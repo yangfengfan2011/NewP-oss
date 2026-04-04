@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.HostApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\server\modules\Demo\DemoModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Authorization\AuthorizationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\ConfigCenter\ConfigCenter.csproj" />
+    <ProjectReference Include="..\..\server\modules\Audit\AuditModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Files\FilesModule.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Codex Claude Orchestration"
+  short_description: "Coordinate Claude Code execution while Codex stays in review mode"

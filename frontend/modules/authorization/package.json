@@ -1,0 +1,21 @@
+{
+  "name": "@icp-platform/module-authorization",
+  "version": "1.0.0",
+  "description": "Authorization module for ICP Platform",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@icp-platform/core": "workspace:*",
+    "@icp-platform/sdk": "workspace:*",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@icp-platform/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "modules/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @icp-platform/shell dev",
+    "build": "pnpm -r build",
+    "clean": "pnpm -r exec rm -rf dist node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2"
+  }
+}

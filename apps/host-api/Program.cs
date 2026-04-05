@@ -61,6 +61,21 @@ builder.Services.AddModuleSystem(options =>
             Console.WriteLine($"Unable to load module assembly {moduleFile}: {ex.Message}");
         }
     }
+
+    // Explicitly load ConfigCenter (doesn't match *Module.dll pattern)
+    var configCenterPath = Path.Combine(baseDirectory, "ConfigCenter.dll");
+    if (File.Exists(configCenterPath))
+    {
+        try
+        {
+            var configCenterAssembly = Assembly.LoadFrom(configCenterPath);
+            options.Assemblies.Add(configCenterAssembly);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unable to load ConfigCenter assembly: {ex.Message}");
+        }
+    }
 });
 
 var app = builder.Build();

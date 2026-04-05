@@ -47,6 +47,14 @@ export interface FrontendModule {
   cleanup?: () => void | Promise<void>;
 }
 
+export type ShellExperienceMode = 'hybrid' | 'product' | 'platform';
+
+export interface UiConfig {
+  shellExperienceMode: ShellExperienceMode;
+}
+
+export type ShellView = 'business' | 'platform';
+
 export class ModuleRegistry {
   private static modules: Map<string, FrontendModule> = new Map();
   private static initialized = false;
@@ -145,6 +153,10 @@ export interface AuthContext {
 
 export interface PlatformContext {
   auth: AuthContext;
+  uiConfig: UiConfig;
+  shellView: ShellView;
+  setShellView: (view: ShellView) => void;
+  canSwitchShellView: boolean;
   navigate: (path: string) => void;
   showNotification: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   showDialog: (content: ReactNode, options?: { title?: string; width?: number }) => Promise<boolean>;

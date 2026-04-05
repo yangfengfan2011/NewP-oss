@@ -4,23 +4,21 @@
 
 ### 已完成
 
-**后端实现（26 个文件）**
+**后端实现（25 个文件）**
 - 实体模型：Role, Permission, RolePermission, UserRole
 - 服务层：AuthorizationService, RoleService, PermissionService
 - 仓储层：内存实现（RoleRepository, PermissionRepository, RolePermissionRepository, UserRoleRepository）
 - API 控制器：RoleController, PermissionController, UserRoleController
-- DTO 定义：完整的请求/响应对象
+- DTO 定义：完整的请求/响应对象（PermissionDto, RoleDto, UserRoleDto）
 - 模块契约：实现 IPermissionProvider 和 IMenuProvider
 
-**前端实现（8 个文件）**
-- 权限上下文：AuthorizationProvider, useAuthorization
-- 权限 Hooks：usePermission, useAnyPermission, useAllPermissions
-- 权限组件：PermissionGuard, PermissionButton
+**前端实现（6 个文件）**
 - 模块页面：RoleManagement, PermissionList
-- 模块注册：完整的路由、菜单、权限声明
+- 模块注册：完整的路由、菜单、权限声明（index.ts）
+- 权限上下文和组件由 @icp-platform/core 提供
 
 **测试（2 个文件）**
-- AuthorizationServiceTests：授权检查服务测试（7 个测试用例）
+- AuthorizationServiceTests：授权检查服务测试（6 个测试用例）
 - RoleServiceTests：角色服务测试（6 个测试用例）
 
 ### 核心能力
@@ -61,23 +59,26 @@
 ## 验证结果
 
 - ✅ 后端构建通过
-- ✅ 前端构建通过
-- ⚠️ 测试运行需要 .NET 8.0.0（当前环境为 10.0.5）
+- ✅ 前端构建通过（pnpm build）
+- ✅ 单元测试通过（12/12 测试用例全部通过）
+  - AuthorizationServiceTests: 6 个测试用例
+  - RoleServiceTests: 6 个测试用例
 
 ## 文件清单
 
-**后端核心文件**
-- `/d/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.cs`
-- `/d/Github/ICP-X/NewP/server/modules/Authorization/Services/IAuthorizationService.cs`
-- `/d/Github/ICP-X/NewP/server/modules/Authorization/Services/AuthorizationService.cs`
-- `/d/Github/ICP-X/NewP/server/modules/Authorization/Services/IRoleService.cs`
-- `/d/Github/ICP-X/NewP/server/modules/Authorization/Services/RoleService.cs`
+**后端核心文件（25 个）**
+- 模块入口：`AuthorizationModule.cs`
+- 服务层（6 个）：`IAuthorizationService.cs`, `AuthorizationService.cs`, `IRoleService.cs`, `RoleService.cs`, `IPermissionService.cs`, `PermissionService.cs`
+- 仓储层（8 个）：4 个接口 + 4 个内存实现
+- 控制器（3 个）：`RoleController.cs`, `PermissionController.cs`, `UserRoleController.cs`
+- 模型（4 个）：`Role.cs`, `Permission.cs`, `RolePermission.cs`, `UserRole.cs`
+- DTO（3 个）：`RoleDto.cs`, `PermissionDto.cs`, `UserRoleDto.cs`
 
-**前端核心文件**
-- `/d/Github/ICP-X/NewP/frontend/packages/core/src/authorization/AuthorizationContext.tsx`
-- `/d/Github/ICP-X/NewP/frontend/packages/core/src/authorization/PermissionGuard.tsx`
-- `/d/Github/ICP-X/NewP/frontend/modules/authorization/src/index.ts`
+**前端核心文件（6 个）**
+- 模块入口：`frontend/modules/authorization/src/index.ts`
+- 页面组件（2 个）：`RoleManagement.tsx`, `PermissionList.tsx`
+- 构建产物（3 个）：`dist/index.d.ts`, `dist/pages/*.d.ts`
 
-**测试文件**
-- `/d/Github/ICP-X/NewP/tests/Authorization.Tests/AuthorizationServiceTests.cs`
-- `/d/Github/ICP-X/NewP/tests/Authorization.Tests/RoleServiceTests.cs`
+**测试文件（2 个）**
+- `tests/Authorization.Tests/AuthorizationServiceTests.cs`
+- `tests/Authorization.Tests/RoleServiceTests.cs`

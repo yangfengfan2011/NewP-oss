@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\server\modules\ConfigCenter\ConfigCenter.csproj" />
     <ProjectReference Include="..\..\server\modules\Audit\AuditModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Files\FilesModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj" />
   </ItemGroup>
 
 </Project>

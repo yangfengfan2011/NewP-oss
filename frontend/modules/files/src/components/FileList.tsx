@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { FileInfo, fileService } from '../services/fileService';
 
 interface FileListProps {
@@ -26,7 +26,7 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
   };
 
   useEffect(() => {
-    loadFiles();
+    void loadFiles();
   }, [entityType, entityId, refreshTrigger]);
 
   const handleDownload = async (fileId: string) => {
@@ -48,50 +48,84 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
     }
   };
 
-  if (loading) return <div>加载中...</div>;
-  if (error) return <div style={{ color: 'red' }}>错误: {error}</div>;
+  if (loading) {
+    return <div className="sh-page-loading">文件加载中...</div>;
+  }
+
+  if (error) {
+    return <div className="sh-page-error">文件加载失败：{error}</div>;
+  }
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h3>文件列表</h3>
+    <section className="sh-page-panel">
+      <div className="sh-page-panel-header">
+        <h2 className="sh-page-panel-title">文件列表</h2>
+        <span className="sh-page-panel-meta">{files.length} 个文件</span>
+      </div>
+      <div className="sh-page-panel-body">
+        <div className="sh-section-grid">
+          <div className="sh-summary-card">
+            <span className="sh-summary-card-label">关联范围</span>
+            <span className="sh-summary-card-value">{entityType ? '业务关联' : '全局'}</span>
+            <span className="sh-summary-card-meta">
+              {entityId ? `实体 ID：${entityId}` : '当前展示全部可见文件'}
+            </span>
+          </div>
+
+          <div className="sh-meta-block">
+            <div className="sh-meta-row">
+              <span className="sh-meta-label">刷新方式</span>
+              <span className="sh-meta-value">上传成功后自动刷新</span>
+            </div>
+            <div className="sh-meta-row">
+              <span className="sh-meta-label">支持操作</span>
+              <span className="sh-meta-value">下载 / 删除</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {files.length === 0 ? (
-        <p>暂无文件</p>
+        <div className="sh-page-panel-body">
+          <div className="sh-page-empty">暂无文件</div>
+        </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #ddd' }}>
-              <th style={{ padding: '0.5rem', textAlign: 'left' }}>文件名</th>
-              <th style={{ padding: '0.5rem', textAlign: 'left' }}>大小</th>
-              <th style={{ padding: '0.5rem', textAlign: 'left' }}>上传时间</th>
-              <th style={{ padding: '0.5rem', textAlign: 'left' }}>上传者</th>
-              <th style={{ padding: '0.5rem', textAlign: 'left' }}>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {files.map((file) => (
-              <tr key={file.fileId} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '0.5rem' }}>{file.fileName}</td>
-                <td style={{ padding: '0.5rem' }}>
-                  {fileService.formatFileSize(file.fileSize)}
-                </td>
-                <td style={{ padding: '0.5rem' }}>
-                  {new Date(file.uploadedAt).toLocaleString()}
-                </td>
-                <td style={{ padding: '0.5rem' }}>{file.uploadedBy || '-'}</td>
-                <td style={{ padding: '0.5rem' }}>
-                  <button
-                    onClick={() => handleDownload(file.fileId)}
-                    style={{ marginRight: '0.5rem' }}
-                  >
-                    下载
-                  </button>
-                  <button onClick={() => handleDelete(file.fileId)}>删除</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="sh-page-panel-body">
+          <div className="sh-table-wrap">
+            <table className="sh-table">
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>大小</th>
+                  <th>上传时间</th>
+                  <th>上传者</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((file) => (
+                  <tr key={file.fileId}>
+                    <td>{file.fileName}</td>
+                    <td>{fileService.formatFileSize(file.fileSize)}</td>
+                    <td>{new Date(file.uploadedAt).toLocaleString()}</td>
+                    <td>{file.uploadedBy || '-'}</td>
+                    <td>
+                      <div className="sh-action-row">
+                        <button onClick={() => handleDownload(file.fileId)} className="sh-btn">
+                          下载
+                        </button>
+                        <button onClick={() => handleDelete(file.fileId)} className="sh-btn">
+                          删除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
-    </div>
+    </section>
   );
 }

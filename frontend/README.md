@@ -324,3 +324,22 @@ Demo 模块展示了：
 - React Router 6.22
 - Vite 5.1
 - pnpm workspace
+
+## Clean Check
+
+为避免本地 `node_modules`、`dist` 或 Vite 缓存掩盖问题，建议在干净环境下按下面步骤验证前端可构建性：
+
+```bash
+# 清理工作区产物和依赖（跨平台）
+pnpm clean
+
+# 基于锁文件重新安装
+pnpm install --frozen-lockfile
+
+# 重新构建全部 workspace 包
+pnpm build
+```
+
+说明：
+- `pnpm clean` 会清理各 workspace 下的 `dist`、`node_modules` 和 `.vite` 缓存。
+- 推荐在提交前或切换机器后至少执行一次这组命令，用来确认 clean 环境下的可构建性。

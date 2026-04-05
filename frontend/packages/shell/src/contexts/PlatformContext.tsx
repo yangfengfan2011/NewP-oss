@@ -1,11 +1,25 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlatformContext as IPlatformContext } from '@icp-platform/sdk';
+import { PlatformContext as IPlatformContext, ShellView, UiConfig } from '@icp-platform/sdk';
 import { useAuth } from './AuthContext';
 
 const PlatformContext = createContext<IPlatformContext | null>(null);
 
-export function PlatformProvider({ children }: { children: ReactNode }) {
+interface PlatformProviderProps {
+  children: ReactNode;
+  uiConfig: UiConfig;
+  shellView: ShellView;
+  setShellView: (view: ShellView) => void;
+  canSwitchShellView: boolean;
+}
+
+export function PlatformProvider({
+  children,
+  uiConfig,
+  shellView,
+  setShellView,
+  canSwitchShellView,
+}: PlatformProviderProps) {
   const auth = useAuth();
   const navigate = useNavigate();
 
@@ -22,6 +36,10 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   return (
     <PlatformContext.Provider value={{
       auth,
+      uiConfig,
+      shellView,
+      setShellView,
+      canSwitchShellView,
       navigate,
       showNotification,
       showDialog

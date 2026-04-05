@@ -1,317 +1,316 @@
 # CLAUDE.md
 
-本文件为 Claude Code 在 `NewP` 目录工作时提供项目级指引。
+本文档为 Claude Code 在 `NewP` 仓库内工作时提供项目级协作指引。
 
-## 1. 当前最重要的结论
+## 1. 当前项目判断
 
-当前仓库不是“纯文档仓库”，而是已经有真实工程骨架的开发仓库。
+当前仓库不是“纯文档仓库”或“概念性脚手架仓库”，而是已经具备真实后端、前端、模块、测试与迁移文档的开发仓库。
 
-你在开始任何工作前，必须先接受下面这几个事实：
+当前阶段判断如下：
 
-1. 当前最重要的目标是 **第二阶段：最小可运行平台**
-2. 这个阶段的成功标准不是“框架看起来完整”，而是：
-   - 后端能启动
-   - 前端能启动
-   - 有登录页
-   - 能用默认管理员登录
-   - 登录后进入主界面
-   - 能访问受保护的 Demo 页面
-3. 当前明确 **不做**：
-   - WinApp 重写
-   - Studio 重写
-   - 文件服务重写
-   - 工作流、报表、设计器
-   - 大规模旧页面兼容
+- Phase 0 已完成：旧平台资产盘点、处置矩阵、V1 范围冻结已形成文档。
+- Phase 1 已完成：后端 Host / Kernel / SDK 与前端 Shell / Core / SDK 主干已落地。
+- Phase 2 已完成：本地登录、默认管理员、登录闭环、主界面壳、受保护页面访问已打通。
+- Phase 3 已部分完成：扩展契约、Demo 模块贯通、Shell 模块装配已具备，但阶段总结仍需继续沉淀。
+- Phase 4 已有首批内建模块实现：`Authorization`、`ConfigCenter`、`Audit`、`Files` 已有代码、测试和文档基础，仍在持续完善。
 
-## 2. 你现在所处的阶段
+因此，后续工作默认不再围绕“证明骨架存在”展开，而是围绕：
 
-按当前规划，仓库重点已经切换到：
+- 细化模块设计
+- 补齐阶段设计与阶段总结
+- 完善模块实现
+- 加固验证链路
+- 有节奏地推进迁移跑道
 
-- Phase 0：旧平台盘点与处置矩阵，已形成文档
-- Phase 1：仓库基础骨架，已具备初步工程结构
-- **Phase 2：最小可运行平台，当前应优先推进**
+## 2. 当前最重要的规则
 
-这意味着：
-- 你不需要再花主要精力讨论“要不要这样做”
-- 你应该优先把第二阶段闭环做出来
+### 详细设计先行
 
-## 3. 你必须先读的文件
+任何新的功能、模块、阶段性改造或行为变更，在正式实施前都必须先有详细设计文档。
 
-优先级从高到低：
+没有详细设计文档时，只允许做：
+
+- 信息收集
+- 问题排查
+- 方案讨论
+- 设计草稿
+
+不允许直接进入正式实现。
+
+详细设计文档默认放在：
+
+- `docs/designs/`
+
+模板见：
+
+- `docs/designs/detailed-design-template.md`
+
+### 继续遵守模块边界
+
+Host 只负责：
+
+- 启动
+- 组合
+- 认证接入
+- 路由、菜单、权限、配置描述符聚合
+- 模块加载
+
+Host 不负责：
+
+- 模块业务逻辑
+- 权限规则细节
+- 配置中心内部逻辑
+- 审计存储细节
+
+模块必须通过契约接入，不能通过直接改 Shell 或直接跨模块耦合来实现功能。
+
+### 迁移仍然要先文档化
+
+旧平台相关工作仍然必须遵循：
+
+1. 先盘点
+2. 再分类
+3. 再明确目标形态
+4. 最后才实施迁移或重写
+
+不要把旧平台代码、启动逻辑或元数据结构直接搬进新平台。
+
+## 3. 推荐阅读顺序
+
+开始具体工作前，优先阅读这些文件：
 
 1. `AGENTS.md`
-2. `docs/scope-v1.md`
+2. `README.md`
 3. `Plan.md`
-4. `docs/phase-2-minimum-runnable-plan.md`
-5. `docs/module-boundaries-v1.md`
-6. `docs/identity-lite-module-boundary-v1.md`
-7. `docs/authorization-module-boundary-v1.md`
-8. `docs/configcenter-module-boundary-v1.md`
-9. `docs/audit-module-boundary-v1.md`
-10. `docs/prompts/00_第二阶段执行说明.md`
+4. `docs/current-status.md`
+5. `docs/README.md`
+6. `docs/architecture/scope-v1.md`
+7. `docs/architecture/architecture.md`
+8. `docs/architecture/module-contract.md`
+9. `docs/architecture/module-boundaries-v1.md`
 
-如果你的任务涉及旧平台输入，再补读：
-- `docs/oldp-asset-inventory-v1.md`
-- `docs/oldp-asset-disposition-v1.md`
+如果任务涉及某个具体模块，再继续看：
 
-## 4. 第二阶段的硬目标
+- `docs/modules/<module>-boundary-v1.md`
+- `docs/designs/<module>-design.md`
+- `docs/modules/<module>-implementation.md`
+- `docs/verification/verification-matrix.md`
 
-第二阶段必须交付下面这些能力：
+如果任务涉及旧平台输入，再补充阅读：
 
-- `apps/host-api` 可启动
-- 前端入口可启动
-- 登录页可访问
-- 登录接口可用
-- 当前用户接口可用
-- 退出登录接口可用
-- 默认管理员或本地种子账号可用
-- 登录后进入主界面
-- 主界面有菜单与路由容器
-- Demo Module 菜单可见、页面可访问
-- 未登录不能直接访问受保护页面
+- `docs/migration/oldp-asset-inventory-v1.md`
+- `docs/migration/oldp-asset-disposition-v1.md`
+- `docs/migration/migration-strategy.md`
 
-如果做不到这些，第二阶段就还没完成。
+## 4. 当前仓库里的真实结构
 
-## 5. 仓库中的真实结构
+后端：
 
-当前已经存在这些关键目录：
-
-### 后端
 - `apps/host-api`
 - `server/kernel`
 - `server/sdk`
-- `server/modules/Demo`
 - `server/modules/Authorization`
 - `server/modules/ConfigCenter`
 - `server/modules/Audit`
 - `server/modules/Files`
+- `server/modules/Demo`
 
-### 前端
-- `frontend/package.json`
+前端：
+
 - `frontend/packages/shell`
 - `frontend/packages/core`
 - `frontend/packages/sdk`
 - `frontend/packages/ui`
+- `frontend/modules/authorization`
+- `frontend/modules/config-center`
+- `frontend/modules/audit`
+- `frontend/modules/files`
+- `frontend/modules/demo`
 
-### 测试
+测试：
+
 - `tests/Kernel.Tests`
 - `tests/Authorization.Tests`
 - `tests/ConfigCenter.Tests`
 - `tests/Audit.Tests`
 - `tests/Files.Tests`
 
-### 解决方案
+解决方案与主入口：
+
 - `ICP-Platform.sln`
+- `frontend/package.json`
 
-因此，不要再假设“还没有工程文件”。
+因此，不要再假设“仓库还没有真实代码或测试基础”。
 
-## 6. 第二阶段推荐任务顺序
+## 5. 当前文档体系
 
-如果你要连续推进第二阶段，请按这个顺序做：
+文档目录已经重组，新增或更新文档时应优先放到正确分类下：
 
-1. 后端 Host 骨架与模块契约
-2. 前端 Shell 与前端 SDK
-3. 最小登录能力
-4. 默认管理员与种子数据
-5. 登录后主界面与权限守卫闭环
-6. Demo Module 端到端贯通
-7. 最小可运行平台验证
-8. 验证与修复
+- `docs/architecture/`：范围、架构、契约、边界
+- `docs/designs/`：详细设计
+- `docs/phases/`：阶段计划与阶段总结
+- `docs/modules/`：模块边界与实现概览
+- `docs/migration/`：旧平台盘点、处置、迁移策略
+- `docs/verification/`：构建、验证、验收矩阵
+- `docs/guides/`：本地环境与开发指南
+- `docs/collaboration/`：协作说明
+- `docs/prompts/`、`docs/bootstrap/`：执行流程与协作资产
 
-对应提示词：
-- `docs/prompts/04_后端模块契约与Host骨架.md`
-- `docs/prompts/05_前端Shell与前端SDK.md`
-- `docs/prompts/05_1_最小登录与身份能力.md`
-- `docs/prompts/05_2_默认管理员与种子数据.md`
-- `docs/prompts/05_3_登录后主界面与权限守卫闭环.md`
-- `docs/prompts/07_DemoModule端到端贯通.md`
-- `docs/prompts/07_1_最小可运行平台验证.md`
-- `docs/prompts/12_验证与修复.md`
+如果文档内容长期有效，优先进入分类目录；不要继续把核心文档散落在 `docs/` 根目录。
 
-## 7. 你应该如何理解各模块边界
+## 6. 当前应如何理解各模块边界
 
 ### Identity Lite / LocalAuth
 
-只负责：
+负责：
+
 - 登录
-- 当前用户
 - 退出登录
-- 最小登录态机制
-- 默认管理员种子账号
+- 当前用户识别
+- 默认管理员与本地种子能力
+- 最小登录态恢复
 
 不负责：
-- 完整用户中心
+
+- 完整身份平台
+- 用户中心
 - 组织树
-- SSO / LDAP / OAuth 深度接入
+- 单点登录、LDAP、OAuth、OIDC 深度集成
 
 ### Authorization
 
-只负责：
-- 权限点
-- 授权检查
-- 菜单/路由权限控制
+负责：
+
+- 权限点定义
+- 角色与权限关系
+- 用户角色关系
+- 后端授权判断
+- 前端菜单、路由、页面级权限控制
 
 不负责：
-- “当前是谁”的登录识别
+
+- 认证本身
+- 完整组织和租户模型
 
 ### ConfigCenter
 
-只负责：
-- 配置项
-- 字典
-- 枚举承载入口
-- 轻量导入能力
+负责：
+
+- 配置项模型
+- 配置查询与修改
+- 轻量 schema 同步
+- 字典、枚举承载入口预留
 
 不负责：
+
 - 登录逻辑
-- 审计逻辑
+- 审计实现
+- 大而全配置发布平台
 
 ### Audit
 
-只负责：
+负责：
+
 - 访问日志
 - 操作日志
-- 统一审计写入与查询入口
+- 审计写入与查询入口
 
 不负责：
+
 - 权限判断
 - 配置管理
 
-## 8. 必须遵守的架构规则
+### Files
 
-### Host
+负责：
 
-Host 只负责：
-- 启动
-- 组合
-- 认证上下文接入
-- 路由、菜单、权限声明聚合
-- 模块加载
+- 文件元数据与文件服务基础能力
+- 文件访问入口与后续存储抽象扩展位
 
-Host 不负责：
-- 模块业务逻辑
-- 权限细节
-- 审计存储细节
-- 配置中心逻辑
+不负责：
 
-### 模块
+- 旧文件服务的整体原样重写
+- 与 WinApp/Studio 直接绑定的历史宿主能力
 
-模块必须：
-- 通过契约接入
-- 不直接修改 Shell 内部
-- 不跨模块直接依赖具体基础设施实现
+## 7. 当前阶段下不该做的事
 
-### 迁移
+当前默认不要做：
 
-迁移必须：
-- 先分类，再实施
-- 先文档化，再落代码
-- 不允许把旧框架启动逻辑直接搬进新宿主
-
-## 9. 本阶段绝对不要做的事
-
-不要做：
-- 把任务扩大成完整身份平台
-- 顺手引入 WinApp、Studio、文件服务重写
+- 把局部任务膨胀成完整平台重设计
+- 顺手引入 WinApp、Studio、旧文件服务重写
 - 顺手兼容大量旧 `.aspx` 页面
-- 把旧 `OldP` 代码整包复制进来
-- 同时混做“架构重构 + 功能新增 + 迁移改造”
+- 直接复制 `OldP` 代码或旧启动逻辑
+- 在没有详细设计的情况下直接写新功能
+- 把多个模块的大改、迁移和新功能混在一次改动里
 
-## 10. 你每次执行任务前都要自问
+## 8. 每次开始工作前先自检
 
 开始前先确认：
 
-1. 这个任务是否在 `docs/scope-v1.md` 范围内？
-2. 这个任务是否有明确成功标准？
-3. 这轮是否真的需要改代码？
-4. 这轮有没有无意间扩大成完整平台设计？
-5. 这轮完成后，最小可运行平台闭环是不是更近了一步？
+1. 这项工作是否在当前范围内。
+2. 这项工作对应的详细设计文档是否已经存在。
+3. 这次改动是实现、设计补齐，还是验证补齐。
+4. 是否会破坏模块边界。
+5. 是否需要同步更新实现文档、验证文档或阶段状态文档。
 
-如果答案不清楚，先收敛任务，再动手。
+如果第 2 点答案是否定的，先补设计再实现。
 
-## 11. 你每次完成任务后必须输出什么
+## 9. 每次完成工作后必须给出的信息
 
-必须报告：
+输出中应明确说明：
+
 - 改了什么
-- 影响了哪些文件和目录
-- 执行了哪些验证
-- 哪些通过，哪些没通过
-- 当前剩余风险
-- 下一步建议
+- 影响了哪些文件或模块
+- 跑了哪些验证
+- 哪些通过，哪些未通过
+- 还剩什么风险
+- 下一步建议是什么
 
-## 12. 推荐给 Claude Code 的工作方式
+## 10. 推荐验证习惯
 
-### 单线程方式
-
-适合：
-- 当前任务边界清楚
-- 需要连续实现
-
-优先使用：
-- 一个主线程
-- 末尾再统一验证
-
-### subagents 方式
-
-如需并行辅助，请使用：
-- `docs/prompts/13_通用subagents触发模板.md`
-
-子代理尽量只做：
-- 只读探索
-- 契约审查
-- 文档核对
-- 最后阶段测试修复
-
-### worktree 方式
-
-如需拆分大任务，请使用：
-- `docs/prompts/14_通用Worktree任务模板.md`
-
-建议拆法：
-- `host-foundation`
-- `shell-login`
-- `demo-module`
-
-## 13. 常用验证命令
-
-根据任务至少尝试：
+根据改动范围，尽量执行这些检查：
 
 ```bash
 # 后端
-dotnet build
+dotnet build ICP-Platform.sln
 dotnet test
 
 # 前端
+cd frontend
 pnpm install
 pnpm build
-pnpm test
 ```
 
-如果任务涉及启动闭环，还应验证：
-- Host 能启动
-- 登录页可访问
-- 默认管理员可登录
-- 登录后能看到主界面
-- Demo 页面可访问
+如果改动涉及登录、权限、配置或模块装配，还应补充：
 
-## 14. 参考旧平台时的原则
+- Host 可启动
+- Frontend Shell 可启动
+- 默认管理员可登录
+- `current-user` 可返回当前用户
+- 登录后可见主界面
+- 受保护页面权限行为符合预期
+
+## 11. 参考旧平台时的原则
 
 需要参考 `OldP` 时：
-- 先查 `../OldP/ApiDoc/`
-- 再查 `../OldP/Source/`
-- 再查 `../OldP/Runtime/`
 
-但必须记住：
-- 旧代码是参考来源，不是复制来源
-- 旧元数据是迁移输入，不是默认原样保留对象
+1. 先看 `../OldP/ApiDoc/`
+2. 再看 `../OldP/Source/`
+3. 最后看 `../OldP/Runtime/`
 
-## 15. 第二阶段完成后才允许做什么
+始终记住：
 
-只有当“最小可运行平台”闭环完成后，才建议继续推进：
-- `Authorization` 深化
-- `ConfigCenter` 导入 POC
-- `Audit` 深化
-- 元数据迁移策略落地
+- 旧平台代码是参考来源，不是复制来源。
+- 旧元数据是迁移输入，不是默认原样保留的目标模型。
 
-在此之前，不要把主力放到复杂模块上。
+## 12. 当前最值得继续补的文档
 
+如果接下来继续整顿文档，优先方向是：
+
+- Phase 3 阶段总结
+- `Audit` 详细设计
+- `Files` 详细设计
+- Shell 模块装配 / 注册机制详细设计
+- 更完整的迁移执行文档
+
+以上内容应与 `docs/current-status.md`、`docs/README.md` 和各模块实现文档保持一致。

@@ -39,6 +39,7 @@ export default function ConfigManagement() {
   const loadConfigs = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch('/api/config/grouped');
       if (!response.ok) throw new Error('Failed to load config');
       const data = await response.json();
@@ -62,7 +63,7 @@ export default function ConfigManagement() {
       const response = await fetch(`/api/config/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: newValue })
+        body: JSON.stringify({ value: newValue }),
       });
 
       if (!response.ok) throw new Error('Failed to update config');
@@ -81,84 +82,148 @@ export default function ConfigManagement() {
   };
 
   if (!canView) {
-    return <div>No permission to view config.</div>;
+    return <div className="sh-page-empty">暂无查看配置的权限。</div>;
   }
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div className="sh-page-loading">配置加载中...</div>;
   }
 
   if (error) {
-    return <div style={{ color: 'red' }}>Error: {error}</div>;
+    return <div className="sh-page-error">配置加载失败：{error}</div>;
   }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>Config Management</h1>
+    <div className="sh-page">
+      <section className="sh-page-header">
+        <div className="sh-page-header-main">
+          <span className="sh-page-eyebrow">配置中心</span>
+          <h1 className="sh-page-title">配置管理</h1>
+          <p className="sh-page-description">
+            按模块与分组查看系统配置项，保留原有加载和编辑行为，并统一到第二阶段的共享页面样式中。
+          </p>
+        </div>
+      </section>
 
-      <div style={{ marginBottom: '16px', color: '#666' }}>
-        {canCreate ? 'Create permission granted' : 'No create permission'}
-        {' · '}
-        {canDelete ? 'Delete permission granted' : 'No delete permission'}
+      <div className="sh-section-grid">
+        <div className="sh-meta-block">
+          <div className="sh-meta-row">
+            <span className="sh-meta-label">新增配置</span>
+            <span
+              className={`sh-status-badge ${
+                canCreate ? 'sh-status-badge-success' : 'sh-status-badge-neutral'
+              }`}
+            >
+              {canCreate ? '允许' : '禁止'}
+            </span>
+          </div>
+          <div className="sh-meta-row">
+            <span className="sh-meta-label">编辑配置</span>
+            <span
+              className={`sh-status-badge ${
+                canEdit ? 'sh-status-badge-success' : 'sh-status-badge-neutral'
+              }`}
+            >
+              {canEdit ? '允许' : '禁止'}
+            </span>
+          </div>
+          <div className="sh-meta-row">
+            <span className="sh-meta-label">删除配置</span>
+            <span
+              className={`sh-status-badge ${
+                canDelete ? 'sh-status-badge-warning' : 'sh-status-badge-neutral'
+              }`}
+            >
+              {canDelete ? '允许' : '禁止'}
+            </span>
+          </div>
+        </div>
+
+        <div className="sh-summary-card">
+          <span className="sh-summary-card-label">配置分组</span>
+          <span className="sh-summary-card-value">{groups.length}</span>
+          <span className="sh-summary-card-meta">
+            {groups.reduce((sum, group) => sum + group.items.length, 0)} 个配置项
+          </span>
+        </div>
       </div>
 
-      {groups.map(group => (
-        <div key={`${group.moduleId}-${group.group || 'default'}`} style={{ marginBottom: '30px' }}>
-          <h2>
-            {group.moduleId}
-            {group.group && ` - ${group.group}`}
-          </h2>
+      <div className="sh-helper-block">
+        <h3 className="sh-helper-block-title">页面说明</h3>
+        <p>当前阶段优先统一配置页的结构与操作密度，复杂配置编辑器和批量变更能力留到后续再补充。</p>
+      </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #ddd' }}>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Key</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Display Name</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Value</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Type</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Environment</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.items.map(item => (
-                <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '10px' }}>{item.key}</td>
-                  <td style={{ padding: '10px' }}>{item.displayName}</td>
-                  <td style={{ padding: '10px' }}>
-                    {editingItem?.id === item.id ? (
-                      <input
-                        type="text"
-                        value={newValue}
-                        onChange={(e) => setNewValue(e.target.value)}
-                        style={{ width: '100%', padding: '5px' }}
-                      />
-                    ) : (
-                      <span>{item.value || '-'}</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px' }}>{item.type}</td>
-                  <td style={{ padding: '10px' }}>{item.environment || 'Global'}</td>
-                  <td style={{ padding: '10px' }}>
-                    {editingItem?.id === item.id ? (
-                      <>
-                        <button onClick={handleSave} style={{ marginRight: '5px' }}>
-                          Save
-                        </button>
-                        <button onClick={handleCancel}>Cancel</button>
-                      </>
-                    ) : (
-                      canEdit && <button onClick={() => handleEdit(item)}>Edit</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {groups.map((group) => (
+        <section key={`${group.moduleId}-${group.group || 'default'}`} className="sh-page-panel">
+          <div className="sh-page-panel-header">
+            <div>
+              <h2 className="sh-page-panel-title">
+                {group.moduleId}
+                {group.group ? ` / ${group.group}` : ''}
+              </h2>
+              <div className="sh-page-panel-meta">共 {group.items.length} 个配置项</div>
+            </div>
+          </div>
+          <div className="sh-page-panel-body">
+            <div className="sh-table-wrap">
+              <table className="sh-table">
+                <thead>
+                  <tr>
+                    <th>配置键</th>
+                    <th>显示名称</th>
+                    <th>当前值</th>
+                    <th>类型</th>
+                    <th>环境</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="sh-code">{item.key}</td>
+                      <td>{item.displayName}</td>
+                      <td>
+                        {editingItem?.id === item.id ? (
+                          <input
+                            type="text"
+                            value={newValue}
+                            onChange={(e) => setNewValue(e.target.value)}
+                            className="sh-form-input"
+                          />
+                        ) : (
+                          <span>{item.value || '-'}</span>
+                        )}
+                      </td>
+                      <td>{item.type}</td>
+                      <td>{item.environment || '全局'}</td>
+                      <td>
+                        {editingItem?.id === item.id ? (
+                          <div className="sh-form-inline">
+                            <button onClick={handleSave} className="sh-btn sh-btn-primary">
+                              保存
+                            </button>
+                            <button onClick={handleCancel} className="sh-btn">
+                              取消
+                            </button>
+                          </div>
+                        ) : (
+                          canEdit && (
+                            <button onClick={() => handleEdit(item)} className="sh-btn">
+                              编辑
+                            </button>
+                          )
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       ))}
 
-      {groups.length === 0 && <p>No config items found.</p>}
+      {groups.length === 0 && <div className="sh-page-empty">未找到配置项。</div>}
     </div>
   );
 }

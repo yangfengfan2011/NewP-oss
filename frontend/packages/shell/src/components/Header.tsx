@@ -1,38 +1,47 @@
 import { useAuth } from '../contexts/AuthContext';
+import { usePlatform } from '../contexts/PlatformContext';
 
 export function Header() {
   const auth = useAuth();
+  const { shellView, setShellView, canSwitchShellView } = usePlatform();
+
+  const renderShellViewButton = (view: 'business' | 'platform', label: string) => {
+    const isActive = shellView === view;
+
+    return (
+      <button
+        type="button"
+        onClick={() => setShellView(view)}
+        disabled={isActive}
+        className={`sh-view-switch-btn ${isActive ? 'active' : ''}`}
+      >
+        {label}
+      </button>
+    );
+  };
 
   return (
-    <header style={{
-      padding: '0 1.5rem',
-      borderBottom: '1px solid #e8e8e8',
-      backgroundColor: '#fff',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      height: '64px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>ICP Platform</h1>
+    <header className="sh-header">
+      <div className="sh-header-brand">
+        <div>
+          <div className="sh-header-meta">统一业务与平台工作台</div>
+          <h1 className="sh-header-title">ICP Platform</h1>
+        </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <div className="sh-header-actions">
+        {canSwitchShellView && (
+          <div className="sh-view-switch">
+            {renderShellViewButton('business', '业务视图')}
+            {renderShellViewButton('platform', '平台视图')}
+          </div>
+        )}
         {auth.isAuthenticated && auth.user && (
-          <>
-            <span>欢迎, {auth.user.displayName}</span>
-            <button
-              onClick={() => auth.logout()}
-              style={{
-                padding: '0.5rem 1rem',
-                border: '1px solid #d9d9d9',
-                borderRadius: '4px',
-                backgroundColor: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              退出
+          <div className="sh-header-user">
+            <span className="sh-header-meta">欢迎，{auth.user.displayName}</span>
+            <button onClick={() => auth.logout()} className="sh-btn">
+              退出登录
             </button>
-          </>
+          </div>
         )}
       </div>
     </header>

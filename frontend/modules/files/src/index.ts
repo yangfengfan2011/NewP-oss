@@ -6,7 +6,7 @@ export const filesModule: FrontendModule = {
     moduleId: 'files',
     displayName: '文件管理',
     version: '0.1.0',
-    description: '提供文件上传、下载、存储抽象能力'
+    description: '文件上传、下载和存储管理'
   },
 
   routes: [

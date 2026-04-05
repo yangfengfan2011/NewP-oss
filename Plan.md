@@ -1,87 +1,171 @@
 # Plan.md
 
-## Phase 0: Inventory and disposition
-- Scan old hosts, projects, runtime metadata, config assets, and external dependencies
-- Produce asset inventory
-- Produce disposition matrix: Retire / Rewrite / Wrap / Import / Postpone
-- Freeze first-wave scope
+## Phase 0：盘点与处置
 
-Validation:
-- inventory document exists
-- disposition matrix exists
-- first-wave module list is approved
+- 扫描旧宿主、旧工程、运行时元数据、配置资产和外部依赖
+- 产出资产盘点文档
+- 产出资产处置矩阵：`Retire / Rewrite / Wrap / Import / Postpone`
+- 冻结首批纳入范围
 
-## Phase 1: Repository foundation
-- Create backend host, kernel, contracts, infrastructure skeleton
-- Create frontend shell, ui, core, sdk skeleton
-- Create minimum runnable startup path
-- Add docs, scripts, AGENTS.md, Codex config
+验证标准：
 
-Validation:
-- backend build
-- frontend install
-- frontend build
-- backend can start
-- frontend can start
+- 资产盘点文档存在
+- 处置矩阵存在
+- 首批模块范围已获确认
 
-## Phase 2: Minimum runnable platform
-- Implement Identity Lite / LocalAuth
-- Add login page
-- Add login API, current-user API, logout API
-- Seed default admin or local admin account
-- Connect auth context, route guard, and shell
-- Wire demo menu and one protected demo page
-- Produce minimum smoke validation steps
+## Phase 1：仓库基础主干
 
-Validation:
-- can open login page
-- can log in locally
-- can enter shell after login
-- can fetch current user
-- can access one protected demo page after login
-- cannot access protected page after logout
+- 建立后端 Host、Kernel、Contracts、Infrastructure 骨架
+- 建立前端 Shell、UI、Core、SDK 骨架
+- 建立最小可运行启动路径
+- 补充文档、脚本、`AGENTS.md` 与协作配置
 
-## Phase 3: Extension contracts
-- Define server module registration contract
-- Define menu/route/permission/config contracts
-- Define migration/import contract
-- Build demo module on backend and frontend
+验证标准：
 
-Validation:
-- contract tests
-- shell can load demo module
-- permission and route registration visible
+- 后端可构建
+- 前端依赖可安装
+- 前端可构建
+- 后端可启动
+- 前端可启动
 
-## Phase 4: Core built-in modules
-- Authorization
-- ConfigCenter
-- Audit
+## Phase 2：最小可运行平台
 
-Validation:
-- backend tests
-- frontend build
-- smoke tests
+- 实现 `Identity Lite / LocalAuth`
+- 增加登录页
+- 增加登录 API、当前用户 API、退出登录 API
+- 建立默认管理员或本地管理员账号
+- 接通认证上下文、路由守卫和 Shell
+- 接通 Demo 菜单与一个受保护 Demo 页面
+- 产出最小 smoke 验证步骤
 
-## Phase 5: Migration runway
-- Define metadata migration strategy
-- Deliver one importer or compatibility slice
-- Migrate one real old asset class end-to-end
+验证标准：
 
-Validation:
-- import/compatibility path documented
-- one old asset class verified in new platform
+- 可以打开登录页
+- 可以本地登录
+- 登录后可以进入 Shell
+- 可以获取当前用户
+- 登录后可以访问一个受保护 Demo 页面
+- 退出登录后不能继续访问受保护页面
 
-## Phase 6: Developer experience
-- module templates
-- SDK helpers
-- test templates
-- docs and examples
+## Phase 3A：扩展契约定义
 
-Validation:
-- scaffold a sample module end-to-end
+- 定义服务端模块注册契约
+- 定义菜单、路由、权限、配置契约
+- 定义迁移/导入契约
+- 形成契约相关基础文档
 
-## Default postponed scope
-- WinApp rewrite
-- Studio rewrite
-- file-service rewrite and deep migration
-- workflow and report redesign
+验证标准：
+
+- 契约文档存在
+- 模块注册入口清晰
+- 菜单、路由、权限、配置契约有统一口径
+
+## Phase 3B：Demo 贯通与契约验证
+
+- 在前后端都落地 Demo 模块
+- 验证 Shell 可以装配 Demo 模块
+- 验证菜单、路由、权限注册链路可见
+- 补充基础契约验证记录
+
+验证标准：
+
+- Shell 可以加载 Demo 模块
+- Demo 模块菜单和路由可见
+- 权限注册结果可见
+- 至少一条 Demo 贯通验证文档存在
+
+## Phase 3C：阶段总结与文档收口
+
+- 补 Phase 3 阶段总结
+- 补契约验证说明
+- 更新当前状态文档
+- 收拢 Phase 3 相关入口文档
+
+验证标准：
+
+- Phase 3 总结文档存在
+- 契约验证说明存在
+- `docs/current-status.md` 与计划口径一致
+
+## Phase 4A：Authorization / ConfigCenter 完善
+
+- 补齐 `Authorization` 详细设计、实现说明和验证记录
+- 补齐 `ConfigCenter` 详细设计、实现说明和验证记录
+- 加固两者的 API、前后端集成与运行验证
+
+验证标准：
+
+- `authorization-design.md`、`configcenter-design.md` 存在
+- 对应实现说明存在并与代码一致
+- 后端测试通过
+- 前端构建通过
+- 模块级 smoke 或验证记录存在
+
+## Phase 4B：Audit / Files 完善
+
+- 补齐 `Audit` 详细设计、实现说明和验证记录
+- 补齐 `Files` 详细设计、实现说明和验证记录
+- 加固两者的 API、前后端集成与运行验证
+
+验证标准：
+
+- `audit-design.md`、`files-design.md` 存在
+- 对应实现说明存在并与代码一致
+- 后端测试通过
+- 前端构建通过
+- 模块级 smoke 或验证记录存在
+
+## Phase 5：首个旧资产迁移 POC
+
+- 选择一类真实旧资产作为首个迁移对象
+- 明确来源、目标模型、迁移策略和验证方式
+- 交付一个导入器、兼容切片或映射实现
+- 完成该类资产的端到端迁移验证
+
+验证标准：
+
+- 迁移对象已明确
+- 迁移设计与执行文档存在
+- 导入/兼容路径已文档化
+- 至少一类旧资产已在新平台完成端到端验证
+
+## Phase 6：开发体验与模板化
+
+- 模块模板
+- SDK 辅助能力
+- 测试模板
+- 文档和示例
+
+验证标准：
+
+- 可以端到端脚手架出一个示例模块
+
+## 默认延后范围
+
+- WinApp 重写
+- Studio 重写
+- 文件服务重写与深度迁移
+- 工作流与报表重设计
+
+## 横向约束
+
+以下规则对 Phase 3 及之后的工作默认生效：
+
+- 任何新的功能、模块、阶段改动或行为变更，在正式实施前必须先有详细设计文档。
+- 每个阶段完成时，不能只交付代码；还必须同时交付设计、实现说明、验证记录和状态更新。
+- 如果计划项已经有实现，但文档和验证未收口，则该计划项只能算“部分完成”，不能标记为“已完成”。
+
+## AI-First 约束
+
+本项目的首要目标是提升 AI 辅助开发效率，并逐步过渡到 AI 主导开发，因此后续阶段默认再追加以下约束：
+
+- 每个阶段都要尽量产出可被 AI 重复执行的模板，而不是一次性手工成果。
+- 每项工作都应明确边界、允许改动区、局部验证方式和回滚方式。
+- 需求拆分应优先形成小任务，避免在同一轮里混入重构、新功能和迁移。
+- 设计与计划需要尽量降低上下文负担，避免把关键规则分散在口头说明里。
+- 若某阶段完成了功能，但无法被 AI 稳定复做、复验或扩展，则不能视为真正完成。
+
+对 `Phase 5` 的补充要求：
+
+- 不只验证“能导入”，还要验证“后续同类资产可按同样模板继续导入”。
+- 至少冻结一组样本、一个映射规则表、一条固定执行路径和一份复跑验证记录。

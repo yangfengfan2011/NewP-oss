@@ -1,123 +1,143 @@
 # ICP 新平台
 
-这是 ICP 平台的新一代实现，采用模块化单体架构。
+这是 ICP 平台的新一代实现仓库，采用“平台主壳 + 内建模块 + 前后端 SDK”的模块化单体架构。
 
-## 目录结构
+## 当前状态
+
+- Phase 0 已完成：旧平台资产盘点、处置矩阵与 V1 范围冻结文档已形成
+- Phase 1 已完成：后端 Host / Kernel / SDK、前端 Shell / Core / SDK 骨架已落地并可构建
+- Phase 2 已完成：本地登录、默认管理员、登录闭环、受保护页面访问、前后端最小可运行链路已打通
+- Phase 3 已完成基础接入：扩展契约、Demo 模块贯通、Shell 模块装配能力已具备
+- Phase 4 已完成：Authorization、ConfigCenter、Audit、Files 已完成详细设计、实现说明、验证记录与测试/构建收口
+
+更完整的项目现状见 [docs/current-status.md](docs/current-status.md)。
+
+## 仓库结构
 
 ```text
 /apps
-  /host-api          # 后端宿主 API
-  /admin-web         # 管理后台（预留）
-  /module-playground # 模块演练场
+  /host-api
+  /admin-web
+  /module-playground
 /server
-  /kernel            # 平台内核（抽象与契约）
-  /modules           # 内建模块
-    /Demo            # 演示模块
-    /Authorization   # 权限授权（待实现）
-    /ConfigCenter    # 配置中心（待实现）
-    /Audit           # 审计（待实现）
-  /sdk               # 服务端 SDK
+  /kernel
+  /sdk
+  /modules
 /frontend
   /packages
-    /shell           # 前端平台壳
-    /sdk             # 前端 SDK
-    /ui              # 共享 UI 组件（待实现）
-    /core            # 核心前端能力（待实现）
-/tests               # 测试
-/docs                # 文档
-/scripts             # 脚本
-/.codex              # Codex 配置
+  /modules
+/tests
+/docs
+/scripts
 ```
 
 ## 快速开始
 
-### 后端
+### 初始化依赖
 
-```bash
-# 恢复依赖
-dotnet restore
+Windows:
 
-# 构建
-dotnet build
-
-# 运行 Host API
-cd apps/host-api
-dotnet run
-
-# 访问 Swagger
-# https://localhost:5000/swagger
+```powershell
+.\scripts\bootstrap.ps1
 ```
 
-### 前端
+macOS / Linux:
 
 ```bash
-cd frontend
-
-# 安装依赖
-pnpm install
-
-# 启动开发服务器
-pnpm dev
-
-# 访问
-# http://localhost:3000
+./scripts/bootstrap.sh
 ```
 
-## 当前状态
+### 一键启动开发环境
 
-- ✅ 仓库骨架已建立
-- ✅ 已完成范围、盘点、处置矩阵和模块边界文档
-- ✅ 已明确第一阶段目标是“最小可运行平台”
-- ⏳ 后端和前端骨架需要继续按文档实现和收口
-- ⏳ 最小登录能力（Identity Lite / LocalAuth）待实现
-- ⏳ Demo Module 全链路待实现
-- ⏳ Authorization / ConfigCenter / Audit 模块待实现
+Windows:
 
-## 第一阶段目标
+```powershell
+.\scripts\dev.ps1
+```
 
-第一阶段不是"重写整个平台"，而是完成：
+macOS / Linux:
 
-1. ✅ 建立范围与路线约束
-2. 🚧 建立新平台主干与模块契约
-3. ⏳ 建立最小登录能力
-4. ⏳ 打通一个 Demo Module 全链路
-5. ⏳ 做出首批平台公共模块雏形
+```bash
+./scripts/dev.sh
+```
 
-## V1 范围
+停止开发环境：
 
-### 纳入范围
-- Host / Kernel / Contracts / SDK
-- Frontend Shell
-- Identity Lite / LocalAuth
-- Demo Module
-- Authorization / ConfigCenter / Audit
-- 一个轻量旧资产导入 POC
+Windows:
 
-### 明确排除
-- WinApp 重写
-- Studio 重写
-- 文件服务重写
-- 深度文件迁移
-- 工作流重设计
-- 报表与设计器重设计
+```powershell
+.\scripts\stop-dev.ps1
+```
 
-详见 `docs/scope-v1.md`
+macOS / Linux:
 
-## 核心文档
+```bash
+./scripts/stop-dev.sh
+```
 
-- `AGENTS.md` - 项目身份、架构规则、迁移规则
-- `CLAUDE.md` - Claude Code 工作指引
-- `Plan.md` - 分阶段实施计划
-- `docs/scope-v1.md` - V1 范围冻结
-- `docs/phase-2-minimum-runnable-plan.md` - 第二阶段实施计划
-- `docs/module-boundaries-v1.md` - 首批模块边界总览
-- `docs/architecture.md` - 架构概览
-- `docs/module-contract.md` - 模块契约规范
+启动后默认访问地址：
 
-## 架构原则
+- Host API: `http://localhost:5000`
+- Frontend Shell: `http://localhost:3000`
 
-- 模块边界明确
-- 优先使用扩展契约而非直接耦合
-- 平台内核与产品逻辑分离
-- 宿主组合，模块声明
-- 保持变更可验证、可回滚
+默认本地账号：
+
+- `admin / admin123`
+
+## 常用命令
+
+构建：
+
+Windows:
+
+```powershell
+.\scripts\build.ps1
+```
+
+macOS / Linux:
+
+```bash
+./scripts/build.sh
+```
+
+测试：
+
+Windows:
+
+```powershell
+.\scripts\test.ps1
+```
+
+macOS / Linux:
+
+```bash
+./scripts/test.sh
+```
+
+## 文档入口
+
+- 文档总览：[docs/README.md](docs/README.md)
+- 项目现状：[docs/current-status.md](docs/current-status.md)
+- 架构与范围：[docs/architecture/](docs/architecture/)
+- 阶段文档：[docs/phases/](docs/phases/)
+- 模块文档：[docs/modules/](docs/modules/)
+- 迁移文档：[docs/migration/](docs/migration/)
+- 验证文档：[docs/verification/](docs/verification/)
+- 开发与协作文档：[docs/guides/](docs/guides/)、[docs/collaboration/](docs/collaboration/)
+
+## 当前推荐阅读顺序
+
+1. [AGENTS.md](AGENTS.md)
+2. [Plan.md](Plan.md)
+3. [docs/current-status.md](docs/current-status.md)
+4. [docs/architecture/scope-v1.md](docs/architecture/scope-v1.md)
+5. [docs/architecture/architecture.md](docs/architecture/architecture.md)
+6. [docs/architecture/module-contract.md](docs/architecture/module-contract.md)
+7. [docs/architecture/module-boundaries-v1.md](docs/architecture/module-boundaries-v1.md)
+8. [docs/phases/phase-2-minimum-runnable-plan.md](docs/phases/phase-2-minimum-runnable-plan.md)
+
+## 说明
+
+- `OldP/` 是旧平台参考来源，不是直接复制来源
+- `docs/prompts/` 和 `docs/bootstrap/` 主要服务于协作与执行流程，不是产品主文档
+- 后续新增文档请优先放入对应分类目录

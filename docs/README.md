@@ -1,0 +1,96 @@
+# 文档总览
+
+`docs/` 已按职责重组为以下分类：
+
+## 1. architecture
+
+长期有效的架构、范围、契约与模板文档。
+
+- [architecture/architecture.md](architecture/architecture.md)
+- [architecture/scope-v1.md](architecture/scope-v1.md)
+- [architecture/module-contract.md](architecture/module-contract.md)
+- [architecture/module-boundaries-v1.md](architecture/module-boundaries-v1.md)
+- [architecture/platform-sdk.md](architecture/platform-sdk.md)
+- [architecture/module-template.md](architecture/module-template.md)
+
+## 2. phases
+
+按阶段沉淀的计划、总结、阶段实施材料。
+
+- [phases/phase-2-minimum-runnable-plan.md](phases/phase-2-minimum-runnable-plan.md)
+- [phases/phase-3-extension-contracts-summary.md](phases/phase-3-extension-contracts-summary.md)
+- [phases/scaffold-summary.md](phases/scaffold-summary.md)
+
+## 3. modules
+
+各模块边界、实现说明与模块级文档。
+
+- [modules/identity-lite-module-boundary-v1.md](modules/identity-lite-module-boundary-v1.md)
+- [modules/authorization-module-boundary-v1.md](modules/authorization-module-boundary-v1.md)
+- [modules/configcenter-module-boundary-v1.md](modules/configcenter-module-boundary-v1.md)
+- [modules/audit-module-boundary-v1.md](modules/audit-module-boundary-v1.md)
+- [modules/authorization-implementation.md](modules/authorization-implementation.md)
+- [modules/configcenter-implementation.md](modules/configcenter-implementation.md)
+- [modules/audit-implementation.md](modules/audit-implementation.md)
+- [modules/files-implementation.md](modules/files-implementation.md)
+
+## 4. designs
+
+实施前必须存在的详细设计文档。
+
+- [designs/README.md](designs/README.md)
+- [designs/detailed-design-template.md](designs/detailed-design-template.md)
+
+## 5. migration
+
+旧平台资产盘点、迁移策略与模板。
+
+- [migration/oldp-asset-inventory-v1.md](migration/oldp-asset-inventory-v1.md)
+- [migration/oldp-asset-disposition-v1.md](migration/oldp-asset-disposition-v1.md)
+- [migration/migration-strategy.md](migration/migration-strategy.md)
+- [migration/metadata-migration-strategy.md](migration/metadata-migration-strategy.md)
+- [migration/asset-inventory-template.md](migration/asset-inventory-template.md)
+- [migration/asset-disposition-matrix.md](migration/asset-disposition-matrix.md)
+
+## 6. verification
+
+构建、阶段验收、快速验证与 Demo 贯通验证。
+
+- [verification/quick-verification.md](verification/quick-verification.md)
+- [verification/scaffold-verification.md](verification/scaffold-verification.md)
+- [verification/demo-module-verification.md](verification/demo-module-verification.md)
+- [verification/phase-3-contract-verification.md](verification/phase-3-contract-verification.md)
+- [verification/verification-matrix.md](verification/verification-matrix.md)
+
+## 7. guides
+
+面向开发者的运行、环境与协作使用说明。
+
+- [guides/local-environment.md](guides/local-environment.md)
+- [guides/subagents-guide.md](guides/subagents-guide.md)
+- [guides/worktree-guide.md](guides/worktree-guide.md)
+
+## 8. collaboration
+
+面向 Codex / Claude 协作流程的执行手册。
+
+- [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
+- [collaboration/claude-code-第二阶段执行手册.md](collaboration/claude-code-第二阶段执行手册.md)
+- [prompts/](prompts/)
+- [bootstrap/](bootstrap/)
+
+## 9. superpowers
+
+设计规格与实施计划沉淀。
+
+- [superpowers/specs/](superpowers/specs/)
+- [superpowers/plans/](superpowers/plans/)
+
+## 10. 当前推荐入口
+
+- 项目现状：[current-status.md](current-status.md)
+- 仓库入口：[../README.md](../README.md)
+- 架构总览：[architecture/architecture.md](architecture/architecture.md)
+- 详细设计入口：[designs/README.md](designs/README.md)
+- 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
+- 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)

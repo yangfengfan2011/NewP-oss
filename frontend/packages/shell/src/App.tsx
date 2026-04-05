@@ -1,5 +1,6 @@
+import { useMemo, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
 import { AuthorizationProvider } from '@icp-platform/core';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlatformProvider } from './contexts/PlatformContext';
@@ -7,6 +8,7 @@ import { PermissionGuard } from './components/PermissionGuard';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import { shellUiConfig } from './config/uiConfig';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -53,11 +55,51 @@ function AppRoutes() {
   );
 }
 
+function getDefaultShellView(): ShellView {
+  switch (shellUiConfig.shellExperienceMode) {
+    case 'platform':
+      return 'platform';
+    case 'product':
+    case 'hybrid':
+    default:
+      return 'business';
+  }
+}
+
 function App() {
+  const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
+
+  const shellView = useMemo<ShellView>(() => {
+    switch (shellUiConfig.shellExperienceMode) {
+      case 'platform':
+        return 'platform';
+      case 'product':
+        return 'business';
+      case 'hybrid':
+      default:
+        return shellViewState;
+    }
+  }, [shellViewState]);
+
+  const canSwitchShellView = shellUiConfig.shellExperienceMode === 'hybrid';
+
+  const setShellView = (view: ShellView) => {
+    if (!canSwitchShellView) {
+      return;
+    }
+
+    setShellViewState(view);
+  };
+
   return (
     <BrowserRouter>
       <AuthProvider>
-        <PlatformProvider>
+        <PlatformProvider
+          uiConfig={shellUiConfig}
+          shellView={shellView}
+          setShellView={setShellView}
+          canSwitchShellView={canSwitchShellView}
+        >
           <AuthorizationGate>
             <AppRoutes />
           </AuthorizationGate>

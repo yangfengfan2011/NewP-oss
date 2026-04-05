@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -17,93 +17,69 @@ export default function Login() {
     try {
       await auth.login(username, password);
       navigate('/');
-    } catch (error) {
-      console.error('Login failed:', error);
-      setError('登录失败，请检查用户名和密码');
+    } catch (loginError) {
+      console.error('Login failed:', loginError);
+      setError('登录失败，请检查用户名和密码。');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      backgroundColor: '#f0f2f5'
-    }}>
-      <div style={{
-        width: '400px',
-        padding: '2rem',
-        backgroundColor: '#fff',
-        borderRadius: '8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '2rem' }}>ICP Platform</h2>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>用户名</label>
-            <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                border: '1px solid #d9d9d9',
-                borderRadius: '4px',
-                boxSizing: 'border-box'
-              }}
-              required
-            />
-          </div>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>密码</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                border: '1px solid #d9d9d9',
-                borderRadius: '4px',
-                boxSizing: 'border-box'
-              }}
-              required
-            />
-          </div>
-          {error && (
-            <div style={{
-              marginBottom: '1rem',
-              padding: '0.5rem',
-              backgroundColor: '#fff2f0',
-              border: '1px solid #ffccc7',
-              borderRadius: '4px',
-              color: '#cf1322',
-              fontSize: '0.875rem'
-            }}>
-              {error}
+    <div className="sh-login-page">
+      <div className="sh-login-brand">
+        <span className="sh-login-brand-badge">阶段一视觉基础</span>
+        <h1>ICP Platform</h1>
+        <p>统一业务运营与平台治理入口，提供清晰、稳定、轻量的企业级 Shell 体验。</p>
+        <ul className="sh-login-brand-list">
+          <li>统一进入业务门户与平台门户</li>
+          <li>支持权限治理、配置管理与审计巡检</li>
+          <li>为后续模块接入提供稳定的共享视觉基础</li>
+        </ul>
+      </div>
+      <div className="sh-login-panel">
+        <div className="sh-login-card">
+          <h2>登录平台</h2>
+          <p>请使用现有账号凭据登录统一 Shell。</p>
+          <form onSubmit={handleSubmit}>
+            <div className="sh-form-group">
+              <label className="sh-form-label" htmlFor="username">
+                用户名
+              </label>
+              <input
+                id="username"
+                type="text"
+                className="sh-form-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                placeholder="请输入用户名"
+              />
             </div>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              backgroundColor: '#1890ff',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: '1rem'
-            }}
-          >
-            {loading ? '登录中...' : '登录'}
-          </button>
-        </form>
+            <div className="sh-form-group sh-form-group-lg">
+              <label className="sh-form-label" htmlFor="password">
+                密码
+              </label>
+              <input
+                id="password"
+                type="password"
+                className="sh-form-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="请输入密码"
+              />
+            </div>
+            {error && <div className="sh-form-error">{error}</div>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="sh-btn sh-btn-primary sh-form-submit"
+            >
+              {loading ? '登录中...' : '登录'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

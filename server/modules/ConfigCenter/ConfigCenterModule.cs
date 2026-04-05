@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Modules.ConfigCenter.Imports;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
 using ICP.Platform.Modules.ConfigCenter.Services;
 using ICP.Platform.Sdk;
@@ -16,7 +17,9 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddScoped<IConfigService, ConfigService>();
-        services.AddScoped<IConfigRepository, ConfigRepository>();
+        services.AddSingleton<IConfigRepository, ConfigRepository>();
+        services.AddScoped<ILegacySettingParser, LegacySettingXmlParser>();
+        services.AddScoped<ILegacySettingImportService, LegacySettingImportService>();
     }
 
     public IReadOnlyList<ConfigDescriptor> GetConfigSchema()

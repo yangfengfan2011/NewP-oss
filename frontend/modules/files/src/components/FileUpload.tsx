@@ -12,7 +12,7 @@ export default function FileUpload({
   entityType,
   entityId,
   onUploadSuccess,
-  onUploadError
+  onUploadError,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -38,38 +38,50 @@ export default function FileUpload({
   };
 
   return (
-    <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '4px' }}>
-      <h3>上传文件</h3>
-      <input
-        type="file"
-        onChange={handleFileChange}
-        disabled={uploading}
-        style={{ marginTop: '0.5rem' }}
-      />
-      {uploading && (
-        <div style={{ marginTop: '1rem' }}>
-          <div>上传中... {progress}%</div>
-          <div
-            style={{
-              width: '100%',
-              height: '8px',
-              backgroundColor: '#f0f0f0',
-              borderRadius: '4px',
-              marginTop: '0.5rem'
-            }}
-          >
-            <div
-              style={{
-                width: `${progress}%`,
-                height: '100%',
-                backgroundColor: '#1890ff',
-                borderRadius: '4px',
-                transition: 'width 0.3s'
-              }}
-            />
+    <section className="sh-page-panel">
+      <div className="sh-page-panel-header">
+        <h2 className="sh-page-panel-title">上传文件</h2>
+      </div>
+      <div className="sh-page-panel-body">
+        <div className="sh-section-grid">
+          <div className="sh-summary-card">
+            <span className="sh-summary-card-label">上传目标</span>
+            <span className="sh-summary-card-value">{entityType ? '业务实体' : '通用空间'}</span>
+            <span className="sh-summary-card-meta">
+              {entityId ? `实体 ID：${entityId}` : '未绑定具体业务实体'}
+            </span>
+          </div>
+
+          <div className="sh-meta-block">
+            <div className="sh-meta-row">
+              <span className="sh-meta-label">触发方式</span>
+              <span className="sh-meta-value">选择文件后立即上传</span>
+            </div>
+            <div className="sh-meta-row">
+              <span className="sh-meta-label">完成反馈</span>
+              <span className="sh-meta-value">成功后自动刷新文件列表</span>
+            </div>
           </div>
         </div>
-      )}
-    </div>
+
+        <div className="sh-form-group">
+          <input
+            type="file"
+            onChange={handleFileChange}
+            disabled={uploading}
+            className="sh-form-input"
+          />
+        </div>
+
+        {uploading && (
+          <div className="sh-page-stack">
+            <span className="sh-page-panel-meta">上传中... {progress}%</span>
+            <div className="sh-progress">
+              <div className="sh-progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

@@ -8,11 +8,11 @@ export default function Layout() {
   const menus = ModuleRegistry.getMenus();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <div className="sh-layout">
       <Header />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="sh-layout-body">
         <Sidebar menus={menus} />
-        <main style={{ flex: 1, padding: '1.5rem', overflow: 'auto', backgroundColor: '#fff' }}>
+        <main className="sh-main">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

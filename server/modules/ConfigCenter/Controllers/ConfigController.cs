@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.ConfigCenter.DTOs;
+using ICP.Platform.Modules.ConfigCenter.Imports;
 using ICP.Platform.Modules.ConfigCenter.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,10 +10,12 @@ namespace ICP.Platform.Modules.ConfigCenter.Controllers;
 public class ConfigController : ControllerBase
 {
     private readonly IConfigService _configService;
+    private readonly ILegacySettingImportService _importService;
 
-    public ConfigController(IConfigService configService)
+    public ConfigController(IConfigService configService, ILegacySettingImportService importService)
     {
         _configService = configService;
+        _importService = importService;
     }
 
     [HttpGet]
@@ -92,5 +95,14 @@ public class ConfigController : ControllerBase
     {
         await _configService.DeleteConfigAsync(id, cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("import/setting")]
+    public async Task<ActionResult<LegacySettingImportResult>> ImportLegacySetting(
+        [FromBody] LegacySettingImportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _importService.ImportAsync(request, User?.Identity?.Name, cancellationToken);
+        return Ok(result);
     }
 }

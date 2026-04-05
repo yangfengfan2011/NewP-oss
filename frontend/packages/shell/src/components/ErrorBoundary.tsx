@@ -1,4 +1,4 @@
-import { Component, ReactNode, ErrorInfo } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -31,10 +31,13 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div style={{ padding: '2rem', textAlign: 'center' }}>
-          <h2>出错了</h2>
+        <div className="sh-error-boundary">
+          <h2>页面出现错误</h2>
           <p>{this.state.error?.message}</p>
-          <button onClick={() => this.setState({ hasError: false })}>
+          <button
+            className="sh-btn sh-btn-primary"
+            onClick={() => this.setState({ hasError: false })}
+          >
             重试
           </button>
         </div>

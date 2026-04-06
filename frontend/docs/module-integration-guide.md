@@ -1,169 +1,112 @@
 # 前端模块接入指南
 
-## 快速开始
+本文说明如何把新的前端模块接入当前平台，并与后端模块形成最小闭环。
 
-### 1. 创建模块目录结构
+## 推荐流程
+
+### 1. 使用脚手架生成模块
+
+在仓库根目录执行：
+
+```powershell
+.\scripts\new-module.ps1 -ModuleName ExampleModule
+```
+
+如果只想先生成文件，不自动更新宿主接入点，可以使用：
+
+```powershell
+.\scripts\new-module.ps1 -ModuleName ExampleModule -SkipIntegration
+```
+
+Linux 或 macOS 环境可使用：
 
 ```bash
-frontend/modules/your-module/
-├── src/
-│   ├── pages/
-│   │   └── YourPage.tsx
-│   └── index.ts
-├── package.json
-└── tsconfig.json
+./scripts/new-module.sh --module-name ExampleModule
+./scripts/new-module.sh --module-name ExampleModule --skip-integration
 ```
 
-### 2. 配置 package.json
+### 2. 查看生成结果
 
-```json
-{
-  "name": "@icp-modules/your-module",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
-  },
-  "dependencies": {
-    "@icp-platform/sdk": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.1",
-    "react": "^18.3.1",
-    "typescript": "^5.4.2"
-  }
-}
+脚手架默认会生成两个目录：
+
+```text
+server/modules/ExampleModule
+frontend/modules/example-module
 ```
 
-### 3. 配置 tsconfig.json
+其中前端模块默认包含：
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
-    "declaration": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
-}
+- 一个最小模块入口
+- 一个最小页面
+- 一个最小服务文件
+- 一个默认请求 `/api/example-module/status` 的联通验证逻辑
+
+### 3. 默认宿主接入
+
+未指定跳过集成时，脚手架还会自动更新：
+
+- `apps/host-api/HostApi.csproj`
+- `frontend/packages/shell/src/registerModules.ts`
+
+这样新模块生成后即可参与宿主构建。
+
+## 手动接入方式
+
+如果不使用自动集成，至少需要手动完成以下两步：
+
+### HostApi 接入
+
+在 `apps/host-api/HostApi.csproj` 中添加：
+
+```xml
+<ProjectReference Include="..\..\server\modules\ExampleModule\ExampleModule.csproj" />
 ```
 
-### 4. 创建页面组件
+### Shell 接入
+
+在 `frontend/packages/shell/src/registerModules.ts` 中添加：
 
 ```typescript
-// src/pages/YourPage.tsx
-export default function YourPage() {
-  return (
-    <div>
-      <h2>你的模块</h2>
-      <p>模块内容</p>
-    </div>
-  );
-}
+import exampleModuleModule from '../../../modules/example-module/src/index';
+
+const modules = [
+  // ...
+  exampleModuleModule,
+];
 ```
 
-### 5. 定义模块入口
+## 验证命令
 
-```typescript
-// src/index.ts
-import { FrontendModule } from '@icp-platform/sdk';
-import YourPage from './pages/YourPage';
+建议至少执行以下命令：
 
-export const yourModule: FrontendModule = {
-  metadata: {
-    moduleId: 'your-module',
-    displayName: '你的模块',
-    version: '0.1.0',
-    description: '模块描述'
-  },
-
-  routes: [
-    {
-      path: '/your-module',
-      component: YourPage,
-      permissions: ['your-module.view']
-    }
-  ],
-
-  menus: [
-    {
-      id: 'your-module',
-      label: '你的模块',
-      path: '/your-module',
-      icon: '📦',
-      order: 100,
-      permissions: ['your-module.view']
-    }
-  ],
-
-  permissions: [
-    {
-      code: 'your-module.view',
-      name: '查看你的模块',
-      category: 'YourModule'
-    }
-  ],
-
-  i18n: [
-    {
-      locale: 'zh-CN',
-      messages: {
-        'your-module.title': '你的模块'
-      }
-    }
-  ],
-
-  initialize: async () => {
-    console.log('Your module initialized');
-  }
-};
-
-export default yourModule;
+```powershell
+dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
+dotnet build .\apps\host-api\HostApi.csproj
+cd frontend
+pnpm --filter @icp-modules/example-module build
+pnpm build
 ```
 
-### 6. 在 Shell 中注册模块
+## 说明
 
-```typescript
-// packages/shell/src/main.tsx
-import yourModule from '../../../modules/your-module/src/index';
+- 前端模块目录使用 kebab-case。
+- 后端模块目录使用 PascalCase。
+- 默认权限编码使用 `<模块名>.View`。
+- 默认接口前缀使用 `/api/<kebab-case-module-name>`。
+## Controlled Integration Guardrails
 
-ModuleRegistry.register(yourModule);
+- Normal frontend module integration may update `frontend/packages/shell/src/registerModules.ts`.
+- Do not directly modify shell layout, global provider structure, or internal route composition for routine module access.
+- If a module really needs more than the controlled entry point, add or update a design doc first.
+
+## Minimum Verification
+
+```powershell
+dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
+dotnet build .\apps\host-api\HostApi.csproj
+cd frontend
+pnpm --filter @icp-modules/example-module build
+pnpm build
 ```
 
-### 7. 构建和运行
-
-```bash
-# 安装依赖
-pnpm install
-
-# 构建模块
-pnpm --filter @icp-modules/your-module build
-
-# 开发模式
-pnpm dev
-```
-
-## 完整示例
-
-参考 `frontend/modules/demo` 查看完整的模块实现示例。
-
-## 注意事项
-
-- 模块 ID 必须唯一
-- 路由路径不要与其他模块冲突
-- 权限代码建议使用 `模块名.资源.操作` 格式
-- 菜单 order 越小越靠前
-- 所有异步初始化逻辑放在 `initialize` 函数中
+The expected path is: the module builds and integrates without modifying other Shell internals.

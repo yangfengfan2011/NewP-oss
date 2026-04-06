@@ -96,3 +96,10 @@
 - 验证结果
 - 已知风险
 - 回滚思路
+## Componentization Guardrails
+
+- New modules should go through `Contracts / SDK / templates / controlled entry points` before changing Host or Shell internals.
+- `Host` should only own startup, composition, module loading, and host-level concerns.
+- `Shell` should only own layout, global providers, menu aggregation, route aggregation, and controlled registration.
+- Normal frontend module integration may update `frontend/packages/shell/src/registerModules.ts`, but should not directly modify other Shell internals.
+- The full guardrails reference lives in `docs/architecture/componentization-guardrails.md`.

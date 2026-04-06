@@ -44,3 +44,5 @@
 - [identity-lite-design.md](identity-lite-design.md)
 - [authorization-design.md](authorization-design.md)
 - [configcenter-design.md](configcenter-design.md)
+- [frontend-ui-component-strategy-design.md](frontend-ui-component-strategy-design.md)
+- [post-phase-6-foundation-and-migration-design.md](post-phase-6-foundation-and-migration-design.md)

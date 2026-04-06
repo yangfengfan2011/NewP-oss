@@ -1,5 +1,6 @@
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Sdk;
+using ICP.Platform.Templates.BackendModuleTemplate.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Templates.BackendModuleTemplate;

@@ -200,20 +200,39 @@ AI-First 对齐：
 
 ### Phase 6：开发体验与模板化
 
-状态：部分完成
+状态：已完成
 
 已落地：
 
-- 后端组件化模板设计
-- 仓库内后端模板骨架
-- `ModuleTemplateSample` 活示例模块
-- 对应测试与验证记录
+- 后端组件化模板设计与实现
+- 仓库内后端模板骨架（`server/templates/backend-module-template`，已补齐 `.csproj`）
+- `ModuleTemplateSample` 前后端端到端示例模块
+- `tests/ModuleTemplateSample.Tests` 已补回并验证通过（8 个测试全部通过）
+- 前端组件化模板设计与实现
+- 仓库内前端模板骨架（`frontend/templates/frontend-module-template`，默认包含最小状态接口联通页）
+- 前端模板构建验证通过
+- `scripts/new-module.ps1` / `scripts/new-module.sh` 可执行脚手架
+- 前端模块接入指南（`frontend/docs/module-integration-guide.md`）
+- 前端架构说明文档（`frontend/README.md`）
+- 对应测试与验证记录已按真实结果修正
 
-下一步：
+已验证：
 
-- 前端组件化模板
-- 端到端示例模块
-- 可执行脚手架
+- 后端模板可复制并创建新模块
+- 前端模板可复制并创建新模块
+- ModuleTemplateSample 已集成到 HostApi 并构建成功
+- 前端整个工作区构建成功（包含模板包与 `module-template-sample`）
+- `new-module.ps1 -ModuleName Phase6ScaffoldSmoke -SkipIntegration` 已真实生成并构建通过
+- `new-module.ps1 -ModuleName Phase6IntegrationSmoke` 已真实验证宿主接入路径
+- `new-module.sh --module-name Phase6ShellSmoke --skip-integration` 已在当前 WSL 环境下通过包装器调用 PowerShell 脚手架并完成生成与构建验证
+
+对应文档：
+
+- [designs/post-phase-6-foundation-and-migration-design.md](designs/post-phase-6-foundation-and-migration-design.md)
+- [verification/phase-6-backend-component-template-verification.md](verification/phase-6-backend-component-template-verification.md)
+- [verification/phase-6-frontend-component-template-verification.md](verification/phase-6-frontend-component-template-verification.md)
+- [verification/phase-6-closeout-verification.md](verification/phase-6-closeout-verification.md)
+- [verification/phase-6-frontend-component-template-verification.md](verification/phase-6-frontend-component-template-verification.md)
 
 ## 当前可用能力
 
@@ -221,13 +240,16 @@ AI-First 对齐：
 
 - Host API 可构建
 - 模块系统可装配
-- Demo / Authorization / ConfigCenter / Audit / Files 模块已有代码基础
+- Demo / Authorization / ConfigCenter / Audit / Files / ModuleTemplateSample 模块已有代码基础
 
 ### 前端
 
 - Shell 可运行
 - 登录闭环已接通
-- Demo / Authorization / ConfigCenter / Audit / Files 模块已接入前端工作区
+- Demo / Authorization / ConfigCenter / Audit / Files / ModuleTemplateSample 模块已接入前端工作区
+- 前端模板骨架可复制并独立构建
+- 前端最小端到端示例模块可独立构建
+- PowerShell / Shell 脚手架可生成新的最小前后端模块骨架
 - clean 环境下已验证 `pnpm install --frozen-lockfile` 与 `pnpm build` 可通过
 
 ### 测试
@@ -246,10 +268,14 @@ AI-First 对齐：
 
 ## 当前推荐下一步
 
-1. 持续关注 Phase 5 中文 Description 编码不稳定风险。
-2. 推进 Phase 6 的前端组件化模板、端到端示例模块和可执行脚手架。
-3. 基于 Phase 5 的迁移模板，扩展到 `Dictionary` 和 `Enumeration` 等其他旧资产类型。
-4. 持续维护计划、状态和模块文档的一致性，避免再次出现”代码已推进、文档未收口”。
+1. 启动 `Phase 6.5` 持久化底座收口，优先为 `ConfigCenter` / `Authorization` 建立真实数据库持久化、本地初始化与可复跑验证。
+2. 在真实持久化底座上继续推进迁移波次 1，优先扩展 `Dictionary` 和 `Enumeration` 等旧资产类型。
+3. 缓存与性能增强放到后续证据驱动阶段，不在持久化之前抢跑。
+4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并持续维护计划、状态和模块文档一致性。
+
+对应设计：
+
+- [designs/post-phase-6-foundation-and-migration-design.md](designs/post-phase-6-foundation-and-migration-design.md)
 
 ## AI-First 校准结论
 

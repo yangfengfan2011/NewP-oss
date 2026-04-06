@@ -104,6 +104,22 @@ importers:
         specifier: ^5.4.2
         version: 5.9.3
 
+  modules/module-template-sample:
+    dependencies:
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.1
+        version: 18.3.28
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      typescript:
+        specifier: ^5.4.2
+        version: 5.9.3
+
   packages/core:
     dependencies:
       react:
@@ -177,6 +193,22 @@ importers:
       vite:
         specifier: ^5.1.4
         version: 5.4.21
+
+  templates/frontend-module-template:
+    dependencies:
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.1
+        version: 18.3.28
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      typescript:
+        specifier: ^5.4.2
+        version: 5.9.3
 
 packages:
 

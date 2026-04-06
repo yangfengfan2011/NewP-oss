@@ -29,3 +29,9 @@ Each frontend module should provide:
 - contracts should be serializable where practical
 - any compatibility adapter must be explicit in the contract or migration layer
 
+## Guardrails
+
+- Host only composes and loads modules; it should not absorb module-private business rules.
+- Shell-level frontend integration should go through the controlled module list in `frontend/packages/shell/src/registerModules.ts`.
+- Shared declarations that multiple modules rely on should move through `Kernel / SDK / Contracts`, not be copied into individual modules.
+- Migration or import logic should stay in explicit migration/import layers, not leak into host composition.

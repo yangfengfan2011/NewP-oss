@@ -9,8 +9,11 @@
 - Phase 2 已完成：本地登录、默认管理员、登录闭环、受保护页面访问、前后端最小可运行链路已打通
 - Phase 3 已完成基础接入：扩展契约、Demo 模块贯通、Shell 模块装配能力已具备
 - Phase 4 已完成：Authorization、ConfigCenter、Audit、Files 已完成详细设计、实现说明、验证记录与测试/构建收口
+- Phase 5 已完成：首个旧资产迁移 POC 已落地，并形成可复跑的迁移模板交付
+- Phase 6 已完成：后端和前端组件化模板已落地，端到端示例模块已验证，集成文档已完善
 
 更完整的项目现状见 [docs/current-status.md](docs/current-status.md)。
+Phase 6 之后的建议路线见 [docs/designs/post-phase-6-foundation-and-migration-design.md](docs/designs/post-phase-6-foundation-and-migration-design.md)。
 
 ## 仓库结构
 
@@ -141,3 +144,9 @@ macOS / Linux:
 - `OldP/` 是旧平台参考来源，不是直接复制来源
 - `docs/prompts/` 和 `docs/bootstrap/` 主要服务于协作与执行流程，不是产品主文档
 - 后续新增文档请优先放入对应分类目录
+## Componentization Guardrails
+
+- Guardrails entry: [docs/architecture/componentization-guardrails.md](docs/architecture/componentization-guardrails.md)
+- New modules should integrate through templates, `Contracts / SDK`, and controlled entry points first.
+- Normal frontend module integration should only update `frontend/packages/shell/src/registerModules.ts`.
+- If a task needs to modify other Host or Shell internals, write or update a design doc first.

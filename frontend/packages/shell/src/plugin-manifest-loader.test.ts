@@ -64,7 +64,7 @@ describe('plugin-manifest-loader', () => {
       status: 200,
       statusText: 'OK',
       json: async () => ({
-        plugins: [{ url: '/test-plugin.js' }],
+        plugins: [{ url: '/plugin-assets/Audit/1.0.0/entry.js' }],
       }),
     });
     const importModule = vi.fn().mockResolvedValue({
@@ -80,7 +80,7 @@ describe('plugin-manifest-loader', () => {
     expect(result.manifestFound).toBe(true);
     expect(result.modules).toEqual([runtimeModule]);
     expect(result.errors).toEqual([]);
-    expect(importModule).toHaveBeenCalledWith('/test-plugin.js');
+    expect(importModule).toHaveBeenCalledWith('/plugin-assets/Audit/1.0.0/entry.js');
   });
 
   it('handles partial plugin load failures and continues with successful modules', async () => {

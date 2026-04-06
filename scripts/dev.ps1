@@ -47,59 +47,85 @@ foreach ($path in @($frontendOutLog, $frontendErrLog, $backendOutLog, $backendEr
 }
 
 Write-Host "Starting Host API..." -ForegroundColor Cyan
-$backendProcess = Start-Process `
-    -FilePath "dotnet" `
-    -ArgumentList "run", "--project", (Join-Path $repoRoot "apps\host-api\HostApi.csproj") `
-    -WorkingDirectory $repoRoot `
-    -RedirectStandardOutput $backendOutLog `
-    -RedirectStandardError $backendErrLog `
-    -PassThru
+$previousAspNetCoreEnvironment = $env:ASPNETCORE_ENVIRONMENT
+$previousDotnetEnvironment = $env:DOTNET_ENVIRONMENT
 
-Write-Host "Starting Frontend Shell..." -ForegroundColor Cyan
-$frontendProcess = Start-Process `
-    -FilePath "pnpm.cmd" `
-    -ArgumentList "-C", (Join-Path $repoRoot "frontend"), "--filter", "@icp-platform/shell", "dev" `
-    -WorkingDirectory $repoRoot `
-    -RedirectStandardOutput $frontendOutLog `
-    -RedirectStandardError $frontendErrLog `
-    -PassThru
+try {
+    $env:ASPNETCORE_ENVIRONMENT = "Development"
+    $env:DOTNET_ENVIRONMENT = "Development"
+
+    $backendProcess = Start-Process `
+        -FilePath "dotnet" `
+        -ArgumentList "run", "--project", (Join-Path $repoRoot "apps\host-api\HostApi.csproj") `
+        -WorkingDirectory $repoRoot `
+        -RedirectStandardOutput $backendOutLog `
+        -RedirectStandardError $backendErrLog `
+        -PassThru
+}
+finally {
+    if ($null -eq $previousAspNetCoreEnvironment) {
+        Remove-Item Env:ASPNETCORE_ENVIRONMENT -ErrorAction SilentlyContinue
+    } else {
+        $env:ASPNETCORE_ENVIRONMENT = $previousAspNetCoreEnvironment
+    }
+
+    if ($null -eq $previousDotnetEnvironment) {
+        Remove-Item Env:DOTNET_ENVIRONMENT -ErrorAction SilentlyContinue
+    } else {
+        $env:DOTNET_ENVIRONMENT = $previousDotnetEnvironment
+    }
+}
 
 Set-Content -Path $backendPidFile -Value $backendProcess.Id
-Set-Content -Path $frontendPidFile -Value $frontendProcess.Id
 
 $backendReady = $false
 $frontendReady = $false
-$deadline = (Get-Date).AddSeconds(60)
+$frontendProcess = $null
+$backendDeadline = (Get-Date).AddSeconds(60)
 
-while ((Get-Date) -lt $deadline -and (-not $backendReady -or -not $frontendReady)) {
-    if (-not $backendReady) {
-        try {
-            Invoke-WebRequest -UseBasicParsing "$backendUrl/api/auth/current-user" -TimeoutSec 3 | Out-Null
+while ((Get-Date) -lt $backendDeadline -and -not $backendReady) {
+    try {
+        Invoke-WebRequest -UseBasicParsing "$backendUrl/api/auth/current-user" -TimeoutSec 3 | Out-Null
+        $backendReady = $true
+    } catch {
+        if ($_.Exception.Response) {
             $backendReady = $true
-        } catch {
-            if ($_.Exception.Response) {
-                $backendReady = $true
-            }
         }
     }
 
-    if (-not $frontendReady) {
+    if (-not $backendReady) {
+        Start-Sleep -Seconds 1
+    }
+}
+
+if ($backendReady) {
+    Write-Host "Starting Frontend Shell..." -ForegroundColor Cyan
+    $frontendProcess = Start-Process `
+        -FilePath "pnpm.cmd" `
+        -ArgumentList "-C", (Join-Path $repoRoot "frontend"), "--filter", "@icp-platform/shell", "dev" `
+        -WorkingDirectory $repoRoot `
+        -RedirectStandardOutput $frontendOutLog `
+        -RedirectStandardError $frontendErrLog `
+        -PassThru
+
+    Set-Content -Path $frontendPidFile -Value $frontendProcess.Id
+
+    $frontendDeadline = (Get-Date).AddSeconds(60)
+
+    while ((Get-Date) -lt $frontendDeadline -and -not $frontendReady) {
         try {
             Invoke-WebRequest -UseBasicParsing $frontendUrl -TimeoutSec 3 | Out-Null
             $frontendReady = $true
         } catch {
+            Start-Sleep -Seconds 1
         }
-    }
-
-    if (-not $backendReady -or -not $frontendReady) {
-        Start-Sleep -Seconds 1
     }
 }
 
 Write-Host ""
 Write-Host "=== Startup result ===" -ForegroundColor Green
 Write-Host "Host API PID: $($backendProcess.Id)" -ForegroundColor Yellow
-Write-Host "Frontend PID: $($frontendProcess.Id)" -ForegroundColor Yellow
+Write-Host "Frontend PID: $(if ($frontendProcess) { $frontendProcess.Id } else { 'not started' })" -ForegroundColor Yellow
 Write-Host "Host API logs: $backendOutLog / $backendErrLog"
 Write-Host "Frontend logs: $frontendOutLog / $frontendErrLog"
 Write-Host "PID files: $backendPidFile / $frontendPidFile"

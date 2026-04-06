@@ -87,3 +87,5 @@ temp/
 .ai-orchestrator/
 cookies.txt
 update_tests.patch
+.codex-temp/dev-frontend.pid
+.codex-temp/dev-host-api.pid

@@ -41,7 +41,7 @@ frontend/
 
 - 生成 `frontend/modules/example-module`
 - 生成对应的后端模块目录
-- 更新 `frontend/packages/shell/src/registerModules.ts`
+- 更新 `frontend/packages/shell/src/builtin-runtime-plugins.ts`
 
 如果只想生成骨架，不自动修改宿主接入点，可以加 `-SkipIntegration` 或 `--skip-integration`。
 

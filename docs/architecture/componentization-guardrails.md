@@ -67,7 +67,7 @@
 
 前端模块正常接入时，唯一允许修改的 Shell 级入口是：
 
-- `frontend/packages/shell/src/registerModules.ts`
+- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
 
 如果一个新增模块任务需要修改 Shell 的其他内部文件，应先补单独设计，说明为什么现有契约或受控清单不够用。
 
@@ -92,7 +92,7 @@
 `new-module` 脚手架默认只允许自动更新以下受控接入点：
 
 - `apps/host-api/HostApi.csproj`
-- `frontend/packages/shell/src/registerModules.ts`
+- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
 
 脚手架不应引导开发者直接修改 Shell 其他内部结构。
 

@@ -234,6 +234,46 @@ AI-First 对齐：
 - [verification/phase-6-closeout-verification.md](verification/phase-6-closeout-verification.md)
 - [verification/phase-6-frontend-component-template-verification.md](verification/phase-6-frontend-component-template-verification.md)
 
+### Phase 6.6：运行层插件平台最小闭环
+
+状态：进行中
+
+已落地：
+
+- 后端插件清单模型与插件目录扫描能力
+- 基于 `plugin.json` 的入口程序集解析与宿主版本兼容校验
+- 宿主从 `modules/*/plugin.json` 发现并装载内建模块
+- 开发期内建模块清单已放入 `apps/host-api/modules/*`
+- `Program.cs` 已切离 `*Module.dll` 扫描与 `ConfigCenter.dll` 特判
+- 插件打包脚本与插件包校验脚本已落地
+- `Audit` / `Authorization` / `ModuleTemplateSample` 已验证可产出标准插件目录
+- 面向仓库外部开发的后端插件模板已落地
+- `new-module.ps1` / `new-module.sh` 已支持外部插件模式
+
+已验证：
+
+- `dotnet test tests/Kernel.Tests/Kernel.Tests.csproj`
+- `dotnet build apps/host-api/HostApi.csproj`
+- Host 启动日志显示通过插件目录发现并装载 6 个内建模块
+- `scripts/pack-plugin.ps1` 与 `scripts/verify-plugin-package.ps1` 已对现有模块完成真实打包校验
+- 宿主已在 `Platform__ModulesPath=artifacts/plugin-packages` 下完成打包产物烟测启动
+- 外部插件样例已通过脚手架生成、构建、打包与校验链路验证
+
+当前边界：
+
+- `ProjectReference` 仍保留在 `HostApi.csproj` 中，作为开发期 DLL 产出过渡机制
+- 插件依赖治理、哈希/签名校验、外部打包脚本与前后端统一插件交付模型与更完整的前端插件治理尚未纳入本轮
+- 外部插件开发当前仍使用仓库内 `server/sdk/Sdk.csproj` 作为开发期 SDK 引用
+
+对应文档：
+
+- [architecture/plugin-package-format.md](architecture/plugin-package-format.md)
+- [architecture/plugin-runtime-loading.md](architecture/plugin-runtime-loading.md)
+- [architecture/plugin-compatibility-policy.md](architecture/plugin-compatibility-policy.md)
+- [guides/plugin-packaging.md](guides/plugin-packaging.md)
+- [guides/external-plugin-development.md](guides/external-plugin-development.md)
+- [guides/external-plugin-debugging.md](guides/external-plugin-debugging.md)
+
 ## 当前可用能力
 
 ### 后端
@@ -241,6 +281,7 @@ AI-First 对齐：
 - Host API 可构建
 - 模块系统可装配
 - Demo / Authorization / ConfigCenter / Audit / Files / ModuleTemplateSample 模块已有代码基础
+- 宿主可通过插件目录与插件清单装载内建后端模块
 
 ### 前端
 
@@ -268,9 +309,9 @@ AI-First 对齐：
 
 ## 当前推荐下一步
 
-1. 启动 `Phase 6.5` 持久化底座收口，优先为 `ConfigCenter` / `Authorization` 建立真实数据库持久化、本地初始化与可复跑验证。
-2. 在真实持久化底座上继续推进迁移波次 1，优先扩展 `Dictionary` 和 `Enumeration` 等旧资产类型。
-3. 缓存与性能增强放到后续证据驱动阶段，不在持久化之前抢跑。
+1. 继续推进 `Phase 6.6`，补齐插件打包脚本、标准安装目录和至少一个可独立交付的插件包。
+2. 在插件装配主线稳定后，再启动对外 SDK / 外部模板收口，而不是提前承诺外部扩展开发。
+3. `Phase 6.5` 持久化底座收口与插件平台推进并行时，必须保持模块边界，不把两个主题混成一次大改。
 4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并持续维护计划、状态和模块文档一致性。
 
 对应设计：

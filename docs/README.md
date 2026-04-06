@@ -66,6 +66,9 @@
 
 面向开发者的运行、环境与协作使用说明。
 
+- [guides/componentized-development-quickstart.md](guides/componentized-development-quickstart.md)
+- [guides/componentized-development.md](guides/componentized-development.md)
+- [guides/componentized-example-module.md](guides/componentized-example-module.md)
 - [guides/local-environment.md](guides/local-environment.md)
 - [guides/subagents-guide.md](guides/subagents-guide.md)
 - [guides/worktree-guide.md](guides/worktree-guide.md)
@@ -90,7 +93,10 @@
 
 - 项目现状：[current-status.md](current-status.md)
 - 仓库入口：[../README.md](../README.md)
+- 组件化开发超短版：[guides/componentized-development-quickstart.md](guides/componentized-development-quickstart.md)
 - 架构总览：[architecture/architecture.md](architecture/architecture.md)
+- 组件化开发入口：[guides/componentized-development.md](guides/componentized-development.md)
+- 组件化 Example：[guides/componentized-example-module.md](guides/componentized-example-module.md)
 - 详细设计入口：[designs/README.md](designs/README.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
 - 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)

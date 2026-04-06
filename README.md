@@ -120,6 +120,7 @@ macOS / Linux:
 ## 文档入口
 
 - 文档总览：[docs/README.md](docs/README.md)
+- 组件化开发指南：[docs/guides/componentized-development.md](docs/guides/componentized-development.md)
 - 项目现状：[docs/current-status.md](docs/current-status.md)
 - 架构与范围：[docs/architecture/](docs/architecture/)
 - 阶段文档：[docs/phases/](docs/phases/)
@@ -135,9 +136,10 @@ macOS / Linux:
 3. [docs/current-status.md](docs/current-status.md)
 4. [docs/architecture/scope-v1.md](docs/architecture/scope-v1.md)
 5. [docs/architecture/architecture.md](docs/architecture/architecture.md)
-6. [docs/architecture/module-contract.md](docs/architecture/module-contract.md)
-7. [docs/architecture/module-boundaries-v1.md](docs/architecture/module-boundaries-v1.md)
-8. [docs/phases/phase-2-minimum-runnable-plan.md](docs/phases/phase-2-minimum-runnable-plan.md)
+6. [docs/guides/componentized-development.md](docs/guides/componentized-development.md)
+7. [docs/architecture/module-contract.md](docs/architecture/module-contract.md)
+8. [docs/architecture/module-boundaries-v1.md](docs/architecture/module-boundaries-v1.md)
+9. [docs/phases/phase-2-minimum-runnable-plan.md](docs/phases/phase-2-minimum-runnable-plan.md)
 
 ## 说明
 
@@ -146,7 +148,8 @@ macOS / Linux:
 - 后续新增文档请优先放入对应分类目录
 ## Componentization Guardrails
 
-- Guardrails entry: [docs/architecture/componentization-guardrails.md](docs/architecture/componentization-guardrails.md)
+- Primary entry: [docs/guides/componentized-development.md](docs/guides/componentized-development.md)
+- Guardrails detail: [docs/architecture/componentization-guardrails.md](docs/architecture/componentization-guardrails.md)
 - New modules should integrate through templates, `Contracts / SDK`, and controlled entry points first.
-- Normal frontend module integration should only update `frontend/packages/shell/src/registerModules.ts`.
+- Normal frontend module integration should only update `frontend/packages/shell/src/builtin-runtime-plugins.ts`.
 - If a task needs to modify other Host or Shell internals, write or update a design doc first.

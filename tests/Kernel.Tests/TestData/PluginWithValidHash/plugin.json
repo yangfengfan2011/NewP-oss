@@ -1,0 +1,11 @@
+{
+  "moduleId": "PluginWithValidHash",
+  "displayName": "Plugin With Valid Hash",
+  "version": "1.0.0",
+  "entryAssembly": "PluginWithValidHash.dll",
+  "entryAssemblySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  }
+}

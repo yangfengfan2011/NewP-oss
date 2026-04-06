@@ -41,6 +41,34 @@
 
 脚手架会基于当前模板生成完整后端目录，并按需更新 `apps/host-api/HostApi.csproj`。
 
+## 插件打包
+
+当前后端模块可以通过插件打包脚本产出最小插件目录：
+
+```powershell
+.\scripts\pack-plugin.ps1 -ProjectPath .\server\modules\ExampleModule\ExampleModule.csproj -Force
+```
+
+```bash
+./scripts/pack-plugin.sh --project-path server/modules/ExampleModule/ExampleModule.csproj --force
+```
+
+打包结果默认位于：
+
+- `artifacts/plugin-packages/<ModuleId>/`
+
+包内至少包含：
+
+- `plugin.json`
+- 模块程序集
+- `README.md`
+
+可用校验脚本检查产物完整性：
+
+```powershell
+.\scripts\verify-plugin-package.ps1 -PackagePath .\artifacts\plugin-packages\ExampleModule
+```
+
 ## 原则
 
 - 模块必须继续继承 `ModuleBase`。
@@ -60,3 +88,5 @@
 dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
 dotnet build .\apps\host-api\HostApi.csproj
 ```
+
+详细规则见 [Plugin Packaging Guide](../../../docs/guides/plugin-packaging.md)。

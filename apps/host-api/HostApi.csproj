@@ -13,6 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Update="modules\**\plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Development-time staging only; runtime module composition is manifest-driven. -->
     <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
     <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\server\modules\Demo\DemoModule.csproj" />

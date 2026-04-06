@@ -46,7 +46,7 @@ frontend/modules/example-module
 未指定跳过集成时，脚手架还会自动更新：
 
 - `apps/host-api/HostApi.csproj`
-- `frontend/packages/shell/src/registerModules.ts`
+- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
 
 这样新模块生成后即可参与宿主构建。
 
@@ -64,14 +64,12 @@ frontend/modules/example-module
 
 ### Shell 接入
 
-在 `frontend/packages/shell/src/registerModules.ts` 中添加：
+在 `frontend/packages/shell/src/builtin-runtime-plugins.ts` 中添加：
 
 ```typescript
-import exampleModuleModule from '../../../modules/example-module/src/index';
-
-const modules = [
+export const BUILTIN_RUNTIME_PLUGIN_ENTRIES = [
   // ...
-  exampleModuleModule,
+  { moduleId: 'example-module' },
 ];
 ```
 
@@ -95,7 +93,7 @@ pnpm build
 - 默认接口前缀使用 `/api/<kebab-case-module-name>`。
 ## Controlled Integration Guardrails
 
-- Normal frontend module integration may update `frontend/packages/shell/src/registerModules.ts`.
+- Normal frontend module integration may update `frontend/packages/shell/src/builtin-runtime-plugins.ts`.
 - Do not directly modify shell layout, global provider structure, or internal route composition for routine module access.
 - If a module really needs more than the controlled entry point, add or update a design doc first.
 

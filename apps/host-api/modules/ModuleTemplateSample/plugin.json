@@ -1,0 +1,12 @@
+{
+  "moduleId": "ModuleTemplateSample",
+  "displayName": "模块模板示例",
+  "version": "1.0.0",
+  "description": "开发期内建插件清单",
+  "entryAssembly": "../../ModuleTemplateSampleModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  }
+}

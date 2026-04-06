@@ -5,14 +5,17 @@ import App from './App';
 import { registerShellModules } from './registerModules';
 import './index.css';
 
-registerShellModules();
+async function bootstrap() {
+  await registerShellModules();
 
-ModuleRegistry.initializeAll().then(() => {
+  await ModuleRegistry.initializeAll();
   console.log('All modules initialized');
-});
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+bootstrap();

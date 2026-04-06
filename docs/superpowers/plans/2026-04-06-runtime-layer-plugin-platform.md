@@ -126,10 +126,10 @@
 - Create: `D:\Github\ICP-X\NewP\docs\architecture\plugin-governance.md`
 - Create: `D:\Github\ICP-X\NewP\docs\guides\plugin-upgrade-and-rollback.md`
 
-- [ ] 增加模块版本与兼容失败提示。
-- [ ] 增加插件禁用机制。
-- [ ] 增加哈希或签名校验设计。
-- [ ] 增加升级和回滚路径说明。
+- [x] 增加模块版本与兼容失败提示。
+- [x] 增加插件禁用机制。
+- [x] 增加哈希或签名校验设计。
+- [x] 增加升级和回滚路径说明。
 
 **验收标准**
 - 插件不兼容、校验失败或被禁用时，宿主行为可预测且可解释。
@@ -142,9 +142,9 @@
 - Create: `D:\Github\ICP-X\NewP\docs\architecture\frontend-plugin-loading.md`
 - Create: `D:\Github\ICP-X\NewP\docs\guides\frontend-plugin-integration.md`
 
-- [ ] 设计前端插件清单或资源清单格式。
-- [ ] 明确前端插件与后端插件如何对齐。
-- [ ] 逐步把 `registerModules.ts` 从研发期清单，过渡到正式插件装配入口。
+- [x] 设计前端插件清单或资源清单格式。
+- [x] 明确前端插件与后端插件如何对齐。
+- [x] 逐步把 `registerModules.ts` 从研发期清单，过渡到正式插件装配入口。
 
 **验收标准**
 - 前端正式交付不再依赖工作区手工源码接线作为唯一方式。

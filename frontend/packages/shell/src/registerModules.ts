@@ -1,26 +1,93 @@
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { FrontendModule, ModuleRegistry } from '@icp-platform/sdk';
 
-import auditModule from '../../../modules/audit/src/index';
-import authorizationModule from '../../../modules/authorization/src/index';
-import configCenterModule from '../../../modules/config-center/src/index';
-import demoModule from '../../../modules/demo/src/index';
-import filesModule from '../../../modules/files/src/index';
-import moduleTemplateSampleModule from '../../../modules/module-template-sample/src/index';
+import {
+  getBuiltinDevelopmentFallbackEntries,
+  type BuiltinRuntimePluginEntry,
+} from './builtin-runtime-plugins';
+import { loadPluginManifest } from './plugin-manifest-loader';
 
-/**
- * Shell-level controlled module registration list.
- * Normal module integration should only update this file,
- * instead of modifying other shell internals directly.
- */
-const modules = [
-  demoModule,
-  auditModule,
-  authorizationModule,
-  configCenterModule,
-  filesModule,
-  moduleTemplateSampleModule,
-];
+const LOCAL_WORKSPACE_MODULES = import.meta.glob<Record<string, unknown>>(
+  '../../../modules/*/src/index.ts',
+  { eager: false },
+);
 
-export function registerShellModules() {
+const LOCAL_INTERNAL_PLUGIN_MODULES = import.meta.glob<Record<string, unknown>>(
+  './plugins/*.ts',
+  { eager: false },
+);
+
+function getLocalDevelopmentModuleRegistry(): Record<string, () => Promise<Record<string, unknown>>> {
+  const registry: Record<string, () => Promise<Record<string, unknown>>> = {};
+
+  for (const [path, loader] of Object.entries(LOCAL_WORKSPACE_MODULES)) {
+    const match = path.match(/^\.\.\/\.\.\/\.\.\/modules\/([^/]+)\/src\/index\.ts$/);
+    if (match) {
+      registry[match[1]] = loader;
+    }
+  }
+
+  for (const [path, loader] of Object.entries(LOCAL_INTERNAL_PLUGIN_MODULES)) {
+    const match = path.match(/^\.\/plugins\/(.+)\.ts$/);
+    if (match) {
+      registry[match[1]] = loader;
+    }
+  }
+
+  return registry;
+}
+
+function resolveExportedModule(
+  entry: BuiltinRuntimePluginEntry,
+  module: Record<string, unknown>,
+): FrontendModule {
+  const exportedModule = entry.exportName ? module[entry.exportName] : module.default;
+
+  if (!exportedModule) {
+    throw new Error(
+      `Module ${entry.moduleId} does not export ${entry.exportName || 'default'}`,
+    );
+  }
+
+  return exportedModule as FrontendModule;
+}
+
+async function loadLocalDevelopmentModules(): Promise<FrontendModule[]> {
+  const registry = getLocalDevelopmentModuleRegistry();
+  const modules: FrontendModule[] = [];
+
+  for (const entry of getBuiltinDevelopmentFallbackEntries()) {
+    const loader = registry[entry.moduleId];
+    if (!loader) {
+      console.warn(`Local development module ${entry.moduleId} not found in registry`);
+      continue;
+    }
+
+    const module = await loader();
+    modules.push(resolveExportedModule(entry, module));
+  }
+
+  return modules;
+}
+
+export async function registerShellModules() {
+  const result = await loadPluginManifest();
+
+  if (result.manifestFound) {
+    console.info(
+      `Registering ${result.modules.length} runtime modules from manifest`,
+    );
+    result.modules.forEach(module => ModuleRegistry.register(module));
+
+    if (result.errors.length > 0) {
+      console.warn(
+        `${result.errors.length} plugin(s) failed to load, continuing with successfully loaded modules`,
+      );
+    }
+
+    return;
+  }
+
+  console.info('Registering local development modules');
+  const modules = await loadLocalDevelopmentModules();
   modules.forEach(module => ModuleRegistry.register(module));
 }

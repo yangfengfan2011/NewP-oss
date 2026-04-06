@@ -35,7 +35,7 @@
 并在默认情况下自动更新：
 
 - `apps/host-api/HostApi.csproj`
-- `frontend/packages/shell/src/registerModules.ts`
+- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
 
 ### 方式二：手动复制
 
@@ -66,7 +66,7 @@ pnpm build
 - `src/index.ts` should only declare the frontend module.
 - `src/pages/*` should contain page entry logic only.
 - `src/services/*` should contain API access only.
-- Normal module integration should only update `frontend/packages/shell/src/registerModules.ts`.
+- Normal module integration should only update `frontend/packages/shell/src/builtin-runtime-plugins.ts`.
 - Do not modify other shell internals unless a separate design explicitly approves it.
 
 ## Minimum Verification

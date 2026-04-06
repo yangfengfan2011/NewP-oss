@@ -1,0 +1,9 @@
+{
+  "moduleId": "MissingAssembly",
+  "displayName": "Missing Assembly Plugin",
+  "version": "1.0.0",
+  "entryAssembly": "NonExistent.dll",
+  "hostVersion": {
+    "min": "1.0.0"
+  }
+}

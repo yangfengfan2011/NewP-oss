@@ -32,6 +32,6 @@ Each frontend module should provide:
 ## Guardrails
 
 - Host only composes and loads modules; it should not absorb module-private business rules.
-- Shell-level frontend integration should go through the controlled module list in `frontend/packages/shell/src/registerModules.ts`.
+- Shell-level frontend integration should go through the controlled built-in runtime plugin list in `frontend/packages/shell/src/builtin-runtime-plugins.ts`.
 - Shared declarations that multiple modules rely on should move through `Kernel / SDK / Contracts`, not be copied into individual modules.
 - Migration or import logic should stay in explicit migration/import layers, not leak into host composition.

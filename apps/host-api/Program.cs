@@ -3,6 +3,7 @@ using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
+using ICP.Platform.Kernel.PluginDiscovery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,39 +43,23 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.Configure<LocalAuthOptions>(builder.Configuration.GetSection("LocalAuth"));
 builder.Services.AddSingleton<LocalAuthSeeder>();
 
+var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
+var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
+    ? configuredModulesPath
+    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredModulesPath));
+var hostVersion = builder.Configuration["Platform:HostVersion"]
+    ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
+    ?? "1.0.0";
+var disabledPlugins = builder.Configuration.GetSection("Platform:DisabledPlugins").Get<string[]>() ?? Array.Empty<string>();
+var pluginAssemblyLoader = new PluginRuntimeAssemblyLoader(hostVersion, disabledPlugins);
+var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(modulesRootPath);
+
 builder.Services.AddModuleSystem(options =>
 {
     options.Assemblies.Add(Assembly.GetExecutingAssembly());
-
-    var baseDirectory = AppContext.BaseDirectory;
-    var moduleFiles = Directory.GetFiles(baseDirectory, "*Module.dll");
-
-    foreach (var moduleFile in moduleFiles)
+    foreach (var pluginAssembly in pluginLoadResult.LoadedAssemblies)
     {
-        try
-        {
-            var assembly = Assembly.LoadFrom(moduleFile);
-            options.Assemblies.Add(assembly);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Unable to load module assembly {moduleFile}: {ex.Message}");
-        }
-    }
-
-    // Explicitly load ConfigCenter (doesn't match *Module.dll pattern)
-    var configCenterPath = Path.Combine(baseDirectory, "ConfigCenter.dll");
-    if (File.Exists(configCenterPath))
-    {
-        try
-        {
-            var configCenterAssembly = Assembly.LoadFrom(configCenterPath);
-            options.Assemblies.Add(configCenterAssembly);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Unable to load ConfigCenter assembly: {ex.Message}");
-        }
+        options.Assemblies.Add(pluginAssembly);
     }
 });
 
@@ -98,6 +83,22 @@ app.MapControllers();
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
 var modules = registry.GetAllModules();
 var logger = app.Logger;
+
+logger.LogInformation(
+    "Plugin discovery root: {PluginsRootPath}, host version: {HostVersion}, loadable plugins: {LoadedCount}, skipped plugins: {SkippedCount}",
+    modulesRootPath,
+    hostVersion,
+    pluginLoadResult.SuccessfulPlugins.Count,
+    pluginLoadResult.FailedPlugins.Count);
+
+foreach (var failedPlugin in pluginLoadResult.FailedPlugins)
+{
+    logger.LogWarning(
+        "Skipped plugin package {PluginDirectory}: {ErrorType} - {ErrorMessage}",
+        failedPlugin.PluginDirectory ?? "(unknown)",
+        failedPlugin.ErrorType,
+        failedPlugin.ErrorMessage ?? "No details");
+}
 
 logger.LogInformation("=== Loaded Modules ===");
 foreach (var (moduleId, module) in modules)

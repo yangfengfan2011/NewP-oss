@@ -1,9 +1,9 @@
 {
-    "moduleId":  "audit",
+    "moduleId":  "Audit",
     "entryManifest":  "manifest.json",
     "assetRoot":  "assets",
     "runtimeBaseStrategy":  "host-local-static",
-    "publicBasePath":  "/plugins/audit/1.0.0/",
+    "publicBasePath":  "/plugins/Audit/1.0.0/",
     "sharedDependencies":  [
                                "react",
                                "react-dom",

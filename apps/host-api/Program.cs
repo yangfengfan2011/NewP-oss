@@ -1,12 +1,14 @@
-using System.Reflection;
+﻿using System.Reflection;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.PluginDiscovery;
+using ICP.Platform.Kernel.PluginPackages;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -43,16 +45,24 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.Configure<LocalAuthOptions>(builder.Configuration.GetSection("LocalAuth"));
 builder.Services.AddSingleton<LocalAuthSeeder>();
 
-var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
-var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
-    ? configuredModulesPath
-    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredModulesPath));
+var configuredPluginInstallRoot = builder.Configuration["Platform:PluginInstallRoot"] ?? "plugins";
+var pluginInstallRoot = Path.IsPathRooted(configuredPluginInstallRoot)
+    ? configuredPluginInstallRoot
+    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPluginInstallRoot));
 var hostVersion = builder.Configuration["Platform:HostVersion"]
     ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
     ?? "1.0.0";
 var disabledPlugins = builder.Configuration.GetSection("Platform:DisabledPlugins").Get<string[]>() ?? Array.Empty<string>();
+
+var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
+var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
+var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
+var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder);
+materializer.Materialize(pluginInstallRoot);
+
+var backendLoadViewPath = Path.Combine(pluginInstallRoot, "runtime", "backend-load-view");
 var pluginAssemblyLoader = new PluginRuntimeAssemblyLoader(hostVersion, disabledPlugins);
-var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(modulesRootPath);
+var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(backendLoadViewPath);
 
 builder.Services.AddModuleSystem(options =>
 {
@@ -65,8 +75,10 @@ builder.Services.AddModuleSystem(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
+if (!skipLocalAuthSeeding)
 {
+    using var scope = app.Services.CreateScope();
     var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
     await seeder.SeedAsync();
 }
@@ -75,6 +87,33 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
+
+app.Map("/plugins/frontend-plugin-manifest.json", manifestApp =>
+{
+    manifestApp.Run(async context =>
+    {
+        var manifestPath = Path.Combine(pluginInstallRoot, "runtime", "frontend-plugin-manifest.json");
+        if (!File.Exists(manifestPath))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "application/json";
+        await context.Response.SendFileAsync(manifestPath);
+    });
+});
+
+var publicAssetsPath = Path.Combine(pluginInstallRoot, "public");
+if (Directory.Exists(publicAssetsPath))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(publicAssetsPath),
+        RequestPath = frontendPluginBaseUrl
+    });
+}
+
 app.UseAuthentication();
 app.UseAuditMiddleware();
 app.UseAuthorization();
@@ -85,8 +124,9 @@ var modules = registry.GetAllModules();
 var logger = app.Logger;
 
 logger.LogInformation(
-    "Plugin discovery root: {PluginsRootPath}, host version: {HostVersion}, loadable plugins: {LoadedCount}, skipped plugins: {SkippedCount}",
-    modulesRootPath,
+    "Plugin discovery root: {PluginInstallRoot}, backend load view: {BackendLoadViewPath}, host version: {HostVersion}, loadable plugins: {LoadedCount}, skipped plugins: {SkippedCount}",
+    pluginInstallRoot,
+    backendLoadViewPath,
     hostVersion,
     pluginLoadResult.SuccessfulPlugins.Count,
     pluginLoadResult.FailedPlugins.Count);
@@ -116,3 +156,5 @@ var menus = registry.GetAllMenus();
 logger.LogInformation("Loaded {Count} menu items", menus.Count);
 
 app.Run();
+
+

@@ -87,3 +87,5 @@ temp/
 .ai-orchestrator/
 cookies.txt
 update_tests.patch
+artifacts/installed-plugins/
+artifacts/frontend-plugins/

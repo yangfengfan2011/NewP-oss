@@ -392,13 +392,12 @@ function Write-FrontendManifest {
     )
 
     $frontendDir = Join-Path $TargetDirectory "frontend"
-    $moduleSlug = $Metadata.ModuleId.ToLowerInvariant()
     $manifest = [ordered]@{
-        moduleId = $moduleSlug
+        moduleId = $Metadata.ModuleId
         entryManifest = "manifest.json"
         assetRoot = "assets"
         runtimeBaseStrategy = "host-local-static"
-        publicBasePath = "/plugins/$moduleSlug/$($Metadata.Version)/"
+        publicBasePath = "/plugins/$($Metadata.ModuleId)/$($Metadata.Version)/"
         sharedDependencies = @(
             "react",
             "react-dom",
@@ -419,13 +418,20 @@ function Write-Checksums {
     $checksumsDir = Join-Path $TargetDirectory "checksums"
     New-Item -ItemType Directory -Path $checksumsDir -Force | Out-Null
 
+    $normalizedTargetDirectory = [System.IO.Path]::GetFullPath($TargetDirectory).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $targetDirectoryPrefix = $normalizedTargetDirectory + [System.IO.Path]::DirectorySeparatorChar
+
     $checksums = @{}
     $files = Get-ChildItem -LiteralPath $TargetDirectory -Recurse -File |
         Where-Object { $_.FullName -notmatch "\\checksums\\" }
 
     foreach ($file in $files) {
-        $relativePath = $file.FullName.Substring($TargetDirectory.Length + 1).Replace('\', '/')
-        $hash = Compute-Sha256 -FilePath $file.FullName
+        $normalizedFilePath = [System.IO.Path]::GetFullPath($file.FullName)
+        if (-not $normalizedFilePath.StartsWith($targetDirectoryPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "File path is outside the target directory: $normalizedFilePath"
+        }
+        $relativePath = $normalizedFilePath.Substring($targetDirectoryPrefix.Length).Replace('\', '/')
+        $hash = Compute-Sha256 -FilePath $normalizedFilePath
         $checksums[$relativePath] = $hash
     }
 
@@ -460,7 +466,7 @@ $projectDirectory = Split-Path -Parent $backendProjectPath
 $moduleSourcePath = Find-ModuleSourceFile -ProjectDirectory $projectDirectory
 $moduleMetadata = Read-ModuleMetadataFromSource -ModuleSourcePath $moduleSourcePath
 
-if ($frontendMetadata.ModuleId -ne $moduleMetadata.ModuleId) {
+if ($frontendMetadata.ModuleId -cne $moduleMetadata.ModuleId) {
     throw "Frontend module '$frontendModulePath' has moduleId '$($frontendMetadata.ModuleId)', but backend moduleId is '$($moduleMetadata.ModuleId)'."
 }
 
@@ -469,7 +475,43 @@ $assemblyName = Get-ProjectProperty -ResolvedProjectPath $backendProjectPath -Pr
 
 $hostVersionDefaults = Resolve-HostVersionDefaults -RepoRoot $repoRoot
 
-$resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) { $OutputRoot } else { Join-Path $repoRoot $OutputRoot }
+$isRooted = [System.IO.Path]::IsPathRooted($OutputRoot)
+$isFullyQualified = $false
+if ($isRooted) {
+    if ($OutputRoot -match '^[A-Za-z]:(?![/\\])') {
+        throw "Invalid -OutputRoot path format: $OutputRoot. Drive-relative paths (e.g., 'C:temp') are not supported."
+    }
+    try {
+        $fullPath = [System.IO.Path]::GetFullPath($OutputRoot)
+        $isFullyQualified = ($fullPath -eq $OutputRoot) -or ($fullPath.Replace('/', '\') -eq $OutputRoot.Replace('/', '\'))
+    } catch {
+        throw "Invalid -OutputRoot path format: $OutputRoot"
+    }
+}
+
+$resolvedOutputRoot = if ($isFullyQualified) {
+    [System.IO.Path]::GetFullPath($OutputRoot)
+} else {
+    $candidatePath = Join-Path $repoRoot $OutputRoot
+    $normalizedPath = [System.IO.Path]::GetFullPath($candidatePath)
+    $normalizedRepoRoot = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $repoRootPrefix = $normalizedRepoRoot + [System.IO.Path]::DirectorySeparatorChar
+
+    if (-not $normalizedPath.StartsWith($repoRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Relative -OutputRoot must resolve to a path within the repository root. Resolved path: $normalizedPath"
+    }
+
+    $defaultOutputSubtree = Join-Path $repoRoot "artifacts/plugin-packages"
+    $normalizedDefaultSubtree = [System.IO.Path]::GetFullPath($defaultOutputSubtree).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $defaultSubtreePrefix = $normalizedDefaultSubtree + [System.IO.Path]::DirectorySeparatorChar
+
+    if (-not ($normalizedPath.StartsWith($defaultSubtreePrefix, [System.StringComparison]::OrdinalIgnoreCase) -or $normalizedPath.Equals($normalizedDefaultSubtree, [System.StringComparison]::OrdinalIgnoreCase))) {
+        throw "Relative -OutputRoot must resolve within 'artifacts/plugin-packages'. Resolved path: $normalizedPath"
+    }
+
+    $normalizedPath
+}
+
 $packageDirectory = Join-Path $resolvedOutputRoot $moduleMetadata.ModuleId
 
 if (Test-Path -LiteralPath $packageDirectory) {

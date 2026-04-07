@@ -1,9 +1,15 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.PluginDiscovery;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
 public class UnifiedPluginPackageScanner
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     public UnifiedPluginPackageScanResult ScanPackage(string packageRoot)
     {
         if (!Directory.Exists(packageRoot))
@@ -27,12 +33,7 @@ public class UnifiedPluginPackageScanner
         try
         {
             var json = File.ReadAllText(pluginJsonPath);
-            manifest = JsonSerializer.Deserialize<UnifiedPluginPackageManifest>(
-                json,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                })
+            manifest = JsonSerializer.Deserialize<UnifiedPluginPackageManifest>(json, JsonOptions)
                 ?? throw new JsonException("plugin.json deserialized to null");
         }
         catch (Exception ex)
@@ -43,32 +44,142 @@ public class UnifiedPluginPackageScanner
                 $"Failed to parse plugin.json: {ex.Message}");
         }
 
-        var backendPath = Path.GetFullPath(Path.Combine(packageRoot, manifest.Artifacts.Backend));
-        var frontendPath = Path.GetFullPath(Path.Combine(packageRoot, manifest.Artifacts.Frontend));
-
-        var missingPaths = new List<string>();
-        if (string.IsNullOrWhiteSpace(manifest.Artifacts.Backend) || !File.Exists(backendPath))
+        try
         {
-            missingPaths.Add(manifest.Artifacts.Backend);
-        }
+            var backendPath = ResolveContainedFilePath(packageRoot, manifest.Artifacts.Backend, "Artifacts.Backend");
+            var frontendPath = ResolveContainedFilePath(packageRoot, manifest.Artifacts.Frontend, "Artifacts.Frontend");
 
-        if (string.IsNullOrWhiteSpace(manifest.Artifacts.Frontend) || !File.Exists(frontendPath))
+            ValidateBackendManifest(backendPath);
+            ValidateFrontendManifest(frontendPath);
+
+            return UnifiedPluginPackageScanResult.Success(
+                packageRoot,
+                manifest,
+                backendPath,
+                frontendPath);
+        }
+        catch (JsonException ex)
         {
-            missingPaths.Add(manifest.Artifacts.Frontend);
+            return UnifiedPluginPackageScanResult.Failure(
+                packageRoot,
+                UnifiedPluginPackageScanFailureType.ManifestParseError,
+                ex.Message);
         }
-
-        if (missingPaths.Any())
+        catch (IOException ex)
         {
             return UnifiedPluginPackageScanResult.Failure(
                 packageRoot,
                 UnifiedPluginPackageScanFailureType.ArtifactNotFound,
-                $"Missing child manifest(s): {string.Join(", ", missingPaths)}");
+                ex.Message);
+        }
+    }
+
+    private static void ValidateBackendManifest(string backendManifestPath)
+    {
+        PluginManifest backendManifest;
+        try
+        {
+            backendManifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(backendManifestPath), JsonOptions)
+                ?? throw new JsonException($"Backend manifest '{backendManifestPath}' deserialized to null.");
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            throw new JsonException($"Failed to parse child manifest '{backendManifestPath}': {ex.Message}", ex);
         }
 
-        return UnifiedPluginPackageScanResult.Success(
-            packageRoot,
-            manifest,
-            backendPath,
-            frontendPath);
+        ResolveContainedFilePath(Path.GetDirectoryName(backendManifestPath)!, backendManifest.EntryAssembly, "EntryAssembly");
+    }
+
+    private static void ValidateFrontendManifest(string frontendManifestPath)
+    {
+        FrontendPackageManifest frontendManifest;
+        try
+        {
+            frontendManifest = JsonSerializer.Deserialize<FrontendPackageManifest>(File.ReadAllText(frontendManifestPath), JsonOptions)
+                ?? throw new JsonException($"Frontend manifest '{frontendManifestPath}' deserialized to null.");
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            throw new JsonException($"Failed to parse child manifest '{frontendManifestPath}': {ex.Message}", ex);
+        }
+
+        var frontendRoot = Path.GetDirectoryName(frontendManifestPath)!;
+        var entryManifestPath = ResolveContainedFilePath(frontendRoot, frontendManifest.EntryManifest, "EntryManifest");
+        ResolveContainedDirectoryPath(frontendRoot, frontendManifest.AssetRoot, "AssetRoot");
+
+        FrontendEntryManifest entryManifest;
+        try
+        {
+            entryManifest = JsonSerializer.Deserialize<FrontendEntryManifest>(File.ReadAllText(entryManifestPath), JsonOptions)
+                ?? throw new JsonException($"Frontend runtime manifest '{entryManifestPath}' deserialized to null.");
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            throw new JsonException($"Failed to parse child manifest '{entryManifestPath}': {ex.Message}", ex);
+        }
+
+        ResolveContainedFilePath(frontendRoot, entryManifest.Entry, "Entry");
+
+        foreach (var cssPath in entryManifest.Css)
+        {
+            ResolveContainedFilePath(frontendRoot, cssPath, "Css");
+        }
+    }
+
+    private static string ResolveContainedFilePath(string rootPath, string? relativePath, string propertyName)
+    {
+        var candidatePath = ResolveContainedPath(rootPath, relativePath, propertyName);
+        if (!File.Exists(candidatePath))
+        {
+            throw new IOException($"Required file not found for {propertyName}: {relativePath}");
+        }
+
+        return candidatePath;
+    }
+
+    private static string ResolveContainedDirectoryPath(string rootPath, string? relativePath, string propertyName)
+    {
+        var candidatePath = ResolveContainedPath(rootPath, relativePath, propertyName);
+        if (!Directory.Exists(candidatePath))
+        {
+            throw new IOException($"Required directory not found for {propertyName}: {relativePath}");
+        }
+
+        return candidatePath;
+    }
+
+    private static string ResolveContainedPath(string rootPath, string? relativePath, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new IOException($"Manifest property {propertyName} must not be empty.");
+        }
+
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new IOException($"Manifest property {propertyName} resolves to an unsafe path.");
+        }
+
+        var fullRootPath = Path.GetFullPath(rootPath);
+        var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
+        if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new IOException($"Manifest property {propertyName} resolves to an unsafe path.");
+        }
+
+        return fullCandidatePath;
+    }
+
+    private sealed class FrontendPackageManifest
+    {
+        public string EntryManifest { get; set; } = string.Empty;
+        public string AssetRoot { get; set; } = string.Empty;
+    }
+
+    private sealed class FrontendEntryManifest
+    {
+        public string Entry { get; set; } = string.Empty;
+        public List<string> Css { get; set; } = new();
     }
 }

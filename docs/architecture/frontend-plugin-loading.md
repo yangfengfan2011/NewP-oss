@@ -30,7 +30,30 @@ Shell 启动时按下面顺序完成前端模块装配：
 
 ## 运行时清单来源
 
-默认运行时清单不再依赖手工维护的 `public/plugins/frontend-plugin-manifest.json`，而是由 Shell 在 Vite 开发和构建阶段自动生成。默认包含的内建模块来自：
+当前前端运行时清单有两类来源：
+
+1. 宿主安装目录驱动的运行时清单
+2. Shell 在 Vite 开发和构建阶段自动生成的开发期清单
+
+对于统一插件包 Phase 1，HostApi 会把安装目录中的：
+
+- `runtime/frontend-plugin-manifest.json`
+
+映射到：
+
+- `/plugins/frontend-plugin-manifest.json`
+
+并把安装目录中的：
+
+- `public/`
+
+映射到：
+
+- `/plugin-assets`
+
+这使得已启用插件的前端入口 URL 可以直接写入运行时清单并由 Shell 动态导入。
+
+如果当前没有统一插件包安装结果，默认运行时清单仍不依赖手工维护的 `public/plugins/frontend-plugin-manifest.json`，而是由 Shell 在 Vite 开发和构建阶段自动生成。默认包含的内建模块来自：
 
 - `demo`
 - `audit`
@@ -60,7 +83,7 @@ Shell 启动时按下面顺序完成前端模块装配：
 - `moduleId`
   Vite 管理的内建模块标识。Shell 会把它解析到受控源码入口。
 - `url`
-  可选。若声明，则按外部 URL 动态导入模块。
+  可选。若声明，则按外部 URL 动态导入模块。统一插件包 Phase 1 当前主要使用该字段。
 - `exportName`
   可选。若声明，则使用命名导出；若未声明，则默认读取模块的 `default` 导出。
 
@@ -76,6 +99,13 @@ Shell 启动时按下面顺序完成前端模块装配：
 - Vite 在构建时为这些动态入口生成可加载 chunk，Shell 在运行时按清单再去装配它们
 
 这样做的目的，是避免把 `tsc` 直接输出的原始 ESM 文件当作浏览器运行时插件入口使用。原始 `dist/index.js` 往往会保留无扩展名的相对导入，不适合作为稳定交付物。
+
+对于统一插件包 Phase 1，流程进一步扩展为：
+
+1. 统一插件包安装到标准安装目录
+2. 启用操作把已启用版本重建为 `runtime/frontend-plugin-manifest.json`
+3. 同一次启用操作把对应前端产物投影到 `public/<ModuleId>/<Version>/...`
+4. HostApi 通过 `/plugins/frontend-plugin-manifest.json` 与 `/plugin-assets/...` 对外暴露运行时入口
 
 ## 研发期回退机制
 
@@ -107,9 +137,8 @@ Shell 启动时按下面顺序完成前端模块装配：
 
 ## 当前边界
 
-当前实现已经补齐了前端运行时装配和构建期 manifest 生成，但仍未覆盖以下能力：
+当前实现已经补齐了前端运行时装配、构建期 manifest 生成，以及统一插件包安装结果驱动的运行时清单，但仍未覆盖以下能力：
 
-- 前后端插件包一一对齐的统一交付格式
 - 前端插件签名或来源校验
 - 前端插件依赖冲突治理
 - 热插拔、热更新或运行时卸载
@@ -119,4 +148,5 @@ Shell 启动时按下面顺序完成前端模块装配：
 
 - Shell 已具备正式的前端运行时清单入口
 - 业务模块已经能通过 Vite-managed internal module 参与运行时装配
-- 更完整的独立插件包交付模型，仍属于后续阶段工作
+- 统一插件包 Phase 1 已能把安装状态投影为运行时清单和静态资源目录
+- 更完整的签名、依赖治理和宿主级隔离，仍属于后续阶段工作

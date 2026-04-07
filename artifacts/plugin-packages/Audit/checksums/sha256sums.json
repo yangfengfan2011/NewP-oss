@@ -1,10 +1,10 @@
 {
     "files":  {
-                  "backend/AuditModule.dll":  "0f34420db86365fe3ceb16ba166bd41b928da933d668f35992c57f911ca7fc2a",
+                  "backend/AuditModule.dll":  "421d546dba348a9baf7cc79d65b4e46d03cce814bcc42fcfb6465e67f36dfee3",
                   "plugin.json":  "54cf250b3be16b24b41f045dfa788b1d938f0303fd0c11b63dec78e789351eb1",
                   "frontend/assets/entry.js":  "0e0a598882bd7327c7bb476e4af73d45e12b098922de86574bd436e0b68ef445",
                   "backend/plugin.backend.json":  "fb6aff0a0a7d8152f33c997142aba8b289d939adc7d2715cd94ac8e3852ca700",
-                  "frontend/plugin.frontend.json":  "7267dbf3edc11c106917b74d6cbfa9e51f68234fa25abf08c2bf8cdea87e6dc2",
+                  "frontend/plugin.frontend.json":  "5868a319d50fb1caa879db99e90b6732f047ef28ef50c83789204bbfc1724b25",
                   "frontend/manifest.json":  "38162ed6ac9807392d3720defc39ed6e941e8da27547e5778c6bbcf2570882d5"
               }
 }

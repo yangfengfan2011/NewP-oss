@@ -95,6 +95,86 @@ public class UnifiedPluginPackageScannerTests : IDisposable
     }
 
     [Fact]
+    public void PackageWithInvalidBackendManifest_ReturnsManifestParseFailure()
+    {
+        var packagePath = _testData.CreatePackageWithInvalidBackendManifest();
+        var scanner = new UnifiedPluginPackageScanner();
+
+        var result = scanner.ScanPackage(packagePath);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(UnifiedPluginPackageScanFailureType.ManifestParseError, result.FailureType);
+        Assert.Contains("plugin.backend.json", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void PackageWithMissingBackendEntryAssembly_ReturnsArtifactFailure()
+    {
+        var packagePath = _testData.CreatePackageMissingBackendEntryAssembly();
+        var scanner = new UnifiedPluginPackageScanner();
+
+        var result = scanner.ScanPackage(packagePath);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(UnifiedPluginPackageScanFailureType.ArtifactNotFound, result.FailureType);
+        Assert.Contains("AuditModule.dll", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void PackageWithUnsafeBackendEntryAssemblyPath_ReturnsArtifactFailure()
+    {
+        var packagePath = _testData.CreatePackageWithUnsafeBackendEntryAssemblyPath();
+        var scanner = new UnifiedPluginPackageScanner();
+
+        var result = scanner.ScanPackage(packagePath);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(UnifiedPluginPackageScanFailureType.ArtifactNotFound, result.FailureType);
+        Assert.Contains("unsafe", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntryAssembly", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void PackageWithInvalidFrontendManifest_ReturnsManifestParseFailure()
+    {
+        var packagePath = _testData.CreatePackageWithInvalidFrontendManifest();
+        var scanner = new UnifiedPluginPackageScanner();
+
+        var result = scanner.ScanPackage(packagePath);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(UnifiedPluginPackageScanFailureType.ManifestParseError, result.FailureType);
+        Assert.Contains("plugin.frontend.json", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void PackageWithMissingFrontendReferencedFile_ReturnsArtifactFailure()
+    {
+        var packagePath = _testData.CreatePackageMissingFrontendEntryAsset();
+        var scanner = new UnifiedPluginPackageScanner();
+
+        var result = scanner.ScanPackage(packagePath);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(UnifiedPluginPackageScanFailureType.ArtifactNotFound, result.FailureType);
+        Assert.Contains("assets/entry.js", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void PackageWithUnsafeFrontendEntryManifestPath_ReturnsArtifactFailure()
+    {
+        var packagePath = _testData.CreatePackageWithUnsafeFrontendEntryManifestPath();
+        var scanner = new UnifiedPluginPackageScanner();
+
+        var result = scanner.ScanPackage(packagePath);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(UnifiedPluginPackageScanFailureType.ArtifactNotFound, result.FailureType);
+        Assert.Contains("unsafe", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntryManifest", result.ErrorMessage);
+    }
+
+    [Fact]
     public void MissingPackageRoot_ReturnsRootNotFoundFailure()
     {
         var packagePath = Path.Combine(Path.GetTempPath(), $"missing-package-root-{Guid.NewGuid():N}");

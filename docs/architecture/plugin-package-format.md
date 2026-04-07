@@ -73,18 +73,65 @@
 - 入口程序集必须能被宿主解析为实际文件路径。
 - 宿主兼容失败、被禁用或哈希校验失败时，插件都会被跳过并记录日志。
 
+## Phase 6.6 统一插件包补充
+
+在当前后端插件目录格式之外，Phase 6.6 已补上“统一插件包”作为交付单元的最小闭环。
+
+当前统一插件包目录：
+
+```text
+<plugin-package>/
+  plugin.json
+  backend/
+    plugin.backend.json
+    <entry-assembly>.dll
+  frontend/
+    plugin.frontend.json
+    manifest.json
+    assets/
+      ...
+  checksums/
+    sha256sums.json
+```
+
+当前安装目录布局：
+
+```text
+<install-root>/
+  packages/<ModuleId>/<Version>/...
+  state/<ModuleId>.json
+  runtime/backend-load-view/<ModuleId>/plugin.json
+  runtime/frontend-plugin-manifest.json
+  public/<ModuleId>/<Version>/...
+```
+
+这意味着：
+
+- 统一插件包是交付单元，不是直接部署单元
+- 安装器负责把包内容拆分成版本目录、状态目录和运行时投影视图
+- 后端宿主仍然只对 `runtime/backend-load-view` 下的最小插件目录执行装载
+- 前端宿主静态资源入口来自安装后投影出的 `public/` 目录
+
+当前仓库内对应入口：
+
+- `scripts/pack-unified-plugin.*`
+- `scripts/verify-unified-plugin-package.*`
+- `scripts/manage-unified-plugin.*`
+- `tools/PluginOps`
+
 ## 后续演进
 
 本轮尚未完成以下内容：
 
 - 签名校验
-- 前端资源清单
 - 外部插件打包脚本产物规范
 - 依赖冲突与安装顺序治理
+- 卸载与更完整的运维治理入口
 
 说明：
 
 - 可选的 `entryAssemblySha256` 字段已经进入正式运行时校验
-- 当前仍未实现签名体系，也未由打包脚本自动生成哈希字段
+- 当前统一插件包已经包含前端资源清单、安装状态和运行时投影视图
+- 当前仍未实现签名体系，也未由单侧后端打包脚本自动生成哈希字段
 
 这些能力后续在插件打包、治理与前端插件化阶段补齐。

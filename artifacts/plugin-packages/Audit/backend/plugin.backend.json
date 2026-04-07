@@ -1,0 +1,18 @@
+{
+    "moduleId":  "Audit",
+    "displayName":  "审计日志",
+    "version":  "1.0.0",
+    "description":  "平台审计与日志管理模块",
+    "entryAssembly":  "AuditModule.dll",
+    "dependencies":  [
+
+                     ],
+    "hostVersion":  {
+                        "min":  "1.0.0",
+                        "max":  "2.0.0"
+                    },
+    "hostApiContractsVersion":  "1.0.0",
+    "install":  {
+                    "targetKind":  "host-modules-directory"
+                }
+}

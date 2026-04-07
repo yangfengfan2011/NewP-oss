@@ -8,6 +8,19 @@
 
 **Tech Stack:** .NET 10 / xUnit / System.Text.Json / PowerShell + Bash / Node.js / Vite / TypeScript / existing HostApi + Shell runtime manifest flow
 
+## Closeout Status
+
+Closeout reviewed on 2026-04-07.
+
+- Tasks 1-5 are implemented in code and docs.
+- Focused backend verification was rerun and passed: unified package scanner, installer, runtime materializer, lifecycle operations, and HostApi manifest route tests all green.
+- HostApi build and PluginOps build passed.
+- Shell tests passed.
+- Frontend workspace build passed via `pnpm --dir .\frontend build`.
+- The plan's package-level shell build command was not used for final closeout because `frontend/packages/shell` depends on `workspace:*` packages; workspace-root build is the equivalent valid verification in this repo layout.
+- Commit steps in this plan were intentionally not executed by the agent.
+- Runtime verification outputs under `artifacts/installed-plugins/` are local generated artifacts and are not part of the intended archived source diff.
+
 ---
 
 ## File Structure Map

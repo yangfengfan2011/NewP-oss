@@ -236,7 +236,7 @@ AI-First 对齐：
 
 ### Phase 6.6：运行层插件平台最小闭环
 
-状态：进行中
+状态：已完成（Phase 1 最小闭环）
 
 已落地：
 
@@ -246,6 +246,10 @@ AI-First 对齐：
 - 开发期内建模块清单已放入 `apps/host-api/modules/*`
 - `Program.cs` 已切离 `*Module.dll` 扫描与 `ConfigCenter.dll` 特判
 - 插件打包脚本与插件包校验脚本已落地
+- 统一插件包打包脚本与校验脚本已落地
+- 统一插件包安装目录、状态存储与版本化安装能力已落地
+- 已启用插件到后端 load-view 与前端运行时 manifest 的投影能力已落地
+- `PluginOps` 与 `manage-unified-plugin` 运维入口已落地，可执行 install / enable / disable / rollback
 - `Audit` / `Authorization` / `ModuleTemplateSample` 已验证可产出标准插件目录
 - 面向仓库外部开发的后端插件模板已落地
 - `new-module.ps1` / `new-module.sh` 已支持外部插件模式
@@ -256,13 +260,16 @@ AI-First 对齐：
 - `dotnet build apps/host-api/HostApi.csproj`
 - Host 启动日志显示通过插件目录发现并装载 6 个内建模块
 - `scripts/pack-plugin.ps1` 与 `scripts/verify-plugin-package.ps1` 已对现有模块完成真实打包校验
-- 宿主已在 `Platform__ModulesPath=artifacts/plugin-packages` 下完成打包产物烟测启动
+- `scripts/pack-unified-plugin.ps1` 与 `scripts/verify-unified-plugin-package.ps1` 已对 `Audit` 完成真实打包校验
+- `scripts/manage-unified-plugin.ps1` 已对 `Audit` 完成真实 install / enable / disable / rollback 操作，并验证运行时投影视图与状态目录同步变化
+- 宿主已在 `Platform__PluginInstallRoot=artifacts/installed-plugins` 下完成安装结果驱动的烟测启动
 - 外部插件样例已通过脚手架生成、构建、打包与校验链路验证
 
 当前边界：
 
 - `ProjectReference` 仍保留在 `HostApi.csproj` 中，作为开发期 DLL 产出过渡机制
-- 插件依赖治理、哈希/签名校验、外部打包脚本与前后端统一插件交付模型与更完整的前端插件治理尚未纳入本轮
+- 统一插件包打包脚本当前仍以 `Audit` 为 Phase 1 验证对象，不代表所有模块都已收口
+- 插件依赖治理、哈希/签名校验、统一插件包卸载入口与更完整的前端插件治理尚未纳入本轮
 - 外部插件开发当前仍使用仓库内 `server/sdk/Sdk.csproj` 作为开发期 SDK 引用
 
 对应文档：
@@ -271,6 +278,7 @@ AI-First 对齐：
 - [architecture/plugin-runtime-loading.md](architecture/plugin-runtime-loading.md)
 - [architecture/plugin-compatibility-policy.md](architecture/plugin-compatibility-policy.md)
 - [guides/plugin-packaging.md](guides/plugin-packaging.md)
+- [guides/unified-plugin-package-operations.md](guides/unified-plugin-package-operations.md)
 - [guides/external-plugin-development.md](guides/external-plugin-development.md)
 - [guides/external-plugin-debugging.md](guides/external-plugin-debugging.md)
 
@@ -309,10 +317,10 @@ AI-First 对齐：
 
 ## 当前推荐下一步
 
-1. 继续推进 `Phase 6.6`，补齐插件打包脚本、标准安装目录和至少一个可独立交付的插件包。
-2. 在插件装配主线稳定后，再启动对外 SDK / 外部模板收口，而不是提前承诺外部扩展开发。
-3. `Phase 6.5` 持久化底座收口与插件平台推进并行时，必须保持模块边界，不把两个主题混成一次大改。
-4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并持续维护计划、状态和模块文档一致性。
+1. 以当前 Phase 1 闭环为基线，下一步补齐统一插件包依赖治理、卸载入口和更完整的运维治理约束。
+2. 在 install / enable / disable / rollback 收口后，再推进对外 SDK、外部模板和更完整的外部插件开发约束。
+3. `Phase 6.5` 持久化底座收口与插件平台并行推进时，继续保持模块边界，不把两个主题混成一次大改。
+4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并保持计划、状态和模块文档一致性。
 
 对应设计：
 

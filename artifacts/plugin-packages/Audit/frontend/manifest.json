@@ -1,0 +1,7 @@
+{
+    "moduleId":  "Audit",
+    "displayName":  "审计日志",
+    "version":  "1.0.0",
+    "description":  "平台审计与日志管理模块",
+    "entry":  "assets/entry.js"
+}

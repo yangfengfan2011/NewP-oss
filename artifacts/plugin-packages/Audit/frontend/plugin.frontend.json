@@ -1,0 +1,14 @@
+{
+    "moduleId":  "Audit",
+    "entryManifest":  "manifest.json",
+    "assetRoot":  "assets",
+    "runtimeBaseStrategy":  "host-local-static",
+    "publicBasePath":  "/plugins/Audit/1.0.0/",
+    "sharedDependencies":  [
+                               "react",
+                               "react-dom",
+                               "@icp-platform/sdk",
+                               "@icp-platform/core"
+                           ],
+    "frontendContractsVersion":  "1.0.0"
+}

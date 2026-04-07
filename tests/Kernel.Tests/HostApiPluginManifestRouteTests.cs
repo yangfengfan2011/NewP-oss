@@ -115,7 +115,12 @@ public class HostApiPluginManifestRouteTests : IDisposable
         public static async Task<HostApiProcess> StartAsync(string installRoot)
         {
             var repoRoot = FindRepositoryRoot();
-            var projectPath = Path.Combine(repoRoot, "apps", "host-api", "HostApi.csproj");
+            var hostApiDllPath = Path.Combine(repoRoot, "apps", "host-api", "bin", "Debug", "net10.0", "HostApi.dll");
+            if (!File.Exists(hostApiDllPath))
+            {
+                throw new FileNotFoundException($"HostApi build output not found: {hostApiDllPath}");
+            }
+
             var port = GetFreeTcpPort();
             var baseAddress = $"http://127.0.0.1:{port}";
             var stdout = new StringBuilder();
@@ -134,9 +139,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
                 }
             };
 
-            process.StartInfo.ArgumentList.Add("run");
-            process.StartInfo.ArgumentList.Add("--project");
-            process.StartInfo.ArgumentList.Add(projectPath);
+            process.StartInfo.ArgumentList.Add(hostApiDllPath);
             process.StartInfo.ArgumentList.Add("--urls");
             process.StartInfo.ArgumentList.Add(baseAddress);
             process.StartInfo.Environment["Platform__PluginInstallRoot"] = installRoot;
@@ -235,5 +238,4 @@ public class HostApiPluginManifestRouteTests : IDisposable
         }
     }
 }
-
 

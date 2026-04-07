@@ -397,7 +397,7 @@ function Write-FrontendManifest {
         entryManifest = "manifest.json"
         assetRoot = "assets"
         runtimeBaseStrategy = "host-local-static"
-        publicBasePath = "/plugins/$($Metadata.ModuleId)/$($Metadata.Version)/"
+        publicBasePath = "/plugin-assets/$($Metadata.ModuleId)/$($Metadata.Version)/"
         sharedDependencies = @(
             "react",
             "react-dom",

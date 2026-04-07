@@ -236,7 +236,7 @@ AI-First 对齐：
 
 ### Phase 6.6：运行层插件平台最小闭环
 
-状态：进行中
+状态：已完成（Phase 1 最小闭环）
 
 已落地：
 
@@ -261,8 +261,8 @@ AI-First 对齐：
 - Host 启动日志显示通过插件目录发现并装载 6 个内建模块
 - `scripts/pack-plugin.ps1` 与 `scripts/verify-plugin-package.ps1` 已对现有模块完成真实打包校验
 - `scripts/pack-unified-plugin.ps1` 与 `scripts/verify-unified-plugin-package.ps1` 已对 `Audit` 完成真实打包校验
-- `scripts/manage-unified-plugin.ps1` 已对 `Audit` 完成真实 install / enable 操作，并生成安装状态与运行时投影视图
-- 宿主已在 `Platform__ModulesPath=artifacts/plugin-packages` 下完成打包产物烟测启动
+- `scripts/manage-unified-plugin.ps1` 已对 `Audit` 完成真实 install / enable / disable / rollback 操作，并验证运行时投影视图与状态目录同步变化
+- 宿主已在 `Platform__PluginInstallRoot=artifacts/installed-plugins` 下完成安装结果驱动的烟测启动
 - 外部插件样例已通过脚手架生成、构建、打包与校验链路验证
 
 当前边界：
@@ -317,10 +317,10 @@ AI-First 对齐：
 
 ## 当前推荐下一步
 
-1. 继续推进 `Phase 6.6`，补齐统一插件包依赖治理、卸载入口和更完整的运维治理约束。
-2. 在统一插件包 install / enable 主线稳定后，再启动对外 SDK / 外部模板收口，而不是提前承诺外部扩展开发。
-3. `Phase 6.5` 持久化底座收口与插件平台推进并行时，必须保持模块边界，不把两个主题混成一次大改。
-4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并持续维护计划、状态和模块文档一致性。
+1. 以当前 Phase 1 闭环为基线，下一步补齐统一插件包依赖治理、卸载入口和更完整的运维治理约束。
+2. 在 install / enable / disable / rollback 收口后，再推进对外 SDK、外部模板和更完整的外部插件开发约束。
+3. `Phase 6.5` 持久化底座收口与插件平台并行推进时，继续保持模块边界，不把两个主题混成一次大改。
+4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并保持计划、状态和模块文档一致性。
 
 对应设计：
 

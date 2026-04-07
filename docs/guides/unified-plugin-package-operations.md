@@ -123,7 +123,15 @@ Shell：
 
 `Audit:1.0.0:Installed`
 
-安装只负责写入版本目录和状态，不会自动切换当前启用版本。
+安装不会自动切换当前启用版本。
+
+如果当前模块已经启用了同一版本，而你重新安装了该版本的新包内容，PluginOps 会在安装成功后同步重建：
+
+- `runtime/backend-load-view`
+- `runtime/frontend-plugin-manifest.json`
+- `public/<ModuleId>/<Version>/...`
+
+这样可以避免“状态仍指向当前版本，但运行时投影和静态资源还是旧内容”的漂移。
 
 ## 启用
 
@@ -163,12 +171,26 @@ Shell：
 .\scripts\manage-unified-plugin.ps1 -Action disable -ModuleId Audit -InstallRoot .\artifacts\installed-plugins
 ```
 
+```bash
+./scripts/manage-unified-plugin.sh \
+  --action disable \
+  --module-id Audit \
+  --install-root artifacts/installed-plugins
+```
+
 禁用成功后，当前启用版本会被清空，并同步重建运行视图。
 
 ## 回滚
 
 ```powershell
 .\scripts\manage-unified-plugin.ps1 -Action rollback -ModuleId Audit -InstallRoot .\artifacts\installed-plugins
+```
+
+```bash
+./scripts/manage-unified-plugin.sh \
+  --action rollback \
+  --module-id Audit \
+  --install-root artifacts/installed-plugins
 ```
 
 回滚成功后，当前启用版本会切回上一个已安装版本，并同步重建运行视图。

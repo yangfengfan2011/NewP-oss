@@ -111,6 +111,8 @@
 - 安装器负责把包内容拆分成版本目录、状态目录和运行时投影视图
 - 后端宿主仍然只对 `runtime/backend-load-view` 下的最小插件目录执行装载
 - 前端宿主静态资源入口来自安装后投影出的 `public/` 目录
+- `PluginOps` / `manage-unified-plugin` 负责 install / enable / disable / rollback 这些运维动作
+- `install` 不会切换启用版本，但若重装当前已启用版本，会立即刷新 `runtime/` 与 `public/` 投影视图
 
 当前仓库内对应入口：
 

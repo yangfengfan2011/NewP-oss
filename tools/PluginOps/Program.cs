@@ -44,8 +44,23 @@ static class PluginOpsApp
         var installer = new UnifiedPluginPackageInstaller(stateStore);
 
         var result = installer.Install(packagePath, installRoot);
+        if (!string.Equals(result.Status, "Installed", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintInstallResult(result);
+            return 1;
+        }
+
+        try
+        {
+            MaterializeRuntimeView(installRoot, stateStore);
+        }
+        catch (Exception ex)
+        {
+            return Fail($"Installed {result.ModuleId}@{result.Version} but failed to refresh runtime projection: {ex.Message}");
+        }
+
         PrintInstallResult(result);
-        return string.Equals(result.Status, "Installed", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+        return 0;
     }
 
     private static int RunEnable(IReadOnlyDictionary<string, string> options)

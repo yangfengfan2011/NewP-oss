@@ -107,6 +107,11 @@ Shell 启动时按下面顺序完成前端模块装配：
 3. 同一次启用操作把对应前端产物投影到 `public/<ModuleId>/<Version>/...`
 4. HostApi 通过 `/plugins/frontend-plugin-manifest.json` 与 `/plugin-assets/...` 对外暴露运行时入口
 
+补充说明：
+
+- 常规 `install` 不会切换当前启用版本
+- 如果重复安装的正好是当前已启用版本，PluginOps 仍会立即重建运行时清单和 `public/` 资源投影，保持前端入口与状态一致
+
 ## 研发期回退机制
 
 研发期本地回退仍然保留，但不再依赖静态源码导入列表。当前回退机制同样通过受控的懒加载 registry 装配以下内建模块：

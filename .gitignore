@@ -91,3 +91,5 @@ update_tests.patch
 .codex-temp/dev-host-api.pid
 artifacts/installed-plugins/
 artifacts/frontend-plugins/
+.codex-temp/dev-frontend.pid
+.codex-temp/dev-host-api.pid

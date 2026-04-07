@@ -45,6 +45,11 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.Configure<LocalAuthOptions>(builder.Configuration.GetSection("LocalAuth"));
 builder.Services.AddSingleton<LocalAuthSeeder>();
 
+var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
+var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
+    ? configuredModulesPath
+    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredModulesPath));
+
 var configuredPluginInstallRoot = builder.Configuration["Platform:PluginInstallRoot"] ?? "plugins";
 var pluginInstallRoot = Path.IsPathRooted(configuredPluginInstallRoot)
     ? configuredPluginInstallRoot
@@ -61,8 +66,11 @@ var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder);
 materializer.Materialize(pluginInstallRoot);
 
 var backendLoadViewPath = Path.Combine(pluginInstallRoot, "runtime", "backend-load-view");
+var pluginDiscoveryRoot = Directory.Exists(backendLoadViewPath) && Directory.EnumerateFileSystemEntries(backendLoadViewPath).Any()
+    ? backendLoadViewPath
+    : modulesRootPath;
 var pluginAssemblyLoader = new PluginRuntimeAssemblyLoader(hostVersion, disabledPlugins);
-var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(backendLoadViewPath);
+var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(pluginDiscoveryRoot);
 
 builder.Services.AddModuleSystem(options =>
 {
@@ -128,7 +136,7 @@ var logger = app.Logger;
 
 logger.LogInformation(
     "Plugin discovery root: {PluginInstallRoot}, backend load view: {BackendLoadViewPath}, host version: {HostVersion}, loadable plugins: {LoadedCount}, skipped plugins: {SkippedCount}",
-    pluginInstallRoot,
+    pluginDiscoveryRoot,
     backendLoadViewPath,
     hostVersion,
     pluginLoadResult.SuccessfulPlugins.Count,

@@ -14,6 +14,27 @@ public class HostApiPluginManifestRouteTests : IDisposable
     private readonly List<string> _tempRoots = new();
 
     [Fact]
+    public async Task HostApiStarts_WhenInstalledPluginStateIsMissing_UsingBuiltInModuleFallback()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await HostApiProcess.StartAsync(installRoot, skipLocalAuthSeeding: false);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/swagger/v1/swagger.json");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+    }
+
+    [Fact]
     public async Task FrontendPluginManifestRoute_ReturnsJson()
     {
         var installRoot = CreateTempRoot();
@@ -112,7 +133,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         public string StdOut => _stdout.ToString();
         public string StdErr => _stderr.ToString();
 
-        public static async Task<HostApiProcess> StartAsync(string installRoot)
+        public static async Task<HostApiProcess> StartAsync(string installRoot, bool skipLocalAuthSeeding = true)
         {
             var repoRoot = FindRepositoryRoot();
             var hostApiDllPath = Path.Combine(repoRoot, "apps", "host-api", "bin", "Debug", "net10.0", "HostApi.dll");
@@ -145,7 +166,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             process.StartInfo.Environment["Platform__PluginInstallRoot"] = installRoot;
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
             process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
-            process.StartInfo.Environment["Platform__SkipLocalAuthSeeding"] = "true";
+            process.StartInfo.Environment["Platform__SkipLocalAuthSeeding"] = skipLocalAuthSeeding ? "true" : "false";
 
             if (!process.Start())
             {

@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Extensions;
+using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.PluginDiscovery;
@@ -16,7 +17,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("LocalAdmin"));
+});
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -60,6 +65,24 @@ var hostVersion = builder.Configuration["Platform:HostVersion"]
 var disabledPlugins = builder.Configuration.GetSection("Platform:DisabledPlugins").Get<string[]>() ?? Array.Empty<string>();
 
 var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
+builder.Services.AddSingleton(stateStore);
+builder.Services.AddSingleton<PluginOperationsAdminService>();
+builder.Services.AddSingleton(sp =>
+    new PluginUploadService(
+        sp.GetRequiredService<InstalledPluginStateStore>(),
+        pluginInstallRoot));
+builder.Services.AddSingleton<UnifiedPluginPackageInstaller>();
+builder.Services.AddSingleton<UnifiedPluginPackageOperations>();
+builder.Services.AddSingleton(sp =>
+    new RuntimeViewMaterializer(sp.GetRequiredService<InstalledPluginStateStore>()));
+builder.Services.AddSingleton(sp =>
+    new PluginOperationsLifecycleService(
+        sp.GetRequiredService<InstalledPluginStateStore>(),
+        sp.GetRequiredService<UnifiedPluginPackageInstaller>(),
+        sp.GetRequiredService<UnifiedPluginPackageOperations>(),
+        sp.GetRequiredService<RuntimeViewMaterializer>(),
+        sp.GetRequiredService<PluginUploadService>(),
+        pluginInstallRoot));
 var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
 var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
 var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder);

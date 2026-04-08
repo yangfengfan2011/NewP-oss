@@ -1,10 +1,16 @@
 import { FrontendModule, ModuleRegistry } from '@icp-platform/sdk';
 
 import {
+  BUILTIN_RUNTIME_PLUGIN_ENTRIES,
   getBuiltinDevelopmentFallbackEntries,
   type BuiltinRuntimePluginEntry,
 } from './builtin-runtime-plugins';
 import { loadPluginManifest } from './plugin-manifest-loader';
+
+/**
+ * Module IDs that are host-managed: always registered even when a runtime manifest is present.
+ */
+const HOST_MANAGED_MODULE_IDS = new Set<string>(['plugin-ops']);
 
 const LOCAL_WORKSPACE_MODULES = import.meta.glob<Record<string, unknown>>(
   '../../../modules/*/src/index.ts',
@@ -69,6 +75,28 @@ async function loadLocalDevelopmentModules(): Promise<FrontendModule[]> {
   return modules;
 }
 
+async function loadHostManagedModules(): Promise<FrontendModule[]> {
+  const registry = getLocalDevelopmentModuleRegistry();
+  const modules: FrontendModule[] = [];
+
+  const hostManagedEntries = BUILTIN_RUNTIME_PLUGIN_ENTRIES.filter(
+    (entry) => HOST_MANAGED_MODULE_IDS.has(entry.moduleId),
+  );
+
+  for (const entry of hostManagedEntries) {
+    const loader = registry[entry.moduleId];
+    if (!loader) {
+      console.warn(`Host-managed module ${entry.moduleId} not found in registry`);
+      continue;
+    }
+
+    const module = await loader();
+    modules.push(resolveExportedModule(entry, module));
+  }
+
+  return modules;
+}
+
 export async function registerShellModules() {
   const result = await loadPluginManifest();
 
@@ -77,6 +105,18 @@ export async function registerShellModules() {
       `Registering ${result.modules.length} runtime modules from manifest`,
     );
     result.modules.forEach(module => ModuleRegistry.register(module));
+
+    const hostManagedModules = await loadHostManagedModules();
+    const manifestModuleIds = new Set(result.modules.map(m => m.metadata.moduleId));
+    const missingHostModules = hostManagedModules.filter(
+      m => !manifestModuleIds.has(m.metadata.moduleId),
+    );
+    if (missingHostModules.length > 0) {
+      console.info(
+        `Registering ${missingHostModules.length} host-managed module(s) alongside manifest`,
+      );
+      missingHostModules.forEach(module => ModuleRegistry.register(module));
+    }
 
     if (result.errors.length > 0) {
       console.warn(

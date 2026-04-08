@@ -155,3 +155,25 @@ Shell 启动时按下面顺序完成前端模块装配：
 - 业务模块已经能通过 Vite-managed internal module 参与运行时装配
 - 统一插件包 Phase 1 已能把安装状态投影为运行时清单和静态资源目录
 - 更完整的签名、依赖治理和宿主级隔离，仍属于后续阶段工作
+
+## Host-managed 内部模块
+
+除运行时清单驱动的模块外，当前 Shell 还支持一类“宿主管理模块”：
+
+- 模块示例：`plugin-ops`
+- 注册方式：仍通过 `builtin-runtime-plugins.ts` 声明受控入口
+- 装配规则：不写入构建出的运行时 manifest，但在 Shell 启动时由宿主额外注册
+
+这样做的原因是：
+
+- `plugin-ops` 属于平台自身的管理入口，不应依赖安装结果才能出现
+- 即使运行时 manifest 已存在，Shell 仍需要保证该模块可访问
+- 它与普通业务模块共用同一套 Vite-managed internal module 装配路径，避免再引入一套特殊加载机制
+
+当前 `plugin-ops` 的前端可见性规则是：
+
+- 路由：`/plugin-ops`
+- `requireAuth: true`
+- 不再附加前端权限点拦截
+
+这不是放宽管理员边界，而是把“是否允许访问运维 API”的最终判断保持在后端 `AdminOnly` 策略上，避免前端因当前权限模型未下发对应权限点而提前把页面挡住。

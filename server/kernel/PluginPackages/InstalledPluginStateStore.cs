@@ -118,6 +118,38 @@ public class InstalledPluginStateStore
         }
     }
 
+    /// <summary>
+    /// 加载所有已安装模块的记录（包括已禁用的模块）。
+    /// </summary>
+    public IReadOnlyList<InstalledPluginRecord> LoadAll()
+    {
+        Directory.CreateDirectory(_stateRoot);
+        var records = new List<InstalledPluginRecord>();
+
+        foreach (var stateFilePath in Directory.GetFiles(_stateRoot, "*.json", SearchOption.TopDirectoryOnly))
+        {
+            var moduleId = Path.GetFileNameWithoutExtension(stateFilePath);
+            if (!TryLoad(moduleId, out var record, out var errorMessage))
+            {
+                throw new IOException(errorMessage);
+            }
+
+            if (record is null)
+            {
+                continue;
+            }
+
+            if (!string.Equals(record.Status, "Installed", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            records.Add(record);
+        }
+
+        return records;
+    }
+
     public IReadOnlyList<InstalledPluginRecord> LoadAllEnabled()
     {
         Directory.CreateDirectory(_stateRoot);

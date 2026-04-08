@@ -2,6 +2,8 @@ export interface BuiltinRuntimePluginEntry {
   moduleId: string;
   exportName?: string;
   developmentFallback?: boolean;
+  /** If true, module is host-managed and should NOT appear in the generated runtime manifest. */
+  hostManaged?: boolean;
 }
 
 export interface BuiltinRuntimePluginManifest {
@@ -15,12 +17,15 @@ export const BUILTIN_RUNTIME_PLUGIN_ENTRIES: BuiltinRuntimePluginEntry[] = [
   { moduleId: 'config-center' },
   { moduleId: 'files' },
   { moduleId: 'module-template-sample' },
+  { moduleId: 'plugin-ops', hostManaged: true },
   { moduleId: 'sample-plugin', developmentFallback: false },
 ];
 
 export function createBuiltinRuntimePluginManifest(): BuiltinRuntimePluginManifest {
   return {
-    plugins: BUILTIN_RUNTIME_PLUGIN_ENTRIES.map(({ moduleId, exportName }) => {
+    plugins: BUILTIN_RUNTIME_PLUGIN_ENTRIES.filter(
+      (entry) => !entry.hostManaged,
+    ).map(({ moduleId, exportName }) => {
       if (exportName) {
         return { moduleId, exportName };
       }

@@ -226,3 +226,25 @@ dotnet run --project .\apps\host-api\HostApi.csproj
 - 若运行视图重建失败，PluginOps 会尝试恢复上一个插件状态，并返回失败
 
 这保证当前 Phase 1 闭环里，启用态切换不会静默漂移到“状态已切换、运行视图未切换”的中间态。
+
+## 网站运维入口（Plugin Operations Center）
+
+除脚本与 `PluginOps` CLI 以外，当前仓库还提供了面向管理员的网页入口：
+
+- 页面路由：`/plugin-ops`
+- 后端入口：`/api/plugin-ops/*`
+- 访问边界：页面要求登录，真正的管理员边界仍由后端 `AdminOnly` 策略控制
+
+当前网页运维闭环如下：
+
+1. 管理员登录 Shell 后进入“插件运维中心”
+2. 页面调用 `GET /api/plugin-ops/modules` 加载当前模块状态
+3. 管理员上传统一插件包，页面调用 `POST /api/plugin-ops/uploads/verify`
+4. 校验通过后，页面可继续调用 `POST /api/plugin-ops/uploads/{uploadId}/install`
+5. 对已安装模块，页面可继续执行：
+   `POST /api/plugin-ops/modules/{moduleId}/enable`
+   `POST /api/plugin-ops/modules/{moduleId}/disable`
+   `POST /api/plugin-ops/modules/{moduleId}/rollback`
+6. 每次操作后，页面都会重新拉取模块状态列表并展示最近反馈
+
+这套网页入口复用了现有统一插件包内核能力，不替代脚本和 CLI，而是把现有运维动作产品化为站内管理入口。

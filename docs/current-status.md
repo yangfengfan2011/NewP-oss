@@ -343,3 +343,29 @@ AI-First 对齐：
 
 - 当前方向基本正确，不需要停下重做。
 - 但需要把阶段目标从“做出一个迁移样例”升级成“做出第一条 AI 可复制迁移模板”。
+
+### Phase 6.7：插件运维中心 V1
+
+状态：已完成首版闭环
+
+已落地：
+
+- `HostApi` 已提供 `GET /api/plugin-ops/modules`、上传校验、安装、启用、禁用、回滚等管理员接口
+- `frontend/modules/plugin-ops` 已接入 Shell，提供 `/plugin-ops` 页面
+- 页面已接入真实 API，可完成：
+  - 模块状态查看
+  - 统一插件包上传校验
+  - install / enable / disable / rollback
+- 前端侧不再依赖当前未实际发放的额外权限点做显示拦截，改为“登录即可见，后端继续 AdminOnly 兜底”
+
+已验证：
+
+- `pnpm --dir .\frontend\packages\shell test`
+- `pnpm --dir .\frontend build`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter "FullyQualifiedName~PluginOperationsAdminServiceTests|FullyQualifiedName~PluginOperationsControllerTests|FullyQualifiedName~HostApiPluginManifestRouteTests"`
+- `dotnet build .\apps\host-api\HostApi.csproj`
+
+当前边界：
+
+- 当前网页入口聚焦统一插件包已存在的运维动作，不包含源码一键打包、签名校验、卸载或更细粒度的多角色治理
+- 前端静态资源与运行时清单会随 install / enable / disable / rollback 更新，但后端程序集若已在运行，仍可能需要重启宿主才能按新视图重载

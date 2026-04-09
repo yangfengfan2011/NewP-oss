@@ -47,8 +47,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             }
         };
     });
-builder.Services.Configure<LocalAuthOptions>(builder.Configuration.GetSection("LocalAuth"));
-builder.Services.AddSingleton<LocalAuthSeeder>();
+builder.Services.AddLocalAuthSeeding(builder.Configuration);
+builder.Services.AddPlatformPersistence(builder.Configuration);
 
 var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
 var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
@@ -105,6 +105,8 @@ builder.Services.AddModuleSystem(options =>
 });
 
 var app = builder.Build();
+
+await app.ApplyPlatformPersistenceAsync();
 
 var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
 if (!skipLocalAuthSeeding)

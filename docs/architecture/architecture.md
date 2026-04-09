@@ -37,6 +37,11 @@ Build a modular platform kernel that can host reusable public modules and extens
 - frontend module SDK
 - templates and registration helpers
 
+### Modeling
+- strong-typed model semantics
+- AI-assisted metadata authoring
+- persistence adapters project model semantics into runtime storage
+
 ## Migration stance
 
 Old platform assets do not all become modules.
@@ -55,3 +60,11 @@ The first wave should not include:
 - studio/winapp rewrite
 - file-service rewrite
 - deep business migration
+
+## Metadata authoring
+
+At the current stage, metadata is authored by AI and reviewed by humans.
+We do not build a human-facing metadata designer first.
+
+Reference:
+- [ai-metadata-authoring-guide.md](ai-metadata-authoring-guide.md)

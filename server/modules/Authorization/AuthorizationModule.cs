@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Repositories;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Sdk;
@@ -16,15 +17,15 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
     public override void ConfigureServices(IServiceCollection services)
     {
         // 注册核心服务
-        services.AddSingleton<IAuthorizationService, AuthorizationService>();
-        services.AddSingleton<IRoleService, RoleService>();
-        services.AddSingleton<IPermissionService, PermissionService>();
+        services.AddScoped<IAuthorizationService, AuthorizationService>();
+        services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IPermissionService, PermissionService>();
 
         // 注册仓储
-        services.AddSingleton<IRoleRepository, RoleRepository>();
-        services.AddSingleton<IPermissionRepository, PermissionRepository>();
-        services.AddSingleton<IRolePermissionRepository, RolePermissionRepository>();
-        services.AddSingleton<IUserRoleRepository, UserRoleRepository>();
+        services.AddScoped<IRoleRepository, EfRoleRepository>();
+        services.AddScoped<IPermissionRepository, EfPermissionRepository>();
+        services.AddScoped<IRolePermissionRepository, EfRolePermissionRepository>();
+        services.AddScoped<IUserRoleRepository, EfUserRoleRepository>();
     }
 
     public IReadOnlyList<PermissionDescriptor> GetPermissions()

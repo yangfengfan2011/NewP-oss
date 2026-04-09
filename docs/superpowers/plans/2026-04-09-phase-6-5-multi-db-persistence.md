@@ -1,85 +1,284 @@
-# Phase 6.5 多数据库持久化 Implementation Plan
+# Phase 6.5 多数据库持久化（混合架构） Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为 `ConfigCenter` 和 `Authorization` 落地真实数据库持久化，支持通过配置切换 `SQL Server / Oracle / MySQL`，同时保证业务层调用方式统一并保留受控原生 SQL 能力。
+**Goal:** 为 `ConfigCenter` 和 `Authorization` 落地真实数据库持久化，同时把数据库结构语义从具体 ORM 实现中抽离出来，形成“代码内核 + 强约束模型语义 + EF Core 第一批适配器”的多数据库持久化底座。
 
-**Architecture:** 新增平台级持久化底座项目，集中承载 Provider 选择、`DbContext`、迁移注册和统一 SQL 执行入口；模块内保留现有 `Models / Repositories / Services` 结构，仅在 `Persistence` 目录补 EF 映射与仓储实现。宿主在启动时根据 `Persistence:Provider` 选择数据库与迁移集，执行自动迁移和统一 seed，三库分别通过集成测试与 smoke 脚本验证。
+**Architecture:** 本轮先建立 `platform-modeling` 与 `platform-persistence` 两个基础层，分别承载模型语义和 Provider 无关持久化内核；再由 `platform-persistence-efcore` 把模型语义投影到 `DbContext`、迁移和三数据库 Provider 上；最后让 `ConfigCenter` 与 `Authorization` 通过模型定义 + EF 仓储完成首批真实落库与验证闭环。
 
 **Tech Stack:** .NET 10、ASP.NET Core、EF Core 10、Microsoft.EntityFrameworkCore.SqlServer 10.0.1、Oracle.EntityFrameworkCore 10.23.26100、MySql.EntityFrameworkCore 10.0.1、xUnit、PowerShell
 
+**Metadata Workflow:** 当前阶段不做给人使用的元数据设计器，模型语义定义默认由 AI 生成或修改，人负责审核，校验器与测试负责兜底；未来如果建设设计器，设计器也必须输出同一套模型语义契约。
+
 ---
 
-### Task 1: 建立平台级持久化底座
+### Task 1: 建立模型语义底座
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PlatformPersistence.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceProvider.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceOptions.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/IPersistenceModelContributor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlQueryExecutor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PlatformDbContext.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Sql/EfSqlQueryExecutor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Sql/SqlServerDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Sql/OracleDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Sql/MySqlDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Extensions/PersistenceServiceCollectionExtensions.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/Persistence.Tests.csproj`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/PersistenceRegistrationTests.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/PlatformModeling.csproj`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/ModelKind.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/FieldKind.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/FieldValueType.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/ModelDefinition.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/FieldDefinition.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/IndexDefinition.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/IModelDefinitionProvider.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelDefinitionValidator.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/Modeling.Tests.csproj`
+- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelDefinitionValidatorTests.cs`
 - Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
 
-- [ ] **Step 1: 先写持久化底座注册失败测试**
-
-在 `D:/Github/ICP-X/NewP/tests/Persistence.Tests/PersistenceRegistrationTests.cs` 写一个测试，验证按 Provider 注册时可以解析 `PlatformDbContext`、`ISqlDialect`、`ISqlQueryExecutor`。
+- [ ] **Step 1: 先写模型定义校验失败测试**
 
 ```csharp
-using ICP.Platform.Persistence;
-using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Extensions;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Validation;
 using Xunit;
 
-namespace ICP.Platform.Persistence.Tests;
+namespace ICP.Platform.Modeling.Tests;
 
-public class PersistenceRegistrationTests
+public class ModelDefinitionValidatorTests
 {
-    [Theory]
-    [InlineData("SqlServer", typeof(SqlServerDialect))]
-    [InlineData("Oracle", typeof(OracleDialect))]
-    [InlineData("MySql", typeof(MySqlDialect))]
-    public void AddPlatformPersistence_RegistersProviderServices(string provider, Type dialectType)
+    [Fact]
+    public void Validate_ThrowsWhenFieldNamesDuplicate()
     {
-        var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var definition = new ModelDefinition(
+            "ConfigItem",
+            "config_items",
+            ModelKind.Entity,
+            new[]
             {
-                ["Persistence:Provider"] = provider,
-                ["ConnectionStrings:SqlServer"] = "Server=localhost;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;",
-                ["ConnectionStrings:Oracle"] = "User Id=icp;Password=REDACTED_FOR_OPEN_SOURCE;Data Source=localhost/FREEPDB1;",
-                ["ConnectionStrings:MySql"] = "Server=localhost;Database=icp_platform;User=root;Password=REDACTED_FOR_OPEN_SOURCE;"
-            })
-            .Build();
+                new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.Text, "string", true, true, false),
+                new FieldDefinition("Id", "config_id", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false)
+            },
+            Array.Empty<IndexDefinition>());
 
-        services.AddPlatformPersistence(configuration);
+        var validator = new ModelDefinitionValidator();
 
-        using var scope = services.BuildServiceProvider().CreateScope();
-        Assert.NotNull(scope.ServiceProvider.GetService<PlatformDbContext>());
-        Assert.IsType(dialectType, scope.ServiceProvider.GetRequiredService<ISqlDialect>());
-        Assert.NotNull(scope.ServiceProvider.GetService<ISqlQueryExecutor>());
+        var ex = Assert.Throws<InvalidOperationException>(() => validator.Validate(definition));
+        Assert.Contains("duplicate field", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
 ```
 
 - [ ] **Step 2: 跑测试确认它先失败**
 
-Run: `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter PersistenceRegistrationTests -v minimal`
-Expected: 编译失败，提示 `ICP.Platform.Persistence` 命名空间、`AddPlatformPersistence`、`PlatformDbContext`、`ISqlDialect`、`ISqlQueryExecutor` 不存在。
+Run: `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj --filter ModelDefinitionValidatorTests -v minimal`
 
-- [ ] **Step 3: 创建平台级持久化项目与核心类型**
+Expected: 编译失败，提示 `ICP.Platform.Modeling`、`ModelDefinition`、`ModelDefinitionValidator` 等类型不存在。
 
-创建 `D:/Github/ICP-X/NewP/server/platform-persistence/PlatformPersistence.csproj`，并加入基础包引用。
+- [ ] **Step 3: 创建模型语义项目与核心类型**
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Modeling</RootNamespace>
+  </PropertyGroup>
+</Project>
+```
+
+```csharp
+namespace ICP.Platform.Modeling;
+
+public enum ModelKind
+{
+    Entity,
+    Link
+}
+```
+
+```csharp
+namespace ICP.Platform.Modeling;
+
+public enum FieldKind
+{
+    Scalar,
+    Reference,
+    Audit
+}
+```
+
+```csharp
+namespace ICP.Platform.Modeling;
+
+public enum FieldValueType
+{
+    Text,
+    Description,
+    Boolean,
+    DateTime,
+    ObjectId,
+    Enum,
+    User,
+    Group
+}
+```
+
+```csharp
+namespace ICP.Platform.Modeling.Definitions;
+
+public sealed record FieldDefinition(
+    string Name,
+    string StoreName,
+    FieldKind Kind,
+    FieldValueType ValueType,
+    string StoreType,
+    bool Required,
+    bool IsPrimaryKey,
+    bool IsAuditField);
+```
+
+```csharp
+namespace ICP.Platform.Modeling.Definitions;
+
+public sealed record IndexDefinition(
+    string Name,
+    IReadOnlyList<string> Fields,
+    bool IsUnique);
+```
+
+```csharp
+namespace ICP.Platform.Modeling.Definitions;
+
+public sealed record ModelDefinition(
+    string Name,
+    string TableName,
+    ModelKind Kind,
+    IReadOnlyList<FieldDefinition> Fields,
+    IReadOnlyList<IndexDefinition> Indexes);
+```
+
+```csharp
+namespace ICP.Platform.Modeling.Definitions;
+
+public interface IModelDefinitionProvider
+{
+    IReadOnlyList<ModelDefinition> GetDefinitions();
+}
+```
+
+- [ ] **Step 4: 实现模型定义校验器**
+
+```csharp
+using ICP.Platform.Modeling.Definitions;
+
+namespace ICP.Platform.Modeling.Validation;
+
+public sealed class ModelDefinitionValidator
+{
+    public void Validate(ModelDefinition definition)
+    {
+        var duplicateField = definition.Fields
+            .GroupBy(static x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static x => x.Count() > 1);
+
+        if (duplicateField is not null)
+        {
+            throw new InvalidOperationException($"Model '{definition.Name}' has duplicate field '{duplicateField.Key}'.");
+        }
+
+        if (!definition.Fields.Any(static x => x.IsPrimaryKey))
+        {
+            throw new InvalidOperationException($"Model '{definition.Name}' must define at least one primary key field.");
+        }
+    }
+}
+```
+
+- [ ] **Step 5: 加入解决方案并回跑测试**
+
+Run:
+- `dotnet sln .\ICP-Platform.sln add .\server\platform-modeling\PlatformModeling.csproj`
+- `dotnet sln .\ICP-Platform.sln add .\tests\Modeling.Tests\Modeling.Tests.csproj`
+- `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj --filter ModelDefinitionValidatorTests -v minimal`
+
+Expected:
+- `Project added to the solution`
+- `ModelDefinitionValidatorTests` 通过
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add D:/Github/ICP-X/NewP/server/platform-modeling D:/Github/ICP-X/NewP/tests/Modeling.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
+git commit -m "feat: add platform modeling foundation"
+```
+
+- [ ] **Step 7: 补充 AI 生成元数据的工作约束**
+
+在 `D:/Github/ICP-X/NewP/server/platform-modeling/README.md` 或等效文档中补充以下约束：
+
+```md
+## Metadata Authoring Workflow
+
+- 当前阶段不提供人工设计器
+- 模型语义定义默认由 AI 生成或修改
+- 所有生成结果必须进入版本库
+- 所有生成结果必须通过 ModelDefinitionValidator 和相关模块测试
+- 后续若建设设计器，设计器输出仍必须对齐当前模型语义契约
+```
+
+Run: `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj -v minimal`
+Expected: `Modeling.Tests` 继续通过
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add D:/Github/ICP-X/NewP/server/platform-modeling
+git commit -m "docs: define ai-assisted metadata authoring workflow"
+```
+
+### Task 2: 建立 Provider 无关的持久化内核
+
+**Files:**
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PlatformPersistence.csproj`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceProvider.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceAdapterKind.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceOptions.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlDialect.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlQueryExecutor.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/IPersistenceMigrationRunner.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Extensions/PersistenceOptionValidation.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/Persistence.Tests.csproj`
+- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/PersistenceOptionValidationTests.cs`
+- Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
+
+- [ ] **Step 1: 先写配置校验测试**
+
+```csharp
+using ICP.Platform.Persistence;
+using ICP.Platform.Persistence.Extensions;
+using Xunit;
+
+namespace ICP.Platform.Persistence.Tests;
+
+public class PersistenceOptionValidationTests
+{
+    [Fact]
+    public void Validate_ThrowsWhenAdapterMissing()
+    {
+        var options = new PersistenceOptions
+        {
+            Provider = PersistenceProvider.SqlServer,
+            Adapter = null
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => PersistenceOptionValidation.Validate(options));
+        Assert.Contains("Adapter", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+}
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run: `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter PersistenceOptionValidationTests -v minimal`
+
+Expected: 编译失败，提示 `PersistenceOptions`、`PersistenceOptionValidation` 等类型不存在。
+
+- [ ] **Step 3: 创建持久化内核项目与配置类型**
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -90,14 +289,7 @@ Expected: 编译失败，提示 `ICP.Platform.Persistence` 命名空间、`AddPl
     <RootNamespace>ICP.Platform.Persistence</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.1" />
-    <PackageReference Include="Oracle.EntityFrameworkCore" Version="10.23.26100" />
-    <PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.1" />
+    <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
   </ItemGroup>
 </Project>
 ```
@@ -116,24 +308,23 @@ public enum PersistenceProvider
 ```csharp
 namespace ICP.Platform.Persistence;
 
-public sealed class PersistenceOptions
+public enum PersistenceAdapterKind
 {
-    public const string SectionName = "Persistence";
-    public PersistenceProvider Provider { get; set; } = PersistenceProvider.SqlServer;
-    public bool AutoMigrate { get; set; } = true;
-    public bool AutoSeed { get; set; } = true;
+    EfCore
 }
 ```
 
 ```csharp
-using Microsoft.EntityFrameworkCore;
+namespace ICP.Platform.Persistence;
 
-namespace ICP.Platform.Persistence.Abstractions;
-
-public interface IPersistenceModelContributor
+public sealed class PersistenceOptions
 {
-    int Order { get; }
-    void Configure(ModelBuilder modelBuilder);
+    public const string SectionName = "Persistence";
+
+    public PersistenceProvider Provider { get; set; } = PersistenceProvider.SqlServer;
+    public PersistenceAdapterKind? Adapter { get; set; } = PersistenceAdapterKind.EfCore;
+    public bool AutoMigrate { get; set; } = true;
+    public bool AutoSeed { get; set; } = true;
 }
 ```
 
@@ -163,111 +354,235 @@ public interface ISqlDialect
 ```
 
 ```csharp
-using ICP.Platform.Persistence.Abstractions;
+namespace ICP.Platform.Persistence.Abstractions;
+
+public interface IPersistenceMigrationRunner
+{
+    Task MigrateAsync(CancellationToken cancellationToken = default);
+}
+```
+
+- [ ] **Step 4: 实现配置校验入口**
+
+```csharp
+namespace ICP.Platform.Persistence.Extensions;
+
+public static class PersistenceOptionValidation
+{
+    public static void Validate(PersistenceOptions options)
+    {
+        if (options.Adapter is null)
+        {
+            throw new InvalidOperationException("Persistence Adapter must be configured.");
+        }
+    }
+}
+```
+
+- [ ] **Step 5: 加入解决方案并回跑测试**
+
+Run:
+- `dotnet sln .\ICP-Platform.sln add .\server\platform-persistence\PlatformPersistence.csproj`
+- `dotnet sln .\ICP-Platform.sln add .\tests\Persistence.Tests\Persistence.Tests.csproj`
+- `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter PersistenceOptionValidationTests -v minimal`
+
+Expected:
+- `Project added to the solution`
+- `PersistenceOptionValidationTests` 通过
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add D:/Github/ICP-X/NewP/server/platform-persistence D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
+git commit -m "feat: add provider-agnostic persistence kernel"
+```
+
+### Task 3: 建立 EF Core 第一批适配器
+
+**Files:**
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/EfPlatformDbContext.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Projection/EfModelProjector.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/SqlServerDialect.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/OracleDialect.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/MySqlDialect.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/EfSqlQueryExecutor.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/PersistenceMigrationRunner.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Extensions/EfCorePersistenceServiceCollectionExtensions.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/EfModelProjectionTests.cs`
+- Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
+
+- [ ] **Step 1: 先写模型投影测试**
+
+```csharp
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace ICP.Platform.Persistence.Tests;
+
+public class EfModelProjectionTests
+{
+    [Fact]
+    public void OnModelCreating_ProjectsTableAndPrimaryKey()
+    {
+        var definitions = new[]
+        {
+            new ModelDefinition(
+                "ConfigItem",
+                "config_items",
+                ModelKind.Entity,
+                new[]
+                {
+                    new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.Text, "string", true, true, false),
+                    new FieldDefinition("Key", "config_key", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false)
+                },
+                Array.Empty<IndexDefinition>())
+        };
+
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseInMemoryDatabase(nameof(OnModelCreating_ProjectsTableAndPrimaryKey))
+            .Options;
+
+        using var db = new EfPlatformDbContext(options, definitions);
+        var entityType = db.Model.FindEntityType("ConfigItem");
+
+        Assert.NotNull(entityType);
+        Assert.Equal("config_items", entityType!.GetTableName());
+        Assert.NotNull(entityType.FindPrimaryKey());
+    }
+}
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run: `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter EfModelProjectionTests -v minimal`
+
+Expected: 编译失败，提示 `ICP.Platform.Persistence.EfCore`、`EfPlatformDbContext` 等类型不存在。
+
+- [ ] **Step 3: 创建 EF Core 适配器项目**
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Persistence.EfCore</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.1" />
+    <PackageReference Include="Oracle.EntityFrameworkCore" Version="10.23.26100" />
+    <PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.1" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Persistence.EfCore.Projection;
 using Microsoft.EntityFrameworkCore;
 
-namespace ICP.Platform.Persistence;
+namespace ICP.Platform.Persistence.EfCore;
 
-public sealed class PlatformDbContext : DbContext
+public sealed class EfPlatformDbContext : DbContext
 {
-    private readonly IEnumerable<IPersistenceModelContributor> _contributors;
+    private readonly IReadOnlyList<ModelDefinition> _definitions;
 
-    public PlatformDbContext(
-        DbContextOptions<PlatformDbContext> options,
-        IEnumerable<IPersistenceModelContributor> contributors) : base(options)
+    public EfPlatformDbContext(DbContextOptions<EfPlatformDbContext> options, IReadOnlyList<ModelDefinition> definitions)
+        : base(options)
     {
-        _contributors = contributors;
+        _definitions = definitions;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        foreach (var contributor in _contributors.OrderBy(static x => x.Order))
-        {
-            contributor.Configure(modelBuilder);
-        }
-
+        var projector = new EfModelProjector();
+        projector.Project(modelBuilder, _definitions);
         base.OnModelCreating(modelBuilder);
     }
 }
 ```
 
-- [ ] **Step 4: 实现 Provider 注册、方言与 SQL 执行器**
-
-在 `D:/Github/ICP-X/NewP/server/platform-persistence/Sql/EfSqlQueryExecutor.cs` 中复用 `PlatformDbContext` 当前连接与事务。
-
 ```csharp
-using System.Data;
-using System.Data.Common;
-using ICP.Platform.Persistence.Abstractions;
-using Microsoft.EntityFrameworkCore.Storage;
+using ICP.Platform.Modeling.Definitions;
+using Microsoft.EntityFrameworkCore;
 
-namespace ICP.Platform.Persistence.Sql;
+namespace ICP.Platform.Persistence.EfCore.Projection;
 
-public sealed class EfSqlQueryExecutor : ISqlQueryExecutor
+public sealed class EfModelProjector
 {
-    private readonly PlatformDbContext _dbContext;
-    private readonly ISqlDialect _dialect;
-
-    public EfSqlQueryExecutor(PlatformDbContext dbContext, ISqlDialect dialect)
+    public void Project(ModelBuilder modelBuilder, IReadOnlyList<ModelDefinition> definitions)
     {
-        _dbContext = dbContext;
-        _dialect = dialect;
-    }
-
-    public async Task<IReadOnlyList<T>> QueryAsync<T>(
-        string sql,
-        IReadOnlyDictionary<string, object?> parameters,
-        Func<DbDataReader, T> map,
-        CancellationToken cancellationToken = default)
-    {
-        var connection = _dbContext.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
+        foreach (var definition in definitions)
         {
-            await connection.OpenAsync(cancellationToken);
+            var entity = modelBuilder.SharedTypeEntity(definition.Name, typeof(Dictionary<string, object>));
+            entity.ToTable(definition.TableName);
+
+            foreach (var field in definition.Fields)
+            {
+                entity.IndexerProperty<string>(field.Name).HasColumnName(field.StoreName);
+            }
+
+            var primaryKeys = definition.Fields.Where(static x => x.IsPrimaryKey).Select(static x => x.Name).ToArray();
+            entity.HasKey(primaryKeys);
         }
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        command.Transaction = _dbContext.Database.CurrentTransaction?.GetDbTransaction();
-
-        foreach (var pair in parameters)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = _dialect.Parameter(pair.Key);
-            parameter.Value = pair.Value ?? DBNull.Value;
-            command.Parameters.Add(parameter);
-        }
-
-        var results = new List<T>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            results.Add(map(reader));
-        }
-
-        return results;
     }
 }
 ```
 
-在 `D:/Github/ICP-X/NewP/server/platform-persistence/Extensions/PersistenceServiceCollectionExtensions.cs` 中写统一注册入口。
+- [ ] **Step 4: 补齐 SQL 方言、查询执行器与迁移执行器**
 
 ```csharp
 using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Sql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace ICP.Platform.Persistence.EfCore;
+
+public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner
+{
+    private readonly EfPlatformDbContext _dbContext;
+    private readonly PersistenceOptions _options;
+
+    public PersistenceMigrationRunner(EfPlatformDbContext dbContext, IOptions<PersistenceOptions> options)
+    {
+        _dbContext = dbContext;
+        _options = options.Value;
+    }
+
+    public Task MigrateAsync(CancellationToken cancellationToken = default) =>
+        _options.AutoMigrate ? _dbContext.Database.MigrateAsync(cancellationToken) : Task.CompletedTask;
+}
+```
+
+```csharp
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.EfCore.Sql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace ICP.Platform.Persistence.Extensions;
+namespace ICP.Platform.Persistence.EfCore.Extensions;
 
-public static class PersistenceServiceCollectionExtensions
+public static class EfCorePersistenceServiceCollectionExtensions
 {
-    public static IServiceCollection AddPlatformPersistence(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddEfCorePersistence(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IReadOnlyList<ModelDefinition> definitions)
     {
         services.Configure<PersistenceOptions>(configuration.GetSection(PersistenceOptions.SectionName));
-        services.AddScoped<ISqlQueryExecutor, EfSqlQueryExecutor>();
+        services.AddSingleton(definitions);
+
         services.AddScoped<ISqlDialect>(sp =>
         {
             var provider = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value.Provider;
@@ -280,7 +595,7 @@ public static class PersistenceServiceCollectionExtensions
             };
         });
 
-        services.AddDbContext<PlatformDbContext>((sp, builder) =>
+        services.AddDbContext<EfPlatformDbContext>((sp, builder) =>
         {
             var provider = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value.Provider;
             switch (provider)
@@ -297,48 +612,229 @@ public static class PersistenceServiceCollectionExtensions
             }
         });
 
+        services.AddScoped<IPersistenceMigrationRunner, PersistenceMigrationRunner>();
+        services.AddScoped<ISqlQueryExecutor, EfSqlQueryExecutor>();
         return services;
     }
 }
 ```
 
-- [ ] **Step 5: 重新跑持久化底座测试并把项目加入解决方案**
+- [ ] **Step 5: 加入解决方案并回跑投影测试**
 
 Run:
-- `dotnet sln .\ICP-Platform.sln add .\server\platform-persistence\PlatformPersistence.csproj`
-- `dotnet sln .\ICP-Platform.sln add .\tests\Persistence.Tests\Persistence.Tests.csproj`
-- `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter PersistenceRegistrationTests -v minimal`
+- `dotnet sln .\ICP-Platform.sln add .\server\platform-persistence-efcore\PlatformPersistence.EfCore.csproj`
+- `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter EfModelProjectionTests -v minimal`
 
 Expected:
 - `Project added to the solution`
-- `PersistenceRegistrationTests` 通过
+- `EfModelProjectionTests` 通过
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-persistence D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
-git commit -m "feat: add persistence foundation and provider registration"
+git add D:/Github/ICP-X/NewP/server/platform-persistence-efcore D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
+git commit -m "feat: add ef core persistence adapter"
 ```
 
-### Task 2: 落地 ConfigCenter 的 EF 持久化实现
+### Task 4: 用模型语义定义 ConfigCenter 与 Authorization
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/ConfigCenterModelContributor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/ConfigItemEntityConfiguration.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/EfConfigRepository.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenterModule.cs`
+- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
+- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Descriptors/AuthorizationModelDefinitions.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/AuthorizationModelDefinitionTests.cs`
 - Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenter.csproj`
-- Modify: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigServiceTests.cs`
+- Modify: `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.csproj`
+
+- [ ] **Step 1: 先写模块模型定义测试**
+
+```csharp
+using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
+using Xunit;
+
+namespace ICP.Platform.Modules.ConfigCenter.Tests;
+
+public class ConfigCenterModelDefinitionTests
+{
+    [Fact]
+    public void ConfigItem_DefinitionContainsPrimaryKeyAndUniqueIndex()
+    {
+        var definition = ConfigCenterModelDefinitions.ConfigItem;
+
+        Assert.Contains(definition.Fields, static x => x.Name == "Id" && x.IsPrimaryKey);
+        Assert.Contains(definition.Indexes, static x => x.Name == "UX_ConfigItem_Key_Environment_Tenant" && x.IsUnique);
+    }
+}
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run:
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter ConfigCenterModelDefinitionTests -v minimal`
+- `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj --filter AuthorizationModelDefinitionTests -v minimal`
+
+Expected: 编译失败，提示两个模块的模型定义类型不存在。
+
+- [ ] **Step 3: 编写 ConfigCenter 模型语义定义**
+
+```csharp
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
+
+namespace ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
+
+public static class ConfigCenterModelDefinitions
+{
+    public static readonly ModelDefinition ConfigItem = new(
+        "ConfigItem",
+        "config_items",
+        ModelKind.Entity,
+        new[]
+        {
+            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("Key", "config_key", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Value", "config_value", FieldKind.Scalar, FieldValueType.Description, "string", false, false, false),
+            new FieldDefinition("Type", "config_type", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("ModuleId", "module_id", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Environment", "environment", FieldKind.Scalar, FieldValueType.Text, "string", false, false, false),
+            new FieldDefinition("TenantId", "tenant_id", FieldKind.Scalar, FieldValueType.Text, "string", false, false, false)
+        },
+        new[]
+        {
+            new IndexDefinition("UX_ConfigItem_Key_Environment_Tenant", new[] { "Key", "Environment", "TenantId" }, true),
+            new IndexDefinition("IX_ConfigItem_Module", new[] { "ModuleId" }, false)
+        });
+}
+```
+
+- [ ] **Step 4: 编写 Authorization 模型语义定义**
+
+```csharp
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
+
+namespace ICP.Platform.Modules.Authorization.Persistence.Descriptors;
+
+public static class AuthorizationModelDefinitions
+{
+    public static readonly ModelDefinition Role = new(
+        "Role",
+        "auth_roles",
+        ModelKind.Entity,
+        new[]
+        {
+            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("Code", "code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false)
+        },
+        new[]
+        {
+            new IndexDefinition("UX_Role_Code", new[] { "Code" }, true)
+        });
+
+    public static readonly ModelDefinition UserRole = new(
+        "UserRole",
+        "auth_user_roles",
+        ModelKind.Link,
+        new[]
+        {
+            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("UserId", "user_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
+            new FieldDefinition("RoleId", "role_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false)
+        },
+        new[]
+        {
+            new IndexDefinition("UX_UserRole_User_Role", new[] { "UserId", "RoleId" }, true)
+        });
+}
+```
+
+- [ ] **Step 5: 给模块项目增加基础引用并回跑测试**
+
+```xml
+<ItemGroup>
+  <ProjectReference Include="..\..\..\platform-modeling\PlatformModeling.csproj" />
+  <ProjectReference Include="..\..\..\platform-persistence\PlatformPersistence.csproj" />
+</ItemGroup>
+```
+
+Run:
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter ConfigCenterModelDefinitionTests -v minimal`
+- `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj --filter AuthorizationModelDefinitionTests -v minimal`
+
+Expected:
+- 新增模型定义测试通过
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/server/modules/Authorization D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests D:/Github/ICP-X/NewP/tests/Authorization.Tests
+git commit -m "feat: add module model definitions for persistence"
+```
+
+### Task 4.5: 安装本地多数据库容器
+
+**Checkpoint:** 完成 `Task 4` 后、进入 `Task 5` 和 `Task 6` 前，先准备本地数据库环境。
+
+**Docs:**
+- `D:/Github/ICP-X/NewP/docs/guides/local-multi-db-container-setup.md`
+
+- [ ] **Step 1: 安装并验证 Docker Desktop**
+
+Run:
+- `docker version`
+
+Expected:
+- Docker Client / Server 信息都能正常返回
+
+- [ ] **Step 2: 按推荐顺序启动三库容器**
+
+顺序：
+- `MySQL`
+- `SQL Server`
+- `Oracle`
+
+Expected:
+- `docker ps` 可看到 `icp-mysql`、`icp-sqlserver`、`icp-oracle`
+
+- [ ] **Step 3: 记录本地连接串并验证端口**
+
+至少确认：
+- `localhost:3306`
+- `localhost:1433`
+- `localhost:1521`
+
+Expected:
+- 三个端口均可用
+- 可将连接串写入后续 `appsettings` 或环境变量
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add D:/Github/ICP-X/NewP/docs/guides/local-multi-db-container-setup.md D:/Github/ICP-X/NewP/docs/superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md
+git commit -m "docs: add local multi-db container setup guide"
+```
+
+### Task 5: 让模块通过 EF 适配器落地真实仓储
+
+**Files:**
+- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Ef/EfConfigRepository.cs`
+- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfRoleRepository.cs`
+- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfPermissionRepository.cs`
+- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfRolePermissionRepository.cs`
+- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfUserRoleRepository.cs`
+- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenterModule.cs`
+- Modify: `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.cs`
 - Create: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/EfConfigRepositoryTests.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/EfAuthorizationRepositoryTests.cs`
 
-- [ ] **Step 1: 先写 ConfigCenter 仓储行为测试**
-
-在 `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/EfConfigRepositoryTests.cs` 写一个测试，覆盖优先级查询和模块查询。
+- [ ] **Step 1: 先写 EF 仓储行为测试**
 
 ```csharp
 using ICP.Platform.Modules.ConfigCenter.Models;
-using ICP.Platform.Modules.ConfigCenter.Persistence;
-using ICP.Platform.Persistence;
+using ICP.Platform.Modules.ConfigCenter.Persistence.Ef;
+using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
+using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -349,93 +845,52 @@ public class EfConfigRepositoryTests
     [Fact]
     public async Task GetByKeyAsync_ReturnsTenantAndEnvironmentMatchFirst()
     {
-        var options = new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseInMemoryDatabase(nameof(GetByKeyAsync_ReturnsTenantAndEnvironmentMatchFirst))
-            .Options;
-
-        await using var db = new PlatformDbContext(options, new[] { new ConfigCenterModelContributor() });
-        var repository = new EfConfigRepository(db);
+        var repository = CreateConfigRepository();
 
         await repository.CreateAsync(new ConfigItem { Key = "Test.Key", Value = "global", Type = "String", ModuleId = "Test", DisplayName = "Global" });
-        await repository.CreateAsync(new ConfigItem { Key = "Test.Key", Value = "prod-tenant", Type = "String", ModuleId = "Test", DisplayName = "Specific", Environment = "Prod", TenantId = "tenant-a" });
+        await repository.CreateAsync(new ConfigItem { Key = "Test.Key", Value = "tenant-prod", Type = "String", ModuleId = "Test", DisplayName = "Specific", Environment = "Prod", TenantId = "tenant-a" });
 
         var item = await repository.GetByKeyAsync("Test.Key", "Prod", "tenant-a");
 
         Assert.NotNull(item);
-        Assert.Equal("prod-tenant", item!.Value);
+        Assert.Equal("tenant-prod", item!.Value);
+    }
+
+    private static EfConfigRepository CreateConfigRepository()
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        var dbContext = new EfPlatformDbContext(options, new[] { ConfigCenterModelDefinitions.ConfigItem });
+        return new EfConfigRepository(dbContext);
     }
 }
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter EfConfigRepositoryTests -v minimal`
-Expected: 编译失败，提示 `ConfigCenterModelContributor`、`EfConfigRepository` 不存在。
+Run:
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter EfConfigRepositoryTests -v minimal`
+- `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj --filter EfAuthorizationRepositoryTests -v minimal`
 
-- [ ] **Step 3: 添加 ConfigCenter 的模型映射与仓储实现**
+Expected: 编译失败，提示 EF 仓储实现与测试工厂不存在。
 
-在 `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/ConfigItemEntityConfiguration.cs` 定义表、列与索引。
-
-```csharp
-using ICP.Platform.Modules.ConfigCenter.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-
-namespace ICP.Platform.Modules.ConfigCenter.Persistence;
-
-public sealed class ConfigItemEntityConfiguration : IEntityTypeConfiguration<ConfigItem>
-{
-    public void Configure(EntityTypeBuilder<ConfigItem> builder)
-    {
-        builder.ToTable("config_items");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).HasMaxLength(64);
-        builder.Property(x => x.Key).HasMaxLength(256).IsRequired();
-        builder.Property(x => x.Type).HasMaxLength(64).IsRequired();
-        builder.Property(x => x.ModuleId).HasMaxLength(128).IsRequired();
-        builder.Property(x => x.Group).HasMaxLength(128);
-        builder.Property(x => x.Environment).HasMaxLength(64);
-        builder.Property(x => x.TenantId).HasMaxLength(64);
-        builder.Property(x => x.DisplayName).HasMaxLength(256).IsRequired();
-        builder.Property(x => x.Description).HasMaxLength(2000);
-        builder.HasIndex(x => new { x.Key, x.Environment, x.TenantId }).IsUnique();
-        builder.HasIndex(x => new { x.ModuleId, x.Group });
-    }
-}
-```
-
-```csharp
-using ICP.Platform.Persistence.Abstractions;
-using Microsoft.EntityFrameworkCore;
-
-namespace ICP.Platform.Modules.ConfigCenter.Persistence;
-
-public sealed class ConfigCenterModelContributor : IPersistenceModelContributor
-{
-    public int Order => 100;
-
-    public void Configure(ModelBuilder modelBuilder)
-    {
-        modelBuilder.ApplyConfiguration(new ConfigItemEntityConfiguration());
-    }
-}
-```
-
-在 `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/EfConfigRepository.cs` 写 EF 实现，保留现有查询语义：
+- [ ] **Step 3: 编写 ConfigCenter EF 仓储**
 
 ```csharp
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
-using ICP.Platform.Persistence;
+using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace ICP.Platform.Modules.ConfigCenter.Persistence;
+namespace ICP.Platform.Modules.ConfigCenter.Persistence.Ef;
 
 public sealed class EfConfigRepository : IConfigRepository
 {
-    private readonly PlatformDbContext _dbContext;
+    private readonly EfPlatformDbContext _dbContext;
 
-    public EfConfigRepository(PlatformDbContext dbContext)
+    public EfConfigRepository(EfPlatformDbContext dbContext)
     {
         _dbContext = dbContext;
     }
@@ -443,12 +898,8 @@ public sealed class EfConfigRepository : IConfigRepository
     public Task<List<ConfigItem>> GetAllAsync(CancellationToken cancellationToken = default) =>
         _dbContext.Set<ConfigItem>().AsNoTracking().ToListAsync(cancellationToken);
 
-    public Task<ConfigItem?> GetByIdAsync(string id, CancellationToken cancellationToken = default) =>
-        _dbContext.Set<ConfigItem>().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-    public async Task<ConfigItem?> GetByKeyAsync(string key, string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default)
-    {
-        return await _dbContext.Set<ConfigItem>()
+    public Task<ConfigItem?> GetByKeyAsync(string key, string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default) =>
+        _dbContext.Set<ConfigItem>()
             .AsNoTracking()
             .Where(x => x.Key == key)
             .OrderByDescending(x => x.Environment == environment && x.TenantId == tenantId)
@@ -456,333 +907,90 @@ public sealed class EfConfigRepository : IConfigRepository
             .ThenByDescending(x => x.Environment == null && x.TenantId == tenantId)
             .ThenByDescending(x => x.Environment == null && x.TenantId == null)
             .FirstOrDefaultAsync(cancellationToken);
-    }
-
-    public Task<List<ConfigItem>> GetByModuleAsync(string moduleId, string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default) =>
-        _dbContext.Set<ConfigItem>()
-            .AsNoTracking()
-            .Where(x => x.ModuleId == moduleId)
-            .Where(x => environment == null || x.Environment == null || x.Environment == environment)
-            .Where(x => tenantId == null || x.TenantId == null || x.TenantId == tenantId)
-            .ToListAsync(cancellationToken);
-
-    public Task<List<ConfigItem>> GetByKeysAsync(IEnumerable<string> keys, string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default) =>
-        _dbContext.Set<ConfigItem>()
-            .AsNoTracking()
-            .Where(x => keys.Contains(x.Key))
-            .Where(x => environment == null || x.Environment == null || x.Environment == environment)
-            .Where(x => tenantId == null || x.TenantId == null || x.TenantId == tenantId)
-            .ToListAsync(cancellationToken);
 
     public async Task CreateAsync(ConfigItem item, CancellationToken cancellationToken = default)
     {
         _dbContext.Set<ConfigItem>().Add(item);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
-
-    public async Task UpdateAsync(ConfigItem item, CancellationToken cancellationToken = default)
-    {
-        _dbContext.Set<ConfigItem>().Update(item);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
-    {
-        var entity = await _dbContext.Set<ConfigItem>().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (entity is null) return;
-        _dbContext.Set<ConfigItem>().Remove(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
 }
 ```
 
-- [ ] **Step 4: 改模块注册与项目引用**
-
-在 `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenter.csproj` 增加：
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />
-  <ProjectReference Include="..\..\sdk\Sdk.csproj" />
-</ItemGroup>
-```
-
-在 `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenterModule.cs` 中改为：
+- [ ] **Step 4: 编写 Authorization EF 仓储并替换模块注册**
 
 ```csharp
-services.AddSingleton<IPersistenceModelContributor, ConfigCenterModelContributor>();
-services.AddScoped<IConfigRepository, EfConfigRepository>();
-services.AddScoped<IConfigService, ConfigService>();
-```
-
-- [ ] **Step 5: 把 ConfigCenter 的服务测试切到可注入仓储**
-
-在 `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigServiceTests.cs` 中，把 `new ConfigRepository()` 替换为统一的仓储构建帮助方法。
-
-```csharp
-private static IConfigRepository CreateRepository()
-{
-    var options = new DbContextOptionsBuilder<PlatformDbContext>()
-        .UseInMemoryDatabase(Guid.NewGuid().ToString())
-        .Options;
-
-    var db = new PlatformDbContext(options, new[] { new ConfigCenterModelContributor() });
-    return new EfConfigRepository(db);
-}
-```
-
-- [ ] **Step 6: 跑 ConfigCenter 测试**
-
-Run:
-- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter EfConfigRepositoryTests -v minimal`
-- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -v minimal`
-
-Expected:
-- `EfConfigRepositoryTests` 通过
-- 原有 `ConfigServiceTests` 继续通过
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests
-git commit -m "feat: persist config center with ef core"
-```
-
-### Task 3: 落地 Authorization 的 EF 持久化实现
-
-**Files:**
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/AuthorizationModelContributor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/RoleEntityConfiguration.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/PermissionEntityConfiguration.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/RolePermissionEntityConfiguration.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/UserRoleEntityConfiguration.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/EfRoleRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/EfPermissionRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/EfRolePermissionRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/EfUserRoleRepository.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.csproj`
-- Modify: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/AuthorizationServiceTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/RoleServiceTests.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/EfAuthorizationRepositoryTests.cs`
-
-- [ ] **Step 1: 先写 Authorization 仓储行为测试**
-
-在 `D:/Github/ICP-X/NewP/tests/Authorization.Tests/EfAuthorizationRepositoryTests.cs` 写一个测试，覆盖用户角色关系查询。
-
-```csharp
-using ICP.Platform.Modules.Authorization.Models;
-using ICP.Platform.Modules.Authorization.Persistence;
-using ICP.Platform.Persistence;
-using Microsoft.EntityFrameworkCore;
-using Xunit;
-
-namespace ICP.Platform.Modules.Authorization.Tests;
-
-public class EfAuthorizationRepositoryTests
-{
-    [Fact]
-    public async Task GetByUserIdAsync_ReturnsAssignedRoles()
-    {
-        var options = new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseInMemoryDatabase(nameof(GetByUserIdAsync_ReturnsAssignedRoles))
-            .Options;
-
-        await using var db = new PlatformDbContext(options, new[] { new AuthorizationModelContributor() });
-        var repository = new EfUserRoleRepository(db);
-
-        await repository.CreateBatchAsync(new[]
-        {
-            new UserRole { UserId = "user-1", RoleId = "role-1" },
-            new UserRole { UserId = "user-1", RoleId = "role-2" }
-        });
-
-        var roles = await repository.GetByUserIdAsync("user-1");
-        Assert.Equal(2, roles.Count);
-    }
-}
-```
-
-- [ ] **Step 2: 跑测试确认失败**
-
-Run: `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj --filter EfAuthorizationRepositoryTests -v minimal`
-Expected: 编译失败，提示 `AuthorizationModelContributor` 与 EF 仓储尚不存在。
-
-- [ ] **Step 3: 实现 Authorization 映射与仓储**
-
-为四个模型分别写实体映射，固定表名、主键、长度和唯一约束：
-
-```csharp
-builder.ToTable("auth_roles");
-builder.HasKey(x => x.Id);
-builder.Property(x => x.Id).HasMaxLength(64);
-builder.Property(x => x.Code).HasMaxLength(128).IsRequired();
-builder.Property(x => x.Name).HasMaxLength(256).IsRequired();
-builder.HasIndex(x => x.Code).IsUnique();
-```
-
-```csharp
-builder.ToTable("auth_permissions");
-builder.HasKey(x => x.Id);
-builder.Property(x => x.Code).HasMaxLength(256).IsRequired();
-builder.Property(x => x.ModuleId).HasMaxLength(128).IsRequired();
-builder.HasIndex(x => x.Code).IsUnique();
-```
-
-```csharp
-builder.ToTable("auth_role_permissions");
-builder.HasKey(x => x.Id);
-builder.HasIndex(x => new { x.RoleId, x.PermissionId }).IsUnique();
-```
-
-```csharp
-builder.ToTable("auth_user_roles");
-builder.HasKey(x => x.Id);
-builder.HasIndex(x => new { x.UserId, x.RoleId }).IsUnique();
-```
-
-统一注册：
-
-```csharp
-using ICP.Platform.Persistence.Abstractions;
-using Microsoft.EntityFrameworkCore;
-
-namespace ICP.Platform.Modules.Authorization.Persistence;
-
-public sealed class AuthorizationModelContributor : IPersistenceModelContributor
-{
-    public int Order => 200;
-
-    public void Configure(ModelBuilder modelBuilder)
-    {
-        modelBuilder.ApplyConfiguration(new RoleEntityConfiguration());
-        modelBuilder.ApplyConfiguration(new PermissionEntityConfiguration());
-        modelBuilder.ApplyConfiguration(new RolePermissionEntityConfiguration());
-        modelBuilder.ApplyConfiguration(new UserRoleEntityConfiguration());
-    }
-}
-```
-
-仓储实现保持现有接口不变，例如：
-
-```csharp
-using ICP.Platform.Modules.Authorization.Models;
-using ICP.Platform.Modules.Authorization.Repositories;
-using ICP.Platform.Persistence;
-using Microsoft.EntityFrameworkCore;
-
-namespace ICP.Platform.Modules.Authorization.Persistence;
-
-public sealed class EfRoleRepository : IRoleRepository
-{
-    private readonly PlatformDbContext _dbContext;
-
-    public EfRoleRepository(PlatformDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
-
-    public Task<List<Role>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        _dbContext.Set<Role>().AsNoTracking().ToListAsync(cancellationToken);
-
-    public Task<Role?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-        _dbContext.Set<Role>().FirstOrDefaultAsync(x => x.Code == code, cancellationToken);
-
-    public async Task CreateAsync(Role role, CancellationToken cancellationToken = default)
-    {
-        _dbContext.Set<Role>().Add(role);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task UpdateAsync(Role role, CancellationToken cancellationToken = default)
-    {
-        _dbContext.Set<Role>().Update(role);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-}
-```
-
-- [ ] **Step 4: 改模块注册与项目引用**
-
-在 `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.csproj` 中增加：
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />
-  <ProjectReference Include="..\..\sdk\Sdk.csproj" />
-</ItemGroup>
-```
-
-在 `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.cs` 中改为：
-
-```csharp
-services.AddSingleton<IPersistenceModelContributor, AuthorizationModelContributor>();
 services.AddScoped<IRoleRepository, EfRoleRepository>();
 services.AddScoped<IPermissionRepository, EfPermissionRepository>();
 services.AddScoped<IRolePermissionRepository, EfRolePermissionRepository>();
 services.AddScoped<IUserRoleRepository, EfUserRoleRepository>();
-services.AddScoped<IAuthorizationService, AuthorizationService>();
-services.AddScoped<IRoleService, RoleService>();
-services.AddScoped<IPermissionService, PermissionService>();
 ```
 
-- [ ] **Step 5: 调整 Authorization 测试以复用 EF 仓储**
-
-在 `D:/Github/ICP-X/NewP/tests/Authorization.Tests/AuthorizationServiceTests.cs` 和 `D:/Github/ICP-X/NewP/tests/Authorization.Tests/RoleServiceTests.cs` 中，通过统一帮助方法创建基于 `PlatformDbContext` 的 EF 仓储。
-
 ```csharp
-private static (IRoleRepository roles, IPermissionRepository permissions, IRolePermissionRepository rolePermissions, IUserRoleRepository userRoles) CreateRepositories()
-{
-    var options = new DbContextOptionsBuilder<PlatformDbContext>()
-        .UseInMemoryDatabase(Guid.NewGuid().ToString())
-        .Options;
+using ICP.Platform.Modules.Authorization.Models;
+using ICP.Platform.Modules.Authorization.Repositories;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.EntityFrameworkCore;
 
-    var db = new PlatformDbContext(options, new[] { new AuthorizationModelContributor() });
-    return (
-        new EfRoleRepository(db),
-        new EfPermissionRepository(db),
-        new EfRolePermissionRepository(db),
-        new EfUserRoleRepository(db));
+namespace ICP.Platform.Modules.Authorization.Persistence.Ef;
+
+public sealed class EfUserRoleRepository : IUserRoleRepository
+{
+    private readonly EfPlatformDbContext _dbContext;
+
+    public EfUserRoleRepository(EfPlatformDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    public Task<List<UserRole>> GetByUserIdAsync(string userId, CancellationToken cancellationToken = default) =>
+        _dbContext.Set<UserRole>()
+            .AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken);
 }
 ```
 
-- [ ] **Step 6: 跑 Authorization 测试**
+- [ ] **Step 5: 回跑模块测试**
 
 Run:
-- `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj --filter EfAuthorizationRepositoryTests -v minimal`
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -v minimal`
 - `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj -v minimal`
 
 Expected:
-- 新增仓储行为测试通过
-- 原有 `AuthorizationServiceTests`、`RoleServiceTests` 全部通过
+- 新增 EF 仓储测试通过
+- 现有服务测试继续通过
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/modules/Authorization D:/Github/ICP-X/NewP/tests/Authorization.Tests
-git commit -m "feat: persist authorization module with ef core"
+git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/server/modules/Authorization D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests D:/Github/ICP-X/NewP/tests/Authorization.Tests
+git commit -m "feat: adapt configcenter and authorization to ef persistence"
 ```
 
-### Task 4: 宿主接入 Provider 配置、迁移程序集与自动迁移
+### Task 6: 宿主接入、迁移程序集与三库验证
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/apps/host-api/HostApi.csproj`
 - Modify: `D:/Github/ICP-X/NewP/apps/host-api/Program.cs`
 - Modify: `D:/Github/ICP-X/NewP/apps/host-api/appsettings.json`
 - Modify: `D:/Github/ICP-X/NewP/apps/host-api/appsettings.Development.json`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence.migrations.sqlserver/PlatformPersistence.SqlServerMigrations.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence.migrations.oracle/PlatformPersistence.OracleMigrations.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence.migrations.mysql/PlatformPersistence.MySqlMigrations.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Migrations/PersistenceMigrationRunner.cs`
-- Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore.migrations.sqlserver/PlatformPersistence.EfCore.SqlServerMigrations.csproj`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore.migrations.oracle/PlatformPersistence.EfCore.OracleMigrations.csproj`
+- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore.migrations.mysql/PlatformPersistence.EfCore.MySqlMigrations.csproj`
+- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/HostPersistenceBootstrapTests.cs`
+- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Invoke-PersistenceSmoke.ps1`
+- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-SqlServerSmoke.ps1`
+- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-OracleSmoke.ps1`
+- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-MySqlSmoke.ps1`
+- Modify: `D:/Github/ICP-X/NewP/tests/README.md`
+- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
 
-- [ ] **Step 1: 先写宿主迁移执行测试**
-
-在 `D:/Github/ICP-X/NewP/tests/Persistence.Tests/HostPersistenceBootstrapTests.cs` 写测试，验证宿主服务集合读取 `Persistence:Provider` 后可以解析迁移执行器。
+- [ ] **Step 1: 先写宿主引导测试**
 
 ```csharp
-using ICP.Platform.Persistence;
-using ICP.Platform.Persistence.Extensions;
+using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.EfCore.Extensions;
+using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
+using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -792,74 +1000,45 @@ namespace ICP.Platform.Persistence.Tests;
 public class HostPersistenceBootstrapTests
 {
     [Fact]
-    public void AddPlatformPersistence_RegistersMigrationRunner()
+    public void Host_ResolvesMigrationRunner()
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
                 ["ConnectionStrings:SqlServer"] = "Server=localhost;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
             })
             .Build();
 
-        services.AddPlatformPersistence(configuration);
+        ConfigurePersistence(services, configuration);
 
         using var provider = services.BuildServiceProvider();
-        Assert.NotNull(provider.GetService<PersistenceMigrationRunner>());
+        Assert.NotNull(provider.GetService<IPersistenceMigrationRunner>());
+    }
+
+    private static void ConfigurePersistence(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddEfCorePersistence(
+            configuration,
+            new[]
+            {
+                ConfigCenterModelDefinitions.ConfigItem,
+                AuthorizationModelDefinitions.Role,
+                AuthorizationModelDefinitions.UserRole
+            });
     }
 }
 ```
 
-- [ ] **Step 2: 跑测试确认它失败**
+- [ ] **Step 2: 跑测试确认失败**
 
 Run: `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter HostPersistenceBootstrapTests -v minimal`
-Expected: 编译失败，提示 `PersistenceMigrationRunner` 不存在。
 
-- [ ] **Step 3: 添加迁移项目和迁移执行器**
+Expected: 编译失败，提示宿主引导或迁移执行器尚未接入。
 
-创建三个迁移程序集，统一引用 `PlatformPersistence.csproj`，例如：
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>ICP.Platform.Persistence.SqlServerMigrations</RootNamespace>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
-  </ItemGroup>
-</Project>
-```
-
-在 `D:/Github/ICP-X/NewP/server/platform-persistence/Migrations/PersistenceMigrationRunner.cs` 中实现：
-
-```csharp
-using Microsoft.Extensions.Options;
-
-namespace ICP.Platform.Persistence;
-
-public sealed class PersistenceMigrationRunner
-{
-    private readonly PlatformDbContext _dbContext;
-    private readonly PersistenceOptions _options;
-
-    public PersistenceMigrationRunner(PlatformDbContext dbContext, IOptions<PersistenceOptions> options)
-    {
-        _dbContext = dbContext;
-        _options = options.Value;
-    }
-
-    public Task MigrateAsync(CancellationToken cancellationToken = default) =>
-        _options.AutoMigrate ? _dbContext.Database.MigrateAsync(cancellationToken) : Task.CompletedTask;
-}
-```
-
-- [ ] **Step 4: 改宿主配置与启动逻辑**
-
-在 `D:/Github/ICP-X/NewP/apps/host-api/appsettings.json` 中改为显式三库配置：
+- [ ] **Step 3: 接入宿主配置与迁移程序集**
 
 ```json
 "ConnectionStrings": {
@@ -868,99 +1047,46 @@ public sealed class PersistenceMigrationRunner
   "MySql": "Server=localhost;Database=icp_platform;User=root;Password=REDACTED_FOR_OPEN_SOURCE;"
 },
 "Persistence": {
+  "Adapter": "EfCore",
   "Provider": "SqlServer",
   "AutoMigrate": true,
   "AutoSeed": true
 }
 ```
 
-在 `D:/Github/ICP-X/NewP/apps/host-api/Program.cs` 中加入持久化注册与迁移：
-
 ```csharp
-using ICP.Platform.Persistence;
-using ICP.Platform.Persistence.Extensions;
-
-builder.Services.AddPlatformPersistence(builder.Configuration);
+builder.Services.AddEfCorePersistence(
+    builder.Configuration,
+    new[]
+    {
+        ConfigCenterModelDefinitions.ConfigItem,
+        AuthorizationModelDefinitions.Role,
+        AuthorizationModelDefinitions.UserRole
+    });
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var migrationRunner = scope.ServiceProvider.GetRequiredService<PersistenceMigrationRunner>();
+    var migrationRunner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
     await migrationRunner.MigrateAsync();
 }
 ```
 
-- [ ] **Step 5: 生成第一版三库迁移**
+- [ ] **Step 4: 生成三套迁移程序集并补 smoke 脚本**
 
-Run:
-- `dotnet ef migrations add InitialSqlServer --project .\server\platform-persistence.migrations.sqlserver\PlatformPersistence.SqlServerMigrations.csproj --startup-project .\apps\host-api\HostApi.csproj --context ICP.Platform.Persistence.PlatformDbContext --output-dir Migrations`
-- `dotnet ef migrations add InitialOracle --project .\server\platform-persistence.migrations.oracle\PlatformPersistence.OracleMigrations.csproj --startup-project .\apps\host-api\HostApi.csproj --context ICP.Platform.Persistence.PlatformDbContext --output-dir Migrations`
-- `dotnet ef migrations add InitialMySql --project .\server\platform-persistence.migrations.mysql\PlatformPersistence.MySqlMigrations.csproj --startup-project .\apps\host-api\HostApi.csproj --context ICP.Platform.Persistence.PlatformDbContext --output-dir Migrations`
-
-Expected:
-- 三个迁移命令都成功
-- 各自迁移目录包含 `Initial*` migration 文件和 model snapshot
-
-- [ ] **Step 6: 跑宿主与持久化测试**
-
-Run:
-- `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj -v minimal`
-- `dotnet build .\apps\host-api\HostApi.csproj`
-
-Expected:
-- `Persistence.Tests` 全部通过
-- `HostApi` 构建成功
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add D:/Github/ICP-X/NewP/apps/host-api D:/Github/ICP-X/NewP/server/platform-persistence* D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
-git commit -m "feat: wire host persistence bootstrap and provider migrations"
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+  </ItemGroup>
+</Project>
 ```
-
-### Task 5: 增加三数据库 smoke 与集成验证
-
-**Files:**
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Invoke-PersistenceSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-SqlServerSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-OracleSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-MySqlSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/SmokeConfigurationTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/tests/README.md`
-
-- [ ] **Step 1: 先写 smoke 配置测试**
-
-在 `D:/Github/ICP-X/NewP/tests/Persistence.Tests/SmokeConfigurationTests.cs` 写测试，验证三个 smoke 脚本都存在且目标 Provider 值正确。
-
-```csharp
-using Xunit;
-
-namespace ICP.Platform.Persistence.Tests;
-
-public class SmokeConfigurationTests
-{
-    [Theory]
-    [InlineData("D:/Github/ICP-X/NewP/tests/integration/persistence/Run-SqlServerSmoke.ps1", "SqlServer")]
-    [InlineData("D:/Github/ICP-X/NewP/tests/integration/persistence/Run-OracleSmoke.ps1", "Oracle")]
-    [InlineData("D:/Github/ICP-X/NewP/tests/integration/persistence/Run-MySqlSmoke.ps1", "MySql")]
-    public void SmokeScripts_Exist(string path, string expectedProvider)
-    {
-        Assert.True(File.Exists(path));
-        var content = File.ReadAllText(path);
-        Assert.Contains(expectedProvider, content);
-    }
-}
-```
-
-- [ ] **Step 2: 跑测试确认失败**
-
-Run: `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter SmokeConfigurationTests -v minimal`
-Expected: 失败，提示 smoke 脚本不存在。
-
-- [ ] **Step 3: 实现统一 smoke 脚本入口**
-
-在 `D:/Github/ICP-X/NewP/tests/integration/persistence/Invoke-PersistenceSmoke.ps1` 中写统一执行逻辑：
 
 ```powershell
 param(
@@ -969,7 +1095,9 @@ param(
   [string]$Provider
 )
 
+$env:Persistence__Adapter = "EfCore"
 $env:Persistence__Provider = $Provider
+
 dotnet build "D:\Github\ICP-X\NewP\apps\host-api\HostApi.csproj"
 if ($LASTEXITCODE -ne 0) { throw "Build failed for $Provider" }
 
@@ -980,105 +1108,45 @@ dotnet test "D:\Github\ICP-X\NewP\tests\Authorization.Tests\Authorization.Tests.
 if ($LASTEXITCODE -ne 0) { throw "Authorization tests failed for $Provider" }
 ```
 
-三个脚本分别只传不同的 Provider：
-
-```powershell
-& "D:\Github\ICP-X\NewP\tests\integration\persistence\Invoke-PersistenceSmoke.ps1" -Provider "SqlServer"
-```
-
-- [ ] **Step 4: 跑 smoke 配置测试与至少一个 smoke**
+- [ ] **Step 5: 跑最终验证**
 
 Run:
-- `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj --filter SmokeConfigurationTests -v minimal`
-- `powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-SqlServerSmoke.ps1`
-
-Expected:
-- `SmokeConfigurationTests` 通过
-- `Run-SqlServerSmoke.ps1` 成功返回
-
-- [ ] **Step 5: 记录三个 Provider 的手工执行口径**
-
-在 `D:/Github/ICP-X/NewP/tests/README.md` 增加：
-
-```md
-## Persistence Smoke
-
-- SQL Server: `powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-SqlServerSmoke.ps1`
-- Oracle: `powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-OracleSmoke.ps1`
-- MySql: `powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-MySqlSmoke.ps1`
-```
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/tests/integration/persistence D:/Github/ICP-X/NewP/tests/README.md
-git commit -m "test: add multi-db persistence smoke scripts"
-```
-
-### Task 6: 更新模块说明、验证记录与当前状态
-
-**Files:**
-- Modify: `D:/Github/ICP-X/NewP/docs/modules/configcenter-implementation.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/modules/authorization-implementation.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/verification/configcenter-module-verification.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/verification/authorization-module-verification.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
-
-- [ ] **Step 1: 更新模块实现说明**
-
-在 `configcenter-implementation.md` 和 `authorization-implementation.md` 中把“内存仓储”改为“EF Core + 多 Provider 持久化，业务接口不变，底层可受控使用原生 SQL”，并补上三数据库切换说明。
-
-- [ ] **Step 2: 更新验证文档**
-
-在两个 verification 文档中补齐以下结果：
-
-```md
-- SQL Server 迁移通过
-- Oracle 迁移通过
-- MySql 迁移通过
-- Host 自动迁移与 seed 通过
-- ConfigCenter / Authorization 模块测试通过
-- 三库 smoke 脚本可执行
-```
-
-- [ ] **Step 3: 更新当前状态文档**
-
-在 `D:/Github/ICP-X/NewP/docs/current-status.md` 中新增或更新：
-
-```md
-### Phase 6.5：持久化底座收口
-
-状态：已完成
-
-已落地：
-- ConfigCenter 真实数据库持久化
-- Authorization 真实数据库持久化
-- SQL Server / Oracle / MySql 配置切换
-- 三套迁移集与 smoke 验证
-```
-
-- [ ] **Step 4: 跑最终验证命令**
-
-Run:
+- `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj -v minimal`
 - `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj -v minimal`
 - `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -v minimal`
 - `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj -v minimal`
 - `dotnet build .\apps\host-api\HostApi.csproj`
+- `powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-SqlServerSmoke.ps1`
 
 Expected:
-- 全部通过
+- 所有测试通过
+- Host 构建通过
+- 至少一个 smoke 成功返回
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: 更新文档并 Commit**
+
+```md
+### Phase 6.5：多数据库持久化（混合架构）
+
+状态：进行中/已完成
+
+已落地：
+- 模型语义底座
+- Provider 无关持久化内核
+- EF Core 第一批适配器
+- ConfigCenter / Authorization 首批真实数据库持久化
+- SQL Server / Oracle / MySql 迁移与 smoke 闭环
+```
 
 ```bash
-git add D:/Github/ICP-X/NewP/docs/modules D:/Github/ICP-X/NewP/docs/verification D:/Github/ICP-X/NewP/docs/current-status.md
-git commit -m "docs: close out phase 6.5 persistence"
+git add D:/Github/ICP-X/NewP/apps/host-api D:/Github/ICP-X/NewP/server/platform-persistence-efcore* D:/Github/ICP-X/NewP/tests D:/Github/ICP-X/NewP/docs/current-status.md
+git commit -m "feat: wire host bootstrap and multi-db verification"
 ```
 
 ## Self-Review Checklist
 
-- [ ] 计划中的每个新目录都已经在文件清单中出现，没有“实现时再决定目录”的隐含步骤。
-- [ ] `ConfigCenter` 和 `Authorization` 都覆盖了模型映射、仓储实现、模块注册、现有测试切换与新增仓储测试。
-- [ ] 宿主启动、Provider 配置、迁移程序集、自动迁移和 seed 都有明确任务承接。
-- [ ] 三数据库 smoke 与最终文档收口都有独立任务，不会漏掉验证和状态同步。
-- [ ] 计划中没有要求业务层按数据库类型分支，也没有把原生 SQL 暴露给业务服务层。
+- [ ] 设计中的三层边界都已经在计划中有任务承接：模型语义、持久化内核、EF 适配器。
+- [ ] 计划没有把 EF Core 重新写回“唯一真相来源”，而是把它放在适配器位置。
+- [ ] `ConfigCenter` 与 `Authorization` 都同时覆盖了模型定义、仓储适配、宿主接入和验证。
+- [ ] 计划仍然保留了三数据库切换、迁移与 smoke 闭环，没有因为调整路线而弱化交付目标。
+- [ ] 计划没有要求业务层按数据库类型分支，也没有把原生 SQL 暴露到业务服务层。

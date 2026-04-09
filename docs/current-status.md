@@ -279,8 +279,49 @@ AI-First 对齐：
 - [architecture/plugin-compatibility-policy.md](architecture/plugin-compatibility-policy.md)
 - [guides/plugin-packaging.md](guides/plugin-packaging.md)
 - [guides/unified-plugin-package-operations.md](guides/unified-plugin-package-operations.md)
-- [guides/external-plugin-development.md](guides/external-plugin-development.md)
+- [developer/external-plugin-development.md](developer/external-plugin-development.md)
 - [guides/external-plugin-debugging.md](guides/external-plugin-debugging.md)
+
+### Phase 6.5：多数据库持久化（混合架构）
+
+状态：已完成
+
+已落地：
+
+- `platform-modeling` 已落地，包含模型语义定义、校验器与对应测试
+- `platform-persistence` 已落地，包含 Provider 无关的持久化选项、方言与迁移抽象
+- `platform-persistence-efcore` 已落地，包含 EF Core 投影、查询执行器、迁移运行器与注册扩展
+- `platform-persistence-composition` 已落地，用于聚合首批平台模型定义
+- `ConfigCenter` / `Authorization` 已补齐模型定义与 EF 仓储实现
+- `HostApi` 已接入 `AddPlatformPersistence` 与启动期迁移入口
+- 三套迁移项目已生成：`SqlServer` / `Oracle` / `MySql`
+- `tests/integration/persistence` 已补齐三套 PowerShell smoke 脚本
+- `Persistence.Tests`、`ConfigCenter.Tests`、`Authorization.Tests` 与 `Kernel.Tests` 中受影响验证已重新跑通
+- 本机 `SqlServer` / `MySql` / `Oracle` 容器上的真实 `database update + HostApi` smoke 已全部通过
+
+当前首批范围：
+
+- `ConfigCenter`
+- `Authorization`
+
+当前边界：
+
+- `Audit` 与 `Files` 暂不纳入本轮首批落库范围
+- 当前默认配置与 `Development` 配置都已具备 `SqlServer / Oracle / MySql` 连接串入口
+- 三库 smoke 依赖本机 Docker 容器与连接串保持可用；更换环境后需要重新执行脚本确认
+
+开发者手册入口：
+
+- `docs/developer/persistence-public-api.md`
+- `docs/developer/persistence-usage-guide.md`
+- `docs/developer/persistence-development-workflow.md`
+
+对应文档：
+
+- [superpowers/specs/2026-04-09-phase-6-5-multi-db-persistence-design.md](superpowers/specs/2026-04-09-phase-6-5-multi-db-persistence-design.md)
+- [superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md](superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md)
+- [architecture/ai-metadata-authoring-guide.md](architecture/ai-metadata-authoring-guide.md)
+- [guides/local-multi-db-container-setup.md](guides/local-multi-db-container-setup.md)
 
 ## 当前可用能力
 
@@ -325,6 +366,7 @@ AI-First 对齐：
 对应设计：
 
 - [designs/post-phase-6-foundation-and-migration-design.md](designs/post-phase-6-foundation-and-migration-design.md)
+- [architecture/ai-metadata-authoring-guide.md](architecture/ai-metadata-authoring-guide.md)
 
 ## AI-First 校准结论
 
@@ -337,6 +379,7 @@ AI-First 对齐：
 - 必须调整：把 `AI-first` 写入主文档、计划和阶段设计，作为正式评判标准。
 - 必须调整：Phase 5 交付除导入功能外，还要包含固定样本、映射规则、固定执行路径和复跑验证记录。
 - 建议调整：后续逐步检查已落地模块是否存在超大文件、隐式耦合、局部验证入口不足的问题。
+- 建议调整：在正式建设元数据设计器之前，统一按 [architecture/ai-metadata-authoring-guide.md](architecture/ai-metadata-authoring-guide.md) 让 AI 生成模型语义定义，并通过校验器与测试兜底。
 - 暂不需要：对 Phase 1 到 Phase 4 的主线成果做推倒重来式返工。
 
 对 Phase 5 的判断：

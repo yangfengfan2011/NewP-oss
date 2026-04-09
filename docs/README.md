@@ -62,18 +62,34 @@
 - [verification/phase-3-contract-verification.md](verification/phase-3-contract-verification.md)
 - [verification/verification-matrix.md](verification/verification-matrix.md)
 
-## 7. guides
+## 7. developer
 
-面向开发者的运行、环境与协作使用说明。
+面向开发者的开发、接入与扩展指南。
 
-- [guides/componentized-development-quickstart.md](guides/componentized-development-quickstart.md)
-- [guides/componentized-development.md](guides/componentized-development.md)
-- [guides/componentized-example-module.md](guides/componentized-example-module.md)
+- [developer/componentized-development-quickstart.md](developer/componentized-development-quickstart.md)
+- [developer/componentized-development.md](developer/componentized-development.md)
+- [developer/componentized-example-module.md](developer/componentized-example-module.md)
+- [developer/external-plugin-development.md](developer/external-plugin-development.md)
+- [developer/frontend-plugin-integration.md](developer/frontend-plugin-integration.md)
+- [developer/persistence-public-api.md](developer/persistence-public-api.md)
+- [developer/persistence-usage-guide.md](developer/persistence-usage-guide.md)
+- [developer/persistence-development-workflow.md](developer/persistence-development-workflow.md)
+
+## 8. guides
+
+面向运行、环境、运维与协作辅助说明。
+
 - [guides/local-environment.md](guides/local-environment.md)
+- [guides/local-multi-db-container-setup.md](guides/local-multi-db-container-setup.md)
+- [guides/2026-04-09-local-multi-db-runtime-record.md](guides/2026-04-09-local-multi-db-runtime-record.md)
+- [guides/plugin-packaging.md](guides/plugin-packaging.md)
+- [guides/plugin-upgrade-and-rollback.md](guides/plugin-upgrade-and-rollback.md)
+- [guides/unified-plugin-package-operations.md](guides/unified-plugin-package-operations.md)
+- [guides/external-plugin-debugging.md](guides/external-plugin-debugging.md)
 - [guides/subagents-guide.md](guides/subagents-guide.md)
 - [guides/worktree-guide.md](guides/worktree-guide.md)
 
-## 8. collaboration
+## 9. collaboration
 
 面向 Codex / Claude 协作流程的执行手册。
 
@@ -82,21 +98,21 @@
 - [prompts/](prompts/)
 - [bootstrap/](bootstrap/)
 
-## 9. superpowers
+## 10. superpowers
 
 设计规格与实施计划沉淀。
 
 - [superpowers/specs/](superpowers/specs/)
 - [superpowers/plans/](superpowers/plans/)
 
-## 10. 当前推荐入口
+## 11. 当前推荐入口
 
 - 项目现状：[current-status.md](current-status.md)
 - 仓库入口：[../README.md](../README.md)
-- 组件化开发超短版：[guides/componentized-development-quickstart.md](guides/componentized-development-quickstart.md)
+- 组件化开发超短版：[developer/componentized-development-quickstart.md](developer/componentized-development-quickstart.md)
 - 架构总览：[architecture/architecture.md](architecture/architecture.md)
-- 组件化开发入口：[guides/componentized-development.md](guides/componentized-development.md)
-- 组件化 Example：[guides/componentized-example-module.md](guides/componentized-example-module.md)
+- 组件化开发入口：[developer/componentized-development.md](developer/componentized-development.md)
+- 组件化 Example：[developer/componentized-example-module.md](developer/componentized-example-module.md)
 - 详细设计入口：[designs/README.md](designs/README.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
 - 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)

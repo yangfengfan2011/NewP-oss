@@ -1,5 +1,6 @@
 import { FrontendModule } from '@icp-platform/sdk';
 import ConfigManagement from './pages/ConfigManagement';
+import ValueListManagement from './pages/ValueListManagement';
 
 const configCenterModule: FrontendModule = {
   metadata: {
@@ -12,6 +13,12 @@ const configCenterModule: FrontendModule = {
     {
       path: '/config/items',
       component: ConfigManagement,
+      requireAuth: true,
+      permissions: ['ConfigCenter.Config.View']
+    },
+    {
+      path: '/config/value-lists',
+      component: ValueListManagement,
       requireAuth: true,
       permissions: ['ConfigCenter.Config.View']
     }
@@ -30,6 +37,14 @@ const configCenterModule: FrontendModule = {
           path: '/config/items',
           icon: 'cog',
           order: 1,
+          permissions: ['ConfigCenter.Config.View']
+        },
+        {
+          id: 'value-lists',
+          label: '值列表管理',
+          path: '/config/value-lists',
+          icon: 'list',
+          order: 2,
           permissions: ['ConfigCenter.Config.View']
         }
       ]

@@ -5,6 +5,25 @@ namespace ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 
 public static class ConfigCenterModelDefinitions
 {
+    public static readonly ModelDefinition ValueListItem = new(
+        "ValueListItem",
+        "value_list_items",
+        ModelKind.Entity,
+        new[]
+        {
+            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("Code", "code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Description", "description", FieldKind.Scalar, FieldValueType.Description, "string", false, false, false),
+            new FieldDefinition("CreatedAt", "created_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedAt", "updated_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedBy", "updated_by", FieldKind.Audit, FieldValueType.User, "string", false, false, true)
+        },
+        new[]
+        {
+            new IndexDefinition("UX_ValueListItem_Code", new[] { "Code" }, true)
+        });
+
     public static readonly ModelDefinition ConfigItem = new(
         "ConfigItem",
         "config_items",
@@ -34,6 +53,7 @@ public static class ConfigCenterModelDefinitions
 
     public static readonly IReadOnlyList<ModelDefinition> All = new[]
     {
+        ValueListItem,
         ConfigItem
     };
 }

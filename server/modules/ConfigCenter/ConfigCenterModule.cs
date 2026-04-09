@@ -19,6 +19,8 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
     {
         services.AddScoped<IConfigService, ConfigService>();
         services.AddScoped<IConfigRepository, EfConfigRepository>();
+        services.AddScoped<IValueListService, ValueListService>();
+        services.AddScoped<IValueListRepository, EfValueListRepository>();
         services.AddScoped<ILegacySettingParser, LegacySettingXmlParser>();
         services.AddScoped<ILegacySettingImportService, LegacySettingImportService>();
     }
@@ -86,6 +88,17 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
                 Route = "/config/items",
                 Icon = "cog",
                 Order = 1,
+                RequiredPermission = "ConfigCenter.Config.View",
+                ModuleId = ModuleId
+            },
+            new MenuDescriptor
+            {
+                Id = "ConfigCenter.ValueLists",
+                DisplayName = "值列表管理",
+                ParentId = "ConfigCenter",
+                Route = "/config/value-lists",
+                Icon = "list",
+                Order = 2,
                 RequiredPermission = "ConfigCenter.Config.View",
                 ModuleId = ModuleId
             }

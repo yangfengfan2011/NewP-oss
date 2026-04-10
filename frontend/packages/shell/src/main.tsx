@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import App from './App';
 import { registerShellModules } from './registerModules';
+import '@icp-platform/ui/styles';
 import './index.css';
 
 async function bootstrap() {

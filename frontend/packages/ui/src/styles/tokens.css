@@ -1,0 +1,62 @@
+/* ========================================
+   ICP Platform UI — Design Tokens
+   从 Shell index.css 中提取的公共设计令牌
+   ======================================== */
+
+:root {
+  /* Colors */
+  --sh-bg-root: #f8fafc;
+  --sh-bg-surface: #ffffff;
+  --sh-bg-subtle: #f1f5f9;
+
+  --sh-text-primary: #0f172a;
+  --sh-text-secondary: #475569;
+  --sh-text-muted: #94a3b8;
+
+  --sh-border: #e2e8f0;
+
+  --sh-primary: #2563eb;
+  --sh-primary-hover: #1d4ed8;
+  --sh-primary-bg: #eff6ff;
+
+  --sh-error: #ef4444;
+  --sh-error-bg: #fef2f2;
+  --sh-error-border: #fca5a5;
+
+  --sh-success: #166534;
+  --sh-success-bg: #dcfce7;
+  --sh-success-border: #bbf7d0;
+
+  --sh-warning: #92400e;
+  --sh-warning-bg: #fef3c7;
+  --sh-warning-border: #fde68a;
+
+  --sh-danger: #b91c1c;
+  --sh-danger-bg: #fee2e2;
+  --sh-danger-border: #fecaca;
+
+  --sh-info-border: #bfdbfe;
+
+  --sh-table-header-bg: #fbfdff;
+  --sh-table-hover-bg: #fcfdff;
+
+  /* Geometry */
+  --sh-radius-sm: 4px;
+  --sh-radius-md: 6px;
+  --sh-radius-lg: 8px;
+  --sh-radius-xl: 12px;
+
+  --sh-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --sh-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --sh-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Spacing */
+  --sh-space-1: 0.25rem;
+  --sh-space-2: 0.5rem;
+  --sh-space-3: 0.75rem;
+  --sh-space-4: 1rem;
+  --sh-space-5: 1.25rem;
+  --sh-space-6: 1.5rem;
+  --sh-space-7: 1.75rem;
+  --sh-space-8: 2rem;
+}

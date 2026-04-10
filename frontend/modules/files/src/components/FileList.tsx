@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FileInfo, fileService } from '../services/fileService';
+import { Panel, SummaryCard, Button, LoadingState, ErrorState, EmptyState, ConfirmDialog, TableWrap } from '@icp-platform/ui';
+import type { TableColumn } from '@icp-platform/ui';
 
 interface FileListProps {
   entityType?: string;
@@ -11,6 +13,7 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const loadFiles = async () => {
     setLoading(true);
@@ -37,11 +40,28 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
     }
   };
 
-  const handleDelete = async (fileId: string) => {
-    if (!confirm('确定要删除此文件吗？')) return;
+  const fileColumns: TableColumn<FileInfo>[] = [
+    { key: 'fileName', title: '文件名' },
+    { key: 'fileSize', title: '大小', render: (file) => fileService.formatFileSize(file.fileSize) },
+    { key: 'uploadedAt', title: '上传时间', render: (file) => new Date(file.uploadedAt).toLocaleString() },
+    { key: 'uploadedBy', title: '上传者', render: (file) => file.uploadedBy || '-' },
+    {
+      key: 'actions',
+      title: '操作',
+      render: (file) => (
+        <div className="sh-action-row">
+          <Button onClick={() => handleDownload(file.fileId)}>下载</Button>
+          <Button onClick={() => setDeleteTarget(file.fileId)}>删除</Button>
+        </div>
+      ),
+    },
+  ];
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await fileService.delete(fileId);
+      await fileService.delete(deleteTarget);
+      setDeleteTarget(null);
       await loadFiles();
     } catch (err) {
       alert((err as Error).message);
@@ -49,28 +69,32 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
   };
 
   if (loading) {
-    return <div className="sh-page-loading">文件加载中...</div>;
+    return <LoadingState message="文件加载中..." />;
   }
 
   if (error) {
-    return <div className="sh-page-error">文件加载失败：{error}</div>;
+    return <ErrorState message={`文件加载失败：${error}`} />;
   }
 
   return (
-    <section className="sh-page-panel">
-      <div className="sh-page-panel-header">
-        <h2 className="sh-page-panel-title">文件列表</h2>
-        <span className="sh-page-panel-meta">{files.length} 个文件</span>
-      </div>
-      <div className="sh-page-panel-body">
+    <>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onConfirm={() => void handleDeleteConfirm()}
+        onCancel={() => setDeleteTarget(null)}
+        title="确认删除"
+        message="确定要删除此文件吗？"
+        variant="danger"
+        confirmText="删除"
+      />
+
+      <Panel title="文件列表" meta={`${files.length} 个文件`}>
         <div className="sh-section-grid">
-          <div className="sh-summary-card">
-            <span className="sh-summary-card-label">关联范围</span>
-            <span className="sh-summary-card-value">{entityType ? '业务关联' : '全局'}</span>
-            <span className="sh-summary-card-meta">
-              {entityId ? `实体 ID：${entityId}` : '当前展示全部可见文件'}
-            </span>
-          </div>
+          <SummaryCard
+            label="关联范围"
+            value={entityType ? '业务关联' : '全局'}
+            meta={entityId ? `实体 ID：${entityId}` : '当前展示全部可见文件'}
+          />
 
           <div className="sh-meta-block">
             <div className="sh-meta-row">
@@ -83,49 +107,17 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
             </div>
           </div>
         </div>
-      </div>
 
-      {files.length === 0 ? (
-        <div className="sh-page-panel-body">
-          <div className="sh-page-empty">暂无文件</div>
-        </div>
-      ) : (
-        <div className="sh-page-panel-body">
-          <div className="sh-table-wrap">
-            <table className="sh-table">
-              <thead>
-                <tr>
-                  <th>文件名</th>
-                  <th>大小</th>
-                  <th>上传时间</th>
-                  <th>上传者</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {files.map((file) => (
-                  <tr key={file.fileId}>
-                    <td>{file.fileName}</td>
-                    <td>{fileService.formatFileSize(file.fileSize)}</td>
-                    <td>{new Date(file.uploadedAt).toLocaleString()}</td>
-                    <td>{file.uploadedBy || '-'}</td>
-                    <td>
-                      <div className="sh-action-row">
-                        <button onClick={() => handleDownload(file.fileId)} className="sh-btn">
-                          下载
-                        </button>
-                        <button onClick={() => handleDelete(file.fileId)} className="sh-btn">
-                          删除
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </section>
+        {files.length === 0 ? (
+          <EmptyState message="暂无文件" />
+        ) : (
+          <TableWrap<FileInfo>
+            columns={fileColumns}
+            data={files}
+            rowKey={(file) => file.fileId}
+          />
+        )}
+      </Panel>
+    </>
   );
 }

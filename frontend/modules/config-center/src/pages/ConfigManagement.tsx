@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { usePermission } from '@icp-platform/core';
+import { PageHeader, SummaryCard, Panel, Badge, Button, LoadingState, ErrorState, EmptyState } from '@icp-platform/ui';
 
 interface ConfigItem {
   id: string;
@@ -82,70 +83,52 @@ export default function ConfigManagement() {
   };
 
   if (!canView) {
-    return <div className="sh-page-empty">暂无查看配置的权限。</div>;
+    return <EmptyState message="暂无查看配置的权限。" />;
   }
 
   if (loading) {
-    return <div className="sh-page-loading">配置加载中...</div>;
+    return <LoadingState message="配置加载中..." />;
   }
 
   if (error) {
-    return <div className="sh-page-error">配置加载失败：{error}</div>;
+    return <ErrorState message={`配置加载失败：${error}`} />;
   }
 
   return (
     <div className="sh-page">
-      <section className="sh-page-header">
-        <div className="sh-page-header-main">
-          <span className="sh-page-eyebrow">配置中心</span>
-          <h1 className="sh-page-title">配置管理</h1>
-          <p className="sh-page-description">
-            按模块与分组查看系统配置项，保留原有加载和编辑行为，并统一到第二阶段的共享页面样式中。
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="配置中心"
+        title="配置管理"
+        description="按模块与分组查看系统配置项，保留原有加载和编辑行为，并统一到第二阶段的共享页面样式中。"
+      />
 
       <div className="sh-section-grid">
         <div className="sh-meta-block">
           <div className="sh-meta-row">
             <span className="sh-meta-label">新增配置</span>
-            <span
-              className={`sh-status-badge ${
-                canCreate ? 'sh-status-badge-success' : 'sh-status-badge-neutral'
-              }`}
-            >
+            <Badge variant={canCreate ? 'success' : 'neutral'}>
               {canCreate ? '允许' : '禁止'}
-            </span>
+            </Badge>
           </div>
           <div className="sh-meta-row">
             <span className="sh-meta-label">编辑配置</span>
-            <span
-              className={`sh-status-badge ${
-                canEdit ? 'sh-status-badge-success' : 'sh-status-badge-neutral'
-              }`}
-            >
+            <Badge variant={canEdit ? 'success' : 'neutral'}>
               {canEdit ? '允许' : '禁止'}
-            </span>
+            </Badge>
           </div>
           <div className="sh-meta-row">
             <span className="sh-meta-label">删除配置</span>
-            <span
-              className={`sh-status-badge ${
-                canDelete ? 'sh-status-badge-warning' : 'sh-status-badge-neutral'
-              }`}
-            >
+            <Badge variant={canDelete ? 'warning' : 'neutral'}>
               {canDelete ? '允许' : '禁止'}
-            </span>
+            </Badge>
           </div>
         </div>
 
-        <div className="sh-summary-card">
-          <span className="sh-summary-card-label">配置分组</span>
-          <span className="sh-summary-card-value">{groups.length}</span>
-          <span className="sh-summary-card-meta">
-            {groups.reduce((sum, group) => sum + group.items.length, 0)} 个配置项
-          </span>
-        </div>
+        <SummaryCard
+          label="配置分组"
+          value={groups.length}
+          meta={`${groups.reduce((sum, group) => sum + group.items.length, 0)} 个配置项`}
+        />
       </div>
 
       <div className="sh-helper-block">
@@ -154,76 +137,63 @@ export default function ConfigManagement() {
       </div>
 
       {groups.map((group) => (
-        <section key={`${group.moduleId}-${group.group || 'default'}`} className="sh-page-panel">
-          <div className="sh-page-panel-header">
-            <div>
-              <h2 className="sh-page-panel-title">
-                {group.moduleId}
-                {group.group ? ` / ${group.group}` : ''}
-              </h2>
-              <div className="sh-page-panel-meta">共 {group.items.length} 个配置项</div>
-            </div>
-          </div>
-          <div className="sh-page-panel-body">
-            <div className="sh-table-wrap">
-              <table className="sh-table">
-                <thead>
-                  <tr>
-                    <th>配置键</th>
-                    <th>显示名称</th>
-                    <th>当前值</th>
-                    <th>类型</th>
-                    <th>环境</th>
-                    <th>操作</th>
+        <Panel
+          key={`${group.moduleId}-${group.group || 'default'}`}
+          title={`${group.moduleId}${group.group ? ` / ${group.group}` : ''}`}
+          meta={`共 ${group.items.length} 个配置项`}
+        >
+          <div className="sh-table-wrap">
+            <table className="sh-table">
+              <thead>
+                <tr>
+                  <th>配置键</th>
+                  <th>显示名称</th>
+                  <th>当前值</th>
+                  <th>类型</th>
+                  <th>环境</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="sh-code">{item.key}</td>
+                    <td>{item.displayName}</td>
+                    <td>
+                      {editingItem?.id === item.id ? (
+                        <input
+                          type="text"
+                          value={newValue}
+                          onChange={(e) => setNewValue(e.target.value)}
+                          className="sh-form-input"
+                        />
+                      ) : (
+                        <span>{item.value || '-'}</span>
+                      )}
+                    </td>
+                    <td>{item.type}</td>
+                    <td>{item.environment || '全局'}</td>
+                    <td>
+                      {editingItem?.id === item.id ? (
+                        <div className="sh-form-inline">
+                          <Button variant="primary" onClick={handleSave}>保存</Button>
+                          <Button onClick={handleCancel}>取消</Button>
+                        </div>
+                      ) : (
+                        canEdit && (
+                          <Button onClick={() => handleEdit(item)}>编辑</Button>
+                        )
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {group.items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="sh-code">{item.key}</td>
-                      <td>{item.displayName}</td>
-                      <td>
-                        {editingItem?.id === item.id ? (
-                          <input
-                            type="text"
-                            value={newValue}
-                            onChange={(e) => setNewValue(e.target.value)}
-                            className="sh-form-input"
-                          />
-                        ) : (
-                          <span>{item.value || '-'}</span>
-                        )}
-                      </td>
-                      <td>{item.type}</td>
-                      <td>{item.environment || '全局'}</td>
-                      <td>
-                        {editingItem?.id === item.id ? (
-                          <div className="sh-form-inline">
-                            <button onClick={handleSave} className="sh-btn sh-btn-primary">
-                              保存
-                            </button>
-                            <button onClick={handleCancel} className="sh-btn">
-                              取消
-                            </button>
-                          </div>
-                        ) : (
-                          canEdit && (
-                            <button onClick={() => handleEdit(item)} className="sh-btn">
-                              编辑
-                            </button>
-                          )
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </section>
+        </Panel>
       ))}
 
-      {groups.length === 0 && <div className="sh-page-empty">未找到配置项。</div>}
+      {groups.length === 0 && <EmptyState message="未找到配置项。" />}
     </div>
   );
 }

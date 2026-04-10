@@ -1,3 +1,11 @@
+import { PageHeader, SummaryCard, Panel, Badge, TableWrap } from '@icp-platform/ui';
+import type { TableColumn } from '@icp-platform/ui';
+
+interface Permission {
+  code: string;
+  name: string;
+}
+
 export default function PermissionList() {
   const permissionsByCategory = [
     {
@@ -46,24 +54,34 @@ export default function PermissionList() {
     0,
   );
 
+  const makeColumns = (category: string): TableColumn<Permission>[] => [
+    {
+      key: 'code',
+      title: '权限代码',
+      render: (p) => <code className="sh-code">{p.code}</code>,
+    },
+    { key: 'name', title: '权限名称' },
+    {
+      key: 'category',
+      title: '类别',
+      render: () => <Badge variant="neutral">{category}</Badge>,
+    },
+  ];
+
   return (
     <div className="sh-page">
-      <section className="sh-page-header">
-        <div className="sh-page-header-main">
-          <span className="sh-page-eyebrow">权限管理</span>
-          <h1 className="sh-page-title">权限列表</h1>
-          <p className="sh-page-description">
-            展示系统中可用权限的代表性视图，按功能类别组织，作为平台侧列表页的统一参考样式。
-          </p>
-        </div>
-        <div className="sh-page-actions">
-          <div className="sh-summary-card">
-            <span className="sh-summary-card-label">总权限数</span>
-            <span className="sh-summary-card-value">{totalPermissions}</span>
-            <span className="sh-summary-card-meta">{permissionsByCategory.length} 个类别</span>
-          </div>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="权限管理"
+        title="权限列表"
+        description="展示系统中可用权限的代表性视图，按功能类别组织，作为平台侧列表页的统一参考样式。"
+        actions={
+          <SummaryCard
+            label="总权限数"
+            value={totalPermissions}
+            meta={`${permissionsByCategory.length} 个类别`}
+          />
+        }
+      />
 
       <div className="sh-helper-block">
         <h3 className="sh-helper-block-title">页面说明</h3>
@@ -72,40 +90,17 @@ export default function PermissionList() {
 
       <section className="sh-page-stack">
         {permissionsByCategory.map(({ category, permissions }) => (
-          <div key={category} className="sh-page-panel">
-            <div className="sh-page-panel-header">
-              <div>
-                <h2 className="sh-page-panel-title">{category}</h2>
-                <div className="sh-page-panel-meta">{permissions.length} 项权限</div>
-              </div>
-            </div>
-            <div className="sh-page-panel-body">
-              <div className="sh-table-wrap">
-                <table className="sh-table">
-                  <thead>
-                    <tr>
-                      <th>权限代码</th>
-                      <th>权限名称</th>
-                      <th>类别</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {permissions.map((permission) => (
-                      <tr key={permission.code}>
-                        <td>
-                          <code className="sh-code">{permission.code}</code>
-                        </td>
-                        <td>{permission.name}</td>
-                        <td>
-                          <span className="sh-status-badge sh-status-badge-neutral">{category}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <Panel
+            key={category}
+            title={category}
+            meta={`${permissions.length} 项权限`}
+          >
+            <TableWrap
+              columns={makeColumns(category)}
+              data={permissions}
+              rowKey={(p) => p.code}
+            />
+          </Panel>
         ))}
       </section>
     </div>

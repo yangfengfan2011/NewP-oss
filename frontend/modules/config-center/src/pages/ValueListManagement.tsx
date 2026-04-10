@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePermission } from '@icp-platform/core';
+import {
+  PageHeader, SummaryCard, Panel, Button, Input, Textarea,
+  EmptyState, LoadingState, ErrorState, ConfirmDialog,
+} from '@icp-platform/ui';
 
 interface ValueListItem {
   id: string;
@@ -38,6 +42,7 @@ export default function ValueListManagement() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [form, setForm] = useState<ValueListFormState>(EMPTY_FORM);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
@@ -145,14 +150,10 @@ export default function ValueListManagement() {
       return;
     }
 
-    const confirmed = window.confirm(`确认删除值列表项“${selectedItem.name}”吗？`);
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setSubmitting(true);
       setError(null);
+      setConfirmOpen(false);
 
       const response = await fetch(`/api/value-lists/${selectedItem.id}`, {
         method: 'DELETE'
@@ -174,170 +175,132 @@ export default function ValueListManagement() {
   }
 
   if (!canView) {
-    return <div className="sh-page-empty">暂无查看值列表的权限。</div>;
+    return <EmptyState message="暂无查看值列表的权限。" />;
   }
 
   if (loading) {
-    return <div className="sh-page-loading">值列表加载中...</div>;
+    return <LoadingState message="值列表加载中..." />;
   }
 
   return (
     <div className="sh-page">
-      <section className="sh-page-header">
-        <div className="sh-page-header-main">
-          <span className="sh-page-eyebrow">配置中心</span>
-          <h1 className="sh-page-title">值列表管理</h1>
-          <p className="sh-page-description">
-            管理系统值列表基础数据，支持新建、编辑、删除和刷新，并在表格中展示当前数据库数据。
-          </p>
-        </div>
-        <div className="sh-page-actions">
-          {canCreate && (
-            <button type="button" className="sh-btn sh-btn-primary" onClick={startCreate}>
-              新建
-            </button>
-          )}
-          {canEdit && (
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={startEdit}
-              disabled={!selectedItem || submitting}
-            >
-              编辑
-            </button>
-          )}
-          {canDelete && (
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={() => void removeSelected()}
-              disabled={!selectedItem || submitting}
-            >
-              删除
-            </button>
-          )}
-          <button type="button" className="sh-btn" onClick={() => void loadItems()} disabled={submitting}>
-            刷新
-          </button>
-        </div>
-      </section>
+      <ConfirmDialog
+        open={confirmOpen}
+        onConfirm={() => void removeSelected()}
+        onCancel={() => setConfirmOpen(false)}
+        title="确认删除"
+        message={`确认删除值列表项"${selectedItem?.name}"吗？`}
+        variant="danger"
+        confirmText="删除"
+      />
+
+      <PageHeader
+        eyebrow="配置中心"
+        title="值列表管理"
+        description="管理系统值列表基础数据，支持新建、编辑、删除和刷新，并在表格中展示当前数据库数据。"
+        actions={
+          <>
+            {canCreate && (
+              <Button variant="primary" onClick={startCreate}>新建</Button>
+            )}
+            {canEdit && (
+              <Button onClick={startEdit} disabled={!selectedItem || submitting}>编辑</Button>
+            )}
+            {canDelete && (
+              <Button
+                onClick={() => setConfirmOpen(true)}
+                disabled={!selectedItem || submitting}
+              >
+                删除
+              </Button>
+            )}
+            <Button onClick={() => void loadItems()} disabled={submitting}>刷新</Button>
+          </>
+        }
+      />
 
       <div className="sh-section-grid">
-        <div className="sh-summary-card">
-          <span className="sh-summary-card-label">值列表数量</span>
-          <span className="sh-summary-card-value">{items.length}</span>
-          <span className="sh-summary-card-meta">
-            {selectedItem ? `当前选中：${selectedItem.name}` : '请选择一条记录进行编辑或删除'}
-          </span>
-        </div>
+        <SummaryCard
+          label="值列表数量"
+          value={items.length}
+          meta={selectedItem ? `当前选中：${selectedItem.name}` : '请选择一条记录进行编辑或删除'}
+        />
         <div className="sh-helper-block">
           <h3 className="sh-helper-block-title">使用说明</h3>
           <p>先在表格中选择一条记录，再点击编辑或删除。新建和编辑都使用下方同一套录入表单。</p>
         </div>
       </div>
 
-      {error && <div className="sh-page-error">{error}</div>}
+      {error && <ErrorState message={error} />}
 
       {isEditorOpen && (
-        <section className="sh-page-panel">
-          <div className="sh-page-panel-header">
-            <div>
-              <h2 className="sh-page-panel-title">{mode === 'create' ? '新建值列表项' : '编辑值列表项'}</h2>
-              <div className="sh-page-panel-meta">维护编码、名称和备注说明</div>
+        <Panel
+          title={mode === 'create' ? '新建值列表项' : '编辑值列表项'}
+          meta="维护编码、名称和备注说明"
+        >
+          {formError && <div className="sh-form-error">{formError}</div>}
+          <div className="sh-page-stack">
+            <Input
+              label="编码"
+              value={form.code}
+              onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))}
+            />
+            <Input
+              label="名称"
+              value={form.name}
+              onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
+            />
+            <Textarea
+              label="备注"
+              rows={4}
+              value={form.description}
+              onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+            />
+            <div className="sh-form-inline">
+              <Button variant="primary" onClick={() => void submitForm()} disabled={submitting}>
+                保存
+              </Button>
+              <Button onClick={closeEditor} disabled={submitting}>取消</Button>
             </div>
           </div>
-          <div className="sh-page-panel-body">
-            {formError && <div className="sh-form-error">{formError}</div>}
-            <div className="sh-page-stack">
-              <label className="sh-form-group">
-                <span className="sh-form-label">编码</span>
-                <input
-                  className="sh-form-input"
-                  value={form.code}
-                  onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-                />
-              </label>
-              <label className="sh-form-group">
-                <span className="sh-form-label">名称</span>
-                <input
-                  className="sh-form-input"
-                  value={form.name}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                />
-              </label>
-              <label className="sh-form-group">
-                <span className="sh-form-label">备注</span>
-                <textarea
-                  className="sh-form-input"
-                  rows={4}
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, description: event.target.value }))
-                  }
-                />
-              </label>
-              <div className="sh-form-inline">
-                <button
-                  type="button"
-                  className="sh-btn sh-btn-primary"
-                  onClick={() => void submitForm()}
-                  disabled={submitting}
-                >
-                  保存
-                </button>
-                <button type="button" className="sh-btn" onClick={closeEditor} disabled={submitting}>
-                  取消
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
+        </Panel>
       )}
 
-      <section className="sh-page-panel">
-        <div className="sh-page-panel-header">
-          <div>
-            <h2 className="sh-page-panel-title">值列表数据</h2>
-            <div className="sh-page-panel-meta">表格展示数据库中的值列表记录</div>
-          </div>
-        </div>
-        <div className="sh-page-panel-body">
-          <div className="sh-table-wrap">
-            <table className="sh-table">
-              <thead>
-                <tr>
-                  <th>选择</th>
-                  <th>编码</th>
-                  <th>名称</th>
-                  <th>备注</th>
-                  <th>更新时间</th>
+      <Panel title="值列表数据" meta="表格展示数据库中的值列表记录">
+        <div className="sh-table-wrap">
+          <table className="sh-table">
+            <thead>
+              <tr>
+                <th>选择</th>
+                <th>编码</th>
+                <th>名称</th>
+                <th>备注</th>
+                <th>更新时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <input
+                      type="radio"
+                      name="value-list-item"
+                      checked={item.id === selectedId}
+                      onChange={() => setSelectedId(item.id)}
+                    />
+                  </td>
+                  <td className="sh-code">{item.code}</td>
+                  <td>{item.name}</td>
+                  <td>{item.description || '-'}</td>
+                  <td>{formatDateTime(item.updatedAt)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <input
-                        type="radio"
-                        name="value-list-item"
-                        checked={item.id === selectedId}
-                        onChange={() => setSelectedId(item.id)}
-                      />
-                    </td>
-                    <td className="sh-code">{item.code}</td>
-                    <td>{item.name}</td>
-                    <td>{item.description || '-'}</td>
-                    <td>{formatDateTime(item.updatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {items.length === 0 && <div className="sh-page-empty">暂无值列表数据。</div>}
+              ))}
+            </tbody>
+          </table>
         </div>
-      </section>
+
+        {items.length === 0 && <EmptyState message="暂无值列表数据。" />}
+      </Panel>
     </div>
   );
 }

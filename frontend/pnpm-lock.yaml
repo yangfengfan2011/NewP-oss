@@ -120,6 +120,25 @@ importers:
         specifier: ^5.4.2
         version: 5.9.3
 
+  modules/plugin-ops:
+    dependencies:
+      '@icp-platform/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.28
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
   packages/core:
     dependencies:
       react:
@@ -153,6 +172,9 @@ importers:
       '@icp-platform/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@icp-platform/ui':
+        specifier: workspace:*
+        version: link:../ui
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -199,6 +221,25 @@ importers:
       vitest:
         specifier: ^1.3.1
         version: 1.6.1(jsdom@24.1.3)
+
+  packages/ui:
+    dependencies:
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.2.0
+        version: 18.3.7(@types/react@18.3.28)
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
 
   templates/frontend-module-template:
     dependencies:

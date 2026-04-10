@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PageHeader, SummaryCard } from '@icp-platform/ui';
 import FileUpload from '../components/FileUpload';
 import FileList from '../components/FileList';
 
@@ -16,27 +17,15 @@ export default function FilesHome() {
 
   return (
     <div className="sh-page">
-      <section className="sh-page-header">
-        <div className="sh-page-header-main">
-          <span className="sh-page-eyebrow">文件管理</span>
-          <h1 className="sh-page-title">文件中心</h1>
-          <p className="sh-page-description">
-            上传、下载和管理文件，支持多种文件类型和基础操作，是第二阶段业务侧页面模式的代表页面之一。
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="文件管理"
+        title="文件中心"
+        description="上传、下载和管理文件，支持多种文件类型和基础操作，是第二阶段业务侧页面模式的代表页面之一。"
+      />
 
       <div className="sh-section-grid">
-        <div className="sh-summary-card">
-          <span className="sh-summary-card-label">上传方式</span>
-          <span className="sh-summary-card-value">2 种</span>
-          <span className="sh-summary-card-meta">拖拽或点击选择</span>
-        </div>
-        <div className="sh-summary-card">
-          <span className="sh-summary-card-label">刷新触发</span>
-          <span className="sh-summary-card-value">{refreshTrigger}</span>
-          <span className="sh-summary-card-meta">上传成功后自动刷新</span>
-        </div>
+        <SummaryCard label="上传方式" value="2 种" meta="拖拽或点击选择" />
+        <SummaryCard label="刷新触发" value={refreshTrigger} meta="上传成功后自动刷新" />
       </div>
 
       <div className="sh-helper-block">

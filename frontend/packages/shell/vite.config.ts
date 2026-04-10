@@ -38,10 +38,10 @@ export default defineConfig({
     alias: {
       '@icp-platform/core': fileURLToPath(new URL('../core/src/index.ts', import.meta.url)),
       '@icp-platform/sdk': fileURLToPath(new URL('../sdk/src/index.ts', import.meta.url)),
-      '@icp-platform/ui': fileURLToPath(new URL('../ui/src/index.ts', import.meta.url)),
       '@icp-platform/ui/styles': fileURLToPath(
         new URL('../ui/src/styles/index.css', import.meta.url),
       ),
+      '@icp-platform/ui': fileURLToPath(new URL('../ui/src/index.ts', import.meta.url)),
     },
   },
   server: {

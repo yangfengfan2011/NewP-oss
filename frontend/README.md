@@ -12,7 +12,7 @@ frontend/
 │   ├── shell/      # 前端宿主
 │   ├── sdk/        # 前端模块契约
 │   ├── core/       # 核心前端能力
-│   └── ui/         # 共享 UI 组件（预留）
+│   └── ui/         # 共享 UI 控件与页面模式块
 ├── modules/
 │   ├── demo/
 │   ├── files/
@@ -26,31 +26,30 @@ frontend/
 
 - Shell 可装配多个前端模块。
 - `frontend/templates/frontend-module-template` 提供可构建的前端模块模板。
-- `frontend/modules/module-template-sample` 提供真实端到端示例模块。
-- `scripts/new-module.ps1` 与 `scripts/new-module.sh` 提供最小模块脚手架。
+- `@icp-platform/ui` 已开始承载真实模块复用的基础控件与结构块。
+- `frontend/modules/module-template-sample` 与 `scripts/new-module.*` 属于后续扩展能力，不是 2026-04-06 原始 Phase 6 模板闭环的核心验收项。
 
 ## 新模块接入
 
-推荐直接使用仓库脚手架：
+推荐先从仓库模板复制新模块骨架：
 
 ```powershell
-.\scripts\new-module.ps1 -ModuleName ExampleModule
+Copy-Item .\frontend\templates\frontend-module-template .\frontend\modules\example-module -Recurse
 ```
 
-脚手架默认会：
+模板闭环的受控接入点仍然是：
 
-- 生成 `frontend/modules/example-module`
-- 生成对应的后端模块目录
-- 更新 `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+- `frontend/packages/shell/src/registerModules.ts`（负责消费受控接入点并完成注册）
 
-如果只想生成骨架，不自动修改宿主接入点，可以加 `-SkipIntegration` 或 `--skip-integration`。
+仓库里也提供 `scripts/new-module.ps1` 与 `scripts/new-module.sh` 作为后续自动化便利，但它们是建立在模板契约之上的扩展，不替代模板本身。
 
 ## 构建验证
 
 ```bash
 cd frontend
+pnpm --filter @icp-platform/ui build
 pnpm --filter @icp-templates/frontend-module-template build
-pnpm --filter @icp-modules/module-template-sample build
 pnpm build
 ```
 
@@ -59,4 +58,5 @@ pnpm build
 - 模块接入保持显式注册，不做隐式扫描。
 - 模块目录命名使用 kebab-case。
 - 模块说明和新增注释统一使用中文。
-- Phase 6 目标是“模板可复用、示例可联通、脚手架可执行”，不在这一层引入额外基础设施抽象。
+- Phase 6 原始目标是“模板可复用、构建链路可验证、接入边界清晰”。
+- 示例模块、脚手架和更重的自动化能力可以继续演进，但不应反向改写模板阶段的边界定义。

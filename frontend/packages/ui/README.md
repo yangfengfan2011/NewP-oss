@@ -33,7 +33,7 @@ src/
 └── index.ts       # Barrel 导出
 ```
 
-- `components/`：基础原子控件、表单控件、复合控件（Modal、Drawer 等）、复杂控件（Tree、DataTable 等）
+- `components/`：基础原子控件、表单控件与已稳定的复合控件
 - `patterns/`：结构型页面块——PageHeader、Panel、SummaryCard、TableWrap、StatusBadge、FormInline
 
 ## 控件清单
@@ -77,14 +77,9 @@ src/
 | `FilterBar` | 筛选工具栏 | `fields: FilterField[]`, `values`, `onChange`, `onSearch`, `onReset` |
 | `KeyValueEditor` | 键值对编辑器 | `items: KeyValuePair[]`, `onChange` |
 
-### 复杂控件（components/）
+### 后续候选控件
 
-| 控件 | 说明 | 核心 Props |
-|------|------|------------|
-| `Tree` | 树形控件 | `data: TreeNode[]`, `selectedKey?`, `onSelect?`, `renderLabel?` |
-| `TreeSelect` | 树选择器 | `data: TreeNode[]`, `value?`, `onChange`, `placeholder?` |
-| `DataTable` | 排序表格 | `columns`, `data`, `rowKey`, `selectable?`, `sort?`, `onSortChange?` |
-| `Uploader` | 拖拽上传 | `accept?`, `multiple?`, `items`, `onAdd`, `onRemove?`, `onRetry?` |
+`Tree`、`TreeSelect`、`DataTable`、`Uploader` 仍保留在包内作为候选实现，但在出现真实页面复用并完成正式公共化前，不视为稳定公开 API。
 
 ## 样式
 

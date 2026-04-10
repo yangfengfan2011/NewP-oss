@@ -9,7 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@icp-platform/sdk": "workspace:*"
+    "@icp-platform/sdk": "workspace:*",
+    "@icp-platform/ui": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

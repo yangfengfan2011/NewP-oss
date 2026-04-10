@@ -1,110 +1,75 @@
-# 前端模块接入指南
+# 前端模块模板规范
 
-本文说明如何把新的前端模块接入当前平台，并与后端模块形成最小闭环。
+本文定义当前仓库新增前端模块时应遵循的模板契约、目录边界和最小验证方式。
 
-## 推荐流程
+## 目标
 
-### 1. 使用脚手架生成模块
+- 让新增前端模块按 `FrontendModule` 契约接入宿主。
+- 固化模板目录结构、必改项和验证命令。
+- 避免模块直接依赖宿主内部实现，或把后续自动化能力反向写进模板边界。
 
-在仓库根目录执行：
-
-```powershell
-.\scripts\new-module.ps1 -ModuleName ExampleModule
-```
-
-如果只想先生成文件，不自动更新宿主接入点，可以使用：
-
-```powershell
-.\scripts\new-module.ps1 -ModuleName ExampleModule -SkipIntegration
-```
-
-Linux 或 macOS 环境可使用：
-
-```bash
-./scripts/new-module.sh --module-name ExampleModule
-./scripts/new-module.sh --module-name ExampleModule --skip-integration
-```
-
-### 2. 查看生成结果
-
-脚手架默认会生成两个目录：
+## 标准目录
 
 ```text
-server/modules/ExampleModule
-frontend/modules/example-module
+frontend/templates/frontend-module-template/
+├── src/
+│   ├── index.ts
+│   └── pages/
+│       └── TemplatePage.tsx
+├── package.json
+├── tsconfig.json
+└── README.md
 ```
 
-其中前端模块默认包含：
+## 必改项
 
-- 一个最小模块入口
-- 一个最小页面
-- 一个最小服务文件
-- 一个默认请求 `/api/example-module/status` 的联通验证逻辑
+- `package.json` 中的包名
+- `metadata.moduleId`
+- `metadata.displayName`
+- 路由前缀与菜单路径
+- 权限编码
+- 菜单 `id`
 
-### 3. 默认宿主接入
+## 可选目录
 
-未指定跳过集成时，脚手架还会自动更新：
+- `src/components/`
+- `src/services/`
+- `src/assets/`
 
-- `apps/host-api/HostApi.csproj`
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+只有在模块出现真实需要时才新增这些目录，不默认生成。
 
-这样新模块生成后即可参与宿主构建。
+## 禁止事项
 
-## 手动接入方式
+- 直接引用 `frontend/packages/shell/src/*`
+- 把路由、菜单、权限和页面实现混堆到一个超大入口文件
+- 默认要求新模块依赖 `@icp-platform/ui`
+- 把 live API 联通逻辑写成模板必备内容
 
-如果不使用自动集成，至少需要手动完成以下两步：
+如果模块确实使用公共 UI，必须在模块自己的 `package.json` 中显式声明 `@icp-platform/ui` 依赖。
 
-### HostApi 接入
+## 宿主接入点
 
-在 `apps/host-api/HostApi.csproj` 中添加：
+- 受控入口：`frontend/packages/shell/src/builtin-runtime-plugins.ts`
+- 注册消费：`frontend/packages/shell/src/registerModules.ts`
 
-```xml
-<ProjectReference Include="..\..\server\modules\ExampleModule\ExampleModule.csproj" />
-```
+常规前端模块接入只应修改受控入口，不直接改 Shell 布局、Provider 结构或内部路由拼装逻辑。
 
-### Shell 接入
+## 推荐标准
 
-在 `frontend/packages/shell/src/builtin-runtime-plugins.ts` 中添加：
+- 前端模块目录使用 kebab-case
+- 前端包名优先使用 `@icp-modules/<module-name>`
+- 权限编码建议使用 `<Module>.<Resource>.<Action>` 或至少 `<Module>.View`
+- 路由前缀应与模块目录语义保持一致
 
-```typescript
-export const BUILTIN_RUNTIME_PLUGIN_ENTRIES = [
-  // ...
-  { moduleId: 'example-module' },
-];
-```
+## 最小验证
 
-## 验证命令
-
-建议至少执行以下命令：
-
-```powershell
-dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
-dotnet build .\apps\host-api\HostApi.csproj
+```bash
 cd frontend
-pnpm --filter @icp-modules/example-module build
+pnpm --filter @icp-templates/frontend-module-template build
+pnpm --filter @icp-modules/<your-module-name> build
 pnpm build
 ```
 
-## 说明
+## 后续自动化说明
 
-- 前端模块目录使用 kebab-case。
-- 后端模块目录使用 PascalCase。
-- 默认权限编码使用 `<模块名>.View`。
-- 默认接口前缀使用 `/api/<kebab-case-module-name>`。
-## Controlled Integration Guardrails
-
-- Normal frontend module integration may update `frontend/packages/shell/src/builtin-runtime-plugins.ts`.
-- Do not directly modify shell layout, global provider structure, or internal route composition for routine module access.
-- If a module really needs more than the controlled entry point, add or update a design doc first.
-
-## Minimum Verification
-
-```powershell
-dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
-dotnet build .\apps\host-api\HostApi.csproj
-cd frontend
-pnpm --filter @icp-modules/example-module build
-pnpm build
-```
-
-The expected path is: the module builds and integrates without modifying other Shell internals.
+仓库中的示例模块和脚手架可以继续作为后续效率工具演进，但它们建立在这份模板契约之上，不替代这份模板规范本身。

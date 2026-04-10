@@ -12,6 +12,7 @@
   "dependencies": {
     "@icp-platform/core": "workspace:*",
     "@icp-platform/sdk": "workspace:*",
+    "@icp-platform/ui": "workspace:*",
     "react": "^18.2.0"
   },
   "devDependencies": {

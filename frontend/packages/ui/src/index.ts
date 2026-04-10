@@ -73,15 +73,3 @@ export type { FilterBarProps, FilterField } from './components/FilterBar';
 export { KeyValueEditor } from './components/KeyValueEditor';
 export type { KeyValueEditorProps, KeyValuePair } from './components/KeyValueEditor';
 
-// Complex Controls (Phase C)
-export { Tree } from './components/Tree';
-export type { TreeProps, TreeNode } from './components/Tree';
-
-export { TreeSelect } from './components/TreeSelect';
-export type { TreeSelectProps } from './components/TreeSelect';
-
-export { DataTable } from './components/DataTable';
-export type { DataTableProps, DataTableColumn, DataTableSort, SortDirection } from './components/DataTable';
-
-export { Uploader } from './components/Uploader';
-export type { UploaderProps, UploadItem, UploadStatus } from './components/Uploader';

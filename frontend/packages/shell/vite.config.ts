@@ -1,5 +1,6 @@
-import { defineConfig, type PluginOption } from 'vite'
+import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
+import { defineConfig, type PluginOption } from 'vite'
 import { createBuiltinRuntimePluginManifest } from './src/builtin-runtime-plugins'
 
 const frontendPluginManifestPath = 'plugins/frontend-plugin-manifest.json'
@@ -33,17 +34,27 @@ function builtinFrontendPluginManifestPlugin(): PluginOption {
 
 export default defineConfig({
   plugins: [react(), builtinFrontendPluginManifestPlugin()],
+  resolve: {
+    alias: {
+      '@icp-platform/core': fileURLToPath(new URL('../core/src/index.ts', import.meta.url)),
+      '@icp-platform/sdk': fileURLToPath(new URL('../sdk/src/index.ts', import.meta.url)),
+      '@icp-platform/ui': fileURLToPath(new URL('../ui/src/index.ts', import.meta.url)),
+      '@icp-platform/ui/styles': fileURLToPath(
+        new URL('../ui/src/styles/index.css', import.meta.url),
+      ),
+    },
+  },
   server: {
     port: 3000,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
-      }
-    }
+        changeOrigin: true,
+      },
+    },
   },
   test: {
     globals: true,
-    environment: 'jsdom'
-  }
+    environment: 'jsdom',
+  },
 })

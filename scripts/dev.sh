@@ -11,6 +11,9 @@ backend_out_log="$log_dir/dev-host-api.out.log"
 backend_err_log="$log_dir/dev-host-api.err.log"
 frontend_pid_file="$log_dir/dev-frontend.pid"
 backend_pid_file="$log_dir/dev-host-api.pid"
+backend_startup_timeout_seconds=120
+frontend_startup_timeout_seconds=90
+log_tail_lines=40
 
 wait_for_url() {
   local url="$1"
@@ -31,6 +34,52 @@ wait_for_url() {
   done
 
   return 1
+}
+
+show_log_tail() {
+  local title="$1"
+  local path="$2"
+
+  echo
+  echo "=== $title ==="
+
+  if [ ! -f "$path" ]; then
+    echo "(log file not found: $path)"
+    return
+  fi
+
+  if [ ! -s "$path" ]; then
+    echo "(no log output)"
+    return
+  fi
+
+  tail -n "$log_tail_lines" "$path"
+}
+
+show_startup_diagnostics() {
+  show_log_tail "Host API stdout tail" "$backend_out_log"
+  show_log_tail "Host API stderr tail" "$backend_err_log"
+  show_log_tail "Frontend stdout tail" "$frontend_out_log"
+  show_log_tail "Frontend stderr tail" "$frontend_err_log"
+}
+
+ensure_frontend_dependencies() {
+  local frontend_root="$repo_root/frontend"
+  local frontend_node_modules="$frontend_root/node_modules"
+  local needs_install=false
+
+  if [ ! -d "$frontend_node_modules" ]; then
+    needs_install=true
+  elif ! pnpm -C "$frontend_root" --filter @icp-platform/shell exec vite --version >/dev/null 2>&1; then
+    needs_install=true
+  fi
+
+  if [ "$needs_install" != true ]; then
+    return
+  fi
+
+  echo "Preparing frontend dependencies with pnpm..."
+  pnpm -C "$frontend_root" install
 }
 
 port_in_use() {
@@ -54,6 +103,8 @@ command -v dotnet >/dev/null 2>&1 || { echo "ERROR: dotnet was not found."; exit
 command -v node >/dev/null 2>&1 || { echo "ERROR: node was not found."; exit 1; }
 command -v pnpm >/dev/null 2>&1 || { echo "ERROR: pnpm was not found."; exit 1; }
 
+ensure_frontend_dependencies
+
 if port_in_use 5000; then
   echo "ERROR: port 5000 is already in use."
   exit 1
@@ -74,16 +125,27 @@ dotnet run --project "$repo_root/apps/host-api/HostApi.csproj" >"$backend_out_lo
 backend_pid=$!
 printf '%s' "$backend_pid" >"$backend_pid_file"
 
-echo "Starting Frontend Shell..."
-pnpm -C "$repo_root/frontend" --filter @icp-platform/shell dev >"$frontend_out_log" 2>"$frontend_err_log" &
-frontend_pid=$!
-printf '%s' "$frontend_pid" >"$frontend_pid_file"
-
 backend_ready=true
-frontend_ready=true
+frontend_ready=false
+frontend_started=false
 
-wait_for_url "$backend_url/api/auth/current-user" 60 || backend_ready=false
-wait_for_url "$frontend_url" 60 || frontend_ready=false
+wait_for_url "$backend_url/api/auth/current-user" "$backend_startup_timeout_seconds" || backend_ready=false
+
+if [ "$backend_ready" = true ]; then
+  echo "Starting Frontend Shell..."
+  pnpm -C "$repo_root/frontend" --filter @icp-platform/shell dev >"$frontend_out_log" 2>"$frontend_err_log" &
+  frontend_pid=$!
+  frontend_started=true
+  frontend_ready=true
+  printf '%s' "$frontend_pid" >"$frontend_pid_file"
+
+  wait_for_url "$frontend_url" "$frontend_startup_timeout_seconds" || frontend_ready=false
+  if [ "$frontend_ready" != true ] && ! kill -0 "$frontend_pid" >/dev/null 2>&1; then
+    frontend_ready=false
+  fi
+else
+  frontend_pid="not started"
+fi
 
 echo
 echo "=== Startup result ==="
@@ -101,7 +163,19 @@ echo "Stop services: ./scripts/stop-dev.sh"
 
 if [ "$backend_ready" != true ] || [ "$frontend_ready" != true ]; then
   echo
-  echo "One or more services did not become ready in time. Check the logs."
+  if [ "$backend_ready" != true ]; then
+    echo "Host API did not become ready within ${backend_startup_timeout_seconds} seconds."
+  fi
+
+  if [ "$backend_ready" = true ] && [ "$frontend_ready" != true ]; then
+    if [ "$frontend_started" = true ] && ! kill -0 "$frontend_pid" >/dev/null 2>&1; then
+      echo "Frontend Shell exited before becoming ready."
+    else
+      echo "Frontend Shell did not become ready within ${frontend_startup_timeout_seconds} seconds."
+    fi
+  fi
+
+  show_startup_diagnostics
   exit 1
 fi
 

@@ -10,6 +10,74 @@ $backendOutLog = Join-Path $logDir "dev-host-api.out.log"
 $backendErrLog = Join-Path $logDir "dev-host-api.err.log"
 $frontendPidFile = Join-Path $logDir "dev-frontend.pid"
 $backendPidFile = Join-Path $logDir "dev-host-api.pid"
+$backendStartupTimeoutSeconds = 120
+$frontendStartupTimeoutSeconds = 90
+$logTailLines = 40
+
+function Show-LogTail {
+    param(
+        [string]$Title,
+        [string]$Path
+    )
+
+    Write-Host ""
+    Write-Host "=== $Title ===" -ForegroundColor Yellow
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Host "(log file not found: $Path)" -ForegroundColor DarkGray
+        return
+    }
+
+    $content = Get-Content -LiteralPath $Path -Tail $logTailLines -ErrorAction SilentlyContinue
+    if (-not $content) {
+        Write-Host "(no log output)" -ForegroundColor DarkGray
+        return
+    }
+
+    $content | ForEach-Object { Write-Host $_ }
+}
+
+function Show-StartupDiagnostics {
+    Show-LogTail -Title "Host API stdout tail" -Path $backendOutLog
+    Show-LogTail -Title "Host API stderr tail" -Path $backendErrLog
+    Show-LogTail -Title "Frontend stdout tail" -Path $frontendOutLog
+    Show-LogTail -Title "Frontend stderr tail" -Path $frontendErrLog
+}
+
+function Ensure-FrontendDependencies {
+    $frontendRoot = Join-Path $repoRoot "frontend"
+    $frontendNodeModules = Join-Path $frontendRoot "node_modules"
+    $viteCheckArgs = @(
+        "-C",
+        $frontendRoot,
+        "--filter",
+        "@icp-platform/shell",
+        "exec",
+        "vite",
+        "--version"
+    )
+
+    $needsInstall = -not (Test-Path -LiteralPath $frontendNodeModules)
+
+    if (-not $needsInstall) {
+        & pnpm.cmd @viteCheckArgs *> $null
+        if ($LASTEXITCODE -ne 0) {
+            $needsInstall = $true
+        }
+    }
+
+    if (-not $needsInstall) {
+        return
+    }
+
+    Write-Host "Preparing frontend dependencies with pnpm..." -ForegroundColor Cyan
+    & pnpm.cmd -C $frontendRoot install
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: frontend dependency installation failed." -ForegroundColor Red
+        exit 1
+    }
+}
 
 Write-Host "=== Start ICP local dev environment ===" -ForegroundColor Green
 
@@ -27,6 +95,8 @@ if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
     Write-Host "ERROR: pnpm was not found." -ForegroundColor Red
     exit 1
 }
+
+Ensure-FrontendDependencies
 
 if (Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1) {
     Write-Host "ERROR: port 5000 is already in use." -ForegroundColor Red
@@ -81,7 +151,7 @@ Set-Content -Path $backendPidFile -Value $backendProcess.Id
 $backendReady = $false
 $frontendReady = $false
 $frontendProcess = $null
-$backendDeadline = (Get-Date).AddSeconds(60)
+$backendDeadline = (Get-Date).AddSeconds($backendStartupTimeoutSeconds)
 
 while ((Get-Date) -lt $backendDeadline -and -not $backendReady) {
     try {
@@ -110,9 +180,13 @@ if ($backendReady) {
 
     Set-Content -Path $frontendPidFile -Value $frontendProcess.Id
 
-    $frontendDeadline = (Get-Date).AddSeconds(60)
+    $frontendDeadline = (Get-Date).AddSeconds($frontendStartupTimeoutSeconds)
 
     while ((Get-Date) -lt $frontendDeadline -and -not $frontendReady) {
+        if ($frontendProcess.HasExited) {
+            break
+        }
+
         try {
             Invoke-WebRequest -UseBasicParsing $frontendUrl -TimeoutSec 3 | Out-Null
             $frontendReady = $true
@@ -138,6 +212,18 @@ Write-Host "Stop services: .\\scripts\\stop-dev.ps1" -ForegroundColor DarkGray
 
 if (-not $backendReady -or -not $frontendReady) {
     Write-Host ""
-    Write-Host "One or more services did not become ready in time. Check the logs." -ForegroundColor Yellow
+    if (-not $backendReady) {
+        Write-Host "Host API did not become ready within $backendStartupTimeoutSeconds seconds." -ForegroundColor Yellow
+    }
+
+    if ($backendReady -and -not $frontendReady) {
+        if ($frontendProcess -and $frontendProcess.HasExited) {
+            Write-Host "Frontend Shell exited before becoming ready." -ForegroundColor Yellow
+        } else {
+            Write-Host "Frontend Shell did not become ready within $frontendStartupTimeoutSeconds seconds." -ForegroundColor Yellow
+        }
+    }
+
+    Show-StartupDiagnostics
     exit 1
 }

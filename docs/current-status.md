@@ -358,15 +358,26 @@ AI-First 对齐：
 
 ## 当前推荐下一步
 
-1. 以当前 Phase 1 闭环为基线，下一步补齐统一插件包依赖治理、卸载入口和更完整的运维治理约束。
-2. 在 install / enable / disable / rollback 收口后，再推进对外 SDK、外部模板和更完整的外部插件开发约束。
-3. `Phase 6.5` 持久化底座收口与插件平台并行推进时，继续保持模块边界，不把两个主题混成一次大改。
-4. 持续关注 Phase 5 中文 Description 编码不稳定风险，并保持计划、状态和模块文档一致性。
+当前后续路线以平台治理和 AI-first 收口为优先，按以下工作包顺序推进：
 
-对应设计：
+1. **WP1 平台治理收口**：把插件平台从"可以运行"收成"行为可控、边界清晰、失败可诊断、回滚可执行"。设计文档已产出（`designs/plugin-governance-enhancement-design.md`），实现尚未启动。
+2. **WP2 AI-first 规范落地**：把 AI-first 从方向性原则提升为日常执行标准与验收标准。设计文档已产出（`designs/ai-first-execution-standard-design.md`），实现尚未启动。
+3. **WP3 文档与状态一致性治理**：让状态文档、计划文档、设计文档、验证记录形成统一口径。设计文档已产出（`designs/post-phase-6-status-alignment-design.md`）。
+4. **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
 
-- [designs/post-phase-6-foundation-and-migration-design.md](designs/post-phase-6-foundation-and-migration-design.md)
-- [architecture/ai-metadata-authoring-guide.md](architecture/ai-metadata-authoring-guide.md)
+对应路线设计：
+
+- [designs/post-phase-6-governance-and-ai-first-roadmap-design.md](designs/post-phase-6-governance-and-ai-first-roadmap-design.md)
+
+### 文档链路已知缺口
+
+| 能力 | 缺口 |
+|------|------|
+| 插件平台 Phase 6.6 | 缺独立验证文档 |
+| 多数据库持久化 Phase 6.5 | 缺独立验证文档 |
+| 插件运维中心 Phase 6.7 | 缺独立实现说明文档、缺独立验证文档 |
+
+这些缺口应由后续专项任务补齐。
 
 ## AI-First 校准结论
 

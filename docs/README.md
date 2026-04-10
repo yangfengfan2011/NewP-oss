@@ -91,10 +91,13 @@
 
 ## 9. collaboration
 
-面向 Codex / Claude 协作流程的执行手册。
+面向 Codex / Claude / GitHub Copilot 协作流程的执行手册。
 
 - [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
 - [collaboration/claude-code-第二阶段执行手册.md](collaboration/claude-code-第二阶段执行手册.md)
+- [collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)
+- [collaboration/codex-review-checklist.md](collaboration/codex-review-checklist.md)
+- [collaboration/work-packages/wp1-plugin-governance-design.md](collaboration/work-packages/wp1-plugin-governance-design.md)
 - [prompts/](prompts/)
 - [bootstrap/](bootstrap/)
 
@@ -116,3 +119,4 @@
 - 详细设计入口：[designs/README.md](designs/README.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
 - 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
+- GitHub Copilot 协作入口：[collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)

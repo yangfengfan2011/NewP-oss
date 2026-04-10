@@ -157,6 +157,21 @@
 
 ## Phase 6 之后建议拆分
 
+### Post-Phase 6：治理与 AI-First 收口
+
+Phase 6 系列完成后，后续路线以平台治理和 AI-first 收口为优先，拆为四个工作包依次推进。详见 `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`。
+
+- **WP1 平台治理收口**：把插件平台收成"行为可控、边界清晰、失败可诊断、回滚可执行"。
+- **WP2 AI-first 规范落地**：把 AI-first 从方向性原则提升为日常执行标准与验收标准。
+- **WP3 文档与状态一致性治理**：让状态、计划、设计、验证记录形成统一口径。
+- **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
+
+验证标准：
+
+- 每个工作包的设计文档已产出
+- 状态文档和计划文档与路线设计口径一致
+- 核心能力的 design / implementation / verification 链路缺口已记录
+
 ### Phase 6.5：持久化底座收口
 
 - 先为真实承接模块补齐数据库持久化，而不是继续停留在内存仓储上扩迁移

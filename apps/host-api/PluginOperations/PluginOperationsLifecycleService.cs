@@ -70,14 +70,15 @@ public class PluginOperationsLifecycleService
     /// </summary>
     public PluginOperationResultDto Enable(string moduleId, string version)
     {
-        var result = _operations.Enable(moduleId, version);
-        if (result.Status == "Failed")
-        {
-            return PluginOperationResultDto.Failed(result.ErrorMessage);
-        }
-
-        RefreshMaterializer();
-        return PluginOperationResultDto.Success(result.ModuleId, result.Version, "Enabled");
+        return ExecuteWithMaterializerRecovery(
+            moduleId,
+            backupModuleFiles: true,
+            () => _operations.Enable(moduleId, version),
+            result => PluginOperationResultDto.Success(
+                result.ModuleId,
+                result.Version,
+                "Enabled",
+                GetSuccessMessage(result)));
     }
 
     /// <summary>
@@ -85,14 +86,15 @@ public class PluginOperationsLifecycleService
     /// </summary>
     public PluginOperationResultDto Disable(string moduleId)
     {
-        var result = _operations.Disable(moduleId);
-        if (result.Status == "Failed")
-        {
-            return PluginOperationResultDto.Failed(result.ErrorMessage);
-        }
-
-        RefreshMaterializer();
-        return PluginOperationResultDto.Success(result.ModuleId, null, "Disabled");
+        return ExecuteWithMaterializerRecovery(
+            moduleId,
+            backupModuleFiles: false,
+            () => _operations.Disable(moduleId),
+            result => PluginOperationResultDto.Success(
+                result.ModuleId,
+                null,
+                "Disabled",
+                GetSuccessMessage(result)));
     }
 
     /// <summary>
@@ -100,18 +102,15 @@ public class PluginOperationsLifecycleService
     /// </summary>
     public PluginOperationResultDto Uninstall(string moduleId)
     {
-        var result = _operations.Uninstall(moduleId);
-        if (result.Status == "Failed")
-        {
-            return PluginOperationResultDto.Failed(result.ErrorMessage);
-        }
-
-        RefreshMaterializer();
-        return PluginOperationResultDto.Success(
-            result.ModuleId,
-            null,
-            "Uninstalled",
-            GetSuccessMessage(result));
+        return ExecuteWithMaterializerRecovery(
+            moduleId,
+            backupModuleFiles: true,
+            () => _operations.Uninstall(moduleId),
+            result => PluginOperationResultDto.Success(
+                result.ModuleId,
+                null,
+                "Uninstalled",
+                GetSuccessMessage(result)));
     }
 
     /// <summary>
@@ -162,6 +161,99 @@ public class PluginOperationsLifecycleService
         _materializer.Materialize(_installRoot);
     }
 
+    private PluginOperationResultDto ExecuteWithMaterializerRecovery(
+        string moduleId,
+        bool backupModuleFiles,
+        Func<UnifiedPluginLifecycleResult> operation,
+        Func<UnifiedPluginLifecycleResult, PluginOperationResultDto> buildSuccessResult)
+    {
+        if (!_stateStore.TryLoad(moduleId, out var previousRecord, out var loadError))
+        {
+            return PluginOperationResultDto.Failed(loadError ?? $"Failed to load plugin state for '{moduleId}'.");
+        }
+
+        string? backupError = null;
+        using var fileBackup = backupModuleFiles
+            ? ModuleFilesystemBackup.Create(_installRoot, moduleId, out backupError)
+            : ModuleFilesystemBackup.Empty();
+
+        if (!string.IsNullOrWhiteSpace(backupError))
+        {
+            return PluginOperationResultDto.Failed(backupError!);
+        }
+
+        var result = operation();
+        if (result.Status == "Failed")
+        {
+            return PluginOperationResultDto.Failed(result.ErrorMessage);
+        }
+
+        try
+        {
+            RefreshMaterializer();
+            return buildSuccessResult(result);
+        }
+        catch (Exception ex)
+        {
+            return RecoverFromMaterializerFailure(moduleId, previousRecord, fileBackup, ex);
+        }
+    }
+
+    private PluginOperationResultDto RecoverFromMaterializerFailure(
+        string moduleId,
+        InstalledPluginRecord? previousRecord,
+        ModuleFilesystemBackup fileBackup,
+        Exception materializeError)
+    {
+        if (!RestorePreviousState(moduleId, previousRecord, out var restoreStateError))
+        {
+            return PluginOperationResultDto.Failed(
+                $"{materializeError.Message} Failed to restore previous plugin state: {restoreStateError}");
+        }
+
+        if (!fileBackup.Restore(out var restoreFileError))
+        {
+            return PluginOperationResultDto.Failed(
+                $"{materializeError.Message} Failed to restore previous plugin files: {restoreFileError}");
+        }
+
+        try
+        {
+            RefreshMaterializer();
+        }
+        catch (Exception restoreProjectionEx)
+        {
+            return PluginOperationResultDto.Failed(
+                $"{materializeError.Message} Failed to restore previous runtime projection: {restoreProjectionEx.Message}");
+        }
+
+        return PluginOperationResultDto.Failed($"{materializeError.Message} Plugin state was restored to the previous version.");
+    }
+
+    private bool RestorePreviousState(string moduleId, InstalledPluginRecord? previousRecord, out string? errorMessage)
+    {
+        if (previousRecord is null)
+        {
+            return _stateStore.TryDeleteModule(moduleId, out errorMessage);
+        }
+
+        return _stateStore.TrySave(CloneRecord(previousRecord), out errorMessage);
+    }
+
+    private static InstalledPluginRecord CloneRecord(InstalledPluginRecord record)
+    {
+        return new InstalledPluginRecord
+        {
+            ModuleId = record.ModuleId,
+            Version = record.Version,
+            Status = record.Status,
+            PackageRoot = record.PackageRoot,
+            CurrentEnabledVersion = record.CurrentEnabledVersion,
+            IsDisabled = record.IsDisabled,
+            InstalledVersions = [.. record.InstalledVersions]
+        };
+    }
+
     private static string GetSuccessMessage(object result)
     {
         return GetResultString(result, "Message", "WarningMessage");
@@ -181,6 +273,145 @@ public class PluginOperationsLifecycleService
         }
 
         return string.Empty;
+    }
+
+    private sealed class ModuleFilesystemBackup : IDisposable
+    {
+        private static readonly string[] RelativePaths =
+        [
+            "packages",
+            Path.Combine(".pruned", "packages"),
+            Path.Combine(".pruned", "public")
+        ];
+
+        private readonly string _installRoot;
+        private readonly string _backupRoot;
+        private readonly IReadOnlyList<BackupEntry> _entries;
+
+        private ModuleFilesystemBackup(string installRoot, string backupRoot, IReadOnlyList<BackupEntry> entries)
+        {
+            _installRoot = installRoot;
+            _backupRoot = backupRoot;
+            _entries = entries;
+        }
+
+        public static ModuleFilesystemBackup Create(string installRoot, string moduleId, out string? errorMessage)
+        {
+            errorMessage = null;
+            var backupRoot = Path.Combine(Path.GetTempPath(), "plugin_ops_backup_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(backupRoot);
+
+            try
+            {
+                var entries = new List<BackupEntry>();
+
+                foreach (var relativeRoot in RelativePaths)
+                {
+                    var sourcePath = Path.Combine(installRoot, relativeRoot, moduleId);
+                    var backupPath = Path.Combine(backupRoot, relativeRoot, moduleId);
+                    var exists = Directory.Exists(sourcePath);
+                    if (exists)
+                    {
+                        CopyDirectory(sourcePath, backupPath);
+                    }
+
+                    entries.Add(new BackupEntry(sourcePath, backupPath, exists));
+                }
+
+                return new ModuleFilesystemBackup(installRoot, backupRoot, entries);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                errorMessage = $"Failed to snapshot plugin files for '{moduleId}': {ex.Message}";
+                try
+                {
+                    if (Directory.Exists(backupRoot))
+                    {
+                        Directory.Delete(backupRoot, recursive: true);
+                    }
+                }
+                catch
+                {
+                }
+
+                return Empty();
+            }
+        }
+
+        public static ModuleFilesystemBackup Empty()
+        {
+            return new ModuleFilesystemBackup(
+                string.Empty,
+                string.Empty,
+                Array.Empty<BackupEntry>());
+        }
+
+        public bool Restore(out string? errorMessage)
+        {
+            errorMessage = null;
+
+            try
+            {
+                foreach (var entry in _entries)
+                {
+                    if (Directory.Exists(entry.DestinationPath))
+                    {
+                        Directory.Delete(entry.DestinationPath, recursive: true);
+                    }
+
+                    if (!entry.Existed)
+                    {
+                        continue;
+                    }
+
+                    CopyDirectory(entry.BackupPath, entry.DestinationPath);
+                }
+
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (string.IsNullOrWhiteSpace(_backupRoot))
+            {
+                return;
+            }
+
+            try
+            {
+                if (Directory.Exists(_backupRoot))
+                {
+                    Directory.Delete(_backupRoot, recursive: true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void CopyDirectory(string sourcePath, string destinationPath)
+        {
+            var sourceDirectory = new DirectoryInfo(sourcePath);
+            Directory.CreateDirectory(destinationPath);
+
+            foreach (var file in sourceDirectory.GetFiles())
+            {
+                file.CopyTo(Path.Combine(destinationPath, file.Name), overwrite: true);
+            }
+
+            foreach (var directory in sourceDirectory.GetDirectories())
+            {
+                CopyDirectory(directory.FullName, Path.Combine(destinationPath, directory.Name));
+            }
+        }
+
+        private sealed record BackupEntry(string DestinationPath, string BackupPath, bool Existed);
     }
 }
 

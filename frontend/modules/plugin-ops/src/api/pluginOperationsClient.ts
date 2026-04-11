@@ -131,6 +131,20 @@ export async function disableModule(
   );
 }
 
+export async function uninstallModule(
+  moduleId: string,
+  fetcher: Fetcher = fetch,
+): Promise<PluginOperationResult> {
+  return await readActionResult(
+    fetcher(
+      `/api/plugin-ops/modules/${encodeURIComponent(moduleId)}`,
+      buildRequest({
+        method: 'DELETE',
+      }),
+    ),
+  );
+}
+
 export async function rollbackModule(
   moduleId: string,
   fetcher: Fetcher = fetch,
@@ -151,6 +165,7 @@ const pluginOperationsClient = {
   installUpload,
   enableModule,
   disableModule,
+  uninstallModule,
   rollbackModule,
 };
 

@@ -177,6 +177,39 @@ public class PluginOperationsLifecycleTests : IDisposable
         Assert.Contains("enabled", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Enable_WhenMaterializerRefreshFails_RestoresPreviousStateAndProjection()
+    {
+        InstallDirectly("Audit", "1.0.0");
+        InstallDirectly("Audit", "2.0.0");
+        _operations.Enable("Audit", "1.0.0");
+        _materializer.Materialize(_installRoot);
+
+        var previousRuntimeManifestPath = Path.Combine(_installRoot, "runtime", "frontend-plugin-manifest.json");
+        var previousPublicEntryPath = Path.Combine(_installRoot, "public", "Audit", "1.0.0", "assets", "entry.js");
+        var previousRuntimeManifest = File.ReadAllText(previousRuntimeManifestPath);
+        var previousPublicEntry = File.ReadAllText(previousPublicEntryPath);
+
+        var failingMaterializer = CreateMaterializerWithSwapFailure(_stateStore, 4, "Simulated public swap failure");
+        var service = new PluginOperationsLifecycleService(
+            _stateStore,
+            _installer,
+            _operations,
+            failingMaterializer,
+            _uploadService,
+            _installRoot);
+
+        var result = service.Enable("Audit", "2.0.0");
+
+        Assert.Equal("Failed", result.Status);
+        Assert.Contains("restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(_stateStore.TryLoad("Audit", out var record, out _));
+        Assert.NotNull(record);
+        Assert.Equal("1.0.0", record!.CurrentEnabledVersion);
+        Assert.Equal(previousRuntimeManifest, File.ReadAllText(previousRuntimeManifestPath));
+        Assert.Equal(previousPublicEntry, File.ReadAllText(previousPublicEntryPath));
+    }
+
     // ── disable 测试 ─────────────────────────────────────────────────────
 
     [Fact]
@@ -200,6 +233,38 @@ public class PluginOperationsLifecycleTests : IDisposable
         var result = _service.Disable("NonExistent");
 
         Assert.Equal("Failed", result.Status);
+    }
+
+    [Fact]
+    public void Disable_WhenMaterializerRefreshFails_RestoresPreviousStateAndProjection()
+    {
+        InstallDirectly("Audit", "1.0.0");
+        _operations.Enable("Audit", "1.0.0");
+        _materializer.Materialize(_installRoot);
+
+        var previousRuntimeManifestPath = Path.Combine(_installRoot, "runtime", "frontend-plugin-manifest.json");
+        var previousPublicEntryPath = Path.Combine(_installRoot, "public", "Audit", "1.0.0", "assets", "entry.js");
+        var previousRuntimeManifest = File.ReadAllText(previousRuntimeManifestPath);
+        var previousPublicEntry = File.ReadAllText(previousPublicEntryPath);
+
+        var failingMaterializer = CreateMaterializerWithSwapFailure(_stateStore, 4, "Simulated public swap failure");
+        var service = new PluginOperationsLifecycleService(
+            _stateStore,
+            _installer,
+            _operations,
+            failingMaterializer,
+            _uploadService,
+            _installRoot);
+
+        var result = service.Disable("Audit");
+
+        Assert.Equal("Failed", result.Status);
+        Assert.Contains("restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(_stateStore.TryLoad("Audit", out var record, out _));
+        Assert.NotNull(record);
+        Assert.Equal("1.0.0", record!.CurrentEnabledVersion);
+        Assert.Equal(previousRuntimeManifest, File.ReadAllText(previousRuntimeManifestPath));
+        Assert.Equal(previousPublicEntry, File.ReadAllText(previousPublicEntryPath));
     }
 
     // ── rollback 测试 ────────────────────────────────────────────────────
@@ -255,6 +320,44 @@ public class PluginOperationsLifecycleTests : IDisposable
         Assert.NotNull(record);
         Assert.Equal("1.0.0", record!.CurrentEnabledVersion);
         Assert.True(Directory.Exists(Path.Combine(_installRoot, "runtime", "backend-load-view", "Audit")));
+    }
+
+    [Fact]
+    public void Uninstall_WhenMaterializerRefreshFails_RestoresPreviousStateAndProjection()
+    {
+        InstallDirectly("Cleanup", "1.0.0");
+        _materializer.Materialize(_installRoot);
+
+        var previousRuntimeManifestPath = Path.Combine(_installRoot, "runtime", "frontend-plugin-manifest.json");
+        var previousRuntimeManifest = File.ReadAllText(previousRuntimeManifestPath);
+
+        var failingMaterializer = CreateMaterializerWithSwapFailure(_stateStore, 4, "Simulated public swap failure");
+        var service = new PluginOperationsLifecycleService(
+            _stateStore,
+            _installer,
+            _operations,
+            failingMaterializer,
+            _uploadService,
+            _installRoot);
+
+        var method = typeof(PluginOperationsLifecycleService).GetMethod(
+            "Uninstall",
+            BindingFlags.Instance | BindingFlags.Public,
+            binder: null,
+            types: [typeof(string)],
+            modifiers: null);
+
+        Assert.NotNull(method);
+        var result = (PluginOperationResultDto)method!.Invoke(service, ["Cleanup"])!;
+
+        Assert.Equal("Failed", result.Status);
+        Assert.Contains("restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(_stateStore.TryLoad("Cleanup", out var record, out _));
+        Assert.NotNull(record);
+        Assert.Equal(["1.0.0"], record!.InstalledVersions);
+        Assert.Null(record.CurrentEnabledVersion);
+        Assert.True(Directory.Exists(Path.Combine(_installRoot, "packages", "Cleanup", "1.0.0")));
+        Assert.Equal(previousRuntimeManifest, File.ReadAllText(previousRuntimeManifestPath));
     }
 
     [Fact]

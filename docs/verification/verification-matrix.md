@@ -37,6 +37,19 @@
 
 - [demo-module-verification.md](demo-module-verification.md)
 
+### WP1
+
+- `dotnet build tests/Kernel.Tests/Kernel.Tests.csproj -nr:false -v minimal`
+- `dotnet build tools/PluginOps/PluginOps.csproj -nr:false -v minimal`
+- `dotnet build apps/host-api/HostApi.csproj -nr:false -v minimal`
+- `dotnet test tests/Kernel.Tests/Kernel.Tests.csproj --filter "FullyQualifiedName~PluginRuntimeAssemblyLoaderTests|FullyQualifiedName~PluginOperationsAdminServiceTests|FullyQualifiedName~UnifiedPluginPackageLifecycleOperationsTests|FullyQualifiedName~UnifiedPluginPackageInstallerTests|FullyQualifiedName~PluginOperationsLifecycleTests|FullyQualifiedName~PluginOperationsControllerTests|FullyQualifiedName~PluginOpsIntegrationTests" -nr:false -v minimal`
+- `pnpm --dir frontend/packages/shell exec vitest --run src/__tests__/plugin-ops-client.test.ts src/__tests__/plugin-ops-page.test.tsx`
+- `pnpm --dir frontend --filter @icp-platform/shell build`
+
+参考：
+
+- [plugin-governance-enhancement-verification.md](plugin-governance-enhancement-verification.md)
+
 ## 模块级验证
 
 ### Kernel

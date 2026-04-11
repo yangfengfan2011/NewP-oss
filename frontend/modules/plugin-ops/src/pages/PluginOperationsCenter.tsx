@@ -5,6 +5,7 @@ import {
   getModules,
   installUpload,
   rollbackModule,
+  uninstallModule,
   verifyUpload,
 } from '../api/pluginOperationsClient';
 import type {
@@ -13,7 +14,7 @@ import type {
   PluginUploadVerifyResult,
 } from '../types/pluginOperations';
 
-type NoticeTone = 'info' | 'success' | 'error';
+type NoticeTone = 'info' | 'success' | 'warning' | 'error';
 
 interface NoticeState {
   tone: NoticeTone;
@@ -26,6 +27,10 @@ function getStatusLabel(status: string): string {
       return '已启用';
     case 'Installed':
       return '已安装';
+    case 'Disabled':
+      return '已禁用';
+    case 'Uninstalled':
+      return '已卸载';
     case 'Failed':
       return '失败';
     case 'NotInstalled':
@@ -37,6 +42,19 @@ function getStatusLabel(status: string): string {
 
 function getVersionsLabel(versions: string[]): string {
   return versions.length > 0 ? versions.join(', ') : '无';
+}
+
+function getNoticeTone(result: PluginOperationResult): NoticeTone {
+  if (result.status === 'Failed') {
+    return 'error';
+  }
+
+  const message = result.message.trim().toLowerCase();
+  if (message.includes('warning') || message.includes('warn') || message.includes('警告')) {
+    return 'warning';
+  }
+
+  return 'success';
 }
 
 function getInitialSelectedVersions(modules: PluginModuleStatus[]): Record<string, string> {
@@ -113,7 +131,7 @@ export default function PluginOperationsCenter() {
     try {
       const result = await operation();
       setNotice({
-        tone: result.status === 'Failed' ? 'error' : 'success',
+        tone: getNoticeTone(result),
         message: result.message || `${result.moduleId} ${getStatusLabel(result.status)}。`,
       });
       await loadModules();
@@ -140,7 +158,7 @@ export default function PluginOperationsCenter() {
           <span className="sh-page-eyebrow">运维中心</span>
           <h1 className="sh-page-title">插件运维中心</h1>
           <p className="sh-page-description">
-            统一查看插件安装状态，完成插件包校验、安装、启用、禁用和回滚。
+            统一查看插件安装状态，完成插件包校验、安装、启用、禁用、卸载和回滚。
           </p>
         </div>
       </section>
@@ -333,6 +351,19 @@ export default function PluginOperationsCenter() {
                           }
                         >
                           回滚
+                        </button>
+                        <button
+                          type="button"
+                          className="sh-btn"
+                          onClick={() => void runLifecycleAction(
+                            `uninstall-${module.moduleId}`,
+                            async () => await uninstallModule(module.moduleId),
+                          )}
+                          disabled={
+                            !module.canUninstall || busyAction === `uninstall-${module.moduleId}`
+                          }
+                        >
+                          卸载
                         </button>
                       </div>
                     </td>

@@ -23,6 +23,7 @@ describe('pluginOperationsClient', () => {
     expect(typeof exports.installUpload).toBe('function');
     expect(typeof exports.enableModule).toBe('function');
     expect(typeof exports.disableModule).toBe('function');
+    expect(typeof exports.uninstallModule).toBe('function');
     expect(typeof exports.rollbackModule).toBe('function');
   });
 
@@ -42,6 +43,7 @@ describe('pluginOperationsClient', () => {
         lastError: null,
         canEnable: true,
         canDisable: true,
+        canUninstall: false,
         canRollback: false,
       },
     ];
@@ -93,6 +95,9 @@ describe('pluginOperationsClient', () => {
     const disableModule = (api as Record<string, unknown>).disableModule as
       | ((moduleId: string, fetcher?: typeof fetch) => Promise<unknown>)
       | undefined;
+    const uninstallModule = (api as Record<string, unknown>).uninstallModule as
+      | ((moduleId: string, fetcher?: typeof fetch) => Promise<unknown>)
+      | undefined;
     const rollbackModule = (api as Record<string, unknown>).rollbackModule as
       | ((moduleId: string, fetcher?: typeof fetch) => Promise<unknown>)
       | undefined;
@@ -100,16 +105,19 @@ describe('pluginOperationsClient', () => {
       .mockResolvedValueOnce(jsonResponse({ moduleId: 'Audit', version: '1.1.0', status: 'Installed', message: 'ok' }))
       .mockResolvedValueOnce(jsonResponse({ moduleId: 'Audit', version: '1.1.0', status: 'Enabled', message: 'ok' }))
       .mockResolvedValueOnce(jsonResponse({ moduleId: 'Audit', version: null, status: 'Disabled', message: 'ok' }))
+      .mockResolvedValueOnce(jsonResponse({ moduleId: 'Audit', version: null, status: 'Uninstalled', message: 'ok' }))
       .mockResolvedValueOnce(jsonResponse({ moduleId: 'Audit', version: '1.0.0', status: 'RolledBack', message: 'ok' }));
 
     expect(typeof installUpload).toBe('function');
     expect(typeof enableModule).toBe('function');
     expect(typeof disableModule).toBe('function');
+    expect(typeof uninstallModule).toBe('function');
     expect(typeof rollbackModule).toBe('function');
 
     await installUpload?.('upload-1', fetcher);
     await enableModule?.('Audit', '1.1.0', fetcher);
     await disableModule?.('Audit', fetcher);
+    await uninstallModule?.('Audit', fetcher);
     await rollbackModule?.('Audit', fetcher);
 
     expect(fetcher).toHaveBeenNthCalledWith(
@@ -139,6 +147,14 @@ describe('pluginOperationsClient', () => {
     );
     expect(fetcher).toHaveBeenNthCalledWith(
       4,
+      '/api/plugin-ops/modules/Audit',
+      expect.objectContaining({
+        method: 'DELETE',
+        credentials: 'include',
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      5,
       '/api/plugin-ops/modules/Audit/rollback',
       expect.objectContaining({
         method: 'POST',

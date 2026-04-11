@@ -249,7 +249,7 @@ AI-First 对齐：
 - 统一插件包打包脚本与校验脚本已落地
 - 统一插件包安装目录、状态存储与版本化安装能力已落地
 - 已启用插件到后端 load-view 与前端运行时 manifest 的投影能力已落地
-- `PluginOps` 与 `manage-unified-plugin` 运维入口已落地，可执行 install / enable / disable / rollback
+- `PluginOps` 与 `manage-unified-plugin` 运维入口已落地，可执行 install / enable / disable / uninstall / rollback
 - `Audit` / `Authorization` / `ModuleTemplateSample` 已验证可产出标准插件目录
 - 面向仓库外部开发的后端插件模板已落地
 - `new-module.ps1` / `new-module.sh` 已支持外部插件模式
@@ -261,7 +261,7 @@ AI-First 对齐：
 - Host 启动日志显示通过插件目录发现并装载 6 个内建模块
 - `scripts/pack-plugin.ps1` 与 `scripts/verify-plugin-package.ps1` 已对现有模块完成真实打包校验
 - `scripts/pack-unified-plugin.ps1` 与 `scripts/verify-unified-plugin-package.ps1` 已对 `Audit` 完成真实打包校验
-- `scripts/manage-unified-plugin.ps1` 已对 `Audit` 完成真实 install / enable / disable / rollback 操作，并验证运行时投影视图与状态目录同步变化
+- `scripts/manage-unified-plugin.ps1` 已对 `Audit` 完成真实 install / enable / disable / uninstall / rollback 操作，并验证运行时投影视图与状态目录同步变化
 - 宿主已在 `Platform__PluginInstallRoot=artifacts/installed-plugins` 下完成安装结果驱动的烟测启动
 - 外部插件样例已通过脚手架生成、构建、打包与校验链路验证
 
@@ -269,7 +269,7 @@ AI-First 对齐：
 
 - `ProjectReference` 仍保留在 `HostApi.csproj` 中，作为开发期 DLL 产出过渡机制
 - 统一插件包打包脚本当前仍以 `Audit` 为 Phase 1 验证对象，不代表所有模块都已收口
-- 插件依赖治理、哈希/签名校验、统一插件包卸载入口与更完整的前端插件治理尚未纳入本轮
+- 哈希/签名校验、更完整的前端插件治理与版本感知依赖仍未纳入本轮
 - 外部插件开发当前仍使用仓库内 `server/sdk/Sdk.csproj` 作为开发期 SDK 引用
 
 对应文档：
@@ -331,6 +331,7 @@ AI-First 对齐：
 - 模块系统可装配
 - Demo / Authorization / ConfigCenter / Audit / Files / ModuleTemplateSample 模块已有代码基础
 - 宿主可通过插件目录与插件清单装载内建后端模块
+- 插件平台已具备依赖治理、卸载、版本保留与 rollback 原子恢复的后端闭环
 
 ### 前端
 
@@ -360,10 +361,10 @@ AI-First 对齐：
 
 当前后续路线以平台治理和 AI-first 收口为优先，按以下工作包顺序推进：
 
-1. **WP1 平台治理收口**：把插件平台从"可以运行"收成"行为可控、边界清晰、失败可诊断、回滚可执行"。设计文档已产出（`designs/plugin-governance-enhancement-design.md`），实现尚未启动。
-2. **WP2 AI-first 规范落地**：把 AI-first 从方向性原则提升为日常执行标准与验收标准。设计文档已产出（`designs/ai-first-execution-standard-design.md`），实现尚未启动。
-3. **WP3 文档与状态一致性治理**：让状态文档、计划文档、设计文档、验证记录形成统一口径。设计文档已产出（`designs/post-phase-6-status-alignment-design.md`）。
-4. **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
+1. **WP2 AI-first 规范落地**：把 AI-first 从方向性原则提升为日常执行标准与验收标准。设计文档已产出（`designs/ai-first-execution-standard-design.md`），实现尚未启动。
+2. **WP3 文档与状态一致性治理**：让状态文档、计划文档、设计文档、验证记录形成统一口径。设计文档已产出（`designs/post-phase-6-status-alignment-design.md`）。
+3. **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
+4. **运维体验优化**：将 destructive-action 确认流程与 warning severity 统一到 shell 级交互规范中。
 
 对应路线设计：
 
@@ -373,7 +374,6 @@ AI-First 对齐：
 
 | 能力 | 缺口 |
 |------|------|
-| 插件平台 Phase 6.6 | 缺独立验证文档 |
 | 多数据库持久化 Phase 6.5 | 缺独立验证文档 |
 | 插件运维中心 Phase 6.7 | 缺独立实现说明文档、缺独立验证文档 |
 
@@ -404,12 +404,12 @@ AI-First 对齐：
 
 已落地：
 
-- `HostApi` 已提供 `GET /api/plugin-ops/modules`、上传校验、安装、启用、禁用、回滚等管理员接口
+- `HostApi` 已提供 `GET /api/plugin-ops/modules`、上传校验、安装、启用、禁用、卸载、回滚等管理员接口
 - `frontend/modules/plugin-ops` 已接入 Shell，提供 `/plugin-ops` 页面
 - 页面已接入真实 API，可完成：
   - 模块状态查看
   - 统一插件包上传校验
-  - install / enable / disable / rollback
+  - install / enable / disable / uninstall / rollback
 - 前端侧不再依赖当前未实际发放的额外权限点做显示拦截，改为“登录即可见，后端继续 AdminOnly 兜底”
 
 已验证：
@@ -421,5 +421,38 @@ AI-First 对齐：
 
 当前边界：
 
-- 当前网页入口聚焦统一插件包已存在的运维动作，不包含源码一键打包、签名校验、卸载或更细粒度的多角色治理
-- 前端静态资源与运行时清单会随 install / enable / disable / rollback 更新，但后端程序集若已在运行，仍可能需要重启宿主才能按新视图重载
+- 当前网页入口聚焦统一插件包已存在的运维动作，不包含源码一键打包、签名校验或更细粒度的多角色治理
+- 前端静态资源与运行时清单会随 install / enable / disable / uninstall / rollback 更新，但后端程序集若已在运行，仍可能需要重启宿主才能按新视图重载
+
+### Post-Phase-6：WP1 插件平台治理增强
+
+状态：已完成并已提交主线
+
+已落地：
+
+- 发现阶段已增加插件依赖治理，依赖不满足的插件不会进入程序集装载阶段
+- 插件状态机已正式区分 `Installed / Enabled / Disabled / Uninstalled` 语义
+- 统一插件包生命周期已补齐 `uninstall`，并已贯通 `PluginOps` CLI、管理脚本与 `DELETE /api/plugin-ops/modules/{moduleId}`
+- install 阶段已补依赖预检 warning，enable 阶段已补依赖强校验，uninstall 阶段已补被依赖 warning
+- 已实现默认保留最近 2 个版本的版本清理策略，并在 install / enable 后触发旧版本清理
+- HostApi / Web 路径的 rollback 已补齐与 CLI 对等的原子恢复保护，控制器级失败注入已验证受控失败与状态恢复
+
+已验证：
+
+- `dotnet build tests/Kernel.Tests/Kernel.Tests.csproj -nr:false -v minimal`
+- `dotnet build tools/PluginOps/PluginOps.csproj -nr:false -v minimal`
+- `dotnet build apps/host-api/HostApi.csproj -nr:false -v minimal`
+- `dotnet test tests/Kernel.Tests/Kernel.Tests.csproj --filter "FullyQualifiedName~PluginRuntimeAssemblyLoaderTests|FullyQualifiedName~PluginOperationsAdminServiceTests|FullyQualifiedName~UnifiedPluginPackageLifecycleOperationsTests|FullyQualifiedName~UnifiedPluginPackageInstallerTests|FullyQualifiedName~PluginOperationsLifecycleTests|FullyQualifiedName~PluginOperationsControllerTests|FullyQualifiedName~PluginOpsIntegrationTests" -nr:false -v minimal`
+- 上述 WP1 相关定向测试共 `124` 个全部通过
+- `plugin-ops` shell 定向 vitest `6` 个全部通过，`@icp-platform/shell` 构建通过
+
+当前边界：
+
+- 依赖治理当前仍是模块级语义，不支持 version-aware dependency
+- 运维页已补齐 uninstall 动作，并以 warning tone 展示 install / uninstall 的治理提示
+- rollback 与 enable / disable / uninstall 均已具备 HostApi 控制器级失败注入验证与状态恢复覆盖
+
+对应文档：
+
+- [designs/plugin-governance-enhancement-design.md](designs/plugin-governance-enhancement-design.md)
+- [verification/plugin-governance-enhancement-verification.md](verification/plugin-governance-enhancement-verification.md)

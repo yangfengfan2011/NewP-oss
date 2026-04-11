@@ -172,6 +172,38 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     }
 
     [Fact]
+    public async Task Enable_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    {
+        var armFailure = false;
+        using var factory = new TestWebApplicationFactory
+        {
+            RuntimeViewMaterializerFactory = stateStore =>
+                CreateMaterializerWithConditionalSwapFailure(stateStore, () => armFailure, 4, "Simulated public swap failure")
+        };
+        using var client = await CreateAuthenticatedClientAsync(factory);
+
+        await InstallModuleViaApiAsync(factory, client, "Audit", "2.0.0");
+
+        armFailure = true;
+        var response = await client.PostAsJsonAsync("/api/plugin-ops/modules/Audit/enable", new { version = "2.0.0" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var dto = doc.RootElement;
+        Assert.Equal("Failed", dto.GetProperty("status").GetString());
+        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Audit");
+        Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
+        var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
+        using var moduleDoc = JsonDocument.Parse(moduleJson);
+        var moduleDto = moduleDoc.RootElement;
+        Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
+        Assert.Equal("1.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
+    }
+
+    [Fact]
     public async Task Disable_Returns401_WhenNotAuthenticated()
     {
         using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -198,6 +230,36 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         using var client = await CreateAuthenticatedClientAsync();
         var response = await client.PostAsync("/api/plugin-ops/modules/NonExistent/disable", null);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Disable_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    {
+        var armFailure = false;
+        using var factory = new TestWebApplicationFactory
+        {
+            RuntimeViewMaterializerFactory = stateStore =>
+                CreateMaterializerWithConditionalSwapFailure(stateStore, () => armFailure, 4, "Simulated public swap failure")
+        };
+        using var client = await CreateAuthenticatedClientAsync(factory);
+
+        armFailure = true;
+        var response = await client.PostAsync("/api/plugin-ops/modules/Audit/disable", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var dto = doc.RootElement;
+        Assert.Equal("Failed", dto.GetProperty("status").GetString());
+        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Audit");
+        Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
+        var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
+        using var moduleDoc = JsonDocument.Parse(moduleJson);
+        var moduleDto = moduleDoc.RootElement;
+        Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
+        Assert.Equal("1.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
     }
 
     [Fact]
@@ -239,6 +301,43 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         var response = await client.DeleteAsync("/api/plugin-ops/modules/Guarded");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    {
+        var armFailure = false;
+        using var factory = new TestWebApplicationFactory
+        {
+            RuntimeViewMaterializerFactory = stateStore =>
+                CreateMaterializerWithConditionalSwapFailure(stateStore, () => armFailure, 4, "Simulated public swap failure")
+        };
+        using var client = await CreateAuthenticatedClientAsync(factory);
+
+        await InstallModuleViaApiAsync(factory, client, "Cleanup", "1.0.0");
+
+        armFailure = true;
+        var response = await client.DeleteAsync("/api/plugin-ops/modules/Cleanup");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var dto = doc.RootElement;
+        Assert.Equal("Failed", dto.GetProperty("status").GetString());
+        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Cleanup");
+        Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
+        var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
+        using var moduleDoc = JsonDocument.Parse(moduleJson);
+        var moduleDto = moduleDoc.RootElement;
+        Assert.Equal("Installed", moduleDto.GetProperty("status").GetString());
+        Assert.Null(moduleDto.GetProperty("currentEnabledVersion").GetString());
+        var installedVersions = moduleDto.GetProperty("installedVersions")
+            .EnumerateArray()
+            .Select(v => v.GetString())
+            .ToList();
+        Assert.Contains("1.0.0", installedVersions);
     }
 
     [Fact]

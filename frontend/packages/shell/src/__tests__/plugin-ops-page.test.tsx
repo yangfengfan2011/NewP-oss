@@ -57,6 +57,7 @@ describe('PluginOperationsCenter', () => {
           lastError: null,
           canEnable: true,
           canDisable: true,
+          canUninstall: false,
           canRollback: false,
         },
       ]))
@@ -85,6 +86,7 @@ describe('PluginOperationsCenter', () => {
           lastError: null,
           canEnable: true,
           canDisable: true,
+          canUninstall: false,
           canRollback: true,
         },
       ]));
@@ -157,5 +159,74 @@ describe('PluginOperationsCenter', () => {
     });
     expect(container.textContent).toContain('安装成功');
     expect(container.textContent).toContain('1.0.0, 1.1.0');
+  });
+  it('shows warning tone for success messages and exposes uninstall actions', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([
+        {
+          moduleId: 'Cleanup',
+          displayName: '娓呯悊妯″潡',
+          installedVersions: ['1.0.0'],
+          currentEnabledVersion: null,
+          status: 'Installed',
+          lastOperation: 'Install',
+          lastError: null,
+          canEnable: true,
+          canDisable: false,
+          canUninstall: true,
+          canRollback: false,
+        },
+      ]))
+      .mockResolvedValueOnce(jsonResponse({
+        moduleId: 'Cleanup',
+        version: null,
+        status: 'Uninstalled',
+        message: 'Uninstalled with warning: other installed plugins still depend on Cleanup.',
+      }))
+      .mockResolvedValueOnce(jsonResponse([
+        {
+          moduleId: 'Cleanup',
+          displayName: '娓呯悊妯″潡',
+          installedVersions: ['1.0.0'],
+          currentEnabledVersion: null,
+          status: 'Installed',
+          lastOperation: 'Install',
+          lastError: null,
+          canEnable: true,
+          canDisable: false,
+          canUninstall: true,
+          canRollback: false,
+        },
+      ]));
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<PluginOperationsCenter />);
+    });
+    await flushUi();
+
+    const uninstallButton = Array.from(container.querySelectorAll('button')).find(
+      button => button.textContent?.includes('卸载'),
+    );
+    expect(uninstallButton).toBeDefined();
+
+    await act(async () => {
+      uninstallButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/plugin-ops/modules/Cleanup',
+      expect.objectContaining({
+        method: 'DELETE',
+        credentials: 'include',
+      }),
+    );
+
+    const notice = container.querySelector('p[data-tone]');
+    expect(notice?.getAttribute('data-tone')).toBe('warning');
+    expect(container.textContent).toContain('Uninstalled with warning');
   });
 });

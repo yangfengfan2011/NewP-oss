@@ -14,6 +14,7 @@ export interface PluginModuleStatus {
   lastError: string | null;
   canEnable: boolean;
   canDisable: boolean;
+  canUninstall: boolean;
   canRollback: boolean;
 }
 

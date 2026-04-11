@@ -1,0 +1,13 @@
+{
+  "defaultLanguage": "zhs",
+  "supportedLanguages": [
+    {
+      "code": "zhs",
+      "displayName": "简体中文"
+    },
+    {
+      "code": "en",
+      "displayName": "English"
+    }
+  ]
+}

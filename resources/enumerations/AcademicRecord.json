@@ -1,0 +1,29 @@
+{
+  "name": "AcademicRecord",
+  "items": [
+    {
+      "name": "Primary"
+    },
+    {
+      "name": "Junior"
+    },
+    {
+      "name": "Senior"
+    },
+    {
+      "name": "JuniorCollege"
+    },
+    {
+      "name": "RegularCollege"
+    },
+    {
+      "name": "Master"
+    },
+    {
+      "name": "Doctor"
+    },
+    {
+      "name": "Other"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "TreeQueryControlType",
+  "items": [
+    {
+      "name": "Tree"
+    },
+    {
+      "name": "List"
+    },
+    {
+      "name": "TreeList"
+    },
+    {
+      "name": "ListTree"
+    }
+  ]
+}

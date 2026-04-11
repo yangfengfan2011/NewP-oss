@@ -1,0 +1,14 @@
+{
+  "name": "ObjectPermissionMode",
+  "items": [
+    {
+      "name": "Manual"
+    },
+    {
+      "name": "SetActorByWorkflow"
+    },
+    {
+      "name": "SetAgentByWorkflow"
+    }
+  ]
+}

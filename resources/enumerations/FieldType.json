@@ -1,0 +1,11 @@
+{
+  "name": "FieldType",
+  "items": [
+    {
+      "name": "date"
+    },
+    {
+      "name": "datetime"
+    }
+  ]
+}

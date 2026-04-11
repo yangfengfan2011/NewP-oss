@@ -1,0 +1,11 @@
+{
+  "name": "MenuSize",
+  "items": [
+    {
+      "name": "Big"
+    },
+    {
+      "name": "Small"
+    }
+  ]
+}

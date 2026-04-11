@@ -1,0 +1,14 @@
+{
+  "name": "ModelFieldInherit",
+  "items": [
+    {
+      "name": "Innate"
+    },
+    {
+      "name": "Show"
+    },
+    {
+      "name": "Hidden"
+    }
+  ]
+}

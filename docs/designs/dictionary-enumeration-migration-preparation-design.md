@@ -35,15 +35,47 @@ Phase 5 已完成 `.setting` 文件作为首个旧资产迁移 POC，验证了"�
 
 本设计涉及的新平台目标模块：
 
-- `server/modules/ConfigCenter`（配置项承载）
+- `resources/localization/languages.json`（启用语言与默认语言入口）
+- `resources/localization/`（静态多语言资源，权威来源）
+- `resources/enumerations/`（静态枚举结构清单，权威来源）
+- `frontend/packages/core/`（后续最小 i18n 基座接入点）
 
 ## 5. 设计约束
 
 - 遵循 Phase 5 形成的迁移模板："样本冻结 → 规则冻结 → 执行冻结 → 验证冻结"。
-- 导入路径通过受控 API 执行，不使用自动扫描或批量注入。
-- 导入结果应可通过现有 `ConfigCenter` 查询 API 验证。
-- 不改变 `ConfigCenter` 现有模型定义，如果需要扩展模型应在实施阶段单独设计。
+- 转换路径通过受控脚本执行，不使用自动扫描或批量注入。
+- 转换结果应可通过静态资源目录、结构校验和最小 i18n smoke 验证。
+- 启用语言集合必须由独立配置文件决定，而不是在脚本或模型里硬编码。
 - 迁移规则遵循"尽量保持旧资产语义，只在明显不合理时受控升级"的原则。
+
+### 5.1 AI-first 最小检查补充
+
+- 入口在哪里：当前准备阶段的设计入口是本文档，当前协作入口是 `docs/current-status.md` 与 `docs/phases/post-phase-6-stage-map.md` 中的 `WP4 Stage 8`；正式实施的执行入口草案见 `6.4` 与 `7.4`。
+- 边界在哪里：本设计只覆盖样本冻结、映射规则草案、执行路径草案、验证方案草案与正式实施准入条件，不包含导入代码实现、批量导入、DB Enumeration、多语言模型扩展和高复杂元数据迁移。
+- 如何验证：准备阶段通过样本存在性检查、设计与协作文档核对、最小静态资源路径检查、`ConfigCenter` 定向测试、`validate-ai-first-design.ps1` 校验，以及后续独立的 Stage 8 准入复核记录来验证是否具备进入正式实施的条件。
+- 失败信号是什么：若首批冻结样本无法在当前协作范围内复核、语言配置入口未冻结、多语言策略未明确、或新增转换路径无法与 Phase 5 Setting POC 模板对齐，则 Stage 8 结论必须为“暂不可进入实现”。
+- 如何回滚：准备阶段的回滚方式见第 `10` 节；若本轮只新增 Stage 8 文档记录，则删除对应 Stage 8 文档补充即可回退到本设计原状。
+
+### 5.2 Stage 8 当前阶段性结论
+
+- `Dictionary` 与 `Enumeration` 的权威多语言数据不再以 `ConfigCenter + ConfigItem` 作为正式目标形态。
+- 当前正式目标形态改为：
+  - `Dictionary`：源码受控的静态 i18n 资源文件
+  - `Enumeration`：源码受控的静态枚举结构清单 + 配套 i18n 资源文件
+- `ConfigCenter` 保留其配置中心职责，但不再作为 `Dictionary / Enumeration` 权威多语言数据的主承载仓库。
+- `ValueListItem` 保留其当前值列表职责，不作为本轮 `Dictionary / Enumeration` 首批导入目标。
+
+### 5.3 多语言策略修正结论
+
+- 不能把 `Dictionary / Enumeration` 的正式承载设计锁死为 `zhs/en` 双语。
+- `zhs/en` 当前只能作为首批样本验证和映射讨论的观察切片，不能被当成长期数据模型的上限。
+- 正式设计改为：多语言资源以任意 `LanguageRef` 为键，按静态资源文件存放，不再把 `Value / Description` 当作权威多语言存储。
+- 运行时启用哪些语言，由 `resources/localization/languages.json` 决定；新增语言时，先改配置，再重跑转换。
+- `resources/localization/languages.json` 的首批初始值参考 `D:/Github/ICP-X/OldP/Runtime/1_Server/Config/Apps.language`，当前冻结为 `zhs` 与 `en`，但配置结构不限制后续扩展。
+- 当前推荐形式：
+  - `Dictionary`：`resources/localization/<language>/dictionary/<context>.json`
+  - `Enumeration`：`resources/enumerations/<enumeration-name>.json` + `resources/localization/<language>/enumerations/<enumeration-name>.json`
+- `ConfigCenter` 如果未来仍需消费这些数据，应通过受控投影或只读适配层接入，而不是回到“数据库权威来源”模式。
 
 ## 6. Dictionary 资产
 
@@ -92,48 +124,39 @@ Dictionary 文件（`.dic`）为 XML 格式，结构如下：
 
 | 旧字段 | 新字段 | 映射规则 |
 |--------|--------|----------|
-| `Context.Name` | `ConfigItem.Group` | 格式为 `Dictionary/{ContextName}` |
-| `Label.Name` | `ConfigItem.Key` | 格式为 `{ContextName}.{LabelName}` |
-| `LocalizedLabel` 内容（`zhs`） | `ConfigItem.Value` | 取中文简体作为主值 |
-| `LocalizedLabel` 内容（`en`） | `ConfigItem.Description` | 取英文作为描述 |
-| 文件名 | `ConfigItem.DisplayName` | 使用 `LabelName` 作为显示名 |
-| 固定值 `ConfigCenter` | `ConfigItem.ModuleId` | 与 Setting 导入一致 |
+| `Context.Name` | 资源命名空间 | 格式为 `dictionary/{ContextName}` |
+| `Label.Name` | 资源键 | 格式为 `{ContextName}.{LabelName}` |
+| `LocalizedLabel.LanguageRef` | 语言目录名 | 直接保留为 `<language>`；不再只限于 `zhs/en` |
+| `LocalizedLabel` 内容 | 资源值 | 写入对应语言文件中的键值对 |
 
-待实施阶段确认的问题：
+当前已知约束：
 
-- 多语言值是否只取 `zhs` 作为主值，还是需要扩展 `ConfigItem` 模型以支持多语言字段。如果需要扩展，应先补模型扩展设计。
-- `IsWeb` 属性是否需要映射，当前草案建议忽略。
+- `IsWeb` 属性首批建议忽略，不作为资源值的一部分
+- 首批实现只要求 `Common.dic` 与 `Platform.dic` 成功转换为静态资源，不要求一次性接入全部 `.dic` 文件
+- 若某个 `Label` 缺少部分语言，只为现有语言产出资源项，不人为补齐伪翻译
 
 ### 6.4 执行路径草案
 
-推荐新增 API 端点：
+推荐新增转换入口：
 
-- `POST /api/config/import/dictionary`
-
-请求格式：
-
-```json
-{
-  "moduleId": "ConfigCenter",
-  "sourceFileName": "Common.dic",
-  "xmlContent": "<DictionarySerializer>...</DictionarySerializer>"
-}
-```
+- `scripts/migration/dictionary-to-i18n.<ps1|py>`
 
 执行流程：
 
-1. 接收 `.dic` 文件的 XML 内容。
+1. 读取冻结的 `.dic` 文件内容。
 2. 解析 `Context` → `Label` → `LocalizedLabel` 结构。
-3. 按映射规则生成 `ConfigItem` 集合。
-4. 写入 `ConfigCenter` 仓储（同 Key 覆盖）。
-5. 返回导入结果（成功/失败/跳过的明细）。
+3. 按语言分组生成静态资源文件。
+4. 输出到受控目录 `resources/localization/<language>/dictionary/`。
+5. 仅为 `resources/localization/languages.json` 中已启用的语言输出资源；遇到未启用的 `LanguageRef` 时记录 warning。
+6. 返回转换结果（成功/失败/跳过的明细）。
 
 ### 6.5 验证方案草案
 
-- 导入后通过 `GET /api/config/{key}` 查询单个标签。
-- 通过 `GET /api/config/grouped` 查询 `Dictionary/Common` 或 `Dictionary/Platform` 分组。
-- 验证导入数量与源文件中的 `Label` 节点数一致。
-- 验证中文值和英文描述映射正确。
+- 转换后检查 `resources/localization/<language>/dictionary/` 下是否生成目标文件。
+- 验证 `resources/localization/languages.json` 中的启用语言与生成目录一致。
+- 验证生成键数量与源文件中的 `Label` 节点数量一致。
+- 验证 `Common.SystemTitle`、`Common.OK` 等代表性键在 `zhs/en` 中值正确。
+- 验证遇到未配置的新 `LanguageRef` 时，转换器会记录 warning，而不是静默丢弃或偷偷创建未知目录。
 
 ## 7. Enumeration 资产
 
@@ -189,12 +212,10 @@ Dictionary 文件（`.dic`）为 XML 格式，结构如下：
 
 | 旧字段 | 新字段 | 映射规则 |
 |--------|--------|----------|
-| `Enumeration.Name` | `ConfigItem.Group` | 格式为 `Enumeration/{EnumerationName}` |
-| `EnumerationItem.Name` | `ConfigItem.Key` | 格式为 `{EnumerationName}.{ItemName}` |
-| `.dic` 中对应 `LocalizedLabel`（`zhs`） | `ConfigItem.Value` | 取中文简体显示文本 |
-| `.dic` 中对应 `LocalizedLabel`（`en`） | `ConfigItem.Description` | 取英文作为描述 |
-| `EnumerationItem.Name` | `ConfigItem.DisplayName` | 使用枚举项名称 |
-| 固定值 `ConfigCenter` | `ConfigItem.ModuleId` | 与 Setting/Dictionary 导入一致 |
+| `Enumeration.Name` | 枚举清单名 | 格式为 `<EnumerationName>` |
+| `EnumerationItem.Name` | 枚举项键 | 直接写入静态枚举清单 |
+| `.dic` 中 `LocalizedLabel.LanguageRef` | 语言目录名 | 直接保留为 `<language>`；不再只限于 `zhs/en` |
+| `.dic` 中 `LocalizedLabel` 内容 | 枚举本地化资源值 | 写入对应语言文件中的 `{EnumerationName}.{ItemName}` |
 
 #### `.enum` 与 `.dic` 不完全对齐的处理规则
 
@@ -202,57 +223,45 @@ Dictionary 文件（`.dic`）为 XML 格式，结构如下：
 
 | 场景 | 处理方式 | 理由 |
 |------|----------|------|
-| `.enum` 中有项，`.dic` 中无对应标签 | 正常导入。`Value` 使用 `ItemName` 作为 fallback，`Description` 留空。 | 枚举项定义是权威来源，缺翻译不阻塞导入。 |
+| `.enum` 中有项，`.dic` 中无对应标签 | 正常生成静态枚举结构；本地化资源缺失时由消费侧回退到 `ItemName`，并记录 warning。 | `.enum` 是结构定义的权威来源，缺翻译不阻塞结构落地。 |
 | `.dic` 中有标签，`.enum` 中无对应项 | 跳过该标签，记录警告日志。 | `.enum` 是结构定义的权威来源，孤立的翻译标签不产生新的枚举项。 |
-| `.dic` 中有 `zhs` 但无 `en` | 正常导入。`Value` 使用 `zhs` 文本，`Description` 留空。 | 中文文本是主值，英文描述为可选。 |
-| `.dic` 中有 `en` 但无 `zhs` | 正常导入。`Value` 使用 `en` 文本作为 fallback，`Description` 使用同一 `en` 文本。 | 有翻译优于无翻译，即使主语言缺失也应尽量保留可读值。 |
-| `.dic` 中有其他语言（非 `zhs`/`en`） | 忽略。首批只处理 `zhs` 和 `en` 两种语言。 | 控制首批范围，避免多语言扩展影响模型。 |
+| `.dic` 中缺少默认语言，但有其他已启用语言 | 正常生成已有语言资源，并记录 warning。 | 配置文件决定启用语言集合，缺少默认语言不应阻塞转换。 |
+| `.dic` 中出现未在 `languages.json` 启用的语言 | 跳过该语言，记录 warning；如需启用，先更新 `resources/localization/languages.json` 再重跑转换。 | 语言集合由配置文件显式决定，但模型不锁死为双语。 |
 | 同一 `EnumerationItem` 在 `.dic` 中有多个匹配标签 | 使用精确匹配 `{EnumerationName}{ItemName}` 的标签。如果仍有多个，取第一个。 | 命名规则是约定唯一的，多个匹配说明源数据异常，取第一个并记录警告。 |
 
 这些规则在实施阶段必须在导入代码中严格执行，对应的单元测试必须覆盖上述每个场景。
 
-待实施阶段确认的问题：
+当前已知约束：
 
-- 枚举项是否需要保留排序信息（当前 `.enum` 文件中项的顺序隐含排序语义）。
-- 枚举项之间的层级关系（`PEID`）是否需要在 `ConfigItem` 中表达，当前草案建议首批不处理层级。
-- `ConfigItem` 模型是否需要增加"类型"标记以区分 Setting / Dictionary / Enumeration 来源，当前草案建议通过 `Group` 前缀区分。
+- 首批不保留排序信息；如后续确需显式排序，再单独开设计
+- 首批不处理层级关系（`PEID`）
+- 首批只要求静态枚举结构清单与本地化资源落地，不要求额外的数据库投影
+- 如后续需要运行时查询 API，应由静态清单投影生成，而不是反过来把数据库当权威源
 
 ### 7.4 执行路径草案
 
-推荐新增 API 端点：
+推荐新增转换入口：
 
-- `POST /api/config/import/enumeration`
-
-请求格式：
-
-```json
-{
-  "moduleId": "ConfigCenter",
-  "enumSourceFileName": "Enumerations.enum",
-  "enumXmlContent": "<root>...</root>",
-  "dicSourceFileName": "Enumerations.dic",
-  "dicXmlContent": "<DictionarySerializer>...</DictionarySerializer>"
-}
-```
+- `scripts/migration/enumeration-to-static-resources.<ps1|py>`
 
 执行流程：
 
-1. 接收 `.enum` 文件和对应 `.dic` 文件的 XML 内容。
+1. 读取冻结的 `.enum` 文件与对应 `.dic` 文件。
 2. 解析 `.enum` 中的 `Enumeration` → `EnumerationItem` 结构。
 3. 从 `.dic` 中查找 `{EnumerationName}{ItemName}` 对应的本地化文本。
-4. 按映射规则生成 `ConfigItem` 集合。
-5. 写入 `ConfigCenter` 仓储（同 Key 覆盖）。
-6. 返回导入结果。
+4. 输出静态枚举结构清单到 `resources/enumerations/`。
+5. 仅为 `resources/localization/languages.json` 中已启用的语言输出本地化资源到 `resources/localization/<language>/enumerations/`。
+6. 对未启用语言记录 warning。
+7. 返回转换结果。
 
 ### 7.5 验证方案草案
 
-- 导入后通过 `GET /api/config/grouped` 查询 `Enumeration/Gender` 等分组。
-- 验证枚举项数量与源 `.enum` 文件中的 `EnumerationItem` 数一致。
-- 验证本地化文本映射正确（如 `Gender.Female` → `女`）。
-- 验证缺少本地化文本的枚举项以 `ItemName` 作为 fallback 值。
-- 验证 `.dic` 中有标签但 `.enum` 中无对应项时，该标签被跳过且导入结果中包含对应警告。
-- 验证同一 `EnumerationItem` 在 `.dic` 中有多个匹配标签时，取第一个且导入结果中包含对应警告。
-- 验证仅有 `en` 而无 `zhs` 的枚举项，`Value` 使用 `en` 文本作为 fallback。
+- 验证 `resources/enumerations/` 下生成的结构清单数量与源 `.enum` 中的 `Enumeration` 数一致。
+- 验证 `resources/localization/languages.json` 中的启用语言与生成目录一致。
+- 验证 `Gender`、`MessageState` 等代表性枚举的项数量与源文件一致。
+- 验证 `resources/localization/<language>/enumerations/` 中的本地化键值正确。
+- 验证 `.dic` 中有未启用的 `LanguageRef` 时，转换器会输出 warning。
+- 验证 `.dic` 中有标签但 `.enum` 中无对应项时，该标签被跳过且结果中包含 warning。
 
 ## 8. 正式实施准入条件
 
@@ -260,15 +269,22 @@ Dictionary 文件（`.dic`）为 XML 格式，结构如下：
 
 1. **WP1–WP3 收口**：平台治理、AI-first 标准和文档一致性工作包已完成或达到可接受状态。
 2. **样本审阅**：首批冻结样本已经过人工审阅，确认无敏感数据、结构符合预期。
-3. **模型兼容确认**：确认 `ConfigItem` 模型无需扩展即可承载 Dictionary 和 Enumeration 映射结果，或已有对应的模型扩展设计。
-4. **多语言策略确认**：确认多语言值的处理方式（只取主语言 vs 扩展模型）。
-5. **导入路径与 Setting POC 对齐**：确认新增 API 端点遵循 Phase 5 形成的导入模板，不引入新的特殊机制。
+3. **目标形态确认**：确认 `Dictionary` 与 `Enumeration` 的权威目标形态分别为静态资源与静态枚举清单，而不是继续默认落到数据库配置项。
+4. **多语言策略确认**：确认正式资源模型可以表达任意 `LanguageRef`，而不是把承载模型锁死为 `zhs/en`。
+5. **语言配置入口确认**：确认启用语言集合由 `resources/localization/languages.json` 决定，并已有首批冻结内容。
+6. **执行路径与 Phase 5 模板对齐**：确认本轮仍遵循“样本冻结 → 规则冻结 → 执行冻结 → 验证冻结”，即使具体执行入口从 API 转成静态转换脚本，也不引入隐式扫描或不可复跑流程。
+
+### 8.1 当前 Stage 8 收口结论
+
+- 当前样本审阅、目标形态、多语言承载策略与执行路径都已形成明确方向。
+- `WP4` 可进入正式实施准备阶段，但下一包应优先从 `Dictionary` 的静态资源转换与最小 i18n 基座开始，而不是回到数据库导入实现。
+- 建议下一包改定义为：`Stage 9：Dictionary 静态资源转换与最小 i18n 基座`
 
 ## 9. 风险
 
 | 风险 | 影响 | 控制方式 |
 |------|------|----------|
-| `ConfigItem` 模型无法自然表达多语言值 | 映射规则需要调整，可能需先补模型扩展设计 | 在准入条件中要求先确认模型兼容性 |
+| 当前前端尚无现成 i18n 基座 | Stage 9 需要同时落最小资源加载能力 | 将最小 i18n 基座明确纳入 Stage 9 范围，而不是在 Stage 8 继续空转 |
 | Dictionary 文件数量多（20+），首批范围可能被要求扩大 | 准备文档与实际实施范围不一致 | 严格限制首批只选 2 个文件，后续按波次扩展 |
 | 枚举层级关系在平铺为 `ConfigItem` 时丢失语义 | 后续使用方无法还原层级结构 | 首批不处理层级，后续如有需求再补设计 |
 | 旧 `.dic` 文件编码不统一 | 中文值在导入过程中出现乱码（Phase 5 已暴露类似风险） | 实施阶段需显式指定 UTF-8 编码处理 |
@@ -287,6 +303,6 @@ Dictionary 文件（`.dic`）为 XML 格式，结构如下：
 |----------|-------------|---------------------|----------------------|
 | 样本冻结 | `CompanyRuleSetting.setting` | `Common.dic`、`Platform.dic` | `Enumerations.enum` + `Enumerations.dic` |
 | 映射规则 | Key → Key, Value → Value | Label → Key, LocalizedLabel → Value | EnumItem → Key, dic → Value |
-| 执行路径 | `POST /api/config/import/setting` | `POST /api/config/import/dictionary` | `POST /api/config/import/enumeration` |
-| 验证方式 | 按 Key 查询、按 Group 查询 | 按 Key 查询、按 Group 查询 | 按 Key 查询、按 Group 查询 |
+| 执行路径 | `POST /api/config/import/setting` | `scripts/migration/dictionary-to-i18n.<ps1|py>` | `scripts/migration/enumeration-to-static-resources.<ps1|py>` |
+| 验证方式 | 按 Key 查询、按 Group 查询 | 静态资源目录检查、键数量核对、语言配置核对 | 静态清单检查、本地化资源核对、语言配置核对 |
 | 覆盖策略 | 同 Key 覆盖 | 同 Key 覆盖 | 同 Key 覆盖 |

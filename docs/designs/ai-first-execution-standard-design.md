@@ -222,7 +222,7 @@
 | `docs/architecture/ai-first-platform-criteria.md` | AI-first 判定准则与否决信号 | 本标准直接引用并扩展为统一执行基线中的 8 项准则与否决信号 |
 | `docs/architecture/componentization-guardrails.md` | 组件化护栏，Host / Shell / 模块的接入边界 | 本标准在模块边界部分与其保持一致 |
 | `docs/designs/detailed-design-template.md` | 设计文档结构模板 | 本标准补充最小检查清单，作为模板的必答补充 |
-| `docs/collaboration/github-copilot-working-mode.md` | Copilot 协作模式与文件边界 | 本标准定义执行层面的判断口径，协作模式定义角色与流程 |
+| `docs/history/collaboration/github-copilot-working-mode.md` | 历史 Copilot 协作模式与文件边界 | 本标准定义执行层面的判断口径，历史协作文档保留旧角色与流程作为参考 |
 
 各文档的规则在各自范围内继续有效。在 AI-first 执行维度上，如果出现口径不一致，以本标准为准，并同步推动对应源文档的修订来消除分歧，不在执行过程中临场裁决。
 

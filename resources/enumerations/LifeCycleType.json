@@ -1,0 +1,11 @@
+{
+  "name": "LifeCycleType",
+  "items": [
+    {
+      "name": "Workflow"
+    },
+    {
+      "name": "Stage"
+    }
+  ]
+}

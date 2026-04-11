@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
-import { AuthorizationProvider } from '@icp-platform/core';
+import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlatformProvider } from './contexts/PlatformContext';
 import { PermissionGuard } from './components/PermissionGuard';
@@ -9,6 +9,12 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import { shellUiConfig } from './config/uiConfig';
+import {
+  dictionaryCatalogs,
+  dictionaryLanguageConfig,
+  enumerationCatalogs,
+  enumerationDefinitions,
+} from './localization/catalogs';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -93,18 +99,26 @@ function App() {
 
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <PlatformProvider
-          uiConfig={shellUiConfig}
-          shellView={shellView}
-          setShellView={setShellView}
-          canSwitchShellView={canSwitchShellView}
-        >
-          <AuthorizationGate>
-            <AppRoutes />
-          </AuthorizationGate>
-        </PlatformProvider>
-      </AuthProvider>
+      <LocalizationProvider
+        defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
+        supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
+        catalogs={dictionaryCatalogs}
+        enumerationDefinitions={enumerationDefinitions}
+        enumerationCatalogs={enumerationCatalogs}
+      >
+        <AuthProvider>
+          <PlatformProvider
+            uiConfig={shellUiConfig}
+            shellView={shellView}
+            setShellView={setShellView}
+            canSwitchShellView={canSwitchShellView}
+          >
+            <AuthorizationGate>
+              <AppRoutes />
+            </AuthorizationGate>
+          </PlatformProvider>
+        </AuthProvider>
+      </LocalizationProvider>
     </BrowserRouter>
   );
 }

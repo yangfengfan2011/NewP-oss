@@ -1,0 +1,11 @@
+{
+  "name": "ActionRuleConditionOperator",
+  "items": [
+    {
+      "name": "AND"
+    },
+    {
+      "name": "OR"
+    }
+  ]
+}

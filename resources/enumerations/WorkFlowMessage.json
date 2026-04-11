@@ -1,0 +1,11 @@
+{
+  "name": "WorkFlowMessage",
+  "items": [
+    {
+      "name": "CURRENTUSER"
+    },
+    {
+      "name": "PROMOTER"
+    }
+  ]
+}

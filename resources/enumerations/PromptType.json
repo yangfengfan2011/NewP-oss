@@ -1,0 +1,11 @@
+{
+  "name": "PromptType",
+  "items": [
+    {
+      "name": "NORMAL"
+    },
+    {
+      "name": "CONFIRM"
+    }
+  ]
+}

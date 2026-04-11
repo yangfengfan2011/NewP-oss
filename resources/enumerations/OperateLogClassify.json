@@ -1,0 +1,11 @@
+{
+  "name": "OperateLogClassify",
+  "items": [
+    {
+      "name": "ThreeRole"
+    },
+    {
+      "name": "Normal"
+    }
+  ]
+}

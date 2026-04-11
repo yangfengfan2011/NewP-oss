@@ -25,7 +25,7 @@
 - `docs/architecture/plugin-runtime-loading.md`
 - `docs/architecture/plugin-compatibility-policy.md`
 - `docs/guides/unified-plugin-package-operations.md`
-- `docs/collaboration/github-copilot-working-mode.md`
+- `docs/collaboration/current-collaboration-mode.md`
 
 ## 4. 允许修改的文件
 

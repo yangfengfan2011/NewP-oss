@@ -100,19 +100,21 @@
 
 ## 9. collaboration
 
-面向 Codex / Claude / GitHub Copilot 协作流程的执行手册。
+面向当前主线程协作方式、评审清单与工作包的执行入口。
 
 - [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
-- [collaboration/claude-code-第二阶段执行手册.md](collaboration/claude-code-第二阶段执行手册.md)
-- [collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)
-- [collaboration/post-phase-6-copilot-stage-map.md](collaboration/post-phase-6-copilot-stage-map.md)
 - [collaboration/codex-review-checklist.md](collaboration/codex-review-checklist.md)
 - [collaboration/work-packages/wp1-plugin-governance-design.md](collaboration/work-packages/wp1-plugin-governance-design.md)
 - [collaboration/work-packages/wp2-ai-first-execution-standard-design.md](collaboration/work-packages/wp2-ai-first-execution-standard-design.md)
 - [collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md](collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md)
 - [collaboration/work-packages/wp3-post-phase-6-status-alignment.md](collaboration/work-packages/wp3-post-phase-6-status-alignment.md)
+- [collaboration/work-packages/wp4-stage-8-admission-review.md](collaboration/work-packages/wp4-stage-8-admission-review.md)
 - [prompts/](prompts/)
 - [bootstrap/](bootstrap/)
+
+历史协作资料已移入：
+
+- [history/collaboration/README.md](history/collaboration/README.md)
 
 ## 10. superpowers
 
@@ -132,4 +134,4 @@
 - 详细设计入口：[designs/README.md](designs/README.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
 - 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
-- GitHub Copilot 协作入口：[collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)
+- 当前阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)

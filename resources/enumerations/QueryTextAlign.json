@@ -1,0 +1,14 @@
+{
+  "name": "QueryTextAlign",
+  "items": [
+    {
+      "name": "Left"
+    },
+    {
+      "name": "Right"
+    },
+    {
+      "name": "Center"
+    }
+  ]
+}

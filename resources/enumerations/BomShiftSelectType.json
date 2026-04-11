@@ -1,0 +1,11 @@
+{
+  "name": "BomShiftSelectType",
+  "items": [
+    {
+      "name": "rowShiftSelect"
+    },
+    {
+      "name": "shiftSelectVisible"
+    }
+  ]
+}

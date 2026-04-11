@@ -1,0 +1,10 @@
+{
+  "AcademicRecord.Junior": "初中",
+  "AcademicRecord.Other": "其它",
+  "AcademicRecord.JuniorCollege": "专科",
+  "AcademicRecord.RegularCollege": "本科",
+  "AcademicRecord.Master": "硕士",
+  "AcademicRecord.Primary": "小学",
+  "AcademicRecord.Senior": "高中",
+  "AcademicRecord.Doctor": "博士"
+}

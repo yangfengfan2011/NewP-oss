@@ -44,6 +44,14 @@
 - 当前实现允许内存仓储，但服务和 DTO 层要为后续数据库化保留稳定接口。
 - 敏感配置必须在查询响应中默认脱敏。
 
+### 5.1 AI-first 最小检查补充
+
+- 入口在哪里：`ConfigCenter` 的正式后端入口是 `server/modules/ConfigCenter/`，对外接口入口是 `GET/POST/PUT/DELETE /api/config` 及其子路由；`WP4` 首批迁移承载入口继续通过这里扩展。
+- 边界在哪里：`ConfigCenter` 负责统一配置项承载、查询与最小导入能力，不负责完整 i18n 平台、复杂审批发布、全量旧元数据收编，也不在本轮拆出独立字典中心或枚举中心。
+- 如何验证：通过 `tests/ConfigCenter.Tests`、后端构建、分组查询与敏感字段脱敏验证；当承接 `WP4` 首批迁移时，再叠加 Stage 8/9/10 的定向导入验证。
+- 失败信号是什么：如果配置项无法用现有 `ConfigItem` 稳定表达、模块边界被迫扩成新的大模型设计、或新增导入路径无法保持与 `Setting` POC 同一模板，则说明当前方案不再适合继续承载。
+- 如何回滚：若后续发现 `WP4` 首批迁移不适合继续共用 `ConfigCenter`，应只回退对应迁移设计与实现，不回退 `ConfigCenter` 已稳定的配置中心主干能力。
+
 ## 6. 总体方案
 
 采用“模块声明 schema + ConfigCenter 同步默认值 + 统一 CRUD 与分组查询”的方案：
@@ -196,8 +204,14 @@
 ## 13. 未决问题
 
 - 是否需要在下一阶段引入更明确的配置优先级规则，例如“tenant > environment > global”。
-- 字典和枚举是否继续共用 `ConfigCenter` 承载，还是拆出更独立的模型。
 - 配置变更是否在下一阶段接入 Audit 模块。
+
+### 13.1 阶段性决定与保留问题
+
+- `WP4` 首批 `Dictionary / Enumeration` 不再默认把 `ConfigCenter` 作为权威多语言数据仓库。
+- `ValueListItem` 仍不作为本轮 `Dictionary / Enumeration` 首批导入目标。
+- `ConfigCenter` 继续负责统一配置项承载；若未来需要消费 `Dictionary / Enumeration`，应优先通过静态资源或静态清单的受控投影接入。
+- `Dictionary` 更适合长期演进为静态 i18n 资源；`Enumeration` 更适合长期演进为静态结构清单 + 本地化资源，而不是数据库权威源。
 
 ## 14. 实施拆分建议
 

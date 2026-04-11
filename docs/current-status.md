@@ -281,6 +281,7 @@ AI-First 对齐：
 - [guides/unified-plugin-package-operations.md](guides/unified-plugin-package-operations.md)
 - [developer/external-plugin-development.md](developer/external-plugin-development.md)
 - [guides/external-plugin-debugging.md](guides/external-plugin-debugging.md)
+- [verification/phase-6-6-runtime-plugin-platform-verification.md](verification/phase-6-6-runtime-plugin-platform-verification.md)
 
 ### Phase 6.5：多数据库持久化（混合架构）
 
@@ -322,6 +323,7 @@ AI-First 对齐：
 - [superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md](superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md)
 - [architecture/ai-metadata-authoring-guide.md](architecture/ai-metadata-authoring-guide.md)
 - [guides/local-multi-db-container-setup.md](guides/local-multi-db-container-setup.md)
+- [verification/phase-6-5-multi-db-persistence-verification.md](verification/phase-6-5-multi-db-persistence-verification.md)
 
 ## 当前可用能力
 
@@ -361,22 +363,19 @@ AI-First 对齐：
 
 当前后续路线以平台治理和 AI-first 收口为优先，按以下工作包顺序推进：
 
-1. **WP3 文档与状态一致性治理**：让状态文档、计划文档、设计文档、验证记录形成统一口径。设计文档已产出（`designs/post-phase-6-status-alignment-design.md`）。
-2. **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
-3. **运维体验优化**：将 destructive-action 确认流程与 warning severity 统一到 shell 级交互规范中。
+1. **WP4 最小迁移连续性**：`Stage 10` 与后续“枚举消费层 UI / 接入”子包已完成并通过，当前冻结范围内的 `Dictionary + Enumeration` 静态资源转换与最小前端消费闭环都已形成。
 
 对应路线设计：
 
 - [designs/post-phase-6-governance-and-ai-first-roadmap-design.md](designs/post-phase-6-governance-and-ai-first-roadmap-design.md)
 
-### 文档链路已知缺口
+### 文档链路校准结论
 
-| 能力 | 缺口 |
-|------|------|
-| 多数据库持久化 Phase 6.5 | 缺独立验证文档 |
-| 插件运维中心 Phase 6.7 | 缺独立实现说明文档、缺独立验证文档 |
-
-这些缺口应由后续专项任务补齐。
+- `Phase 6.5` 已补齐独立验证文档：`verification/phase-6-5-multi-db-persistence-verification.md`
+- `Phase 6.6` 已补齐独立验证文档：`verification/phase-6-6-runtime-plugin-platform-verification.md`
+- `Phase 6.7` 已补齐独立实现说明与独立验证文档：
+  - `modules/plugin-ops-implementation.md`
+  - `verification/phase-6-7-plugin-operations-center-verification.md`
 
 ## AI-First 校准结论
 
@@ -422,6 +421,13 @@ AI-First 对齐：
 
 - 当前网页入口聚焦统一插件包已存在的运维动作，不包含源码一键打包、签名校验或更细粒度的多角色治理
 - 前端静态资源与运行时清单会随 install / enable / disable / uninstall / rollback 更新，但后端程序集若已在运行，仍可能需要重启宿主才能按新视图重载
+
+对应文档：
+
+- [superpowers/specs/2026-04-08-plugin-operations-center-v1-design.md](superpowers/specs/2026-04-08-plugin-operations-center-v1-design.md)
+- [modules/plugin-ops-implementation.md](modules/plugin-ops-implementation.md)
+- [guides/unified-plugin-package-operations.md](guides/unified-plugin-package-operations.md)
+- [verification/phase-6-7-plugin-operations-center-verification.md](verification/phase-6-7-plugin-operations-center-verification.md)
 
 ### Post-Phase-6：WP1 插件平台治理增强
 
@@ -481,8 +487,8 @@ AI-First 对齐：
 - 新增设计的最小标准路径已从“手工复制模板 + 手工登记”收敛为单一脚本入口
 - `scripts/new-design-doc.ps1` 已补上模板预校验，避免无效模板被直接创建并登记进 AI-first 目标集
 - `tests/Kernel.Tests` 已新增“无效模板不能创建也不能登记”的回归测试，补齐设计创建入口的健壮性验证
-- `docs/collaboration/current-collaboration-mode.md` 与 `docs/collaboration/github-copilot-working-mode.md` 已明确接入 `ai-first-execution-standard.md`，并把新增设计默认路径收敛为“创建 -> 校验 -> 受控门禁检查”
-- `docs/collaboration/post-phase-6-copilot-stage-map.md` 已显式把 AI-first 标准纳入后续工作包与阶段验收入口，不再把主线误导回已完成的 `WP1`
+- `docs/collaboration/current-collaboration-mode.md` 与 `docs/history/collaboration/github-copilot-working-mode.md` 已明确接入 `ai-first-execution-standard.md`，并把新增设计默认路径收敛为“创建 -> 校验 -> 受控门禁检查”
+- `docs/phases/post-phase-6-stage-map.md` 已显式把 AI-first 标准纳入后续工作包与阶段验收入口，不再把主线误导回已完成的 `WP1`
 - 新增 `docs/collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md`，将本轮收口范围、允许修改文件与验收标准固定成独立工作包
 
 已验证：
@@ -508,8 +514,8 @@ AI-First 对齐：
 
 - [architecture/ai-first-execution-standard.md](architecture/ai-first-execution-standard.md)
 - [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
-- [collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)
-- [collaboration/post-phase-6-copilot-stage-map.md](collaboration/post-phase-6-copilot-stage-map.md)
+- [history/collaboration/github-copilot-working-mode.md](history/collaboration/github-copilot-working-mode.md)
+- [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
 - [collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md](collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md)
 - [designs/ai-first-execution-standard-design.md](designs/ai-first-execution-standard-design.md)
 - [verification/ai-first-execution-standard-phase-1-verification.md](verification/ai-first-execution-standard-phase-1-verification.md)
@@ -519,3 +525,191 @@ AI-First 对齐：
 - [verification/ai-first-execution-standard-phase-5-verification.md](verification/ai-first-execution-standard-phase-5-verification.md)
 - [verification/ai-first-execution-standard-phase-6-verification.md](verification/ai-first-execution-standard-phase-6-verification.md)
 - [verification/ai-first-execution-standard-phase-7-verification.md](verification/ai-first-execution-standard-phase-7-verification.md)
+
+### Post-Phase-6：WP3 文档与状态一致性治理
+
+状态：已完成并收口
+
+已落地：
+
+- 第一轮已完成入口统一：
+  - `docs/designs/post-phase-6-status-alignment-design.md` 已更新为当前轮口径，不再把 `WP1`、`WP2` 写成“只有设计、尚未实现”
+  - `docs/current-status.md` 已切换到 `WP4 Stage 8` 作为当前下一步
+- `docs/phases/post-phase-6-stage-map.md` 已显式区分 `Stage 3 = WP3 设计` 与 `Stage 7 = WP3 状态对齐收口`
+  - `docs/collaboration/work-packages/wp3-post-phase-6-status-alignment.md` 已按真实范围更新允许修改文件、边界与验证方式
+  - `docs/verification/verification-matrix.md` 已补入 `WP2` 与 `WP3` 的定向验证入口
+- 第二轮已完成历史链路补齐：
+  - `Phase 6.5` 已补齐独立验证文档
+  - `Phase 6.6` 已补齐独立验证文档
+  - `Phase 6.7` 已补齐独立实现说明与独立验证文档
+  - `docs/collaboration/current-collaboration-mode.md` 已更新为 `WP3` 收口后的当前协作口径
+
+已验证：
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\post-phase-6-status-alignment-design.md`
+- `powershell -NoProfile -Command "Select-String -Path '.\docs\current-status.md','.\docs\collaboration\current-collaboration-mode.md','.\docs\phases\post-phase-6-stage-map.md','.\docs\verification\verification-matrix.md' -Pattern 'WP4 最小迁移连续性|已完成并收口|phase-6-5-multi-db-persistence-verification|phase-6-6-runtime-plugin-platform-verification|phase-6-7-plugin-operations-center-verification' | ForEach-Object { '{0}:{1}:{2}' -f $_.Path, $_.LineNumber, $_.Line.Trim() }"`
+- `powershell -NoProfile -Command "$paths = '.\docs\verification\phase-6-5-multi-db-persistence-verification.md','.\docs\verification\phase-6-6-runtime-plugin-platform-verification.md','.\docs\modules\plugin-ops-implementation.md','.\docs\verification\phase-6-7-plugin-operations-center-verification.md'; $missing = $paths | Where-Object { -not (Test-Path $_) }; if ($missing) { $missing; exit 1 }"`
+- `git status --short -- docs/current-status.md docs/collaboration/current-collaboration-mode.md docs/phases/post-phase-6-stage-map.md docs/verification/verification-matrix.md docs/modules/plugin-ops-implementation.md docs/verification/phase-6-5-multi-db-persistence-verification.md docs/verification/phase-6-6-runtime-plugin-platform-verification.md docs/verification/phase-6-7-plugin-operations-center-verification.md docs/verification/post-phase-6-status-alignment-phase-1-verification.md docs/verification/post-phase-6-status-alignment-phase-2-verification.md Plan.md`
+
+当前边界：
+
+- `Plan.md` 路线层口径已对齐，因此整个 `WP3` 过程中都未强行扩写
+- `WP3` 收口解决的是文档链路与协作入口一致性，不包含 `WP4` 的正式实施
+
+对应文档：
+
+- [designs/post-phase-6-status-alignment-design.md](designs/post-phase-6-status-alignment-design.md)
+- [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
+- [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
+- [collaboration/work-packages/wp3-post-phase-6-status-alignment.md](collaboration/work-packages/wp3-post-phase-6-status-alignment.md)
+- [verification/verification-matrix.md](verification/verification-matrix.md)
+- [verification/post-phase-6-status-alignment-phase-1-verification.md](verification/post-phase-6-status-alignment-phase-1-verification.md)
+- [verification/post-phase-6-status-alignment-phase-2-verification.md](verification/post-phase-6-status-alignment-phase-2-verification.md)
+
+### Post-Phase-6：WP4 Stage 8 实施准入复核
+
+状态：已完成并通过，当前结论为可进入实现
+
+已完成：
+
+- 已按 `docs/designs/dictionary-enumeration-migration-preparation-design.md` 第 8 节逐条复核 `Dictionary / Enumeration` 正式实施准入条件
+- 已核对 Stage 8 直接相关的设计入口、样本入口、规则入口、验证入口与协作入口
+- 已补齐 Stage 8 工作包入口与独立验证记录
+- 已补齐迁移准备设计中的 AI-first 显式检查项，避免 Stage 8 继续依赖口头补充
+
+已验证：
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\dictionary-enumeration-migration-preparation-design.md`
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter "FullyQualifiedName~LegacySettingImportServiceTests|FullyQualifiedName~ConfigServiceTests|FullyQualifiedName~ConfigCenterModelDefinitionTests" -nr:false -v minimal`
+- `powershell -NoProfile -Command "$paths = 'OldP/Runtime/1_Server/Base/Config/Dictionary','OldP/Runtime/1_Server/Platform/Config/Dictionary','OldP/Runtime/1_Server/Platform/Config/Enumeration'; foreach($path in $paths){ if(Test-Path $path){ '{0}:FOUND' -f $path } else { '{0}:MISSING' -f $path } }"`
+
+当前结论：
+
+- 样本审阅与 Phase 5 迁移模板对齐已具备证据
+- `Dictionary` 的权威目标形态已改为静态 i18n 资源，`Enumeration` 的权威目标形态已改为静态结构清单 + 本地化资源
+- `ConfigCenter` 不再作为 `Dictionary / Enumeration` 权威多语言数据仓库
+- `resources/localization/languages.json` 已作为启用语言集合入口，首批值参考 `OldP/Runtime/1_Server/Config/Apps.language`
+- `Stage 8` 已满足正式实施准入条件，可进入下一包
+
+样本复核补充：
+
+- `Common.dic`、`Platform.dic`、`Enumerations.enum`、`Enumerations.dic` 已在 `D:/Github/ICP-X/OldP/...` 下完成最小人工审阅，结构与设计一致
+- `Platform.dic` 中虽出现“请输入密码 / Please input password”类界面提示文本，但未发现真实凭据数据
+
+下一步建议：
+
+- `Stage 9`、`Stage 10` 与后续“枚举消费层 UI / 接入”子包已完成，当前 `WP4` 冻结范围内的静态资源转换与最小前端消费已收口
+- 如继续推进，建议单独拆包处理真实业务页消费接入或下一批样本扩展
+
+对应文档：
+
+- [designs/dictionary-enumeration-migration-preparation-design.md](designs/dictionary-enumeration-migration-preparation-design.md)
+- [collaboration/work-packages/wp4-stage-8-admission-review.md](collaboration/work-packages/wp4-stage-8-admission-review.md)
+- [verification/wp4-stage-8-admission-review-verification.md](verification/wp4-stage-8-admission-review-verification.md)
+
+### Post-Phase-6：WP4 Stage 9 Dictionary 静态资源转换与最小 i18n 基座
+
+状态：已完成并通过
+
+已落地：
+
+- 新增 `scripts/migration/dictionary-to-i18n.ps1`，可将冻结样本 `.dic` 转换为静态 JSON 资源
+- 新增 `tests/Kernel.Tests/DictionaryToI18nScriptTests.cs`，覆盖启用语言输出、未启用语言跳过与后输入覆盖前输入
+- `resources/localization/languages.json` 已作为正式语言配置入口被脚本与前端共同消费
+- 已由真实样本生成 `resources/localization/{zhs,en}/dictionary/*.json`
+- `frontend/packages/core` 已补齐最小 `LocalizationProvider / useLocalization`
+- `frontend/packages/shell` 已接入真实 Dictionary 资源，并在 `Home` 页面展示最小消费样例
+
+已验证：
+
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~DictionaryToI18nScriptTests -nr:false -v minimal`
+- `powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\migration\dictionary-to-i18n.ps1' -InputPath @('D:\Github\ICP-X\OldP\Runtime\1_Server\Base\Config\Dictionary\Common.dic','D:\Github\ICP-X\OldP\Runtime\1_Server\Platform\Config\Dictionary\Platform.dic') -OutputRoot '.\resources\localization' -LanguagesConfigPath '.\resources\localization\languages.json'"`
+- `pnpm --dir .\frontend\packages\shell exec vitest --run src/__tests__/localization-sample.test.tsx src/__tests__/home-page-shortcuts.test.tsx`
+- `pnpm --dir .\frontend build`
+
+当前结论：
+
+- `Stage 9` 已形成从真实冻结样本到仓库内静态资源的第一条闭环
+- `Common.dic` 与 `Platform.dic` 当前共生成每种语言 `7` 个 context 文件
+- `Common.json` 在 `zhs` 下共 `51` 个键，`Platform.json` 在 `zhs` 下共 `82` 个键
+- 最小 i18n 基座已经能在 Shell 中消费这些静态资源
+
+当前边界：
+
+- 本轮仍只处理 `Dictionary`，未进入 `Enumeration`
+- 当前未提供语言切换 UI，只补齐最小 Provider、配置消费与真实资源接入
+
+下一步建议：
+
+- `Stage 10` 已完成；如需继续推进，请转看下方 `Stage 10` 小节中的后续方向
+
+对应文档：
+
+- [collaboration/work-packages/wp4-stage-9-dictionary-static-resources.md](collaboration/work-packages/wp4-stage-9-dictionary-static-resources.md)
+- [verification/wp4-stage-9-dictionary-static-resources-verification.md](verification/wp4-stage-9-dictionary-static-resources-verification.md)
+
+### Post-Phase-6：WP4 Stage 10 Enumeration 静态结构清单与本地化资源转换
+
+状态：已完成并通过
+
+已落地：
+
+- 新增 `scripts/migration/enumeration-to-static-resources.ps1`，可将冻结样本 `.enum + .dic` 转换为静态枚举结构与本地化 JSON
+- 新增 `tests/Kernel.Tests/EnumerationToStaticResourcesScriptTests.cs`，覆盖结构输出、启用语言过滤、孤立翻译跳过告警与缺翻译回退边界
+- 已由真实样本生成 `resources/enumerations/*.json`
+- 已由真实样本生成 `resources/localization/{zhs,en}/enumerations/*.json`
+
+当前结论：
+
+- `Stage 10` 已形成从真实冻结样本到仓库内静态枚举结构清单与本地化资源的闭环
+- 当前共生成 `32` 个结构文件、`62` 个本地化文件
+- `SelectMode` 等缺翻译枚举已按设计保留结构并输出 warning，不阻塞静态清单落地
+
+当前边界：
+
+- 本轮只处理静态 `.enum` + `.dic`，未处理 DB Enumeration
+- 本轮未新增枚举消费层 UI、运行时查询 API 或数据库投影
+
+下一步建议：
+
+- 当前 `WP4` 冻结范围已经完成；如继续推进，建议单独拆包处理枚举消费接入或下一批样本扩展
+
+对应文档：
+
+- [collaboration/work-packages/wp4-stage-10-enumeration-static-resources.md](collaboration/work-packages/wp4-stage-10-enumeration-static-resources.md)
+- [verification/wp4-stage-10-enumeration-static-resources-verification.md](verification/wp4-stage-10-enumeration-static-resources-verification.md)
+
+### Post-Phase-6：WP4 Enumeration 消费层 UI / 接入
+
+状态：已完成并通过
+
+已落地：
+
+- `frontend/packages/core` 已补齐 `getEnumerationItems / getEnumerationLabel / useEnumeration`
+- `frontend/packages/shell` 已接入真实 `Gender / MessageState / SelectMode` 枚举静态资源
+- `Home` 页面已新增“枚举资源样例”区块
+- `SelectMode` 当前已明确展示为缺翻译时回退到 `ItemName` 的样例
+
+已验证：
+
+- `pnpm --dir .\frontend\packages\shell exec vitest --run src/__tests__/localization-sample.test.tsx src/__tests__/enumeration-sample.test.tsx`
+- `pnpm --dir .\frontend build`
+
+当前结论：
+
+- `Enumeration` 已形成从静态结构清单、本地化资源到前端真实消费样例的第一条闭环
+- `core` 与 `shell` 的最小接线口径已经稳定，可供后续页面继续复用
+
+当前边界：
+
+- 本轮只做最小样例，不包含独立枚举管理页面、控件封装或代码生成
+- 本轮仍未处理 DB Enumeration、运行时查询 API 与数据库投影
+
+下一步建议：
+
+- 如继续推进，建议单独拆包处理真实业务页消费接入或下一批枚举样本扩展
+
+对应文档：
+
+- [designs/enumeration-consumer-ui-integration-design.md](designs/enumeration-consumer-ui-integration-design.md)
+- [verification/enumeration-consumer-ui-integration-verification.md](verification/enumeration-consumer-ui-integration-verification.md)

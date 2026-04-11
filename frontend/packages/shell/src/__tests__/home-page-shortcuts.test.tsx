@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import { LocalizationProvider } from '@icp-platform/core';
 import Home from '../pages/Home';
+import { dictionaryCatalogs, dictionaryLanguageConfig } from '../localization/catalogs';
 
 vi.mock('../contexts/PlatformContext', () => ({
   usePlatform: () => ({
@@ -38,9 +40,15 @@ describe('Home shortcuts', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
+        <LocalizationProvider
+          defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
+          supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
+          catalogs={dictionaryCatalogs}
+        >
+          <MemoryRouter>
+            <Home />
+          </MemoryRouter>
+        </LocalizationProvider>,
       );
     });
 

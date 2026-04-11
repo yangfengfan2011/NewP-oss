@@ -1,0 +1,11 @@
+{
+  "name": "QueryTemplete",
+  "items": [
+    {
+      "name": "QUERY-PAGE-TOP"
+    },
+    {
+      "name": "QUERY-PAGE-LEFT"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "ModelExtendFieldInherit",
+  "items": [
+    {
+      "name": "Innate"
+    },
+    {
+      "name": "Inherit"
+    },
+    {
+      "name": "Show"
+    },
+    {
+      "name": "Hidden"
+    }
+  ]
+}

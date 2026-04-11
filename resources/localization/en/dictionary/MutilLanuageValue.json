@@ -1,0 +1,4 @@
+{
+    "MutilLanuageValue.CurrentLanguageIsEmpty":  "The Current Language \u0027[currentLanguage]\u0027 is not allowed empty! ",
+    "MutilLanuageValue.ConvertWrong":  "The value of {0} attribute conversion to Multilingual failed with the following description:"
+}

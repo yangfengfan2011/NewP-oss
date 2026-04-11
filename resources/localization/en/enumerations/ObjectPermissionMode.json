@@ -1,0 +1,5 @@
+{
+  "ObjectPermissionMode.SetActorByWorkflow": "Set the performer permissions in the process",
+  "ObjectPermissionMode.SetAgentByWorkflow": "Set the agent permissions in the process",
+  "ObjectPermissionMode.Manual": "Manual settings"
+}

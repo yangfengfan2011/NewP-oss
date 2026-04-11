@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useEnumeration, useLocalization } from '@icp-platform/core';
 import { usePlatform } from '../contexts/PlatformContext';
 
 const businessShortcuts = [
@@ -17,6 +18,10 @@ const platformShortcuts = [
 
 export default function Home() {
   const { shellView, uiConfig } = usePlatform();
+  const { currentLanguage, t } = useLocalization();
+  const gender = useEnumeration('Gender');
+  const messageState = useEnumeration('MessageState');
+  const selectMode = useEnumeration('SelectMode');
 
   const experienceMode = uiConfig.shellExperienceMode;
   const showBusiness = experienceMode === 'hybrid' || experienceMode === 'product';
@@ -57,6 +62,67 @@ export default function Home() {
           不提前做品牌化精修。
         </p>
       </div>
+
+      <section className="sh-page-panel">
+        <div className="sh-page-panel-header">
+          <div>
+            <h2 className="sh-page-panel-title">语言资源样例</h2>
+            <div className="sh-page-panel-meta">当前语言：{currentLanguage}</div>
+          </div>
+        </div>
+        <div className="sh-page-panel-body">
+          <ul className="sh-feature-list">
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>Common.SystemTitle: {t('Common.SystemTitle')}</span>
+            </li>
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>Common.OK: {t('Common.OK')}</span>
+            </li>
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>Common.Cancel: {t('Common.Cancel')}</span>
+            </li>
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>Platform.Prompt: {t('Platform.Prompt')}</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="sh-page-panel">
+        <div className="sh-page-panel-header">
+          <div>
+            <h2 className="sh-page-panel-title">枚举资源样例</h2>
+            <div className="sh-page-panel-meta">SelectMode 缺少翻译时回退到 ItemName</div>
+          </div>
+        </div>
+        <div className="sh-page-panel-body">
+          <ul className="sh-feature-list">
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>
+                Gender: {gender.items.map((item) => `${item.value}=${item.label}`).join(' / ')}
+              </span>
+            </li>
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>
+                MessageState:{' '}
+                {messageState.items.map((item) => `${item.value}=${item.label}`).join(' / ')}
+              </span>
+            </li>
+            <li className="sh-feature-item">
+              <span className="sh-feature-icon">→</span>
+              <span>
+                SelectMode: {selectMode.items.map((item) => `${item.value}=${item.label}`).join(' / ')}
+              </span>
+            </li>
+          </ul>
+        </div>
+      </section>
 
       <div className="sh-section-grid sh-section-grid-2">
         {showBusiness && (

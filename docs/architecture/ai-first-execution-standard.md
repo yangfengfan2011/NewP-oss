@@ -96,8 +96,8 @@
 5. 受控门禁入口：`scripts/check-ai-first-design-targets.ps1`
 6. 目标登记入口：`scripts/register-ai-first-design-target.ps1`
 7. 设计创建入口：`scripts/new-design-doc.ps1`（创建前会先校验模板是否满足 AI-first 最小要求）
-8. 协作入口：[../collaboration/current-collaboration-mode.md](../collaboration/current-collaboration-mode.md)、[../collaboration/github-copilot-working-mode.md](../collaboration/github-copilot-working-mode.md)
-9. 阶段拆包与验收入口：[../collaboration/post-phase-6-copilot-stage-map.md](../collaboration/post-phase-6-copilot-stage-map.md)
+8. 协作入口：[../collaboration/current-collaboration-mode.md](../collaboration/current-collaboration-mode.md)
+9. 阶段拆包与验收入口：[../phases/post-phase-6-stage-map.md](../phases/post-phase-6-stage-map.md)
 
 示例命令：
 

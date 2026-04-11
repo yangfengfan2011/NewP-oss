@@ -1,0 +1,4 @@
+{
+    "ITGControlPluginContainer.ChoosePlugin":  "选择插件",
+    "ITGControlPluginContainer.LoadValueError":  "选择的插件无法加载输入的值，是否使用缺省插件？如不使用默认插件，值将被清空"
+}

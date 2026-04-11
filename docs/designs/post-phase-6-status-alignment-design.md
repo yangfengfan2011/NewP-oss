@@ -2,137 +2,139 @@
 
 ## 1. 背景
 
-仓库已完成 Phase 0 到 Phase 6（含 6.5、6.6、6.7）的主要交付，并在 `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md` 中确定了后续路线：以平台治理和 AI-first 收口为优先，拆分为 WP1–WP4 四个工作包。
+仓库已完成 `WP1` 插件平台治理增强与 `WP2` AI-first 执行标准落地，当前主线正式转入 `WP3`：文档与状态一致性治理。
 
-WP1（插件治理增强设计）和 WP2（AI-first 执行标准设计）已产出对应设计文档。但 `Plan.md` 和 `docs/current-status.md` 尚未与后续路线对齐，两份文档的"推荐下一步"仍停留在 Phase 6.6 阶段性口径上。
+但与 `WP3` 直接相关的几类入口文档仍存在口径错位：
 
-此外，部分核心能力虽然已有代码和测试基础，但 design → implementation/guide → verification → current-status 之间的文档链路存在缺口，需要在收口时明确记录。
+- `docs/designs/post-phase-6-status-alignment-design.md` 仍停留在“`WP1`、`WP2` 只有设计、尚未实现”的旧前提。
+- `docs/phases/post-phase-6-stage-map.md` 中 `Stage 3` 与 `Stage 7` 都使用了“WP3 状态对齐”表述，容易把“设计完成”和“第一轮落地”混成同一阶段。
+- `docs/collaboration/work-packages/wp3-post-phase-6-status-alignment.md` 仍把范围限制在“新增设计 + 修改 `Plan.md` + 修改 `docs/current-status.md`”，没有覆盖本轮真正需要同步的协作入口与验证入口。
+- `docs/verification/verification-matrix.md` 尚未收录 `WP2` 与 `WP3` 的验证入口。
+- `docs/current-status.md` 虽然已经把主线切到 `WP3`，但尚未记录 `WP3` 第一轮落地结果，且“文档链路已知缺口”遗漏了 `Phase 6.6`。
 
-本设计的目的是完成上述对齐，让状态、计划和文档链路形成统一口径。
+这些冲突都属于“入口口径不一致、阶段顺序滞后、引用链路不统一”，而且可以在不扩成全仓清理的前提下完成最小闭环。
 
 ## 2. 目标
 
-- 将 `docs/current-status.md` 的"当前推荐下一步"与后续路线设计的 WP1–WP4 优先级对齐。
-- 将 `Plan.md` 补入与四个工作包一致的后续路线说明。
-- 对三项核心能力（插件平台、多数据库持久化、插件运维中心）完成 design / implementation or guide / verification / current-status 四类链路核对，记录已有和缺口。
+- 收敛 `WP3` 第一轮的最小闭环范围，只处理当前最影响后续协作入口的一组冲突。
+- 统一 `docs/current-status.md`、`docs/phases/post-phase-6-stage-map.md`、`docs/collaboration/work-packages/wp3-post-phase-6-status-alignment.md` 与 `docs/verification/verification-matrix.md` 的当前口径。
+- 为本轮新增正式验证记录，避免 `WP3` 自己继续缺少 verification 入口。
 
 ## 3. 非目标
 
-- 不重写 `Plan.md` 或 `docs/current-status.md` 的既有内容。
-- 不为了制造一致性而删减已有阶段成果。
-- 不补写缺口文档本身（缺口只需记录，由后续工作包或专项任务补齐）。
-- 不修改 `AGENTS.md`、`docs/architecture/*`、任何代码或测试。
+- 不补写 `Phase 6.5`、`Phase 6.6`、`Phase 6.7` 缺失的独立实现说明或独立验证文档本体。
+- 不把 `WP3` 扩成历史文档全量重写任务。
+- 不修改任何代码、脚本、测试或 `AGENTS.md`。
+- 不为了“每轮都要碰一下”而强行改动 `Plan.md`；只有发现路线层口径直接冲突时才调整。
 
-## 4. 范围
+## 4. 入口在哪里
 
-- 修改：`docs/current-status.md`
-- 修改：`Plan.md`
-- 新增：本设计文档 `docs/designs/post-phase-6-status-alignment-design.md`
+本轮 `WP3` 第一轮收口的正式入口如下：
 
-## 5. 对齐原则
+- 设计入口：`docs/designs/post-phase-6-status-alignment-design.md`
+- 状态入口：`docs/current-status.md`
+- 协作入口：`docs/phases/post-phase-6-stage-map.md`
+- 工作包入口：`docs/collaboration/work-packages/wp3-post-phase-6-status-alignment.md`
+- 验证入口：`docs/verification/verification-matrix.md`
+- 验证记录：`docs/verification/post-phase-6-status-alignment-phase-1-verification.md`
 
-### 5.1 保留事实优先
+`Plan.md` 在本轮只作为路线核对输入，不作为默认修改目标。
 
-已有阶段成果（Phase 0–6、6.5、6.6、6.7）的描述以仓库内已有文档和验证记录为准，不缩减、不拔高。
+## 5. 边界在哪里
 
-### 5.2 推荐路线以路线设计文档为准
+- 只处理 `WP3` 第一轮直接相关的状态、协作和验证入口，不新增业务实现。
+- 保留 `Phase 0` 到 `Phase 6.7`、`WP1`、`WP2` 的既有事实描述，不靠删减事实制造一致性。
+- 对 `Phase 6.5`、`Phase 6.6`、`Phase 6.7` 的链路缺口只做记录，不在本轮直接补齐缺口文档本体。
+- `Plan.md` 已在路线层与 `WP1`–`WP4` 顺序对齐，本轮若未发现新的直接冲突，则保持不动。
 
-当 `Plan.md` 或 `docs/current-status.md` 的"推荐下一步"与 `post-phase-6-governance-and-ai-first-roadmap-design.md` 的工作包模型不一致时，以路线设计文档为准进行调整。
+## 6. 第一轮冲突选择与取舍
 
-### 5.3 未完成不写成已完成
+### 6.1 本轮只处理的冲突
 
-WP1、WP2 已有设计文档，但尚未进入代码实现。WP3、WP4 处于设计或更早阶段。状态文档只记录设计产出，不升级为"已实现"或"已验证"。
+1. `WP3` 设计文档仍基于旧前提，未反映 `WP1`、`WP2` 已收口的现实。
+2. `Stage map` 没有清楚区分“`WP3` 设计完成”和“`WP3` 第一轮落地完成”。
+3. `WP3` 工作包与验证矩阵仍停留在更早的三文件收口口径。
+4. `docs/current-status.md` 尚未记录 `WP3` 第一轮收口结果，且缺口表遗漏 `Phase 6.6`。
 
-### 5.4 缺口记录而非假设补齐
+### 6.2 本轮不处理的冲突
 
-文档链路存在缺口时，在本设计文档中明确列出缺口，不靠假设或口头说明来补齐。
+- 不在本轮补 `Phase 6.5`、`Phase 6.6`、`Phase 6.7` 的独立验证文档。
+- 不在本轮补 `Plugin Ops` 独立实现说明。
+- 不在本轮展开 `Plan.md` 的二次细化，只保留路线层语义。
 
-## 6. `docs/current-status.md` 收口方案
+### 6.3 取舍理由
 
-### 6.1 "当前推荐下一步"调整
+这组冲突同时满足三点：
 
-将原有的"当前推荐下一步"部分替换为与路线设计一致的四个工作包优先级：
+- 直接影响后续协作入口是否继续引用过时主线。
+- 可控制在少量文档内完成，不会扩大为历史文档大清理。
+- 做完之后，`WP4` 的准入复核可以在更稳定的入口上继续推进。
 
-1. 平台治理收口（WP1）
-2. AI-first 规范落地（WP2）
-3. 文档与状态一致性治理（WP3）
-4. 最小迁移连续性（WP4）
+## 7. 收口方案
 
-### 6.2 WP1、WP2 设计产出记录
+### 7.1 `docs/current-status.md`
 
-在"当前推荐下一步"中注明 WP1 和 WP2 的设计文档已产出，但实现尚未启动。
+- 新增 `WP3` 第一轮收口段落，明确本轮已落地的文档入口统一动作。
+- 将“当前推荐下一步”更新为：先进入 `WP4` 的 `Stage 8` 准入复核，再把 `WP3` 历史缺口补链作为后续专项处理。
+- 将“文档链路已知缺口”补齐 `Phase 6.6`，避免状态入口继续遗漏核心缺口。
 
-### 6.3 不改动已有阶段描述
+### 7.2 协作入口
 
-Phase 0 到 Phase 6.7 的已有描述保持不变，不删减事实。
+- 在 `docs/phases/post-phase-6-stage-map.md` 中显式区分：
+  - `Stage 3` = `WP3` 设计完成
+  - `Stage 7` = `WP3` 第一轮落地完成
+- 将下一推荐阶段切换为 `Stage 8`，避免协作入口仍把主线停留在已完成的 `Stage 7`。
+- 更新 `docs/collaboration/work-packages/wp3-post-phase-6-status-alignment.md`，使其反映本轮真实允许修改文件、验证方式和边界。
 
-## 7. `Plan.md` 收口方案
+### 7.3 验证入口
 
-### 7.1 补入后续路线说明
+- 在 `docs/verification/verification-matrix.md` 中补入 `WP2` 与 `WP3` 的定向验证入口。
+- 新增 `docs/verification/post-phase-6-status-alignment-phase-1-verification.md`，作为 `WP3` 第一轮的正式验证记录。
 
-在 `Plan.md` 的"Phase 6 之后建议拆分"部分，将原有的阶段列表前插入一段"Post-Phase 6 治理与 AI-First 收口"说明，包含 WP1–WP4 的简要目标。
+### 7.4 `Plan.md`
 
-### 7.2 口径对齐
+本轮核对后，`Plan.md` 在路线层已经与 `WP1`–`WP4` 顺序保持一致，没有新的直接冲突，因此不作为第一轮强制改动对象。
 
-工作包名称和目标描述与 `post-phase-6-governance-and-ai-first-roadmap-design.md` 保持一致。
+## 8. 如何验证
 
-### 7.3 不替代既有迁移计划
+本轮验证只做与 `WP3` 直接相关的最小定向检查：
 
-Phase 7A / 7B / 7C 的既有说明保留不变，WP4 作为桥接入口而非替代。
+1. 设计校验
 
-## 8. 文档链路核对
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\post-phase-6-status-alignment-design.md
+```
 
-### 8.1 插件平台（Phase 6.6）
+2. 关键口径对齐检查
 
-| 链路类型 | 状态 | 文档路径 |
-|----------|------|----------|
-| Design | 有 | `docs/designs/plugin-governance-enhancement-design.md`、`docs/superpowers/specs/2026-04-06-runtime-layer-plugin-platform-design.md`、`docs/superpowers/specs/2026-04-06-unified-plugin-package-design.md` |
-| Architecture / Guide | 有 | `docs/architecture/plugin-package-format.md`、`docs/architecture/plugin-runtime-loading.md`、`docs/architecture/plugin-compatibility-policy.md`、`docs/guides/plugin-packaging.md`、`docs/guides/unified-plugin-package-operations.md`、`docs/developer/external-plugin-development.md`、`docs/guides/external-plugin-debugging.md` |
-| Verification | 缺 | 无独立的 `docs/verification/phase-6-6-*.md`。测试存在于 `tests/Kernel.Tests`，但无正式验证矩阵。 |
-| Current Status | 有 | `docs/current-status.md` Phase 6.6 段落 |
+```powershell
+powershell -NoProfile -Command "Select-String -Path '.\docs\current-status.md','.\docs\phases\post-phase-6-stage-map.md','.\docs\collaboration\work-packages\wp3-post-phase-6-status-alignment.md','.\docs\verification\verification-matrix.md' -Pattern 'WP3|Stage 7|Stage 8|WP4|Phase 6.6|第一轮'"
+```
 
-链路缺口：缺少独立验证文档。
+3. 变更范围检查
 
-### 8.2 多数据库持久化（Phase 6.5）
+```powershell
+git status --short -- docs/current-status.md docs/designs/post-phase-6-status-alignment-design.md docs/phases/post-phase-6-stage-map.md docs/collaboration/work-packages/wp3-post-phase-6-status-alignment.md docs/verification/verification-matrix.md docs/verification/post-phase-6-status-alignment-phase-1-verification.md Plan.md
+```
 
-| 链路类型 | 状态 | 文档路径 |
-|----------|------|----------|
-| Design | 有 | `docs/superpowers/specs/2026-04-09-phase-6-5-multi-db-persistence-design.md` |
-| Developer Guide | 有 | `docs/developer/persistence-public-api.md`、`docs/developer/persistence-usage-guide.md`、`docs/developer/persistence-development-workflow.md`、`docs/guides/local-multi-db-container-setup.md` |
-| Verification | 缺 | 无独立的 `docs/verification/phase-6-5-*.md`。三库 smoke 脚本存在于 `tests/integration/persistence/`，但无正式验证文档。 |
-| Current Status | 有 | `docs/current-status.md` Phase 6.5 段落 |
+## 9. 失败信号是什么
 
-链路缺口：缺少独立验证文档。
+若出现以下任一情况，说明本轮收口未成功：
 
-### 8.3 插件运维中心（Phase 6.7）
+- `docs/current-status.md` 仍未记录 `WP3` 第一轮收口结果。
+- `docs/current-status.md` 的缺口表仍遗漏 `Phase 6.6`。
+- `docs/phases/post-phase-6-stage-map.md` 仍把 `Stage 7` 标成待拆分，或仍把下一包指向 `Stage 7`。
+- `docs/verification/verification-matrix.md` 仍找不到 `WP2` / `WP3` 验证入口。
+- `WP3` 工作包仍只允许修改旧版三文件范围。
 
-| 链路类型 | 状态 | 文档路径 |
-|----------|------|----------|
-| Design | 有 | `docs/superpowers/specs/2026-04-08-plugin-operations-center-v1-design.md` |
-| Implementation / Guide | 弱 | `docs/guides/unified-plugin-package-operations.md` 有部分提及，但无独立的 `docs/modules/plugin-ops-implementation.md` 或专属用户指南。 |
-| Verification | 缺 | 无独立的 `docs/verification/phase-6-7-*.md`。 |
-| Current Status | 有 | `docs/current-status.md` Phase 6.7 段落 |
+## 10. 风险
 
-链路缺口：缺少独立实现说明文档和独立验证文档。
+- 本轮只做第一轮入口统一，历史链路缺口仍会保留。控制方式：在 `docs/current-status.md` 中继续显式列出缺口，不把它们写成“已解决”。
+- `Plan.md` 本轮不改，个别读者可能误以为遗漏。控制方式：在本设计中明确记录“路线层已对齐，因此本轮不强改”。
+- `WP3` 第一轮完成后，团队可能过早认为所有文档治理都结束了。控制方式：把后续缺口补链明确标成 `WP3` 第二轮专项，而不是“已收口”。
 
-### 8.4 缺口汇总
+## 11. 如何回滚
 
-| 能力 | 缺口 |
-|------|------|
-| 插件平台 Phase 6.6 | 缺独立验证文档 |
-| 多数据库持久化 Phase 6.5 | 缺独立验证文档 |
-| 插件运维中心 Phase 6.7 | 缺独立实现说明文档、缺独立验证文档 |
-
-这些缺口应由后续专项任务补齐，不在本工作包中直接创建。
-
-## 9. 风险
-
-- `Plan.md` 和 `docs/current-status.md` 的修改如果口径不统一，会制造新的不一致。控制方式：两处修改在同一工作包内完成，使用相同术语。
-- 已有阶段描述在对齐过程中被误改或误删。控制方式：只追加或调整"推荐下一步"，不修改已有阶段正文。
-- 缺口记录被误读为"阶段未完成"。控制方式：缺口在链路核对表中明确标记为"文档缺口"而非"功能缺口"。
-
-## 10. 回滚思路
-
-- `Plan.md` 和 `docs/current-status.md` 的修改可通过 git 回退到修改前版本。
-- 本设计文档是新增文件，删除即可回退。
-- 不涉及代码或数据变更，无需额外数据回滚。
+- 所有改动均为文档级变更，可直接通过 git 回退本轮相关文件。
+- 若只需局部回滚，可单独回退 `docs/current-status.md`、`docs/collaboration/*` 或 `docs/verification/*` 中的本轮修改。
+- 不涉及代码、数据库或运行时状态变更，无需额外数据回滚。

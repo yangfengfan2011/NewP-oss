@@ -1,0 +1,11 @@
+{
+  "name": "LovType",
+  "items": [
+    {
+      "name": "System"
+    },
+    {
+      "name": "Custom"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "SelectMode",
+  "items": [
+    {
+      "name": "MULTI"
+    },
+    {
+      "name": "NULL"
+    },
+    {
+      "name": "SINGLE"
+    }
+  ]
+}

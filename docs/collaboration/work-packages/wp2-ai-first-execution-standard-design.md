@@ -24,7 +24,7 @@
 - `docs/designs/detailed-design-template.md`
 - `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
 - `docs/designs/plugin-governance-enhancement-design.md`
-- `docs/collaboration/github-copilot-working-mode.md`
+- `docs/collaboration/current-collaboration-mode.md`
 
 ## 4. 允许修改的文件
 

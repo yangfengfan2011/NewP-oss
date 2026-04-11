@@ -1,0 +1,11 @@
+{
+  "name": "MessageState",
+  "items": [
+    {
+      "name": "Read"
+    },
+    {
+      "name": "Unread"
+    }
+  ]
+}

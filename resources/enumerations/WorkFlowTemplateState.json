@@ -1,0 +1,11 @@
+{
+  "name": "WorkFlowTemplateState",
+  "items": [
+    {
+      "name": "TRUE"
+    },
+    {
+      "name": "FALSE"
+    }
+  ]
+}

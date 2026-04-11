@@ -14,8 +14,8 @@
 ## 2. 本轮改动摘要
 
 - 更新 `docs/collaboration/current-collaboration-mode.md`
-- 更新 `docs/collaboration/github-copilot-working-mode.md`
-- 更新 `docs/collaboration/post-phase-6-copilot-stage-map.md`
+- 更新 `docs/history/collaboration/github-copilot-working-mode.md`
+- 更新 `docs/phases/post-phase-6-stage-map.md`
 - 新增 `docs/collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md`
 - 更新 `docs/architecture/ai-first-execution-standard.md`
 - 更新 `docs/current-status.md`

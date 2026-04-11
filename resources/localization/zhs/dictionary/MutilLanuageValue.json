@@ -1,0 +1,4 @@
+{
+    "MutilLanuageValue.CurrentLanguageIsEmpty":  "当前语言\u0027[currentLanguage]\u0027不能为空！",
+    "MutilLanuageValue.ConvertWrong":  "{0}属性的值转化多语言失败，描述信息如下："
+}

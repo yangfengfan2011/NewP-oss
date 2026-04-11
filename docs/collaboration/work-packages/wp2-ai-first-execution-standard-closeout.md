@@ -21,15 +21,15 @@
 - `docs/architecture/ai-first-execution-standard.md`
 - `docs/designs/README.md`
 - `docs/collaboration/current-collaboration-mode.md`
-- `docs/collaboration/github-copilot-working-mode.md`
-- `docs/collaboration/post-phase-6-copilot-stage-map.md`
+- `docs/history/collaboration/github-copilot-working-mode.md`
+- `docs/phases/post-phase-6-stage-map.md`
 - `docs/designs/ai-first-execution-standard-design.md`
 
 ## 4. 允许修改的文件
 
 - `docs/collaboration/current-collaboration-mode.md`
-- `docs/collaboration/github-copilot-working-mode.md`
-- `docs/collaboration/post-phase-6-copilot-stage-map.md`
+- `docs/history/collaboration/github-copilot-working-mode.md`
+- `docs/phases/post-phase-6-stage-map.md`
 - `docs/architecture/ai-first-execution-standard.md`
 - `docs/current-status.md`
 - `docs/README.md`

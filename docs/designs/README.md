@@ -39,6 +39,29 @@
 
 - [detailed-design-template.md](detailed-design-template.md)
 
+如果需要快速创建一份新设计文档，可使用：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignName <your-design-name>
+```
+
+新增设计文档还应同时满足：
+
+- 明确回答 AI-first 最小检查清单中的 5 项必答项：入口、边界、验证、失败信号、回滚
+- 不保留 `TODO`、`TBD`、`待补`、`占位` 这类占位词
+
+建议在提交前运行定向校验：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\<your-design>.md
+```
+
+如果这份设计文档需要进入 AI-first 受控门禁，可登记到显式目标清单：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\designs\<your-design>.md
+```
+
 ## 当前设计文档
 
 - [identity-lite-design.md](identity-lite-design.md)

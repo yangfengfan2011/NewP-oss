@@ -361,10 +361,9 @@ AI-First 对齐：
 
 当前后续路线以平台治理和 AI-first 收口为优先，按以下工作包顺序推进：
 
-1. **WP2 AI-first 规范落地**：把 AI-first 从方向性原则提升为日常执行标准与验收标准。设计文档已产出（`designs/ai-first-execution-standard-design.md`），实现尚未启动。
-2. **WP3 文档与状态一致性治理**：让状态文档、计划文档、设计文档、验证记录形成统一口径。设计文档已产出（`designs/post-phase-6-status-alignment-design.md`）。
-3. **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
-4. **运维体验优化**：将 destructive-action 确认流程与 warning severity 统一到 shell 级交互规范中。
+1. **WP3 文档与状态一致性治理**：让状态文档、计划文档、设计文档、验证记录形成统一口径。设计文档已产出（`designs/post-phase-6-status-alignment-design.md`）。
+2. **WP4 最小迁移连续性**：不扩大战线，只维持 `Dictionary`、`Enumeration` 的迁移准备度。
+3. **运维体验优化**：将 destructive-action 确认流程与 warning severity 统一到 shell 级交互规范中。
 
 对应路线设计：
 
@@ -456,3 +455,67 @@ AI-First 对齐：
 
 - [designs/plugin-governance-enhancement-design.md](designs/plugin-governance-enhancement-design.md)
 - [verification/plugin-governance-enhancement-verification.md](verification/plugin-governance-enhancement-verification.md)
+
+### Post-Phase-6：WP2 AI-first 执行标准落地
+
+状态：已完成并收口
+
+已落地：
+
+- 新增正式标准文档 `docs/architecture/ai-first-execution-standard.md`，把分散在 `AGENTS.md`、AI-first 判定准则、组件化护栏和设计模板中的规则收成统一执行入口
+- `docs/designs/detailed-design-template.md` 已补齐 AI-first 最小检查清单，明确要求新设计回答“入口、边界、验证、失败信号、回滚”5 项必答项
+- `docs/designs/README.md` 已补充提交前定向校验命令，形成设计入口到校验入口的最小流程闭环
+- 新增 `scripts/validate-ai-first-design.ps1`，可对指定设计文档执行 5 项必答项与占位词检查
+- `tests/Kernel.Tests` 已补齐脚本级回归测试，覆盖“缺项失败”“占位词失败”“模板通过”三类核心行为
+- 新增 `scripts/check-ai-first-design-targets.ps1` / `scripts/check-ai-first-design-targets.sh`，将当前受控规范文档集收敛为单一检查入口
+- `scripts/test.ps1` / `scripts/test.sh` 已接入 AI-first 设计目标检查段，根测试入口不再完全忽略 WP2 门禁
+- `.github/workflows/ci.yml` 已接入 AI-first 设计目标校验步骤，使主线 CI 能检查当前受控规范文档集
+- `check-ai-first-design-targets.ps1` 已支持显式传入附加设计文档，并默认自动发现当前工作区中新增或修改的 `docs/designs/*-design.md`
+- 受控门禁已从“只校验固定规范入口”扩展到“固定规范入口 + 本轮新增设计文档”，开始覆盖真实新增工作流
+- 回归测试已覆盖显式附加设计失败与未跟踪新增设计自动发现失败两类关键路径
+- 新增 `docs/architecture/ai-first-design-check-targets.txt`，将受控基础目标集合从脚本硬编码下沉为仓库内显式清单
+- `check-ai-first-design-targets.ps1` 已支持 `-TargetsFile`，后续可在不改脚本逻辑的前提下调整受控基础集
+- 新增 `scripts/register-ai-first-design-target.ps1` / `scripts/register-ai-first-design-target.sh`，可将新增设计文档以相对路径登记到显式目标清单
+- `docs/designs/README.md` 与 `docs/architecture/ai-first-execution-standard.md` 已补充“如何登记到 AI-first 门禁”的命令入口
+- 新增 `scripts/new-design-doc.ps1` / `scripts/new-design-doc.sh`，可按模板创建 `<name>-design.md`，并默认将其登记到 AI-first 显式目标清单
+- 新增设计的最小标准路径已从“手工复制模板 + 手工登记”收敛为单一脚本入口
+- `scripts/new-design-doc.ps1` 已补上模板预校验，避免无效模板被直接创建并登记进 AI-first 目标集
+- `tests/Kernel.Tests` 已新增“无效模板不能创建也不能登记”的回归测试，补齐设计创建入口的健壮性验证
+- `docs/collaboration/current-collaboration-mode.md` 与 `docs/collaboration/github-copilot-working-mode.md` 已明确接入 `ai-first-execution-standard.md`，并把新增设计默认路径收敛为“创建 -> 校验 -> 受控门禁检查”
+- `docs/collaboration/post-phase-6-copilot-stage-map.md` 已显式把 AI-first 标准纳入后续工作包与阶段验收入口，不再把主线误导回已完成的 `WP1`
+- 新增 `docs/collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md`，将本轮收口范围、允许修改文件与验收标准固定成独立工作包
+
+已验证：
+
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~AiFirstDesignValidationScriptTests -nr:false -v minimal`
+- `& .\scripts\validate-ai-first-design.ps1 -Path @('.\docs\designs\detailed-design-template.md', '.\docs\architecture\ai-first-execution-standard.md')`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1` 已确认包含 AI-first 检查段并执行成功，但脚本整体仍受仓库既存失败项影响未全绿
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~AiFirstDesignValidationScriptTests.CheckAiFirstDesignTargets_FailsWhenAdditionalDesignDoesNotMeetChecklist -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~AiFirstDesignValidationScriptTests.CheckAiFirstDesignTargets_UsesExplicitTargetsFile -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~AiFirstDesignValidationScriptTests.RegisterAiFirstDesignTarget_AppendsRelativeDesignPathOnlyOnce -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~AiFirstDesignValidationScriptTests.NewDesignDoc_CreatesDesignFromTemplateAndRegistersTarget -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~AiFirstDesignValidationScriptTests.NewDesignDoc_FailsWhenTemplateDoesNotPassValidationAndDoesNotRegisterTarget -nr:false -v minimal`
+
+收口结论与当前边界：
+
+- 当前受控门禁只覆盖 `detailed-design-template.md` 与 `ai-first-execution-standard.md`，尚未对既有全部设计文档做一次性回填
+- 当前“新增设计自动发现”仍基于工作区变化与显式传参，不是历史设计文档的全量治理机制
+- 根测试入口虽然已接入 AI-first 检查段，但脚本整体仍受 `Kernel.Tests` 中既存失败项影响，不能把本轮结果误解为整仓测试已恢复稳定
+- 更大范围的状态一致性与历史文档链路清理仍属于 `WP3`，不在本轮 `WP2` 收口中展开
+
+对应文档：
+
+- [architecture/ai-first-execution-standard.md](architecture/ai-first-execution-standard.md)
+- [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
+- [collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)
+- [collaboration/post-phase-6-copilot-stage-map.md](collaboration/post-phase-6-copilot-stage-map.md)
+- [collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md](collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md)
+- [designs/ai-first-execution-standard-design.md](designs/ai-first-execution-standard-design.md)
+- [verification/ai-first-execution-standard-phase-1-verification.md](verification/ai-first-execution-standard-phase-1-verification.md)
+- [verification/ai-first-execution-standard-phase-2-verification.md](verification/ai-first-execution-standard-phase-2-verification.md)
+- [verification/ai-first-execution-standard-phase-3-verification.md](verification/ai-first-execution-standard-phase-3-verification.md)
+- [verification/ai-first-execution-standard-phase-4-verification.md](verification/ai-first-execution-standard-phase-4-verification.md)
+- [verification/ai-first-execution-standard-phase-5-verification.md](verification/ai-first-execution-standard-phase-5-verification.md)
+- [verification/ai-first-execution-standard-phase-6-verification.md](verification/ai-first-execution-standard-phase-6-verification.md)
+- [verification/ai-first-execution-standard-phase-7-verification.md](verification/ai-first-execution-standard-phase-7-verification.md)

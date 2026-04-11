@@ -12,6 +12,8 @@
 - [architecture/module-boundaries-v1.md](architecture/module-boundaries-v1.md)
 - [architecture/platform-sdk.md](architecture/platform-sdk.md)
 - [architecture/module-template.md](architecture/module-template.md)
+- [architecture/ai-first-execution-standard.md](architecture/ai-first-execution-standard.md)
+- [architecture/ai-first-design-check-targets.txt](architecture/ai-first-design-check-targets.txt)
 
 ## 2. phases
 
@@ -60,6 +62,13 @@
 - [verification/scaffold-verification.md](verification/scaffold-verification.md)
 - [verification/demo-module-verification.md](verification/demo-module-verification.md)
 - [verification/phase-3-contract-verification.md](verification/phase-3-contract-verification.md)
+- [verification/ai-first-execution-standard-phase-1-verification.md](verification/ai-first-execution-standard-phase-1-verification.md)
+- [verification/ai-first-execution-standard-phase-2-verification.md](verification/ai-first-execution-standard-phase-2-verification.md)
+- [verification/ai-first-execution-standard-phase-3-verification.md](verification/ai-first-execution-standard-phase-3-verification.md)
+- [verification/ai-first-execution-standard-phase-4-verification.md](verification/ai-first-execution-standard-phase-4-verification.md)
+- [verification/ai-first-execution-standard-phase-5-verification.md](verification/ai-first-execution-standard-phase-5-verification.md)
+- [verification/ai-first-execution-standard-phase-6-verification.md](verification/ai-first-execution-standard-phase-6-verification.md)
+- [verification/ai-first-execution-standard-phase-7-verification.md](verification/ai-first-execution-standard-phase-7-verification.md)
 - [verification/verification-matrix.md](verification/verification-matrix.md)
 
 ## 7. developer
@@ -96,8 +105,12 @@
 - [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
 - [collaboration/claude-code-第二阶段执行手册.md](collaboration/claude-code-第二阶段执行手册.md)
 - [collaboration/github-copilot-working-mode.md](collaboration/github-copilot-working-mode.md)
+- [collaboration/post-phase-6-copilot-stage-map.md](collaboration/post-phase-6-copilot-stage-map.md)
 - [collaboration/codex-review-checklist.md](collaboration/codex-review-checklist.md)
 - [collaboration/work-packages/wp1-plugin-governance-design.md](collaboration/work-packages/wp1-plugin-governance-design.md)
+- [collaboration/work-packages/wp2-ai-first-execution-standard-design.md](collaboration/work-packages/wp2-ai-first-execution-standard-design.md)
+- [collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md](collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md)
+- [collaboration/work-packages/wp3-post-phase-6-status-alignment.md](collaboration/work-packages/wp3-post-phase-6-status-alignment.md)
 - [prompts/](prompts/)
 - [bootstrap/](bootstrap/)
 

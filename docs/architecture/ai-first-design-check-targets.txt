@@ -1,0 +1,5 @@
+# AI-first 受控基础目标清单
+# 相对路径以本文件所在目录为基准解析。
+
+../designs/detailed-design-template.md
+ai-first-execution-standard.md

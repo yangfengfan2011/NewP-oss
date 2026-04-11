@@ -12,6 +12,8 @@
    - `AGENTS.md`
    - `Plan.md`
    - `docs/current-status.md`
+   - `docs/architecture/ai-first-execution-standard.md`
+   - `docs/designs/README.md`
    - 本文档
    - 当前工作包文档
 2. 先确认 `docs/collaboration/post-phase-6-copilot-stage-map.md` 中当前所在阶段和下一阶段。
@@ -48,6 +50,8 @@
 - 默认只处理当前工作包，不顺手扩范围。
 - 没有明确设计时，不进入正式实现。
 - 正常接入优先通过 `Contracts / SDK / templates / controlled entry points`。
+- 如果当前工作包需要新增设计文档，优先使用 `scripts/new-design-doc.ps1` / `scripts/new-design-doc.sh` 创建，而不是手工复制旧文档。
+- 如果当前工作包修改了设计文档，交回前至少运行一次 `scripts/validate-ai-first-design.ps1`；如已进入 AI-first 目标集，再运行一次 `scripts/check-ai-first-design-targets.ps1`。
 - 不把架构判断、状态口径和阶段结论交给 Copilot 单独决定。
 - 不把历史文档里的旧阶段口径直接覆盖到当前主文档。
 - 不写依赖单机路径、单机用户名、单机 IDE 状态的内容。
@@ -98,6 +102,7 @@
 - 不要顺手补代码实现
 - 不要顺手修改计划状态
 - 不要把建议写成既成事实
+- 如果本轮涉及新增设计文档，仍应按 AI-first 标准走创建、校验和必要的门禁检查
 
 如果工作包要求“只做局部实现”：
 
@@ -130,14 +135,20 @@
 - 建议验证方式
 - 交回 Codex 时必须汇报的内容
 
+如果工作包涉及新增设计文档或阶段验收文档，还应显式引用：
+
+- `docs/architecture/ai-first-execution-standard.md`
+- `docs/designs/README.md`
+
 ## 8. 当前推荐用法
 
 如果你准备让 Copilot 执行当前阶段任务，优先从这里开始：
 
 1. `docs/collaboration/github-copilot-working-mode.md`
-2. `docs/collaboration/post-phase-6-copilot-stage-map.md`
-3. 当前阶段对应的 `docs/collaboration/work-packages/<wp-file>.md`
-4. `docs/collaboration/codex-review-checklist.md`
+2. `docs/architecture/ai-first-execution-standard.md`
+3. `docs/collaboration/post-phase-6-copilot-stage-map.md`
+4. 当前阶段对应的 `docs/collaboration/work-packages/<wp-file>.md`
+5. `docs/collaboration/codex-review-checklist.md`
 
 当前建议先执行的首个工作包是：
 

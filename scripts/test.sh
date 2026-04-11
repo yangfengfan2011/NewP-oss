@@ -22,4 +22,9 @@ else
 fi
 
 echo ""
+echo "=== AI-first 设计检查 ==="
+cd ..
+"$PWD/scripts/check-ai-first-design-targets.sh"
+
+echo ""
 echo "=== 测试完成 ==="

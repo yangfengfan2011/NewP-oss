@@ -31,6 +31,10 @@ jobs:
       - name: 运行测试
         run: dotnet test ICP-Platform.sln --no-build --configuration Release --verbosity normal
 
+      - name: AI-first 设计目标校验
+        shell: pwsh
+        run: ./scripts/check-ai-first-design-targets.ps1
+
   frontend:
     name: 前端构建
     runs-on: ubuntu-latest

@@ -34,4 +34,9 @@ if ($packageJson -and $packageJson -match '"test"') {
 }
 
 Write-Host ""
+Write-Host "=== AI-first design checks ===" -ForegroundColor Green
+Set-Location $repoRoot
+& (Join-Path $PSScriptRoot "check-ai-first-design-targets.ps1")
+
+Write-Host ""
 Write-Host "=== Tests complete ===" -ForegroundColor Green

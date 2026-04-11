@@ -6,15 +6,16 @@
 
 当前适用范围：
 
+- 当前主线已切换到 post-Phase-6 的平台治理与 AI-first 收口
 - 当前仍使用 `Codex + Claude Code` 协同推进
-- 近期可能切换为“仅使用 Codex”
-- 项目已完成 Phase 0 / 1 / 2，正在收口 Phase 3，并继续推进 Phase 4
+- 后续仍可能切换为“仅使用 Codex”
+- `WP1` 已完成并收口，`WP2` 已形成正式执行标准与设计创建闭环，后续主线将转入 `WP3 / WP4`
 
 因此，本说明关注的不是“如何从零启动项目”，而是：
 
 - 如何在现有仓库上稳定协作
 - 如何减少多人/多工具并行时的冲突
-- 如何保证后续切换工具模式时，文档、计划和交接方式仍然成立
+- 如何保证后续切换工具模式时，文档、计划、AI-first 设计入口和交接方式仍然成立
 
 ## 2. 当前结论
 
@@ -130,7 +131,18 @@
 
 如果这些信息不完整，就容易在协同过程中出现范围漂移。
 
-## 6. 当前协同的核心不是“固定双人分工”
+## 6. 新增设计文档的默认入口
+
+如果当前任务需要新增设计文档，默认按下面的 AI-first 闭环执行：
+
+1. 先阅读 [../architecture/ai-first-execution-standard.md](../architecture/ai-first-execution-standard.md) 和 [../designs/README.md](../designs/README.md)
+2. 使用 `scripts/new-design-doc.ps1` / `scripts/new-design-doc.sh` 按模板创建设计文档，而不是手工复制旧文档
+3. 在交回主线程前，至少运行一次 `scripts/validate-ai-first-design.ps1`
+4. 如果当前新增设计已进入显式目标清单，或工作区存在新增 `docs/designs/*-design.md`，再运行一次 `scripts/check-ai-first-design-targets.ps1`
+
+这条路径的目标不是增加步骤，而是让“设计先行”真正具备统一入口、统一校验和统一失败信号。
+
+## 7. 当前协同的核心不是“固定双人分工”
 
 当前更准确的理解应是：
 
@@ -146,7 +158,7 @@
 - 是否有验证闭环
 - 是否有主线程最终复核
 
-## 7. 双工具协作时的文件规则
+## 8. 双工具协作时的文件规则
 
 - `Plan.md`
 - `docs/current-status.md`
@@ -163,7 +175,7 @@
 - 历史文档比对结果
 - 契约审查意见
 
-## 8. 与现有文档的关系
+## 9. 与现有文档的关系
 
 当前建议这样使用现有协作文档：
 
@@ -171,6 +183,8 @@
   - 作为全局规则文档
 - [../../CLAUDE.md](../../CLAUDE.md)
   - 作为 Claude Code 的项目级工作约束
+- [../architecture/ai-first-execution-standard.md](../architecture/ai-first-execution-standard.md)
+  - 作为新增设计、校验与阶段验收的 AI-first 正式执行入口
 - [../guides/subagents-guide.md](../guides/subagents-guide.md)
   - 作为并行协作与子代理调度的基本规则
 - [../guides/worktree-guide.md](../guides/worktree-guide.md)
@@ -182,7 +196,7 @@
 - [../prompts/](../prompts/)
   - 作为执行素材库，而不是当前协作总规范
 
-## 9. 切换到仅使用 Codex 时如何处理
+## 10. 切换到仅使用 Codex 时如何处理
 
 如果一周后切换到仅使用 Codex，当前文档体系不需要推翻，只需要调整理解方式：
 
@@ -193,7 +207,7 @@
 
 也就是说，后续变化的是“工具数量”，不是“工作纪律”。
 
-## 10. 现阶段是否满足工作需要
+## 11. 现阶段是否满足工作需要
 
 结论：**部分满足，但补完本文档后，才算基本满足。**
 
@@ -213,13 +227,14 @@
 
 本文档就是用来补这三个缺口的。
 
-## 11. 当前推荐入口
+## 12. 当前推荐入口
 
 现阶段协作时，建议优先阅读：
 
 1. [../../AGENTS.md](../../AGENTS.md)
 2. [../../Plan.md](../../Plan.md)
 3. [../current-status.md](../current-status.md)
-4. [current-collaboration-mode.md](current-collaboration-mode.md)
-5. [../designs/README.md](../designs/README.md)
-6. 与当前任务直接相关的模块边界、详细设计、实现说明和验证文档
+4. [../architecture/ai-first-execution-standard.md](../architecture/ai-first-execution-standard.md)
+5. [current-collaboration-mode.md](current-collaboration-mode.md)
+6. [../designs/README.md](../designs/README.md)
+7. 与当前任务直接相关的模块边界、详细设计、实现说明和验证文档

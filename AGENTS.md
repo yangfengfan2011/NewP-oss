@@ -103,3 +103,8 @@
 - `Shell` should only own layout, global providers, menu aggregation, route aggregation, and controlled registration.
 - Normal frontend module integration may update `frontend/packages/shell/src/builtin-runtime-plugins.ts`; `registerModules.ts` should remain focused on shell-side loading/composition logic.
 - The full guardrails reference lives in `docs/architecture/componentization-guardrails.md`.
+
+## 提交约定
+
+- 后续新增的 Git 提交信息默认使用简体中文，除非用户明确要求使用其他语言。
+- 默认生成的设计、计划、说明等项目文档必须使用简体中文，除非用户明确要求使用其他语言。

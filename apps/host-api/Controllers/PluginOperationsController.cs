@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.HostApi.Controllers;
 
 /// <summary>
-/// 插件运维只读接口：提供模块状态列表和单模块详情查询。
+/// 插件运维接口：提供模块状态查询、上传验证和生命周期管理能力。
 /// 仅限 Admin 角色访问。
 /// </summary>
 [ApiController]
@@ -117,6 +117,21 @@ public class PluginOperationsController : ControllerBase
     public IActionResult Disable(string moduleId)
     {
         var result = _lifecycleService.Disable(moduleId);
+        if (result.Status == "Failed")
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 卸载指定模块的所有已安装版本。
+    /// </summary>
+    [HttpDelete("modules/{moduleId}")]
+    public IActionResult Uninstall(string moduleId)
+    {
+        var result = _lifecycleService.Uninstall(moduleId);
         if (result.Status == "Failed")
         {
             return BadRequest(result);

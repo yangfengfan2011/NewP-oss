@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("install", "enable", "disable", "rollback")]
+    [ValidateSet("install", "enable", "disable", "uninstall", "rollback")]
     [string]$Action,
     [string]$PackagePath,
     [string]$ModuleId,
@@ -49,6 +49,13 @@ switch ($Action) {
         }
 
         $dotnetArgs += @("disable", "--module-id", $ModuleId, "--install-root", $InstallRoot)
+    }
+    "uninstall" {
+        if ([string]::IsNullOrWhiteSpace($ModuleId)) {
+            throw "-ModuleId is required when -Action uninstall."
+        }
+
+        $dotnetArgs += @("uninstall", "--module-id", $ModuleId, "--install-root", $InstallRoot)
     }
     "rollback" {
         if ([string]::IsNullOrWhiteSpace($ModuleId)) {

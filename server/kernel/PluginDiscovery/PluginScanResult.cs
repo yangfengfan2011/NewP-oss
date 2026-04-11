@@ -47,5 +47,7 @@ public enum PluginScanErrorType
     IncompatibleHostVersion,
     EntryAssemblyLoadFailed,
     PluginDisabled,
-    EntryAssemblyHashMismatch
+    EntryAssemblyHashMismatch,
+    DependencyNotSatisfied,
+    CircularDependency
 }

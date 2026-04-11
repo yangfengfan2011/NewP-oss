@@ -1,16 +1,24 @@
 using System.Text;
 using System.Text.Json;
+using ICP.Platform.Kernel.PluginDiscovery;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
 public class InstalledPluginStateStore
 {
+    internal const int DefaultRetainedVersionCount = 2;
+    private const string PrunedVersionsRootName = ".pruned";
+
     private static readonly char[] InvalidPathSegmentChars = Path.GetInvalidFileNameChars()
         .Concat(Path.GetInvalidPathChars())
         .Append(Path.DirectorySeparatorChar)
         .Append(Path.AltDirectorySeparatorChar)
         .Distinct()
         .ToArray();
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     private readonly string _stateRoot;
     private readonly string _installRoot;
@@ -118,6 +126,47 @@ public class InstalledPluginStateStore
         }
     }
 
+    public bool TryDeleteModule(string moduleId, out string? errorMessage)
+    {
+        errorMessage = null;
+
+        try
+        {
+            if (!TryGetStatePath(moduleId, out var statePath, out errorMessage))
+            {
+                return false;
+            }
+
+            if (!TryGetModulePackagesPath(moduleId, out var modulePackagesPath, out errorMessage))
+            {
+                return false;
+            }
+
+            if (File.Exists(statePath))
+            {
+                File.Delete(statePath);
+            }
+
+            if (Directory.Exists(modulePackagesPath))
+            {
+                Directory.Delete(modulePackagesPath, recursive: true);
+            }
+
+            if (TryGetArchivedModulePath(moduleId, out var archivedModulePath, out _)
+                && Directory.Exists(archivedModulePath))
+            {
+                Directory.Delete(archivedModulePath, recursive: true);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            errorMessage = $"Failed to delete installed plugin state for '{moduleId}': {ex.Message}";
+            return false;
+        }
+    }
+
     /// <summary>
     /// 加载所有已安装模块的记录（包括已禁用的模块）。
     /// </summary>
@@ -139,7 +188,7 @@ public class InstalledPluginStateStore
                 continue;
             }
 
-            if (!string.Equals(record.Status, "Installed", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(record.Status, InstalledPluginLifecycleState.Installed, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -168,7 +217,7 @@ public class InstalledPluginStateStore
                 continue;
             }
 
-            if (!string.Equals(record.Status, "Installed", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(record.Status, InstalledPluginLifecycleState.Installed, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -182,6 +231,52 @@ public class InstalledPluginStateStore
         }
 
         return enabledRecords;
+    }
+
+    internal bool TryLoadPackageDependencies(string packageRoot, out IReadOnlyList<string> dependencyModuleIds, out string? errorMessage)
+    {
+        dependencyModuleIds = Array.Empty<string>();
+        errorMessage = null;
+
+        try
+        {
+            var fullPackageRoot = Path.GetFullPath(packageRoot);
+            var pluginJsonPath = Path.Combine(fullPackageRoot, "plugin.json");
+            if (!File.Exists(pluginJsonPath))
+            {
+                errorMessage = $"Plugin manifest not found at '{pluginJsonPath}'.";
+                return false;
+            }
+
+            var packageManifest = JsonSerializer.Deserialize<UnifiedPluginPackageManifest>(File.ReadAllText(pluginJsonPath), ManifestJsonOptions)
+                ?? throw new JsonException("plugin.json deserialized to null.");
+
+            if (packageManifest.Artifacts is null || string.IsNullOrWhiteSpace(packageManifest.Artifacts.Backend))
+            {
+                throw new JsonException("Plugin manifest Artifacts.Backend must not be empty.");
+            }
+
+            var backendManifestPath = ResolveContainedFilePath(fullPackageRoot, packageManifest.Artifacts.Backend, "Artifacts.Backend");
+            var backendManifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(backendManifestPath), ManifestJsonOptions)
+                ?? throw new JsonException("Backend manifest deserialized to null.");
+
+            var dependencies = backendManifest.Dependencies?
+                .Select(dependencyId => dependencyId?.Trim())
+                .Where(dependencyId => !string.IsNullOrWhiteSpace(dependencyId))
+                .Select(dependencyId => dependencyId!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            dependencyModuleIds = dependencies ?? new List<string>();
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            errorMessage = $"Failed to load plugin dependencies for '{packageRoot}': {ex.Message}";
+            dependencyModuleIds = Array.Empty<string>();
+            return false;
+        }
     }
 
     internal bool TryCreateEnabledRecord(InstalledPluginRecord record, out InstalledPluginRecord enabledRecord)
@@ -206,6 +301,7 @@ public class InstalledPluginStateStore
             Status = record.Status,
             PackageRoot = GetPackageRoot(record.ModuleId, enabledVersion),
             CurrentEnabledVersion = enabledVersion,
+            IsDisabled = false,
             InstalledVersions = record.InstalledVersions
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList()
@@ -217,6 +313,332 @@ public class InstalledPluginStateStore
     internal string GetPackageRoot(string moduleId, string version)
     {
         return Path.GetFullPath(Path.Combine(_installRoot, "packages", moduleId, version));
+    }
+
+    internal bool TryPruneOldVersions(
+        InstalledPluginRecord record,
+        int retainCount,
+        out InstalledPluginRecord updatedRecord,
+        out string? errorMessage)
+    {
+        errorMessage = null;
+
+        try
+        {
+            ValidateRecord(record, record.ModuleId);
+
+            var installedVersions = record.InstalledVersions
+                .Where(version => !string.IsNullOrWhiteSpace(version))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (installedVersions.Count <= retainCount)
+            {
+                updatedRecord = CloneRecord(record, installedVersions, record.Version);
+                return true;
+            }
+
+            var retainedVersions = DetermineRetainedVersions(record, installedVersions, retainCount);
+            var removedVersions = installedVersions
+                .Where(version => !retainedVersions.Contains(version, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (removedVersions.Count == 0)
+            {
+                updatedRecord = CloneRecord(record, installedVersions, record.Version);
+                return true;
+            }
+
+            var latestRetainedVersion = retainedVersions[^1];
+            updatedRecord = CloneRecord(record, retainedVersions, latestRetainedVersion);
+
+            if (!TrySave(updatedRecord, out errorMessage))
+            {
+                updatedRecord = null!;
+                return false;
+            }
+
+            foreach (var removedVersion in removedVersions)
+            {
+                CleanupVersionArtifacts(record.ModuleId, removedVersion);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            updatedRecord = null!;
+            errorMessage = $"Failed to prune installed plugin versions for '{record.ModuleId}': {ex.Message}";
+            return false;
+        }
+    }
+
+    private bool TryGetModulePackagesPath(string moduleId, out string path, out string? errorMessage)
+    {
+        errorMessage = null;
+        path = string.Empty;
+
+        if (!TryValidateModuleId(moduleId, out errorMessage))
+        {
+            return false;
+        }
+
+        var packagesRoot = Path.GetFullPath(Path.Combine(_installRoot, "packages"));
+        var candidatePath = Path.GetFullPath(Path.Combine(packagesRoot, moduleId));
+        if (!candidatePath.StartsWith(packagesRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            errorMessage = $"Installed plugin package moduleId '{moduleId}' resolves to an unsafe packages path.";
+            return false;
+        }
+
+        path = candidatePath;
+        return true;
+    }
+
+    private IReadOnlyList<string> DetermineRetainedVersions(InstalledPluginRecord record, IReadOnlyList<string> installedVersions, int retainCount)
+    {
+        var retainedVersions = installedVersions
+            .Skip(Math.Max(0, installedVersions.Count - retainCount))
+            .ToList();
+
+        foreach (var protectedVersion in GetProtectedVersions(record, installedVersions))
+        {
+            if (retainedVersions.Contains(protectedVersion, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            retainedVersions.Add(protectedVersion);
+        }
+
+        return installedVersions
+            .Where(version => retainedVersions.Contains(version, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> GetProtectedVersions(InstalledPluginRecord record, IReadOnlyList<string> installedVersions)
+    {
+        var protectedVersions = new List<string>();
+        if (string.IsNullOrWhiteSpace(record.CurrentEnabledVersion))
+        {
+            return protectedVersions;
+        }
+
+        var currentEnabledVersion = installedVersions.FirstOrDefault(
+            version => string.Equals(version, record.CurrentEnabledVersion, StringComparison.OrdinalIgnoreCase));
+        if (currentEnabledVersion is null)
+        {
+            return protectedVersions;
+        }
+
+        protectedVersions.Add(currentEnabledVersion);
+
+        var currentIndex = -1;
+        for (var i = 0; i < installedVersions.Count; i++)
+        {
+            if (string.Equals(installedVersions[i], currentEnabledVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+        if (currentIndex > 0)
+        {
+            protectedVersions.Add(installedVersions[currentIndex - 1]);
+        }
+
+        return protectedVersions;
+    }
+
+    private InstalledPluginRecord CloneRecord(InstalledPluginRecord record, IReadOnlyList<string> installedVersions, string currentVersion)
+    {
+        return new InstalledPluginRecord
+        {
+            ModuleId = record.ModuleId,
+            Version = currentVersion,
+            Status = record.Status,
+            PackageRoot = GetPackageRoot(record.ModuleId, currentVersion),
+            CurrentEnabledVersion = record.CurrentEnabledVersion,
+            IsDisabled = record.IsDisabled,
+            InstalledVersions = installedVersions.ToList()
+        };
+    }
+
+    private void CleanupVersionArtifacts(string moduleId, string version)
+    {
+        try
+        {
+            ArchiveDirectoryIfExists(GetPackageRoot(moduleId, version), GetArchivedPackageRoot(moduleId, version));
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            ArchiveDirectoryIfExists(
+                Path.Combine(_installRoot, "public", moduleId, version),
+                GetArchivedPublicRoot(moduleId, version));
+        }
+        catch
+        {
+        }
+    }
+
+    private bool TryGetArchivedModulePath(string moduleId, out string path, out string? errorMessage)
+    {
+        errorMessage = null;
+        path = string.Empty;
+
+        if (!TryValidateModuleId(moduleId, out errorMessage))
+        {
+            return false;
+        }
+
+        var archivedRoot = Path.GetFullPath(Path.Combine(_installRoot, PrunedVersionsRootName, "packages"));
+        var candidatePath = Path.GetFullPath(Path.Combine(archivedRoot, moduleId));
+        if (!candidatePath.StartsWith(archivedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            errorMessage = $"Archived plugin package moduleId '{moduleId}' resolves to an unsafe path.";
+            return false;
+        }
+
+        path = candidatePath;
+        return true;
+    }
+
+    private string GetArchivedPackageRoot(string moduleId, string version)
+    {
+        return Path.GetFullPath(Path.Combine(_installRoot, PrunedVersionsRootName, "packages", moduleId, version));
+    }
+
+    private string GetArchivedPublicRoot(string moduleId, string version)
+    {
+        return Path.GetFullPath(Path.Combine(_installRoot, PrunedVersionsRootName, "public", moduleId, version));
+    }
+
+    private static void ArchiveDirectoryIfExists(string sourcePath, string archivePath)
+    {
+        if (!Directory.Exists(sourcePath))
+        {
+            return;
+        }
+
+        if (Directory.Exists(archivePath))
+        {
+            Directory.Delete(archivePath, recursive: true);
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
+        Directory.Move(sourcePath, archivePath);
+    }
+
+    private static void RestoreDirectory(string archivePath, string destinationPath)
+    {
+        if (!Directory.Exists(archivePath))
+        {
+            return;
+        }
+
+        if (Directory.Exists(destinationPath))
+        {
+            Directory.Delete(destinationPath, recursive: true);
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        Directory.Move(archivePath, destinationPath);
+    }
+
+    internal bool TryRestoreArchivedVersion(string moduleId, string version, out string? errorMessage)
+    {
+        errorMessage = null;
+
+        try
+        {
+            var archivedPackageRoot = GetArchivedPackageRoot(moduleId, version);
+            if (!Directory.Exists(archivedPackageRoot))
+            {
+                errorMessage = $"Archived plugin package version '{moduleId}@{version}' was not found.";
+                return false;
+            }
+
+            RestoreDirectory(archivedPackageRoot, GetPackageRoot(moduleId, version));
+            RestoreDirectory(GetArchivedPublicRoot(moduleId, version), Path.Combine(_installRoot, "public", moduleId, version));
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            errorMessage = $"Failed to restore archived plugin package version '{moduleId}@{version}': {ex.Message}";
+            return false;
+        }
+    }
+
+    internal bool TryGetPreviousArchivedVersion(string moduleId, string currentEnabledVersion, out string? previousVersion, out string? errorMessage)
+    {
+        previousVersion = null;
+        errorMessage = null;
+
+        try
+        {
+            if (!TryGetArchivedModulePath(moduleId, out var archivedModulePath, out errorMessage))
+            {
+                return false;
+            }
+
+            if (!Directory.Exists(archivedModulePath))
+            {
+                return false;
+            }
+
+            if (!TryParseVersion(currentEnabledVersion, out var currentVersion))
+            {
+                errorMessage = $"Current enabled version '{currentEnabledVersion}' is not a valid version string.";
+                return false;
+            }
+
+            Version? bestCandidate = null;
+            string? bestCandidateText = null;
+
+            foreach (var archivedVersionDirectory in Directory.GetDirectories(archivedModulePath, "*", SearchOption.TopDirectoryOnly))
+            {
+                var archivedVersionText = Path.GetFileName(archivedVersionDirectory);
+                if (!TryParseVersion(archivedVersionText, out var archivedVersion))
+                {
+                    continue;
+                }
+
+                if (archivedVersion >= currentVersion)
+                {
+                    continue;
+                }
+
+                if (bestCandidate is null || archivedVersion > bestCandidate)
+                {
+                    bestCandidate = archivedVersion;
+                    bestCandidateText = archivedVersionText;
+                }
+            }
+
+            previousVersion = bestCandidateText;
+            return previousVersion is not null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            errorMessage = $"Failed to inspect archived plugin versions for '{moduleId}': {ex.Message}";
+            return false;
+        }
+    }
+
+    private static bool TryParseVersion(string versionText, out Version version)
+    {
+        version = new Version(0, 0);
+        if (!Version.TryParse(versionText, out var parsedVersion))
+        {
+            return false;
+        }
+
+        version = parsedVersion;
+        return true;
     }
 
     private bool TryGetStatePath(string moduleId, out string path, out string? errorMessage)
@@ -273,6 +695,11 @@ public class InstalledPluginStateStore
             {
                 throw new JsonException("Installed plugin state is corrupt: CurrentEnabledVersion must exist in InstalledVersions.");
             }
+
+            if (record.IsDisabled)
+            {
+                throw new JsonException("Installed plugin state is corrupt: IsDisabled cannot be true when CurrentEnabledVersion is set.");
+            }
         }
 
         if (string.IsNullOrWhiteSpace(record.Status))
@@ -309,6 +736,34 @@ public class InstalledPluginStateStore
         {
             throw new JsonException($"Installed plugin state is corrupt: {fieldName} contains unsafe path characters.");
         }
+    }
+
+    private static string ResolveContainedFilePath(string rootPath, string? relativePath, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new JsonException($"Plugin manifest {propertyName} must not be empty.");
+        }
+
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new JsonException($"Plugin manifest {propertyName} resolves to an unsafe path.");
+        }
+
+        var fullRootPath = Path.GetFullPath(rootPath);
+        var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
+        if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new JsonException($"Plugin manifest {propertyName} resolves to an unsafe path.");
+        }
+
+        if (!File.Exists(fullCandidatePath))
+        {
+            throw new IOException($"Required file not found for {propertyName}: {relativePath}");
+        }
+
+        return fullCandidatePath;
     }
 
     private void ValidatePackageRoot(string packageRoot, string moduleId, string version)

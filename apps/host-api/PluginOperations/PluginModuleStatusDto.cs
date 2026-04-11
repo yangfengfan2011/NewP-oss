@@ -13,6 +13,7 @@ public class PluginModuleStatusDto
     public bool CanDisable { get; init; }
     public bool CanRollback { get; init; }
     public bool CanEnable { get; init; }
+    public bool CanUninstall { get; init; }
     public string? LastOperation { get; init; }
     public string? LastError { get; init; }
 }

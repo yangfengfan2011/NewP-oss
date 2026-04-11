@@ -7,5 +7,6 @@ public class InstalledPluginRecord
     public string Status { get; set; } = "Installed";
     public string PackageRoot { get; set; } = string.Empty;
     public string? CurrentEnabledVersion { get; set; }
+    public bool IsDisabled { get; set; }
     public List<string> InstalledVersions { get; set; } = new();
 }

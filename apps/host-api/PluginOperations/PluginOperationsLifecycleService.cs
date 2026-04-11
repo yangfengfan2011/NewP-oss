@@ -3,9 +3,9 @@ using ICP.Platform.Kernel.PluginPackages;
 namespace ICP.Platform.HostApi.PluginOperations;
 
 /// <summary>
-/// 插件生命周期运维服务：封装 install / enable / disable / rollback 操作。
+/// 插件生命周期运维服务：封装 install / enable / disable / uninstall / rollback 操作。
 /// install 仅从已验证的 upload 区域读取，不自动启用版本。
-/// enable / disable / rollback 委托 UnifiedPluginPackageOperations 并刷新 RuntimeViewMaterializer。
+/// enable / disable / uninstall / rollback 委托 UnifiedPluginPackageOperations 并刷新 RuntimeViewMaterializer。
 /// </summary>
 public class PluginOperationsLifecycleService
 {
@@ -59,7 +59,10 @@ public class PluginOperationsLifecycleService
         }
 
         return PluginOperationResultDto.Success(
-            installResult.ModuleId, installResult.Version, "Installed");
+            installResult.ModuleId,
+            installResult.Version,
+            "Installed",
+            GetSuccessMessage(installResult));
     }
 
     /// <summary>
@@ -93,23 +96,91 @@ public class PluginOperationsLifecycleService
     }
 
     /// <summary>
-    /// 回滚指定模块到上一个已安装版本，并刷新 runtime/public 投影。
+    /// 卸载指定模块的所有已安装版本，并刷新 runtime/public 投影。
     /// </summary>
-    public PluginOperationResultDto Rollback(string moduleId)
+    public PluginOperationResultDto Uninstall(string moduleId)
     {
-        var result = _operations.Rollback(moduleId);
+        var result = _operations.Uninstall(moduleId);
         if (result.Status == "Failed")
         {
             return PluginOperationResultDto.Failed(result.ErrorMessage);
         }
 
         RefreshMaterializer();
-        return PluginOperationResultDto.Success(result.ModuleId, result.Version, "Enabled");
+        return PluginOperationResultDto.Success(
+            result.ModuleId,
+            null,
+            "Uninstalled",
+            GetSuccessMessage(result));
+    }
+
+    /// <summary>
+    /// 回滚指定模块到上一个已安装版本，并刷新 runtime/public 投影。
+    /// </summary>
+    public PluginOperationResultDto Rollback(string moduleId)
+    {
+        if (!_stateStore.TryLoad(moduleId, out var previousRecord, out var loadError))
+        {
+            return PluginOperationResultDto.Failed(loadError ?? $"Failed to load plugin state for '{moduleId}'.");
+        }
+
+        var result = _operations.Rollback(moduleId);
+        if (result.Status == "Failed")
+        {
+            return PluginOperationResultDto.Failed(result.ErrorMessage);
+        }
+
+        try
+        {
+            RefreshMaterializer();
+            return PluginOperationResultDto.Success(result.ModuleId, result.Version, "Enabled");
+        }
+        catch (Exception ex)
+        {
+            if (previousRecord is not null && !_stateStore.TrySave(previousRecord, out var restoreStateError))
+            {
+                return PluginOperationResultDto.Failed(
+                    $"{ex.Message} Failed to restore previous plugin state: {restoreStateError}");
+            }
+
+            try
+            {
+                RefreshMaterializer();
+            }
+            catch (Exception restoreProjectionEx)
+            {
+                return PluginOperationResultDto.Failed(
+                    $"{ex.Message} Failed to restore previous runtime projection: {restoreProjectionEx.Message}");
+            }
+
+            return PluginOperationResultDto.Failed($"{ex.Message} Plugin state was restored to the previous version.");
+        }
     }
 
     private void RefreshMaterializer()
     {
         _materializer.Materialize(_installRoot);
+    }
+
+    private static string GetSuccessMessage(object result)
+    {
+        return GetResultString(result, "Message", "WarningMessage");
+    }
+
+    private static string GetResultString(object result, params string[] propertyNames)
+    {
+        var type = result.GetType();
+
+        foreach (var propertyName in propertyNames)
+        {
+            var property = type.GetProperty(propertyName);
+            if (property?.PropertyType == typeof(string))
+            {
+                return (string?)property.GetValue(result) ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
     }
 }
 
@@ -124,14 +195,14 @@ public class PluginOperationResultDto
     /// <summary>涉及的版本号；禁用操作时为 null。</summary>
     public string? Version { get; init; }
 
-    /// <summary>操作状态：Installed / Enabled / Disabled / Failed。</summary>
+    /// <summary>操作状态：Installed / Enabled / Disabled / Uninstalled / Failed。</summary>
     public string Status { get; init; } = string.Empty;
 
-    /// <summary>操作消息，成功时可为空字符串，失败时包含错误描述。</summary>
+    /// <summary>操作消息，成功时可携带 warning/message，失败时包含错误描述。</summary>
     public string Message { get; init; } = string.Empty;
 
-    public static PluginOperationResultDto Success(string moduleId, string? version, string status) =>
-        new() { ModuleId = moduleId, Version = version, Status = status, Message = string.Empty };
+    public static PluginOperationResultDto Success(string moduleId, string? version, string status, string message = "") =>
+        new() { ModuleId = moduleId, Version = version, Status = status, Message = message };
 
     public static PluginOperationResultDto Failed(string message) =>
         new() { Status = "Failed", Message = message };

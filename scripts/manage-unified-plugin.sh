@@ -8,6 +8,7 @@ Usage:
   ./scripts/manage-unified-plugin.sh --action install --package-path <path> [--install-root artifacts/installed-plugins]
   ./scripts/manage-unified-plugin.sh --action enable --module-id <id> --version <version> [--install-root artifacts/installed-plugins]
   ./scripts/manage-unified-plugin.sh --action disable --module-id <id> [--install-root artifacts/installed-plugins]
+  ./scripts/manage-unified-plugin.sh --action uninstall --module-id <id> [--install-root artifacts/installed-plugins]
   ./scripts/manage-unified-plugin.sh --action rollback --module-id <id> [--install-root artifacts/installed-plugins]
 EOF
 }
@@ -98,7 +99,7 @@ case "$action" in
     fi
     ps_args+=("-ModuleId" "$module_id" "-Version" "$version")
     ;;
-  disable|rollback)
+  disable|uninstall|rollback)
     if [[ -z "$module_id" ]]; then
       echo "Missing --module-id for $action." >&2
       usage

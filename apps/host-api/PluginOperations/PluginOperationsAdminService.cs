@@ -34,6 +34,7 @@ public class PluginOperationsAdminService
     {
         var currentVersion = record.CurrentEnabledVersion;
         var hasEnabled = !string.IsNullOrWhiteSpace(currentVersion);
+        var lifecycleState = InstalledPluginLifecycleState.FromRecord(record);
         var canRollback = false;
 
         if (hasEnabled)
@@ -47,7 +48,7 @@ public class PluginOperationsAdminService
         {
             ModuleId = record.ModuleId,
             DisplayName = record.ModuleId,
-            Status = hasEnabled ? "Enabled" : "Installed",
+            Status = lifecycleState,
             InstalledVersions = record.InstalledVersions
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList()
@@ -56,6 +57,7 @@ public class PluginOperationsAdminService
             CanDisable = hasEnabled,
             CanRollback = canRollback,
             CanEnable = record.InstalledVersions.Count > 0,
+            CanUninstall = record.InstalledVersions.Count > 0 && !hasEnabled,
             LastOperation = null,
             LastError = null
         };

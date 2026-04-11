@@ -22,6 +22,7 @@ static class PluginOpsApp
                 "install" => RunInstall(options),
                 "enable" => RunEnable(options),
                 "disable" => RunDisable(options),
+                "uninstall" => RunUninstall(options),
                 "rollback" => RunRollback(options),
                 _ => Fail($"Unknown command '{args[0]}'.")
             };
@@ -78,6 +79,13 @@ static class PluginOpsApp
         return RunLifecycleWithRefresh(installRoot, moduleId, stateStore => new UnifiedPluginPackageOperations(stateStore).Disable(moduleId));
     }
 
+    private static int RunUninstall(IReadOnlyDictionary<string, string> options)
+    {
+        var moduleId = RequireOption(options, "module-id");
+        var installRoot = ResolveInstallRoot(RequireOption(options, "install-root"));
+        return RunLifecycleWithRefresh(installRoot, moduleId, stateStore => new UnifiedPluginPackageOperations(stateStore).Uninstall(moduleId));
+    }
+
     private static int RunRollback(IReadOnlyDictionary<string, string> options)
     {
         var moduleId = RequireOption(options, "module-id");
@@ -98,7 +106,8 @@ static class PluginOpsApp
 
         var result = action(stateStore);
         if (!string.Equals(result.Status, "Enabled", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(result.Status, "Disabled", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(result.Status, "Disabled", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(result.Status, "Uninstalled", StringComparison.OrdinalIgnoreCase))
         {
             PrintLifecycleResult(result);
             return 1;
@@ -191,6 +200,10 @@ static class PluginOpsApp
         if (string.Equals(result.Status, "Installed", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine($"{result.ModuleId}:{result.Version}:{result.Status}");
+            if (!string.IsNullOrWhiteSpace(result.Message))
+            {
+                Console.Error.WriteLine(result.Message);
+            }
             return;
         }
 
@@ -200,9 +213,14 @@ static class PluginOpsApp
     private static void PrintLifecycleResult(UnifiedPluginLifecycleResult result)
     {
         if (string.Equals(result.Status, "Enabled", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(result.Status, "Disabled", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(result.Status, "Disabled", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(result.Status, "Uninstalled", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine($"{result.ModuleId}:{result.Version ?? string.Empty}:{result.Status}");
+            if (!string.IsNullOrWhiteSpace(result.Message))
+            {
+                Console.Error.WriteLine(result.Message);
+            }
             return;
         }
 
@@ -227,6 +245,7 @@ static class PluginOpsApp
         Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- install --package <path> --install-root <path>");
         Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- enable --module-id <id> --version <version> --install-root <path>");
         Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- disable --module-id <id> --install-root <path>");
+        Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- uninstall --module-id <id> --install-root <path>");
         Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- rollback --module-id <id> --install-root <path>");
     }
 }

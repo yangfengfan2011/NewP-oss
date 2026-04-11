@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ICP.Platform.Kernel.PluginPackages;
 
 public class UnifiedPluginPackageInstaller
@@ -88,21 +90,34 @@ public class UnifiedPluginPackageInstaller
                 installedVersions.Add(scanResult.Manifest.Version);
             }
 
-            if (!_stateStore.TrySave(new InstalledPluginRecord
-                {
-                    ModuleId = scanResult.Manifest.ModuleId,
-                    Version = scanResult.Manifest.Version,
-                    Status = "Installed",
-                    PackageRoot = versionedTarget,
-                    CurrentEnabledVersion = existingRecord?.CurrentEnabledVersion,
-                    InstalledVersions = installedVersions
-                }, out var saveError))
+            var installedRecord = new InstalledPluginRecord
+            {
+                ModuleId = scanResult.Manifest.ModuleId,
+                Version = scanResult.Manifest.Version,
+                Status = InstalledPluginLifecycleState.Installed,
+                PackageRoot = versionedTarget,
+                CurrentEnabledVersion = existingRecord?.CurrentEnabledVersion,
+                IsDisabled = existingRecord?.IsDisabled ?? false,
+                InstalledVersions = installedVersions
+            };
+
+            if (!_stateStore.TrySave(installedRecord, out var saveError))
             {
                 throw new IOException(saveError);
             }
 
+            if (!_stateStore.TryPruneOldVersions(
+                installedRecord,
+                InstalledPluginStateStore.DefaultRetainedVersionCount,
+                out _,
+                out var pruneError))
+            {
+                throw new IOException(pruneError);
+            }
+
             CleanupInstallDirectory(backupTarget);
-            return UnifiedPluginInstallResult.Installed(scanResult.Manifest.ModuleId, scanResult.Manifest.Version);
+            var warningMessage = BuildDependencyPrecheckWarning(versionedTarget);
+            return UnifiedPluginInstallResult.Installed(scanResult.Manifest.ModuleId, scanResult.Manifest.Version, warningMessage);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -121,6 +136,53 @@ public class UnifiedPluginPackageInstaller
             }
 
             return UnifiedPluginInstallResult.Failed($"Failed to install plugin package '{scanResult.Manifest.ModuleId}@{scanResult.Manifest.Version}': {ex.Message}");
+        }
+    }
+
+    private string? BuildDependencyPrecheckWarning(string packageRoot)
+    {
+        try
+        {
+            if (!_stateStore.TryLoadPackageDependencies(packageRoot, out var dependencyModuleIds, out var loadError))
+            {
+                return $"Dependency precheck warning: {loadError}";
+            }
+
+            if (dependencyModuleIds.Count == 0)
+            {
+                return null;
+            }
+
+            var installedRecords = _stateStore.LoadAll()
+                .ToDictionary(record => record.ModuleId, StringComparer.OrdinalIgnoreCase);
+            var enabledRecords = _stateStore.LoadAllEnabled()
+                .ToDictionary(record => record.ModuleId, StringComparer.OrdinalIgnoreCase);
+
+            var unresolvedDependencies = new List<string>();
+            foreach (var dependencyModuleId in dependencyModuleIds)
+            {
+                if (!installedRecords.ContainsKey(dependencyModuleId))
+                {
+                    unresolvedDependencies.Add($"{dependencyModuleId} (not installed)");
+                    continue;
+                }
+
+                if (!enabledRecords.ContainsKey(dependencyModuleId))
+                {
+                    unresolvedDependencies.Add($"{dependencyModuleId} (installed but disabled)");
+                }
+            }
+
+            if (unresolvedDependencies.Count == 0)
+            {
+                return null;
+            }
+
+            return $"Dependency precheck warning: some dependencies are not ready: {string.Join(", ", unresolvedDependencies)}.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            return $"Dependency precheck warning: unable to verify dependencies ({ex.Message}).";
         }
     }
 
@@ -198,13 +260,18 @@ public class UnifiedPluginInstallResult
     public string Version { get; init; } = string.Empty;
     public string Status { get; init; } = string.Empty;
     public string ErrorMessage { get; init; } = string.Empty;
+    public string WarningMessage { get; init; } = string.Empty;
+    public string Message => string.Equals(Status, "Failed", StringComparison.OrdinalIgnoreCase)
+        ? ErrorMessage
+        : WarningMessage;
 
-    public static UnifiedPluginInstallResult Installed(string moduleId, string version) =>
+    public static UnifiedPluginInstallResult Installed(string moduleId, string version, string? warningMessage = null) =>
         new()
         {
             ModuleId = moduleId,
             Version = version,
-            Status = "Installed"
+            Status = "Installed",
+            WarningMessage = warningMessage ?? string.Empty
         };
 
     public static UnifiedPluginInstallResult Failed(string errorMessage) =>

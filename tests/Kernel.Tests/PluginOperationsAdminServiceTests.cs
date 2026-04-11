@@ -147,6 +147,49 @@ public class PluginOperationsAdminServiceTests : IDisposable
         Assert.Null(dto.CurrentEnabledVersion);
     }
 
+    [Fact]
+    public void GetModule_ReturnsDisabledStatus_WhenModuleWasExplicitlyDisabled()
+    {
+        var record = InstallModule("Audit", "1.0.0");
+        record.IsDisabled = true;
+
+        Assert.True(_stateStore.TrySave(record, out var saveError), saveError);
+
+        var dto = _service.GetModule("Audit");
+
+        Assert.NotNull(dto);
+        Assert.Equal("Disabled", dto!.Status);
+        Assert.Null(dto.CurrentEnabledVersion);
+        Assert.True(dto.CanEnable);
+        Assert.False(dto.CanDisable);
+    }
+
+    [Fact]
+    public void GetModule_ExposesCanUninstall_WhenModuleIsNotEnabled()
+    {
+        InstallModule("Audit", "1.0.0");
+
+        var dto = _service.GetModule("Audit");
+
+        Assert.NotNull(dto);
+        var property = dto!.GetType().GetProperty("CanUninstall");
+        Assert.NotNull(property);
+        Assert.True(Assert.IsType<bool>(property!.GetValue(dto)));
+    }
+
+    [Fact]
+    public void GetModule_CanUninstall_IsFalse_WhenModuleIsEnabled()
+    {
+        InstallModule("Audit", "1.0.0", enabledVersion: "1.0.0");
+
+        var dto = _service.GetModule("Audit");
+
+        Assert.NotNull(dto);
+        var property = dto!.GetType().GetProperty("CanUninstall");
+        Assert.NotNull(property);
+        Assert.False(Assert.IsType<bool>(property!.GetValue(dto)));
+    }
+
     // ── CanEnable semantics ────────────────────────────────────────────
 
     [Fact]

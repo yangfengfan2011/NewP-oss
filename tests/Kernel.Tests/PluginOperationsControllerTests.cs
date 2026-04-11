@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text.Json;
 using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.Kernel.Abstractions;
@@ -200,6 +201,47 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     }
 
     [Fact]
+    public async Task Delete_Returns401_WhenNotAuthenticated()
+    {
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        var response = await client.DeleteAsync("/api/plugin-ops/modules/Audit");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_Returns200_WhenModuleIsInstalled()
+    {
+        using var client = await CreateAuthenticatedClientAsync();
+        await InstallModuleViaApiAsync(client, "Cleanup", "1.0.0");
+
+        var response = await client.DeleteAsync("/api/plugin-ops/modules/Cleanup");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var dto = doc.RootElement;
+        Assert.Equal("Cleanup", dto.GetProperty("moduleId").GetString());
+        Assert.Equal("Uninstalled", dto.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Delete_Returns400_WhenModuleIsEnabled()
+    {
+        using var client = await CreateAuthenticatedClientAsync();
+        await InstallModuleViaApiAsync(client, "Guarded", "1.0.0");
+
+        var enableResponse = await client.PostAsJsonAsync("/api/plugin-ops/modules/Guarded/enable", new { version = "1.0.0" });
+        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+
+        var response = await client.DeleteAsync("/api/plugin-ops/modules/Guarded");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Rollback_Returns401_WhenNotAuthenticated()
     {
         using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -250,6 +292,47 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         Assert.Equal("Enabled", dto.GetProperty("status").GetString());
         Assert.Equal("Audit", dto.GetProperty("moduleId").GetString());
         Assert.Equal("1.0.0", dto.GetProperty("version").GetString());
+    }
+
+    [Fact]
+    public async Task Rollback_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    {
+        var armFailure = false;
+        using var factory = new TestWebApplicationFactory
+        {
+            RuntimeViewMaterializerFactory = stateStore =>
+                CreateMaterializerWithConditionalSwapFailure(stateStore, () => armFailure, 1, "Simulated public swap failure")
+        };
+        using var client = await CreateAuthenticatedClientAsync(factory);
+
+        await InstallModuleViaApiAsync(factory, client, "Audit", "2.0.0");
+
+        var enableResponse = await client.PostAsJsonAsync("/api/plugin-ops/modules/Audit/enable", new { version = "2.0.0" });
+        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+
+        armFailure = true;
+        var response = await client.PostAsync("/api/plugin-ops/modules/Audit/rollback", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var dto = doc.RootElement;
+        Assert.Equal("Failed", dto.GetProperty("status").GetString());
+        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Audit");
+        Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
+        var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
+        using var moduleDoc = JsonDocument.Parse(moduleJson);
+        var moduleDto = moduleDoc.RootElement;
+        Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
+        Assert.Equal("2.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
+        var installedVersions = moduleDto.GetProperty("installedVersions")
+            .EnumerateArray()
+            .Select(v => v.GetString())
+            .ToList();
+        Assert.Contains("1.0.0", installedVersions);
+        Assert.Contains("2.0.0", installedVersions);
     }
 
     // ── Upload Verify ───────────────────────────────────────────────────
@@ -321,6 +404,38 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         return ms;
     }
 
+    private async Task InstallModuleViaApiAsync(HttpClient client, string moduleId, string version)
+    {
+        var packageDir = _factory.CreateValidTestPackage(moduleId, version);
+        var zipStream = CreateZipFromDirectory(packageDir);
+        using var uploadContent = new MultipartFormDataContent();
+        uploadContent.Add(new StreamContent(zipStream), "file", $"{moduleId}-{version}.zip");
+        var uploadResponse = await client.PostAsync("/api/plugin-ops/uploads/verify", uploadContent);
+        Assert.Equal(HttpStatusCode.OK, uploadResponse.StatusCode);
+        var uploadJson = await uploadResponse.Content.ReadAsStringAsync();
+        using var uploadDoc = JsonDocument.Parse(uploadJson);
+        var uploadId = uploadDoc.RootElement.GetProperty("uploadId").GetString()!;
+
+        var installResponse = await client.PostAsync($"/api/plugin-ops/uploads/{uploadId}/install", null);
+        Assert.Equal(HttpStatusCode.OK, installResponse.StatusCode);
+    }
+
+    private async Task InstallModuleViaApiAsync(TestWebApplicationFactory factory, HttpClient client, string moduleId, string version)
+    {
+        var packageDir = factory.CreateValidTestPackage(moduleId, version);
+        var zipStream = CreateZipFromDirectory(packageDir);
+        using var uploadContent = new MultipartFormDataContent();
+        uploadContent.Add(new StreamContent(zipStream), "file", $"{moduleId}-{version}.zip");
+        var uploadResponse = await client.PostAsync("/api/plugin-ops/uploads/verify", uploadContent);
+        Assert.Equal(HttpStatusCode.OK, uploadResponse.StatusCode);
+        var uploadJson = await uploadResponse.Content.ReadAsStringAsync();
+        using var uploadDoc = JsonDocument.Parse(uploadJson);
+        var uploadId = uploadDoc.RootElement.GetProperty("uploadId").GetString()!;
+
+        var installResponse = await client.PostAsync($"/api/plugin-ops/uploads/{uploadId}/install", null);
+        Assert.Equal(HttpStatusCode.OK, installResponse.StatusCode);
+    }
+
     private async Task<HttpClient> CreateAuthenticatedClientAsync(IReadOnlyList<string>? roles = null)
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -328,6 +443,23 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             AllowAutoRedirect = false
         });
         _factory.StubRoles = roles ?? new List<string> { "LocalAdmin" };
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            Username = "admin",
+            Password = "admin123"
+        });
+        Assert.True(loginResponse.IsSuccessStatusCode,
+            string.Format("Login failed with status {0}: {1}", loginResponse.StatusCode, await loginResponse.Content.ReadAsStringAsync()));
+        return client;
+    }
+
+    private async Task<HttpClient> CreateAuthenticatedClientAsync(TestWebApplicationFactory factory, IReadOnlyList<string>? roles = null)
+    {
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        factory.StubRoles = roles ?? new List<string> { "LocalAdmin" };
         var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
         {
             Username = "admin",
@@ -363,6 +495,8 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             return _testData.CreateValidPackage(moduleId, version);
         }
 
+        internal Func<InstalledPluginStateStore, RuntimeViewMaterializer>? RuntimeViewMaterializerFactory { get; set; }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
@@ -386,7 +520,8 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
                 services.AddSingleton<UnifiedPluginPackageInstaller>();
                 services.AddSingleton<UnifiedPluginPackageOperations>();
                 services.AddSingleton(sp =>
-                    new RuntimeViewMaterializer(sp.GetRequiredService<InstalledPluginStateStore>()));
+                    RuntimeViewMaterializerFactory?.Invoke(sp.GetRequiredService<InstalledPluginStateStore>())
+                    ?? new RuntimeViewMaterializer(sp.GetRequiredService<InstalledPluginStateStore>()));
                 services.AddSingleton(sp =>
                     new PluginOperationsLifecycleService(
                         sp.GetRequiredService<InstalledPluginStateStore>(),
@@ -420,6 +555,69 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
                 Directory.Delete(_installRoot, recursive: true);
             base.Dispose();
         }
+    }
+
+    private static RuntimeViewMaterializer CreateMaterializerWithSwapFailure(InstalledPluginStateStore stateStore, int failOnCallNumber, string message)
+    {
+        var constructor = typeof(RuntimeViewMaterializer).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            [typeof(InstalledPluginStateStore), typeof(FrontendRuntimeManifestBuilder), typeof(Action<string, string>)],
+            modifiers: null);
+
+        Assert.NotNull(constructor);
+
+        var callCount = 0;
+        return (RuntimeViewMaterializer)constructor!.Invoke(
+            [
+                stateStore,
+                new FrontendRuntimeManifestBuilder(),
+                (Action<string, string>)((source, destination) =>
+                {
+                    callCount++;
+                    if (callCount == failOnCallNumber)
+                    {
+                        throw new IOException(message);
+                    }
+
+                    Directory.Move(source, destination);
+                })
+            ]);
+    }
+
+    private static RuntimeViewMaterializer CreateMaterializerWithConditionalSwapFailure(
+        InstalledPluginStateStore stateStore,
+        Func<bool> shouldFail,
+        int failOnCallNumber,
+        string message)
+    {
+        var constructor = typeof(RuntimeViewMaterializer).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            [typeof(InstalledPluginStateStore), typeof(FrontendRuntimeManifestBuilder), typeof(Action<string, string>)],
+            modifiers: null);
+
+        Assert.NotNull(constructor);
+
+        var callCount = 0;
+        return (RuntimeViewMaterializer)constructor!.Invoke(
+            [
+                stateStore,
+                new FrontendRuntimeManifestBuilder(),
+                (Action<string, string>)((source, destination) =>
+                {
+                    if (shouldFail())
+                    {
+                        callCount++;
+                        if (callCount == failOnCallNumber)
+                        {
+                            throw new IOException(message);
+                        }
+                    }
+
+                    Directory.Move(source, destination);
+                })
+            ]);
     }
 
     private class StubAuthorizationService : IAuthorizationService

@@ -7,6 +7,7 @@ public class PluginDiscoveryService
 {
     private readonly PluginScanner _scanner = new();
     private readonly PluginCompatibilityValidator? _validator;
+    private readonly PluginDependencyValidator _dependencyValidator = new();
 
     public PluginDiscoveryService()
     {
@@ -55,6 +56,21 @@ public class PluginDiscoveryService
             results.Add(result);
         }
 
-        return results;
+        var governanceFailures = _dependencyValidator.Validate(results);
+
+        return results
+            .Select(result =>
+            {
+                var moduleId = result.Manifest?.ModuleId;
+                if (result.IsSuccess
+                    && !string.IsNullOrWhiteSpace(moduleId)
+                    && governanceFailures.TryGetValue(moduleId, out var governanceFailure))
+                {
+                    return governanceFailure;
+                }
+
+                return result;
+            })
+            .ToList();
     }
 }

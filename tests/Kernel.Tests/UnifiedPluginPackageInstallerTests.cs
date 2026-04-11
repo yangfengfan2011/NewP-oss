@@ -353,6 +353,99 @@ public class UnifiedPluginPackageInstallerTests : IDisposable
     }
 
     [Fact]
+    public void InstallPackage_PreservesDisabledFlag_WhenInstallingNewerVersion()
+    {
+        var versionOnePackageRoot = _testData.CreateValidPackage("Audit", "1.0.0");
+        var versionTwoPackageRoot = _testData.CreateValidPackage("Audit", "2.0.0");
+        var installRoot = CreateInstallRoot();
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(stateStore);
+
+        Assert.Equal("Installed", installer.Install(versionOnePackageRoot, installRoot).Status);
+        Assert.True(stateStore.TryLoad("Audit", out var existingRecord, out var loadError));
+        Assert.Null(loadError);
+        Assert.NotNull(existingRecord);
+        existingRecord!.IsDisabled = true;
+        Assert.True(stateStore.TrySave(existingRecord, out var saveError));
+        Assert.Null(saveError);
+
+        var result = installer.Install(versionTwoPackageRoot, installRoot);
+
+        Assert.Equal("Installed", result.Status);
+        Assert.True(stateStore.TryLoad("Audit", out var record, out loadError));
+        Assert.Null(loadError);
+        Assert.NotNull(record);
+        Assert.True(record!.IsDisabled);
+        Assert.Null(record.CurrentEnabledVersion);
+    }
+
+    [Fact]
+    public void InstallPackage_WhenThirdVersionIsEnabled_PrunesOldestVersionDirectory_AndKeepsRollbackVersions()
+    {
+        var versionOnePackageRoot = _testData.CreateValidPackage("Audit", "1.0.0");
+        var versionTwoPackageRoot = _testData.CreateValidPackage("Audit", "2.0.0");
+        var versionThreePackageRoot = _testData.CreateValidPackage("Audit", "3.0.0");
+        var installRoot = CreateInstallRoot();
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(stateStore);
+        var operations = new UnifiedPluginPackageOperations(stateStore);
+
+        Assert.Equal("Installed", installer.Install(versionOnePackageRoot, installRoot).Status);
+        Assert.Equal("Installed", installer.Install(versionTwoPackageRoot, installRoot).Status);
+        Assert.Equal("Installed", installer.Install(versionThreePackageRoot, installRoot).Status);
+        Assert.Equal("Enabled", operations.Enable("Audit", "3.0.0").Status);
+
+        Assert.True(stateStore.TryLoad("Audit", out var record, out var loadError));
+        Assert.Null(loadError);
+        Assert.NotNull(record);
+        Assert.Equal("3.0.0", record!.Version);
+        Assert.Equal("3.0.0", record.CurrentEnabledVersion);
+        Assert.Equal(Path.Combine(installRoot, "packages", "Audit", "3.0.0"), record.PackageRoot);
+        Assert.Equal(["2.0.0", "3.0.0"], record.InstalledVersions);
+
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "1.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "2.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "3.0.0")));
+    }
+
+    [Fact]
+    public void Install_WithMissingDependency_ReturnsInstalledStatus_AndWarningMessage()
+    {
+        var packageRoot = CreatePackageWithDependencies("Feature", "1.0.0", "MissingPlugin");
+        var installRoot = CreateInstallRoot();
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(stateStore);
+
+        var result = installer.Install(packageRoot, installRoot);
+
+        Assert.Equal("Installed", result.Status);
+        Assert.Contains("MissingPlugin", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallPackage_InstallingThirdVersion_PrunesOldestInactiveVersion_AndUpdatesRecord()
+    {
+        var installRoot = CreateInstallRoot();
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(stateStore);
+
+        Assert.Equal("Installed", installer.Install(_testData.CreateValidPackage("Audit", "1.0.0"), installRoot).Status);
+        Assert.Equal("Installed", installer.Install(_testData.CreateValidPackage("Audit", "2.0.0"), installRoot).Status);
+        Assert.Equal("Installed", installer.Install(_testData.CreateValidPackage("Audit", "3.0.0"), installRoot).Status);
+
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "1.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "2.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "3.0.0")));
+
+        Assert.True(stateStore.TryLoad("Audit", out var record, out var loadError));
+        Assert.Null(loadError);
+        Assert.NotNull(record);
+        Assert.Equal("3.0.0", record!.Version);
+        Assert.Equal(["2.0.0", "3.0.0"], record.InstalledVersions);
+        Assert.Equal(Path.Combine(installRoot, "packages", "Audit", "3.0.0"), record.PackageRoot);
+    }
+
+    [Fact]
     public void StateStore_LoadAllEnabled_UsesCurrentEnabledVersionPackageRoot_WhenDifferentFromLatestInstalledVersion()
     {
         var installRoot = CreateInstallRoot();
@@ -383,6 +476,35 @@ public class UnifiedPluginPackageInstallerTests : IDisposable
         Assert.Equal("1.0.0", record.CurrentEnabledVersion);
         Assert.Equal(versionOnePackageRoot, record.PackageRoot);
         Assert.Equal(["1.0.0", "2.0.0"], record.InstalledVersions);
+    }
+
+    [Fact]
+    public void StateStore_TryLoadEnabledDisabledConflict_ReturnsFailed()
+    {
+        var installRoot = CreateInstallRoot();
+        Directory.CreateDirectory(Path.Combine(installRoot, "state"));
+        var packageRoot = Path.Combine(installRoot, "packages", "Audit", "1.0.0");
+        Directory.CreateDirectory(packageRoot);
+        File.WriteAllText(
+            Path.Combine(installRoot, "state", "Audit.json"),
+            $$"""
+            {
+              "ModuleId": "Audit",
+              "Version": "1.0.0",
+              "Status": "Installed",
+              "PackageRoot": "{{packageRoot.Replace("\\", "\\\\")}}",
+              "CurrentEnabledVersion": "1.0.0",
+              "InstalledVersions": ["1.0.0"],
+              "IsDisabled": true
+            }
+            """);
+        var stateStore = new InstalledPluginStateStore(installRoot);
+
+        var success = stateStore.TryLoad("Audit", out var record, out var errorMessage);
+
+        Assert.False(success);
+        Assert.Null(record);
+        Assert.Contains("IsDisabled", errorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -560,5 +682,18 @@ public class UnifiedPluginPackageInstallerTests : IDisposable
         Directory.CreateDirectory(installRoot);
         _installRoots.Add(installRoot);
         return installRoot;
+    }
+
+    private string CreatePackageWithDependencies(string moduleId, string version, params string[] dependencies)
+    {
+        var packageRoot = _testData.CreateValidPackage(moduleId, version);
+        var pluginJsonPath = Path.Combine(packageRoot, "backend", "plugin.backend.json");
+        var manifest = JsonSerializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(pluginJsonPath, Encoding.UTF8))!;
+        manifest["Dependencies"] = dependencies;
+        File.WriteAllText(
+            pluginJsonPath,
+            JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }),
+            Encoding.UTF8);
+        return packageRoot;
     }
 }

@@ -10,15 +10,18 @@ public sealed class PersonService : IPersonService
     private readonly IPersonRepository _personRepository;
     private readonly IPersonUserLinkRepository _personUserLinkRepository;
     private readonly IIdentityUserDirectory _identityUserDirectory;
+    private readonly IAuthorizationSummaryReader _authorizationSummaryReader;
 
     public PersonService(
         IPersonRepository personRepository,
         IPersonUserLinkRepository personUserLinkRepository,
-        IIdentityUserDirectory identityUserDirectory)
+        IIdentityUserDirectory identityUserDirectory,
+        IAuthorizationSummaryReader authorizationSummaryReader)
     {
         _personRepository = personRepository;
         _personUserLinkRepository = personUserLinkRepository;
         _identityUserDirectory = identityUserDirectory;
+        _authorizationSummaryReader = authorizationSummaryReader;
     }
 
     public async Task<PersonDto?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default)
@@ -36,6 +39,7 @@ public sealed class PersonService : IPersonService
         }
 
         var link = await _personUserLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
+        var authorizationSummary = await GetAuthorizationSummaryAsync(link, cancellationToken);
 
         return new PersonDetailDto
         {
@@ -48,7 +52,8 @@ public sealed class PersonService : IPersonService
             EmploymentStatus = person.EmploymentStatus,
             IsEnabled = person.IsEnabled,
             CreatedAt = person.CreatedAt,
-            UserLink = link is null ? null : MapToDto(link)
+            UserLink = link is null ? null : MapToDto(link),
+            AuthorizationSummary = authorizationSummary
         };
     }
 
@@ -121,6 +126,25 @@ public sealed class PersonService : IPersonService
 
         await _personUserLinkRepository.UpsertAsync(link, cancellationToken);
         return MapToDto(link);
+    }
+
+    private async Task<IReadOnlyList<string>> GetAuthorizationSummaryAsync(
+        PersonUserLink? link,
+        CancellationToken cancellationToken)
+    {
+        if (link is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await _authorizationSummaryReader.GetRoleNamesAsync(link.UserId, cancellationToken);
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 
     private async Task EnsurePersonNoAvailableAsync(

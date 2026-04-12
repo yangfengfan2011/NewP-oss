@@ -157,7 +157,11 @@ public class PersonServiceTests
     {
         var operations = new List<string>();
         var identityUserDirectory = new FakeIdentityUserDirectory(operations);
-        var service = BuildService(new InMemoryPersonRepository(), new InMemoryPersonUserLinkRepository(operations), identityUserDirectory);
+        var service = BuildService(
+            new InMemoryPersonRepository(),
+            new InMemoryPersonUserLinkRepository(operations),
+            identityUserDirectory,
+            new FakeAuthorizationSummaryReader());
         var person = await service.CreateAsync(new CreatePersonRequest
         {
             PersonNo = "P001",
@@ -184,7 +188,8 @@ public class PersonServiceTests
         var service = BuildService(
             new InMemoryPersonRepository(),
             new InMemoryPersonUserLinkRepository(),
-            new NullIdentityUserDirectory());
+            new NullIdentityUserDirectory(),
+            new FakeAuthorizationSummaryReader());
         var person = await service.CreateAsync(new CreatePersonRequest
         {
             PersonNo = "P004",
@@ -226,14 +231,79 @@ public class PersonServiceTests
         Assert.Equal("user-003", detail.UserLink!.UserId);
     }
 
+    [Fact]
+    public async Task GetPersonDetail_WhenUserBound_ReturnsAuthorizationSummary()
+    {
+        var service = BuildService(
+            new InMemoryPersonRepository(),
+            new InMemoryPersonUserLinkRepository(),
+            new FakeIdentityUserDirectory(),
+            new FakeAuthorizationSummaryReader(["平台管理员"]));
+        var person = await service.CreateAsync(new CreatePersonRequest
+        {
+            PersonNo = "P100",
+            Name = "王五",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
+        });
+
+        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        {
+            UserId = "admin",
+            LinkedBy = "tester"
+        });
+
+        var detail = await service.GetDetailAsync(person.Id);
+
+        Assert.NotNull(detail);
+        Assert.Contains("平台管理员", detail!.AuthorizationSummary);
+    }
+
+    [Fact]
+    public async Task GetPersonDetail_WhenAuthorizationSummaryReaderFails_ReturnsEmptyAuthorizationSummary()
+    {
+        var service = BuildService(
+            new InMemoryPersonRepository(),
+            new InMemoryPersonUserLinkRepository(),
+            new FakeIdentityUserDirectory(),
+            new ThrowingAuthorizationSummaryReader());
+        var person = await service.CreateAsync(new CreatePersonRequest
+        {
+            PersonNo = "P101",
+            Name = "赵七",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
+        });
+
+        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        {
+            UserId = "ops-user",
+            LinkedBy = "tester"
+        });
+
+        var detail = await service.GetDetailAsync(person.Id);
+
+        Assert.NotNull(detail);
+        Assert.Empty(detail!.AuthorizationSummary);
+    }
+
     private static IPersonService BuildService() =>
-        BuildService(new InMemoryPersonRepository(), new InMemoryPersonUserLinkRepository(), new FakeIdentityUserDirectory());
+        BuildService(
+            new InMemoryPersonRepository(),
+            new InMemoryPersonUserLinkRepository(),
+            new FakeIdentityUserDirectory(),
+            new FakeAuthorizationSummaryReader());
 
     private static IPersonService BuildService(
         IPersonRepository personRepository,
         IPersonUserLinkRepository personUserLinkRepository,
-        IIdentityUserDirectory identityUserDirectory) =>
-        new PersonService(personRepository, personUserLinkRepository, identityUserDirectory);
+        IIdentityUserDirectory identityUserDirectory,
+        IAuthorizationSummaryReader authorizationSummaryReader) =>
+        new PersonService(
+            personRepository,
+            personUserLinkRepository,
+            identityUserDirectory,
+            authorizationSummaryReader);
 
     private sealed class InMemoryPersonRepository : IPersonRepository
     {
@@ -345,5 +415,24 @@ public class PersonServiceTests
             _operations?.Add($"ensure:{userId}");
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeAuthorizationSummaryReader : IAuthorizationSummaryReader
+    {
+        private readonly IReadOnlyList<string> _roleNames;
+
+        public FakeAuthorizationSummaryReader(IReadOnlyList<string>? roleNames = null)
+        {
+            _roleNames = roleNames ?? [];
+        }
+
+        public Task<IReadOnlyList<string>> GetRoleNamesAsync(string userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_roleNames);
+    }
+
+    private sealed class ThrowingAuthorizationSummaryReader : IAuthorizationSummaryReader
+    {
+        public Task<IReadOnlyList<string>> GetRoleNamesAsync(string userId, CancellationToken cancellationToken = default) =>
+            throw new Exception("authorization unavailable");
     }
 }

@@ -26,6 +26,7 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
         services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IPositionService, PositionService>();
         services.AddScoped<IIdentityUserDirectory, NullIdentityUserDirectory>();
+        services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
         services.AddScoped<IPersonService, PersonService>();
     }
 

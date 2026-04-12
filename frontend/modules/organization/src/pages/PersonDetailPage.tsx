@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
+import BindUserDialog from '../components/BindUserDialog';
 import PersonEditorForm from '../components/PersonEditorForm';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
-import { getPersonDetail, type PersonDetailDto } from '../services/organizationService';
+import { getPersonDetail, linkPersonUser, type PersonDetailDto } from '../services/organizationService';
 
 export default function PersonDetailPage() {
   const [detail, setDetail] = useState<PersonDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bindDialogOpen, setBindDialogOpen] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +57,16 @@ export default function PersonDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
+
+  async function handleBindUser(userId: string) {
+    if (!detail) {
+      throw new Error('当前没有可绑定的人员详情。');
+    }
+
+    await linkPersonUser(detail.id, userId);
+    setReloadToken((current) => current + 1);
+  }
 
   return (
     <div className="sh-page">
@@ -71,8 +83,13 @@ export default function PersonDetailPage() {
       ) : detail ? (
         <div className="sh-page-stack">
           <PersonEditorForm person={detail} />
-          <PersonUserLinkCard link={detail.userLink} />
+          <PersonUserLinkCard link={detail.userLink} onBind={() => setBindDialogOpen(true)} />
           <AuthorizationSummaryCard items={detail.authorizationSummary} />
+          <BindUserDialog
+            open={bindDialogOpen}
+            onClose={() => setBindDialogOpen(false)}
+            onConfirm={handleBindUser}
+          />
         </div>
       ) : (
         <ErrorState message="未找到人员详情。" />

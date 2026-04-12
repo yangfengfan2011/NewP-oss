@@ -37,6 +37,11 @@ export interface PersonUserLinkDto {
   linkedBy: string;
 }
 
+export interface IdentityUserOptionDto {
+  userId: string;
+  displayName: string;
+}
+
 export interface PersonDetailDto {
   id: string;
   personNo: string;
@@ -80,4 +85,27 @@ export async function getPositions(departmentId: string): Promise<PositionDto[]>
 
 export async function getPersonDetail(id: string): Promise<PersonDetailDto> {
   return fetchJson<PersonDetailDto>(`/api/organization/persons/${id}`, '加载人员详情失败');
+}
+
+export async function searchIdentityUsers(keyword: string): Promise<IdentityUserOptionDto[]> {
+  return fetchJson<IdentityUserOptionDto[]>(
+    `/api/organization/persons/user-options?keyword=${encodeURIComponent(keyword)}`,
+    '加载可绑定账号失败',
+  );
+}
+
+export async function linkPersonUser(personId: string, userId: string): Promise<PersonUserLinkDto> {
+  const response = await fetch(`/api/organization/persons/${personId}/user-link`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId }),
+  });
+
+  if (!response.ok) {
+    throw new Error('绑定账号失败');
+  }
+
+  return response.json() as Promise<PersonUserLinkDto>;
 }

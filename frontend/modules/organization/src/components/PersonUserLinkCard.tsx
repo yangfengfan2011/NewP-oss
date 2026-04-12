@@ -1,13 +1,18 @@
-import { EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
+import { Button, EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
 import type { PersonUserLinkDto } from '../services/organizationService';
 
 interface PersonUserLinkCardProps {
   link?: PersonUserLinkDto | null;
+  onBind?: () => void;
 }
 
-export default function PersonUserLinkCard({ link }: PersonUserLinkCardProps) {
+export default function PersonUserLinkCard({ link, onBind }: PersonUserLinkCardProps) {
   return (
-    <Panel title="账号绑定" meta="组织模块只展示绑定状态，不在这里创建账号">
+    <Panel
+      title="账号绑定"
+      meta="组织模块只展示绑定状态，不在这里创建账号"
+      actions={<Button onClick={onBind}>{link ? '重新绑定账号' : '绑定账号'}</Button>}
+    >
       {link ? (
         <div
           style={{

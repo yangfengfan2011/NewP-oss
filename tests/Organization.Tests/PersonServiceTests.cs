@@ -206,6 +206,16 @@ public class PersonServiceTests
     }
 
     [Fact]
+    public async Task NullIdentityUserDirectory_SearchAsync_ReturnsEmptyOptions()
+    {
+        var directory = new NullIdentityUserDirectory();
+
+        var result = await directory.SearchAsync("admin");
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
     public async Task GetDetail_WhenPersonLinked_ReturnsUserLink()
     {
         var service = BuildService();
@@ -415,6 +425,18 @@ public class PersonServiceTests
             _operations?.Add($"ensure:{userId}");
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<IdentityUserOptionDto>> SearchAsync(
+            string keyword,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<IdentityUserOptionDto>>(
+            [
+                new IdentityUserOptionDto
+                {
+                    UserId = "user-001",
+                    DisplayName = "张三"
+                }
+            ]);
     }
 
     private sealed class FakeAuthorizationSummaryReader : IAuthorizationSummaryReader

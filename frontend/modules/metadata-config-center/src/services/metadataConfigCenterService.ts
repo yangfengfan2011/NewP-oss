@@ -52,12 +52,12 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export async function getModules(): Promise<MetadataModuleManifest[]> {
-  const response = await fetch('/metadata-config/modules');
+  const response = await fetch('/api/metadata-config/modules');
   return readJson<MetadataModuleManifest[]>(response);
 }
 
 export async function getSettings(moduleId: string): Promise<SettingDefinitionDto[]> {
-  const response = await fetch(`/metadata-config/modules/${encodeURIComponent(moduleId)}/settings`);
+  const response = await fetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings`);
   return readJson<SettingDefinitionDto[]>(response);
 }
 
@@ -65,7 +65,7 @@ export async function saveSettings(
   moduleId: string,
   payload: SaveSettingDefinitionsRequest,
 ): Promise<SaveSettingDefinitionsResult> {
-  const response = await fetch(`/metadata-config/modules/${encodeURIComponent(moduleId)}/settings`, {
+  const response = await fetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',

@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.MetadataConfigCenter.Controllers;
 
 [ApiController]
-[Route("metadata-config/modules")]
+[Route("api/metadata-config/modules")]
 public class MetadataModulesController : ControllerBase
 {
     private readonly IMetadataManifestService _metadataManifestService;

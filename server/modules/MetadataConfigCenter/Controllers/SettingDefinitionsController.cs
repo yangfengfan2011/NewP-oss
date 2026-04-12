@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.MetadataConfigCenter.Controllers;
 
 [ApiController]
-[Route("metadata-config/modules/{moduleId}/settings")]
+[Route("api/metadata-config/modules/{moduleId}/settings")]
 public class SettingDefinitionsController : ControllerBase
 {
     private readonly ISettingDefinitionAuthoringService _settingDefinitionAuthoringService;

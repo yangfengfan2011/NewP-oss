@@ -25,7 +25,7 @@ public class SettingDefinitionAuthoringServiceTests
         Assert.Equal("true", cacheEnabled.DefaultValue);
 
         var refreshInterval = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.CacheRefreshIntervalSeconds");
-        Assert.Equal("30", refreshInterval.DefaultValue);
+        Assert.Equal("40", refreshInterval.DefaultValue);
 
         var auditRetention = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.AuditRetentionDays");
         Assert.Equal("180", auditRetention.DefaultValue);

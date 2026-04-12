@@ -28,7 +28,7 @@
       "displayName": "缓存刷新间隔（秒）",
       "description": "后台主动刷新配置缓存的轮询间隔",
       "valueType": "Int",
-      "defaultValue": "30",
+      "defaultValue": "40",
       "required": true,
       "isSensitive": false,
       "supportsOverride": true

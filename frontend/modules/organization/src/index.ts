@@ -1,5 +1,8 @@
 import { FrontendModule } from '@icp-platform/sdk';
+import PersonDetailPage from './pages/PersonDetailPage';
+import PersonListPage from './pages/PersonListPage';
 import OrganizationTreePage from './pages/OrganizationTreePage';
+import PositionManagementPage from './pages/PositionManagementPage';
 
 export const organizationModule: FrontendModule = {
   metadata: {
@@ -14,13 +17,31 @@ export const organizationModule: FrontendModule = {
       component: OrganizationTreePage,
       requireAuth: true,
       permissions: ['Organization.Person.View']
+    },
+    {
+      path: '/organization/persons',
+      component: PersonListPage,
+      requireAuth: true,
+      permissions: ['Organization.Person.View']
+    },
+    {
+      path: '/organization/persons/:id',
+      component: PersonDetailPage,
+      requireAuth: true,
+      permissions: ['Organization.Person.View']
+    },
+    {
+      path: '/organization/positions',
+      component: PositionManagementPage,
+      requireAuth: true,
+      permissions: ['Organization.Person.View']
     }
   ],
   menus: [
     {
       id: 'organization',
-      label: '组织结构',
-      path: '/organization/tree',
+      label: '人员中心',
+      path: '/organization/persons',
       icon: '🏢',
       order: 150,
       permissions: ['Organization.Person.View']

@@ -20,9 +20,13 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
         services.AddScoped<ICompanyRepository, EfCompanyRepository>();
         services.AddScoped<IDepartmentRepository, EfDepartmentRepository>();
         services.AddScoped<IPositionRepository, EfPositionRepository>();
+        services.AddScoped<IPersonRepository, EfPersonRepository>();
+        services.AddScoped<IPersonUserLinkRepository, EfPersonUserLinkRepository>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IPositionService, PositionService>();
+        services.AddScoped<IIdentityUserDirectory, NullIdentityUserDirectory>();
+        services.AddScoped<IPersonService, PersonService>();
     }
 
     public IReadOnlyList<PermissionDescriptor> GetPermissions()

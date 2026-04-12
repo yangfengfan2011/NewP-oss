@@ -21,4 +21,6 @@ public class SettingDefinition
     public string Group { get; set; } = string.Empty;
 
     public string SourceFile { get; set; } = string.Empty;
+
+    public string VersionSummary { get; set; } = string.Empty;
 }

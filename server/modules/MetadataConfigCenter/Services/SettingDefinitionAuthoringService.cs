@@ -30,7 +30,14 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         foreach (var file in files)
         {
             var content = await _moduleMetadataStore.ReadTextAsync(file, cancellationToken);
-            definitions.AddRange(_adapter.ParseDefinitions(Path.GetFileName(file), content));
+            var versionSummary = _moduleMetadataStore.ComputeVersionSummary(content);
+            var parsedDefinitions = _adapter.ParseDefinitions(Path.GetFileName(file), content);
+            foreach (var definition in parsedDefinitions)
+            {
+                definition.VersionSummary = versionSummary;
+            }
+
+            definitions.AddRange(parsedDefinitions);
         }
 
         _adapter.Validate(definitions);
@@ -57,7 +64,10 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         return new SaveSettingDefinitionsResult
         {
             Definitions = definitions.Select(MapToDto).ToList(),
-            Status = "已保存未应用"
+            Status = "已保存未应用",
+            HasUnsavedChanges = false,
+            HasUnappliedChanges = true,
+            GitSyncPending = true
         };
     }
 
@@ -86,7 +96,8 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
             IsSensitive = definition.IsSensitive,
             SupportsOverride = definition.SupportsOverride,
             Group = definition.Group,
-            SourceFile = definition.SourceFile
+            SourceFile = definition.SourceFile,
+            VersionSummary = definition.VersionSummary
         };
     }
 
@@ -103,7 +114,8 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
             IsSensitive = definition.IsSensitive,
             SupportsOverride = definition.SupportsOverride,
             Group = definition.Group,
-            SourceFile = definition.SourceFile
+            SourceFile = definition.SourceFile,
+            VersionSummary = definition.VersionSummary
         };
     }
 }

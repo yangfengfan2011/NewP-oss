@@ -10,4 +10,10 @@ public class SaveSettingDefinitionsResult
     public List<SettingDefinitionDto> Definitions { get; set; } = [];
 
     public string Status { get; set; } = "已保存未应用";
+
+    public bool HasUnsavedChanges { get; set; }
+
+    public bool HasUnappliedChanges { get; set; } = true;
+
+    public bool GitSyncPending { get; set; } = true;
 }

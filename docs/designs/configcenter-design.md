@@ -10,7 +10,7 @@
 
 - 提供统一的配置值承载模型和基础 CRUD 能力。
 - 支撑按 `module / group / environment / tenant` 组织配置项。
-- 提供配置 schema 同步入口，让模块声明的 `SettingDefinition / ConfigDescriptor` 默认值可以落到运行时存储。
+- 提供旧 `.setting` 值层导入入口，把历史配置转成 `ConfigItem`。
 - 提供前端配置管理页，支撑基础查看和修改。
 - 为后续 `Setting` 值管理、审计联动和持久化增强预留空间。
 
@@ -20,6 +20,7 @@
 - 不一次性迁移旧平台全部元数据资产。
 - 不在本轮实现复杂缓存、多级配置源和配置变更推送。
 - 不把所有业务元数据都纳入 ConfigCenter；尤其不把 `Dictionary / Enumeration` 的定义层重新拉回数据库权威仓库。
+- 不在 `ConfigCenter` 内编辑 `SettingDefinition` 文件结构或其他定义层资产。
 
 ## 4. 范围
 
@@ -40,7 +41,7 @@
 
 - 设计必须保持“最小可运行”，不把 ConfigCenter 做成平台中的平台。
 - 配置项模型必须兼容未来环境级和租户级覆盖。
-- 模块应通过契约声明 `SettingDefinition / ConfigDescriptor`，宿主负责聚合与同步，不能让每个模块私自维护零散配置键。
+- 定义层和值层要分开：`ConfigCenter` 只负责 `ConfigItem` 值层承载、查询和导入，不负责定义层文件编辑。
 - 当前实现允许内存仓储，但服务和 DTO 层要为后续数据库化保留稳定接口。
 - 敏感配置必须在查询响应中默认脱敏。
 
@@ -54,12 +55,11 @@
 
 ## 6. 总体方案
 
-采用“模块声明 `SettingDefinition / schema` + ConfigCenter 同步默认值 + 统一 CRUD 与分组查询”的方案：
+采用“定义层与值层分离 + ConfigCenter 只负责 `ConfigItem` 值层 CRUD、分组查询和旧 `.setting` 导入”的方案：
 
-- `ConfigCenterModule` 通过 `IConfigProvider` 暴露本模块自己的配置 schema。
-- 后续其他模块也可通过同类描述符声明自己的配置项。
-- `IConfigService.SyncConfigSchemaAsync(...)` 负责将未存在的 `SettingDefinition` 默认值同步到 `ConfigItem` 仓储。
+- `ConfigCenterModule` 继续提供模块自身元信息，但 `ConfigService` 只处理 `ConfigItem`。
 - `ConfigService` 负责 `ConfigItem` CRUD、按模块查询、按组聚合、环境/租户过滤。
+- `LegacySettingImportService` 负责把旧 `.setting` 解析后的值层数据写入 `ConfigItem`。
 - 前端模块 `frontend/modules/config-center` 提供配置管理页面，Shell 通过模块注册接入菜单和路由。
 
 选择这个方案的原因：
@@ -79,14 +79,8 @@
 ### 配置定义模型
 
 - `SettingDefinition / ConfigDescriptor`
-  - `Key`
-  - `DisplayName`
-  - `Description`
-  - `Type`
-  - `DefaultValue`
-  - `Required`
-  - `ModuleId`
-  - `Group`
+  - 仍属于外部定义层或模块元数据，不在 `ConfigCenter` 值服务里编辑。
+  - `ConfigCenter` 若需要消费它们，只能把它们投影成值层默认项，而不是保存定义文件本身。
 
 ### 运行时配置值模型
 
@@ -123,10 +117,9 @@
 
 ### 主流程：配置 schema 同步
 
-1. 模块通过 `IConfigProvider` 返回配置 schema。
-2. 宿主聚合全部配置 schema。
-3. `IConfigService.SyncConfigSchemaAsync(...)` 读取现有基础配置项。
-4. 对于不存在的 `key`，按描述符创建默认配置项。
+1. 外部定义层生成或维护 `SettingDefinition / ConfigDescriptor`。
+2. `ConfigCenter` 不编辑这些定义文件。
+3. 值层导入或 CRUD 只处理 `ConfigItem`。
 
 ### 主流程：读取配置
 
@@ -141,6 +134,13 @@
 2. 服务层校验目标项是否存在。
 3. 对允许更新的字段进行修改，并记录 `UpdatedAt / UpdatedBy`。
 4. 仓储保存后返回 DTO。
+
+### 主流程：旧 `.setting` 导入
+
+1. 调用方提交旧 `.setting` XML。
+2. 导入服务解析出键和值，以及必要的导入上下文。
+3. 对新键创建 `ConfigItem`，对旧键仅更新值层。
+4. 不回写 `SettingDefinition` 文件，也不改写定义层结构。
 
 ### 异常流程
 
@@ -163,7 +163,7 @@
 ### 与宿主/模块的集成
 
 - `ConfigCenterModule` 本身实现 `IConfigProvider`、`IMenuProvider`、`IPermissionProvider`。
-- 宿主应聚合所有模块的 `ConfigDescriptor`，并在启动阶段调用 `SyncConfigSchemaAsync(...)`。
+- 宿主可以聚合模块元信息，但不通过 `ConfigCenter` 服务面编辑定义文件。
 - 其他模块可以读取配置，但不应各自实现孤立的配置存储。
 
 ### 与前端 Shell 的集成
@@ -178,7 +178,7 @@
 - 基础配置、环境配置、租户配置共用同一张逻辑模型，通过 `Environment` 和 `TenantId` 区分作用域。
 - 当前读取规则偏轻量，尚未形成完整优先级解析引擎。
 - 敏感配置在 API 返回层统一脱敏，但原始值仍保存在仓储中。
-- 一致性要求：配置 schema、默认值同步、前端权限配置和管理页面能力要保持同步，否则会出现“页面可见但配置项不存在”的情况。
+- 一致性要求：值层模型、导入逻辑、前端权限配置和管理页面能力要保持同步，否则会出现“页面可见但配置项不符合预期”的情况。
 
 ## 11. 错误处理与风险
 

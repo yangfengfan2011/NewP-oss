@@ -114,34 +114,6 @@ public class ConfigService : IConfigService
         await _configRepository.DeleteAsync(id, cancellationToken);
     }
 
-    public async Task SyncConfigSchemaAsync(IEnumerable<Kernel.Abstractions.ConfigDescriptor> descriptors, CancellationToken cancellationToken = default)
-    {
-        var existingItems = await _configRepository.GetAllAsync(cancellationToken);
-        var existingKeys = existingItems
-            .Where(i => i.Environment == null && i.TenantId == null)
-            .ToDictionary(i => i.Key, i => i);
-
-        foreach (var descriptor in descriptors)
-        {
-            if (!existingKeys.ContainsKey(descriptor.Key))
-            {
-                // 创建默认配置项
-                var item = new ConfigItem
-                {
-                    Key = descriptor.Key,
-                    Value = descriptor.DefaultValue,
-                    Type = descriptor.Type,
-                    ModuleId = descriptor.ModuleId,
-                    Group = descriptor.Group,
-                    DisplayName = descriptor.DisplayName,
-                    Description = descriptor.Description,
-                    IsSensitive = false
-                };
-                await _configRepository.CreateAsync(item, cancellationToken);
-            }
-        }
-    }
-
     private static ConfigItemDto MapToDto(ConfigItem item)
     {
         return new ConfigItemDto

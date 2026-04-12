@@ -11,5 +11,4 @@ public interface IConfigService
     Task<ConfigItemDto> CreateConfigAsync(ConfigItemCreateDto dto, string? createdBy = null, CancellationToken cancellationToken = default);
     Task<ConfigItemDto> UpdateConfigAsync(string id, ConfigItemUpdateDto dto, string? updatedBy = null, CancellationToken cancellationToken = default);
     Task DeleteConfigAsync(string id, CancellationToken cancellationToken = default);
-    Task SyncConfigSchemaAsync(IEnumerable<Kernel.Abstractions.ConfigDescriptor> descriptors, CancellationToken cancellationToken = default);
 }

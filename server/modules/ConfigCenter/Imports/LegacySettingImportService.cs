@@ -60,12 +60,8 @@ public class LegacySettingImportService : ILegacySettingImportService
                     }
                     else
                     {
+                        // 导入只收口到 ConfigItem 值层，保留既有的模块/分组/展示信息。
                         existing.Value = item.Value;
-                        existing.Type = InferType(item.Value);
-                        existing.ModuleId = request.ModuleId;
-                        existing.Group = item.Group;
-                        existing.Description = item.Description;
-                        existing.DisplayName = item.Key;
                         existing.UpdatedAt = DateTime.UtcNow;
                         existing.UpdatedBy = importedBy;
 

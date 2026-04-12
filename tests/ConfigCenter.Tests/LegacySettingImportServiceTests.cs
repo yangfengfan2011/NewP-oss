@@ -138,6 +138,69 @@ public class LegacySettingImportServiceTests
     }
 
     [Fact]
+    public async Task ImportAsync_UpdatesExistingConfigs_OnlyMutatesValueLayerFields()
+    {
+        // Arrange: legacy import should update the ConfigItem value layer, not rewrite definition-like metadata.
+        var xmlContent = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ArrayOfAppSet>
+  <AppSet Key=""ExistingKey"" Value=""42"" ToClient=""true"" Description=""Imported description"" />
+</ArrayOfAppSet>";
+
+        var request = new LegacySettingImportRequest
+        {
+            XmlContent = xmlContent,
+            SourceFileName = "update.setting",
+            ModuleId = "ImportedModule",
+            Environment = null,
+            TenantId = null
+        };
+
+        var parsedItems = new List<LegacySettingImportItem>
+        {
+            new() { Key = "ExistingKey", Value = "42", ToClient = true, Description = "Imported description", Group = "imported", SourceFile = "update.setting" }
+        };
+
+        var existingConfig = new ConfigItem
+        {
+            Id = "existing-id",
+            Key = "ExistingKey",
+            Value = "oldValue",
+            Type = "String",
+            ModuleId = "OriginalModule",
+            Group = "original",
+            DisplayName = "Original Display",
+            Description = "Original description",
+            IsSensitive = false
+        };
+
+        var parser = new FakeParser(parsedItems);
+        var repository = new FakeRepository();
+        repository.AddExisting(existingConfig);
+        var service = new LegacySettingImportService(parser, repository);
+
+        // Act
+        var result = await service.ImportAsync(request, "testUser");
+
+        // Assert
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(0, result.CreatedCount);
+        Assert.Equal(1, result.UpdatedCount);
+        Assert.Empty(result.Errors);
+
+        var updated = await repository.GetByKeyAsync("ExistingKey");
+        Assert.NotNull(updated);
+        Assert.Equal("existing-id", updated.Id);
+        Assert.Equal("ExistingKey", updated.Key);
+        Assert.Equal("42", updated.Value);
+        Assert.Equal("String", updated.Type);
+        Assert.Equal("OriginalModule", updated.ModuleId);
+        Assert.Equal("original", updated.Group);
+        Assert.Equal("Original Display", updated.DisplayName);
+        Assert.Equal("Original description", updated.Description);
+        Assert.Equal("testUser", updated.UpdatedBy);
+    }
+
+    [Fact]
     public async Task ImportAsync_UpdatesExistingConfigs_WhenAlreadyExist()
     {
         // Arrange
@@ -193,10 +256,10 @@ public class LegacySettingImportServiceTests
         Assert.Equal("ExistingKey", updated.Key);
         Assert.Equal("newValue", updated.Value);
         Assert.Equal("String", updated.Type);
-        Assert.Equal("UpdatedModule", updated.ModuleId);
-        Assert.Equal("update", updated.Group);
-        Assert.Equal("ExistingKey", updated.DisplayName);
-        Assert.Equal("Updated description", updated.Description);
+        Assert.Equal("OldModule", updated.ModuleId);
+        Assert.Equal("old", updated.Group);
+        Assert.Equal("Old Display", updated.DisplayName);
+        Assert.Equal("Old description", updated.Description);
         Assert.Equal("testUser", updated.UpdatedBy);
     }
 }

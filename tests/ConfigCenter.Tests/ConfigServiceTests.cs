@@ -18,6 +18,18 @@ public class ConfigServiceTests
     }
 
     [Fact]
+    public void IConfigService_PublicContract_DoesNotExposeSchemaDefinitionSync()
+    {
+        // ConfigCenter 只承载 ConfigItem 值层，不应该把 SettingDefinition/ConfigDescriptor 同步入口暴露给调用方。
+        var methodNames = typeof(IConfigService)
+            .GetMethods()
+            .Select(method => method.Name)
+            .ToList();
+
+        Assert.DoesNotContain("SyncConfigSchemaAsync", methodNames);
+    }
+
+    [Fact]
     public async Task GetConfig_GlobalConfig_ReturnsConfig()
     {
         // Arrange

@@ -138,7 +138,7 @@ public class LegacySettingImportServiceTests
     }
 
     [Fact]
-    public async Task ImportAsync_UpdatesExistingConfigs_WhenAlreadyExist()
+    public async Task ImportAsync_UpdatesExistingConfigs_OnlyMutatesValueLayerFields()
     {
         // Arrange
         var xmlContent = @"<?xml version=""1.0"" encoding=""utf-8""?>
@@ -193,10 +193,10 @@ public class LegacySettingImportServiceTests
         Assert.Equal("ExistingKey", updated.Key);
         Assert.Equal("newValue", updated.Value);
         Assert.Equal("String", updated.Type);
-        Assert.Equal("UpdatedModule", updated.ModuleId);
-        Assert.Equal("update", updated.Group);
-        Assert.Equal("ExistingKey", updated.DisplayName);
-        Assert.Equal("Updated description", updated.Description);
+        Assert.Equal("OldModule", updated.ModuleId);
+        Assert.Equal("old", updated.Group);
+        Assert.Equal("Old Display", updated.DisplayName);
+        Assert.Equal("Old description", updated.Description);
         Assert.Equal("testUser", updated.UpdatedBy);
     }
 }

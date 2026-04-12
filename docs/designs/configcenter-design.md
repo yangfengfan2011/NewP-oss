@@ -10,7 +10,7 @@
 
 - 提供统一的配置值承载模型和基础 CRUD 能力。
 - 支撑按 `module / group / environment / tenant` 组织配置项。
-- 提供配置 schema 同步入口，让模块声明的 `SettingDefinition / ConfigDescriptor` 默认值可以落到运行时存储。
+- 提供统一的 `ConfigItem` 值层承载、查询和修改入口。
 - 提供前端配置管理页，支撑基础查看和修改。
 - 为后续 `Setting` 值管理、审计联动和持久化增强预留空间。
 
@@ -40,7 +40,7 @@
 
 - 设计必须保持“最小可运行”，不把 ConfigCenter 做成平台中的平台。
 - 配置项模型必须兼容未来环境级和租户级覆盖。
-- 模块应通过契约声明 `SettingDefinition / ConfigDescriptor`，宿主负责聚合与同步，不能让每个模块私自维护零散配置键。
+- 模块可以声明 `ConfigDescriptor` 作为值层默认项参考，但 `ConfigCenter` 本身不承担 `SettingDefinition` 定义层编辑职责。
 - 当前实现允许内存仓储，但服务和 DTO 层要为后续数据库化保留稳定接口。
 - 敏感配置必须在查询响应中默认脱敏。
 
@@ -54,18 +54,17 @@
 
 ## 6. 总体方案
 
-采用“模块声明 `SettingDefinition / schema` + ConfigCenter 同步默认值 + 统一 CRUD 与分组查询”的方案：
+采用“统一 `ConfigItem` 值层 CRUD + 旧 `.setting` 值层导入”的方案：
 
-- `ConfigCenterModule` 通过 `IConfigProvider` 暴露本模块自己的配置 schema。
-- 后续其他模块也可通过同类描述符声明自己的配置项。
-- `IConfigService.SyncConfigSchemaAsync(...)` 负责将未存在的 `SettingDefinition` 默认值同步到 `ConfigItem` 仓储。
+- `ConfigCenterModule` 仍可通过 `IConfigProvider` 暴露本模块自己的默认配置描述，但这不是定义层编辑入口。
 - `ConfigService` 负责 `ConfigItem` CRUD、按模块查询、按组聚合、环境/租户过滤。
+- `LegacySettingImportService` 只把旧 `.setting` 数据导入到 `ConfigItem` 值层，不回写或维护 `SettingDefinition` 文件结构。
 - 前端模块 `frontend/modules/config-center` 提供配置管理页面，Shell 通过模块注册接入菜单和路由。
 
 选择这个方案的原因：
 
 - 能够先统一值层配置模型，再逐步承接 `Setting` 值导入和更复杂治理。
-- 模块声明式 schema 有利于后续统计、校验和默认值同步。
+- 保留轻量模块描述符即可兼容默认值来源，同时避免把定义层编辑继续堆回 ConfigCenter。
 - 环境和租户维度以字段方式进入模型，足够支撑 V1。
 
 本轮不选这些方案：
@@ -76,7 +75,7 @@
 
 ## 7. 关键模型
 
-### 配置定义模型
+### 配置定义参考模型
 
 - `SettingDefinition / ConfigDescriptor`
   - `Key`
@@ -121,13 +120,6 @@
 
 ## 8. 核心流程
 
-### 主流程：配置 schema 同步
-
-1. 模块通过 `IConfigProvider` 返回配置 schema。
-2. 宿主聚合全部配置 schema。
-3. `IConfigService.SyncConfigSchemaAsync(...)` 读取现有基础配置项。
-4. 对于不存在的 `key`，按描述符创建默认配置项。
-
 ### 主流程：读取配置
 
 1. 调用方通过 `GetAllConfigsAsync`、`GetConfigAsync` 或 `GetConfigsByModuleAsync` 发起查询。
@@ -146,7 +138,7 @@
 
 - 目标配置项不存在：更新时抛出业务异常，控制器返回 404。
 - 敏感配置被读取：值返回脱敏结果，而不是原始明文。
-- 模块 schema 已声明但尚未同步：对应默认配置不会自动出现，需要通过同步流程补齐。
+- 若模块还未初始化对应 `ConfigItem`：调用方需要通过自己的初始化或导入流程补齐值层数据。
 
 ## 9. 接口与集成点
 
@@ -163,8 +155,8 @@
 ### 与宿主/模块的集成
 
 - `ConfigCenterModule` 本身实现 `IConfigProvider`、`IMenuProvider`、`IPermissionProvider`。
-- 宿主应聚合所有模块的 `ConfigDescriptor`，并在启动阶段调用 `SyncConfigSchemaAsync(...)`。
 - 其他模块可以读取配置，但不应各自实现孤立的配置存储。
+- 若模块需要维护 `SettingDefinition`，应通过独立的 `MetadataConfigCenter` 维护定义层文件。
 
 ### 与前端 Shell 的集成
 
@@ -178,7 +170,7 @@
 - 基础配置、环境配置、租户配置共用同一张逻辑模型，通过 `Environment` 和 `TenantId` 区分作用域。
 - 当前读取规则偏轻量，尚未形成完整优先级解析引擎。
 - 敏感配置在 API 返回层统一脱敏，但原始值仍保存在仓储中。
-- 一致性要求：配置 schema、默认值同步、前端权限配置和管理页面能力要保持同步，否则会出现“页面可见但配置项不存在”的情况。
+- 一致性要求：值层数据、前端权限配置和管理页面能力要保持同步，否则会出现“页面可见但配置项不存在”的情况。
 
 ## 11. 错误处理与风险
 
@@ -189,7 +181,7 @@
 
 风险控制方式：
 
-- 用 schema 描述符约束键名、默认值和分组来源。
+- 用 `ConfigItem` 契约约束键名、作用域和敏感字段行为。
 - 对敏感配置默认脱敏，避免前端列表直出。
 - 未来持久化、导入、审计能力都通过服务层继续演进，不直接破坏现有接口。
 
@@ -216,7 +208,7 @@
 
 ## 14. 实施拆分建议
 
-1. 固化配置 schema 契约与默认值同步逻辑。
+1. 固化 `ConfigItem` 值层契约与最小导入逻辑。
 2. 固化配置项领域模型、仓储、服务和控制器。
 3. 固化前端配置中心页面与菜单接入。
 4. 补类型校验、持久化与审计联动。

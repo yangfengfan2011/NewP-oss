@@ -309,4 +309,15 @@ public class ConfigServiceTests
         Assert.NotNull(group1);
         Assert.Equal(2, group1.Items.Count);
     }
+
+    [Fact]
+    public void IConfigService_PublicContract_DoesNotExposeSchemaDefinitionSync()
+    {
+        var methodNames = typeof(IConfigService)
+            .GetMethods()
+            .Select(method => method.Name)
+            .ToList();
+
+        Assert.DoesNotContain("SyncConfigSchemaAsync", methodNames);
+    }
 }

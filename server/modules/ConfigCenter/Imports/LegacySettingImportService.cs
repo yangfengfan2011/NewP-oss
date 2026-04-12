@@ -60,12 +60,9 @@ public class LegacySettingImportService : ILegacySettingImportService
                     }
                     else
                     {
+                        // Legacy .setting import only refreshes the ConfigItem value layer.
+                        // Definition-layer metadata stays owned by module metadata files.
                         existing.Value = item.Value;
-                        existing.Type = InferType(item.Value);
-                        existing.ModuleId = request.ModuleId;
-                        existing.Group = item.Group;
-                        existing.Description = item.Description;
-                        existing.DisplayName = item.Key;
                         existing.UpdatedAt = DateTime.UtcNow;
                         existing.UpdatedBy = importedBy;
 

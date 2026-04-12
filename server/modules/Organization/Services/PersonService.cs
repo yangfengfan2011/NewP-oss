@@ -54,6 +54,8 @@ public sealed class PersonService : IPersonService
 
     public async Task<PersonDto> CreateAsync(CreatePersonRequest request, CancellationToken cancellationToken = default)
     {
+        await EnsurePersonNoAvailableAsync(request.CompanyId, request.PersonNo, null, cancellationToken);
+
         var person = new Person
         {
             PersonNo = request.PersonNo,
@@ -76,6 +78,8 @@ public sealed class PersonService : IPersonService
         {
             throw new InvalidOperationException($"人员 '{personId}' 不存在。");
         }
+
+        await EnsurePersonNoAvailableAsync(request.CompanyId, person.PersonNo, personId, cancellationToken);
 
         person.CompanyId = request.CompanyId;
         person.DepartmentId = request.DepartmentId;
@@ -117,6 +121,18 @@ public sealed class PersonService : IPersonService
 
         await _personUserLinkRepository.UpsertAsync(link, cancellationToken);
         return MapToDto(link);
+    }
+
+    private async Task EnsurePersonNoAvailableAsync(
+        Guid companyId,
+        string personNo,
+        Guid? excludedPersonId,
+        CancellationToken cancellationToken)
+    {
+        if (await _personRepository.ExistsPersonNoAsync(companyId, personNo, excludedPersonId, cancellationToken))
+        {
+            throw new InvalidOperationException("同一公司下人员工号必须唯一。");
+        }
     }
 
     private static PersonDto MapToDto(Person person) => new()

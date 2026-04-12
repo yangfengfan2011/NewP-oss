@@ -10,6 +10,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class PersonServiceTests
 {
     private static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid CompanyId2 = Guid.Parse("11111111-1111-1111-1111-222222222222");
     private static readonly Guid DepartmentId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid PositionId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
@@ -63,6 +64,59 @@ public class PersonServiceTests
         Assert.Equal(PositionId, updated.PositionId);
         Assert.Equal(EmploymentStatus.Contractor, updated.EmploymentStatus);
         Assert.False(updated.IsEnabled);
+    }
+
+    [Fact]
+    public async Task CreatePerson_WhenPersonNoAlreadyExistsInCompany_ThrowsInvalidOperationException()
+    {
+        var service = BuildService();
+        await service.CreateAsync(new CreatePersonRequest
+        {
+            PersonNo = "P001",
+            Name = "张三",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateAsync(new CreatePersonRequest
+            {
+                PersonNo = "P001",
+                Name = "李四",
+                CompanyId = CompanyId,
+                DepartmentId = DepartmentId
+            }));
+    }
+
+    [Fact]
+    public async Task UpdatePerson_WhenPersonNoAlreadyExistsInCompany_ThrowsInvalidOperationException()
+    {
+        var service = BuildService();
+        var personA = await service.CreateAsync(new CreatePersonRequest
+        {
+            PersonNo = "P001",
+            Name = "张三",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
+        });
+        var personB = await service.CreateAsync(new CreatePersonRequest
+        {
+            PersonNo = "P001",
+            Name = "李四",
+            CompanyId = CompanyId2,
+            DepartmentId = DepartmentId
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.UpdateAsync(personB.Id, new UpdatePersonRequest
+            {
+                CompanyId = CompanyId,
+                DepartmentId = DepartmentId,
+                PositionId = personB.PositionId,
+                Name = "李四（更新）",
+                EmploymentStatus = personB.EmploymentStatus,
+                IsEnabled = personB.IsEnabled
+            }));
     }
 
     [Fact]
@@ -125,6 +179,28 @@ public class PersonServiceTests
     }
 
     [Fact]
+    public async Task LinkUser_WithNullIdentityUserDirectory_ThrowsInvalidOperationException()
+    {
+        var service = BuildService(
+            new InMemoryPersonRepository(),
+            new InMemoryPersonUserLinkRepository(),
+            new NullIdentityUserDirectory());
+        var person = await service.CreateAsync(new CreatePersonRequest
+        {
+            PersonNo = "P004",
+            Name = "赵六",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+            {
+                UserId = "user-null"
+            }));
+    }
+
+    [Fact]
     public async Task GetDetail_WhenPersonLinked_ReturnsUserLink()
     {
         var service = BuildService();
@@ -165,6 +241,16 @@ public class PersonServiceTests
 
         public Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_persons.FirstOrDefault(person => person.Id == personId) is { } person ? Clone(person) : null);
+
+        public Task<bool> ExistsPersonNoAsync(
+            Guid companyId,
+            string personNo,
+            Guid? excludedPersonId = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_persons.Any(person =>
+                person.CompanyId == companyId &&
+                person.Id != excludedPersonId &&
+                string.Equals(person.PersonNo, personNo, StringComparison.OrdinalIgnoreCase)));
 
         public Task CreateAsync(Person person, CancellationToken cancellationToken = default)
         {

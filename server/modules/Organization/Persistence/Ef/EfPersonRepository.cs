@@ -23,6 +23,19 @@ public sealed class EfPersonRepository : IPersonRepository
         return entity is null ? null : Map(entity);
     }
 
+    public async Task<bool> ExistsPersonNoAsync(
+        Guid companyId,
+        string personNo,
+        Guid? excludedPersonId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
+        return entities.Any(entity =>
+            GetGuid(entity, "CompanyId") == companyId &&
+            GetGuid(entity, "Id") != excludedPersonId &&
+            string.Equals(GetString(entity, "PersonNo"), personNo, StringComparison.OrdinalIgnoreCase));
+    }
+
     public async Task CreateAsync(Person person, CancellationToken cancellationToken = default)
     {
         Entities.Add(ToEntity(person));

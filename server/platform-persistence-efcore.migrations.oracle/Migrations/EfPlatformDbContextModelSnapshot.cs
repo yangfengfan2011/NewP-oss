@@ -22,6 +22,52 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
 
             OracleModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Company", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("BOOLEAN")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("SortOrder")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Company_Code");
+
+                    b.ToTable("org_companies", (string)null);
+                });
+
             modelBuilder.Entity("ConfigItem", b =>
                 {
                     b.Property<string>("Id")
@@ -106,6 +152,68 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
                     b.ToTable("config_items", (string)null);
                 });
 
+            modelBuilder.Entity("Department", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("CompanyId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("BOOLEAN")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ParentDepartmentId")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("parent_department_id");
+
+                    b.Property<string>("SortOrder")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId")
+                        .HasDatabaseName("IX_Department_Company");
+
+                    b.HasIndex("ParentDepartmentId")
+                        .HasDatabaseName("IX_Department_Parent");
+
+                    b.HasIndex("CompanyId", "ParentDepartmentId", "Code")
+                        .HasDatabaseName("IX_Department_Company_Parent_Code");
+
+                    b.ToTable("org_departments", (string)null);
+                });
+
             modelBuilder.Entity("Permission", b =>
                 {
                     b.Property<string>("Id")
@@ -154,6 +262,177 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
                         .HasDatabaseName("IX_Permission_Module");
 
                     b.ToTable("auth_permissions", (string)null);
+                });
+
+            modelBuilder.Entity("Person", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CompanyId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DepartmentId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("EmploymentStatus")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("employment_status");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("BOOLEAN")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PersonNo")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("person_no");
+
+                    b.Property<string>("PositionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("position_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId")
+                        .HasDatabaseName("IX_Person_Company");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("IX_Person_Department");
+
+                    b.HasIndex("CompanyId", "PersonNo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Person_Company_PersonNo");
+
+                    b.ToTable("org_persons", (string)null);
+                });
+
+            modelBuilder.Entity("PersonUserLink", b =>
+                {
+                    b.Property<string>("PersonId")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("person_id");
+
+                    b.Property<DateTime>("LinkedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("linked_at");
+
+                    b.Property<string>("LinkedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("linked_by");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("PersonId");
+
+                    b.HasIndex("PersonId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PersonUserLink_Person");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PersonUserLink_User");
+
+                    b.ToTable("org_person_user_links", (string)null);
+                });
+
+            modelBuilder.Entity("Position", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("CompanyId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DepartmentId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("EmploymentStatus")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("employment_status");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("BOOLEAN")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("SortOrder")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("NVARCHAR2(256)")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TIMESTAMP(7)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId")
+                        .HasDatabaseName("IX_Position_Company");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("IX_Position_Department");
+
+                    b.ToTable("org_positions", (string)null);
                 });
 
             modelBuilder.Entity("Role", b =>

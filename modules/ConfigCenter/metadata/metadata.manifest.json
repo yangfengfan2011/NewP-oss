@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "ConfigCenter",
+  "metadataRoot": "metadata",
+  "types": {
+    "settings": {
+      "enabled": true,
+      "sourcePath": "settings",
+      "adapter": "SettingDefinitionAuthoringAdapter",
+      "authoring": {
+        "editable": true
+      },
+      "projection": {
+        "enabled": false,
+        "scope": "module-only",
+        "applyMode": "incremental"
+      },
+      "validation": {
+        "profile": "setting-definition-default",
+        "allowWarningsOnSave": true,
+        "requireFullValidationOnApply": false
+      }
+    }
+  }
+}

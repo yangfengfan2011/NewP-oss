@@ -116,6 +116,22 @@ importers:
         specifier: ^5.4.2
         version: 5.9.3
 
+  modules/metadata-config-center:
+    dependencies:
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.28
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
   modules/module-template-sample:
     dependencies:
       '@icp-platform/sdk':

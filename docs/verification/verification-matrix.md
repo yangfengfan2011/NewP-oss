@@ -146,6 +146,20 @@
 
 - [wp4-stage-10-enumeration-static-resources-verification.md](wp4-stage-10-enumeration-static-resources-verification.md)
 
+### Metadata Config Center Foundation
+
+- `dotnet test .\tests\MetadataConfigCenter.Tests\MetadataConfigCenter.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter "ConfigServiceTests|LegacySettingImportServiceTests|ConfigCenterModuleTests" -nr:false -v minimal`
+- `pnpm --filter @icp-platform/module-metadata-config-center build`
+- `pnpm --filter @icp-platform/module-config-center build`
+- `pnpm --filter @icp-platform/shell build`
+- `pnpm --dir .\frontend\packages\shell exec vitest --run src/__tests__/registerModules-plugin-ops.test.ts`
+- 按 [metadata-config-center-foundation-verification.md](metadata-config-center-foundation-verification.md) 中的 smoke 步骤，在 `Persistence__AutoMigrate=false` 下启动 `HostApi`，验证 `GET /metadata-config/modules`、`GET /metadata-config/modules/ConfigCenter/settings`、`PUT /metadata-config/modules/ConfigCenter/settings`
+
+参考：
+
+- [metadata-config-center-foundation-verification.md](metadata-config-center-foundation-verification.md)
+
 ### Enumeration 消费层 UI / 接入
 
 - `pnpm --dir .\frontend\packages\shell exec vitest --run src/__tests__/localization-sample.test.tsx src/__tests__/enumeration-sample.test.tsx`

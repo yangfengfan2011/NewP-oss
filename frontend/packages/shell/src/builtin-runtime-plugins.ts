@@ -15,6 +15,7 @@ export const BUILTIN_RUNTIME_PLUGIN_ENTRIES: BuiltinRuntimePluginEntry[] = [
   { moduleId: 'audit' },
   { moduleId: 'authorization' },
   { moduleId: 'config-center' },
+  { moduleId: 'metadata-config-center', hostManaged: true },
   { moduleId: 'files' },
   { moduleId: 'module-template-sample' },
   { moduleId: 'plugin-ops', hostManaged: true },

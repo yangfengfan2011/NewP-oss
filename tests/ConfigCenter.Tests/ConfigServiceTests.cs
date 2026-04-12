@@ -321,4 +321,5 @@ public class ConfigServiceTests
         Assert.NotNull(group1);
         Assert.Equal(2, group1.Items.Count);
     }
+
 }

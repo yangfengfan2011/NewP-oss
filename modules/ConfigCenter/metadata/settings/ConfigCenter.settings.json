@@ -1,0 +1,17 @@
+{
+  "moduleId": "ConfigCenter",
+  "type": "settings",
+  "group": "性能",
+  "definitions": [
+    {
+      "key": "ConfigCenter.CacheEnabled",
+      "displayName": "启用配置缓存",
+      "description": "是否启用配置项的内存缓存",
+      "valueType": "Bool",
+      "defaultValue": "true",
+      "required": false,
+      "isSensitive": false,
+      "supportsOverride": true
+    }
+  ]
+}

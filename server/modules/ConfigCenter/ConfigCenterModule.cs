@@ -25,6 +25,8 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
         services.AddScoped<ILegacySettingImportService, LegacySettingImportService>();
     }
 
+    // These descriptors are module-owned defaults for ConfigItem initialization.
+    // Definition-layer editing belongs to MetadataConfigCenter, not ConfigCenter itself.
     public IReadOnlyList<ConfigDescriptor> GetConfigSchema()
     {
         return new[]

@@ -61,6 +61,7 @@ public class LegacySettingImportService : ILegacySettingImportService
                     else
                     {
                         // 导入只收口到 ConfigItem 值层，保留既有的模块/分组/展示信息。
+                        // Definition-layer metadata stays owned by module metadata files.
                         existing.Value = item.Value;
                         existing.UpdatedAt = DateTime.UtcNow;
                         existing.UpdatedBy = importedBy;

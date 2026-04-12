@@ -399,6 +399,12 @@ Git 同步不作为保存或应用的前提条件。
 - `保存 / 应用 / Git 同步` 顶部操作区
 - warning、validation、应用结果与最近操作状态展示区
 
+当前 foundation 首版还补充了一条运行时接线约束：
+
+- `metadata-config-center` 当前以前端 host-managed 模块方式随 Shell 一起注册。
+- 当宿主存在运行时 frontend manifest，但尚未安装对应统一插件包时，页面入口仍应保持可访问。
+- 这条 host-managed 接线只用于保证 foundation 阶段的宿主可用性，不等于它已经进入统一插件包分发主路径。
+
 ### 9.3 与模块系统的集成
 
 - 模块通过 `metadata.manifest.json` 声明自己的元数据接入信息。
@@ -517,6 +523,11 @@ runtime/metadata/global/...
 - `Dictionary` 的某个 key 修改后，保存成功但运行时仍保持旧值；执行应用后，运行时读取到新值。
 - `Enumeration` 的某个枚举项文案修改后，结构与文案仍保持一致；执行应用后，消费端读取到新显示值。
 - 生产环境下工作台不暴露 Git 同步能力。
+
+foundation 首版额外验证重点：
+
+- 当 `Persistence__AutoMigrate=false` 时，宿主仍可完成 `SettingDefinition` 的读取与保存 smoke，因为定义层 authoring 走的是模块文件存储链路，而不是 `ConfigCenter` 值层数据库链路。
+- 当运行时 frontend manifest 存在但未包含 `metadata-config-center` 时，Shell 仍会把该模块按 host-managed 入口注册出来。
 
 ## 13. 未决问题
 

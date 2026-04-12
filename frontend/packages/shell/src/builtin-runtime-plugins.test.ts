@@ -13,6 +13,7 @@ describe('builtin-runtime-plugins', () => {
       'config-center',
       'files',
       'module-template-sample',
+      'organization',
       'sample-plugin',
     ]);
   });

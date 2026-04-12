@@ -18,6 +18,7 @@ export const BUILTIN_RUNTIME_PLUGIN_ENTRIES: BuiltinRuntimePluginEntry[] = [
   { moduleId: 'metadata-config-center', hostManaged: true },
   { moduleId: 'files' },
   { moduleId: 'module-template-sample' },
+  { moduleId: 'organization' },
   { moduleId: 'plugin-ops', hostManaged: true },
   { moduleId: 'sample-plugin', developmentFallback: false },
 ];

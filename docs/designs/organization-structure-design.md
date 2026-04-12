@@ -359,7 +359,14 @@
 3. 再落 `PersonUserLink` 与 `Identity Lite` 的账号绑定集成。
 4. 最后补授权摘要读取、模块级 smoke 和文档收口。
 
-## 16. 未决问题
+## 16. 实现对齐说明（2026-04-13）
+
+- 首版实际落地时，后端只声明了 `Organization.Person.View` 一个权限点；前端页面也按这个现状统一接入，没有在前端任务中反向扩写后端权限清单。
+- 人员中心页首版已经落地筛选区、列表容器和详情入口布局，但由于后端当前没有 `GET /api/organization/persons` 列表接口，列表页暂以空态容器承载，不额外越界补后端列表实现。
+- `Task 2 / Task 3` 的实现过程中，因仓库现状已存在三套 `platform-persistence-efcore.migrations.*` 工程，组织表模型落地后同步补齐了三套 migration 与 snapshot，作为真实库可装载所必需的最小调整。
+- 前端模块当前真实包名是 `@icp-modules/organization`，因此定向构建验证也沿用该名字；首版没有把整个 workspace 的模块包命名统一化。
+
+## 17. 未决问题
 
 - `Identity Lite` 应提供哪种最小账号查询接口更适合组织模块复用。
 - 授权摘要首版展示“角色摘要”还是“权限摘要”更符合管理者认知。

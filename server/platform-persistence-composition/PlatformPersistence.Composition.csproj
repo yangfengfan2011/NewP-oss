@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\modules\ConfigCenter\ConfigCenter.csproj" />
     <ProjectReference Include="..\modules\Authorization\AuthorizationModule.csproj" />
+    <ProjectReference Include="..\modules\Organization\OrganizationModule.csproj" />
   </ItemGroup>
 
 </Project>

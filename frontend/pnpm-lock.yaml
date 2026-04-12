@@ -148,6 +148,28 @@ importers:
         specifier: ^5.4.2
         version: 5.9.3
 
+  modules/organization:
+    dependencies:
+      '@icp-platform/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@icp-platform/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.1
+        version: 18.3.28
+      typescript:
+        specifier: ^5.4.2
+        version: 5.9.3
+
   modules/plugin-ops:
     dependencies:
       '@icp-platform/core':

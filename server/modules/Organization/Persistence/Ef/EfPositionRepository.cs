@@ -1,0 +1,119 @@
+using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.EntityFrameworkCore;
+
+namespace ICP.Platform.Modules.Organization.Persistence.Ef;
+
+public sealed class EfPositionRepository : IPositionRepository
+{
+    private readonly EfPlatformDbContext _dbContext;
+
+    public EfPositionRepository(EfPlatformDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    public async Task<List<Position>> GetByDepartmentIdAsync(Guid departmentId, CancellationToken cancellationToken = default)
+    {
+        var entities = await Entities
+            .AsNoTracking()
+            .Where(position => EF.Property<string>(position, "DepartmentId") == departmentId.ToString())
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(Map).ToList();
+    }
+
+    public async Task<Position?> GetByIdAsync(Guid positionId, CancellationToken cancellationToken = default)
+    {
+        var entity = await Entities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(position => EF.Property<string>(position, "Id") == positionId.ToString(), cancellationToken);
+
+        return entity is null ? null : Map(entity);
+    }
+
+    public async Task CreateAsync(Position position, CancellationToken cancellationToken = default)
+    {
+        Entities.Add(ToEntity(position));
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpdateAsync(Position position, CancellationToken cancellationToken = default)
+    {
+        var entity = await Entities
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == position.Id.ToString(), cancellationToken);
+
+        if (entity is null)
+        {
+            return;
+        }
+
+        CopyToEntity(position, entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("Position");
+
+    private static Position Map(IReadOnlyDictionary<string, object?> entity) => new()
+    {
+        Id = GetGuid(entity, "Id"),
+        CompanyId = GetGuid(entity, "CompanyId"),
+        DepartmentId = GetGuid(entity, "DepartmentId"),
+        Code = GetString(entity, "Code") ?? string.Empty,
+        Name = GetString(entity, "Name") ?? string.Empty,
+        EmploymentStatus = GetEmploymentStatus(entity, "EmploymentStatus"),
+        IsEnabled = GetBool(entity, "IsEnabled"),
+        SortOrder = GetInt(entity, "SortOrder"),
+        CreatedAt = GetDateTime(entity, "CreatedAt"),
+        UpdatedAt = GetNullableDateTime(entity, "UpdatedAt")
+    };
+
+    private static Dictionary<string, object?> ToEntity(Position position)
+    {
+        var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Id"] = position.Id.ToString()
+        };
+
+        CopyToEntity(position, entity);
+        return entity;
+    }
+
+    private static void CopyToEntity(Position position, IDictionary<string, object?> entity)
+    {
+        entity["Id"] = position.Id.ToString();
+        entity["CompanyId"] = position.CompanyId.ToString();
+        entity["DepartmentId"] = position.DepartmentId.ToString();
+        entity["Code"] = position.Code;
+        entity["Name"] = position.Name;
+        entity["EmploymentStatus"] = position.EmploymentStatus.ToString();
+        entity["IsEnabled"] = position.IsEnabled;
+        entity["SortOrder"] = position.SortOrder.ToString();
+        entity["CreatedAt"] = position.CreatedAt;
+        entity["UpdatedAt"] = position.UpdatedAt;
+    }
+
+    private static string? GetString(IReadOnlyDictionary<string, object?> entity, string key) =>
+        entity.TryGetValue(key, out var value) ? value as string : null;
+
+    private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
+        entity.TryGetValue(key, out var value) && value is bool boolean && boolean;
+
+    private static Guid GetGuid(IReadOnlyDictionary<string, object?> entity, string key) =>
+        Guid.TryParse(GetString(entity, key), out var value) ? value : Guid.Empty;
+
+    private static int GetInt(IReadOnlyDictionary<string, object?> entity, string key) =>
+        int.TryParse(GetString(entity, key), out var value) ? value : 0;
+
+    private static EmploymentStatus GetEmploymentStatus(IReadOnlyDictionary<string, object?> entity, string key) =>
+        Enum.TryParse<EmploymentStatus>(GetString(entity, key), true, out var value)
+            ? value
+            : EmploymentStatus.FullTime;
+
+    private static DateTime GetDateTime(IReadOnlyDictionary<string, object?> entity, string key) =>
+        entity.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : default;
+
+    private static DateTime? GetNullableDateTime(IReadOnlyDictionary<string, object?> entity, string key) =>
+        entity.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : null;
+}

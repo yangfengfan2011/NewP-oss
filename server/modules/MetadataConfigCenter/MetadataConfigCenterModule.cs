@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Modules.MetadataConfigCenter.Services;
 using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,7 +14,7 @@ public class MetadataConfigCenterModule : ModuleBase, IMenuProvider, IPermission
 
     public override void ConfigureServices(IServiceCollection services)
     {
-        // Manifest discovery services are introduced in Task 2.
+        services.AddScoped<IMetadataManifestService, MetadataManifestService>();
     }
 
     public IReadOnlyList<MenuDescriptor> GetMenus()

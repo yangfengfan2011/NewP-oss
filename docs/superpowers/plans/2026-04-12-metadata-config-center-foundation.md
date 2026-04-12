@@ -55,7 +55,7 @@ Expected: PASS
 
 ```bash
 git add server/modules/MetadataConfigCenter frontend/modules/metadata-config-center tests/MetadataConfigCenter.Tests modules/ConfigCenter/metadata
-git commit -m "feat: scaffold metadata config center module"
+git commit -m "功能：新增元数据配置中心模块骨架"
 ```
 
 ### Task 2: manifest 装配与模块元数据发现
@@ -101,7 +101,7 @@ Expected: PASS
 
 ```bash
 git add server/modules/MetadataConfigCenter tests/MetadataConfigCenter.Tests
-git commit -m "feat: add metadata manifest discovery"
+git commit -m "功能：新增模块元数据清单发现能力"
 ```
 
 ### Task 3: SettingDefinition 读取模型与保存闭环
@@ -160,7 +160,7 @@ Expected: PASS
 
 ```bash
 git add server/modules/MetadataConfigCenter tests/MetadataConfigCenter.Tests modules/ConfigCenter/metadata/settings
-git commit -m "feat: add setting definition authoring flow"
+git commit -m "功能：打通 SettingDefinition 编辑闭环"
 ```
 
 ### Task 4: ConfigCenter 值层边界收口
@@ -198,7 +198,7 @@ Expected: PASS
 
 ```bash
 git add server/modules/ConfigCenter tests/ConfigCenter.Tests docs/designs/configcenter-design.md
-git commit -m "refactor: tighten config center value-layer boundary"
+git commit -m "重构：收紧 ConfigCenter 值层职责边界"
 ```
 
 ### Task 5: 前端元数据配置中心最小工作台
@@ -251,7 +251,7 @@ Expected: PASS
 
 ```bash
 git add frontend/modules/metadata-config-center frontend/packages/shell
-git commit -m "feat: add metadata config center frontend workspace"
+git commit -m "功能：新增元数据配置中心前端工作台"
 ```
 
 ### Task 6: 保存状态、应用入口与未应用提示
@@ -294,7 +294,7 @@ Expected: PASS
 
 ```bash
 git add server/modules/MetadataConfigCenter frontend/modules/metadata-config-center tests/MetadataConfigCenter.Tests
-git commit -m "feat: surface metadata save state"
+git commit -m "功能：补齐元数据保存状态提示"
 ```
 
 ### Task 7: 文档、验证与交付收口
@@ -340,5 +340,5 @@ Expected: PASS
 
 ```bash
 git add docs/designs docs/current-status.md docs/verification
-git commit -m "docs: record metadata config center foundation verification"
+git commit -m "文档：记录元数据配置中心基础能力验证"
 ```

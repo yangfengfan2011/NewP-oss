@@ -6,6 +6,7 @@ using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Modules.MetadataConfigCenter;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -98,6 +99,7 @@ var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(pluginDiscoveryRoot);
 builder.Services.AddModuleSystem(options =>
 {
     options.Assemblies.Add(Assembly.GetExecutingAssembly());
+    options.Assemblies.Add(typeof(MetadataConfigCenterModule).Assembly);
     foreach (var pluginAssembly in pluginLoadResult.LoadedAssemblies)
     {
         options.Assemblies.Add(pluginAssembly);

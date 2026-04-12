@@ -271,6 +271,8 @@ AI-First 对齐：
 - 统一插件包打包脚本当前仍以 `Audit` 为 Phase 1 验证对象，不代表所有模块都已收口
 - 哈希/签名校验、更完整的前端插件治理与版本感知依赖仍未纳入本轮
 - 外部插件开发当前仍使用仓库内 `server/sdk/Sdk.csproj` 作为开发期 SDK 引用
+- 最近已补上“模块 metadata + 根 `resources/**` 随统一插件包进入 runtime 投影视图”的链路，并已收口为“同路径同内容可复用、同路径不同内容即冲突失败”；`resources/**` 的版本语义与更细粒度的 owner 声明仍待后续继续收口
+- 相关边界已单独整理为 [architecture/metadata-kernel-boundary.md](architecture/metadata-kernel-boundary.md)，后续对 `RuntimeViewMaterializer`、`MetadataConfigCenter` 与统一插件包格式的收口应以该文档为准
 
 对应文档：
 
@@ -334,7 +336,8 @@ AI-First 对齐：
 - 独立后端模块 `server/modules/MetadataConfigCenter`
 - 独立前端模块 `frontend/modules/metadata-config-center`
 - 基于 `modules/*/metadata/metadata.manifest.json` 的模块发现与 `SettingDefinition` authoring 闭环
-- `SettingDefinition` 的读取、保存与“已保存未应用 / Git 未同步”状态返回
+- `SettingDefinition` 的读取、保存、状态计算与显式 `apply` 闭环
+- `SettingDefinition` 已收口为“runtime 优先读取、source 优先保存、apply 再投影到 runtime”的职责分层
 - `ConfigCenter` 与 `MetadataConfigCenter` 的边界收口：前者只承载 `ConfigItem` 值层，后者只承载定义层 authoring
 - Shell 已将 `metadata-config-center` 作为 host-managed 模块接入，保证运行时 manifest 存在但未安装对应插件包时，工作台入口仍可注册
 
@@ -346,12 +349,13 @@ AI-First 对齐：
 - `pnpm --filter @icp-platform/module-config-center build`
 - `pnpm --filter @icp-platform/shell build`
 - `pnpm --dir .\\frontend\\packages\\shell exec vitest --run src/__tests__/registerModules-plugin-ops.test.ts`
-- 已执行一次最小 API smoke：在 `Persistence__AutoMigrate=false` 下启动 `HostApi`，成功读取 `ConfigCenter` 模块设置定义并完成保存，返回状态为 `已保存未应用`
+- `pnpm --dir .\\frontend\\packages\\shell exec vitest --run src/__tests__/metadata-config-service.test.ts`
+- 已执行一次最小 API smoke：在 `Persistence__AutoMigrate=false` 下启动 `HostApi`，成功读取 `ConfigCenter` 模块设置定义并完成保存；当前代码路径已支持显式 `apply`
 
 当前边界：
 
 - foundation 首版只打通 `SettingDefinition` 定义层 authoring，不扩展到 `Dictionary / Enumeration` 的复杂工作台
-- `应用` 与 `Git 同步` 仍保持显式分离；当前闭环只验证“保存后未应用”的状态链路
+- `应用` 与 `Git 同步` 仍保持显式分离；`apply` 已落地为 source 到 runtime 的独立后端动作，但尚未上推为更通用的插件内核动作
 - 当前手工 smoke 通过关闭启动期迁移来绕开数据库依赖，验证的是定义层 authoring 闭环，不代表值层数据库 smoke 被替代
 
 对应文档：

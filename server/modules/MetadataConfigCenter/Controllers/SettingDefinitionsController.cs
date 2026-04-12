@@ -9,10 +9,14 @@ namespace ICP.Platform.Modules.MetadataConfigCenter.Controllers;
 public class SettingDefinitionsController : ControllerBase
 {
     private readonly ISettingDefinitionAuthoringService _settingDefinitionAuthoringService;
+    private readonly ISettingDefinitionApplyService _settingDefinitionApplyService;
 
-    public SettingDefinitionsController(ISettingDefinitionAuthoringService settingDefinitionAuthoringService)
+    public SettingDefinitionsController(
+        ISettingDefinitionAuthoringService settingDefinitionAuthoringService,
+        ISettingDefinitionApplyService settingDefinitionApplyService)
     {
         _settingDefinitionAuthoringService = settingDefinitionAuthoringService;
+        _settingDefinitionApplyService = settingDefinitionApplyService;
     }
 
     [HttpGet]
@@ -29,6 +33,13 @@ public class SettingDefinitionsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _settingDefinitionAuthoringService.SaveSettingDefinitionsAsync(moduleId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("apply")]
+    public async Task<ActionResult<ApplySettingDefinitionsResult>> ApplySettings(string moduleId, CancellationToken cancellationToken = default)
+    {
+        var result = await _settingDefinitionApplyService.ApplySettingDefinitionsAsync(moduleId, cancellationToken);
         return Ok(result);
     }
 }

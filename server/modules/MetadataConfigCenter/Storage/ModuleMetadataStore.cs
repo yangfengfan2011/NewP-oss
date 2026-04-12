@@ -32,6 +32,37 @@ public class ModuleMetadataStore
         return Path.Combine(ResolveMetadataDirectory(moduleId, sourcePath), sourceFile);
     }
 
+    public string ResolveAuthoringMetadataDirectory(string moduleId, string sourcePath)
+    {
+        var effectiveRoot = ResolvePreferredAuthoringRoot(moduleId, sourcePath);
+        return Path.Combine(effectiveRoot, "modules", moduleId, "metadata", sourcePath);
+    }
+
+    public string ResolveAuthoringMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
+    {
+        return Path.Combine(ResolveAuthoringMetadataDirectory(moduleId, sourcePath), sourceFile);
+    }
+
+    public string? ResolveRuntimeMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
+    {
+        if (string.IsNullOrWhiteSpace(_runtimeRoot))
+        {
+            return null;
+        }
+
+        return Path.Combine(_runtimeRoot, "modules", moduleId, "metadata", sourcePath, sourceFile);
+    }
+
+    public string? ResolveRuntimeMetadataDirectory(string moduleId, string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(_runtimeRoot))
+        {
+            return null;
+        }
+
+        return Path.Combine(_runtimeRoot, "modules", moduleId, "metadata", sourcePath);
+    }
+
     public IReadOnlyList<string> EnumerateMetadataFiles(string moduleId, string sourcePath, string searchPattern)
     {
         var directory = ResolveMetadataDirectory(moduleId, sourcePath);
@@ -110,6 +141,32 @@ public class ModuleMetadataStore
         }
 
         return null;
+    }
+
+    private string ResolvePreferredAuthoringRoot(string moduleId, string sourcePath)
+    {
+        if (MetadataPathExists(_repositoryRoot, moduleId, sourcePath) || MetadataRootExists(_repositoryRoot, moduleId))
+        {
+            return _repositoryRoot;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_runtimeRoot)
+            && (MetadataPathExists(_runtimeRoot, moduleId, sourcePath) || MetadataRootExists(_runtimeRoot, moduleId)))
+        {
+            return _runtimeRoot;
+        }
+
+        return _repositoryRoot;
+    }
+
+    private static bool MetadataPathExists(string root, string moduleId, string sourcePath)
+    {
+        return Directory.Exists(Path.Combine(root, "modules", moduleId, "metadata", sourcePath));
+    }
+
+    private static bool MetadataRootExists(string root, string moduleId)
+    {
+        return Directory.Exists(Path.Combine(root, "modules", moduleId, "metadata"));
     }
 
     private IEnumerable<string> EnumerateMetadataRoots()

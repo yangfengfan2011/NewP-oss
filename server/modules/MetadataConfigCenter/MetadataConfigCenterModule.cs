@@ -20,6 +20,7 @@ public class MetadataConfigCenterModule : ModuleBase, IMenuProvider, IPermission
         services.AddScoped<ModuleMetadataStore>();
         services.AddScoped<SettingDefinitionAuthoringAdapter>();
         services.AddScoped<ISettingDefinitionAuthoringService, SettingDefinitionAuthoringService>();
+        services.AddScoped<ISettingDefinitionApplyService, SettingDefinitionApplyService>();
     }
 
     public IReadOnlyList<MenuDescriptor> GetMenus()

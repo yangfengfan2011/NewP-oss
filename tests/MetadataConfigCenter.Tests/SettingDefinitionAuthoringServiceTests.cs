@@ -65,6 +65,31 @@ public class SettingDefinitionAuthoringServiceTests
         Assert.Equal("75", refreshInterval.DefaultValue);
     }
 
+    [Fact]
+    public async Task SaveSettings_WhenRuntimeProjectedMetadataExists_WritesRepositorySourceAndLeavesRuntimeProjectionUntouched()
+    {
+        using var fixture = await MetadataTestRepository.CreateAsync(runtimeRefreshIntervalSeconds: "75");
+        var service = fixture.CreateSettingDefinitionService();
+        var definitions = await service.GetSettingDefinitionsAsync("ConfigCenter");
+
+        var refreshInterval = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.CacheRefreshIntervalSeconds");
+        refreshInterval.DisplayName = "运行时读取、源码保存";
+
+        await service.SaveSettingDefinitionsAsync(
+            "ConfigCenter",
+            new SaveSettingDefinitionsRequest
+            {
+                Definitions = definitions
+            });
+
+        var repositoryContent = await File.ReadAllTextAsync(fixture.SettingsFilePath);
+        var runtimeContent = await File.ReadAllTextAsync(fixture.RuntimeSettingsFilePath!);
+
+        Assert.Contains("运行时读取、源码保存", repositoryContent);
+        Assert.DoesNotContain("运行时读取、源码保存", runtimeContent);
+        Assert.Contains("\"defaultValue\": \"75\"", runtimeContent);
+    }
+
     private sealed class MetadataTestRepository : IDisposable
     {
         private readonly string _rootPath;
@@ -75,9 +100,14 @@ public class SettingDefinitionAuthoringServiceTests
             _rootPath = rootPath;
             _runtimeRoot = runtimeRoot;
             SettingsFilePath = Path.Combine(rootPath, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
+            RuntimeSettingsFilePath = string.IsNullOrWhiteSpace(runtimeRoot)
+                ? null
+                : Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
         }
 
         public string SettingsFilePath { get; }
+
+        public string? RuntimeSettingsFilePath { get; }
 
         public static async Task<MetadataTestRepository> CreateAsync(string? runtimeRefreshIntervalSeconds = null)
         {

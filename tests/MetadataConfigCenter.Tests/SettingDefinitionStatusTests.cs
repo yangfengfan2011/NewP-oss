@@ -30,16 +30,60 @@ public class SettingDefinitionStatusTests
         Assert.True(result.GitSyncPending);
     }
 
+    [Fact]
+    public async Task SaveSettingDefinitions_WhenRuntimeProjectionMatchesSource_ReturnsNoPendingApplyOrGitSyncStatus()
+    {
+        using var fixture = await MetadataStatusTestRepository.CreateAsync(includeRuntimeProjection: true);
+        var service = fixture.CreateSettingDefinitionService();
+        var definitions = await service.GetSettingDefinitionsAsync("ConfigCenter");
+
+        var result = await service.SaveSettingDefinitionsAsync(
+            "ConfigCenter",
+            new SaveSettingDefinitionsRequest
+            {
+                Definitions = definitions
+            });
+
+        Assert.False(result.HasUnsavedChanges);
+        Assert.False(result.HasUnappliedChanges);
+        Assert.False(result.GitSyncPending);
+        Assert.Equal("当前没有待处理变更", result.Status);
+    }
+
+    [Fact]
+    public async Task SaveSettingDefinitions_WhenRuntimeProjectionDiffersAfterSave_ReturnsPendingApplyAndGitSyncStatus()
+    {
+        using var fixture = await MetadataStatusTestRepository.CreateAsync(includeRuntimeProjection: true);
+        var service = fixture.CreateSettingDefinitionService();
+        var definitions = await service.GetSettingDefinitionsAsync("ConfigCenter");
+
+        definitions[0].DisplayName = "启用缓存（待应用）";
+
+        var result = await service.SaveSettingDefinitionsAsync(
+            "ConfigCenter",
+            new SaveSettingDefinitionsRequest
+            {
+                Definitions = definitions
+            });
+
+        Assert.False(result.HasUnsavedChanges);
+        Assert.True(result.HasUnappliedChanges);
+        Assert.True(result.GitSyncPending);
+        Assert.Equal("已保存未应用", result.Status);
+    }
+
     private sealed class MetadataStatusTestRepository : IDisposable
     {
         private readonly string _rootPath;
+        private readonly string? _runtimeRoot;
 
-        private MetadataStatusTestRepository(string rootPath)
+        private MetadataStatusTestRepository(string rootPath, string? runtimeRoot)
         {
             _rootPath = rootPath;
+            _runtimeRoot = runtimeRoot;
         }
 
-        public static async Task<MetadataStatusTestRepository> CreateAsync()
+        public static async Task<MetadataStatusTestRepository> CreateAsync(bool includeRuntimeProjection = false)
         {
             var sourceRoot = FindRepositoryRoot();
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-status-tests", Guid.NewGuid().ToString("N"));
@@ -49,14 +93,22 @@ public class SettingDefinitionStatusTests
             var targetMetadata = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
+            string? runtimeRoot = null;
+            if (includeRuntimeProjection)
+            {
+                runtimeRoot = Path.Combine(tempRoot, "plugins", "runtime");
+                var runtimeMetadata = Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata");
+                CopyDirectory(sourceMetadata, runtimeMetadata);
+            }
+
             await Task.CompletedTask;
-            return new MetadataStatusTestRepository(tempRoot);
+            return new MetadataStatusTestRepository(tempRoot, runtimeRoot);
         }
 
         public SettingDefinitionAuthoringService CreateSettingDefinitionService()
         {
-            var manifestService = new MetadataManifestService(_rootPath);
-            var store = new ModuleMetadataStore(_rootPath);
+            var manifestService = new MetadataManifestService(_rootPath, _runtimeRoot);
+            var store = new ModuleMetadataStore(_rootPath, _runtimeRoot);
             var adapter = new SettingDefinitionAuthoringAdapter();
             return new SettingDefinitionAuthoringService(manifestService, store, adapter);
         }

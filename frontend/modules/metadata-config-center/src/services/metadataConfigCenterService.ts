@@ -42,6 +42,11 @@ export interface SaveSettingDefinitionsResult {
   gitSyncPending: boolean;
 }
 
+export interface ApplySettingDefinitionsResult {
+  status: string;
+  hasUnappliedChanges: boolean;
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const message = await response.text();
@@ -74,4 +79,12 @@ export async function saveSettings(
   });
 
   return readJson<SaveSettingDefinitionsResult>(response);
+}
+
+export async function applySettings(moduleId: string): Promise<ApplySettingDefinitionsResult> {
+  const response = await fetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings/apply`, {
+    method: 'POST',
+  });
+
+  return readJson<ApplySettingDefinitionsResult>(response);
 }

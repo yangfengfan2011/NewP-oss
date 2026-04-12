@@ -4,6 +4,8 @@ import SaveApplyToolbar from '../components/SaveApplyToolbar';
 import SettingDefinitionTable from '../components/SettingDefinitionTable';
 import MetadataModuleOverview from './MetadataModuleOverview';
 import {
+  applySettings,
+  ApplySettingDefinitionsResult,
   getModules,
   getSettings,
   MetadataModuleManifest,
@@ -21,6 +23,7 @@ export default function SettingDefinitionManagement() {
   const [status, setStatus] = useState<SaveSettingDefinitionsResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,6 +91,23 @@ export default function SettingDefinitionManagement() {
     }
   }
 
+  async function handleApply() {
+    if (!selectedModuleId) {
+      return;
+    }
+
+    try {
+      setApplying(true);
+      setError(null);
+      const result = await applySettings(selectedModuleId);
+      setStatus((previousStatus) => mergeApplyResult(previousStatus, result, draftDefinitions, hasUnsavedChanges));
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : '应用失败');
+    } finally {
+      setApplying(false);
+    }
+  }
+
   function handleSelect(moduleId: string, type: string) {
     setSelectedModuleId(moduleId);
     setSelectedType(type);
@@ -116,6 +136,9 @@ export default function SettingDefinitionManagement() {
           canSave={hasUnsavedChanges && draftDefinitions.length > 0}
           saving={saving}
           onSave={() => void handleSave()}
+          canApply={!hasUnsavedChanges && effectiveStatus.hasUnappliedChanges}
+          applying={applying}
+          onApply={() => void handleApply()}
           statusMessage={effectiveStatus.status}
           hasUnsavedChanges={hasUnsavedChanges}
           hasUnappliedChanges={effectiveStatus.hasUnappliedChanges}
@@ -189,4 +212,19 @@ export default function SettingDefinitionManagement() {
       </div>
     </div>
   );
+}
+
+function mergeApplyResult(
+  previousStatus: SaveSettingDefinitionsResult | null,
+  applyResult: ApplySettingDefinitionsResult,
+  draftDefinitions: SettingDefinitionDto[],
+  hasUnsavedChanges: boolean,
+): SaveSettingDefinitionsResult {
+  return {
+    definitions: previousStatus?.definitions ?? draftDefinitions,
+    status: applyResult.status,
+    hasUnsavedChanges,
+    hasUnappliedChanges: applyResult.hasUnappliedChanges,
+    gitSyncPending: previousStatus?.gitSyncPending ?? false,
+  };
 }

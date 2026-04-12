@@ -21,7 +21,10 @@ public class UnifiedPluginPackageTestData : IDisposable
         return CreatePackage(includePluginJson: true, validPluginJson: true, includeFrontend: true);
     }
 
-    public string CreateValidPackageWithMetadataAndResources(string moduleId = DefaultModuleId, string version = "1.0.0")
+    public string CreateValidPackageWithMetadataAndResources(
+        string moduleId = DefaultModuleId,
+        string version = "1.0.0",
+        string platformDefaultLanguage = "zhs")
     {
         return CreatePackage(
             includePluginJson: true,
@@ -30,7 +33,8 @@ public class UnifiedPluginPackageTestData : IDisposable
             moduleId: moduleId,
             version: version,
             includeModuleMetadata: true,
-            includePlatformResources: true);
+            includePlatformResources: true,
+            platformDefaultLanguage: platformDefaultLanguage);
     }
 
     public string CreateValidPackage(string moduleId, string version)
@@ -97,7 +101,8 @@ public class UnifiedPluginPackageTestData : IDisposable
         bool includeFrontendEntryAsset = true,
         Func<string, string>? mutateFrontendManifest = null,
         bool includeModuleMetadata = false,
-        bool includePlatformResources = false)
+        bool includePlatformResources = false,
+        string platformDefaultLanguage = "zhs")
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"plugin_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempPath);
@@ -275,13 +280,15 @@ public class UnifiedPluginPackageTestData : IDisposable
                 JsonSerializer.Serialize(
                     new
                     {
-                        defaultLanguage = "zhs",
+                        defaultLanguage = platformDefaultLanguage,
                         supportedLanguages = new[]
                         {
                             new
                             {
-                                code = "zhs",
-                                displayName = "简体中文"
+                                code = platformDefaultLanguage,
+                                displayName = platformDefaultLanguage.Equals("en", StringComparison.OrdinalIgnoreCase)
+                                    ? "English"
+                                    : "简体中文"
                             }
                         }
                     },

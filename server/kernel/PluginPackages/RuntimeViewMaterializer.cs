@@ -138,7 +138,7 @@ public class RuntimeViewMaterializer
         }
 
         var targetResourcesRoot = Path.Combine(runtimeRoot, "resources");
-        CopyDirectory(packageResourcesRoot, targetResourcesRoot);
+        CopyDirectoryRejectingConflicts(packageResourcesRoot, targetResourcesRoot, record.ModuleId);
     }
 
     private static string ResolveContainedPath(string rootPath, string? relativePath, string propertyName)
@@ -264,6 +264,65 @@ public class RuntimeViewMaterializer
             var destinationPath = Path.Combine(destinationDirectory, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             File.Copy(file, destinationPath, overwrite: true);
+        }
+    }
+
+    private static void CopyDirectoryRejectingConflicts(string sourceDirectory, string destinationDirectory, string moduleId)
+    {
+        Directory.CreateDirectory(destinationDirectory);
+
+        foreach (var directory in Directory.GetDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, directory);
+            Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
+        }
+
+        foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, file);
+            var destinationPath = Path.Combine(destinationDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+            if (File.Exists(destinationPath))
+            {
+                if (FilesAreIdentical(file, destinationPath))
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    $"Platform resource conflict detected for '{relativePath}' while materializing module '{moduleId}'.");
+            }
+
+            File.Copy(file, destinationPath, overwrite: false);
+        }
+    }
+
+    private static bool FilesAreIdentical(string leftPath, string rightPath)
+    {
+        var leftInfo = new FileInfo(leftPath);
+        var rightInfo = new FileInfo(rightPath);
+        if (leftInfo.Length != rightInfo.Length)
+        {
+            return false;
+        }
+
+        using var leftStream = File.OpenRead(leftPath);
+        using var rightStream = File.OpenRead(rightPath);
+
+        while (true)
+        {
+            var leftByte = leftStream.ReadByte();
+            var rightByte = rightStream.ReadByte();
+            if (leftByte != rightByte)
+            {
+                return false;
+            }
+
+            if (leftByte == -1)
+            {
+                return true;
+            }
         }
     }
 

@@ -24,6 +24,10 @@ describe('metadataConfigCenterService', () => {
         hasUnsavedChanges: false,
         hasUnappliedChanges: true,
         gitSyncPending: true,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        status: '已应用',
+        hasUnappliedChanges: false,
       }));
 
     const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchMock);
@@ -32,6 +36,7 @@ describe('metadataConfigCenterService', () => {
     await service.getModules();
     await service.getSettings('ConfigCenter');
     await service.saveSettings('ConfigCenter', { definitions: [] });
+    await service.applySettings('ConfigCenter');
 
     expect(spy).toHaveBeenNthCalledWith(1, '/api/metadata-config/modules');
     expect(spy).toHaveBeenNthCalledWith(
@@ -46,6 +51,13 @@ describe('metadataConfigCenterService', () => {
         headers: {
           'Content-Type': 'application/json',
         },
+      }),
+    );
+    expect(spy).toHaveBeenNthCalledWith(
+      4,
+      '/api/metadata-config/modules/ConfigCenter/settings/apply',
+      expect.objectContaining({
+        method: 'POST',
       }),
     );
   });

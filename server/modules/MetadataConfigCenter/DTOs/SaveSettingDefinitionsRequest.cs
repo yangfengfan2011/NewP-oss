@@ -17,3 +17,10 @@ public class SaveSettingDefinitionsResult
 
     public bool GitSyncPending { get; set; } = true;
 }
+
+public class ApplySettingDefinitionsResult
+{
+    public string Status { get; set; } = "当前没有待处理变更";
+
+    public bool HasUnappliedChanges { get; set; }
+}

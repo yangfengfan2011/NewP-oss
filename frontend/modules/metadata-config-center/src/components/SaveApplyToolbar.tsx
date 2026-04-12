@@ -2,6 +2,9 @@ interface SaveApplyToolbarProps {
   canSave: boolean;
   saving: boolean;
   onSave: () => void;
+  canApply: boolean;
+  applying: boolean;
+  onApply: () => void;
   statusMessage: string | null;
   hasUnsavedChanges: boolean;
   hasUnappliedChanges: boolean;
@@ -36,6 +39,9 @@ export default function SaveApplyToolbar({
   canSave,
   saving,
   onSave,
+  canApply,
+  applying,
+  onApply,
   statusMessage,
   hasUnsavedChanges,
   hasUnappliedChanges,
@@ -63,7 +69,7 @@ export default function SaveApplyToolbar({
           {statusMessage ?? renderStatusLine(hasUnsavedChanges, hasUnappliedChanges, gitSyncPending)}
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: '#475569' }}>
-          保存仅回写 metadata 文件；应用和 Git 同步保持分离，并在当前阶段保持禁用。
+          保存仅回写 metadata 文件；应用会把当前 source 投影到 runtime；Git 同步仍保持分离并在当前阶段禁用。
         </div>
       </div>
 
@@ -86,19 +92,20 @@ export default function SaveApplyToolbar({
         </button>
         <button
           type="button"
-          disabled
-          title="当前阶段只展示入口，不执行真实应用动作。"
+          onClick={onApply}
+          disabled={!canApply || applying}
+          title={canApply ? '将当前 source metadata 投影到 runtime。' : '当前没有可应用变更或仍有未保存修改。'}
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 10,
             padding: '12px 18px',
-            background: '#f8fafc',
-            color: '#94a3b8',
-            cursor: 'not-allowed',
+            background: canApply && !applying ? '#f8fafc' : '#f8fafc',
+            color: canApply && !applying ? '#0f172a' : '#94a3b8',
+            cursor: canApply && !applying ? 'pointer' : 'not-allowed',
             fontWeight: 700,
           }}
         >
-          应用
+          {applying ? '应用中...' : '应用'}
         </button>
         <button
           type="button"

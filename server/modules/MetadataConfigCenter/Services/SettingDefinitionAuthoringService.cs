@@ -55,19 +55,34 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         _adapter.Validate(definitions);
 
         var generatedFiles = _adapter.BuildFileContents(moduleId, definitions);
+        var gitSyncPending = false;
+        var hasUnappliedChanges = false;
+
         foreach (var generatedFile in generatedFiles)
         {
-            var filePath = _moduleMetadataStore.ResolveMetadataFilePath(moduleId, settingsSourcePath, generatedFile.SourceFile);
+            var filePath = _moduleMetadataStore.ResolveAuthoringMetadataFilePath(moduleId, settingsSourcePath, generatedFile.SourceFile);
+            if (!await FileContentMatchesAsync(filePath, generatedFile.Content, cancellationToken))
+            {
+                gitSyncPending = true;
+            }
+
+            var runtimeFilePath = _moduleMetadataStore.ResolveRuntimeMetadataFilePath(moduleId, settingsSourcePath, generatedFile.SourceFile);
+            if (string.IsNullOrWhiteSpace(runtimeFilePath)
+                || !await FileContentMatchesAsync(runtimeFilePath, generatedFile.Content, cancellationToken))
+            {
+                hasUnappliedChanges = true;
+            }
+
             await _moduleMetadataStore.WriteTextAtomicallyAsync(filePath, generatedFile.Content, cancellationToken);
         }
 
         return new SaveSettingDefinitionsResult
         {
             Definitions = definitions.Select(MapToDto).ToList(),
-            Status = "已保存未应用",
+            Status = BuildStatus(gitSyncPending, hasUnappliedChanges),
             HasUnsavedChanges = false,
-            HasUnappliedChanges = true,
-            GitSyncPending = true
+            HasUnappliedChanges = hasUnappliedChanges,
+            GitSyncPending = gitSyncPending
         };
     }
 
@@ -117,5 +132,41 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
             SourceFile = definition.SourceFile,
             VersionSummary = definition.VersionSummary
         };
+    }
+
+    private async Task<bool> FileContentMatchesAsync(string filePath, string expectedContent, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(filePath))
+        {
+            return false;
+        }
+
+        var actualContent = await _moduleMetadataStore.ReadTextAsync(filePath, cancellationToken);
+        return NormalizeLineEndings(actualContent).Equals(NormalizeLineEndings(expectedContent), StringComparison.Ordinal);
+    }
+
+    private static string BuildStatus(bool gitSyncPending, bool hasUnappliedChanges)
+    {
+        if (hasUnappliedChanges && gitSyncPending)
+        {
+            return "已保存未应用";
+        }
+
+        if (hasUnappliedChanges)
+        {
+            return "已保存，尚未应用";
+        }
+
+        if (gitSyncPending)
+        {
+            return "已保存，Git 未同步";
+        }
+
+        return "当前没有待处理变更";
+    }
+
+    private static string NormalizeLineEndings(string content)
+    {
+        return content.Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 }

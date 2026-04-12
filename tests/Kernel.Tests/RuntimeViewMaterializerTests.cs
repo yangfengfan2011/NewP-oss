@@ -130,6 +130,47 @@ public class RuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void Materialize_WhenEnabledPluginsShareIdenticalPlatformResources_AllowsProjection()
+    {
+        var auditPackageRoot = _testData.CreateValidPackageWithMetadataAndResources("Audit", "1.0.0", "zhs");
+        var filesPackageRoot = _testData.CreateValidPackageWithMetadataAndResources("Files", "1.0.0", "zhs");
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(auditPackageRoot, installRoot, "Audit");
+        EnableInstalledPackage(filesPackageRoot, installRoot, "Files");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+
+        materializer.Materialize(installRoot);
+
+        var runtimeLanguagesPath = Path.Combine(installRoot, "runtime", "resources", "localization", "languages.json");
+        Assert.True(File.Exists(runtimeLanguagesPath));
+        Assert.Contains("\"defaultLanguage\": \"zhs\"", File.ReadAllText(runtimeLanguagesPath));
+    }
+
+    [Fact]
+    public void Materialize_WhenEnabledPluginsHaveConflictingPlatformResources_ThrowsAndPreservesPreviousProjection()
+    {
+        var auditPackageRoot = _testData.CreateValidPackageWithMetadataAndResources("Audit", "1.0.0", "zhs");
+        var filesPackageRoot = _testData.CreateValidPackageWithMetadataAndResources("Files", "1.0.0", "en");
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(auditPackageRoot, installRoot, "Audit");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+        materializer.Materialize(installRoot);
+
+        var runtimeLanguagesPath = Path.Combine(installRoot, "runtime", "resources", "localization", "languages.json");
+        var previousRuntimeLanguages = File.ReadAllText(runtimeLanguagesPath);
+
+        EnableInstalledPackage(filesPackageRoot, installRoot, "Files");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => materializer.Materialize(installRoot));
+        Assert.Contains("conflict", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(previousRuntimeLanguages, File.ReadAllText(runtimeLanguagesPath));
+    }
+
+    [Fact]
     public void Materialize_WhenFrontendManifestPathEscapesPackageRoot_ThrowsAndPreservesPreviousProjection()
     {
         var packageRoot = _testData.CreateValidPackage();

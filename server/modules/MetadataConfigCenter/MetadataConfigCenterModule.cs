@@ -1,5 +1,7 @@
+using ICP.Platform.Modules.MetadataConfigCenter.Adapters;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.MetadataConfigCenter.Services;
+using ICP.Platform.Modules.MetadataConfigCenter.Storage;
 using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +17,9 @@ public class MetadataConfigCenterModule : ModuleBase, IMenuProvider, IPermission
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddScoped<IMetadataManifestService, MetadataManifestService>();
+        services.AddScoped<ModuleMetadataStore>();
+        services.AddScoped<SettingDefinitionAuthoringAdapter>();
+        services.AddScoped<ISettingDefinitionAuthoringService, SettingDefinitionAuthoringService>();
     }
 
     public IReadOnlyList<MenuDescriptor> GetMenus()

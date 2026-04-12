@@ -21,6 +21,18 @@ public class UnifiedPluginPackageTestData : IDisposable
         return CreatePackage(includePluginJson: true, validPluginJson: true, includeFrontend: true);
     }
 
+    public string CreateValidPackageWithMetadataAndResources(string moduleId = DefaultModuleId, string version = "1.0.0")
+    {
+        return CreatePackage(
+            includePluginJson: true,
+            validPluginJson: true,
+            includeFrontend: true,
+            moduleId: moduleId,
+            version: version,
+            includeModuleMetadata: true,
+            includePlatformResources: true);
+    }
+
     public string CreateValidPackage(string moduleId, string version)
     {
         return CreatePackage(includePluginJson: true, validPluginJson: true, includeFrontend: true, moduleId: moduleId, version: version);
@@ -83,7 +95,9 @@ public class UnifiedPluginPackageTestData : IDisposable
         string frontendEntryManifestPath = FrontendEntryManifest,
         string frontendAssetRoot = FrontendAssetRoot,
         bool includeFrontendEntryAsset = true,
-        Func<string, string>? mutateFrontendManifest = null)
+        Func<string, string>? mutateFrontendManifest = null,
+        bool includeModuleMetadata = false,
+        bool includePlatformResources = false)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"plugin_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempPath);
@@ -193,6 +207,97 @@ public class UnifiedPluginPackageTestData : IDisposable
                 File.WriteAllText(Path.Combine(frontendPath, "assets", "entry.js"), "export default 'audit';\n");
             }
             File.WriteAllText(Path.Combine(frontendPath, "assets", "styles.css"), "body { color: black; }\n");
+        }
+
+        if (includeModuleMetadata)
+        {
+            var metadataRoot = Path.Combine(tempPath, "modules", moduleId, "metadata");
+            var settingsRoot = Path.Combine(metadataRoot, "settings");
+            Directory.CreateDirectory(settingsRoot);
+            File.WriteAllText(
+                Path.Combine(metadataRoot, "metadata.manifest.json"),
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        schemaVersion = "1.0",
+                        moduleId,
+                        metadataRoot = "metadata",
+                        types = new
+                        {
+                            settings = new
+                            {
+                                enabled = true,
+                                sourcePath = "settings",
+                                adapter = "SettingDefinitionAuthoringAdapter",
+                                authoring = new
+                                {
+                                    editable = true
+                                }
+                            }
+                        }
+                    },
+                    new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(
+                Path.Combine(settingsRoot, $"{moduleId}.settings.json"),
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        moduleId,
+                        type = "settings",
+                        group = "插件默认",
+                        definitions = new[]
+                        {
+                            new
+                            {
+                                key = $"{moduleId}.SampleSetting",
+                                displayName = "样例设置",
+                                description = "来自插件包的默认元数据",
+                                valueType = "String",
+                                defaultValue = "plugin-default",
+                                required = true,
+                                isSensitive = false,
+                                supportsOverride = true
+                            }
+                        }
+                    },
+                    new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        if (includePlatformResources)
+        {
+            var resourcesRoot = Path.Combine(tempPath, "resources");
+            var localizationRoot = Path.Combine(resourcesRoot, "localization");
+            var enumerationRoot = Path.Combine(resourcesRoot, "enumerations");
+            Directory.CreateDirectory(localizationRoot);
+            Directory.CreateDirectory(enumerationRoot);
+            File.WriteAllText(
+                Path.Combine(localizationRoot, "languages.json"),
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        defaultLanguage = "zhs",
+                        supportedLanguages = new[]
+                        {
+                            new
+                            {
+                                code = "zhs",
+                                displayName = "简体中文"
+                            }
+                        }
+                    },
+                    new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(
+                Path.Combine(enumerationRoot, "Theme.json"),
+                JsonSerializer.Serialize(
+                    new[]
+                    {
+                        new
+                        {
+                            key = "default",
+                            displayName = "默认主题"
+                        }
+                    },
+                    new JsonSerializerOptions { WriteIndented = true }));
         }
 
         var checksumsPath = Path.Combine(tempPath, "checksums");

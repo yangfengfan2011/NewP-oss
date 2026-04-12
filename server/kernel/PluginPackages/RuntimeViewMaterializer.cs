@@ -52,6 +52,8 @@ public class RuntimeViewMaterializer
             {
                 MaterializeBackendView(stagedBackendViewRoot, record);
                 StageFrontendAssets(stagedPublicRoot, record);
+                StageModuleMetadata(stagedRuntimeRoot, record);
+                StagePlatformResources(stagedRuntimeRoot, record);
             }
 
             var frontendManifestPath = Path.Combine(stagedRuntimeRoot, "frontend-plugin-manifest.json");
@@ -113,6 +115,30 @@ public class RuntimeViewMaterializer
             entryManifestPath,
             Path.Combine(targetRoot, Path.GetFileName(entryManifestPath)),
             overwrite: true);
+    }
+
+    private static void StageModuleMetadata(string runtimeRoot, InstalledPluginRecord record)
+    {
+        var packageMetadataRoot = Path.Combine(record.PackageRoot, "modules", record.ModuleId, "metadata");
+        if (!Directory.Exists(packageMetadataRoot))
+        {
+            return;
+        }
+
+        var targetMetadataRoot = Path.Combine(runtimeRoot, "modules", record.ModuleId, "metadata");
+        CopyDirectory(packageMetadataRoot, targetMetadataRoot);
+    }
+
+    private static void StagePlatformResources(string runtimeRoot, InstalledPluginRecord record)
+    {
+        var packageResourcesRoot = Path.Combine(record.PackageRoot, "resources");
+        if (!Directory.Exists(packageResourcesRoot))
+        {
+            return;
+        }
+
+        var targetResourcesRoot = Path.Combine(runtimeRoot, "resources");
+        CopyDirectory(packageResourcesRoot, targetResourcesRoot);
     }
 
     private static string ResolveContainedPath(string rootPath, string? relativePath, string propertyName)

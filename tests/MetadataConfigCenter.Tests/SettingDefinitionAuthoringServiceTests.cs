@@ -53,19 +53,33 @@ public class SettingDefinitionAuthoringServiceTests
         Assert.Contains("启用缓存（已更新）", updatedContent);
     }
 
+    [Fact]
+    public async Task GetSettings_PrefersRuntimeProjectedMetadata_WhenAvailable()
+    {
+        using var fixture = await MetadataTestRepository.CreateAsync(runtimeRefreshIntervalSeconds: "75");
+        var service = fixture.CreateSettingDefinitionService();
+
+        var definitions = await service.GetSettingDefinitionsAsync("ConfigCenter");
+
+        var refreshInterval = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.CacheRefreshIntervalSeconds");
+        Assert.Equal("75", refreshInterval.DefaultValue);
+    }
+
     private sealed class MetadataTestRepository : IDisposable
     {
         private readonly string _rootPath;
+        private readonly string? _runtimeRoot;
 
-        private MetadataTestRepository(string rootPath)
+        private MetadataTestRepository(string rootPath, string? runtimeRoot)
         {
             _rootPath = rootPath;
+            _runtimeRoot = runtimeRoot;
             SettingsFilePath = Path.Combine(rootPath, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
         }
 
         public string SettingsFilePath { get; }
 
-        public static async Task<MetadataTestRepository> CreateAsync()
+        public static async Task<MetadataTestRepository> CreateAsync(string? runtimeRefreshIntervalSeconds = null)
         {
             var sourceRoot = FindRepositoryRoot();
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-tests", Guid.NewGuid().ToString("N"));
@@ -75,14 +89,29 @@ public class SettingDefinitionAuthoringServiceTests
             var targetMetadata = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
-            await Task.CompletedTask;
-            return new MetadataTestRepository(tempRoot);
+            string? runtimeRoot = null;
+            if (!string.IsNullOrWhiteSpace(runtimeRefreshIntervalSeconds))
+            {
+                runtimeRoot = Path.Combine(tempRoot, "plugins", "runtime");
+                var runtimeMetadata = Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata");
+                CopyDirectory(sourceMetadata, runtimeMetadata);
+
+                var runtimeSettingsPath = Path.Combine(runtimeMetadata, "settings", "ConfigCenter.settings.json");
+                var runtimeSettings = await File.ReadAllTextAsync(runtimeSettingsPath);
+                runtimeSettings = runtimeSettings.Replace(
+                    "\"defaultValue\": \"40\"",
+                    $"\"defaultValue\": \"{runtimeRefreshIntervalSeconds}\"",
+                    StringComparison.Ordinal);
+                await File.WriteAllTextAsync(runtimeSettingsPath, runtimeSettings);
+            }
+
+            return new MetadataTestRepository(tempRoot, runtimeRoot);
         }
 
         public SettingDefinitionAuthoringService CreateSettingDefinitionService()
         {
-            var manifestService = new MetadataManifestService(_rootPath);
-            var store = new ModuleMetadataStore(_rootPath);
+            var manifestService = new MetadataManifestService(_rootPath, _runtimeRoot);
+            var store = new ModuleMetadataStore(_rootPath, _runtimeRoot);
             var adapter = new SettingDefinitionAuthoringAdapter();
             return new SettingDefinitionAuthoringService(manifestService, store, adapter);
         }

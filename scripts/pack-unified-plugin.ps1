@@ -57,10 +57,12 @@ function Resolve-FrontendModulePath {
         throw "Frontend modules directory not found: $frontendModulesRoot"
     }
 
+    $kebabCaseName = [regex]::Replace($ModuleName, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()
     $candidateNames = @(
         $ModuleName,
         $ModuleName.ToLowerInvariant(),
-        $ModuleName.ToUpperInvariant()
+        $ModuleName.ToUpperInvariant(),
+        $kebabCaseName
     ) | Select-Object -Unique
 
     foreach ($candidateName in $candidateNames) {
@@ -83,6 +85,33 @@ function Resolve-FrontendModulePath {
     }
 
     throw "Frontend module not found for '$ModuleName'. Expected a directory under '$frontendModulesRoot' containing 'src/index.ts'."
+}
+
+function Resolve-ModuleMetadataPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ModuleName
+    )
+
+    $modulesRoot = Join-Path $RepoRoot "modules"
+    if (-not (Test-Path -LiteralPath $modulesRoot)) {
+        return $null
+    }
+
+    $matchingDirectory = Get-ChildItem -LiteralPath $modulesRoot -Directory |
+        Where-Object { $_.Name.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
+
+    if (-not $matchingDirectory) {
+        return $null
+    }
+
+    $metadataPath = Join-Path $matchingDirectory.FullName "metadata"
+    if (-not (Test-Path -LiteralPath $metadataPath)) {
+        return $null
+    }
+
+    return $metadataPath
 }
 
 function Read-FrontendModuleMetadata {
@@ -184,8 +213,18 @@ function Write-Utf8NoBomFile {
 function Compute-Sha256 {
     param([Parameter(Mandatory = $true)][string]$FilePath)
 
-    $hash = Get-FileHash -LiteralPath $FilePath -Algorithm SHA256
-    return $hash.Hash.ToLower()
+    $stream = [System.IO.File]::OpenRead($FilePath)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+            return ([System.BitConverter]::ToString($hashBytes)).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $sha256.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
 }
 
 function Build-BackendModule {
@@ -266,6 +305,53 @@ function Copy-FrontendArtifacts {
     New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
 
     Copy-Item -LiteralPath $entryJsPath -Destination (Join-Path $assetsDir "entry.js") -Force
+}
+
+function Copy-DirectoryContents {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceDirectory,
+        [Parameter(Mandatory = $true)][string]$DestinationDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $SourceDirectory)) {
+        return
+    }
+
+    New-Item -ItemType Directory -Path $DestinationDirectory -Force | Out-Null
+    foreach ($entry in Get-ChildItem -LiteralPath $SourceDirectory -Force) {
+        Copy-Item -LiteralPath $entry.FullName -Destination (Join-Path $DestinationDirectory $entry.Name) -Recurse -Force
+    }
+}
+
+function Copy-ModuleMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ModuleName,
+        [Parameter(Mandatory = $true)][string]$TargetDirectory
+    )
+
+    $metadataPath = Resolve-ModuleMetadataPath -RepoRoot $RepoRoot -ModuleName $ModuleName
+    if (-not $metadataPath) {
+        return
+    }
+
+    $targetMetadataDirectory = Join-Path $TargetDirectory "modules/$ModuleName/metadata"
+    Copy-DirectoryContents -SourceDirectory $metadataPath -DestinationDirectory $targetMetadataDirectory
+}
+
+function Copy-PlatformResources {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$TargetDirectory
+    )
+
+    $resourcesPath = Join-Path $RepoRoot "resources"
+    if (-not (Test-Path -LiteralPath $resourcesPath)) {
+        return
+    }
+
+    $targetResourcesDirectory = Join-Path $TargetDirectory "resources"
+    Copy-DirectoryContents -SourceDirectory $resourcesPath -DestinationDirectory $targetResourcesDirectory
 }
 
 function Resolve-HostVersionDefaults {
@@ -447,10 +533,6 @@ function Write-Checksums {
 $repoRoot = (Get-RepoRoot).Path
 Set-Location $repoRoot
 
-if ($ModuleName -ne "Audit") {
-    throw "This Phase 1 script currently supports only -ModuleName Audit. Received: $ModuleName"
-}
-
 Write-Host "=== Packing unified plugin ===" -ForegroundColor Green
 Write-Host "Module: $ModuleName" -ForegroundColor Cyan
 Write-Host "Configuration: $Configuration" -ForegroundColor Cyan
@@ -531,6 +613,8 @@ Build-FrontendModule -RepoRoot $repoRoot -FrontendModulePath $frontendModulePath
 $outputDirectory = Join-Path $projectDirectory "bin/$Configuration/$targetFramework"
 Copy-BackendArtifacts -OutputDirectory $outputDirectory -AssemblyName $assemblyName -TargetDirectory $packageDirectory
 Copy-FrontendArtifacts -RepoRoot $repoRoot -ModuleName $frontendModuleName -TargetDirectory $packageDirectory
+Copy-ModuleMetadata -RepoRoot $repoRoot -ModuleName $moduleMetadata.ModuleId -TargetDirectory $packageDirectory
+Copy-PlatformResources -RepoRoot $repoRoot -TargetDirectory $packageDirectory
 
 Write-RootManifest -TargetDirectory $packageDirectory -Metadata $moduleMetadata -HostVersion $hostVersionDefaults
 Write-BackendManifest -TargetDirectory $packageDirectory -AssemblyName $assemblyName -Metadata $moduleMetadata -HostVersion $hostVersionDefaults

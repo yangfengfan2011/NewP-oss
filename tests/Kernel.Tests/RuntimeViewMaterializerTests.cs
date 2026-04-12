@@ -106,6 +106,30 @@ public class RuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void MaterializeEnabledPlugin_StagesModuleMetadata_AndPlatformResourcesIntoRuntime()
+    {
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources();
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+
+        materializer.Materialize(installRoot);
+
+        var runtimeModuleManifestPath = Path.Combine(installRoot, "runtime", "modules", "Audit", "metadata", "metadata.manifest.json");
+        var runtimeModuleSettingsPath = Path.Combine(installRoot, "runtime", "modules", "Audit", "metadata", "settings", "Audit.settings.json");
+        var runtimeLanguagesPath = Path.Combine(installRoot, "runtime", "resources", "localization", "languages.json");
+
+        Assert.True(File.Exists(runtimeModuleManifestPath));
+        Assert.True(File.Exists(runtimeModuleSettingsPath));
+        Assert.True(File.Exists(runtimeLanguagesPath));
+        Assert.Contains("\"moduleId\": \"Audit\"", File.ReadAllText(runtimeModuleManifestPath));
+        Assert.Contains("\"plugin-default\"", File.ReadAllText(runtimeModuleSettingsPath));
+        Assert.Contains("\"defaultLanguage\": \"zhs\"", File.ReadAllText(runtimeLanguagesPath));
+    }
+
+    [Fact]
     public void Materialize_WhenFrontendManifestPathEscapesPackageRoot_ThrowsAndPreservesPreviousProjection()
     {
         var packageRoot = _testData.CreateValidPackage();

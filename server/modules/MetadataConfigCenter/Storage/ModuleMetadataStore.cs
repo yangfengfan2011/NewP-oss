@@ -6,20 +6,25 @@ namespace ICP.Platform.Modules.MetadataConfigCenter.Storage;
 public class ModuleMetadataStore
 {
     private readonly string _repositoryRoot;
+    private readonly string? _runtimeRoot;
 
     public ModuleMetadataStore()
-        : this(ResolveRepositoryRoot())
+        : this(ResolveRepositoryRoot(), ResolveRuntimeRoot())
     {
     }
 
-    public ModuleMetadataStore(string repositoryRoot)
+    public ModuleMetadataStore(string repositoryRoot, string? runtimeRoot = null)
     {
-        _repositoryRoot = repositoryRoot;
+        _repositoryRoot = Path.GetFullPath(repositoryRoot);
+        _runtimeRoot = string.IsNullOrWhiteSpace(runtimeRoot)
+            ? null
+            : Path.GetFullPath(runtimeRoot);
     }
 
     public string ResolveMetadataDirectory(string moduleId, string sourcePath)
     {
-        return Path.Combine(_repositoryRoot, "modules", moduleId, "metadata", sourcePath);
+        var effectiveRoot = ResolvePreferredMetadataRoot(moduleId, sourcePath) ?? _repositoryRoot;
+        return Path.Combine(effectiveRoot, "modules", moduleId, "metadata", sourcePath);
     }
 
     public string ResolveMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
@@ -82,5 +87,50 @@ public class ModuleMetadataStore
         }
 
         throw new DirectoryNotFoundException("Unable to locate repository root for metadata storage.");
+    }
+
+    private string? ResolvePreferredMetadataRoot(string moduleId, string sourcePath)
+    {
+        foreach (var root in EnumerateMetadataRoots())
+        {
+            var sourceDirectory = Path.Combine(root, "modules", moduleId, "metadata", sourcePath);
+            if (Directory.Exists(sourceDirectory))
+            {
+                return root;
+            }
+        }
+
+        foreach (var root in EnumerateMetadataRoots())
+        {
+            var metadataDirectory = Path.Combine(root, "modules", moduleId, "metadata");
+            if (Directory.Exists(metadataDirectory))
+            {
+                return root;
+            }
+        }
+
+        return null;
+    }
+
+    private IEnumerable<string> EnumerateMetadataRoots()
+    {
+        if (!string.IsNullOrWhiteSpace(_runtimeRoot))
+        {
+            yield return _runtimeRoot;
+        }
+
+        yield return _repositoryRoot;
+    }
+
+    private static string ResolveRuntimeRoot()
+    {
+        var configuredInstallRoot = Environment.GetEnvironmentVariable("Platform__PluginInstallRoot");
+        var installRoot = string.IsNullOrWhiteSpace(configuredInstallRoot)
+            ? Path.Combine(AppContext.BaseDirectory, "plugins")
+            : Path.IsPathRooted(configuredInstallRoot)
+                ? configuredInstallRoot
+                : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredInstallRoot));
+
+        return Path.Combine(installRoot, "runtime");
     }
 }

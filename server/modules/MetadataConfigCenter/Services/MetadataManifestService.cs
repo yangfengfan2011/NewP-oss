@@ -11,45 +11,62 @@ public class MetadataManifestService : IMetadataManifestService
     };
 
     private readonly string _repositoryRoot;
+    private readonly string? _runtimeRoot;
 
     public MetadataManifestService()
-        : this(ResolveRepositoryRoot())
+        : this(ResolveRepositoryRoot(), ResolveRuntimeRoot())
     {
     }
 
-    public MetadataManifestService(string repositoryRoot)
+    public MetadataManifestService(string repositoryRoot, string? runtimeRoot = null)
     {
-        _repositoryRoot = repositoryRoot;
+        _repositoryRoot = Path.GetFullPath(repositoryRoot);
+        _runtimeRoot = string.IsNullOrWhiteSpace(runtimeRoot)
+            ? null
+            : Path.GetFullPath(runtimeRoot);
     }
 
     public async Task<IReadOnlyList<MetadataModuleManifest>> GetModuleManifestsAsync(CancellationToken cancellationToken = default)
     {
-        var modulesRoot = Path.Combine(_repositoryRoot, "modules");
-        if (!Directory.Exists(modulesRoot))
+        var manifestsByModuleId = new Dictionary<string, MetadataModuleManifest>(StringComparer.OrdinalIgnoreCase);
+        foreach (var modulesRoot in EnumerateModulesRoots())
         {
-            return [];
-        }
-
-        var manifestPaths = Directory
-            .EnumerateFiles(modulesRoot, "metadata.manifest.json", SearchOption.AllDirectories)
-            .Where(path => path.Contains($"{Path.DirectorySeparatorChar}metadata{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var manifests = new List<MetadataModuleManifest>(manifestPaths.Count);
-        foreach (var manifestPath in manifestPaths)
-        {
-            await using var stream = File.OpenRead(manifestPath);
-            var manifest = await JsonSerializer.DeserializeAsync<MetadataModuleManifest>(stream, JsonOptions, cancellationToken);
-            if (manifest is null || string.IsNullOrWhiteSpace(manifest.ModuleId))
+            if (!Directory.Exists(modulesRoot))
             {
                 continue;
             }
 
-            manifests.Add(manifest);
+            var manifestPaths = Directory
+                .EnumerateFiles(modulesRoot, "metadata.manifest.json", SearchOption.AllDirectories)
+                .Where(path => path.Contains($"{Path.DirectorySeparatorChar}metadata{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var manifestPath in manifestPaths)
+            {
+                await using var stream = File.OpenRead(manifestPath);
+                var manifest = await JsonSerializer.DeserializeAsync<MetadataModuleManifest>(stream, JsonOptions, cancellationToken);
+                if (manifest is null || string.IsNullOrWhiteSpace(manifest.ModuleId) || manifestsByModuleId.ContainsKey(manifest.ModuleId))
+                {
+                    continue;
+                }
+
+                manifestsByModuleId[manifest.ModuleId] = manifest;
+            }
         }
 
-        return manifests;
+        return manifestsByModuleId.Values
+            .OrderBy(manifest => manifest.ModuleId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private IEnumerable<string> EnumerateModulesRoots()
+    {
+        if (!string.IsNullOrWhiteSpace(_runtimeRoot))
+        {
+            yield return Path.Combine(_runtimeRoot, "modules");
+        }
+
+        yield return Path.Combine(_repositoryRoot, "modules");
     }
 
     private static string ResolveRepositoryRoot()
@@ -67,5 +84,17 @@ public class MetadataManifestService : IMetadataManifestService
         }
 
         throw new DirectoryNotFoundException("Unable to locate repository root for metadata manifest discovery.");
+    }
+
+    private static string ResolveRuntimeRoot()
+    {
+        var configuredInstallRoot = Environment.GetEnvironmentVariable("Platform__PluginInstallRoot");
+        var installRoot = string.IsNullOrWhiteSpace(configuredInstallRoot)
+            ? Path.Combine(AppContext.BaseDirectory, "plugins")
+            : Path.IsPathRooted(configuredInstallRoot)
+                ? configuredInstallRoot
+                : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredInstallRoot));
+
+        return Path.Combine(installRoot, "runtime");
     }
 }

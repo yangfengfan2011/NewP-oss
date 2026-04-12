@@ -39,6 +39,35 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             document.RootElement.GetProperty("publicBasePath").GetString());
     }
 
+    [Fact]
+    public void PackUnifiedPlugin_IncludesSelectedModuleMetadata_AndPlatformResources()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var outputRoot = Path.Combine(repoRoot, "artifacts", "plugin-packages", $"script-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputRoot);
+        _tempRoots.Add(outputRoot);
+
+        var result = RunPowerShellScript(
+            repoRoot,
+            Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"),
+            [
+                "-ModuleName", "ConfigCenter",
+                "-Configuration", "Debug",
+                "-OutputRoot", outputRoot,
+                "-Force"
+            ]);
+
+        var packageRoot = Path.Combine(outputRoot, "ConfigCenter");
+        var moduleManifestPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "metadata.manifest.json");
+        var moduleSettingsPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
+        var languagesPath = Path.Combine(packageRoot, "resources", "localization", "languages.json");
+
+        Assert.True(result.ExitCode == 0, $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(moduleManifestPath), $"Expected module manifest at {moduleManifestPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(moduleSettingsPath), $"Expected module settings at {moduleSettingsPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(languagesPath), $"Expected platform resources at {languagesPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+    }
+
     public void Dispose()
     {
         foreach (var tempRoot in _tempRoots)

@@ -4,6 +4,16 @@
   "group": "性能",
   "definitions": [
     {
+      "key": "ConfigCenter.AuditRetentionDays",
+      "displayName": "配置审计保留天数",
+      "description": "配置变更审计记录的默认保留周期",
+      "valueType": "Int",
+      "defaultValue": "180",
+      "required": true,
+      "isSensitive": false,
+      "supportsOverride": true
+    },
+    {
       "key": "ConfigCenter.CacheEnabled",
       "displayName": "启用配置缓存",
       "description": "是否启用配置项的内存缓存",
@@ -12,6 +22,26 @@
       "required": false,
       "isSensitive": false,
       "supportsOverride": true
+    },
+    {
+      "key": "ConfigCenter.CacheRefreshIntervalSeconds",
+      "displayName": "缓存刷新间隔（秒）",
+      "description": "后台主动刷新配置缓存的轮询间隔",
+      "valueType": "Int",
+      "defaultValue": "30",
+      "required": true,
+      "isSensitive": false,
+      "supportsOverride": true
+    },
+    {
+      "key": "ConfigCenter.GitSyncTimeoutSeconds",
+      "displayName": "Git 同步超时（秒）",
+      "description": "执行元数据 Git 同步时允许的最长等待时间",
+      "valueType": "Int",
+      "defaultValue": "90",
+      "required": true,
+      "isSensitive": false,
+      "supportsOverride": false
     }
   ]
 }

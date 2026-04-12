@@ -1,6 +1,6 @@
 import { MenuConfig, ShellView, UiConfig } from '@icp-platform/sdk';
 
-const platformMenuIds = new Set(['authorization', 'config-center', 'audit']);
+const platformMenuIds = new Set(['authorization', 'config-center', 'audit', 'metadata-config-center']);
 
 export const shellUiConfig: UiConfig = {
   shellExperienceMode: 'hybrid',
@@ -17,8 +17,16 @@ export function isMenuVisibleInShellView(menu: MenuConfig, shellView: ShellView)
 }
 
 export function filterMenusByShellView(menus: MenuConfig[], shellView: ShellView): MenuConfig[] {
+  return filterMenusByShellViewInternal(menus, shellView, true);
+}
+
+function filterMenusByShellViewInternal(
+  menus: MenuConfig[],
+  shellView: ShellView,
+  filterByShellView: boolean,
+): MenuConfig[] {
   return menus.flatMap(menu => {
-    if (!isMenuVisibleInShellView(menu, shellView)) {
+    if (filterByShellView && !isMenuVisibleInShellView(menu, shellView)) {
       return [];
     }
 
@@ -26,7 +34,7 @@ export function filterMenusByShellView(menus: MenuConfig[], shellView: ShellView
       return [menu];
     }
 
-    const children = filterMenusByShellView(menu.children, shellView);
+    const children = filterMenusByShellViewInternal(menu.children, shellView, false);
 
     if (children.length === 0 && !menu.path) {
       return [];

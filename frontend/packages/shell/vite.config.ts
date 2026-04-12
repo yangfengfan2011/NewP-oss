@@ -51,6 +51,10 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
+      '/metadata-config': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
     },
   },
   test: {

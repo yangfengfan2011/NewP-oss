@@ -17,11 +17,18 @@ public class SettingDefinitionAuthoringServiceTests
 
         var definitions = await service.GetSettingDefinitionsAsync("ConfigCenter");
 
-        var definition = Assert.Single(definitions);
-        Assert.Equal("ConfigCenter.CacheEnabled", definition.Key);
-        Assert.Equal("启用配置缓存", definition.DisplayName);
-        Assert.Equal("性能", definition.Group);
-        Assert.Equal("true", definition.DefaultValue);
+        Assert.True(definitions.Count >= 4);
+
+        var cacheEnabled = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.CacheEnabled");
+        Assert.Equal("启用配置缓存", cacheEnabled.DisplayName);
+        Assert.Equal("性能", cacheEnabled.Group);
+        Assert.Equal("true", cacheEnabled.DefaultValue);
+
+        var refreshInterval = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.CacheRefreshIntervalSeconds");
+        Assert.Equal("30", refreshInterval.DefaultValue);
+
+        var auditRetention = Assert.Single(definitions, definition => definition.Key == "ConfigCenter.AuditRetentionDays");
+        Assert.Equal("180", auditRetention.DefaultValue);
     }
 
     [Fact]

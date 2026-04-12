@@ -13,6 +13,7 @@ const platformShortcuts = [
   { label: '权限列表', to: '/authorization/permissions', note: '查看平台侧目录式列表页结构' },
   { label: '配置管理', to: '/config/items', note: '查看配置页摘要区与表格区组合' },
   { label: '值列表管理', to: '/config/value-lists', note: '管理基础值列表数据与表格操作' },
+  { label: '元数据配置中心', to: '/metadata-config/modules', note: '进入 SettingDefinition 元数据定义工作台' },
   { label: '访问日志', to: '/audit/access-logs', note: '查看审计页摘要与分页结构' },
 ];
 

@@ -58,4 +58,30 @@ describe('Home shortcuts', () => {
     );
     expect(valueListLink?.getAttribute('href')).toBe('/config/value-lists');
   });
+
+  it('shows metadata config center in platform shortcuts', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <LocalizationProvider
+          defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
+          supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
+          catalogs={dictionaryCatalogs}
+        >
+          <MemoryRouter>
+            <Home />
+          </MemoryRouter>
+        </LocalizationProvider>,
+      );
+    });
+
+    expect(container.textContent).toContain('元数据配置中心');
+    const metadataLink = Array.from(container.querySelectorAll('a')).find(
+      (link) => link.textContent?.includes('元数据配置中心'),
+    );
+    expect(metadataLink?.getAttribute('href')).toBe('/metadata-config/modules');
+  });
 });

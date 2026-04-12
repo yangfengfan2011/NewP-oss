@@ -325,6 +325,41 @@ AI-First 对齐：
 - [guides/local-multi-db-container-setup.md](guides/local-multi-db-container-setup.md)
 - [verification/phase-6-5-multi-db-persistence-verification.md](verification/phase-6-5-multi-db-persistence-verification.md)
 
+### Post-Phase-6：Metadata Config Center Foundation
+
+状态：已完成并收口
+
+已落地：
+
+- 独立后端模块 `server/modules/MetadataConfigCenter`
+- 独立前端模块 `frontend/modules/metadata-config-center`
+- 基于 `modules/*/metadata/metadata.manifest.json` 的模块发现与 `SettingDefinition` authoring 闭环
+- `SettingDefinition` 的读取、保存与“已保存未应用 / Git 未同步”状态返回
+- `ConfigCenter` 与 `MetadataConfigCenter` 的边界收口：前者只承载 `ConfigItem` 值层，后者只承载定义层 authoring
+- Shell 已将 `metadata-config-center` 作为 host-managed 模块接入，保证运行时 manifest 存在但未安装对应插件包时，工作台入口仍可注册
+
+已验证：
+
+- `dotnet test .\\tests\\MetadataConfigCenter.Tests\\MetadataConfigCenter.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\\tests\\ConfigCenter.Tests\\ConfigCenter.Tests.csproj --filter "ConfigServiceTests|LegacySettingImportServiceTests|ConfigCenterModuleTests" -nr:false -v minimal`
+- `pnpm --filter @icp-platform/module-metadata-config-center build`
+- `pnpm --filter @icp-platform/module-config-center build`
+- `pnpm --filter @icp-platform/shell build`
+- `pnpm --dir .\\frontend\\packages\\shell exec vitest --run src/__tests__/registerModules-plugin-ops.test.ts`
+- 已执行一次最小 API smoke：在 `Persistence__AutoMigrate=false` 下启动 `HostApi`，成功读取 `ConfigCenter` 模块设置定义并完成保存，返回状态为 `已保存未应用`
+
+当前边界：
+
+- foundation 首版只打通 `SettingDefinition` 定义层 authoring，不扩展到 `Dictionary / Enumeration` 的复杂工作台
+- `应用` 与 `Git 同步` 仍保持显式分离；当前闭环只验证“保存后未应用”的状态链路
+- 当前手工 smoke 通过关闭启动期迁移来绕开数据库依赖，验证的是定义层 authoring 闭环，不代表值层数据库 smoke 被替代
+
+对应文档：
+
+- [designs/metadata-config-center-design.md](designs/metadata-config-center-design.md)
+- [designs/configcenter-design.md](designs/configcenter-design.md)
+- [verification/metadata-config-center-foundation-verification.md](verification/metadata-config-center-foundation-verification.md)
+
 ## 当前可用能力
 
 ### 后端

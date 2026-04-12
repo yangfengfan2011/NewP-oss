@@ -10,7 +10,10 @@ import { loadPluginManifest } from './plugin-manifest-loader';
 /**
  * Module IDs that are host-managed: always registered even when a runtime manifest is present.
  */
-const HOST_MANAGED_MODULE_IDS = new Set<string>(['plugin-ops']);
+const HOST_MANAGED_MODULE_IDS = new Set<string>([
+  'plugin-ops',
+  'metadata-config-center',
+]);
 
 const LOCAL_WORKSPACE_MODULES = import.meta.glob<Record<string, unknown>>(
   '../../../modules/*/src/index.ts',

@@ -157,6 +157,7 @@
 - `ConfigCenterModule` 本身实现 `IConfigProvider`、`IMenuProvider`、`IPermissionProvider`。
 - 其他模块可以读取配置，但不应各自实现孤立的配置存储。
 - 若模块需要维护 `SettingDefinition`，应通过独立的 `MetadataConfigCenter` 维护定义层文件。
+- `MetadataConfigCenter` foundation 闭环已验证：定义层读取/保存走文件 authoring 链路，`ConfigCenter` 不参与 `SettingDefinition` 文件编辑。
 
 ### 与前端 Shell 的集成
 
@@ -192,6 +193,7 @@
 - 能通过 API 创建、查询、更新、删除配置项。
 - 敏感配置返回值被脱敏。
 - 配置中心页面可在有权限时打开，并能看到基础配置列表。
+- 元数据配置中心 foundation 收口时，`ConfigServiceTests` 与 `LegacySettingImportServiceTests` 已再次验证 `ConfigCenter` 仍只承载 `ConfigItem` 值层，不承担 `SettingDefinition` 定义编辑职责。
 
 ## 13. 未决问题
 

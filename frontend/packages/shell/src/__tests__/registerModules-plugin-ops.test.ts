@@ -14,6 +14,7 @@ describe('plugin-ops host-managed module registration', () => {
     const { BUILTIN_RUNTIME_PLUGIN_ENTRIES } = await import('../builtin-runtime-plugins');
     const moduleIds = BUILTIN_RUNTIME_PLUGIN_ENTRIES.map((e) => e.moduleId);
     expect(moduleIds).toContain('plugin-ops');
+    expect(moduleIds).toContain('metadata-config-center');
   });
 
   it('does NOT include plugin-ops in the generated runtime manifest (host-managed, not runtime-installed)', async () => {
@@ -21,6 +22,7 @@ describe('plugin-ops host-managed module registration', () => {
     const manifest = createBuiltinRuntimePluginManifest();
     const moduleIds = manifest.plugins.map((p) => p.moduleId);
     expect(moduleIds).not.toContain('plugin-ops');
+    expect(moduleIds).not.toContain('metadata-config-center');
   });
 
   it('registerShellModules registers plugin-ops when manifest is found and does NOT include plugin-ops', async () => {
@@ -60,6 +62,7 @@ describe('plugin-ops host-managed module registration', () => {
 
     // plugin-ops must also be registered (host-managed guarantee)
     expect(registeredIds).toContain('plugin-ops');
+    expect(registeredIds).toContain('MetadataConfigCenter');
   });
 
   it('plugin-ops module has metadata.moduleId matching the HOST_MANAGED_MODULE_IDS key', async () => {

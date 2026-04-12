@@ -1,5 +1,5 @@
 import { FrontendModule } from '@icp-platform/sdk';
-import MetadataModuleOverview from './pages/MetadataModuleOverview';
+import SettingDefinitionManagement from './pages/SettingDefinitionManagement';
 
 const metadataConfigCenterModule: FrontendModule = {
   metadata: {
@@ -11,7 +11,7 @@ const metadataConfigCenterModule: FrontendModule = {
   routes: [
     {
       path: '/metadata-config/modules',
-      component: MetadataModuleOverview,
+      component: SettingDefinitionManagement,
       requireAuth: true,
       permissions: ['MetadataConfigCenter.View']
     }

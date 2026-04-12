@@ -748,3 +748,35 @@ AI-First 对齐：
 
 - [designs/enumeration-consumer-ui-integration-design.md](designs/enumeration-consumer-ui-integration-design.md)
 - [verification/enumeration-consumer-ui-integration-verification.md](verification/enumeration-consumer-ui-integration-verification.md)
+
+### Post-Phase-6：Organization 结构模块首版闭环
+
+状态：已完成首版闭环
+
+已落地：
+
+- 独立后端模块 `server/modules/Organization`
+- 独立前端模块 `frontend/modules/organization`
+- `公司 / 部门 / 岗位 / 人员 / 人员-用户关联` 最小主数据闭环
+- 人员详情中的账号绑定状态与授权摘要只读展示
+- 组织模块三套 provider migration：`SqlServer / MySql / Oracle`
+- 对应实现说明、验证记录和状态文档收口
+
+已验证：
+
+- `dotnet test tests/Organization.Tests/Organization.Tests.csproj -nr:false -v minimal`
+- `dotnet build apps/host-api/HostApi.csproj -v minimal`
+- `pnpm --dir frontend build`
+
+当前边界：
+
+- `Identity Lite` 仍负责用户账号主体；组织模块只做只读账号查询和人员-用户关联
+- `Authorization` 仍负责授权角色与权限；组织模块只展示授权摘要，不做角色分配
+- 人员中心页当前已落地筛选区与列表容器，但尚未接真实人员列表 API
+- 默认 `NullIdentityUserDirectory` 仍是安全降级实现，未接入真实目录时不会写入脏账号绑定
+
+对应文档：
+
+- [designs/organization-structure-design.md](designs/organization-structure-design.md)
+- [modules/organization-implementation.md](modules/organization-implementation.md)
+- [verification/organization-module-verification.md](verification/organization-module-verification.md)

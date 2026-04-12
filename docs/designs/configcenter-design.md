@@ -4,22 +4,22 @@
 
 `ConfigCenter` 目前已经有后端模块、前端页面和测试，但之前的文档主要回答“边界是什么”和“已经做了什么”，还没有把配置模型、环境/租户覆盖方式、配置同步入口、与其他模块的衔接讲成一份详细设计。
 
-这份设计的目的，是把新平台 V1 的统一配置承载方案稳定下来，让后续模块知道：配置项应如何定义、如何同步默认配置、如何按环境和租户读取，以及为什么当前只做“最小配置中心”而不是“大而全配置平台”。
+这份设计的目的，是把新平台 V1 的统一配置承载方案稳定下来，让后续模块知道：配置值应如何承载、如何同步默认配置、如何按环境和租户读取，以及为什么当前只做“最小配置中心”而不是“大而全配置平台”。
 
 ## 2. 目标
 
-- 提供统一的配置项承载模型和基础 CRUD 能力。
+- 提供统一的配置值承载模型和基础 CRUD 能力。
 - 支撑按 `module / group / environment / tenant` 组织配置项。
-- 提供配置 schema 同步入口，让模块声明的配置默认值可以落到运行时存储。
+- 提供配置 schema 同步入口，让模块声明的 `SettingDefinition / ConfigDescriptor` 默认值可以落到运行时存储。
 - 提供前端配置管理页，支撑基础查看和修改。
-- 为后续字典、枚举导入、审计联动和持久化增强预留空间。
+- 为后续 `Setting` 值管理、审计联动和持久化增强预留空间。
 
 ## 3. 非目标
 
 - 不构建复杂审批发布、灰度投放、版本化回滚平台。
-- 不一次性迁移旧平台全部 Setting / Dictionary / Enumeration 资产。
+- 不一次性迁移旧平台全部元数据资产。
 - 不在本轮实现复杂缓存、多级配置源和配置变更推送。
-- 不把所有业务元数据都纳入 ConfigCenter。
+- 不把所有业务元数据都纳入 ConfigCenter；尤其不把 `Dictionary / Enumeration` 的定义层重新拉回数据库权威仓库。
 
 ## 4. 范围
 
@@ -40,31 +40,31 @@
 
 - 设计必须保持“最小可运行”，不把 ConfigCenter 做成平台中的平台。
 - 配置项模型必须兼容未来环境级和租户级覆盖。
-- 模块应通过契约声明配置 schema，宿主负责聚合与同步，不能让每个模块私自维护零散配置键。
+- 模块应通过契约声明 `SettingDefinition / ConfigDescriptor`，宿主负责聚合与同步，不能让每个模块私自维护零散配置键。
 - 当前实现允许内存仓储，但服务和 DTO 层要为后续数据库化保留稳定接口。
 - 敏感配置必须在查询响应中默认脱敏。
 
 ### 5.1 AI-first 最小检查补充
 
-- 入口在哪里：`ConfigCenter` 的正式后端入口是 `server/modules/ConfigCenter/`，对外接口入口是 `GET/POST/PUT/DELETE /api/config` 及其子路由；`WP4` 首批迁移承载入口继续通过这里扩展。
-- 边界在哪里：`ConfigCenter` 负责统一配置项承载、查询与最小导入能力，不负责完整 i18n 平台、复杂审批发布、全量旧元数据收编，也不在本轮拆出独立字典中心或枚举中心。
+- 入口在哪里：`ConfigCenter` 的正式后端入口是 `server/modules/ConfigCenter/`，对外接口入口是 `GET/POST/PUT/DELETE /api/config` 及其子路由；`Setting` 值层继续通过这里承载。
+- 边界在哪里：`ConfigCenter` 负责 `Setting` 值层的统一承载、查询与最小导入能力，不负责完整 i18n 平台、复杂审批发布、全量旧元数据收编，也不再承担独立元数据配置中心的职责。
 - 如何验证：通过 `tests/ConfigCenter.Tests`、后端构建、分组查询与敏感字段脱敏验证；当承接 `WP4` 首批迁移时，再叠加 Stage 8/9/10 的定向导入验证。
 - 失败信号是什么：如果配置项无法用现有 `ConfigItem` 稳定表达、模块边界被迫扩成新的大模型设计、或新增导入路径无法保持与 `Setting` POC 同一模板，则说明当前方案不再适合继续承载。
 - 如何回滚：若后续发现 `WP4` 首批迁移不适合继续共用 `ConfigCenter`，应只回退对应迁移设计与实现，不回退 `ConfigCenter` 已稳定的配置中心主干能力。
 
 ## 6. 总体方案
 
-采用“模块声明 schema + ConfigCenter 同步默认值 + 统一 CRUD 与分组查询”的方案：
+采用“模块声明 `SettingDefinition / schema` + ConfigCenter 同步默认值 + 统一 CRUD 与分组查询”的方案：
 
 - `ConfigCenterModule` 通过 `IConfigProvider` 暴露本模块自己的配置 schema。
 - 后续其他模块也可通过同类描述符声明自己的配置项。
-- `IConfigService.SyncConfigSchemaAsync(...)` 负责将未存在的配置项默认值同步到仓储。
-- `ConfigService` 负责配置项 CRUD、按模块查询、按组聚合、环境/租户过滤。
+- `IConfigService.SyncConfigSchemaAsync(...)` 负责将未存在的 `SettingDefinition` 默认值同步到 `ConfigItem` 仓储。
+- `ConfigService` 负责 `ConfigItem` CRUD、按模块查询、按组聚合、环境/租户过滤。
 - 前端模块 `frontend/modules/config-center` 提供配置管理页面，Shell 通过模块注册接入菜单和路由。
 
 选择这个方案的原因：
 
-- 能够先统一配置模型，再逐步承接迁移导入和更复杂治理。
+- 能够先统一值层配置模型，再逐步承接 `Setting` 值导入和更复杂治理。
 - 模块声明式 schema 有利于后续统计、校验和默认值同步。
 - 环境和租户维度以字段方式进入模型，足够支撑 V1。
 
@@ -76,9 +76,9 @@
 
 ## 7. 关键模型
 
-### 配置 schema 模型
+### 配置定义模型
 
-- `ConfigDescriptor`
+- `SettingDefinition / ConfigDescriptor`
   - `Key`
   - `DisplayName`
   - `Description`
@@ -88,7 +88,7 @@
   - `ModuleId`
   - `Group`
 
-### 运行时配置模型
+### 运行时配置值模型
 
 - `ConfigItem`
   - `Id`
@@ -210,7 +210,8 @@
 
 - `WP4` 首批 `Dictionary / Enumeration` 不再默认把 `ConfigCenter` 作为权威多语言数据仓库。
 - `ValueListItem` 仍不作为本轮 `Dictionary / Enumeration` 首批导入目标。
-- `ConfigCenter` 继续负责统一配置项承载；若未来需要消费 `Dictionary / Enumeration`，应优先通过静态资源或静态清单的受控投影接入。
+- `Setting` 继续属于元数据体系，但其定义层不等于值层：定义由模块元数据承载，值由 `ConfigCenter` 承载。
+- `ConfigCenter` 继续负责 `ConfigItem` 值层承载；若未来需要消费 `Dictionary / Enumeration`，应优先通过静态资源或静态清单的受控投影接入。
 - `Dictionary` 更适合长期演进为静态 i18n 资源；`Enumeration` 更适合长期演进为静态结构清单 + 本地化资源，而不是数据库权威源。
 
 ## 14. 实施拆分建议

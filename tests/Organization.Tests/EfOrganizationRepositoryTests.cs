@@ -4,6 +4,7 @@ using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -127,6 +128,16 @@ public class EfOrganizationRepositoryTests
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IPositionService) &&
             descriptor.ImplementationType == typeof(PositionService));
+    }
+
+    [Fact]
+    public void PlatformPersistenceModelCatalog_IncludesOrganizationDefinitions()
+    {
+        var definitions = PlatformPersistenceModelCatalog.GetDefinitions();
+
+        Assert.Contains(definitions, definition => definition.Name == "Company");
+        Assert.Contains(definitions, definition => definition.Name == "Department");
+        Assert.Contains(definitions, definition => definition.Name == "Position");
     }
 
     private static EfPlatformDbContext CreateDbContext()

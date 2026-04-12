@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\server\modules\Organization\OrganizationModule.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-composition\PlatformPersistence.Composition.csproj" />
   </ItemGroup>
 
 </Project>

@@ -102,6 +102,14 @@
 server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 ```
 
+说明：
+
+- 单文件 = 单模型一个文件。
+- 一个模块可以包含多个 `*.model.json` 文件。
+- 模块不需要额外清单文件，直接扫描 `metadata/models/*.model.json`。
+- 模型名和表名同源，字段名和列名同源，不再单独维护 `table` 与 `column`。
+- `kind` 必须保留，首轮至少支持 `Entity` 与 `Link`。
+
 建议结构：
 
 ```json
@@ -110,31 +118,53 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
   "moduleId": "Authorization",
   "model": {
     "name": "Role",
-    "table": "auth_roles",
     "kind": "Entity",
+    "builtinFields": ["ENAME", "ECODE"],
+    "sections": [
+      {
+        "id": "basic",
+        "title": "基本信息"
+      }
+    ],
     "fields": [
       {
-        "name": "Code",
-        "storage": {
-          "column": "code",
-          "valueType": "Text",
-          "storeType": "string",
-          "required": true,
-          "primaryKey": false,
-          "audit": false,
-          "maxLength": 100
-        },
+        "name": "ENAME",
         "uiType": "text",
+        "layout": {
+          "position": "010",
+          "width": 50,
+          "section": "basic"
+        },
         "form": {
           "create": {
-            "included": true,
-            "editable": true,
-            "order": 20
+            "mode": "editable"
           },
           "edit": {
-            "included": true,
-            "editable": false,
-            "order": 20
+            "mode": "editable"
+          }
+        },
+        "view": {
+          "visible": true
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        },
+        "uiType": "textarea",
+        "layout": {
+          "position": "020",
+          "width": 100,
+          "section": "basic"
+        },
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
           }
         },
         "view": {
@@ -157,28 +187,42 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 `storage` 负责：
 
-- 列名、值类型、存储类型
-- 必填、主键、审计字段
+- 数据库结构类型与可空性
 - 长度、精度、标度
-- 外键或引用声明
-- 索引、唯一约束
+- 可进入 `ModelDefinition` 与 migration 的字段结构语义
+
+`layout` 负责：
+
+- 字段静态布局
+- `position`、`width`、`section`
+- `create/edit` 共用的排布语义
+
+`section` 负责：
+
+- 页面静态分组边界
+- `id`、`title`
+- 不参与宽度计算，只作为分组容器
+- section 内字段必须连续，不可被其他 section 或根层级字段打断
 
 `form` 负责：
 
-- `create/edit` 场景是否纳入表单
-- `create/edit` 场景可编辑性
-- 分组、顺序、说明、占位提示
-- 前端表单层面的必填提示
+- `create/edit` 场景行为
+- `hidden / readonly / editable` 模式差异
 
 `view` 负责：
 
 - 详情页是否显示该属性
 
-字段级 `uiType` / `uiOptions` 负责：
+字段级 `uiType` 负责：
 
 - 输入控件语义
 - 固定显示值语义
-- 少量静态格式参数，例如日期格式、选择器模式
+
+字段级 `dataSource` 负责：
+
+- 选择型或引用型字段的数据来源
+- 首轮只支持 `enum` 与 `model`
+- 不属于 `storage`
 
 独立 `.view` 元数据负责：
 
@@ -189,29 +233,29 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 只允许 `storage` 分区中的以下信息影响数据库结构与 migration：
 
-- 模型名、表名
-- 字段名、列名
+- 模型名
+- 字段名
+- 模型类型对应的固定字段集合
 - 基础类型
-- 主键
-- 必填
+- 可空性
 - 长度、精度、标度
-- 审计字段标识
-- 显式关系声明
+- `linkedTypes` 提供的 `Link` 类型组合约束
 - 普通索引与唯一索引
 
 ### 7.4 禁止影响数据库的字段
 
 以下字段即使和模型写在同一文件中，也不得参与数据库投影：
 
-- `editable`
+- `layout`
+- `position`
+- `width`
+- `section`
+- `mode`
 - `visible`
-- `group`
-- `order`
-- `filterable`
-- `placeholder`
 - `uiType`
-- `uiOptions`
-- 任何 create/edit/detail 专属声明
+- `dataSource`
+- 任何 create/edit/view 专属声明
+- 多语言显示文本
 
 ### 7.5 禁止进入该文件的语义
 
@@ -224,24 +268,264 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 - 回滚策略
 - 自动改库策略
 - 动态脚本表达式
+- SQL 或脚本型数据源
+- 条件显示、动态布局、联动查询
+- 删除策略表达式，例如直接在元数据中声明 cascade / restrict 行为
 
 如果后续确有需要，应以代码服务、显式规则引擎或独立设计文档承接，而不是继续扩充该文件。
+
+### 7.6 模型类型与固定字段
+
+`kind = Entity` 与 `kind = Link` 都对应平台内建基础字段集，由代码内核自动补入，而不是每个模型在元数据中完整重写。
+
+`Entity` 首轮强制固定字段：
+
+- `EID`
+- `CreatedBy`
+- `CreatedAt`
+- `UpdatedBy`
+- `UpdatedAt`
+
+`Entity` 首轮可选固定字段：
+
+- `ENAME`
+- `ECODE`
+
+`Link` 首轮强制固定字段：
+
+- `LID`
+- `PEID`
+- `CEID`
+- `LCreatedBy`
+- `LCreatedAt`
+- `LUpdatedBy`
+- `LUpdatedAt`
+
+`Link` 首轮可选固定字段：
+
+- `LSequence`
+
+可选固定字段通过模型级 `builtinFields` 启用，并按 `kind` 严格校验：
+
+- `Entity` 只允许启用 `ENAME`、`ECODE`
+- `Link` 只允许启用 `LSequence`
+
+固定字段允许在 `fields` 中显式引用，用于补充：
+
+- `uiType`
+- `layout`
+- `form`
+- `view`
+
+但不允许修改其基础存储定义。
+
+### 7.7 布局与场景语义
+
+布局只支持静态布局，不支持条件显示、动态重排或表达式驱动逻辑。
+
+字段级共享 `layout` 至少包括：
+
+- `position`
+- `width`
+- `section`
+
+规则如下：
+
+- `position` 在同一模型内必须唯一
+- `width` 为任意整数百分比
+- 同一行累计宽度超过 `100` 时自动换行
+- 不写 `section` 的字段属于页面根层级字段
+- `section` 本身不定义宽度和列数，只作为分组边界
+
+`form` 负责 `create/edit` 行为差异，首轮采用：
+
+- `form.create.mode`
+- `form.edit.mode`
+
+`mode` 首轮允许值：
+
+- `hidden`
+- `readonly`
+- `editable`
+
+`view` 首轮先保持：
+
+- `visible`
+
+### 7.8 Link 的类型边界与 linkedTypes
+
+`Link` 是受控关系对象，不是普通实体变体。它既有自己的对象标识与审计字段，也必须声明允许连接哪些模型类型。
+
+因此 `kind = Link` 的模型必须支持 `linkedTypes`，并且至少定义一条规则。每条规则首轮最小结构为：
+
+- `parent`
+- `child`
+
+示例：
+
+```json
+"linkedTypes": [
+  { "parent": "Organization", "child": "Company" },
+  { "parent": "Company", "child": "Group" },
+  { "parent": "Group", "child": "Role" },
+  { "parent": "Role", "child": "User" }
+]
+```
+
+`linkedTypes` 的职责是：
+
+- 限制该 `Link` 模型允许连接哪些模型类型组合
+- 支撑保存时的类型合法性校验
+- 支撑删除对象时快速定位可能关联的 `Link` 模型范围
+
+`linkedTypes` 不负责：
+
+- 声明删除策略
+- 声明级联行为
+- 声明运行时流程
+
+删除时是阻止、级联删除还是执行其他清理动作，仍应由代码内核决定。
+
+### 7.9 索引与唯一性
+
+唯一性统一通过 `indexes` 表达，不单独作为字段属性存在。
+
+平台自动补入以下内建索引：
+
+- `Entity`：`EID` 唯一索引
+- `Link`：`LID` 唯一索引
+- `Link`：`PEID` 普通索引
+- `Link`：`CEID` 普通索引
+
+`(PEID, CEID)` 默认允许重复，不作为平台通用唯一约束。若某个具体 `Link` 模型要求父子组合唯一，必须在 `indexes` 中显式声明唯一复合索引。
+
+元数据中不应重复声明已经由内核自动补入的内建索引。
+
+### 7.10 数据源与多语言
+
+`dataSource` 属于字段级 UI/schema 属性，不属于 `storage`。
+
+首轮只支持两类数据源：
+
+- `enum`
+- `model`
+
+其中：
+
+- `enum` 引用已有枚举元数据文件
+- `model` 首轮只声明目标模型，不声明 `valueField`、`labelField`、`filter`
+
+`model` 数据源的默认显示规则：
+
+- 优先 `ENAME`
+- 再回退 `ECODE`
+- 再回退主键标识（`EID` 或 `LID`）
+
+多语言是平台级基础能力，应贯穿模型 authoring、schema 生成和前后端展示。模型元数据不直接内嵌多语言文本，而应通过稳定 key 规则映射到现有多语言元数据文件。
+
+建议默认 key 规则：
+
+- 模型：`Model.<ModelName>`
+- 字段：`Model.<ModelName>.Field.<FieldName>`
+- Section：`Model.<ModelName>.Section.<SectionId>`
+
+### 7.11 存储类型映射文件
+
+`storage.type` 不直接复用后端强类型枚举，也不直接暴露底层数据库类型名，而是使用平台级稳定枚举，并通过一份独立的类型映射元数据文件完成投影。
+
+建议新增平台级元数据文件：
+
+```text
+server/platform-modeling/metadata/storage-types.json
+```
+
+该文件首轮承担以下职责：
+
+- 定义合法的 `storage.type`
+- 定义每种平台类型允许的约束能力
+- 定义该类型在不同数据库 provider 下的默认存储映射
+
+类型映射文件建议采用对象字典结构，`types` 的 key 直接作为合法的 `storage.type` 值：
+
+```json
+{
+  "schemaVersion": "1.0",
+  "types": {
+    "string": {
+      "capabilities": {
+        "supportsLength": true,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "nvarchar",
+          "defaultLength": 200
+        },
+        "Oracle": {
+          "storeType": "nvarchar2",
+          "defaultLength": 200
+        },
+        "MySql": {
+          "storeType": "varchar",
+          "defaultLength": 200
+        }
+      }
+    },
+    "decimal": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": true,
+        "supportsScale": true
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "decimal",
+          "defaultPrecision": 18,
+          "defaultScale": 2
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 18,
+          "defaultScale": 2
+        },
+        "MySql": {
+          "storeType": "decimal",
+          "defaultPrecision": 18,
+          "defaultScale": 2
+        }
+      }
+    }
+  }
+}
+```
+
+设计规则如下：
+
+- `types` 的 key 就是合法的 `storage.type`
+- 首轮每种类型都必须同时定义 `SqlServer`、`Oracle`、`MySql` 三种 provider 映射
+- `capabilities` 负责校验 `maxLength / precision / scale` 是否可用于该类型
+- provider 节点负责提供数据库默认存储类型与默认约束值
+- 字段自身声明的 `maxLength / precision / scale` 优先级高于 provider 默认值
+
+该文件的职责是“平台类型到建模与存储默认值的映射”，不是旧平台 `DataTypes.datatype` 的直接平移。旧平台文件可作为参考来源，但新平台不再采用把长度或精度固化在类型名中的做法，例如不再使用 `STRING200`、`FLOAT10_5` 这类命名作为模型元数据真源。
 
 ## 8. 核心流程
 
 ### 8.1 主流程：authoring 与校验
 
 1. AI 或开发者编辑 `*.model.json`
-2. JSON schema 校验文件结构和字段分区是否合法
-3. 语义校验器校验模型名、主键、索引、字段重复、引用完整性等规则
+2. JSON schema 校验文件结构、模型类型、分区边界是否合法
+3. 语义校验器校验模型名、固定字段、索引、`linkedTypes`、字段重复与布局连续性等规则
 4. 若校验通过，进入后续投影或生成环节
 
 ### 8.2 主流程：数据库投影
 
 1. 后端读取 `*.model.json`
-2. 仅提取 `storage` 分区
-3. 将其转换为现有 `ModelDefinition / FieldDefinition / IndexDefinition`
-4. 由现有持久化适配层继续投影到 EF Core 模型
+2. 根据 `kind` 自动补入固定字段与内建索引
+3. 仅提取 `storage` 分区与允许影响数据库的模型级结构语义
+4. 将其转换为现有 `ModelDefinition / FieldDefinition / IndexDefinition`
+5. 由现有持久化适配层继续投影到 EF Core 模型
 
 ### 8.3 主流程：migration 生成
 
@@ -253,14 +537,17 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 ### 8.4 主流程：UI schema 消费
 
 1. 前端或 authoring 服务读取同一份文件
-2. 提取字段级 `uiType`、`uiOptions`、`form / view` 分区
-3. 生成新建/编辑 schema 与详情 schema
+2. 提取字段级 `uiType`、`dataSource`、`layout`、`form / view` 分区与 section
+3. 结合多语言 key 生成新建/编辑 schema 与详情 schema
 4. 列表列仍由独立 `.view` 元数据决定，不反向影响数据库结构
 
 ### 8.5 异常流程
 
 - `storage` 中缺少主键：拒绝进入数据库投影
+- `builtinFields` 与 `kind` 不匹配：校验失败
 - 索引引用不存在字段：拒绝进入 migration 生成
+- `linkedTypes` 缺失或声明非法：拒绝 `Link` 模型投影
+- section 内字段不连续或 `position` 重复：拒绝进入前端 schema 生成
 - `form/view` 或字段级处理类型引用不存在字段：拒绝进入前端 schema 生成
 - 某属性出现在错误分区：校验失败
 - `storage` 变更试图隐式触发运行时改库：拒绝执行
@@ -281,7 +568,9 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 后续若引入模型 authoring 工作台或模块页面生成能力，可消费：
 
 - `uiType`
-- `uiOptions`
+- `dataSource`
+- `layout`
+- `sections`
 - `form.create`
 - `form.edit`
 - `view.visible`
@@ -368,9 +657,9 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 ## 13. 未决问题
 
-- `storage.valueType` 与 `storage.storeType` 的最终枚举范围是否完全复用现有 C# 枚举
-- 关系声明是先只支持最小引用，还是首轮就覆盖更完整的导航关系
-- `form/view/uiType` 是否直接由前端读取文件，还是先统一经过后端 schema API 暴露
+- `storage-types.json` 中首轮平台类型枚举的最终集合应收敛为哪些值
+- `Link` 的 `linkedTypes` 在后续是否需要扩展更多静态属性，例如是否允许隐藏某些组合
+- `form/view/uiType/dataSource` 是否直接由前端读取文件，还是先统一经过后端 schema API 暴露
 - `uiType` 的稳定键空间是否完全复用旧平台处理类型命名，还是定义新平台受控映射表
 
 ## 14. 实施拆分建议

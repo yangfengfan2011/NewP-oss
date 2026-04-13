@@ -4,7 +4,7 @@
 
 **Goal:** 为平台现有 `ModelDefinition` 路线新增“单文件分区模型元数据” authoring 入口，先打通 `storage` 分区到 `ModelDefinition` 与 migration 的主链路，并用 `ConfigCenter` 作为首个试点模块验证可行性。
 
-**Architecture:** 本轮不替换现有代码内核，而是在 `server/platform-modeling` 中新增一层模型元数据文档、校验器和投影器。元数据文件固定采用 `storage / form / view` 分区，其中只有 `storage` 能投影为现有 `ModelDefinition`；`form / view` 先纳入契约和校验，但首轮不进入前端消费实现。模块侧采用“元数据文件作为 authoring 源 + 代码投影为执行期强类型对象”的并存策略，优先在 `ConfigCenter` 落地。
+**Architecture:** 本轮不替换现有代码内核，而是在 `server/platform-modeling` 中新增一层模型元数据文档、校验器和投影器。元数据文件固定采用 `storage / form / view` 分区，并为字段增加稳定的 `uiType / uiOptions` 声明；其中只有 `storage` 能投影为现有 `ModelDefinition`，`form / view / uiType / uiOptions` 先纳入契约和校验，但首轮不进入前端消费实现。模块侧采用“元数据文件作为 authoring 源 + 代码投影为执行期强类型对象”的并存策略，优先在 `ConfigCenter` 落地。
 
 **Tech Stack:** .NET 10, xUnit, JSON, System.Text.Json, EF Core 现有持久化链路, PowerShell
 
@@ -19,6 +19,7 @@
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataStorageSection.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataFormSection.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataViewSection.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataUiOptionsSection.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataIndex.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataScenarioRule.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/IModelMetadataDocumentLoader.cs`
@@ -52,7 +53,7 @@
 
 - `Metadata/*` 只定义 authoring 文档模型，不承载运行时执行逻辑。
 - `Validation/ModelMetadataValidator.cs` 负责分区边界、字段引用和结构完整性校验。
-- `Projection/ModelMetadataProjector.cs` 只消费 `storage` 分区，明确忽略 `form / view`。
+- `Projection/ModelMetadataProjector.cs` 只消费 `storage` 分区，明确忽略 `form / view / uiType / uiOptions`。
 - `ConfigCenterModelMetadataProvider.cs` 负责从模块元数据文件加载并投影，不把文件读取逻辑散落回模块定义类。
 
 ### Task 1: 建立元数据文档模型与分区校验器
@@ -63,6 +64,7 @@
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataStorageSection.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataFormSection.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataViewSection.cs`
+- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataUiOptionsSection.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataIndex.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataScenarioRule.cs`
 - Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelMetadataValidator.cs`
@@ -99,7 +101,7 @@ public class ModelMetadataValidatorTests
                         Name = "Key",
                         Form = new ModelMetadataFormSection
                         {
-                            Create = new ModelMetadataScenarioRule { Visible = true, Editable = true }
+                            Create = new ModelMetadataScenarioRule { Included = true, Editable = true }
                         }
                     }
                 ]
@@ -149,6 +151,8 @@ public sealed class ModelMetadataField
 {
     public string Name { get; init; } = string.Empty;
     public ModelMetadataStorageSection? Storage { get; init; }
+    public string? UiType { get; init; }
+    public ModelMetadataUiOptionsSection? UiOptions { get; init; }
     public ModelMetadataFormSection? Form { get; init; }
     public ModelMetadataViewSection? View { get; init; }
 }
@@ -176,17 +180,20 @@ public sealed class ModelMetadataFormSection
 
 public sealed class ModelMetadataViewSection
 {
-    public ModelMetadataScenarioRule? List { get; init; }
-    public ModelMetadataScenarioRule? Detail { get; init; }
+    public bool Visible { get; init; }
+}
+
+public sealed class ModelMetadataUiOptionsSection
+{
+    public string? Format { get; init; }
+    public string? PickerMode { get; init; }
 }
 
 public sealed class ModelMetadataScenarioRule
 {
-    public bool Visible { get; init; }
+    public bool Included { get; init; }
     public bool Editable { get; init; }
     public int? Order { get; init; }
-    public string? DisplayKind { get; init; }
-    public bool Sortable { get; init; }
 }
 ```
 
@@ -322,14 +329,12 @@ public class ModelMetadataProjectorTests
                             StoreType = "string",
                             Required = true
                         },
+                        UiType = "text",
                         Form = new ModelMetadataFormSection
                         {
-                            Create = new ModelMetadataScenarioRule { Visible = true, Editable = false }
+                            Create = new ModelMetadataScenarioRule { Included = true, Editable = false }
                         },
-                        View = new ModelMetadataViewSection
-                        {
-                            List = new ModelMetadataScenarioRule { Visible = false, DisplayKind = "badge" }
-                        }
+                        View = new ModelMetadataViewSection { Visible = true }
                     }
                 ],
                 Indexes = []
@@ -432,7 +437,8 @@ public sealed class ModelMetadataProjector
 ## Model Metadata Partition Rules
 
 - `storage` 是唯一允许投影到 `ModelDefinition` 与 migration 的分区
-- `form` 和 `view` 只用于 UI/schema authoring，不参与数据库投影
+- `form`、`view`、`uiType` 和 `uiOptions` 只用于 UI/schema authoring，不参与数据库投影
+- `view` 在模型字段层只控制详情页是否显示该属性；列表列由独立 `.view` 元数据决定
 - 单文件允许共存三类语义，但校验器必须阻止跨区越界
 ```
 
@@ -510,14 +516,12 @@ Expected: FAIL，提示 provider 或元数据文件尚不存在。
           "primaryKey": true,
           "audit": false
         },
+        "uiType": "object-id",
         "form": {
-          "create": { "visible": false, "editable": false, "order": 0 },
-          "edit": { "visible": false, "editable": false, "order": 0 }
+          "create": { "included": false, "editable": false, "order": 0 },
+          "edit": { "included": false, "editable": false, "order": 0 }
         },
-        "view": {
-          "list": { "visible": false, "displayKind": "text", "order": 0, "sortable": false },
-          "detail": { "visible": false, "displayKind": "text", "order": 0 }
-        }
+        "view": { "visible": false }
       },
       {
         "name": "Key",
@@ -530,14 +534,12 @@ Expected: FAIL，提示 provider 或元数据文件尚不存在。
           "audit": false,
           "maxLength": 200
         },
+        "uiType": "text",
         "form": {
-          "create": { "visible": true, "editable": true, "order": 10 },
-          "edit": { "visible": true, "editable": false, "order": 10 }
+          "create": { "included": true, "editable": true, "order": 10 },
+          "edit": { "included": true, "editable": false, "order": 10 }
         },
-        "view": {
-          "list": { "visible": true, "displayKind": "text", "order": 10, "sortable": true },
-          "detail": { "visible": true, "displayKind": "text", "order": 10 }
-        }
+        "view": { "visible": true }
       }
     ],
     "indexes": [
@@ -615,7 +617,7 @@ git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/te
 git commit -m "功能：用 ConfigCenter 试点单文件分区模型元数据"
 ```
 
-### Task 4: 固定“form/view 不影响数据库”的回归测试与最小验证记录
+### Task 4: 固定“form/view/uiType 不影响数据库”的回归测试与最小验证记录
 
 **Files:**
 - Modify: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
@@ -627,7 +629,7 @@ git commit -m "功能：用 ConfigCenter 试点单文件分区模型元数据"
 
 ```csharp
 [Fact]
-public void Project_DoesNotUseDisplayKindOrEditableToMutateStorageDefinition()
+public void Project_DoesNotUseUiTypeOrFormFlagsToMutateStorageDefinition()
 {
     var document = new ModelMetadataDocument
     {
@@ -650,14 +652,13 @@ public void Project_DoesNotUseDisplayKindOrEditableToMutateStorageDefinition()
                         StoreType = "string",
                         Required = false
                     },
+                    UiType = "ticks-date",
+                    UiOptions = new ModelMetadataUiOptionsSection { Format = "yyyy-MM-dd" },
                     Form = new ModelMetadataFormSection
                     {
-                        Create = new ModelMetadataScenarioRule { Editable = false, Visible = true }
+                        Create = new ModelMetadataScenarioRule { Editable = false, Included = true }
                     },
-                    View = new ModelMetadataViewSection
-                    {
-                        List = new ModelMetadataScenarioRule { DisplayKind = "badge", Visible = true, Sortable = true }
-                    }
+                    View = new ModelMetadataViewSection { Visible = true }
                 }
             ],
             Indexes = []
@@ -689,7 +690,7 @@ Expected:
 - 模型元数据文档结构校验
 - storage 到 ModelDefinition 投影
 - ConfigCenter 试点模块从 JSON 加载定义
-- form/view 不影响数据库结构
+- form/view/uiType 不影响数据库结构
 
 ## 验证命令
 - dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj -nr:false -v minimal
@@ -702,7 +703,7 @@ Expected:
 ### 首轮落地状态
 - 已完成 storage 主链路试点
 - ConfigCenter 已从单文件分区模型元数据投影出现有 ModelDefinition
-- form/view 已进入契约，但尚未进入前端消费实现
+- form/view/uiType 已进入契约，但尚未进入前端消费实现
 ```
 
 - [ ] **Step 5: Commit**
@@ -718,7 +719,7 @@ git commit -m "文档：收口单文件分区模型元数据首轮验证"
   - 单文件分区契约：Task 1
   - `storage` 到 `ModelDefinition` 投影：Task 2
   - `ConfigCenter` 首个试点：Task 3
-  - `form/view` 不影响数据库结构：Task 4
+  - `form/view/uiType` 不影响数据库结构：Task 4
 - [ ] 占位词扫描：计划中未使用 `TODO`、`TBD`、`implement later` 等占位描述。
 - [ ] 类型一致性：
   - 文档模型统一使用 `ModelMetadataDocument / ModelMetadataField / ModelMetadataStorageSection`

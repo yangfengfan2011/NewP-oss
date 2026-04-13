@@ -10,7 +10,7 @@
 现状中，模型定义主要以 C# 强类型形式存在，例如 `ModelDefinition / FieldDefinition / IndexDefinition`。这种形式在编译安全和执行链路上有优势，但也存在两个问题：
 
 - 结构语义分散在代码中，AI 或开发者做批量生成、对比和审阅时上下文成本偏高
-- 团队对“字段可编辑、浏览显示类型、创建/编辑差异”等声明性 UI 语义有实际需求，但这些语义若直接塞回 C# 执行代码，后续会越来越难抽离
+- 团队对“字段可编辑、字段处理类型、创建/编辑差异、详情固定显示值”等声明性 UI 语义有实际需求，但这些语义若直接塞回 C# 执行代码，后续会越来越难抽离
 
 本设计的目标不是把老平台的模型设计器原样搬回新平台，而是在现有 `ModelDefinition` 路线之上，新增一种更利于 AI 和人工协作的 authoring 形态，并明确数据库结构语义、表单语义、浏览语义三者的边界。
 
@@ -18,7 +18,7 @@
 
 - 为模块模型定义提供一种单文件、分区式的元数据 authoring 格式。
 - 让数据库结构语义成为该文件的主要权威输入之一，并能受控投影为现有 `ModelDefinition`。
-- 允许在同一文件中承载创建/编辑/浏览所需的声明性 UI 语义，但保持与数据库结构语义分区隔离。
+- 允许在同一文件中承载创建/编辑与详情展示所需的声明性 UI 语义，但保持与数据库结构语义分区隔离。
 - 明确哪些属性可以影响数据库 migration，哪些只能影响前端 schema，哪些禁止进入元数据。
 - 保持“元数据负责声明，代码内核负责校验、投影、迁移、回滚”的总体架构不变。
 
@@ -38,7 +38,7 @@
 - `server/platform-modeling/**`
 - 现有 `ModelDefinition / FieldDefinition / IndexDefinition / ModelKind`
 - 后续用于把元数据投影为 EF Core 模型或 migration 草案的适配层
-- 后续前端或 authoring 服务可消费的 `form / view` 分区
+- 后续前端或 authoring 服务可消费的 `form / view` 分区与字段级处理类型
 
 本设计不涉及：
 
@@ -58,7 +58,7 @@
 ### 5.1 AI-first 最小检查补充
 
 - 入口在哪里：模型 authoring 入口建议为 `server/modules/<ModuleId>/metadata/models/*.model.json`；后端消费入口为元数据解析器与 `ModelDefinition` 投影适配器。
-- 边界在哪里：`storage` 只负责数据库结构；`form` 只负责创建/编辑；`view` 只负责浏览/详情；流程、切换、回滚、处理算法不进入该文件。
+- 边界在哪里：`storage` 只负责数据库结构；`form` 只负责创建/编辑；`view` 只负责详情页是否显示该属性；字段级 `uiType` 负责输入控件语义与固定显示值语义；列表列编排不进入该文件；流程、切换、回滚、处理算法不进入该文件。
 - 如何验证：通过 JSON schema 校验、`ModelDefinition` 投影测试、EF Core migration 生成测试、前端 schema 读取测试和 smoke 验证。
 - 失败信号是什么：若实现后需要运行时自动改库、若 `form/view` 属性进入数据库投影、若后续新增场景只能继续平铺字段属性，说明设计边界失守。
 - 如何回滚：删除或停用元数据 authoring 入口，保留现有 C# 定义与 migration 工具链；投影适配层可逐模块回退到纯 C# 提供者。
@@ -67,23 +67,23 @@
 
 采用“单文件分区 authoring + 代码适配器投影 + 显式 migration”的方案。
 
-每个模型对应一个 `*.model.json` 文件，在同一文件内固定分为三个责任区：
+每个模型对应一个 `*.model.json` 文件，在同一文件内固定分为三个责任区，并允许每个字段声明一个稳定的字段级处理类型键：
 
 - `storage`：数据库结构语义
 - `form`：新建/编辑语义
-- `view`：浏览/详情语义
+- `view`：详情展示语义
 
 其中：
 
 - `storage` 分区可以投影为现有 `ModelDefinition`，并进一步生成 EF Core 配置或 migration 草案
-- `form / view` 分区仅供前端 schema 或 authoring 服务消费，不参与数据库 migration
+- `form / view` 分区与字段级处理类型仅供前端 schema 或 authoring 服务消费，不参与数据库 migration
 - 文件整体作为 AI 与人工审核的 authoring 输入，真正的迁移执行仍通过代码工具链完成
 
 选择这个方案的原因：
 
 - 相比纯 C#，它更利于 AI 做结构化生成、批量比对和局部修改
 - 相比拆成三个独立文件，它仍保持“一个模型一个文件”的低心智负担
-- 相比单文件平铺，它能强制保留存储、表单、浏览三类语义的边界
+- 相比单文件平铺，它能强制保留存储、表单、详情展示三类语义的边界，并把字段处理类型控制在受控声明范围内
 
 本轮不选这些方案：
 
@@ -124,30 +124,21 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
           "audit": false,
           "maxLength": 100
         },
+        "uiType": "text",
         "form": {
           "create": {
-            "visible": true,
+            "included": true,
             "editable": true,
             "order": 20
           },
           "edit": {
-            "visible": true,
+            "included": true,
             "editable": false,
             "order": 20
           }
         },
         "view": {
-          "list": {
-            "visible": true,
-            "displayKind": "text",
-            "sortable": true,
-            "order": 20
-          },
-          "detail": {
-            "visible": true,
-            "displayKind": "text",
-            "order": 20
-          }
+          "visible": true
         }
       }
     ],
@@ -174,17 +165,25 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 `form` 负责：
 
-- `create/edit` 场景可见性
+- `create/edit` 场景是否纳入表单
 - `create/edit` 场景可编辑性
 - 分组、顺序、说明、占位提示
 - 前端表单层面的必填提示
 
 `view` 负责：
 
-- `list/detail` 场景可见性
-- 浏览显示类型
-- 列宽、排序、筛选提示
-- 展示顺序、格式化提示
+- 详情页是否显示该属性
+
+字段级 `uiType` / `uiOptions` 负责：
+
+- 输入控件语义
+- 固定显示值语义
+- 少量静态格式参数，例如日期格式、选择器模式
+
+独立 `.view` 元数据负责：
+
+- 列表显示哪些列
+- 列表布局、排序、列宽、分组等页面级编排
 
 ### 7.3 允许影响数据库的字段
 
@@ -206,13 +205,13 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 - `editable`
 - `visible`
-- `displayKind`
 - `group`
 - `order`
-- `sortable`
 - `filterable`
 - `placeholder`
-- 任何 create/edit/list/detail 专属声明
+- `uiType`
+- `uiOptions`
+- 任何 create/edit/detail 专属声明
 
 ### 7.5 禁止进入该文件的语义
 
@@ -254,15 +253,15 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 ### 8.4 主流程：UI schema 消费
 
 1. 前端或 authoring 服务读取同一份文件
-2. 提取 `form / view` 分区
-3. 生成表单 schema 或浏览 schema
-4. 页面按场景消费，不反向影响数据库结构
+2. 提取字段级 `uiType`、`uiOptions`、`form / view` 分区
+3. 生成新建/编辑 schema 与详情 schema
+4. 列表列仍由独立 `.view` 元数据决定，不反向影响数据库结构
 
 ### 8.5 异常流程
 
 - `storage` 中缺少主键：拒绝进入数据库投影
 - 索引引用不存在字段：拒绝进入 migration 生成
-- `form/view` 中引用不存在字段：拒绝进入前端 schema 生成
+- `form/view` 或字段级处理类型引用不存在字段：拒绝进入前端 schema 生成
 - 某属性出现在错误分区：校验失败
 - `storage` 变更试图隐式触发运行时改库：拒绝执行
 
@@ -281,10 +280,11 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 后续若引入模型 authoring 工作台或模块页面生成能力，可消费：
 
+- `uiType`
+- `uiOptions`
 - `form.create`
 - `form.edit`
-- `view.list`
-- `view.detail`
+- `view.visible`
 
 前端必须通过受控 schema 消费，不得直接用该文件承载页面脚本。
 
@@ -326,7 +326,7 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 ### 11.1 主要风险
 
 - 单文件设计若缺少严格分区校验，后续会重新退化为“一个字段挂满所有属性”的大杂烩
-- 若团队把 `displayKind/editable` 之类字段也纳入数据库投影，会破坏当前边界
+- 若团队把 `uiType/editable` 之类字段也纳入数据库投影，会破坏当前边界
 - 若试图让元数据直接运行时改库，会把高风险迁移问题塞回元数据链路
 - 若前端消费端过早绑定这份文件的内部细节，后续演进会受限
 
@@ -349,7 +349,7 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 - 元数据文件结构校验测试
 - `storage` -> `ModelDefinition` 投影测试
-- `form/view` 字段引用一致性测试
+- `form/view/uiType` 字段引用一致性测试
 - EF Core migration 生成测试
 - 定向模块测试，例如 `ConfigCenterModelDefinitionTests` 风格测试扩展
 
@@ -370,8 +370,8 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 - `storage.valueType` 与 `storage.storeType` 的最终枚举范围是否完全复用现有 C# 枚举
 - 关系声明是先只支持最小引用，还是首轮就覆盖更完整的导航关系
-- `form/view` 是否直接由前端读取文件，还是先统一经过后端 schema API 暴露
-- 单文件是否需要额外的 `display` 公共区，承载 create/edit/list/detail 都共享的展示语义
+- `form/view/uiType` 是否直接由前端读取文件，还是先统一经过后端 schema API 暴露
+- `uiType` 的稳定键空间是否完全复用旧平台处理类型命名，还是定义新平台受控映射表
 
 ## 14. 实施拆分建议
 
@@ -384,8 +384,8 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 3. 再打通 migration 生成与回归测试  
    最小交付：样本模型变更可生成受控 migration
 
-4. 最后补 `form/view` 消费链路  
-   最小交付：一个样本模块可以按 create/edit/list/detail 读取 schema
+4. 最后补 `form/view/uiType` 消费链路  
+   最小交付：一个样本模块可以按 create/edit/详情读取 schema，并与独立 `.view` 列表元数据协同
 
 这样能保证第一阶段先解决“AI 更好地 authoring 结构模型”这个主问题，不把前端 schema 和复杂行为元数据一起捆绑进来。
 
@@ -395,13 +395,13 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
    模型 authoring 入口建议为 `server/modules/<ModuleId>/metadata/models/*.model.json`；后端实现入口为模型元数据解析、校验与投影适配层。
 
 2. 边界在哪里  
-   `storage` 负责数据库结构，`form` 负责创建/编辑，`view` 负责浏览/详情；流程、回滚、处理算法、运行时改库不在本设计范围内。
+   `storage` 负责数据库结构，`form` 负责创建/编辑，`view` 只负责详情页是否显示该属性，字段级 `uiType` 负责输入控件语义与固定显示值语义；列表列行为不在本设计范围内。
 
 3. 如何验证  
    通过 JSON schema 校验、`ModelDefinition` 投影测试、migration 生成测试、前端 schema 引用一致性测试和最小 smoke 验证证明设计落地。
 
 4. 失败信号是什么  
-   若实现后出现平铺属性膨胀、`form/view` 反向影响数据库结构、运行时隐式改库，或必须靠人工约定才能解释字段语义，则说明该设计没有按预期落地。
+   若实现后出现平铺属性膨胀、`form/view/uiType` 反向影响数据库结构、运行时隐式改库，或必须靠人工约定才能解释字段语义，则说明该设计没有按预期落地。
 
 5. 如何回滚  
-   可以逐模块退回到原有 C# 定义方式；migration 问题通过常规迁移回滚处理；若仅 `form/view` 消费不成熟，可先停用 UI 分区，仅保留 `storage` 主链路。
+   可以逐模块退回到原有 C# 定义方式；migration 问题通过常规迁移回滚处理；若仅 `form/view/uiType` 消费不成熟，可先停用 UI 分区，仅保留 `storage` 主链路。

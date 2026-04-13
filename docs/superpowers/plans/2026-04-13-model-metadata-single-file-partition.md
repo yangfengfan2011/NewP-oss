@@ -14,40 +14,40 @@
 
 ### Modeling foundation
 
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataDocument.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataField.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataStorageSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataFormSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataViewSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataUiOptionsSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataIndex.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataScenarioRule.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/IModelMetadataDocumentLoader.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/JsonModelMetadataDocumentLoader.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Projection/ModelMetadataProjector.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelMetadataValidator.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/platform-modeling/README.md`
+- Create: `server/platform-modeling/Metadata/ModelMetadataDocument.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataField.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataStorageSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataFormSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataViewSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataUiOptionsSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataIndex.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataScenarioRule.cs`
+- Create: `server/platform-modeling/Metadata/IModelMetadataDocumentLoader.cs`
+- Create: `server/platform-modeling/Metadata/JsonModelMetadataDocumentLoader.cs`
+- Create: `server/platform-modeling/Projection/ModelMetadataProjector.cs`
+- Create: `server/platform-modeling/Validation/ModelMetadataValidator.cs`
+- Modify: `server/platform-modeling/README.md`
 
 ### Tests
 
-- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelMetadataValidatorTests.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/Modeling.Tests.csproj`
+- Create: `tests/Modeling.Tests/ModelMetadataValidatorTests.cs`
+- Create: `tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
+- Modify: `tests/Modeling.Tests/Modeling.Tests.csproj`
 
 ### Pilot module
 
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/metadata/models/ConfigItem.model.json`
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenter.csproj`
-- Modify: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigCenterModelMetadataProviderTests.cs`
+- Create: `server/modules/ConfigCenter/metadata/models/ConfigItem.model.json`
+- Create: `server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs`
+- Modify: `server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
+- Modify: `server/modules/ConfigCenter/ConfigCenter.csproj`
+- Modify: `tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
+- Create: `tests/ConfigCenter.Tests/ConfigCenterModelMetadataProviderTests.cs`
 
 ### Docs and verification
 
-- Modify: `D:/Github/ICP-X/NewP/docs/designs/model-metadata-single-file-partition-design.md`
-- Create: `D:/Github/ICP-X/NewP/docs/verification/model-metadata-single-file-partition-verification.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
+- Modify: `docs/designs/model-metadata-single-file-partition-design.md`
+- Create: `docs/verification/model-metadata-single-file-partition-verification.md`
+- Modify: `docs/current-status.md`
 
 ### Responsibility notes
 
@@ -59,17 +59,17 @@
 ### Task 1: 建立元数据文档模型与分区校验器
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataDocument.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataField.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataStorageSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataFormSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataViewSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataUiOptionsSection.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataIndex.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/ModelMetadataScenarioRule.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelMetadataValidator.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelMetadataValidatorTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/Modeling.Tests.csproj`
+- Create: `server/platform-modeling/Metadata/ModelMetadataDocument.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataField.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataStorageSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataFormSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataViewSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataUiOptionsSection.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataIndex.cs`
+- Create: `server/platform-modeling/Metadata/ModelMetadataScenarioRule.cs`
+- Create: `server/platform-modeling/Validation/ModelMetadataValidator.cs`
+- Create: `tests/Modeling.Tests/ModelMetadataValidatorTests.cs`
+- Modify: `tests/Modeling.Tests/Modeling.Tests.csproj`
 
 - [ ] **Step 1: 先写分区校验 failing test**
 
@@ -280,18 +280,18 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-modeling/Metadata D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelMetadataValidator.cs D:/Github/ICP-X/NewP/tests/Modeling.Tests
+git add server/platform-modeling/Metadata server/platform-modeling/Validation/ModelMetadataValidator.cs tests/Modeling.Tests
 git commit -m "功能：新增模型元数据文档与分区校验器"
 ```
 
 ### Task 2: 新增 JSON 加载器与 storage 到 ModelDefinition 的投影器
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/IModelMetadataDocumentLoader.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Metadata/JsonModelMetadataDocumentLoader.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Projection/ModelMetadataProjector.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/platform-modeling/README.md`
+- Create: `server/platform-modeling/Metadata/IModelMetadataDocumentLoader.cs`
+- Create: `server/platform-modeling/Metadata/JsonModelMetadataDocumentLoader.cs`
+- Create: `server/platform-modeling/Projection/ModelMetadataProjector.cs`
+- Create: `tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
+- Modify: `server/platform-modeling/README.md`
 
 - [ ] **Step 1: 先写 projector failing test**
 
@@ -451,19 +451,19 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-modeling/Metadata D:/Github/ICP-X/NewP/server/platform-modeling/Projection D:/Github/ICP-X/NewP/server/platform-modeling/README.md D:/Github/ICP-X/NewP/tests/Modeling.Tests
+git add server/platform-modeling/Metadata server/platform-modeling/Projection server/platform-modeling/README.md tests/Modeling.Tests
 git commit -m "功能：新增模型元数据 JSON 加载与 storage 投影器"
 ```
 
 ### Task 3: 用 ConfigCenter 试点元数据文件并保持现有测试口径
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/metadata/models/ConfigItem.model.json`
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenter.csproj`
-- Create: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigCenterModelMetadataProviderTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
+- Create: `server/modules/ConfigCenter/metadata/models/ConfigItem.model.json`
+- Create: `server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs`
+- Modify: `server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
+- Modify: `server/modules/ConfigCenter/ConfigCenter.csproj`
+- Create: `tests/ConfigCenter.Tests/ConfigCenterModelMetadataProviderTests.cs`
+- Modify: `tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
 
 - [ ] **Step 1: 先写试点模块 failing test**
 
@@ -613,17 +613,17 @@ Expected:
 - [ ] **Step 7: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests
+git add server/modules/ConfigCenter tests/ConfigCenter.Tests
 git commit -m "功能：用 ConfigCenter 试点单文件分区模型元数据"
 ```
 
 ### Task 4: 固定“form/view/uiType 不影响数据库”的回归测试与最小验证记录
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
-- Create: `D:/Github/ICP-X/NewP/docs/verification/model-metadata-single-file-partition-verification.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/designs/model-metadata-single-file-partition-design.md`
+- Modify: `tests/Modeling.Tests/ModelMetadataProjectorTests.cs`
+- Create: `docs/verification/model-metadata-single-file-partition-verification.md`
+- Modify: `docs/current-status.md`
+- Modify: `docs/designs/model-metadata-single-file-partition-design.md`
 
 - [ ] **Step 1: 补一条越界保护测试**
 
@@ -709,7 +709,7 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/tests/Modeling.Tests D:/Github/ICP-X/NewP/docs/verification/model-metadata-single-file-partition-verification.md D:/Github/ICP-X/NewP/docs/current-status.md D:/Github/ICP-X/NewP/docs/designs/model-metadata-single-file-partition-design.md
+git add tests/Modeling.Tests docs/verification/model-metadata-single-file-partition-verification.md docs/current-status.md docs/designs/model-metadata-single-file-partition-design.md
 git commit -m "文档：收口单文件分区模型元数据首轮验证"
 ```
 

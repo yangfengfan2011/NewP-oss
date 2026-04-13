@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { MenuConfig } from '@icp-platform/sdk';
+import type { MenuConfig } from '@icp-platform/sdk';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlatform } from '../contexts/PlatformContext';
 import { filterMenusByShellView } from '../config/uiConfig';
@@ -7,6 +7,12 @@ import { filterMenusByShellView } from '../config/uiConfig';
 interface SidebarProps {
   menus: MenuConfig[];
 }
+
+const uiShowcaseMenu: MenuConfig = {
+  id: 'ui-showcase',
+  label: '控件展示',
+  path: '/ui-showcase',
+};
 
 function MenuItem({ menu }: { menu: MenuConfig }) {
   const location = useLocation();
@@ -44,11 +50,14 @@ function MenuItem({ menu }: { menu: MenuConfig }) {
 export function Sidebar({ menus }: SidebarProps) {
   const { shellView } = usePlatform();
   const visibleMenus = filterMenusByShellView(menus, shellView);
+  const navigationMenus = visibleMenus.some(menu => menu.path === uiShowcaseMenu.path)
+    ? visibleMenus
+    : [...visibleMenus, uiShowcaseMenu];
 
   return (
     <nav className="sh-sidebar">
       <ul className="sh-nav-list">
-        {visibleMenus.map(menu => (
+        {navigationMenus.map(menu => (
           <MenuItem key={menu.id} menu={menu} />
         ))}
       </ul>

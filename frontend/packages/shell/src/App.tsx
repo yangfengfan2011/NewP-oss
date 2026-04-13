@@ -1,25 +1,25 @@
 import { useMemo, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { PlatformProvider } from './contexts/PlatformContext';
+import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
 import Layout from './components/Layout';
-import Home from './pages/Home';
-import Login from './pages/Login';
 import { shellUiConfig } from './config/uiConfig';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { PlatformProvider } from './contexts/PlatformContext';
 import {
   dictionaryCatalogs,
   dictionaryLanguageConfig,
   enumerationCatalogs,
   enumerationDefinitions,
 } from './localization/catalogs';
+import Home from './pages/Home';
+import Login from './pages/Login';
+import UiShowcase from './pages/UiShowcase';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
 
-  // 等待 auth 初始化完成，避免误跳转
   if (!auth.isInitialized) {
     return null;
   }
@@ -39,9 +39,17 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+      <Route
+        path="/"
+        element={(
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        )}
+      >
         <Route index element={<Home />} />
-        {routes.map(route => (
+        <Route path="ui-showcase" element={<UiShowcase />} />
+        {routes.map((route) => (
           <Route
             key={route.path}
             path={route.path}

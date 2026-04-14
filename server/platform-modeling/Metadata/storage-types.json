@@ -1,0 +1,207 @@
+{
+  "schemaVersion": "1.0",
+  "types": {
+    "string": {
+      "capabilities": {
+        "supportsLength": true,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "nvarchar",
+          "defaultLength": 200
+        },
+        "Oracle": {
+          "storeType": "nvarchar2",
+          "defaultLength": 200
+        },
+        "MySql": {
+          "storeType": "varchar",
+          "defaultLength": 200
+        }
+      }
+    },
+    "text": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "nvarchar(max)"
+        },
+        "Oracle": {
+          "storeType": "clob"
+        },
+        "MySql": {
+          "storeType": "longtext"
+        }
+      }
+    },
+    "int": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "int"
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 10,
+          "defaultScale": 0
+        },
+        "MySql": {
+          "storeType": "int"
+        }
+      }
+    },
+    "long": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "bigint"
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 19,
+          "defaultScale": 0
+        },
+        "MySql": {
+          "storeType": "bigint"
+        }
+      }
+    },
+    "decimal": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": true,
+        "supportsScale": true
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "decimal",
+          "defaultPrecision": 18,
+          "defaultScale": 2
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 18,
+          "defaultScale": 2
+        },
+        "MySql": {
+          "storeType": "decimal",
+          "defaultPrecision": 18,
+          "defaultScale": 2
+        }
+      }
+    },
+    "bool": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "bit"
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 1,
+          "defaultScale": 0
+        },
+        "MySql": {
+          "storeType": "bit"
+        }
+      }
+    },
+    "date": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "bigint"
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 19,
+          "defaultScale": 0
+        },
+        "MySql": {
+          "storeType": "bigint"
+        }
+      }
+    },
+    "datetime": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "bigint"
+        },
+        "Oracle": {
+          "storeType": "number",
+          "defaultPrecision": 19,
+          "defaultScale": 0
+        },
+        "MySql": {
+          "storeType": "bigint"
+        }
+      }
+    },
+    "guid": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "nvarchar",
+          "defaultLength": 36
+        },
+        "Oracle": {
+          "storeType": "varchar2",
+          "defaultLength": 36
+        },
+        "MySql": {
+          "storeType": "varchar",
+          "defaultLength": 36
+        }
+      }
+    },
+    "json": {
+      "capabilities": {
+        "supportsLength": false,
+        "supportsPrecision": false,
+        "supportsScale": false
+      },
+      "providers": {
+        "SqlServer": {
+          "storeType": "nvarchar(max)"
+        },
+        "Oracle": {
+          "storeType": "clob"
+        },
+        "MySql": {
+          "storeType": "longtext"
+        }
+      }
+    }
+  }
+}

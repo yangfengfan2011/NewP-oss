@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "ConfigCenter",
+  "model": {
+    "name": "ValueListItem",
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "Code",
+        "storage": {
+          "type": "string",
+          "nullable": false
+        },
+        "uiType": "text"
+      },
+      {
+        "name": "Name",
+        "storage": {
+          "type": "string",
+          "nullable": false
+        },
+        "uiType": "text"
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        },
+        "uiType": "textarea"
+      },
+      {
+        "name": "CreatedAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": false
+        },
+        "uiType": "datetime"
+      },
+      {
+        "name": "UpdatedAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": false
+        },
+        "uiType": "datetime"
+      },
+      {
+        "name": "UpdatedBy",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        },
+        "uiType": "readonly"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_ValueListItem_Code",
+        "fields": [
+          "Code"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

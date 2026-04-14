@@ -24,7 +24,7 @@ public sealed class EfConfigRepository : IConfigRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => EF.Property<string>(item, "Id") == id, cancellationToken);
+            .FirstOrDefaultAsync(item => EF.Property<string>(item, "EID") == id, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -115,7 +115,7 @@ public sealed class EfConfigRepository : IConfigRepository
     public async Task UpdateAsync(ConfigItem item, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == item.Id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == item.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -129,7 +129,7 @@ public sealed class EfConfigRepository : IConfigRepository
     public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == id, cancellationToken);
 
         if (entity is null)
         {
@@ -146,7 +146,8 @@ public sealed class EfConfigRepository : IConfigRepository
     // 避免模块仓储绕开建模约束直接绑定数据库实现细节。
     private static ConfigItem Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        // 领域对象仍然保留 Id 命名，仓储层负责把它映射到新元数据里的 EID。
+        Id = GetString(entity, "EID")!,
         Key = GetString(entity, "Key")!,
         Value = GetString(entity, "Value"),
         Type = GetString(entity, "Type")!,
@@ -166,7 +167,7 @@ public sealed class EfConfigRepository : IConfigRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = item.Id
+            ["EID"] = item.Id
         };
 
         CopyToEntity(item, entity);
@@ -175,8 +176,8 @@ public sealed class EfConfigRepository : IConfigRepository
 
     private static void CopyToEntity(ConfigItem item, IDictionary<string, object?> entity)
     {
-        // 更新时显式回写全部受控字段，保证仓储输出和建模层字段集合保持一致。
-        entity["Id"] = item.Id;
+        // 更新时显式回写全部受控字段，并在这里处理 Id -> EID 的兼容映射。
+        entity["EID"] = item.Id;
         entity["Key"] = item.Key;
         entity["Value"] = item.Value;
         entity["Type"] = item.Type;

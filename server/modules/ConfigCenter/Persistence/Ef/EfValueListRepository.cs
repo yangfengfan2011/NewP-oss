@@ -28,7 +28,7 @@ public sealed class EfValueListRepository : IValueListRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => EF.Property<string>(item, "Id") == id, cancellationToken);
+            .FirstOrDefaultAsync(item => EF.Property<string>(item, "EID") == id, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -51,7 +51,7 @@ public sealed class EfValueListRepository : IValueListRepository
     public async Task UpdateAsync(ValueListItem item, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == item.Id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == item.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -65,7 +65,7 @@ public sealed class EfValueListRepository : IValueListRepository
     public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == id, cancellationToken);
 
         if (entity is null)
         {
@@ -80,7 +80,8 @@ public sealed class EfValueListRepository : IValueListRepository
 
     private static ValueListItem Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        // 领域对象仍然保留 Id 命名，仓储层负责把它映射到新元数据里的 EID。
+        Id = GetString(entity, "EID")!,
         Code = GetString(entity, "Code")!,
         Name = GetString(entity, "Name")!,
         Description = GetString(entity, "Description"),
@@ -93,7 +94,7 @@ public sealed class EfValueListRepository : IValueListRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = item.Id
+            ["EID"] = item.Id
         };
 
         CopyToEntity(item, entity);
@@ -102,7 +103,8 @@ public sealed class EfValueListRepository : IValueListRepository
 
     private static void CopyToEntity(ValueListItem item, IDictionary<string, object?> entity)
     {
-        entity["Id"] = item.Id;
+        // ValueListItem 先通过仓储兼容旧领域模型与新元数据固定主键命名。
+        entity["EID"] = item.Id;
         entity["Code"] = item.Code;
         entity["Name"] = item.Name;
         entity["Description"] = item.Description;

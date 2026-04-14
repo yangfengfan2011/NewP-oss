@@ -14,48 +14,48 @@
 
 ### 需要修改的现有文件
 
-- `D:\Github\ICP-X\NewP\docs\architecture\module-template.md`
+- `docs\architecture\module-template.md`
   从当前简要清单升级为正式的后端模块模板落地指南，明确必备文件、按需目录、边界约束、复制方式和验证命令。
-- `D:\Github\ICP-X\NewP\apps\host-api\HostApi.csproj`
+- `apps\host-api\HostApi.csproj`
   引入真实示例模块项目引用，确保示例模块可以被宿主构建产物携带并被模块扫描加载。
-- `D:\Github\ICP-X\NewP\docs\current-status.md`
+- `docs\current-status.md`
   在第六阶段完成后更新当前状态、交付物和验证结论。
 
 ### 需要新增的文件
 
-- `D:\Github\ICP-X\NewP\server\templates\backend-module-template\README.md`
+- `server\templates\backend-module-template\README.md`
   仓库内模板骨架总说明，告诉复制者哪些文件是必改项、哪些目录按需启用、哪些规则不能改。
-- `D:\Github\ICP-X\NewP\server\templates\backend-module-template\TemplateModule.cs`
+- `server\templates\backend-module-template\TemplateModule.cs`
   模板模块入口骨架，演示 `ModuleBase`、权限声明和配置声明的最小写法。
-- `D:\Github\ICP-X\NewP\server\templates\backend-module-template\Controllers\TemplateController.cs`
+- `server\templates\backend-module-template\Controllers\TemplateController.cs`
   模板控制器骨架。
-- `D:\Github\ICP-X\NewP\server\templates\backend-module-template\DTOs\TemplateResponse.cs`
+- `server\templates\backend-module-template\DTOs\TemplateResponse.cs`
   模板 DTO 骨架。
-- `D:\Github\ICP-X\NewP\server\templates\backend-module-template\Services\ITemplateService.cs`
+- `server\templates\backend-module-template\Services\ITemplateService.cs`
   模板服务接口骨架。
-- `D:\Github\ICP-X\NewP\server\templates\backend-module-template\Services\TemplateService.cs`
+- `server\templates\backend-module-template\Services\TemplateService.cs`
   模板服务实现骨架。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\ModuleTemplateSampleModule.cs`
+- `server\modules\ModuleTemplateSample\ModuleTemplateSampleModule.cs`
   真实后端示例模块入口。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj`
+- `server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj`
   真实后端示例模块项目文件。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\Controllers\SampleStatusController.cs`
+- `server\modules\ModuleTemplateSample\Controllers\SampleStatusController.cs`
   真实示例模块最小 API。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\DTOs\SampleStatusResponse.cs`
+- `server\modules\ModuleTemplateSample\DTOs\SampleStatusResponse.cs`
   真实示例模块响应 DTO。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\Services\ISampleStatusService.cs`
+- `server\modules\ModuleTemplateSample\Services\ISampleStatusService.cs`
   真实示例模块服务接口。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\Services\SampleStatusService.cs`
+- `server\modules\ModuleTemplateSample\Services\SampleStatusService.cs`
   真实示例模块服务实现。
-- `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\README.md`
+- `server\modules\ModuleTemplateSample\README.md`
   真实示例模块说明文档。
-- `D:\Github\ICP-X\NewP\tests\ModuleTemplateSample.Tests\ModuleTemplateSample.Tests.csproj`
+- `tests\ModuleTemplateSample.Tests\ModuleTemplateSample.Tests.csproj`
   真实示例模块测试项目。
-- `D:\Github\ICP-X\NewP\tests\ModuleTemplateSample.Tests\ModuleTemplateSampleTests.cs`
+- `tests\ModuleTemplateSample.Tests\ModuleTemplateSampleTests.cs`
   真实示例模块测试，至少覆盖模块元数据、权限/配置声明和最小服务链路。
-- `D:\Github\ICP-X\NewP\docs\verification\phase-6-backend-component-template-verification.md`
+- `docs\verification\phase-6-backend-component-template-verification.md`
   第六阶段第一版验证记录。
-- `D:\Github\ICP-X\NewP\docs\modules\module-template-sample-implementation.md`
+- `docs\modules\module-template-sample-implementation.md`
   真实示例模块的实现说明，说明其为何作为“活模板”存在，以及与模板骨架如何对应。
 
 ### 命名与边界约定
@@ -70,13 +70,13 @@
 ### Task 1: 落地后端模板规范与仓库内模板骨架
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\docs\architecture\module-template.md`
-- Create: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\README.md`
-- Create: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\TemplateModule.cs`
-- Create: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\Controllers\TemplateController.cs`
-- Create: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\DTOs\TemplateResponse.cs`
-- Create: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\Services\ITemplateService.cs`
-- Create: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\Services\TemplateService.cs`
+- Modify: `docs\architecture\module-template.md`
+- Create: `server\templates\backend-module-template\README.md`
+- Create: `server\templates\backend-module-template\TemplateModule.cs`
+- Create: `server\templates\backend-module-template\Controllers\TemplateController.cs`
+- Create: `server\templates\backend-module-template\DTOs\TemplateResponse.cs`
+- Create: `server\templates\backend-module-template\Services\ITemplateService.cs`
+- Create: `server\templates\backend-module-template\Services\TemplateService.cs`
 
 - [ ] **Step 1: 先写模板说明目标结构**
 
@@ -300,13 +300,13 @@ git commit -m "docs: add backend module template skeleton"
 ### Task 2: 落地真实后端示例模块
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj`
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\ModuleTemplateSampleModule.cs`
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\Controllers\SampleStatusController.cs`
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\DTOs\SampleStatusResponse.cs`
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\Services\ISampleStatusService.cs`
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\Services\SampleStatusService.cs`
-- Create: `D:\Github\ICP-X\NewP\server\modules\ModuleTemplateSample\README.md`
+- Create: `server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj`
+- Create: `server\modules\ModuleTemplateSample\ModuleTemplateSampleModule.cs`
+- Create: `server\modules\ModuleTemplateSample\Controllers\SampleStatusController.cs`
+- Create: `server\modules\ModuleTemplateSample\DTOs\SampleStatusResponse.cs`
+- Create: `server\modules\ModuleTemplateSample\Services\ISampleStatusService.cs`
+- Create: `server\modules\ModuleTemplateSample\Services\SampleStatusService.cs`
+- Create: `server\modules\ModuleTemplateSample\README.md`
 
 - [ ] **Step 1: 新建示例模块项目文件**
 
@@ -504,9 +504,9 @@ git commit -m "feat: add backend module template sample module"
 ### Task 3: 接入宿主并补齐示例模块测试
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\apps\host-api\HostApi.csproj`
-- Create: `D:\Github\ICP-X\NewP\tests\ModuleTemplateSample.Tests\ModuleTemplateSample.Tests.csproj`
-- Create: `D:\Github\ICP-X\NewP\tests\ModuleTemplateSample.Tests\ModuleTemplateSampleTests.cs`
+- Modify: `apps\host-api\HostApi.csproj`
+- Create: `tests\ModuleTemplateSample.Tests\ModuleTemplateSample.Tests.csproj`
+- Create: `tests\ModuleTemplateSample.Tests\ModuleTemplateSampleTests.cs`
 
 - [ ] **Step 1: 让 HostApi 引用示例模块**
 
@@ -637,9 +637,9 @@ git commit -m "test: verify backend module template sample integration"
 ### Task 4: 完成验证记录、实现说明和状态收口
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\docs\verification\phase-6-backend-component-template-verification.md`
-- Create: `D:\Github\ICP-X\NewP\docs\modules\module-template-sample-implementation.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\current-status.md`
+- Create: `docs\verification\phase-6-backend-component-template-verification.md`
+- Create: `docs\modules\module-template-sample-implementation.md`
+- Modify: `docs\current-status.md`
 
 - [ ] **Step 1: 写示例模块实现说明**
 

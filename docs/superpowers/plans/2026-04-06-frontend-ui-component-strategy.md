@@ -14,53 +14,53 @@
 
 ### 需要修改的现有文件
 
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\README.md`
-- `D:\Github\ICP-X\NewP\frontend\packages\shell\package.json`
-- `D:\Github\ICP-X\NewP\frontend\modules\config-center\package.json`
-- `D:\Github\ICP-X\NewP\frontend\modules\authorization\package.json`
-- `D:\Github\ICP-X\NewP\frontend\packages\shell\src\index.css`
-- `D:\Github\ICP-X\NewP\frontend\packages\shell\src\main.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\shell\src\pages\Login.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\shell\src\pages\Home.tsx`
-- `D:\Github\ICP-X\NewP\frontend\modules\config-center\src\pages\ConfigManagement.tsx`
-- `D:\Github\ICP-X\NewP\frontend\modules\authorization\src\pages\RoleManagement.tsx`
-- `D:\Github\ICP-X\NewP\frontend\modules\authorization\src\pages\PermissionList.tsx`
+- `frontend\packages\ui\README.md`
+- `frontend\packages\shell\package.json`
+- `frontend\modules\config-center\package.json`
+- `frontend\modules\authorization\package.json`
+- `frontend\packages\shell\src\index.css`
+- `frontend\packages\shell\src\main.tsx`
+- `frontend\packages\shell\src\pages\Login.tsx`
+- `frontend\packages\shell\src\pages\Home.tsx`
+- `frontend\modules\config-center\src\pages\ConfigManagement.tsx`
+- `frontend\modules\authorization\src\pages\RoleManagement.tsx`
+- `frontend\modules\authorization\src\pages\PermissionList.tsx`
 
 ### 需要新增的文件
 
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\package.json`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\tsconfig.json`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\index.ts`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\styles\tokens.css`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\styles\base.css`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\Button.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\Input.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\TextArea.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\StatusBadge.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\LoadingState.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\EmptyState.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\ErrorState.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\PageHeader.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\Panel.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\SummaryCard.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\HelperBlock.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\MetaBlock.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\TableWrap.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\FormInline.tsx`
-- `D:\Github\ICP-X\NewP\frontend\packages\ui\src\examples\UiKitchenSink.tsx`
-- `D:\Github\ICP-X\NewP\docs\verification\frontend-ui-component-phase-a-verification.md`
+- `frontend\packages\ui\package.json`
+- `frontend\packages\ui\tsconfig.json`
+- `frontend\packages\ui\src\index.ts`
+- `frontend\packages\ui\src\styles\tokens.css`
+- `frontend\packages\ui\src\styles\base.css`
+- `frontend\packages\ui\src\components\Button.tsx`
+- `frontend\packages\ui\src\components\Input.tsx`
+- `frontend\packages\ui\src\components\TextArea.tsx`
+- `frontend\packages\ui\src\components\StatusBadge.tsx`
+- `frontend\packages\ui\src\components\LoadingState.tsx`
+- `frontend\packages\ui\src\components\EmptyState.tsx`
+- `frontend\packages\ui\src\components\ErrorState.tsx`
+- `frontend\packages\ui\src\patterns\PageHeader.tsx`
+- `frontend\packages\ui\src\patterns\Panel.tsx`
+- `frontend\packages\ui\src\patterns\SummaryCard.tsx`
+- `frontend\packages\ui\src\patterns\HelperBlock.tsx`
+- `frontend\packages\ui\src\patterns\MetaBlock.tsx`
+- `frontend\packages\ui\src\patterns\TableWrap.tsx`
+- `frontend\packages\ui\src\patterns\FormInline.tsx`
+- `frontend\packages\ui\src\examples\UiKitchenSink.tsx`
+- `docs\verification\frontend-ui-component-phase-a-verification.md`
 
 ---
 
 ### Task 1: 建立 `@icp-platform/ui` 包骨架
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\ui\README.md`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\package.json`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\tsconfig.json`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\index.ts`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\styles\tokens.css`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\styles\base.css`
+- Modify: `frontend\packages\ui\README.md`
+- Create: `frontend\packages\ui\package.json`
+- Create: `frontend\packages\ui\tsconfig.json`
+- Create: `frontend\packages\ui\src\index.ts`
+- Create: `frontend\packages\ui\src\styles\tokens.css`
+- Create: `frontend\packages\ui\src\styles\base.css`
 
 - [ ] **Step 1: 新建 UI 包项目文件**
 
@@ -99,21 +99,21 @@ Expected:
 ### Task 2: 落地第一批基础控件与结构块
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\Button.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\Input.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\TextArea.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\StatusBadge.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\LoadingState.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\EmptyState.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\components\ErrorState.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\PageHeader.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\Panel.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\SummaryCard.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\HelperBlock.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\MetaBlock.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\TableWrap.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\patterns\FormInline.tsx`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\ui\src\examples\UiKitchenSink.tsx`
+- Create: `frontend\packages\ui\src\components\Button.tsx`
+- Create: `frontend\packages\ui\src\components\Input.tsx`
+- Create: `frontend\packages\ui\src\components\TextArea.tsx`
+- Create: `frontend\packages\ui\src\components\StatusBadge.tsx`
+- Create: `frontend\packages\ui\src\components\LoadingState.tsx`
+- Create: `frontend\packages\ui\src\components\EmptyState.tsx`
+- Create: `frontend\packages\ui\src\components\ErrorState.tsx`
+- Create: `frontend\packages\ui\src\patterns\PageHeader.tsx`
+- Create: `frontend\packages\ui\src\patterns\Panel.tsx`
+- Create: `frontend\packages\ui\src\patterns\SummaryCard.tsx`
+- Create: `frontend\packages\ui\src\patterns\HelperBlock.tsx`
+- Create: `frontend\packages\ui\src\patterns\MetaBlock.tsx`
+- Create: `frontend\packages\ui\src\patterns\TableWrap.tsx`
+- Create: `frontend\packages\ui\src\patterns\FormInline.tsx`
+- Create: `frontend\packages\ui\src\examples\UiKitchenSink.tsx`
 
 - [ ] **Step 1: 实现第一批基础控件**
 
@@ -169,16 +169,16 @@ Expected:
 ### Task 3: 接入 `Shell` 与模块页面
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\package.json`
-- Modify: `D:\Github\ICP-X\NewP\frontend\modules\config-center\package.json`
-- Modify: `D:\Github\ICP-X\NewP\frontend\modules\authorization\package.json`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\main.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\index.css`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\pages\Login.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\pages\Home.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\modules\config-center\src\pages\ConfigManagement.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\modules\authorization\src\pages\RoleManagement.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\modules\authorization\src\pages\PermissionList.tsx`
+- Modify: `frontend\packages\shell\package.json`
+- Modify: `frontend\modules\config-center\package.json`
+- Modify: `frontend\modules\authorization\package.json`
+- Modify: `frontend\packages\shell\src\main.tsx`
+- Modify: `frontend\packages\shell\src\index.css`
+- Modify: `frontend\packages\shell\src\pages\Login.tsx`
+- Modify: `frontend\packages\shell\src\pages\Home.tsx`
+- Modify: `frontend\modules\config-center\src\pages\ConfigManagement.tsx`
+- Modify: `frontend\modules\authorization\src\pages\RoleManagement.tsx`
+- Modify: `frontend\modules\authorization\src\pages\PermissionList.tsx`
 
 - [ ] **Step 1: 给消费方包增加依赖**
 
@@ -239,9 +239,9 @@ Expected:
 ### Task 4: 验证与文档收口
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\docs\verification\frontend-ui-component-phase-a-verification.md`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\ui\README.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\current-status.md`
+- Create: `docs\verification\frontend-ui-component-phase-a-verification.md`
+- Modify: `frontend\packages\ui\README.md`
+- Modify: `docs\current-status.md`
 
 - [ ] **Step 1: 更新 UI README**
 

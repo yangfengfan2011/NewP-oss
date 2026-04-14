@@ -108,7 +108,7 @@ describe('Business dashboard home', () => {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
 ```
 
 Expected: FAIL because `Home.tsx` still renders the current portal-style landing page.
@@ -174,7 +174,7 @@ expect(container.textContent).not.toContain('业务门户');
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx src/__tests__/home-page-shortcuts.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx src/__tests__/home-page-shortcuts.test.tsx
 ```
 
 Expected: PASS for the new business-dashboard smoke test; existing business-home test should now validate the new home shape.
@@ -182,12 +182,12 @@ Expected: PASS for the new business-dashboard smoke test; existing business-home
 - [ ] **Step 6: Commit the business-home page split**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/pages/BusinessDashboardHome.tsx \
   frontend/packages/shell/src/pages/Home.tsx \
   frontend/packages/shell/src/__tests__/business-dashboard-home.test.tsx \
   frontend/packages/shell/src/__tests__/home-page-shortcuts.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: split business dashboard home"
+git -C . commit -m "feat: split business dashboard home"
 ```
 
 ## Task 2: Add typed PLM dashboard fixtures and top-card / todo content
@@ -229,7 +229,7 @@ it('shows the three action-summary cards above the main todo list', async () => 
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
 ```
 
 Expected: FAIL because the page still renders placeholder text only.
@@ -356,7 +356,7 @@ export default function BusinessDashboardHome() {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
 ```
 
 Expected: PASS with the three top cards shown above the main todo panel and `变更单评审` visible in the list.
@@ -364,14 +364,14 @@ Expected: PASS with the three top cards shown above the main todo panel and `变
 - [ ] **Step 6: Commit the top-card and todo sections**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/business-home/types.ts \
   frontend/packages/shell/src/business-home/fixtures.ts \
   frontend/packages/shell/src/components/business-home/BusinessHeroCards.tsx \
   frontend/packages/shell/src/components/business-home/BusinessTodoPanel.tsx \
   frontend/packages/shell/src/pages/BusinessDashboardHome.tsx \
   frontend/packages/shell/src/__tests__/business-dashboard-home.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: add PLM dashboard hero cards and todo panel"
+git -C . commit -m "feat: add PLM dashboard hero cards and todo panel"
 ```
 
 ## Task 3: Add the right-side flow rail and lower collaboration sections
@@ -415,7 +415,7 @@ it('renders flow status on the right and collaboration sections below the main t
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
 ```
 
 Expected: FAIL because the dashboard still has no right rail or lower collaboration sections.
@@ -595,7 +595,7 @@ export default function BusinessDashboardHome() {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx src/__tests__/home-page-shortcuts.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx src/__tests__/home-page-shortcuts.test.tsx
 ```
 
 Expected: PASS with the right rail and both lower sections present; `home-page-shortcuts.test.tsx` should now validate dashboard quick links instead of the retired portal list.
@@ -603,7 +603,7 @@ Expected: PASS with the right rail and both lower sections present; `home-page-s
 - [ ] **Step 6: Commit the full dashboard content scaffold**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/components/business-home/BusinessFlowRail.tsx \
   frontend/packages/shell/src/components/business-home/BusinessProjectsPanel.tsx \
   frontend/packages/shell/src/components/business-home/BusinessQuickLinksPanel.tsx \
@@ -612,7 +612,7 @@ git -C D:/Github/ICP-X/NewP add \
   frontend/packages/shell/src/pages/BusinessDashboardHome.tsx \
   frontend/packages/shell/src/__tests__/business-dashboard-home.test.tsx \
   frontend/packages/shell/src/__tests__/home-page-shortcuts.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: add PLM dashboard flow rail and collaboration sections"
+git -C . commit -m "feat: add PLM dashboard flow rail and collaboration sections"
 ```
 
 ## Task 4: Add dashboard-specific styling and responsive layout behavior
@@ -649,7 +649,7 @@ it('marks the business dashboard container and main grid with dedicated class na
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/business-dashboard-home.test.tsx
 ```
 
 Expected: FAIL until the layout classes and final structure are wired consistently.
@@ -744,8 +744,8 @@ return (
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell build
+pnpm --dir frontend --filter @icp-platform/shell test
+pnpm --dir frontend --filter @icp-platform/shell build
 ```
 
 Expected:
@@ -756,11 +756,11 @@ Expected:
 - [ ] **Step 6: Commit the styled dashboard layout**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/index.css \
   frontend/packages/shell/src/pages/BusinessDashboardHome.tsx \
   frontend/packages/shell/src/__tests__/business-dashboard-home.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: style PLM business dashboard layout"
+git -C . commit -m "feat: style PLM business dashboard layout"
 ```
 
 ## Task 5: Final verification and implementation notes
@@ -772,8 +772,8 @@ git -C D:/Github/ICP-X/NewP commit -m "feat: style PLM business dashboard layout
 - [ ] **Step 1: Re-run the exact verification commands**
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell build
+pnpm --dir frontend --filter @icp-platform/shell test
+pnpm --dir frontend --filter @icp-platform/shell build
 ```
 
 - [ ] **Step 2: Smoke-check the dashboard in dev mode**
@@ -781,7 +781,7 @@ pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell build
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell dev
+pnpm --dir frontend --filter @icp-platform/shell dev
 ```
 
 Expected manual checks:
@@ -812,8 +812,8 @@ Expected manual checks:
 - [ ] **Step 5: Commit any final spec alignment or polish**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   docs/superpowers/specs/2026-04-11-plm-business-home-dashboard-design.md \
   frontend/packages/shell/src/pages/BusinessDashboardHome.tsx
-git -C D:/Github/ICP-X/NewP commit -m "docs: align PLM dashboard implementation notes"
+git -C . commit -m "docs: align PLM dashboard implementation notes"
 ```

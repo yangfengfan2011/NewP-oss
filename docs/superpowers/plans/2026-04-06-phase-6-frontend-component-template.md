@@ -14,30 +14,30 @@
 
 ### 需要修改的现有文件
 
-- `D:\Github\ICP-X\NewP\frontend\package.json`
+- `frontend\package.json`
   为根 workspace 配置补充 `templates/*`，确保模板骨架能像普通包一样参与构建。
-- `D:\Github\ICP-X\NewP\frontend\pnpm-workspace.yaml`
+- `frontend\pnpm-workspace.yaml`
   与根 `package.json` 保持一致，把模板目录纳入 pnpm workspace。
-- `D:\Github\ICP-X\NewP\frontend\docs\module-integration-guide.md`
+- `frontend\docs\module-integration-guide.md`
   从“快速接入指南”升级为“前端模板规范 + 复制指南”，明确契约、目录、必改项、可删项和禁改项。
-- `D:\Github\ICP-X\NewP\frontend\README.md`
+- `frontend\README.md`
   补充 `templates/` 目录说明，避免后续只看前端根 README 时遗漏模板位置。
-- `D:\Github\ICP-X\NewP\docs\current-status.md`
+- `docs\current-status.md`
   在模板实际落地后更新 Phase 6 状态和可用能力。
 
 ### 需要新增的文件
 
-- `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\README.md`
+- `frontend\templates\frontend-module-template\README.md`
   模板骨架使用说明，明确复制方式、必改项、可删项、验证命令。
-- `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\package.json`
+- `frontend\templates\frontend-module-template\package.json`
   模板包定义，使用最小依赖集合。
-- `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\tsconfig.json`
+- `frontend\templates\frontend-module-template\tsconfig.json`
   模板包 TypeScript 构建配置。
-- `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\src\index.ts`
+- `frontend\templates\frontend-module-template\src\index.ts`
   模板模块入口，演示 `FrontendModule` 的标准声明方式。
-- `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\src\pages\TemplatePage.tsx`
+- `frontend\templates\frontend-module-template\src\pages\TemplatePage.tsx`
   模板最小页面。
-- `D:\Github\ICP-X\NewP\docs\verification\phase-6-frontend-component-template-verification.md`
+- `docs\verification\phase-6-frontend-component-template-verification.md`
   第六阶段前端模板第一版验证记录。
 
 ### 命名与边界约束
@@ -53,10 +53,10 @@
 ### Task 1: 固化前端模板规范与 workspace 边界
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\package.json`
-- Modify: `D:\Github\ICP-X\NewP\frontend\pnpm-workspace.yaml`
-- Modify: `D:\Github\ICP-X\NewP\frontend\docs\module-integration-guide.md`
-- Modify: `D:\Github\ICP-X\NewP\frontend\README.md`
+- Modify: `frontend\package.json`
+- Modify: `frontend\pnpm-workspace.yaml`
+- Modify: `frontend\docs\module-integration-guide.md`
+- Modify: `frontend\README.md`
 
 - [ ] **Step 1: 更新前端根 package 的 workspace 配置**
 
@@ -185,11 +185,11 @@ git commit -m "docs: define frontend module template contract"
 ### Task 2: 创建仓库内前端模板骨架包
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\README.md`
-- Create: `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\package.json`
-- Create: `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\tsconfig.json`
-- Create: `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\src\index.ts`
-- Create: `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\src\pages\TemplatePage.tsx`
+- Create: `frontend\templates\frontend-module-template\README.md`
+- Create: `frontend\templates\frontend-module-template\package.json`
+- Create: `frontend\templates\frontend-module-template\tsconfig.json`
+- Create: `frontend\templates\frontend-module-template\src\index.ts`
+- Create: `frontend\templates\frontend-module-template\src\pages\TemplatePage.tsx`
 
 - [ ] **Step 1: 创建模板包 README**
 
@@ -373,8 +373,8 @@ git commit -m "feat: add frontend module template skeleton"
 ### Task 3: 完成验证记录与项目状态收口
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\docs\verification\phase-6-frontend-component-template-verification.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\current-status.md`
+- Create: `docs\verification\phase-6-frontend-component-template-verification.md`
+- Modify: `docs\current-status.md`
 
 - [ ] **Step 1: 编写前端模板验证记录**
 

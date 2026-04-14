@@ -13,10 +13,10 @@
 ### Task 1: 补齐组件化护栏文档与项目入口口径
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\docs\architecture\componentization-guardrails.md`
-- Modify: `D:\Github\ICP-X\NewP\AGENTS.md`
-- Modify: `D:\Github\ICP-X\NewP\README.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\architecture\module-contract.md`
+- Create: `docs\architecture\componentization-guardrails.md`
+- Modify: `AGENTS.md`
+- Modify: `README.md`
+- Modify: `docs\architecture\module-contract.md`
 
 - [ ] **Step 1: 先写组件化护栏文档草案**
 
@@ -73,8 +73,8 @@ Expected: no output
 ### Task 2: 收紧前端受控接入说明
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\docs\module-integration-guide.md`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\registerModules.ts`
+- Modify: `frontend\docs\module-integration-guide.md`
+- Modify: `frontend\packages\shell\src\registerModules.ts`
 
 - [ ] **Step 1: 先补“唯一受控接入点”和“禁改区”说明**
 
@@ -117,10 +117,10 @@ Expected: both mention controlled integration and shell guardrails
 ### Task 3: 收紧模板 README 与脚手架提示
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\README.md`
-- Modify: `D:\Github\ICP-X\NewP\frontend\templates\frontend-module-template\README.md`
-- Modify: `D:\Github\ICP-X\NewP\scripts\new-module.ps1`
-- Modify: `D:\Github\ICP-X\NewP\scripts\new-module.sh`
+- Modify: `server\templates\backend-module-template\README.md`
+- Modify: `frontend\templates\frontend-module-template\README.md`
+- Modify: `scripts\new-module.ps1`
+- Modify: `scripts\new-module.sh`
 
 - [ ] **Step 1: 在前后端模板 README 中补边界、禁改区、最小验证路径**
 

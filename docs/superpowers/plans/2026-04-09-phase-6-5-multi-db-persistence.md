@@ -15,18 +15,18 @@
 ### Task 1: 建立模型语义底座
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/PlatformModeling.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/ModelKind.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/FieldKind.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/FieldValueType.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/ModelDefinition.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/FieldDefinition.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/IndexDefinition.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/IModelDefinitionProvider.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelDefinitionValidator.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/Modeling.Tests.csproj`
-- Create: `D:/Github/ICP-X/NewP/tests/Modeling.Tests/ModelDefinitionValidatorTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
+- Create: `server/platform-modeling/PlatformModeling.csproj`
+- Create: `server/platform-modeling/ModelKind.cs`
+- Create: `server/platform-modeling/FieldKind.cs`
+- Create: `server/platform-modeling/FieldValueType.cs`
+- Create: `server/platform-modeling/Definitions/ModelDefinition.cs`
+- Create: `server/platform-modeling/Definitions/FieldDefinition.cs`
+- Create: `server/platform-modeling/Definitions/IndexDefinition.cs`
+- Create: `server/platform-modeling/Definitions/IModelDefinitionProvider.cs`
+- Create: `server/platform-modeling/Validation/ModelDefinitionValidator.cs`
+- Create: `tests/Modeling.Tests/Modeling.Tests.csproj`
+- Create: `tests/Modeling.Tests/ModelDefinitionValidatorTests.cs`
+- Modify: `ICP-Platform.sln`
 
 - [ ] **Step 1: 先写模型定义校验失败测试**
 
@@ -203,13 +203,13 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-modeling D:/Github/ICP-X/NewP/tests/Modeling.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
+git add server/platform-modeling tests/Modeling.Tests ICP-Platform.sln
 git commit -m "feat: add platform modeling foundation"
 ```
 
 - [ ] **Step 7: 补充 AI 生成元数据的工作约束**
 
-在 `D:/Github/ICP-X/NewP/server/platform-modeling/README.md` 或等效文档中补充以下约束：
+在 `server/platform-modeling/README.md` 或等效文档中补充以下约束：
 
 ```md
 ## Metadata Authoring Workflow
@@ -227,24 +227,24 @@ Expected: `Modeling.Tests` 继续通过
 - [ ] **Step 8: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-modeling
+git add server/platform-modeling
 git commit -m "docs: define ai-assisted metadata authoring workflow"
 ```
 
 ### Task 2: 建立 Provider 无关的持久化内核
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PlatformPersistence.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceProvider.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceAdapterKind.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceOptions.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlQueryExecutor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/IPersistenceMigrationRunner.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence/Extensions/PersistenceOptionValidation.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/Persistence.Tests.csproj`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/PersistenceOptionValidationTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
+- Create: `server/platform-persistence/PlatformPersistence.csproj`
+- Create: `server/platform-persistence/PersistenceProvider.cs`
+- Create: `server/platform-persistence/PersistenceAdapterKind.cs`
+- Create: `server/platform-persistence/PersistenceOptions.cs`
+- Create: `server/platform-persistence/Abstractions/ISqlDialect.cs`
+- Create: `server/platform-persistence/Abstractions/ISqlQueryExecutor.cs`
+- Create: `server/platform-persistence/Abstractions/IPersistenceMigrationRunner.cs`
+- Create: `server/platform-persistence/Extensions/PersistenceOptionValidation.cs`
+- Create: `tests/Persistence.Tests/Persistence.Tests.csproj`
+- Create: `tests/Persistence.Tests/PersistenceOptionValidationTests.cs`
+- Modify: `ICP-Platform.sln`
 
 - [ ] **Step 1: 先写配置校验测试**
 
@@ -393,24 +393,24 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-persistence D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
+git add server/platform-persistence tests/Persistence.Tests ICP-Platform.sln
 git commit -m "feat: add provider-agnostic persistence kernel"
 ```
 
 ### Task 3: 建立 EF Core 第一批适配器
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/EfPlatformDbContext.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Projection/EfModelProjector.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/SqlServerDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/OracleDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/MySqlDialect.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Sql/EfSqlQueryExecutor.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/PersistenceMigrationRunner.cs`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Extensions/EfCorePersistenceServiceCollectionExtensions.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/EfModelProjectionTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/ICP-Platform.sln`
+- Create: `server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj`
+- Create: `server/platform-persistence-efcore/EfPlatformDbContext.cs`
+- Create: `server/platform-persistence-efcore/Projection/EfModelProjector.cs`
+- Create: `server/platform-persistence-efcore/Sql/SqlServerDialect.cs`
+- Create: `server/platform-persistence-efcore/Sql/OracleDialect.cs`
+- Create: `server/platform-persistence-efcore/Sql/MySqlDialect.cs`
+- Create: `server/platform-persistence-efcore/Sql/EfSqlQueryExecutor.cs`
+- Create: `server/platform-persistence-efcore/PersistenceMigrationRunner.cs`
+- Create: `server/platform-persistence-efcore/Extensions/EfCorePersistenceServiceCollectionExtensions.cs`
+- Create: `tests/Persistence.Tests/EfModelProjectionTests.cs`
+- Modify: `ICP-Platform.sln`
 
 - [ ] **Step 1: 先写模型投影测试**
 
@@ -632,19 +632,19 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/platform-persistence-efcore D:/Github/ICP-X/NewP/tests/Persistence.Tests D:/Github/ICP-X/NewP/ICP-Platform.sln
+git add server/platform-persistence-efcore tests/Persistence.Tests ICP-Platform.sln
 git commit -m "feat: add ef core persistence adapter"
 ```
 
 ### Task 4: 用模型语义定义 ConfigCenter 与 Authorization
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Descriptors/AuthorizationModelDefinitions.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/AuthorizationModelDefinitionTests.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenter.csproj`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.csproj`
+- Create: `server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelDefinitions.cs`
+- Create: `server/modules/Authorization/Persistence/Descriptors/AuthorizationModelDefinitions.cs`
+- Create: `tests/ConfigCenter.Tests/ConfigCenterModelDefinitionTests.cs`
+- Create: `tests/Authorization.Tests/AuthorizationModelDefinitionTests.cs`
+- Modify: `server/modules/ConfigCenter/ConfigCenter.csproj`
+- Modify: `server/modules/Authorization/AuthorizationModule.csproj`
 
 - [ ] **Step 1: 先写模块模型定义测试**
 
@@ -768,7 +768,7 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/server/modules/Authorization D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests D:/Github/ICP-X/NewP/tests/Authorization.Tests
+git add server/modules/ConfigCenter server/modules/Authorization tests/ConfigCenter.Tests tests/Authorization.Tests
 git commit -m "feat: add module model definitions for persistence"
 ```
 
@@ -777,7 +777,7 @@ git commit -m "feat: add module model definitions for persistence"
 **Checkpoint:** 完成 `Task 4` 后、进入 `Task 5` 和 `Task 6` 前，先准备本地数据库环境。
 
 **Docs:**
-- `D:/Github/ICP-X/NewP/docs/guides/local-multi-db-container-setup.md`
+- `docs/guides/local-multi-db-container-setup.md`
 
 - [ ] **Step 1: 安装并验证 Docker Desktop**
 
@@ -811,22 +811,22 @@ Expected:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/docs/guides/local-multi-db-container-setup.md D:/Github/ICP-X/NewP/docs/superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md
+git add docs/guides/local-multi-db-container-setup.md docs/superpowers/plans/2026-04-09-phase-6-5-multi-db-persistence.md
 git commit -m "docs: add local multi-db container setup guide"
 ```
 
 ### Task 5: 让模块通过 EF 适配器落地真实仓储
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Ef/EfConfigRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfRoleRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfPermissionRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfRolePermissionRepository.cs`
-- Create: `D:/Github/ICP-X/NewP/server/modules/Authorization/Persistence/Ef/EfUserRoleRepository.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenterModule.cs`
-- Modify: `D:/Github/ICP-X/NewP/server/modules/Authorization/AuthorizationModule.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests/EfConfigRepositoryTests.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/Authorization.Tests/EfAuthorizationRepositoryTests.cs`
+- Create: `server/modules/ConfigCenter/Persistence/Ef/EfConfigRepository.cs`
+- Create: `server/modules/Authorization/Persistence/Ef/EfRoleRepository.cs`
+- Create: `server/modules/Authorization/Persistence/Ef/EfPermissionRepository.cs`
+- Create: `server/modules/Authorization/Persistence/Ef/EfRolePermissionRepository.cs`
+- Create: `server/modules/Authorization/Persistence/Ef/EfUserRoleRepository.cs`
+- Modify: `server/modules/ConfigCenter/ConfigCenterModule.cs`
+- Modify: `server/modules/Authorization/AuthorizationModule.cs`
+- Create: `tests/ConfigCenter.Tests/EfConfigRepositoryTests.cs`
+- Create: `tests/Authorization.Tests/EfAuthorizationRepositoryTests.cs`
 
 - [ ] **Step 1: 先写 EF 仓储行为测试**
 
@@ -963,26 +963,26 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add D:/Github/ICP-X/NewP/server/modules/ConfigCenter D:/Github/ICP-X/NewP/server/modules/Authorization D:/Github/ICP-X/NewP/tests/ConfigCenter.Tests D:/Github/ICP-X/NewP/tests/Authorization.Tests
+git add server/modules/ConfigCenter server/modules/Authorization tests/ConfigCenter.Tests tests/Authorization.Tests
 git commit -m "feat: adapt configcenter and authorization to ef persistence"
 ```
 
 ### Task 6: 宿主接入、迁移程序集与三库验证
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/apps/host-api/Program.cs`
-- Modify: `D:/Github/ICP-X/NewP/apps/host-api/appsettings.json`
-- Modify: `D:/Github/ICP-X/NewP/apps/host-api/appsettings.Development.json`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore.migrations.sqlserver/PlatformPersistence.EfCore.SqlServerMigrations.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore.migrations.oracle/PlatformPersistence.EfCore.OracleMigrations.csproj`
-- Create: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore.migrations.mysql/PlatformPersistence.EfCore.MySqlMigrations.csproj`
-- Create: `D:/Github/ICP-X/NewP/tests/Persistence.Tests/HostPersistenceBootstrapTests.cs`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Invoke-PersistenceSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-SqlServerSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-OracleSmoke.ps1`
-- Create: `D:/Github/ICP-X/NewP/tests/integration/persistence/Run-MySqlSmoke.ps1`
-- Modify: `D:/Github/ICP-X/NewP/tests/README.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
+- Modify: `apps/host-api/Program.cs`
+- Modify: `apps/host-api/appsettings.json`
+- Modify: `apps/host-api/appsettings.Development.json`
+- Create: `server/platform-persistence-efcore.migrations.sqlserver/PlatformPersistence.EfCore.SqlServerMigrations.csproj`
+- Create: `server/platform-persistence-efcore.migrations.oracle/PlatformPersistence.EfCore.OracleMigrations.csproj`
+- Create: `server/platform-persistence-efcore.migrations.mysql/PlatformPersistence.EfCore.MySqlMigrations.csproj`
+- Create: `tests/Persistence.Tests/HostPersistenceBootstrapTests.cs`
+- Create: `tests/integration/persistence/Invoke-PersistenceSmoke.ps1`
+- Create: `tests/integration/persistence/Run-SqlServerSmoke.ps1`
+- Create: `tests/integration/persistence/Run-OracleSmoke.ps1`
+- Create: `tests/integration/persistence/Run-MySqlSmoke.ps1`
+- Modify: `tests/README.md`
+- Modify: `docs/current-status.md`
 
 - [ ] **Step 1: 先写宿主引导测试**
 
@@ -1098,13 +1098,13 @@ param(
 $env:Persistence__Adapter = "EfCore"
 $env:Persistence__Provider = $Provider
 
-dotnet build "D:\Github\ICP-X\NewP\apps\host-api\HostApi.csproj"
+dotnet build "apps\host-api\HostApi.csproj"
 if ($LASTEXITCODE -ne 0) { throw "Build failed for $Provider" }
 
-dotnet test "D:\Github\ICP-X\NewP\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj" -v minimal
+dotnet test "tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj" -v minimal
 if ($LASTEXITCODE -ne 0) { throw "ConfigCenter tests failed for $Provider" }
 
-dotnet test "D:\Github\ICP-X\NewP\tests\Authorization.Tests\Authorization.Tests.csproj" -v minimal
+dotnet test "tests\Authorization.Tests\Authorization.Tests.csproj" -v minimal
 if ($LASTEXITCODE -ne 0) { throw "Authorization tests failed for $Provider" }
 ```
 
@@ -1139,7 +1139,7 @@ Expected:
 ```
 
 ```bash
-git add D:/Github/ICP-X/NewP/apps/host-api D:/Github/ICP-X/NewP/server/platform-persistence-efcore* D:/Github/ICP-X/NewP/tests D:/Github/ICP-X/NewP/docs/current-status.md
+git add apps/host-api server/platform-persistence-efcore* tests docs/current-status.md
 git commit -m "feat: wire host bootstrap and multi-db verification"
 ```
 

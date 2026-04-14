@@ -46,11 +46,11 @@
 ### Task 1: 冻结插件协议与交付边界
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\docs\architecture\plugin-package-format.md`
-- Create: `D:\Github\ICP-X\NewP\docs\architecture\plugin-runtime-loading.md`
-- Create: `D:\Github\ICP-X\NewP\docs\architecture\plugin-compatibility-policy.md`
-- Modify: `D:\Github\ICP-X\NewP\Plan.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\current-status.md`
+- Create: `docs\architecture\plugin-package-format.md`
+- Create: `docs\architecture\plugin-runtime-loading.md`
+- Create: `docs\architecture\plugin-compatibility-policy.md`
+- Modify: `Plan.md`
+- Modify: `docs\current-status.md`
 
 - [ ] 明确插件包目录结构。
 - [ ] 明确清单文件字段：模块 ID、版本、依赖、兼容宿主版本、入口程序集、可选前端资源声明。
@@ -64,14 +64,14 @@
 ### Task 2: 让宿主以后端正式插件装配为主
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\apps\host-api\Program.cs`
-- Modify: `D:\Github\ICP-X\NewP\apps\host-api\HostApi.csproj`
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginModel\PluginManifest.cs`
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginModel\PluginCompatibility.cs`
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginLoader\PluginManifestLoader.cs`
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginLoader\PluginDirectoryScanner.cs`
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginLoader\PluginCompatibilityChecker.cs`
-- Modify: `D:\Github\ICP-X\NewP\server\kernel\ModuleLoader\AssemblyModuleLoader.cs`
+- Modify: `apps\host-api\Program.cs`
+- Modify: `apps\host-api\HostApi.csproj`
+- Create: `server\kernel\PluginModel\PluginManifest.cs`
+- Create: `server\kernel\PluginModel\PluginCompatibility.cs`
+- Create: `server\kernel\PluginLoader\PluginManifestLoader.cs`
+- Create: `server\kernel\PluginLoader\PluginDirectoryScanner.cs`
+- Create: `server\kernel\PluginLoader\PluginCompatibilityChecker.cs`
+- Modify: `server\kernel\ModuleLoader\AssemblyModuleLoader.cs`
 
 - [ ] 先让宿主能够读取插件目录和插件清单，而不是单纯扫描 `*Module.dll`。
 - [ ] 把 `ConfigCenter.dll` 这类文件名特判替换成清单驱动装配。
@@ -85,12 +85,12 @@
 ### Task 3: 建立模块包交付与验证链路
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\scripts\pack-plugin.ps1`
-- Create: `D:\Github\ICP-X\NewP\scripts\pack-plugin.sh`
-- Create: `D:\Github\ICP-X\NewP\scripts\verify-plugin-package.ps1`
-- Create: `D:\Github\ICP-X\NewP\scripts\verify-plugin-package.sh`
-- Create: `D:\Github\ICP-X\NewP\docs\guides\plugin-packaging.md`
-- Modify: `D:\Github\ICP-X\NewP\server\templates\backend-module-template\README.md`
+- Create: `scripts\pack-plugin.ps1`
+- Create: `scripts\pack-plugin.sh`
+- Create: `scripts\verify-plugin-package.ps1`
+- Create: `scripts\verify-plugin-package.sh`
+- Create: `docs\guides\plugin-packaging.md`
+- Modify: `server\templates\backend-module-template\README.md`
 
 - [ ] 让模块打包结果包含程序集、清单、版本信息和最小说明文件。
 - [ ] 定义插件安装目录约定。
@@ -103,12 +103,12 @@
 ### Task 4: 对外稳定 SDK 与外部模板
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\server\sdk\README.md`
-- Create: `D:\Github\ICP-X\NewP\server\templates\external-plugin-template\...`
-- Create: `D:\Github\ICP-X\NewP\docs\guides\external-plugin-development.md`
-- Create: `D:\Github\ICP-X\NewP\docs\guides\external-plugin-debugging.md`
-- Modify: `D:\Github\ICP-X\NewP\scripts\new-module.ps1`
-- Modify: `D:\Github\ICP-X\NewP\scripts\new-module.sh`
+- Modify: `server\sdk\README.md`
+- Create: `server\templates\external-plugin-template\...`
+- Create: `docs\guides\external-plugin-development.md`
+- Create: `docs\guides\external-plugin-debugging.md`
+- Modify: `scripts\new-module.ps1`
+- Modify: `scripts\new-module.sh`
 
 - [ ] 区分“内部模块模板”和“对外插件模板”。
 - [ ] 明确外部模板只依赖公开 SDK / Contracts。
@@ -121,10 +121,10 @@
 ### Task 5: 插件治理与风险控制
 
 **Files:**
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginLoader\PluginHashValidator.cs`
-- Create: `D:\Github\ICP-X\NewP\server\kernel\PluginLoader\PluginDisablePolicy.cs`
-- Create: `D:\Github\ICP-X\NewP\docs\architecture\plugin-governance.md`
-- Create: `D:\Github\ICP-X\NewP\docs\guides\plugin-upgrade-and-rollback.md`
+- Create: `server\kernel\PluginLoader\PluginHashValidator.cs`
+- Create: `server\kernel\PluginLoader\PluginDisablePolicy.cs`
+- Create: `docs\architecture\plugin-governance.md`
+- Create: `docs\guides\plugin-upgrade-and-rollback.md`
 
 - [x] 增加模块版本与兼容失败提示。
 - [x] 增加插件禁用机制。
@@ -137,10 +137,10 @@
 ### Task 6: 前端插件化收口
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\registerModules.ts`
-- Create: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\plugin-manifest-loader.ts`
-- Create: `D:\Github\ICP-X\NewP\docs\architecture\frontend-plugin-loading.md`
-- Create: `D:\Github\ICP-X\NewP\docs\guides\frontend-plugin-integration.md`
+- Modify: `frontend\packages\shell\src\registerModules.ts`
+- Create: `frontend\packages\shell\src\plugin-manifest-loader.ts`
+- Create: `docs\architecture\frontend-plugin-loading.md`
+- Create: `docs\guides\frontend-plugin-integration.md`
 
 - [x] 设计前端插件清单或资源清单格式。
 - [x] 明确前端插件与后端插件如何对齐。

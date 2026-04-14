@@ -2,7 +2,7 @@
 
 ## 1. 当前目标
 
-本工作包不再重做设计讨论，默认以 [docs/designs/model-metadata-single-file-partition-design.md](/D:/Github/ICP-X/NewP/docs/designs/model-metadata-single-file-partition-design.md) 作为目标设计真源。
+本工作包不再重做设计讨论，默认以 [docs/designs/model-metadata-single-file-partition-design.md](docs/designs/model-metadata-single-file-partition-design.md) 作为目标设计真源。
 
 本阶段实施目标已完成收口：
 
@@ -22,15 +22,15 @@
 
 当前仓库已经存在以下最小入口：
 
-- [server/platform-modeling/metadata/ModelMetadataDocument.cs](/D:/Github/ICP-X/NewP/server/platform-modeling/metadata/ModelMetadataDocument.cs)
-- [server/platform-modeling/metadata/JsonModelMetadataDocumentLoader.cs](/D:/Github/ICP-X/NewP/server/platform-modeling/metadata/JsonModelMetadataDocumentLoader.cs)
-- [server/platform-modeling/metadata/JsonStorageTypeMapLoader.cs](/D:/Github/ICP-X/NewP/server/platform-modeling/metadata/JsonStorageTypeMapLoader.cs)
-- [server/platform-modeling/metadata/storage-types.json](/D:/Github/ICP-X/NewP/server/platform-modeling/metadata/storage-types.json)
-- [server/platform-modeling/Validation/ModelMetadataValidator.cs](/D:/Github/ICP-X/NewP/server/platform-modeling/Validation/ModelMetadataValidator.cs)
-- [server/platform-modeling/Projection/ModelMetadataProjector.cs](/D:/Github/ICP-X/NewP/server/platform-modeling/Projection/ModelMetadataProjector.cs)
-- [server/platform-modeling/Schema/ModelSchemaBuilder.cs](/D:/Github/ICP-X/NewP/server/platform-modeling/Schema/ModelSchemaBuilder.cs)
-- [server/modules/ConfigCenter/metadata/models/ConfigItem.model.json](/D:/Github/ICP-X/NewP/server/modules/ConfigCenter/metadata/models/ConfigItem.model.json)
-- [server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs](/D:/Github/ICP-X/NewP/server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs)
+- [server/platform-modeling/metadata/ModelMetadataDocument.cs](server/platform-modeling/metadata/ModelMetadataDocument.cs)
+- [server/platform-modeling/metadata/JsonModelMetadataDocumentLoader.cs](server/platform-modeling/metadata/JsonModelMetadataDocumentLoader.cs)
+- [server/platform-modeling/metadata/JsonStorageTypeMapLoader.cs](server/platform-modeling/metadata/JsonStorageTypeMapLoader.cs)
+- [server/platform-modeling/metadata/storage-types.json](server/platform-modeling/metadata/storage-types.json)
+- [server/platform-modeling/Validation/ModelMetadataValidator.cs](server/platform-modeling/Validation/ModelMetadataValidator.cs)
+- [server/platform-modeling/Projection/ModelMetadataProjector.cs](server/platform-modeling/Projection/ModelMetadataProjector.cs)
+- [server/platform-modeling/Schema/ModelSchemaBuilder.cs](server/platform-modeling/Schema/ModelSchemaBuilder.cs)
+- [server/modules/ConfigCenter/metadata/models/ConfigItem.model.json](server/modules/ConfigCenter/metadata/models/ConfigItem.model.json)
+- [server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs](server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs)
 
 ### 2.2 当前真实能力
 
@@ -155,7 +155,7 @@
 - 计划文档曾把 projector 写成已补齐更完整的固定字段和类型映射，但当前代码只覆盖 `EID / ENAME / LID / PEID / CEID` 与 `string / text` 两类最小映射。
 - 现在上述三点已进入第一轮补齐，但仍未到设计目标的完整实现，尤其还缺 section、数据源白名单与更完整类型映射。
 - 验证文档曾把“最小闭环已完成”表述得过宽，容易误解为 `ConfigCenter` 已正式切换到 metadata provider。
-- [docs/current-status.md](/D:/Github/ICP-X/NewP/docs/current-status.md) 中此前同时存在“已完成最小闭环并完成文档收口”和“已启动并形成最小闭环”两种口径，且前者对实现成熟度描述偏满。
+- [docs/current-status.md](docs/current-status.md) 中此前同时存在“已完成最小闭环并完成文档收口”和“已启动并形成最小闭环”两种口径，且前者对实现成熟度描述偏满。
 
 ## 5. 后续实施顺序
 

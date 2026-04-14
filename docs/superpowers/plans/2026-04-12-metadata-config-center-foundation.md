@@ -36,7 +36,7 @@ Expected: FAIL，提示 `MetadataConfigCenterModule` 或对应测试项目尚不
 
 - [ ] **Step 3: 创建后端模块最小骨架**
 
-实现 `MetadataConfigCenterModule`，参照 [ConfigCenterModule.cs](D:/Github/ICP-X/NewP/server/modules/ConfigCenter/ConfigCenterModule.cs) 与 `ModuleTemplateSample` 结构，先注册菜单、权限，并为 `IMetadataManifestService` 预留注册位；具体 manifest interface/service 文件在 Task 2 创建，不引入其他业务逻辑。
+实现 `MetadataConfigCenterModule`，参照 [ConfigCenterModule.cs](server/modules/ConfigCenter/ConfigCenterModule.cs) 与 `ModuleTemplateSample` 结构，先注册菜单、权限，并为 `IMetadataManifestService` 预留注册位；具体 manifest interface/service 文件在 Task 2 创建，不引入其他业务逻辑。
 
 - [ ] **Step 4: 创建前端模块最小骨架**
 

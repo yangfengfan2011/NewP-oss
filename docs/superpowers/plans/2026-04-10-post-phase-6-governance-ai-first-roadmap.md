@@ -13,13 +13,13 @@
 ### Task 1: 落地 WP1 插件治理增强设计
 
 **Files:**
-- Create: `f:/Github/NewP/NewP/docs/designs/plugin-governance-enhancement-design.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
-- Read: `f:/Github/NewP/NewP/docs/architecture/plugin-package-format.md`
-- Read: `f:/Github/NewP/NewP/docs/architecture/plugin-runtime-loading.md`
-- Read: `f:/Github/NewP/NewP/docs/architecture/plugin-compatibility-policy.md`
-- Read: `f:/Github/NewP/NewP/docs/guides/unified-plugin-package-operations.md`
-- Read: `f:/Github/NewP/NewP/docs/current-status.md`
+- Create: `docs/designs/plugin-governance-enhancement-design.md`
+- Read: `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
+- Read: `docs/architecture/plugin-package-format.md`
+- Read: `docs/architecture/plugin-runtime-loading.md`
+- Read: `docs/architecture/plugin-compatibility-policy.md`
+- Read: `docs/guides/unified-plugin-package-operations.md`
+- Read: `docs/current-status.md`
 
 - [ ] **Step 1: 盘点插件治理现状与缺口**
 
@@ -108,12 +108,12 @@ git commit -m "docs: define plugin governance enhancement design"
 ### Task 2: 落地 WP2 AI-First 执行标准设计
 
 **Files:**
-- Create: `f:/Github/NewP/NewP/docs/designs/ai-first-execution-standard-design.md`
-- Read: `f:/Github/NewP/NewP/AGENTS.md`
-- Read: `f:/Github/NewP/NewP/docs/architecture/componentization-guardrails.md`
-- Read: `f:/Github/NewP/NewP/docs/architecture/ai-metadata-authoring-guide.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/detailed-design-template.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
+- Create: `docs/designs/ai-first-execution-standard-design.md`
+- Read: `AGENTS.md`
+- Read: `docs/architecture/componentization-guardrails.md`
+- Read: `docs/architecture/ai-metadata-authoring-guide.md`
+- Read: `docs/designs/detailed-design-template.md`
+- Read: `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
 
 - [ ] **Step 1: 汇总当前 AI-first 约束来源**
 
@@ -198,12 +198,12 @@ git commit -m "docs: define ai-first execution standard"
 ### Task 3: 落地 WP3 状态与文档一致性收口设计
 
 **Files:**
-- Create: `f:/Github/NewP/NewP/docs/designs/post-phase-6-status-alignment-design.md`
-- Modify: `f:/Github/NewP/NewP/docs/current-status.md`
-- Modify: `f:/Github/NewP/NewP/Plan.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
-- Read: `f:/Github/NewP/NewP/docs/current-status.md`
-- Read: `f:/Github/NewP/NewP/Plan.md`
+- Create: `docs/designs/post-phase-6-status-alignment-design.md`
+- Modify: `docs/current-status.md`
+- Modify: `Plan.md`
+- Read: `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
+- Read: `docs/current-status.md`
+- Read: `Plan.md`
 
 - [ ] **Step 1: 盘点当前状态文档与计划文档的差异**
 
@@ -299,11 +299,11 @@ git commit -m "docs: align post-phase-6 status and plan"
 ### Task 4: 落地 WP4 最小迁移连续性准备
 
 **Files:**
-- Create: `f:/Github/NewP/NewP/docs/designs/dictionary-enumeration-migration-preparation-design.md`
-- Read: `f:/Github/NewP/NewP/docs/migration/metadata-migration-strategy.md`
-- Read: `f:/Github/NewP/NewP/docs/migration/oldp-asset-disposition-v1.md`
-- Read: `f:/Github/NewP/NewP/docs/migration/setting-import-poc.md`
-- Read: `f:/Github/NewP/NewP/docs/verification/setting-import-poc-verification.md`
+- Create: `docs/designs/dictionary-enumeration-migration-preparation-design.md`
+- Read: `docs/migration/metadata-migration-strategy.md`
+- Read: `docs/migration/oldp-asset-disposition-v1.md`
+- Read: `docs/migration/setting-import-poc.md`
+- Read: `docs/verification/setting-import-poc-verification.md`
 
 - [ ] **Step 1: 复盘现有迁移模板与约束**
 
@@ -377,11 +377,11 @@ git commit -m "docs: prepare dictionary and enumeration migration"
 ### Task 5: 总体收口与路线确认
 
 **Files:**
-- Read: `f:/Github/NewP/NewP/docs/designs/plugin-governance-enhancement-design.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/ai-first-execution-standard-design.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/post-phase-6-status-alignment-design.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/dictionary-enumeration-migration-preparation-design.md`
-- Read: `f:/Github/NewP/NewP/docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
+- Read: `docs/designs/plugin-governance-enhancement-design.md`
+- Read: `docs/designs/ai-first-execution-standard-design.md`
+- Read: `docs/designs/post-phase-6-status-alignment-design.md`
+- Read: `docs/designs/dictionary-enumeration-migration-preparation-design.md`
+- Read: `docs/designs/post-phase-6-governance-and-ai-first-roadmap-design.md`
 
 - [ ] **Step 1: 交叉检查四份文档的顺序一致性**
 

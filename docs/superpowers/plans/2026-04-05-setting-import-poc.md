@@ -14,44 +14,44 @@
 
 ### 需要修改的现有文件
 
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\ConfigCenterModule.cs`
+- `server\modules\ConfigCenter\ConfigCenterModule.cs`
   注册新的导入解析器与导入服务。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Controllers\ConfigController.cs`
+- `server\modules\ConfigCenter\Controllers\ConfigController.cs`
   增加一个旧 `.setting` 文件的显式导入接口。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Services\IConfigService.cs`
+- `server\modules\ConfigCenter\Services\IConfigService.cs`
   只有在导入流程确实需要通过既有服务抽象时才修改，否则保持不变。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Services\ConfigService.cs`
+- `server\modules\ConfigCenter\Services\ConfigService.cs`
   复用当前创建、更新、查询逻辑。只有在导入 upsert 需要小型辅助方法时才修改。
-- `D:\Github\ICP-X\NewP\tests\ConfigCenter.Tests\ConfigServiceTests.cs`
+- `tests\ConfigCenter.Tests\ConfigServiceTests.cs`
   保持现有 CRUD 和优先级测试不变，不在此文件里混入导入专项测试。
-- `D:\Github\ICP-X\NewP\docs\designs\phase-5-first-import-poc-design.md`
+- `docs\designs\phase-5-first-import-poc-design.md`
   在实现落地后补齐最终样本与实现说明。
-- `D:\Github\ICP-X\NewP\docs\current-status.md`
+- `docs\current-status.md`
   POC 完成并验证后，更新 `Phase 5` 状态。
 
 ### 需要新增的文件
 
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportItem.cs`
+- `server\modules\ConfigCenter\Imports\LegacySettingImportItem.cs`
   表达单个旧 `AppSet` 节点的强类型模型。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportRequest.cs`
+- `server\modules\ConfigCenter\Imports\LegacySettingImportRequest.cs`
   受控导入请求模型。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportResult.cs`
+- `server\modules\ConfigCenter\Imports\LegacySettingImportResult.cs`
   导入结果模型，记录创建、更新、跳过、失败及导入键列表。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\ILegacySettingParser.cs`
+- `server\modules\ConfigCenter\Imports\ILegacySettingParser.cs`
   旧 `.setting` 解析接口。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingXmlParser.cs`
+- `server\modules\ConfigCenter\Imports\LegacySettingXmlParser.cs`
   `root/AppSet` 的 XML 解析实现。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\ILegacySettingImportService.cs`
+- `server\modules\ConfigCenter\Imports\ILegacySettingImportService.cs`
   导入编排接口。
-- `D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportService.cs`
+- `server\modules\ConfigCenter\Imports\LegacySettingImportService.cs`
   负责导入执行和按 `Key` 覆盖。
-- `D:\Github\ICP-X\NewP\tests\ConfigCenter.Tests\LegacySettingXmlParserTests.cs`
+- `tests\ConfigCenter.Tests\LegacySettingXmlParserTests.cs`
   解析器测试。
-- `D:\Github\ICP-X\NewP\tests\ConfigCenter.Tests\LegacySettingImportServiceTests.cs`
+- `tests\ConfigCenter.Tests\LegacySettingImportServiceTests.cs`
   导入服务测试。
-- `D:\Github\ICP-X\NewP\docs\migration\setting-import-poc.md`
+- `docs\migration\setting-import-poc.md`
   样本来源、映射规则、接口形式、当前限制说明。
-- `D:\Github\ICP-X\NewP\docs\verification\setting-import-poc-verification.md`
+- `docs\verification\setting-import-poc-verification.md`
   POC 验证记录。
 
 ### 当前 POC 样本假设
@@ -66,10 +66,10 @@
 ### 任务 1：解析旧 `.setting` XML 为导入模型
 
 **文件：**
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportItem.cs`
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\ILegacySettingParser.cs`
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingXmlParser.cs`
-- 测试：`D:\Github\ICP-X\NewP\tests\ConfigCenter.Tests\LegacySettingXmlParserTests.cs`
+- 新增：`server\modules\ConfigCenter\Imports\LegacySettingImportItem.cs`
+- 新增：`server\modules\ConfigCenter\Imports\ILegacySettingParser.cs`
+- 新增：`server\modules\ConfigCenter\Imports\LegacySettingXmlParser.cs`
+- 测试：`tests\ConfigCenter.Tests\LegacySettingXmlParserTests.cs`
 
 - [ ] **步骤 1：先写失败测试**
 
@@ -218,13 +218,13 @@ git commit -m "feat: add legacy setting xml parser"
 ### 任务 2：把 `.setting` 导入 `ConfigCenter`，并按 `Key` 覆盖
 
 **文件：**
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportRequest.cs`
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportResult.cs`
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\ILegacySettingImportService.cs`
-- 新增：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Imports\LegacySettingImportService.cs`
-- 修改：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\ConfigCenterModule.cs`
-- 修改：`D:\Github\ICP-X\NewP\server\modules\ConfigCenter\Controllers\ConfigController.cs`
-- 测试：`D:\Github\ICP-X\NewP\tests\ConfigCenter.Tests\LegacySettingImportServiceTests.cs`
+- 新增：`server\modules\ConfigCenter\Imports\LegacySettingImportRequest.cs`
+- 新增：`server\modules\ConfigCenter\Imports\LegacySettingImportResult.cs`
+- 新增：`server\modules\ConfigCenter\Imports\ILegacySettingImportService.cs`
+- 新增：`server\modules\ConfigCenter\Imports\LegacySettingImportService.cs`
+- 修改：`server\modules\ConfigCenter\ConfigCenterModule.cs`
+- 修改：`server\modules\ConfigCenter\Controllers\ConfigController.cs`
+- 测试：`tests\ConfigCenter.Tests\LegacySettingImportServiceTests.cs`
 
 - [ ] **步骤 1：先写失败测试**
 
@@ -484,10 +484,10 @@ git commit -m "feat: add legacy setting import poc backend"
 ### 任务 3：补齐迁移说明、验证记录和阶段状态
 
 **文件：**
-- 新增：`D:\Github\ICP-X\NewP\docs\migration\setting-import-poc.md`
-- 新增：`D:\Github\ICP-X\NewP\docs\verification\setting-import-poc-verification.md`
-- 修改：`D:\Github\ICP-X\NewP\docs\designs\phase-5-first-import-poc-design.md`
-- 修改：`D:\Github\ICP-X\NewP\docs\current-status.md`
+- 新增：`docs\migration\setting-import-poc.md`
+- 新增：`docs\verification\setting-import-poc-verification.md`
+- 修改：`docs\designs\phase-5-first-import-poc-design.md`
+- 修改：`docs\current-status.md`
 
 - [ ] **步骤 1：写迁移说明文档，明确真实样本与映射规则**
 

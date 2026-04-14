@@ -13,17 +13,17 @@
 ### Task 1: 确认迁移范围与入口影响面
 
 **Files:**
-- Read: `D:/Github/ICP-X/NewP/docs/README.md`
-- Read: `D:/Github/ICP-X/NewP/docs/current-status.md`
-- Read: `D:/Github/ICP-X/NewP/tests/README.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/componentized-development-quickstart.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/componentized-development.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/componentized-example-module.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/external-plugin-development.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/frontend-plugin-integration.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/persistence-public-api.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/persistence-usage-guide.md`
-- Read: `D:/Github/ICP-X/NewP/docs/guides/persistence-development-workflow.md`
+- Read: `docs/README.md`
+- Read: `docs/current-status.md`
+- Read: `tests/README.md`
+- Read: `docs/guides/componentized-development-quickstart.md`
+- Read: `docs/guides/componentized-development.md`
+- Read: `docs/guides/componentized-example-module.md`
+- Read: `docs/guides/external-plugin-development.md`
+- Read: `docs/guides/frontend-plugin-integration.md`
+- Read: `docs/guides/persistence-public-api.md`
+- Read: `docs/guides/persistence-usage-guide.md`
+- Read: `docs/guides/persistence-development-workflow.md`
 
 - [ ] **Step 1: 确认需要迁移的 8 篇文档**
 
@@ -63,14 +63,14 @@ Expected:
 ### Task 2: 迁移文档并修复相对链接
 
 **Files:**
-- Move: `D:/Github/ICP-X/NewP/docs/guides/componentized-development-quickstart.md` -> `D:/Github/ICP-X/NewP/docs/developer/componentized-development-quickstart.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/componentized-development.md` -> `D:/Github/ICP-X/NewP/docs/developer/componentized-development.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/componentized-example-module.md` -> `D:/Github/ICP-X/NewP/docs/developer/componentized-example-module.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/external-plugin-development.md` -> `D:/Github/ICP-X/NewP/docs/developer/external-plugin-development.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/frontend-plugin-integration.md` -> `D:/Github/ICP-X/NewP/docs/developer/frontend-plugin-integration.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/persistence-public-api.md` -> `D:/Github/ICP-X/NewP/docs/developer/persistence-public-api.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/persistence-usage-guide.md` -> `D:/Github/ICP-X/NewP/docs/developer/persistence-usage-guide.md`
-- Move: `D:/Github/ICP-X/NewP/docs/guides/persistence-development-workflow.md` -> `D:/Github/ICP-X/NewP/docs/developer/persistence-development-workflow.md`
+- Move: `docs/guides/componentized-development-quickstart.md` -> `docs/developer/componentized-development-quickstart.md`
+- Move: `docs/guides/componentized-development.md` -> `docs/developer/componentized-development.md`
+- Move: `docs/guides/componentized-example-module.md` -> `docs/developer/componentized-example-module.md`
+- Move: `docs/guides/external-plugin-development.md` -> `docs/developer/external-plugin-development.md`
+- Move: `docs/guides/frontend-plugin-integration.md` -> `docs/developer/frontend-plugin-integration.md`
+- Move: `docs/guides/persistence-public-api.md` -> `docs/developer/persistence-public-api.md`
+- Move: `docs/guides/persistence-usage-guide.md` -> `docs/developer/persistence-usage-guide.md`
+- Move: `docs/guides/persistence-development-workflow.md` -> `docs/developer/persistence-development-workflow.md`
 
 - [ ] **Step 1: 创建新目录并迁移文档**
 
@@ -118,9 +118,9 @@ Expected:
 ### Task 3: 修复入口链接并验证可发现性
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/docs/README.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
-- Modify: `D:/Github/ICP-X/NewP/tests/README.md`
+- Modify: `docs/README.md`
+- Modify: `docs/current-status.md`
+- Modify: `tests/README.md`
 
 - [ ] **Step 1: 更新 `docs/README.md`**
 

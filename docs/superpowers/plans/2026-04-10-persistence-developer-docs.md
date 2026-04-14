@@ -13,16 +13,16 @@
 ### Task 1: 梳理持久化公共入口与现有使用链路
 
 **Files:**
-- Read: `D:/Github/ICP-X/NewP/apps/host-api/Extensions/PersistenceBootstrapExtensions.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence/PersistenceOptions.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/IPersistenceMigrationRunner.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlDialect.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence/Abstractions/ISqlQueryExecutor.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/Extensions/EfCorePersistenceServiceCollectionExtensions.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence-efcore/EfPlatformDbContext.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-persistence-composition/PlatformPersistenceModelCatalog.cs`
-- Read: `D:/Github/ICP-X/NewP/server/platform-modeling/Definitions/IModelDefinitionProvider.cs`
-- Read: `D:/Github/ICP-X/NewP/tests/integration/persistence/Invoke-PersistenceSmoke.ps1`
+- Read: `apps/host-api/Extensions/PersistenceBootstrapExtensions.cs`
+- Read: `server/platform-persistence/PersistenceOptions.cs`
+- Read: `server/platform-persistence/Abstractions/IPersistenceMigrationRunner.cs`
+- Read: `server/platform-persistence/Abstractions/ISqlDialect.cs`
+- Read: `server/platform-persistence/Abstractions/ISqlQueryExecutor.cs`
+- Read: `server/platform-persistence-efcore/Extensions/EfCorePersistenceServiceCollectionExtensions.cs`
+- Read: `server/platform-persistence-efcore/EfPlatformDbContext.cs`
+- Read: `server/platform-persistence-composition/PlatformPersistenceModelCatalog.cs`
+- Read: `server/platform-modeling/Definitions/IModelDefinitionProvider.cs`
+- Read: `tests/integration/persistence/Invoke-PersistenceSmoke.ps1`
 
 - [ ] **Step 1: 读取当前真实代码入口**
 
@@ -81,9 +81,9 @@ Expected:
 ### Task 2: 编写三篇持久化开发者手册
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/docs/guides/persistence-public-api.md`
-- Create: `D:/Github/ICP-X/NewP/docs/guides/persistence-usage-guide.md`
-- Create: `D:/Github/ICP-X/NewP/docs/guides/persistence-development-workflow.md`
+- Create: `docs/guides/persistence-public-api.md`
+- Create: `docs/guides/persistence-usage-guide.md`
+- Create: `docs/guides/persistence-development-workflow.md`
 
 - [ ] **Step 1: 编写公共 API 手册**
 
@@ -166,8 +166,8 @@ Expected:
 ### Task 3: 补最少量入口链接并验证可发现性
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
-- Modify: `D:/Github/ICP-X/NewP/tests/README.md`
+- Modify: `docs/current-status.md`
+- Modify: `tests/README.md`
 
 - [ ] **Step 1: 在状态文档中增加开发者手册入口**
 

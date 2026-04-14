@@ -12,30 +12,30 @@
 
 ## 文件结构
 
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\core\src\localization\LocalizationContext.tsx`
+- 修改 `frontend\packages\core\src\localization\LocalizationContext.tsx`
   - 扩展 Provider 入参、上下文能力和 `useEnumeration`
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\core\src\localization\index.ts`
+- 修改 `frontend\packages\core\src\localization\index.ts`
   - 导出新增类型与 Hook
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\core\src\index.ts`
+- 修改 `frontend\packages\core\src\index.ts`
   - 从包根导出枚举能力
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\shell\src\localization\catalogs.ts`
+- 修改 `frontend\packages\shell\src\localization\catalogs.ts`
   - 聚合枚举结构资源与本地化资源
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\shell\src\App.tsx`
+- 修改 `frontend\packages\shell\src\App.tsx`
   - 把枚举资源传入 `LocalizationProvider`
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\shell\src\pages\Home.tsx`
+- 修改 `frontend\packages\shell\src\pages\Home.tsx`
   - 新增枚举资源样例区块
-- 修改 `D:\Github\ICP-X\NewP\frontend\packages\shell\src\__tests__\localization-sample.test.tsx`
+- 修改 `frontend\packages\shell\src\__tests__\localization-sample.test.tsx`
   - 增补枚举样例断言
-- 新增 `D:\Github\ICP-X\NewP\frontend\packages\shell\src\__tests__\enumeration-sample.test.tsx`
+- 新增 `frontend\packages\shell\src\__tests__\enumeration-sample.test.tsx`
   - 专门覆盖 `useEnumeration`、语言切换和 fallback
 
 ## Task 1: 扩展 Core 枚举消费基座
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\core\src\localization\LocalizationContext.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\core\src\localization\index.ts`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\core\src\index.ts`
-- Test: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\__tests__\enumeration-sample.test.tsx`
+- Modify: `frontend\packages\core\src\localization\LocalizationContext.tsx`
+- Modify: `frontend\packages\core\src\localization\index.ts`
+- Modify: `frontend\packages\core\src\index.ts`
+- Test: `frontend\packages\shell\src\__tests__\enumeration-sample.test.tsx`
 
 - [ ] **Step 1: 写失败中的枚举基座测试**
 
@@ -265,9 +265,9 @@ git commit -m "feat: add frontend enumeration localization primitives"
 ## Task 2: 接入 Shell 真实枚举资源
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\localization\catalogs.ts`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\App.tsx`
-- Test: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\__tests__\localization-sample.test.tsx`
+- Modify: `frontend\packages\shell\src\localization\catalogs.ts`
+- Modify: `frontend\packages\shell\src\App.tsx`
+- Test: `frontend\packages\shell\src\__tests__\localization-sample.test.tsx`
 
 - [ ] **Step 1: 扩展现有样例测试，先让真实资源接线失败**
 
@@ -365,9 +365,9 @@ git commit -m "feat: wire enumeration static resources into shell localization"
 ## Task 3: 在 Home 页面展示枚举样例并完成回归
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\pages\Home.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\__tests__\localization-sample.test.tsx`
-- Modify: `D:\Github\ICP-X\NewP\frontend\packages\shell\src\__tests__\enumeration-sample.test.tsx`
+- Modify: `frontend\packages\shell\src\pages\Home.tsx`
+- Modify: `frontend\packages\shell\src\__tests__\localization-sample.test.tsx`
+- Modify: `frontend\packages\shell\src\__tests__\enumeration-sample.test.tsx`
 
 - [ ] **Step 1: 写页面级失败断言**
 
@@ -467,10 +467,10 @@ git commit -m "feat: add enumeration localization sample to shell home"
 ## Task 4: 文档与状态收口
 
 **Files:**
-- Modify: `D:\Github\ICP-X\NewP\docs\current-status.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\phases\post-phase-6-stage-map.md`
-- Modify: `D:\Github\ICP-X\NewP\docs\verification\verification-matrix.md`
-- Add: `D:\Github\ICP-X\NewP\docs\verification\enumeration-consumer-ui-integration-verification.md`
+- Modify: `docs\current-status.md`
+- Modify: `docs\phases\post-phase-6-stage-map.md`
+- Modify: `docs\verification\verification-matrix.md`
+- Add: `docs\verification\enumeration-consumer-ui-integration-verification.md`
 
 - [ ] **Step 1: 新增验证记录文档**
 

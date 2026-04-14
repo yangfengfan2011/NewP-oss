@@ -13,9 +13,9 @@
 ### Task 1: 补齐模板与示例范围映射
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/server/templates/backend-module-template/README.md`
-- Modify: `D:/Github/ICP-X/NewP/frontend/templates/frontend-module-template/README.md`
-- Create: `D:/Github/ICP-X/NewP/server/templates/backend-module-template/TemplateModule.csproj`
+- Modify: `server/templates/backend-module-template/README.md`
+- Modify: `frontend/templates/frontend-module-template/README.md`
+- Create: `server/templates/backend-module-template/TemplateModule.csproj`
 
 - [ ] **Step 1: 补齐后端模板项目文件**
 
@@ -33,12 +33,12 @@ Expected: Build succeeded, 0 errors
 ### Task 2: 落地端到端前端示例模块
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/frontend/modules/module-template-sample/package.json`
-- Create: `D:/Github/ICP-X/NewP/frontend/modules/module-template-sample/tsconfig.json`
-- Create: `D:/Github/ICP-X/NewP/frontend/modules/module-template-sample/src/index.ts`
-- Create: `D:/Github/ICP-X/NewP/frontend/modules/module-template-sample/src/pages/ModuleTemplateSamplePage.tsx`
-- Create: `D:/Github/ICP-X/NewP/frontend/modules/module-template-sample/src/services/moduleTemplateSampleService.ts`
-- Modify: `D:/Github/ICP-X/NewP/frontend/packages/shell/src/registerModules.ts`
+- Create: `frontend/modules/module-template-sample/package.json`
+- Create: `frontend/modules/module-template-sample/tsconfig.json`
+- Create: `frontend/modules/module-template-sample/src/index.ts`
+- Create: `frontend/modules/module-template-sample/src/pages/ModuleTemplateSamplePage.tsx`
+- Create: `frontend/modules/module-template-sample/src/services/moduleTemplateSampleService.ts`
+- Modify: `frontend/packages/shell/src/registerModules.ts`
 
 - [ ] **Step 1: 先写最小前端服务与页面**
 
@@ -56,9 +56,9 @@ Expected: Build succeeded
 ### Task 3: 升级前端模板为最小联通模板
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/frontend/templates/frontend-module-template/src/index.ts`
-- Modify: `D:/Github/ICP-X/NewP/frontend/templates/frontend-module-template/src/pages/TemplatePage.tsx`
-- Create: `D:/Github/ICP-X/NewP/frontend/templates/frontend-module-template/src/services/templateStatusService.ts`
+- Modify: `frontend/templates/frontend-module-template/src/index.ts`
+- Modify: `frontend/templates/frontend-module-template/src/pages/TemplatePage.tsx`
+- Create: `frontend/templates/frontend-module-template/src/services/templateStatusService.ts`
 
 - [ ] **Step 1: 把模板页面改为接口驱动页面**
 
@@ -72,10 +72,10 @@ Expected: Build succeeded
 ### Task 4: 实现可执行脚手架
 
 **Files:**
-- Create: `D:/Github/ICP-X/NewP/scripts/new-module.ps1`
-- Create: `D:/Github/ICP-X/NewP/scripts/new-module.sh`
-- Modify: `D:/Github/ICP-X/NewP/frontend/docs/module-integration-guide.md`
-- Modify: `D:/Github/ICP-X/NewP/frontend/README.md`
+- Create: `scripts/new-module.ps1`
+- Create: `scripts/new-module.sh`
+- Modify: `frontend/docs/module-integration-guide.md`
+- Modify: `frontend/README.md`
 
 - [ ] **Step 1: 实现 PowerShell 脚手架**
 
@@ -92,9 +92,9 @@ Expected: Build succeeded
 ### Task 5: 执行脚手架 smoke 验证并收口文档
 
 **Files:**
-- Modify: `D:/Github/ICP-X/NewP/docs/verification/phase-6-frontend-component-template-verification.md`
-- Modify: `D:/Github/ICP-X/NewP/docs/current-status.md`
-- Create or Modify: `D:/Github/ICP-X/NewP/docs/verification/phase-6-closeout-verification.md`
+- Modify: `docs/verification/phase-6-frontend-component-template-verification.md`
+- Modify: `docs/current-status.md`
+- Create or Modify: `docs/verification/phase-6-closeout-verification.md`
 
 - [ ] **Step 1: 执行 fresh 构建验证**
 

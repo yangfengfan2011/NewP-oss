@@ -106,7 +106,7 @@ describe('Platform console home', () => {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: FAIL because `Home` still renders the current portal-only landing page for both modes.
@@ -180,7 +180,7 @@ vi.mock('../contexts/PlatformContext', () => ({
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/home-page-shortcuts.test.tsx src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/home-page-shortcuts.test.tsx src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: PASS for the business shortcut test and the new platform-mode smoke test.
@@ -188,12 +188,12 @@ Expected: PASS for the business shortcut test and the new platform-mode smoke te
 - [ ] **Step 6: Commit the entry-point split**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/pages/Home.tsx \
   frontend/packages/shell/src/pages/PlatformConsoleHome.tsx \
   frontend/packages/shell/src/__tests__/home-page-shortcuts.test.tsx \
   frontend/packages/shell/src/__tests__/platform-console-home.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: split shell home by platform view"
+git -C . commit -m "feat: split shell home by platform view"
 ```
 
 ## Task 2: Add typed platform console fixtures and left-nav / queue scaffolding
@@ -243,7 +243,7 @@ it('switches the review list when a different assembly item is selected', async 
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: FAIL because the platform page has no assembly navigation or queue data yet.
@@ -394,7 +394,7 @@ export default function PlatformConsoleHome() {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: PASS, including assembly switching from `数据模型` to `菜单导航`.
@@ -402,14 +402,14 @@ Expected: PASS, including assembly switching from `数据模型` to `菜单导�
 - [ ] **Step 6: Commit the fixture-backed platform review scaffold**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/platform/types.ts \
   frontend/packages/shell/src/platform/fixtures.ts \
   frontend/packages/shell/src/components/platform/PlatformAssemblyNav.tsx \
   frontend/packages/shell/src/components/platform/PlatformReviewList.tsx \
   frontend/packages/shell/src/pages/PlatformConsoleHome.tsx \
   frontend/packages/shell/src/__tests__/platform-console-home.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: add platform console review queue scaffold"
+git -C . commit -m "feat: add platform console review queue scaffold"
 ```
 
 ## Task 3: Add the platform context bar and right-side configurator panel
@@ -459,7 +459,7 @@ it('updates the configurator when a different object is selected', async () => {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: FAIL because the page does not yet render a context bar or configurator details.
@@ -569,7 +569,7 @@ return (
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: PASS, including selecting `Order` and updating the right-side configurator content.
@@ -577,12 +577,12 @@ Expected: PASS, including selecting `Order` and updating the right-side configur
 - [ ] **Step 6: Commit the page chrome and configurator**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/components/platform/PlatformPageChrome.tsx \
   frontend/packages/shell/src/components/platform/PlatformConfiguratorPanel.tsx \
   frontend/packages/shell/src/pages/PlatformConsoleHome.tsx \
   frontend/packages/shell/src/__tests__/platform-console-home.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: add platform console configurator panel"
+git -C . commit -m "feat: add platform console configurator panel"
 ```
 
 ## Task 4: Add platform-console styling and status-driven summaries
@@ -621,7 +621,7 @@ it('shows review statuses and publish gating cues in the platform console', asyn
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/platform-console-home.test.tsx
 ```
 
 Expected: FAIL because the list and configurator do not yet expose status labels clearly.
@@ -705,8 +705,8 @@ export const reviewStatusLabels: Record<ReviewStatus, string> = {
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell build
+pnpm --dir frontend --filter @icp-platform/shell test
+pnpm --dir frontend --filter @icp-platform/shell build
 ```
 
 Expected:
@@ -717,13 +717,13 @@ Expected:
 - [ ] **Step 6: Commit the styled V1 platform console**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/platform/fixtures.ts \
   frontend/packages/shell/src/components/platform/PlatformReviewList.tsx \
   frontend/packages/shell/src/components/platform/PlatformConfiguratorPanel.tsx \
   frontend/packages/shell/src/index.css \
   frontend/packages/shell/src/__tests__/platform-console-home.test.tsx
-git -C D:/Github/ICP-X/NewP commit -m "feat: style platform metadata review console"
+git -C . commit -m "feat: style platform metadata review console"
 ```
 
 ## Task 5: Final verification and handoff notes
@@ -735,8 +735,8 @@ git -C D:/Github/ICP-X/NewP commit -m "feat: style platform metadata review cons
 - [ ] **Step 1: Run the exact verification commands one more time**
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell test
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell build
+pnpm --dir frontend --filter @icp-platform/shell test
+pnpm --dir frontend --filter @icp-platform/shell build
 ```
 
 - [ ] **Step 2: Smoke-check the expected UX in dev mode**
@@ -744,7 +744,7 @@ pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell build
 Run:
 
 ```bash
-pnpm --dir D:/Github/ICP-X/NewP/frontend --filter @icp-platform/shell dev
+pnpm --dir frontend --filter @icp-platform/shell dev
 ```
 
 Expected manual checks:
@@ -774,8 +774,8 @@ Expected manual checks:
 - [ ] **Step 5: Commit any final polish or spec alignment**
 
 ```bash
-git -C D:/Github/ICP-X/NewP add \
+git -C . add \
   frontend/packages/shell/src/pages/PlatformConsoleHome.tsx \
   docs/superpowers/specs/2026-04-11-platform-view-metadata-console-design.md
-git -C D:/Github/ICP-X/NewP commit -m "docs: align platform console implementation notes"
+git -C . commit -m "docs: align platform console implementation notes"
 ```

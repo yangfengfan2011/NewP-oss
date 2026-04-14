@@ -46,6 +46,8 @@ export function getEnumerationLabel(
   itemName: string,
   fallback?: string,
 ): string {
+  // 枚举标签按“当前语言 -> 默认语言 -> 调用方 fallback -> 枚举项名”回退，
+  // 保证 catalog 缺项时界面仍能稳定显示，而不是直接出现空白标签。
   const currentLabel = getEnumerationCatalogValue(enumerationCatalogs[currentLanguage], enumerationName, itemName);
   if (currentLabel !== undefined) {
     return currentLabel;
@@ -96,6 +98,8 @@ function getEnumerationCatalogValue(
     return flatValue;
   }
 
+  // 这里同时兼容新的扁平 key 和历史嵌套 catalog 结构，
+  // 这样静态资源迁移可以逐步推进，而不要求所有枚举字典一次性重写。
   const legacyEnumerationCatalog = (languageCatalog as unknown as Record<string, unknown>)[enumerationName];
   if (!legacyEnumerationCatalog || typeof legacyEnumerationCatalog !== 'object') {
     return undefined;
@@ -125,6 +129,8 @@ export function LocalizationProvider({
   const [currentLanguage, setCurrentLanguage] = useState(normalizedInitialLanguage);
 
   useEffect(() => {
+    // 受支持语言集合变化后，当前语言若已失效则回退到规范化初始语言，
+    // 避免 provider 外部热更新语言配置时把上下文留在无效语言代码上。
     if (!supportedLanguageCodes.has(currentLanguage)) {
       setCurrentLanguage(normalizedInitialLanguage);
     }
@@ -139,6 +145,8 @@ export function LocalizationProvider({
   };
 
   const t = (key: string, fallback?: string) => {
+    // 文案解析只在当前语言和默认语言之间回退；
+    // 这里故意不做多级链式猜测，避免 catalog 问题被过度隐藏。
     const currentCatalog = catalogs[currentLanguage] ?? {};
     if (currentCatalog[key] !== undefined) {
       return currentCatalog[key];

@@ -37,6 +37,8 @@ export default function SettingDefinitionManagement() {
   }, [selectedModuleId, selectedType]);
 
   const hasUnsavedChanges = useMemo(() => {
+    // 这里显式比较已保存数据和草稿数据，让“保存”和“应用”保持两段式状态机：
+    // 本地编辑 -> 已保存未应用 -> 已应用，而不是把 authoring 和生效状态混在一起。
     return JSON.stringify(savedDefinitions) !== JSON.stringify(draftDefinitions);
   }, [savedDefinitions, draftDefinitions]);
 
@@ -62,6 +64,8 @@ export default function SettingDefinitionManagement() {
       setLoading(true);
       setError(null);
       const data = await getSettings(moduleId);
+      // 每次切换模块时都用服务端已保存版本重建草稿，
+      // 避免把上一个模块的本地草稿误带到当前模块。
       setSavedDefinitions(data);
       setDraftDefinitions(data);
       setStatus(null);
@@ -100,6 +104,8 @@ export default function SettingDefinitionManagement() {
       setApplying(true);
       setError(null);
       const result = await applySettings(selectedModuleId);
+      // apply 只推进“生效状态”，不覆盖当前 definitions；
+      // definitions 仍然以最近一次保存结果或当前草稿为准，防止服务端 apply 响应把本地上下文抹掉。
       setStatus((previousStatus) => mergeApplyResult(previousStatus, result, draftDefinitions, hasUnsavedChanges));
     } catch (applyError) {
       setError(applyError instanceof Error ? applyError.message : '应用失败');
@@ -221,6 +227,8 @@ function mergeApplyResult(
   hasUnsavedChanges: boolean,
 ): SaveSettingDefinitionsResult {
   return {
+    // apply 响应只带生效结果，不一定携带完整 authoring 内容，
+    // 因此这里优先保留之前的 definitions，没有时再回退到当前草稿。
     definitions: previousStatus?.definitions ?? draftDefinitions,
     status: applyResult.status,
     hasUnsavedChanges,

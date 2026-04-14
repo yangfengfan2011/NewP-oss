@@ -15,6 +15,7 @@
 如果更希望先看一个最小、可照着抄的例子，再回来理解规则，直接看：
 
 - [componentized-example-module.md](componentized-example-module.md)
+- [code-commenting-guidelines.md](code-commenting-guidelines.md)
 
 ## 1. 先记住的核心原则
 

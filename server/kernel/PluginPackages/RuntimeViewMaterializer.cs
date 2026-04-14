@@ -3,6 +3,10 @@ using System.Text.Json;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
+/// <summary>
+/// 根据当前已启用插件重新生成运行时视图。
+/// 这里的职责不是把 authoring 真源原地改写，而是生成一份可整体替换、可失败回退的 runtime/public 投影视图。
+/// </summary>
 public class RuntimeViewMaterializer
 {
     private static readonly System.Text.Json.JsonSerializerOptions ManifestJsonOptions = new()
@@ -37,6 +41,8 @@ public class RuntimeViewMaterializer
     public void Materialize(string installRoot)
     {
         var enabledRecords = _stateStore.LoadAllEnabled();
+        // 所有输出先进入 staging；只有全部成功后才会替换正式 runtime/public，
+        // 避免中途失败时留下半更新的运行时视图。
         var stagingRoot = Path.Combine(installRoot, $".materialize-staging-{Guid.NewGuid():N}");
         var stagedRuntimeRoot = Path.Combine(stagingRoot, "runtime");
         var stagedBackendViewRoot = Path.Combine(stagedRuntimeRoot, "backend-load-view");
@@ -85,6 +91,8 @@ public class RuntimeViewMaterializer
         var targetDirectory = Path.Combine(backendViewRoot, record.ModuleId);
         Directory.CreateDirectory(targetDirectory);
 
+        // backend-load-view 是运行时消费的统一后端视图。
+        // 这里保留包内结构，同时把后端 manifest 规范化为 plugin.json，避免运行时再关心包内命名差异。
         CopyDirectory(backendRoot, targetDirectory);
         File.Copy(backendManifestPath, Path.Combine(targetDirectory, "plugin.json"), overwrite: true);
 
@@ -106,6 +114,8 @@ public class RuntimeViewMaterializer
         var entryManifestPath = ResolveContainedFilePath(frontendRoot, frontendManifest.EntryManifest, "EntryManifest");
         var entryManifest = System.Text.Json.JsonSerializer.Deserialize<FrontendEntryManifest>(File.ReadAllText(entryManifestPath), ManifestJsonOptions)
             ?? throw new System.Text.Json.JsonException($"Frontend runtime manifest '{entryManifestPath}' deserialized to null.");
+        // 这里显式验证 entry 文件存在，但不直接复制 entry 本身；
+        // public 目录交付的是资产根和入口清单，真正入口仍由运行时 manifest 决定。
         ResolveContainedFilePath(frontendRoot, entryManifest.Entry, "Entry");
 
         var targetRoot = Path.Combine(publicRoot, record.ModuleId, record.Version);
@@ -137,6 +147,8 @@ public class RuntimeViewMaterializer
             return;
         }
 
+        // 平台公共资源按最终生效视图汇总到同一个 resources 目录；
+        // 冲突时直接失败，而不是依赖复制顺序做隐式覆盖。
         var targetResourcesRoot = Path.Combine(runtimeRoot, "resources");
         CopyDirectoryRejectingConflicts(packageResourcesRoot, targetResourcesRoot, record.ModuleId);
     }
@@ -155,6 +167,7 @@ public class RuntimeViewMaterializer
 
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
+        // manifest 中的相对路径必须被约束在插件包目录内，防止通过 ../ 或绝对路径越界读取宿主文件。
         if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -201,6 +214,8 @@ public class RuntimeViewMaterializer
 
         try
         {
+            // 先把当前有效视图移动到备份目录，再提交 staging 结果。
+            // 一旦后续 move 失败，catch 会按目录级别恢复，保证 runtime/public 仍指向上一版完整视图。
             if (runtimeExists)
             {
                 _moveDirectory(runtimeRoot, runtimeBackupRoot);
@@ -242,6 +257,7 @@ public class RuntimeViewMaterializer
             Directory.Delete(destinationPath, recursive: true);
         }
 
+        // 只有原目录本来存在时才回滚备份，避免把不存在的目标“恢复”成新目录。
         if (destinationPreviouslyExisted && Directory.Exists(backupPath))
         {
             Directory.Move(backupPath, destinationPath);
@@ -290,6 +306,7 @@ public class RuntimeViewMaterializer
                     continue;
                 }
 
+                // 资源冲突必须显式暴露给内核处理，不能靠最后复制者获胜。
                 throw new InvalidOperationException(
                     $"Platform resource conflict detected for '{relativePath}' while materializing module '{moduleId}'.");
             }

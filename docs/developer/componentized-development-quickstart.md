@@ -14,6 +14,7 @@
 详细解释看：
 
 - [componentized-example-module.md](componentized-example-module.md)
+- [code-commenting-guidelines.md](code-commenting-guidelines.md)
 
 ## 2. 后端最少要有哪些文件
 

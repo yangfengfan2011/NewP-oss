@@ -4,6 +4,9 @@ using ICP.Platform.Kernel.PluginDiscovery;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
+// InstalledPluginStateStore 同时维护两类受控状态：
+// 1) 安装态的权威记录；
+// 2) 被裁剪版本的归档区，作为回滚和恢复的最后出口。
 public class InstalledPluginStateStore
 {
     internal const int DefaultRetainedVersionCount = 2;
@@ -90,6 +93,7 @@ public class InstalledPluginStateStore
                 return false;
             }
 
+            // 先写临时文件，再原子替换/移动目标文件，避免崩溃时留下半截 JSON。
             var json = JsonSerializer.Serialize(record, _jsonOptions);
             tempPath = Path.Combine(_stateRoot, $"{record.ModuleId}.{Guid.NewGuid():N}.tmp");
             File.WriteAllText(tempPath, json + Environment.NewLine, new UTF8Encoding(false));
@@ -142,6 +146,7 @@ public class InstalledPluginStateStore
                 return false;
             }
 
+            // 删除要同时清掉状态、当前安装包和归档包，避免“状态没了但文件还在”的悬挂残留。
             if (File.Exists(statePath))
             {
                 File.Delete(statePath);
@@ -175,6 +180,7 @@ public class InstalledPluginStateStore
         Directory.CreateDirectory(_stateRoot);
         var records = new List<InstalledPluginRecord>();
 
+        // 这里返回的是仍处于 Installed 状态的记录；已归档的旧版本不算在当前运行时视图内。
         foreach (var stateFilePath in Directory.GetFiles(_stateRoot, "*.json", SearchOption.TopDirectoryOnly))
         {
             var moduleId = Path.GetFileNameWithoutExtension(stateFilePath);
@@ -204,6 +210,7 @@ public class InstalledPluginStateStore
         Directory.CreateDirectory(_stateRoot);
         var enabledRecords = new List<InstalledPluginRecord>();
 
+        // Enabled 视图是运行时投影：只有状态有效且能重建出当前启用版本的记录才算可用。
         foreach (var stateFilePath in Directory.GetFiles(_stateRoot, "*.json", SearchOption.TopDirectoryOnly))
         {
             var moduleId = Path.GetFileNameWithoutExtension(stateFilePath);
@@ -240,6 +247,7 @@ public class InstalledPluginStateStore
 
         try
         {
+            // 依赖读取只用于安装后的预检提示，不改变安装结果；读取失败会降级为告警。
             var fullPackageRoot = Path.GetFullPath(packageRoot);
             var pluginJsonPath = Path.Combine(fullPackageRoot, "plugin.json");
             if (!File.Exists(pluginJsonPath))
@@ -294,6 +302,7 @@ public class InstalledPluginStateStore
             return false;
         }
 
+        // 当前启用版本必须同时满足“记录里声明过”和“本地包版本仍存在”，否则不重建虚假的运行时视图。
         enabledRecord = new InstalledPluginRecord
         {
             ModuleId = record.ModuleId,
@@ -349,6 +358,8 @@ public class InstalledPluginStateStore
                 return true;
             }
 
+            // 裁剪不是简单删文件，而是先收敛状态，再把移除的版本挪到 .pruned 作为回滚保留。
+            // 这样运行时视图和磁盘内容始终保持同一套“已生效版本”边界。
             var latestRetainedVersion = retainedVersions[^1];
             updatedRecord = CloneRecord(record, retainedVersions, latestRetainedVersion);
 
@@ -468,6 +479,7 @@ public class InstalledPluginStateStore
     {
         try
         {
+            // 被裁剪的版本不直接硬删，先进入归档区，给恢复旧版本留一条受控通道。
             ArchiveDirectoryIfExists(GetPackageRoot(moduleId, version), GetArchivedPackageRoot(moduleId, version));
         }
         catch
@@ -555,6 +567,7 @@ public class InstalledPluginStateStore
 
         try
         {
+            // 恢复只允许从归档区回迁，不能从任意外部路径拼回安装树，避免把越界目录重新引入。
             var archivedPackageRoot = GetArchivedPackageRoot(moduleId, version);
             if (!Directory.Exists(archivedPackageRoot))
             {
@@ -580,6 +593,7 @@ public class InstalledPluginStateStore
 
         try
         {
+            // 这里只找比当前启用版本更老的归档版本，用于回滚时选择最近的可用前一版。
             if (!TryGetArchivedModulePath(moduleId, out var archivedModulePath, out errorMessage))
             {
                 return false;
@@ -669,6 +683,7 @@ public class InstalledPluginStateStore
             throw new JsonException("Installed plugin state is corrupt: payload deserialized to null.");
         }
 
+        // 状态文件一旦无法自证一致，就按损坏处理，而不是尝试猜测修复。
         if (string.IsNullOrWhiteSpace(record.ModuleId))
         {
             throw new JsonException("Installed plugin state is corrupt: ModuleId must not be empty.");
@@ -750,6 +765,7 @@ public class InstalledPluginStateStore
             throw new JsonException($"Plugin manifest {propertyName} resolves to an unsafe path.");
         }
 
+        // 状态和清单中的相对路径都必须收口在包根内；如果文件本身缺失，则直接视为坏包/坏状态。
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
         if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
@@ -783,6 +799,7 @@ public class InstalledPluginStateStore
             throw new JsonException("Installed plugin state is corrupt: PackageRoot is invalid.", ex);
         }
 
+        // PackageRoot 必须精确指向 installRoot/packages/{moduleId}/{version}，否则说明状态和磁盘已经失配。
         var packagesRoot = Path.GetFullPath(Path.Combine(_installRoot, "packages"));
         if (!fullPackageRoot.StartsWith(packagesRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {

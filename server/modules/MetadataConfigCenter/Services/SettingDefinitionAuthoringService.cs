@@ -5,6 +5,10 @@ using ICP.Platform.Modules.MetadataConfigCenter.Storage;
 
 namespace ICP.Platform.Modules.MetadataConfigCenter.Services;
 
+/// <summary>
+/// 面向 authoring 真源的 SettingDefinition 读写服务。
+/// 这里负责维护可提交源目录的内容与状态描述，不直接修改 runtime 生效视图。
+/// </summary>
 public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringService
 {
     private readonly IMetadataManifestService _metadataManifestService;
@@ -27,6 +31,8 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         var files = _moduleMetadataStore.EnumerateMetadataFiles(moduleId, settingsSourcePath, "*.json");
 
         var definitions = new List<SettingDefinition>();
+        // 每个文件先带上版本摘要，再统一校验；
+        // 这样前端既能知道定义来自哪个源文件，也能识别内容是否发生过 authoring 级变更。
         foreach (var file in files)
         {
             var content = await _moduleMetadataStore.ReadTextAsync(file, cancellationToken);
@@ -67,6 +73,8 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
             }
 
             var runtimeFilePath = _moduleMetadataStore.ResolveRuntimeMetadataFilePath(moduleId, settingsSourcePath, generatedFile.SourceFile);
+            // runtime 不存在或内容不一致都视为“已保存未应用”，
+            // 因为 authoring 成功并不等于当前运行时已经切到新版本。
             if (string.IsNullOrWhiteSpace(runtimeFilePath)
                 || !await FileContentMatchesAsync(runtimeFilePath, generatedFile.Content, cancellationToken))
             {
@@ -147,6 +155,8 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
 
     private static string BuildStatus(bool gitSyncPending, bool hasUnappliedChanges)
     {
+        // 状态文案按 authoring / apply / git 三类信号组合，
+        // 让前端不需要重复推导复杂状态机。
         if (hasUnappliedChanges && gitSyncPending)
         {
             return "已保存未应用";

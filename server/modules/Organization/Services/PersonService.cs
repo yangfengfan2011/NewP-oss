@@ -39,6 +39,8 @@ public sealed class PersonService : IPersonService
         }
 
         var link = await _personUserLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
+        // 权限摘要属于附加视图信息，不应反向决定人员详情是否可读；
+        // 因此即使授权汇总失败，也返回人员主体数据。
         var authorizationSummary = await GetAuthorizationSummaryAsync(link, cancellationToken);
 
         return new PersonDetailDto
@@ -59,6 +61,7 @@ public sealed class PersonService : IPersonService
 
     public async Task<PersonDto> CreateAsync(CreatePersonRequest request, CancellationToken cancellationToken = default)
     {
+        // 人员工号唯一性按“同一公司”收口，而不是全平台全局唯一。
         await EnsurePersonNoAvailableAsync(request.CompanyId, request.PersonNo, null, cancellationToken);
 
         var person = new Person
@@ -114,6 +117,7 @@ public sealed class PersonService : IPersonService
             throw new InvalidOperationException("该账号已绑定其他人员。");
         }
 
+        // 绑定前先通过身份目录确认用户存在，避免组织模块自己持有“悬空用户 ID”。
         await _identityUserDirectory.EnsureUserExistsAsync(request.UserId, cancellationToken);
 
         var link = new PersonUserLink
@@ -143,6 +147,7 @@ public sealed class PersonService : IPersonService
         }
         catch (Exception)
         {
+            // 授权摘要是可降级信息；读取失败时返回空列表而不是放大成整页失败。
             return [];
         }
     }

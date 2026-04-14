@@ -63,6 +63,8 @@ public class UnifiedPluginPackageInstaller
 
         try
         {
+            // 安装按“先备份旧版本、再落新版本、最后提交状态”的顺序执行。
+            // 这样任一步失败，都能把目录恢复到上一次可用的安装态，而不会留下半安装结果。
             CleanupInstallDirectory(backupTarget);
 
             if (hasExistingInstall)
@@ -74,6 +76,8 @@ public class UnifiedPluginPackageInstaller
             Directory.CreateDirectory(versionedTarget);
             CopyDirectory(packageRoot, versionedTarget);
 
+            // 安装态记录是当前包版本集合的权威来源；这里仅追加新版本，不重建启用态。
+            // 这样安装不会误改“当前启用版本”或禁用状态。
             if (!_stateStore.TryLoad(scanResult.Manifest.ModuleId, out var existingRecord, out var loadError))
             {
                 throw new IOException(loadError);
@@ -106,6 +110,8 @@ public class UnifiedPluginPackageInstaller
                 throw new IOException(saveError);
             }
 
+            // 裁剪必须在新状态成功落盘后才执行。
+            // 即使旧版本清理失败，当前版本记录也已经稳定，可继续依赖回滚归档。
             if (!_stateStore.TryPruneOldVersions(
                 installedRecord,
                 InstalledPluginStateStore.DefaultRetainedVersionCount,
@@ -121,6 +127,7 @@ public class UnifiedPluginPackageInstaller
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // 失败按事务回滚处理：先清理这次写入的新目录，再把旧目录从备份恢复回来。
             CleanupInstallDirectory(versionedTarget);
             if (backupCreated)
             {
@@ -143,6 +150,7 @@ public class UnifiedPluginPackageInstaller
     {
         try
         {
+            // 依赖预检只提供告警，不阻断安装结果；它用来提示“安装成功但运行时可能暂不可用”的包。
             if (!_stateStore.TryLoadPackageDependencies(packageRoot, out var dependencyModuleIds, out var loadError))
             {
                 return $"Dependency precheck warning: {loadError}";

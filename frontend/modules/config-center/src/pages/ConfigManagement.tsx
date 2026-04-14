@@ -32,6 +32,7 @@ export default function ConfigManagement() {
   const [newValue, setNewValue] = useState('');
 
   useEffect(() => {
+    // 配置页只在具备查看权限时进入数据加载，避免未授权场景下仍然暴露分组结构。
     if (canView) {
       void loadConfigs();
     }
@@ -41,6 +42,7 @@ export default function ConfigManagement() {
     try {
       setLoading(true);
       setError(null);
+      // 列表视图始终从分组接口重新取权威数据，编辑保存后也回到这里重新渲染。
       const response = await fetch('/api/config/grouped');
       if (!response.ok) throw new Error('Failed to load config');
       const data = await response.json();
@@ -53,6 +55,7 @@ export default function ConfigManagement() {
   };
 
   const handleEdit = (item: ConfigItem) => {
+    // 单行编辑只保留一个正在变更的配置项，避免多个输入框同时处于脏状态。
     setEditingItem(item);
     setNewValue(item.value || '');
   };
@@ -61,6 +64,8 @@ export default function ConfigManagement() {
     if (!editingItem) return;
 
     try {
+      // 这里不做复杂前端推导，直接提交用户当前输入；
+      // 真正的类型约束和格式校验仍由后端配置写入接口兜底。
       const response = await fetch(`/api/config/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -69,6 +74,7 @@ export default function ConfigManagement() {
 
       if (!response.ok) throw new Error('Failed to update config');
 
+      // 保存成功后退出编辑态并重新加载分组结果，确保页面立即回到已生效的权威视图。
       setEditingItem(null);
       setNewValue('');
       await loadConfigs();
@@ -78,6 +84,7 @@ export default function ConfigManagement() {
   };
 
   const handleCancel = () => {
+    // 取消只撤销本地编辑态，不触碰后端数据；这样可以安全放弃未保存修改。
     setEditingItem(null);
     setNewValue('');
   };

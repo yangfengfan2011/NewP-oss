@@ -35,6 +35,8 @@ public sealed class EfConfigRepository : IConfigRepository
         string? tenantId = null,
         CancellationToken cancellationToken = default)
     {
+        // 配置命中顺序按“环境 + 租户最精确 -> 仅环境 -> 仅租户 -> 全局默认”回退，
+        // 这样调用方只查一次就能得到当前上下文的最优生效项。
         var entity = await Entities
             .AsNoTracking()
             .Where(item => EF.Property<string>(item, "Key") == key)
@@ -63,6 +65,8 @@ public sealed class EfConfigRepository : IConfigRepository
         string? tenantId = null,
         CancellationToken cancellationToken = default)
     {
+        // 模块级查询返回“当前上下文可能可见”的候选项，包含全局项和当前环境/租户项；
+        // 具体冲突如何决议由上层服务决定，而不是在仓储层静默覆盖。
         var entities = await Entities
             .AsNoTracking()
             .Where(item =>
@@ -84,6 +88,7 @@ public sealed class EfConfigRepository : IConfigRepository
         string? tenantId = null,
         CancellationToken cancellationToken = default)
     {
+        // 先去重 keys，避免上层批量查询时把重复 key 放大成无意义 SQL 条件。
         var keyList = keys.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var entities = await Entities
@@ -137,6 +142,8 @@ public sealed class EfConfigRepository : IConfigRepository
 
     private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("ConfigItem");
 
+    // 这里仍然使用字典实体而不是强类型 EF 实体，目的是复用平台建模层的统一存储表示，
+    // 避免模块仓储绕开建模约束直接绑定数据库实现细节。
     private static ConfigItem Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         Id = GetString(entity, "Id")!,
@@ -168,6 +175,7 @@ public sealed class EfConfigRepository : IConfigRepository
 
     private static void CopyToEntity(ConfigItem item, IDictionary<string, object?> entity)
     {
+        // 更新时显式回写全部受控字段，保证仓储输出和建模层字段集合保持一致。
         entity["Id"] = item.Id;
         entity["Key"] = item.Key;
         entity["Value"] = item.Value;

@@ -15,6 +15,8 @@ describe('pluginOperationsClient', () => {
   });
 
   it('exposes the API methods expected by the operations center', async () => {
+    // 这个测试先锁住客户端对外暴露的最小 API 面，
+    // 防止页面层还没报错之前，导出名漂移就已经把运维入口悄悄掐断。
     const api = await import('../../../../modules/plugin-ops/src/api/pluginOperationsClient');
     const exports = api as Record<string, unknown>;
 
@@ -28,6 +30,8 @@ describe('pluginOperationsClient', () => {
   });
 
   it('loads module statuses from the host API', async () => {
+    // 列表查询必须走宿主 API 且携带登录态 cookie；
+    // 这是页面能拿到真实运行时状态的基础前提。
     const api = await import('../../../../modules/plugin-ops/src/api/pluginOperationsClient');
     const getModules = (api as Record<string, unknown>).getModules as
       | ((fetcher?: typeof fetch) => Promise<unknown>)
@@ -57,6 +61,8 @@ describe('pluginOperationsClient', () => {
   });
 
   it('posts uploaded packages for verification and keeps validation payloads on bad requests', async () => {
+    // 校验接口即使返回 400，也可能带有结构化校验结果；
+    // 客户端不能一律抛异常，否则页面无法展示“为什么这个包不合法”。
     const api = await import('../../../../modules/plugin-ops/src/api/pluginOperationsClient');
     const verifyUpload = (api as Record<string, unknown>).verifyUpload as
       | ((file: File, fetcher?: typeof fetch) => Promise<unknown>)
@@ -85,6 +91,8 @@ describe('pluginOperationsClient', () => {
   });
 
   it('sends lifecycle operations to the dedicated endpoints', async () => {
+    // 生命周期动作必须各自命中独立端点；
+    // 这个测试保护的是前端路由契约，避免启用/禁用/卸载/回滚串线。
     const api = await import('../../../../modules/plugin-ops/src/api/pluginOperationsClient');
     const installUpload = (api as Record<string, unknown>).installUpload as
       | ((uploadId: string, fetcher?: typeof fetch) => Promise<unknown>)

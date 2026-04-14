@@ -2,6 +2,10 @@ using System.Text.Json;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
+/// <summary>
+/// 统一插件包生命周期操作入口。
+/// 这里负责启用、禁用、卸载、回滚等状态切换规则，避免把切换逻辑分散到元数据或调用方。
+/// </summary>
 public class UnifiedPluginPackageOperations
 {
     private readonly InstalledPluginStateStore _stateStore;
@@ -33,6 +37,7 @@ public class UnifiedPluginPackageOperations
             return UnifiedPluginLifecycleResult.Failed(moduleId, version, dependencyError ?? $"Plugin '{moduleId}' version '{version}' cannot be enabled.");
         }
 
+        // 启用时始终回写为已安装列表中的真实版本字符串，避免大小写差异造成状态漂移。
         record.CurrentEnabledVersion = record.InstalledVersions
             .First(installedVersion => string.Equals(installedVersion, version, StringComparison.OrdinalIgnoreCase));
         record.IsDisabled = false;
@@ -42,6 +47,7 @@ public class UnifiedPluginPackageOperations
             return UnifiedPluginLifecycleResult.Failed(moduleId, version, saveError ?? "Failed to save plugin state.");
         }
 
+        // 启用成功后立即裁剪历史版本，确保“当前启用版本 + 最近保留版本”规则持续生效。
         if (!_stateStore.TryPruneOldVersions(
             record,
             InstalledPluginStateStore.DefaultRetainedVersionCount,
@@ -95,6 +101,7 @@ public class UnifiedPluginPackageOperations
             return UnifiedPluginLifecycleResult.Failed(moduleId, null, $"Plugin '{moduleId}' is enabled and must be disabled before uninstall.");
         }
 
+        // 卸载不会阻断所有依赖场景，但会尽量给出显式警告，避免依赖影响被静默吞掉。
         var warningMessage = BuildUninstallDependencyWarning(moduleId);
 
         if (!_stateStore.TryDeleteModule(moduleId, out var deleteError))
@@ -126,6 +133,8 @@ public class UnifiedPluginPackageOperations
         var currentIndex = record.InstalledVersions.FindIndex(version => string.Equals(version, currentVersion, StringComparison.OrdinalIgnoreCase));
         if (currentIndex <= 0)
         {
+            // 当前列表里没有可直接回退的上一版时，再尝试从归档版本恢复；
+            // 这样“回滚”语义保持稳定，而不是仅依赖内存中的已安装列表。
             if (!TryRestoreRollbackTarget(record, out var rollbackError))
             {
                 return UnifiedPluginLifecycleResult.Failed(moduleId, currentVersion, rollbackError ?? $"Plugin '{moduleId}' has no previous installed version to roll back to.");
@@ -175,6 +184,8 @@ public class UnifiedPluginPackageOperations
             return false;
         }
 
+        // 恢复归档版本后，也要把它重新并回 InstalledVersions，
+        // 否则后续状态机仍然看不到可回滚目标。
         if (!record.InstalledVersions.Contains(previousVersion, StringComparer.OrdinalIgnoreCase))
         {
             record.InstalledVersions.Insert(0, previousVersion);
@@ -201,6 +212,8 @@ public class UnifiedPluginPackageOperations
                 return true;
             }
 
+            // 启用依赖校验区分“未安装”和“已安装但未启用”，
+            // 这样前端和运维可以看到明确的下一步动作，而不是只收到一个泛化失败。
             var installedRecords = _stateStore.LoadAll()
                 .ToDictionary(record => record.ModuleId, StringComparer.OrdinalIgnoreCase);
             var enabledRecords = _stateStore.LoadAllEnabled()

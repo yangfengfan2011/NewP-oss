@@ -1,9 +1,15 @@
 namespace ICP.Platform.Kernel.PluginDiscovery;
 
+/// <summary>
+/// 对扫描成功的插件结果做依赖层面的二次校验。
+/// 这里不负责发现插件本身，只负责把“结构可读”进一步收敛为“依赖上可装配”。
+/// </summary>
 public class PluginDependencyValidator
 {
     public IReadOnlyDictionary<string, PluginScanResult> Validate(IReadOnlyList<PluginScanResult> results)
     {
+        // 只有已经通过基础扫描的结果才进入依赖校验；
+        // 结构错误和依赖错误分层处理，便于调用方保留原始失败信号。
         var successfulResults = results
             .Where(result => result.IsSuccess && result.Manifest is not null)
             .ToDictionary(
@@ -64,6 +70,8 @@ public class PluginDependencyValidator
         stack.Add(moduleId);
 
         var manifest = successfulResults[moduleId].Manifest!;
+        // 只有当前批次里真实存在的依赖才参与环检测；
+        // 缺失依赖留给后面的 unsatisfied 阶段统一处理，避免两类失败信号互相覆盖。
         foreach (var dependencyId in manifest.Dependencies.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!successfulResults.ContainsKey(dependencyId))
@@ -94,6 +102,8 @@ public class PluginDependencyValidator
         cyclePath.Add(moduleId);
         var detailMessage = $"Circular dependency detected: {string.Join(" -> ", cyclePath)}";
 
+        // 环上的每个模块都要显式标记失败，而不是只标记当前回访点；
+        // 否则调用方只能看到“某一环节点坏了”，无法知道整条闭环都不可装配。
         foreach (var cycleModuleId in cyclePath.Take(cyclePath.Count - 1).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (failures.ContainsKey(cycleModuleId))
@@ -126,6 +136,8 @@ public class PluginDependencyValidator
             candidateModuleIds.Remove(excludedModuleId);
         }
 
+        // 缺失依赖要迭代收缩候选集，因为 A 依赖 B、B 又因缺失 C 被淘汰时，
+        // A 也应在下一轮变成 dependency-not-satisfied。
         var changed = true;
         while (changed)
         {

@@ -2,8 +2,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
 
 /**
- * plugin-ops is a host-managed module: it must always be registered,
- * even when loadPluginManifest() returns manifestFound: true.
+ * 这组测试锁定 host-managed 的边界：
+ * 运行时 manifest 可以提供外部插件，但 plugin-ops 和 metadata-config-center
+ * 仍然必须由 Shell 额外完成注册。
  */
 describe('plugin-ops host-managed module registration', () => {
   beforeEach(() => {
@@ -28,7 +29,8 @@ describe('plugin-ops host-managed module registration', () => {
   it('registerShellModules registers plugin-ops when manifest is found and does NOT include plugin-ops', async () => {
     const registered: FrontendModule[] = [];
 
-    // A fake module that the manifest returns (simulating a different runtime plugin)
+    // 这里模拟一个运行时安装插件，用来证明即使 manifest 路径成功，
+    // 宿主管理模块的补注册也必须继续发生。
     const fakeModule: FrontendModule = {
       metadata: { moduleId: 'some-other-plugin', displayName: 'Other', version: '1.0.0' },
       routes: [],
@@ -52,25 +54,26 @@ describe('plugin-ops host-managed module registration', () => {
       },
     }));
 
-    // Import registerShellModules after mocking
+    // mock 之后重新导入，确保 registerShellModules 真正读取到
+    // 这次测试要保护的 manifest loader 和 registry 边界。
     const { registerShellModules } = await import('../registerModules');
     await registerShellModules();
 
-    // The fake module from the manifest should be registered
+    // manifest 提供的模块仍然要走正常注册流程。
     const registeredIds = registered.map((m) => m.metadata.moduleId);
     expect(registeredIds).toContain('some-other-plugin');
 
-    // plugin-ops must also be registered (host-managed guarantee)
+    // host-managed 模块是“额外补齐”，不是替代 manifest 模块。
     expect(registeredIds).toContain('plugin-ops');
     expect(registeredIds).toContain('MetadataConfigCenter');
   });
 
   it('plugin-ops module has metadata.moduleId matching the HOST_MANAGED_MODULE_IDS key', async () => {
-    // Import the actual plugin-ops module
+    // 过滤键和值对象里的 moduleId 必须保持一致，
+    // 否则 host-managed 注册路径会静默失效。
     const mod = await import('../../../../modules/plugin-ops/src/index');
     const pluginOps = mod.default as FrontendModule;
 
-    // The moduleId should be 'plugin-ops' so the host-managed filter works correctly
     expect(pluginOps.metadata.moduleId).toBe('plugin-ops');
   });
 });

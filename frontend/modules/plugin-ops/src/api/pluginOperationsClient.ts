@@ -8,6 +8,8 @@ type Fetcher = typeof fetch;
 
 function buildRequest(init?: RequestInit): RequestInit {
   return {
+    // 插件运维接口默认依赖宿主登录态，不允许因为某个调用方忘记带 cookie
+    // 就让前后端在“未登录”与“没有权限”之间出现歧义。
     credentials: 'include',
     ...init,
   };
@@ -25,6 +27,8 @@ async function ensureOk(response: Response): Promise<Response> {
   let message = `Request failed with status ${response.status}`;
   const contentType = response.headers.get('Content-Type') ?? '';
 
+  // 这里统一把后端 problem/json、普通 JSON 和纯文本错误折叠成一个 Error.message，
+  // 让页面层只处理“用户可见的失败文案”，不用每个动作重复拆响应格式。
   if (contentType.includes('application/json')) {
     const payload = await response.json() as {
       message?: string;
@@ -49,6 +53,8 @@ async function readActionResult(request: Promise<Response>): Promise<PluginOpera
   const response = await request;
   const contentType = response.headers.get('Content-Type') ?? '';
   if (!contentType.includes('application/json')) {
+    // 生命周期动作理论上应该返回统一 JSON 结果；
+    // 如果后端退化成非 JSON，先走 ensureOk 抛出清晰错误，避免前端把异常响应当成功解析。
     await ensureOk(response);
   }
 

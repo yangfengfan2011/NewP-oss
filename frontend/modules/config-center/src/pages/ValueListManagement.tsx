@@ -50,6 +50,7 @@ export default function ValueListManagement() {
   );
 
   useEffect(() => {
+    // 只有具备查看权限时才拉取数据；页面的可见性和数据加载边界都由权限先收口。
     if (canView) {
       void loadItems();
     }
@@ -68,6 +69,7 @@ export default function ValueListManagement() {
       const data = (await response.json()) as ValueListItem[];
       setItems(data);
 
+      // 刷新后如果原选中项已经不存在，立即清空选择，避免编辑/删除继续指向失效实体。
       if (selectedId && !data.some((item) => item.id === selectedId)) {
         setSelectedId(null);
       }
@@ -107,6 +109,8 @@ export default function ValueListManagement() {
   }
 
   async function submitForm() {
+    // 新建和编辑共用同一套表单，但保存前必须先把“必填校验”收口到前端，
+    // 这样后端只需要处理持久化和一致性校验，不必再分散处理明显的空值输入。
     if (!form.code.trim() || !form.name.trim()) {
       setFormError('编码和名称不能为空。');
       return;
@@ -136,6 +140,7 @@ export default function ValueListManagement() {
         throw new Error(problem ?? '值列表保存失败');
       }
 
+      // 保存完成后重新拉取列表，让表格回到权威数据视图，避免保留旧值引发误判。
       await loadItems();
       closeEditor();
     } catch (submitError) {
@@ -155,6 +160,7 @@ export default function ValueListManagement() {
       setError(null);
       setConfirmOpen(false);
 
+      // 删除前先关闭确认弹窗，避免请求进行中继续重复触发删除动作。
       const response = await fetch(`/api/value-lists/${selectedItem.id}`, {
         method: 'DELETE'
       });
@@ -165,6 +171,7 @@ export default function ValueListManagement() {
       }
 
       setSelectedId(null);
+      // 删除成功后先清空本地选中态，再重新加载列表，避免表格仍然指向已删除记录。
       await loadItems();
       closeEditor();
     } catch (deleteError) {

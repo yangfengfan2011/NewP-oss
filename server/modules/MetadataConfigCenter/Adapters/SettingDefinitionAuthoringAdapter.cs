@@ -26,6 +26,8 @@ public class SettingDefinitionAuthoringAdapter
         }
 
         var definitions = new List<SettingDefinition>();
+        // group 作为文件级元数据挂到每条定义上，
+        // 这样后续校验和回写都能基于单条定义工作，而不必反复回看原始 JSON 结构。
         foreach (var item in definitionsElement.EnumerateArray())
         {
             definitions.Add(new SettingDefinition
@@ -49,6 +51,7 @@ public class SettingDefinitionAuthoringAdapter
     public void Validate(IEnumerable<SettingDefinition> definitions)
     {
         var definitionList = definitions.ToList();
+        // key 去重按大小写不敏感处理，避免同一设置项因命名大小写漂移被误认为两个定义。
         var duplicateKey = definitionList
             .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(group => group.Count() > 1);
@@ -80,6 +83,8 @@ public class SettingDefinitionAuthoringAdapter
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            // 单个源文件只允许回写一个 group，确保 authoring 文件可以稳定重建，
+            // 而不是把多个逻辑分组混进同一个 JSON 后再依赖隐式顺序解析。
             if (distinctGroups.Count != 1)
             {
                 throw new InvalidOperationException($"Source file {group.Key} contains multiple groups and cannot be written deterministically.");
@@ -120,6 +125,7 @@ public class SettingDefinitionAuthoringAdapter
             return sourceFile;
         }
 
+        // 缺少源文件名时回退到模块级默认文件名，避免保存阶段生成随机文件路径。
         return $"{moduleId}.settings.json";
     }
 

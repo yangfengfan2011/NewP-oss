@@ -82,6 +82,8 @@ export default function PluginOperationsCenter() {
   }, []);
 
   async function loadModules(): Promise<void> {
+    // 模块状态以后端查询结果为准；每次运维动作后都重新拉取，避免前端本地状态和
+    // 运行时真实状态分叉，尤其是启用、回滚和卸载这种会改变可操作边界的流程。
     setLoading(true);
     try {
       const data = await getModules();
@@ -107,6 +109,8 @@ export default function PluginOperationsCenter() {
       return;
     }
 
+    // 先校验再安装，避免把不可恢复的包直接送入安装链路；
+    // 校验结果也会成为后续“是否允许安装”的用户边界提示。
     setBusyAction('verify');
     try {
       const result = await verifyUpload(selectedFile);
@@ -127,6 +131,8 @@ export default function PluginOperationsCenter() {
     actionKey: string,
     operation: () => Promise<PluginOperationResult>,
   ): Promise<void> {
+    // 同一时间只允许一个生命周期动作生效，防止并发点击把启用、禁用、回滚
+    // 交错执行，导致页面展示的状态和后端实际状态不一致。
     setBusyAction(actionKey);
     try {
       const result = await operation();
@@ -290,6 +296,8 @@ export default function PluginOperationsCenter() {
                           <select
                             value={selectedVersions[module.moduleId] ?? ''}
                             onChange={(event) => {
+                              // 启用目标版本由用户显式选择，不自动回填当前启用版本；
+                              // 这样可以区分“查看当前状态”和“准备执行的下一次切换”。
                               const nextVersion = event.target.value;
                               setSelectedVersions((current) => ({
                                 ...current,

@@ -12,6 +12,8 @@ public class UnifiedPluginPackageScanner
 
     public UnifiedPluginPackageScanResult ScanPackage(string packageRoot)
     {
+        // 扫描阶段只做结构校验和路径收口，不触发任何代码执行。
+        // 目标是尽早拒绝缺失、越界或无法解析的包，避免把坏包带入安装流程。
         if (!Directory.Exists(packageRoot))
         {
             return UnifiedPluginPackageScanResult.Failure(
@@ -46,6 +48,7 @@ public class UnifiedPluginPackageScanner
 
         try
         {
+            // 子清单是包能否安全落地的关键边界；任意一层路径越界或缺失，整个包都应判定为不可安装。
             var backendPath = ResolveContainedFilePath(packageRoot, manifest.Artifacts.Backend, "Artifacts.Backend");
             var frontendPath = ResolveContainedFilePath(packageRoot, manifest.Artifacts.Frontend, "Artifacts.Frontend");
 
@@ -160,6 +163,7 @@ public class UnifiedPluginPackageScanner
             throw new IOException($"Manifest property {propertyName} resolves to an unsafe path.");
         }
 
+        // 所有相对路径都必须留在包根内，确保包可搬移且不会通过 .. 逃逸到外部目录。
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
         if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)

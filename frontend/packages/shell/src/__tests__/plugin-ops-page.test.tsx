@@ -44,6 +44,8 @@ describe('PluginOperationsCenter', () => {
   });
 
   it('loads module statuses, verifies uploads, and refreshes the list after install', async () => {
+    // 这个用例保护的是页面的最小运维闭环：
+    // 初始加载 -> 上传校验 -> 安装 -> 再次拉取权威状态，而不是只验证单个按钮点击。
     const fetchMock = vi.mocked(fetch);
     fetchMock
       .mockResolvedValueOnce(jsonResponse([
@@ -161,6 +163,8 @@ describe('PluginOperationsCenter', () => {
     expect(container.textContent).toContain('1.0.0, 1.1.0');
   });
   it('shows warning tone for success messages and exposes uninstall actions', async () => {
+    // 卸载成功但带依赖警告时，页面必须把结果呈现为 warning，
+    // 否则管理员会把“需要后续处理”的状态误判为普通成功。
     const fetchMock = vi.mocked(fetch);
     fetchMock
       .mockResolvedValueOnce(jsonResponse([

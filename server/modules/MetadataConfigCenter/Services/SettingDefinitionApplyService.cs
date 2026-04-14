@@ -4,6 +4,10 @@ using ICP.Platform.Modules.MetadataConfigCenter.Storage;
 
 namespace ICP.Platform.Modules.MetadataConfigCenter.Services;
 
+/// <summary>
+/// 将 SettingDefinition 的 authoring 真源投影到运行时目录。
+/// Save 只更新可提交源，Apply 才负责切换 runtime 视图，两者故意分离。
+/// </summary>
 public class SettingDefinitionApplyService : ISettingDefinitionApplyService
 {
     private readonly IMetadataManifestService _metadataManifestService;
@@ -38,6 +42,8 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
             throw new InvalidOperationException($"Module {moduleId} does not have an available runtime metadata projection root.");
         }
 
+        // 只有 authoring 与 runtime 投影不一致时才执行替换，
+        // 这样前端的“当前没有待处理变更”状态才能和实际生效结果保持一致。
         var hadPendingApply = !MetadataDirectoriesMatch(sourceDirectory, runtimeDirectory);
         if (hadPendingApply)
         {
@@ -91,6 +97,7 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
             return false;
         }
 
+        // 比较前先统一换行，避免 Windows/Linux 行尾差异导致无意义的“未应用”提示。
         foreach (var fileName in sourceFiles)
         {
             var sourceContent = NormalizeLineEndings(File.ReadAllText(Path.Combine(sourceDirectory, fileName!)));
@@ -117,6 +124,8 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
 
         try
         {
+            // 先构建 staging，再整体替换 runtime 目录；
+            // 如果提交阶段失败，catch 会把 backup 挪回去，避免 runtime 落在半更新状态。
             await ProjectDirectoryAsync(sourceDirectory, stagingDirectory, cancellationToken);
 
             if (runtimeExists)
@@ -139,6 +148,7 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
                 Directory.Delete(runtimeDirectory, recursive: true);
             }
 
+            // 只有原 runtime 存在时才做恢复，避免把一个本不存在的目录错误“回滚”出来。
             if (runtimeExists && Directory.Exists(backupDirectory))
             {
                 Directory.Move(backupDirectory, runtimeDirectory);

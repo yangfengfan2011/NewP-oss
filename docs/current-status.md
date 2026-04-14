@@ -784,3 +784,31 @@ AI-First 对齐：
 - [designs/organization-structure-design.md](designs/organization-structure-design.md)
 - [modules/organization-implementation.md](modules/organization-implementation.md)
 - [verification/organization-module-verification.md](verification/organization-module-verification.md)
+
+### Post-Phase-6：单文件分区模型元数据首轮试点
+
+状态：已启动并形成最小闭环
+
+已落地：
+
+- `server/platform-modeling/metadata/storage-types.json` 已作为平台级 `storage.type` 真源落库
+- `platform-modeling` 已补齐模型元数据最小文档模型、加载器、校验器、投影器与 schema builder 骨架
+- `Entity / Link` 的最小固定字段补入链路已打通
+- `ConfigCenter` 已新增 `ConfigItem.model.json` 与对应 metadata provider，形成真实文件试点
+
+已验证：
+
+- `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter "ConfigCenterModelDefinitionTests|ConfigCenterModelMetadataProviderTests" -nr:false -v minimal`
+
+当前边界：
+
+- 当前实现仍是最小闭环，尚未覆盖完整的 `layout / form / view / dataSource` 输出能力
+- `ConfigItem` 试点文件当前只保留最小字段集合，不代表最终业务模型收口
+- `ValueListItem` 尚未切入同一条元数据链路
+
+对应文档：
+
+- [designs/model-metadata-single-file-partition-design.md](designs/model-metadata-single-file-partition-design.md)
+- [superpowers/plans/2026-04-13-model-metadata-single-file-partition.md](superpowers/plans/2026-04-13-model-metadata-single-file-partition.md)
+- [verification/model-metadata-single-file-partition-verification.md](verification/model-metadata-single-file-partition-verification.md)

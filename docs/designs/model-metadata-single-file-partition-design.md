@@ -217,6 +217,7 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 
 - 输入控件语义
 - 固定显示值语义
+- 使用新平台受控键空间，不直接复用旧平台处理类型命名
 
 字段级 `dataSource` 负责：
 
@@ -384,6 +385,8 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 - 声明级联行为
 - 声明运行时流程
 
+首轮 `linkedTypes` 先只保留 `parent / child` 两个属性，不提前引入 `hidden`、权限控制、查询行为或其他附加静态属性。若后续出现明确场景，再以独立设计增补。
+
 删除时是阻止、级联删除还是执行其他清理动作，仍应由代码内核决定。
 
 ### 7.9 索引与唯一性
@@ -420,6 +423,27 @@ server/modules/<ModuleId>/metadata/models/<ModelName>.model.json
 - 优先 `ENAME`
 - 再回退 `ECODE`
 - 再回退主键标识（`EID` 或 `LID`）
+
+`uiType` 首轮建议允许值：
+
+- `text`
+- `textarea`
+- `number`
+- `switch`
+- `date`
+- `datetime`
+- `json`
+- `enum`
+- `reference`
+- `readonly`
+
+其中：
+
+- `reference` 首轮只支持单选
+- 多对象关系优先通过 `Link` 模型表达，而不是通过字段级多选引用承载
+- 旧平台处理类型仅作为迁移参考映射来源，不作为新平台元数据真源
+
+首轮不将 `reference` 继续拆分为树形选择、用户选择、角色选择、组织选择等专用子类型，但平台明确预期后续会出现这类可复用选择器能力。后续只有在这些能力形成跨模块稳定复用后，才作为受控 `uiType` 子类型进入平台键空间，而不是继续通过页面私有逻辑或膨胀 `dataSource` 承载。
 
 多语言是平台级基础能力，应贯穿模型 authoring、schema 生成和前后端展示。模型元数据不直接内嵌多语言文本，而应通过稳定 key 规则映射到现有多语言元数据文件。
 
@@ -508,6 +532,28 @@ server/platform-modeling/metadata/storage-types.json
 - provider 节点负责提供数据库默认存储类型与默认约束值
 - 字段自身声明的 `maxLength / precision / scale` 优先级高于 provider 默认值
 
+`storage.type` 首轮建议平台枚举：
+
+- `string`
+- `text`
+- `int`
+- `long`
+- `decimal`
+- `bool`
+- `date`
+- `datetime`
+- `guid`
+- `json`
+
+其中 `datetime` 与 `date` 是平台语义类型，底层可以统一映射为 ticks 存储策略；模型元数据保留其时间语义，不直接退化为普通 `long`。
+
+首轮不额外区分 `SqlServer / Oracle / MySql` 的日期精度或格式约束，统一由平台规定 ticks 语义：
+
+- `datetime`：统一使用平台约定的 ticks 语义
+- `date`：统一存储为当日零点对应的 ticks
+
+三种 provider 只负责将 ticks 落到各自的大整数存储类型，不承担额外日期格式解释。
+
 该文件的职责是“平台类型到建模与存储默认值的映射”，不是旧平台 `DataTypes.datatype` 的直接平移。旧平台文件可作为参考来源，但新平台不再采用把长度或精度固化在类型名中的做法，例如不再使用 `STRING200`、`FLOAT10_5` 这类命名作为模型元数据真源。
 
 ## 8. 核心流程
@@ -536,10 +582,11 @@ server/platform-modeling/metadata/storage-types.json
 
 ### 8.4 主流程：UI schema 消费
 
-1. 前端或 authoring 服务读取同一份文件
-2. 提取字段级 `uiType`、`dataSource`、`layout`、`form / view` 分区与 section
-3. 结合多语言 key 生成新建/编辑 schema 与详情 schema
-4. 列表列仍由独立 `.view` 元数据决定，不反向影响数据库结构
+1. 后端读取并解析 `*.model.json`
+2. 后端补全固定字段、`builtinFields`、默认 `uiType`、多语言 key 与类型映射结果
+3. 后端输出受控 schema API
+4. 前端或 authoring 服务消费后端 schema API 生成新建/编辑 schema 与详情 schema
+5. 列表列仍由独立 `.view` 元数据决定，不反向影响数据库结构
 
 ### 8.5 异常流程
 
@@ -575,7 +622,7 @@ server/platform-modeling/metadata/storage-types.json
 - `form.edit`
 - `view.visible`
 
-前端必须通过受控 schema 消费，不得直接用该文件承载页面脚本。
+业务前端必须通过后端受控 schema API 消费，不得直接将 `*.model.json` 作为运行时契约，也不得直接用该文件承载页面脚本。authoring 或调试工具如需查看原始元数据，应通过受控读取或预览接口完成。
 
 ### 9.3 与现有 C# 定义的关系
 
@@ -655,12 +702,9 @@ server/platform-modeling/metadata/storage-types.json
 - 生成的 migration 摘要
 - 回滚验证结果
 
-## 13. 未决问题
+## 13. 后续扩展方向
 
-- `storage-types.json` 中首轮平台类型枚举的最终集合应收敛为哪些值
-- `Link` 的 `linkedTypes` 在后续是否需要扩展更多静态属性，例如是否允许隐藏某些组合
-- `form/view/uiType/dataSource` 是否直接由前端读取文件，还是先统一经过后端 schema API 暴露
-- `uiType` 的稳定键空间是否完全复用旧平台处理类型命名，还是定义新平台受控映射表
+- `reference` 在后续阶段可按平台级稳定能力扩展为受控子类型，例如组织树选择器、用户选择器、角色选择器、组选择器，但不属于首轮契约
 
 ## 14. 实施拆分建议
 

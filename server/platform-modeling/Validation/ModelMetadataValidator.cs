@@ -4,6 +4,15 @@ namespace ICP.Platform.Modeling.Validation;
 
 public sealed class ModelMetadataValidator
 {
+    private static readonly HashSet<string> EntityKernelFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "EID",
+        "CreatedBy",
+        "CreatedAt",
+        "UpdatedBy",
+        "UpdatedAt"
+    };
+
     // 可选固定字段必须按模型类型分组使用，不能跨 kind 混用。
     private static readonly HashSet<string> EntityBuiltinFields = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -14,6 +23,17 @@ public sealed class ModelMetadataValidator
     private static readonly HashSet<string> LinkBuiltinFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "LSequence"
+    };
+
+    private static readonly HashSet<string> LinkKernelFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LID",
+        "PEID",
+        "CEID",
+        "LCreatedBy",
+        "LCreatedAt",
+        "LUpdatedBy",
+        "LUpdatedAt"
     };
 
     public void Validate(ModelMetadataDocument document)
@@ -61,6 +81,9 @@ public sealed class ModelMetadataValidator
             throw new InvalidOperationException($"Link model '{document.Model.Name}' must define linkedTypes.");
         }
 
+        ValidateFieldContracts(document, allowedBuiltinFields);
+        ValidateIndexContracts(document);
+
         if (typeMap is null)
         {
             return;
@@ -81,5 +104,79 @@ public sealed class ModelMetadataValidator
                     $"Field '{field.Name}' references unknown storage.type '{storage.Type}'.");
             }
         }
+    }
+
+    // 字段名、内建字段覆写和索引引用都属于 authoring 契约约束，必须先在 validator 阶段拦住。
+    private static void ValidateFieldContracts(
+        ModelMetadataDocument document,
+        HashSet<string> allowedBuiltinFields)
+    {
+        var seenFieldNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in document.Model.Fields)
+        {
+            if (!seenFieldNames.Add(field.Name))
+            {
+                throw new InvalidOperationException(
+                    $"Model '{document.Model.Name}' contains duplicate field '{field.Name}'.");
+            }
+
+            if (field.Storage is not null && IsKernelManagedField(document.Model.Kind, field.Name, allowedBuiltinFields))
+            {
+                throw new InvalidOperationException(
+                    $"Field '{field.Name}' is kernel-managed and must not redefine storage.");
+            }
+        }
+    }
+
+    private static void ValidateIndexContracts(ModelMetadataDocument document)
+    {
+        var availableFields = CollectAvailableFieldNames(document);
+        foreach (var index in document.Model.Indexes)
+        {
+            foreach (var fieldName in index.Fields)
+            {
+                if (!availableFields.Contains(fieldName))
+                {
+                    throw new InvalidOperationException(
+                        $"Index '{index.Name}' references unknown field '{fieldName}'.");
+                }
+            }
+        }
+    }
+
+    private static HashSet<string> CollectAvailableFieldNames(ModelMetadataDocument document)
+    {
+        var availableFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var field in document.Model.Fields)
+        {
+            availableFields.Add(field.Name);
+        }
+
+        if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
+        {
+            availableFields.UnionWith(EntityKernelFields);
+            availableFields.UnionWith(document.Model.BuiltinFields.Where(EntityBuiltinFields.Contains));
+        }
+        else
+        {
+            availableFields.UnionWith(LinkKernelFields);
+            availableFields.UnionWith(document.Model.BuiltinFields.Where(LinkBuiltinFields.Contains));
+        }
+
+        return availableFields;
+    }
+
+    private static bool IsKernelManagedField(
+        string modelKind,
+        string fieldName,
+        HashSet<string> allowedBuiltinFields)
+    {
+        if (string.Equals(modelKind, "Entity", StringComparison.OrdinalIgnoreCase))
+        {
+            return EntityKernelFields.Contains(fieldName) || allowedBuiltinFields.Contains(fieldName);
+        }
+
+        return LinkKernelFields.Contains(fieldName) || allowedBuiltinFields.Contains(fieldName);
     }
 }

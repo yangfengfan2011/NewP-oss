@@ -183,4 +183,121 @@ public class ModelMetadataProjectorTests
         Assert.Contains(definition.Indexes, static x => x is { Name: "UX_ConfigItem_EID", IsUnique: true });
         Assert.Contains(definition.Indexes, static x => x is { Name: "UX_ConfigItem_Code", IsUnique: true });
     }
+
+    [Fact]
+    public void Project_AddsEntityFixedFieldsAndSkipsBuiltinFieldAuthoringEntry()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "ConfigCenter",
+            Model = new ModelMetadataModel
+            {
+                Name = "ConfigItem",
+                Kind = "Entity",
+                BuiltinFields = ["ENAME", "ECODE"],
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "ENAME",
+                        UiType = "text"
+                    },
+                    new ModelMetadataField
+                    {
+                        Name = "IsEnabled",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "bool"
+                        }
+                    },
+                    new ModelMetadataField
+                    {
+                        Name = "Payload",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "json",
+                            Nullable = true
+                        }
+                    },
+                    new ModelMetadataField
+                    {
+                        Name = "PublishedAt",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "datetime",
+                            Nullable = true
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        Assert.Contains(definition.Fields, static x => x is { Name: "EID", IsPrimaryKey: true, ValueType: FieldValueType.ObjectId });
+        Assert.Contains(definition.Fields, static x => x is { Name: "CreatedBy", Kind: FieldKind.Audit, ValueType: FieldValueType.User, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "CreatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.DateTime, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "UpdatedBy", Kind: FieldKind.Audit, ValueType: FieldValueType.User, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "UpdatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.DateTime, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "ENAME", ValueType: FieldValueType.Text });
+        Assert.Contains(definition.Fields, static x => x is { Name: "ECODE", ValueType: FieldValueType.Text });
+        Assert.Equal(1, definition.Fields.Count(static x => x.Name == "ENAME"));
+        Assert.Contains(definition.Fields, static x => x is { Name: "IsEnabled", ValueType: FieldValueType.Boolean });
+        Assert.Contains(definition.Fields, static x => x is { Name: "Payload", ValueType: FieldValueType.Description });
+        Assert.Contains(definition.Fields, static x => x is { Name: "PublishedAt", ValueType: FieldValueType.DateTime });
+    }
+
+    [Fact]
+    public void Project_AddsLinkFixedFieldsAndOptionalBuiltinFields()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Organization",
+            Model = new ModelMetadataModel
+            {
+                Name = "Organize",
+                Kind = "Link",
+                BuiltinFields = ["LSequence"],
+                LinkedTypes =
+                [
+                    new ModelMetadataLinkedType
+                    {
+                        Parent = "Organization",
+                        Child = "Company"
+                    }
+                ],
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "LSequence",
+                        UiType = "text"
+                    },
+                    new ModelMetadataField
+                    {
+                        Name = "LinkToken",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "guid"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        Assert.Contains(definition.Fields, static x => x is { Name: "LID", IsPrimaryKey: true, ValueType: FieldValueType.ObjectId });
+        Assert.Contains(definition.Fields, static x => x is { Name: "PEID", Kind: FieldKind.Reference, ValueType: FieldValueType.ObjectId });
+        Assert.Contains(definition.Fields, static x => x is { Name: "CEID", Kind: FieldKind.Reference, ValueType: FieldValueType.ObjectId });
+        Assert.Contains(definition.Fields, static x => x is { Name: "LCreatedBy", Kind: FieldKind.Audit, ValueType: FieldValueType.User, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "LCreatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.DateTime, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "LUpdatedBy", Kind: FieldKind.Audit, ValueType: FieldValueType.User, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "LUpdatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.DateTime, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x.Name == "LSequence");
+        Assert.Equal(1, definition.Fields.Count(static x => x.Name == "LSequence"));
+        Assert.Contains(definition.Fields, static x => x is { Name: "LinkToken", ValueType: FieldValueType.ObjectId });
+    }
 }

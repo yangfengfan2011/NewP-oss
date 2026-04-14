@@ -13,7 +13,36 @@ public sealed class ModelSchemaBuilder
         {
             Name = field.Name,
             UiType = string.IsNullOrWhiteSpace(field.UiType) ? "readonly" : field.UiType,
-            LabelKey = $"Model.{document.Model.Name}.Field.{field.Name}"
+            LabelKey = $"Model.{document.Model.Name}.Field.{field.Name}",
+            Layout = field.Layout is null
+                ? null
+                : new ModelSchemaLayoutDescriptor
+                {
+                    Position = field.Layout.Position,
+                    Width = field.Layout.Width,
+                    Section = field.Layout.Section
+                },
+            Form = field.Form is null
+                ? null
+                : new ModelSchemaFormDescriptor
+                {
+                    CreateMode = field.Form.Create?.Mode,
+                    EditMode = field.Form.Edit?.Mode
+                },
+            View = field.View is null
+                ? null
+                : new ModelSchemaViewDescriptor
+                {
+                    Visible = field.View.Visible
+                },
+            DataSource = field.DataSource is null
+                ? null
+                : new ModelSchemaDataSourceDescriptor
+                {
+                    Type = field.DataSource.Type,
+                    Enum = field.DataSource.Enum,
+                    Model = field.DataSource.Model
+                }
         }).ToList();
 
         return new ModelSchemaDescriptor

@@ -88,4 +88,118 @@ public class ModelMetadataValidatorTests
 
         Assert.Contains("linkedTypes", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Validate_ThrowsWhenFieldNamesDuplicate()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "ConfigCenter",
+            Model = new ModelMetadataModel
+            {
+                Name = "ConfigItem",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "Value",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "text"
+                        }
+                    },
+                    new ModelMetadataField
+                    {
+                        Name = "value",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "string"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var validator = new ModelMetadataValidator();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => validator.Validate(document));
+
+        Assert.Contains("duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_ThrowsWhenIndexReferencesUnknownField()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "ConfigCenter",
+            Model = new ModelMetadataModel
+            {
+                Name = "ConfigItem",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "Value",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "text"
+                        }
+                    }
+                ],
+                Indexes =
+                [
+                    new ModelMetadataIndex
+                    {
+                        Name = "UX_ConfigItem_Code",
+                        Fields = ["Code"],
+                        Unique = true
+                    }
+                ]
+            }
+        };
+
+        var validator = new ModelMetadataValidator();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => validator.Validate(document));
+
+        Assert.Contains("index", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_ThrowsWhenBuiltinFieldDefinesStorage()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "ConfigCenter",
+            Model = new ModelMetadataModel
+            {
+                Name = "ConfigItem",
+                Kind = "Entity",
+                BuiltinFields = ["ENAME"],
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "ENAME",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "string"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var validator = new ModelMetadataValidator();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => validator.Validate(document));
+
+        Assert.Contains("storage", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

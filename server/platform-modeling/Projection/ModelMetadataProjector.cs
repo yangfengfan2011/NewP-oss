@@ -5,6 +5,29 @@ namespace ICP.Platform.Modeling.Projection;
 
 public sealed class ModelMetadataProjector
 {
+    private static readonly HashSet<string> EntityFixedFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "EID",
+        "CreatedBy",
+        "CreatedAt",
+        "UpdatedBy",
+        "UpdatedAt",
+        "ENAME",
+        "ECODE"
+    };
+
+    private static readonly HashSet<string> LinkFixedFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LID",
+        "PEID",
+        "CEID",
+        "LCreatedBy",
+        "LCreatedAt",
+        "LUpdatedBy",
+        "LUpdatedAt",
+        "LSequence"
+    };
+
     public ModelDefinition Project(ModelMetadataDocument document)
     {
         return Project(document, null, null);
@@ -21,25 +44,27 @@ public sealed class ModelMetadataProjector
 
         if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
         {
-            // Entity 固定字段由内核补入，不要求每个模型文件重复声明。
-            fields.Add(new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
-
-            if (document.Model.BuiltinFields.Contains("ENAME", StringComparer.OrdinalIgnoreCase))
-            {
-                fields.Add(new FieldDefinition("ENAME", "ENAME", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false));
-            }
+            AddEntityFixedFields(fields, document.Model.BuiltinFields);
         }
         else if (string.Equals(document.Model.Kind, "Link", StringComparison.OrdinalIgnoreCase))
         {
-            // Link 固定字段定义关系对象自身标识以及两端端点。
-            fields.Add(new FieldDefinition("LID", "LID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
-            fields.Add(new FieldDefinition("PEID", "PEID", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false));
-            fields.Add(new FieldDefinition("CEID", "CEID", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false));
+            AddLinkFixedFields(fields, document.Model.BuiltinFields);
         }
 
         foreach (var field in document.Model.Fields)
         {
-            var storage = field.Storage ?? throw new InvalidOperationException($"Field '{field.Name}' must define storage.");
+            if (field.Storage is null)
+            {
+                if (IsProjectedByKernel(document.Model.Kind, field.Name))
+                {
+                    // 固定字段允许只在 authoring 中补 UI/schema 信息，不要求重复声明 storage。
+                    continue;
+                }
+
+                throw new InvalidOperationException($"Field '{field.Name}' must define storage.");
+            }
+
+            var storage = field.Storage;
             fields.Add(ProjectField(field.Name, storage, typeMap, provider));
         }
 
@@ -59,13 +84,7 @@ public sealed class ModelMetadataProjector
         StorageTypeMapDocument? typeMap,
         string? provider)
     {
-        // 首轮 projector 先保持显式映射，后续再扩展更多 storage.type。
-        var valueType = storage.Type.ToLowerInvariant() switch
-        {
-            "string" => FieldValueType.Text,
-            "text" => FieldValueType.Description,
-            _ => FieldValueType.Text
-        };
+        var valueType = MapValueType(storage.Type);
 
         var storeType = storage.Type;
         if (typeMap is not null && provider is not null)
@@ -87,6 +106,65 @@ public sealed class ModelMetadataProjector
             !storage.Nullable,
             false,
             false);
+    }
+
+    private static bool IsProjectedByKernel(string modelKind, string fieldName)
+    {
+        return string.Equals(modelKind, "Entity", StringComparison.OrdinalIgnoreCase)
+            ? EntityFixedFields.Contains(fieldName)
+            : LinkFixedFields.Contains(fieldName);
+    }
+
+    // 固定字段的存储定义收口在 projector，避免模块元数据重复声明这些内建事实。
+    private static void AddEntityFixedFields(List<FieldDefinition> fields, IReadOnlyCollection<string> builtinFields)
+    {
+        fields.Add(new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
+        fields.Add(new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
+        fields.Add(new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true));
+
+        if (builtinFields.Contains("ENAME", StringComparer.OrdinalIgnoreCase))
+        {
+            fields.Add(new FieldDefinition("ENAME", "ENAME", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false));
+        }
+
+        if (builtinFields.Contains("ECODE", StringComparer.OrdinalIgnoreCase))
+        {
+            fields.Add(new FieldDefinition("ECODE", "ECODE", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false));
+        }
+    }
+
+    // Link 固定字段不仅包含两端引用，也包含关系对象自身的审计字段。
+    private static void AddLinkFixedFields(List<FieldDefinition> fields, IReadOnlyCollection<string> builtinFields)
+    {
+        fields.Add(new FieldDefinition("LID", "LID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
+        fields.Add(new FieldDefinition("PEID", "PEID", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false));
+        fields.Add(new FieldDefinition("CEID", "CEID", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false));
+        fields.Add(new FieldDefinition("LCreatedBy", "LCreatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("LCreatedAt", "LCreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
+        fields.Add(new FieldDefinition("LUpdatedBy", "LUpdatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("LUpdatedAt", "LUpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true));
+
+        if (builtinFields.Contains("LSequence", StringComparer.OrdinalIgnoreCase))
+        {
+            fields.Add(new FieldDefinition("LSequence", "LSequence", FieldKind.Scalar, FieldValueType.Text, "string", false, false, false));
+        }
+    }
+
+    private static FieldValueType MapValueType(string storageType)
+    {
+        return storageType.ToLowerInvariant() switch
+        {
+            "string" => FieldValueType.Text,
+            "text" => FieldValueType.Description,
+            "json" => FieldValueType.Description,
+            "bool" => FieldValueType.Boolean,
+            "date" => FieldValueType.DateTime,
+            "datetime" => FieldValueType.DateTime,
+            "guid" => FieldValueType.ObjectId,
+            _ => FieldValueType.Text
+        };
     }
 
     private static IReadOnlyList<IndexDefinition> BuildIndexes(ModelMetadataDocument document)

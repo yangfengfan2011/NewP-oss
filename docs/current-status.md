@@ -364,6 +364,45 @@ AI-First 对齐：
 - [designs/configcenter-design.md](designs/configcenter-design.md)
 - [verification/metadata-config-center-foundation-verification.md](verification/metadata-config-center-foundation-verification.md)
 
+### Post-Phase-6：单文件分区模型元数据首轮试点
+
+状态：已启动，当前处于“模型元数据暂存”最小链路阶段
+
+已落地：
+
+- `server/platform-modeling` 已具备模型元数据最小文档模型、JSON 加载器、类型映射加载器、最小 validator、最小 projector 与最小 schema builder
+- 平台级 `storage-types.json` 已落地
+- `ConfigCenter` 已新增试点文件 `server/modules/ConfigCenter/metadata/models/ConfigItem.model.json`
+- `ConfigCenterModelMetadataProvider` 已能完成“文件读取 -> 类型映射读取 -> 最小校验 -> 最小投影”
+- 第一轮增量已补上：
+  - projector 的固定字段、optional builtin 字段与最小 `storage.type` 映射
+  - validator 的重复字段、索引引用与 kernel-managed `storage` 覆写校验
+  - schema builder 的字段级 `layout / form / view / dataSource` 输出
+- 已重新执行 `tests/Modeling.Tests` 与 `tests/ConfigCenter.Tests` 定向测试并通过
+
+当前口径：
+
+- 当前实现以已合并的“模型元数据暂存”代码为准，不回到已回滚实现
+- 当前 authoring 契约已收敛为 `name / kind / builtinFields / fields.storage.type+nullable / linkedTypes / indexes / layout / form / view`
+- `storage` 仍是唯一允许进入数据库投影的分区
+- `layout / form / view / uiType / dataSource` 当前已形成最小字段级 schema 输出
+
+当前边界：
+
+- projector 还没有补齐更完整的 `storage.type` 语义映射，尤其是 `int / long / decimal`
+- validator 还没有补 section、`position` 与 `dataSource.type` 等更完整核心契约校验
+- schema builder 还没有补固定字段自动展开、section 列表与更完整默认值策略
+- `ConfigCenterModelDefinitions.ConfigItem` 已通过 metadata provider 暴露；当前仍只有 `ValueListItem` 保留手写定义
+- 当前 `ConfigItem` 试点元数据仍只覆盖 `EID / ENAME / Value`，与现有 `EfConfigRepository` 使用的 `Id / Key / Type / ModuleId / DisplayName / ...` 契约尚未对齐
+- `ValueListItem` 仍未接入同一条模型元数据链路
+- 本轮未包含 migration 生成、EF Core 差异比对或前端模块级真实接入验证
+
+对应文档：
+
+- [designs/model-metadata-single-file-partition-design.md](designs/model-metadata-single-file-partition-design.md)
+- [superpowers/plans/2026-04-13-model-metadata-single-file-partition.md](superpowers/plans/2026-04-13-model-metadata-single-file-partition.md)
+- [verification/model-metadata-single-file-partition-verification.md](verification/model-metadata-single-file-partition-verification.md)
+
 ## 当前可用能力
 
 ### 后端
@@ -785,27 +824,10 @@ AI-First 对齐：
 - [modules/organization-implementation.md](modules/organization-implementation.md)
 - [verification/organization-module-verification.md](verification/organization-module-verification.md)
 
-### Post-Phase-6：单文件分区模型元数据首轮试点
-
-状态：已启动并形成最小闭环
-
-已落地：
-
-- `server/platform-modeling/metadata/storage-types.json` 已作为平台级 `storage.type` 真源落库
-- `platform-modeling` 已补齐模型元数据最小文档模型、加载器、校验器、投影器与 schema builder 骨架
-- `Entity / Link` 的最小固定字段补入链路已打通
-- `ConfigCenter` 已新增 `ConfigItem.model.json` 与对应 metadata provider，形成真实文件试点
-
 已验证：
 
 - `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj -nr:false -v minimal`
 - `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter "ConfigCenterModelDefinitionTests|ConfigCenterModelMetadataProviderTests" -nr:false -v minimal`
-
-当前边界：
-
-- 当前实现仍是最小闭环，尚未覆盖完整的 `layout / form / view / dataSource` 输出能力
-- `ConfigItem` 试点文件当前只保留最小字段集合，不代表最终业务模型收口
-- `ValueListItem` 尚未切入同一条元数据链路
 
 对应文档：
 

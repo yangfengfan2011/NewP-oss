@@ -16,4 +16,42 @@ public sealed class ModelSchemaFieldDescriptor
     public string UiType { get; init; } = string.Empty;
 
     public string LabelKey { get; init; } = string.Empty;
+
+    public ModelSchemaLayoutDescriptor? Layout { get; init; }
+
+    public ModelSchemaFormDescriptor? Form { get; init; }
+
+    public ModelSchemaViewDescriptor? View { get; init; }
+
+    public ModelSchemaDataSourceDescriptor? DataSource { get; init; }
+}
+
+public sealed class ModelSchemaLayoutDescriptor
+{
+    public string Position { get; init; } = string.Empty;
+
+    public int Width { get; init; }
+
+    public string? Section { get; init; }
+}
+
+public sealed class ModelSchemaFormDescriptor
+{
+    public string? CreateMode { get; init; }
+
+    public string? EditMode { get; init; }
+}
+
+public sealed class ModelSchemaViewDescriptor
+{
+    public bool Visible { get; init; }
+}
+
+public sealed class ModelSchemaDataSourceDescriptor
+{
+    public string Type { get; init; } = string.Empty;
+
+    public string? Enum { get; init; }
+
+    public string? Model { get; init; }
 }

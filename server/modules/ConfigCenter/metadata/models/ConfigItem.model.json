@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "ConfigCenter",
+  "model": {
+    "name": "ConfigItem",
+    "kind": "Entity",
+    "builtinFields": ["ENAME"],
+    "fields": [
+      {
+        "name": "Value",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      }
+    ]
+  }
+}

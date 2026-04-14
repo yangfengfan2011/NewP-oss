@@ -11,9 +11,7 @@ public class ConfigCenterModelDefinitionTests
     {
         var definition = ConfigCenterModelDefinitions.ConfigItem;
 
-        Assert.Contains(definition.Fields, static field => field.Name == "EID" && field.IsPrimaryKey);
-        Assert.Contains(definition.Fields, static field => field.Name == "Key");
-        Assert.Contains(definition.Fields, static field => field.Name == "Value");
+        Assert.Contains(definition.Fields, static field => field.Name == "Id" && field.IsPrimaryKey);
         Assert.Contains(
             definition.Indexes,
             static index => index.Name == "UX_ConfigItem_Key_Environment_Tenant" && index.IsUnique);

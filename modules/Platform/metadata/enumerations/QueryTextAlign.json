@@ -1,0 +1,17 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "QueryTextAlign":  {
+                           "items":  [
+                                         {
+                                             "name":  "Left"
+                                         },
+                                         {
+                                             "name":  "Right"
+                                         },
+                                         {
+                                             "name":  "Center"
+                                         }
+                                     ]
+                       }
+}

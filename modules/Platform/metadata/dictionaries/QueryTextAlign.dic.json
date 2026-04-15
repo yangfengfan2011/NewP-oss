@@ -1,0 +1,18 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "QueryTextAlign":  {
+                           "QueryTextAlign.Right":  {
+                                                        "zhs":  "右对齐",
+                                                        "en":  "Align Right"
+                                                    },
+                           "QueryTextAlign.Center":  {
+                                                         "zhs":  "居中",
+                                                         "en":  "Center"
+                                                     },
+                           "QueryTextAlign.Left":  {
+                                                       "zhs":  "左对齐",
+                                                       "en":  "Align Left"
+                                                   }
+                       }
+}

@@ -1,5 +1,0 @@
-{
-  "ObjectPermissionMode.SetActorByWorkflow": "流程中设置执行人权限",
-  "ObjectPermissionMode.SetAgentByWorkflow": "流程中设置代理人权限",
-  "ObjectPermissionMode.Manual": "手动设置"
-}

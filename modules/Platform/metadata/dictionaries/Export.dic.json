@@ -1,0 +1,10 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "Export":  {
+                   "Export.NoExportDataContent":  {
+                                                      "zhs":  "无导出数据。",
+                                                      "en":  "No export data."
+                                                  }
+               }
+}

@@ -46,6 +46,16 @@ public class ModuleMetadataStore
         return Path.Combine(effectiveRoot, "modules", moduleId, "metadata", sourcePath);
     }
 
+    public string ResolvePlatformMetadataFilePath(string fileName)
+    {
+        return Path.Combine(_repositoryRoot, "server", "platform", "metadata", fileName);
+    }
+
+    public string ResolvePlatformMetadataDirectory()
+    {
+        return Path.Combine(_repositoryRoot, "server", "platform", "metadata");
+    }
+
     public string ResolveAuthoringMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
     {
         return Path.Combine(ResolveAuthoringMetadataDirectory(moduleId, sourcePath), sourceFile);

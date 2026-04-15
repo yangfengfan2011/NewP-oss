@@ -1,0 +1,210 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "Common":  {
+                   "Common.Add":  {
+                                      "zhs":  "添加",
+                                      "en":  "Add"
+                                  },
+                   "Common.Upload":  {
+                                         "zhs":  "上传",
+                                         "en":  "Upload"
+                                     },
+                   "Common.Test":  {
+                                       "zhs":  "测试",
+                                       "en":  "Test"
+                                   },
+                   "Common.Exit":  {
+                                       "zhs":  "退出",
+                                       "en":  "Exit"
+                                   },
+                   "Common.Ellipsis":  {
+                                           "zhs":  "...",
+                                           "en":  "..."
+                                       },
+                   "Common.Modify":  {
+                                         "zhs":  "修改",
+                                         "en":  "Modify "
+                                     },
+                   "Common.Query":  {
+                                        "zhs":  "查询",
+                                        "en":  "Query"
+                                    },
+                   "Common.Days":  {
+                                       "zhs":  "天",
+                                       "en":  "Days"
+                                   },
+                   "Common.Delete":  {
+                                         "zhs":  "删除",
+                                         "en":  "Delete"
+                                     },
+                   "Common.Copy":  {
+                                       "zhs":  "复制",
+                                       "en":  "Copy"
+                                   },
+                   "Common.Finish":  {
+                                         "zhs":  "完成",
+                                         "en":  "Complete"
+                                     },
+                   "Common.Empty":  {
+                                        "zhs":  "空",
+                                        "en":  "Empty"
+                                    },
+                   "Common.Edit":  {
+                                       "zhs":  "编辑",
+                                       "en":  "Edit"
+                                   },
+                   "Common.Create":  {
+                                         "zhs":  "新建",
+                                         "en":  "New"
+                                     },
+                   "Common.Caption":  {
+                                          "zhs":  "说明",
+                                          "en":  "Description"
+                                      },
+                   "Common.Yes":  {
+                                      "zhs":  "是",
+                                      "en":  "Yes"
+                                  },
+                   "Common.FrequentClickTip":  {
+                                                   "zhs":  "操作频繁，请稍后再试!",
+                                                   "en":  "Frequent operation, please try again later!"
+                                               },
+                   "Common.CopyAndAdd":  {
+                                             "zhs":  "复制新增",
+                                             "en":  "Copy and add"
+                                         },
+                   "Common.NextStep":  {
+                                           "zhs":  "下一步",
+                                           "en":  "Next step"
+                                       },
+                   "Common.View":  {
+                                       "zhs":  "浏览",
+                                       "en":  "Browse"
+                                   },
+                   "Common.PreviousStep":  {
+                                               "zhs":  "上一步",
+                                               "en":  "Last step"
+                                           },
+                   "Common.ComponentPathSelect":  {
+                                                      "zhs":  "组件路径选择",
+                                                      "en":  "Component Path Select"
+                                                  },
+                   "Common.SaveSuccess":  {
+                                              "zhs":  "保存成功",
+                                              "en":  "SaveSuccess"
+                                          },
+                   "Common.Separator":  {
+                                            "zhs":  "、",
+                                            "en":  "; "
+                                        },
+                   "Common.All":  {
+                                      "zhs":  "全部",
+                                      "en":  "All"
+                                  },
+                   "Common.AddAll":  {
+                                         "zhs":  "添加全部",
+                                         "en":  "Add all"
+                                     },
+                   "Common.Cut":  {
+                                      "zhs":  "剪切",
+                                      "en":  "Cut"
+                                  },
+                   "Common.AddressAndPhone":  {
+                                                  "zhs":  "公司地址：山东省济南市高新区新泺大街2117号铭盛大厦15层  联系电话：0531-88879070",
+                                                  "en":  "Company address: the 15th Floor, Mingsheng Building, No. 2117 Xintong Street, Hi-tech Zone, Jinan City, Shandong Province Tel: 0531-88879070."
+                                              },
+                   "Common.Cancel":  {
+                                         "zhs":  "取消",
+                                         "en":  "Cancel"
+                                     },
+                   "Common.Remove":  {
+                                         "zhs":  "移除",
+                                         "en":  "Remove"
+                                     },
+                   "Common.ObjectNotExist":  {
+                                                 "zhs":  "此对象不存在，可能已经被删除，请尝试刷新或关闭当前页!",
+                                                 "en":  "This object does not exist and may have been deleted. Please try refreshing or closing the current page!"
+                                             },
+                   "Common.Copyright":  {
+                                            "zhs":  "版权所有\u0026nbsp;©\u0026nbsp;2012-2024\u0026nbsp;\u0026nbsp;华天软件\u0026nbsp;\u0026nbsp;保留所有权利",
+                                            "en":  "Copyright\u0026nbsp; ©\u0026nbsp; 2012-2024\u0026nbsp; \u0026nbsp; Huatian software\u0026nbsp; \u0026nbsp; All rights reserved."
+                                        },
+                   "Common.Close":  {
+                                        "zhs":  "关闭",
+                                        "en":  "Shut down"
+                                    },
+                   "Common.OtherGroup":  {
+                                             "zhs":  "其它分组",
+                                             "en":  "Other groups"
+                                         },
+                   "Common.Paste":  {
+                                        "zhs":  "粘贴",
+                                        "en":  "Paste"
+                                    },
+                   "Common.ObjectPermission":  {
+                                                   "zhs":  "对象授权",
+                                                   "en":  "Object authorization"
+                                               },
+                   "Common.Refresh":  {
+                                          "zhs":  "刷新",
+                                          "en":  "Refresh"
+                                      },
+                   "Common.ObjectMessage":  {
+                                                "zhs":  "消息订阅",
+                                                "en":  "Message subscription"
+                                            },
+                   "Common.StartWorkflow":  {
+                                                "zhs":  "发起流程",
+                                                "en":  "Initiate process "
+                                            },
+                   "Common.No":  {
+                                     "zhs":  "否",
+                                     "en":  "No"
+                                 },
+                   "Common.Name":  {
+                                       "zhs":  "名称",
+                                       "en":  "Name"
+                                   },
+                   "Common.DialogTitle":  {
+                                              "zhs":  "InforCenter 对话框",
+                                              "en":  "InforCenter dialog"
+                                          },
+                   "Common.Description":  {
+                                              "zhs":  "描述",
+                                              "en":  "Description"
+                                          },
+                   "Common.Save":  {
+                                       "zhs":  "保存",
+                                       "en":  "Save"
+                                   },
+                   "Common.OK":  {
+                                     "zhs":  "确定",
+                                     "en":  "OK"
+                                 },
+                   "Common.Reset":  {
+                                        "zhs":  "重置",
+                                        "en":  "Reset"
+                                    },
+                   "Common.LabelSuffix":  {
+                                              "zhs":  "：",
+                                              "en":  "："
+                                          },
+                   "Common.RemoveAll":  {
+                                            "zhs":  "移除全部",
+                                            "en":  "Remove all"
+                                        },
+                   "Common.Component":  {
+                                            "zhs":  "组件",
+                                            "en":  "Component"
+                                        },
+                   "Common.Header":  {
+                                         "zhs":  "标题",
+                                         "en":  "Title"
+                                     },
+                   "Common.SystemTitle":  {
+                                              "zhs":  "InforCenter",
+                                              "en":  "InforCenter"
+                                          }
+               }
+}

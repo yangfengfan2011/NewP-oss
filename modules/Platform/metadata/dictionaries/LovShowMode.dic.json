@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "LovShowMode":  {
+                        "LovShowMode.Prompt":  {
+                                                   "zhs":  "提示",
+                                                   "en":  "Prompt"
+                                               },
+                        "LovShowMode.Exhaustion":  {
+                                                       "zhs":  "穷举",
+                                                       "en":  "Exhaustive"
+                                                   }
+                    }
+}

@@ -1,0 +1,22 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "TreeQueryControlType":  {
+                                 "TreeQueryControlType.TreeList":  {
+                                                                       "zhs":  "树和列表",
+                                                                       "en":  "Tree and list"
+                                                                   },
+                                 "TreeQueryControlType.ListTree":  {
+                                                                       "zhs":  "列表和树",
+                                                                       "en":  "List and tree"
+                                                                   },
+                                 "TreeQueryControlType.List":  {
+                                                                   "zhs":  "列表",
+                                                                   "en":  "List"
+                                                               },
+                                 "TreeQueryControlType.Tree":  {
+                                                                   "zhs":  "树",
+                                                                   "en":  "Tree"
+                                                               }
+                             }
+}

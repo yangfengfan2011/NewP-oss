@@ -1,0 +1,20 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "ModelExtendFieldInherit":  {
+                                    "items":  [
+                                                  {
+                                                      "name":  "Innate"
+                                                  },
+                                                  {
+                                                      "name":  "Inherit"
+                                                  },
+                                                  {
+                                                      "name":  "Show"
+                                                  },
+                                                  {
+                                                      "name":  "Hidden"
+                                                  }
+                                              ]
+                                }
+}

@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "WorkFlowMessage":  {
+                            "items":  [
+                                          {
+                                              "name":  "CURRENTUSER"
+                                          },
+                                          {
+                                              "name":  "PROMOTER"
+                                          }
+                                      ]
+                        }
+}

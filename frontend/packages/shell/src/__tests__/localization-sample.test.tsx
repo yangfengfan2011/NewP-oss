@@ -5,6 +5,12 @@ import { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Outlet } from 'react-router-dom';
 import App from '../App';
+import {
+  buildLanguageCatalogs,
+  dictionaryCatalogs,
+  dictionaryLanguageConfig,
+  mergeDicEntries,
+} from '../localization/catalogs';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -96,5 +102,60 @@ describe('Home localization sample', () => {
     expect(enumerationPanel?.textContent).toContain('MULTI');
     expect(enumerationPanel?.textContent).toContain('SINGLE');
     expect(enumerationPanel?.textContent).toContain('ItemName');
+  });
+
+  it('loads dictionary catalogs from dic metadata files', () => {
+    expect(dictionaryLanguageConfig.defaultLanguage).toBe('zhs');
+    expect(dictionaryCatalogs.zhs['Common.Add']).toBe('添加');
+    expect(dictionaryCatalogs.en['Platform.QRCode']).toBe('QR Code');
+  });
+
+  it('merges dic entries by entry key and replaces the full language set on conflicts', () => {
+    const merged = mergeDicEntries(
+      {
+        'Common.Add': { zhs: '添加', en: 'Add' },
+      },
+      {
+        'Common.Add': { zhs: '新增', en: 'Create' },
+      },
+    );
+
+    expect(merged['Common.Add']).toEqual({ zhs: '新增', en: 'Create' });
+  });
+
+  it('fails when a dic entry does not cover all supported languages', () => {
+    expect(() =>
+      buildLanguageCatalogs(
+        dictionaryLanguageConfig,
+        {
+          schemaVersion: '1.0',
+          type: 'dic',
+          Broken: {
+            'Broken.Key': {
+              zhs: '缺少英文',
+            },
+          },
+        } as never,
+      ),
+    ).toThrow(/missing language 'en'/i);
+  });
+
+  it('fails when a dic entry contains an unknown language', () => {
+    expect(() =>
+      buildLanguageCatalogs(
+        dictionaryLanguageConfig,
+        {
+          schemaVersion: '1.0',
+          type: 'dic',
+          Broken: {
+            'Broken.Key': {
+              zhs: '中文',
+              en: 'English',
+              fr: 'Francais',
+            },
+          },
+        } as never,
+      ),
+    ).toThrow(/unknown languages: fr/i);
   });
 });

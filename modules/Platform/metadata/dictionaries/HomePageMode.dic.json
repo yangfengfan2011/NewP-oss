@@ -1,0 +1,10 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "HomePageMode":  {
+                         "HomePageMode.ClassicHomePage":  {
+                                                              "zhs":  "经典模式",
+                                                              "en":  "Classic mode"
+                                                          }
+                     }
+}

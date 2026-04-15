@@ -1,0 +1,17 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "SelectMode":  {
+                       "items":  [
+                                     {
+                                         "name":  "MULTI"
+                                     },
+                                     {
+                                         "name":  "NULL"
+                                     },
+                                     {
+                                         "name":  "SINGLE"
+                                     }
+                                 ]
+                   }
+}

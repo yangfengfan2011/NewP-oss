@@ -18,29 +18,29 @@ public class SettingDefinitionAuthoringAdapter
     {
         using var document = JsonDocument.Parse(content);
         var root = document.RootElement;
-        var group = TryGetString(root, "group");
 
-        if (!root.TryGetProperty("definitions", out var definitionsElement) || definitionsElement.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty("settings", out var settingsElement) || settingsElement.ValueKind != JsonValueKind.Object)
         {
             return [];
         }
 
         var definitions = new List<SettingDefinition>();
-        // group 作为文件级元数据挂到每条定义上，
-        // 这样后续校验和回写都能基于单条定义工作，而不必反复回看原始 JSON 结构。
-        foreach (var item in definitionsElement.EnumerateArray())
+        // settings 改为对象映射后，key 自身就是稳定标识；
+        // adapter 在这里负责把 authoring 结构还原成面向 UI/校验的行式对象。
+        foreach (var setting in settingsElement.EnumerateObject())
         {
+            var item = setting.Value;
             definitions.Add(new SettingDefinition
             {
-                Key = TryGetString(item, "key"),
+                Key = setting.Name,
                 DisplayName = TryGetString(item, "displayName"),
                 Description = TryGetOptionalString(item, "description"),
                 ValueType = TryGetString(item, "valueType"),
-                DefaultValue = TryGetString(item, "defaultValue"),
+                DefaultValue = TryGetString(item, "value"),
                 Required = TryGetBoolean(item, "required"),
                 IsSensitive = TryGetBoolean(item, "isSensitive"),
                 SupportsOverride = TryGetBoolean(item, "supportsOverride"),
-                Group = group,
+                Group = TryGetString(item, "group"),
                 SourceFile = sourceFile
             });
         }
@@ -78,34 +78,24 @@ public class SettingDefinitionAuthoringAdapter
         foreach (var group in definitions.GroupBy(item => NormalizeSourceFile(moduleId, item.SourceFile), StringComparer.OrdinalIgnoreCase))
         {
             var items = group.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase).ToList();
-            var distinctGroups = items
-                .Select(item => item.Group)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            // 单个源文件只允许回写一个 group，确保 authoring 文件可以稳定重建，
-            // 而不是把多个逻辑分组混进同一个 JSON 后再依赖隐式顺序解析。
-            if (distinctGroups.Count != 1)
-            {
-                throw new InvalidOperationException($"Source file {group.Key} contains multiple groups and cannot be written deterministically.");
-            }
-
             var document = new
             {
-                moduleId,
+                schemaVersion = "1.0",
                 type = "settings",
-                group = distinctGroups[0],
-                definitions = items.Select(item => new
-                {
-                    key = item.Key,
-                    displayName = item.DisplayName,
-                    description = item.Description,
-                    valueType = item.ValueType,
-                    defaultValue = item.DefaultValue,
-                    required = item.Required,
-                    isSensitive = item.IsSensitive,
-                    supportsOverride = item.SupportsOverride
-                }).ToList()
+                settings = items.ToDictionary(
+                    item => item.Key,
+                    item => new
+                    {
+                        group = item.Group,
+                        displayName = item.DisplayName,
+                        description = item.Description,
+                        valueType = item.ValueType,
+                        value = item.DefaultValue,
+                        required = item.Required,
+                        isSensitive = item.IsSensitive,
+                        supportsOverride = item.SupportsOverride
+                    },
+                    StringComparer.OrdinalIgnoreCase)
             };
 
             files.Add(new GeneratedSettingDefinitionFile

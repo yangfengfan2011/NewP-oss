@@ -1,0 +1,18 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "Theme":  {
+                  "Theme.southstreet":  {
+                                            "zhs":  "绿色",
+                                            "en":  "Green"
+                                        },
+                  "Theme.smoothness":  {
+                                           "zhs":  "灰色",
+                                           "en":  "Gray"
+                                       },
+                  "Theme.cupertino":  {
+                                          "zhs":  "蓝色",
+                                          "en":  "Blue"
+                                      }
+              }
+}

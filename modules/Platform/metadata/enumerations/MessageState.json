@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "MessageState":  {
+                         "items":  [
+                                       {
+                                           "name":  "Read"
+                                       },
+                                       {
+                                           "name":  "Unread"
+                                       }
+                                   ]
+                     }
+}

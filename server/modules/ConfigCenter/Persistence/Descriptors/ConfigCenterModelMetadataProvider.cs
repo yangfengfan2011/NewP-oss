@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
@@ -8,7 +9,6 @@ namespace ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 public sealed class ConfigCenterModelMetadataProvider
 {
     private static readonly string ConfigItemPath = GetRepositoryPath(
-        "server",
         "modules",
         "ConfigCenter",
         "metadata",
@@ -21,20 +21,82 @@ public sealed class ConfigCenterModelMetadataProvider
         "metadata",
         "storage-types.json");
 
-    private readonly IModelMetadataDocumentLoader _modelLoader = new JsonModelMetadataDocumentLoader();
     private readonly IStorageTypeMapLoader _typeMapLoader = new JsonStorageTypeMapLoader();
     private readonly ModelMetadataValidator _validator = new();
     private readonly ModelMetadataProjector _projector = new();
 
     public ModelDefinition LoadConfigItem()
     {
-        // 文件读取、校验和投影收口在 provider 中，避免散落到静态定义容器。
-        var document = _modelLoader.LoadFromFile(ConfigItemPath);
+        // 新布局只把业务根对象暴露在文件顶层，这里负责把它还原成当前运行时文档，避免旧 `model` 包装继续成为权威源。
+        var document = LoadModelDocument(ConfigItemPath);
         var typeMap = _typeMapLoader.LoadFromFile(StorageTypeMapPath);
 
         _validator.Validate(document, typeMap);
 
         return _projector.Project(document, typeMap, "SqlServer");
+    }
+
+    private static ModelMetadataDocument LoadModelDocument(string path)
+    {
+        var json = File.ReadAllText(path);
+        using var jsonDocument = JsonDocument.Parse(json);
+
+        var root = jsonDocument.RootElement;
+        if (!root.TryGetProperty("schemaVersion", out var schemaVersionElement))
+        {
+            throw new InvalidOperationException($"模型文件缺少 schemaVersion：{path}");
+        }
+
+        if (!root.TryGetProperty("type", out var typeElement))
+        {
+            throw new InvalidOperationException($"模型文件缺少 type：{path}");
+        }
+
+        if (!string.Equals(typeElement.GetString(), "model", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"模型文件类型不匹配：{path}");
+        }
+
+        string? modelName = null;
+        JsonElement modelElement = default;
+        var businessRootCount = 0;
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (property.NameEquals("schemaVersion") || property.NameEquals("type"))
+            {
+                continue;
+            }
+
+            businessRootCount++;
+            modelName = property.Name;
+            modelElement = property.Value;
+        }
+
+        if (businessRootCount != 1 || modelName is null)
+        {
+            throw new InvalidOperationException($"模型文件必须且只能包含一个业务根对象：{path}");
+        }
+
+        var model = modelElement.Deserialize<ModelMetadataModel>(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            PropertyNameCaseInsensitive = true
+        }) ?? throw new InvalidOperationException($"模型文件反序列化失败：{path}");
+
+        return new ModelMetadataDocument
+        {
+            SchemaVersion = schemaVersionElement.GetString() ?? "1.0",
+            ModuleId = "ConfigCenter",
+            Model = new ModelMetadataModel
+            {
+                Name = modelName,
+                Kind = model.Kind,
+                BuiltinFields = model.BuiltinFields,
+                Fields = model.Fields,
+                LinkedTypes = model.LinkedTypes,
+                Indexes = model.Indexes
+            }
+        };
     }
 
     private static string GetRepositoryPath(params string[] segments)

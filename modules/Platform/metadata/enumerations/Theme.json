@@ -1,0 +1,17 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "Theme":  {
+                  "items":  [
+                                {
+                                    "name":  "cupertino"
+                                },
+                                {
+                                    "name":  "smoothness"
+                                },
+                                {
+                                    "name":  "southstreet"
+                                }
+                            ]
+              }
+}

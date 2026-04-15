@@ -67,7 +67,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlatformPersistence.Composi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConfigCenter", "server\modules\ConfigCenter\ConfigCenter.csproj", "{F98732B7-8098-4DD3-A86F-7A222AC88DF4}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sdk", "sdk", "{D34DD474-498C-F94E-F588-E69E52FEB4F9}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "server-sdk", "server-sdk", "{D34DD474-498C-F94E-F588-E69E52FEB4F9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Authorization", "Authorization", "{8AA8B472-DD17-71E7-FDE2-4F3E142B7451}"
 EndProject

@@ -1,0 +1,334 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "Platform":  {
+                     "Platform.ErrorDateInfo":  {
+                                                    "zhs":  "出现应用程序未处理的异常：",
+                                                    "en":  "Error Date Info"
+                                                },
+                     "Platform.QRCode":  {
+                                             "zhs":  "二维码",
+                                             "en":  "QR Code"
+                                         },
+                     "Platform.ExistSubObjNotDelete":  {
+                                                           "zhs":  "对象存在下级或引用关系，不允许删除。",
+                                                           "en":  "The object has a subordinate or reference relationship, which is not allowed to be deleted."
+                                                       },
+                     "Platform.TheSameOfTypeExtent":  {
+                                                          "zhs":  "存在相同文件后缀的文件类型，请调整后再保存。",
+                                                          "en":  "There are file types with the same file suffix, please save after adjust."
+                                                      },
+                     "Platform.EXISTLINK":  {
+                                                "zhs":  "[ENAME]/[ECODE]已存在，不能复制粘贴或添加关系！",
+                                                "en":  "[ENAME]/[ECODE] already exist, it is unable to copy and paste or add relationships!"
+                                            },
+                     "Platform.ObjectType":  {
+                                                 "zhs":  "对象类型",
+                                                 "en":  "Object type"
+                                             },
+                     "Platform.homePage_messageTipsBtn":  {
+                                                              "zhs":  "消息",
+                                                              "en":  "homePage_messageTipsBtn"
+                                                          },
+                     "Platform.ModulePermissionDetail":  {
+                                                             "zhs":  "授权类型：{0}，授权对象：{1}，授权最终结果为：允许功能：{2}，禁止功能：{3}",
+                                                             "en":  "PermissionType：{0}，PermissionObject{1}，Detail：Allow：{2}，Deny：{3}\""
+                                                         },
+                     "Platform.FileExtentExist":  {
+                                                      "zhs":  "后缀名([extent])已经存在！",
+                                                      "en":  "The suffix name ([extent]) isalready exists!"
+                                                  },
+                     "Platform.Or":  {
+                                         "zhs":  "或",
+                                         "en":  "Or"
+                                     },
+                     "Platform.ObjectInspector":  {
+                                                      "zhs":  "对象查看器",
+                                                      "en":  "Object Viewer"
+                                                  },
+                     "Platform.WorkAgentMessage":  {
+                                                       "zhs":  "结束时间必须大于当前时间！",
+                                                       "en":  "The end time must be greater than the current time!"
+                                                   },
+                     "Platform.QRCodeExpire":  {
+                                                   "zhs":  "二维码已经失效，请刷新页面扫一扫！",
+                                                   "en":  "QR Code expired, please scan again!"
+                                               },
+                     "Platform.RootFolder":  {
+                                                 "zhs":  "根目录",
+                                                 "en":  "RootFolder"
+                                             },
+                     "Platform.ALLADDSUCCEED":  {
+                                                    "zhs":  "共计[SumCount]个对象，添加关系全部成功！",
+                                                    "en":  "The total number of objects [SumCount], and the relationships are all succeeded added !"
+                                                },
+                     "Platform.ADDSUCCEED":  {
+                                                 "zhs":  "[ENAME]/[ECODE]添加关系成功!",
+                                                 "en":  "[ENAME]/[ECODE] add relationship succeeded!"
+                                             },
+                     "Platform.RightMenu":  {
+                                                "zhs":  "右键菜单",
+                                                "en":  "Right-click Menu"
+                                            },
+                     "Platform.WasTheLastOne":  {
+                                                    "zhs":  "已经是最后一个！",
+                                                    "en":  "It\u0027s the last one!"
+                                                },
+                     "Platform.PleaseSelectAnObject":  {
+                                                           "zhs":  "请选择一个对象进行操作！",
+                                                           "en":  "Please select an object for operation!"
+                                                       },
+                     "Platform.SomeObjectNotExist":  {
+                                                         "zhs":  "成功:[SUCCESS],失败[FAIELD],请尝试刷新.详情：",
+                                                         "en":  "Success: [SUCCESS] Fail [FAIELD]. Please try refreshing. Details:"
+                                                     },
+                     "Platform.WorkflowAttachObjectNotExist":  {
+                                                                   "zhs":  "流程附件不存在，不允许提交流程!",
+                                                                   "en":  "Process attachment does not exist, submission process is not allowed!"
+                                                               },
+                     "Platform.Img":  {
+                                          "zhs":  "",
+                                          "en":  ""
+                                      },
+                     "Platform.ObjectNotExist":  {
+                                                     "zhs":  "此对象不存在，可能已经被删除，请尝试刷新或关闭当前页!",
+                                                     "en":  "This object does not exist and may have been deleted. Please try refreshing or closing the current page!"
+                                                 },
+                     "Platform.ExistSubObjAndReferenceNotDelete":  {
+                                                                       "zhs":  "对象存在下级和引用，不允许删除。",
+                                                                       "en":  "The object has subordinates and reference, which is not allowed to be deleted."
+                                                                   },
+                     "Platform.NoPermissionExpandCurrentTreeNode":  {
+                                                                        "zhs":  "您没有当前树节点的展开权限！",
+                                                                        "en":  "You do not have the expansion permission for the current tree node!"
+                                                                    },
+                     "Platform.DorpdownIsnotInOption":  {
+                                                            "zhs":  "输入的值不在属性“[ColText]”下拉值列表中！",
+                                                            "en":  "The value you enter is not in the attribute “[ColText]” drop-down list!"
+                                                        },
+                     "Platform.RequiredFlag":  {
+                                                   "zhs":  "*",
+                                                   "en":  "*"
+                                               },
+                     "Platform.WebActionConfirm":  {
+                                                       "zhs":  "您确认要执行[ACTION]操作吗？",
+                                                       "en":  "Are you sure to perform the [ACTION] operation?"
+                                                   },
+                     "Platform.ClickChooseContent":  {
+                                                         "zhs":  "请点击选取内容。",
+                                                         "en":  "Please click to select the content."
+                                                     },
+                     "Platform.IsRootUnableQuery":  {
+                                                        "zhs":  "已经是根节点，无法向上查询！",
+                                                        "en":  "This is already the root node, it cannot be queried up!"
+                                                    },
+                     "Platform.LOOPCHECKERROR":  {
+                                                     "zhs":  "[ENAME]/[ECODE]存在环结构，不能复制粘贴或添加关系！",
+                                                     "en":  "[ENAME]/[ECODE], there is a ring structure, it is unable to copy and paste or add relationships!"
+                                                 },
+                     "Platform.PleaseInputPwd":  {
+                                                     "zhs":  "请输入密码",
+                                                     "en":  "Please input password"
+                                                 },
+                     "Platform.ClassicHomePage_Setting":  {
+                                                              "zhs":  "设置",
+                                                              "en":  "ClassicHomePage_Setting"
+                                                          },
+                     "Platform.Confirm":  {
+                                              "zhs":  "提示框",
+                                              "en":  "Prompt box"
+                                          },
+                     "Platform.WasTheFirstOne":  {
+                                                     "zhs":  "已经是第一个！",
+                                                     "en":  "It\u0027s the first one!"
+                                                 },
+                     "Platform.PleaseSelectStartNode":  {
+                                                            "zhs":  "请选择一个起始节点！",
+                                                            "en":  "Please select a starting node!"
+                                                        },
+                     "Platform.Prompt":  {
+                                             "zhs":  "提示框",
+                                             "en":  "Prompt box"
+                                         },
+                     "Platform.EmptySelectionException":  {
+                                                              "zhs":  "请至少选择一个对象。",
+                                                              "en":  "Please select at least one object."
+                                                          },
+                     "Platform.ErrorType":  {
+                                                "zhs":  "应用程序线程错误:{0}",
+                                                "en":  "Error Type {0}"
+                                            },
+                     "Platform.EnumerationEnameChange":  {
+                                                             "zhs":  "值列表可能被引用，修改值列表名称会使得引用关联丢失，确定要修改吗？",
+                                                             "en":  "Value list may be referenced. Modifying the name of value list will cause reference association to be lost. Are you sure you want to modify it?"
+                                                         },
+                     "Platform.AlreadyMoveToTop":  {
+                                                       "zhs":  "已到达顶部",
+                                                       "en":  "Arrive at top"
+                                                   },
+                     "Platform.NoFitableValue":  {
+                                                     "zhs":  "没有符合类型的返回值。",
+                                                     "en":  "There is no return value that matches the type."
+                                                 },
+                     "Platform.Position":  {
+                                               "zhs":  "位置",
+                                               "en":  "Position"
+                                           },
+                     "Platform.Standard":  {
+                                               "zhs":  "标准",
+                                               "en":  "Standard"
+                                           },
+                     "Platform.ExistReferenceNotDelete":  {
+                                                              "zhs":  "对象存在引用，不允许删除。",
+                                                              "en":  "The object has reference, which is not allowed to be deleted."
+                                                          },
+                     "Platform.SelectionTypeError":  {
+                                                         "zhs":  "该操作不允许操作[Type]！",
+                                                         "en":  "The operation is not allowed [Type]!"
+                                                     },
+                     "Platform.NotSelectObject":  {
+                                                      "zhs":  "进行该操作前，至少需要选择一个对象。",
+                                                      "en":  "At least one object needs to be selected before this operation."
+                                                  },
+                     "Platform.NoAddPermission":  {
+                                                      "zhs":  "[ENAME]/[ECODE],您没有新增[OBJECTTYPE]的关系权限！",
+                                                      "en":  "[ENAME]/[ECODE],You do not have the ability to add a relationship [OBJECTTYPE]!"
+                                                  },
+                     "Platform.ExistReferenceNotUpdate":  {
+                                                              "zhs":  "对象存在引用，不允许更改。",
+                                                              "en":  "The object has a reference, which is not allowed to be deleted."
+                                                          },
+                     "Platform.TimerServiceloading":  {
+                                                          "zhs":  "正在连接...",
+                                                          "en":  "Loading..."
+                                                      },
+                     "Platform.ObjectTypeNotExist":  {
+                                                         "zhs":  "对象类型[ObjectType]不存在，可能已经被删除！",
+                                                         "en":  "\"ObjectFactory:Type [ObjectType] not exist !"
+                                                     },
+                     "Platform.PleaseSelectQueryStartNode":  {
+                                                                 "zhs":  "请选择查询起始节点！",
+                                                                 "en":  "Please select query start node!"
+                                                             },
+                     "Platform.homePage_historyBtn":  {
+                                                          "zhs":  "最近访问",
+                                                          "en":  "homePage_historyBtn"
+                                                      },
+                     "Platform.TimerServiceError":  {
+                                                        "zhs":  "定时服务未开启导致无法获取进度信息...",
+                                                        "en":  "Unable to get progress information due to timing service not being started..."
+                                                    },
+                     "Platform.TopRightToolBar":  {
+                                                      "zhs":  "工具栏",
+                                                      "en":  "TopRightToolBar"
+                                                  },
+                     "Platform.InputQueryCondition":  {
+                                                          "zhs":  "请输入查询内容！",
+                                                          "en":  "Please enter the query content!"
+                                                      },
+                     "Platform.ErrorMsg":  {
+                                               "zhs":  "异常类型：{0}\\r\\n异常消息：{1}\\r\\n异常信息：{2}\\r\\n输出类型：{3}\\r\\n",
+                                               "en":  "Error Type:{0}\\r\\nMsgTip：{1}\\r\\nMsg：{2}\\r\\nOutType：{3}\\r\\n"
+                                           },
+                     "Platform.ModulePermissionSave":  {
+                                                           "zhs":  "[UserID]更新了功能权限，权限明细为:[Detail]",
+                                                           "en":  "[UserID] the functional permissions have been updated.detail:[Detail]"
+                                                       },
+                     "Platform.NotSingleSelectionException":  {
+                                                                  "zhs":  "请选择一个对象进行操作。",
+                                                                  "en":  "Please select an object for operation."
+                                                              },
+                     "Platform.WorkflowAttachHavebeenDeleted":  {
+                                                                    "zhs":  "流程附件中存在被删除的附件，不允许发起流程，请关闭尝试重新发起流程!",
+                                                                    "en":  "Process attachment have been deleted, please try again!"
+                                                                },
+                     "Platform.OnlyOneAllow":  {
+                                                   "zhs":  "进行该操作前，您只能选择一个对象。",
+                                                   "en":  "You can only select an object before this operation."
+                                               },
+                     "Platform.Name":  {
+                                           "zhs":  "名称",
+                                           "en":  "Name"
+                                       },
+                     "Platform.PARTADDSUCCEED":  {
+                                                     "zhs":  "共计[SumCount]个对象，添加关系成功[SucceedCount]个，失败[FailCount]个，具体原因如下：",
+                                                     "en":  "The total number of objects [SumCount], the number of the relationships that are succeeded added  [SucceedCount], the number of the relationships that are not succeeded added  [FailCount], for the following reasons:"
+                                                 },
+                     "Platform.AlreadyMoveToBottom":  {
+                                                          "zhs":  "已到达底部",
+                                                          "en":  "Arrive at bottom"
+                                                      },
+                     "Platform.NotOneSelectObject":  {
+                                                         "zhs":  "进行该操作前，需要选择一个对象。",
+                                                         "en":  "An object needs to be selected before this operation."
+                                                     },
+                     "Platform.Hidden":  {
+                                             "zhs":  "导航隐藏",
+                                             "en":  "Hidden"
+                                         },
+                     "Platform.CANNOTPASTE":  {
+                                                  "zhs":  "[ENAME]/[ECODE]不能复制粘贴或添加关系。",
+                                                  "en":  "[ENAME]/[ECODE]unable to copy and paste or add relationships."
+                                              },
+                     "Platform.AlreadyDelete":  {
+                                                    "zhs":  "（可能被删除）",
+                                                    "en":  "(may be deleted)"
+                                                },
+                     "Platform.ItemMasterFormProperty":  {
+                                                             "zhs":  "主零组件表单信息",
+                                                             "en":  "Item Master Form Property"
+                                                         },
+                     "Platform.NotFindAnything":  {
+                                                      "zhs":  "没有搜索到内容！",
+                                                      "en":  "Not Find Anything!"
+                                                  },
+                     "Platform.PleaseCheckOutTheNextoperation":  {
+                                                                     "zhs":  "请先查询再执行下一个操作！",
+                                                                     "en":  "Please query first and then execute the next operation!"
+                                                                 },
+                     "Platform.ObjectInfoAlreadyExists":  {
+                                                              "zhs":  "[InfoName]存在重复，请重新输入！",
+                                                              "en":  "[InfoName] is duplicated, please enter again!"
+                                                          },
+                     "Platform.PleaseInputQueryContent":  {
+                                                              "zhs":  "请输入查询内容！",
+                                                              "en":  "Please enter the query content!"
+                                                          },
+                     "Platform.homePage_collectionBtn":  {
+                                                             "zhs":  "收藏夹",
+                                                             "en":  "homePage_collectionBtn"
+                                                         },
+                     "Platform.DidNotFindTheQueryContent":  {
+                                                                "zhs":  "没有找到查询内容！",
+                                                                "en":  "No query content is found!"
+                                                            },
+                     "Platform.homePage_chatDialog":  {
+                                                          "zhs":  "AI助手",
+                                                          "en":  "homePage_chatDialog"
+                                                      },
+                     "Platform.WebActionComplete":  {
+                                                        "zhs":  "您已经执行了[ACTION]操作！",
+                                                        "en":  "You have already performed the [ACTION] operation!"
+                                                    },
+                     "Platform.NotExistEID":  {
+                                                  "zhs":  "当前节点在控制台[VIEWNAME]视图中未配置EID。",
+                                                  "en":  "The current node does not have an EID configured in the console popup [VIEWNAME]."
+                                              },
+                     "Platform.SampleQueryTool":  {
+                                                      "zhs":  "简单查询",
+                                                      "en":  "SampleQueryTool"
+                                                  },
+                     "Platform.OnlyReturnAllow":  {
+                                                      "zhs":  "只允许返回[ObjectType]类型信息。",
+                                                      "en":  "Only allowed to return [ObjectType] type information."
+                                                  },
+                     "Platform.None":  {
+                                           "zhs":  "无",
+                                           "en":  "None"
+                                       },
+                     "Platform.NoData":  {
+                                             "zhs":  "暂无数据",
+                                             "en":  "No data available"
+                                         }
+                 }
+}

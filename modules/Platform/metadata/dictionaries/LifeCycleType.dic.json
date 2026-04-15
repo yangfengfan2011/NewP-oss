@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "LifeCycleType":  {
+                          "LifeCycleType.Stage":  {
+                                                      "zhs":  "阶段生命周期",
+                                                      "en":  "Stage"
+                                                  },
+                          "LifeCycleType.Workflow":  {
+                                                         "zhs":  "流程生命周期",
+                                                         "en":  "Workflow"
+                                                     }
+                      }
+}

@@ -1,0 +1,10 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "DocumentTypeClassify":  {
+                                 "DocumentTypeClassify.CommonDocument":  {
+                                                                             "zhs":  "一般文档",
+                                                                             "en":  "General document"
+                                                                         }
+                             }
+}

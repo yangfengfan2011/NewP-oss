@@ -1,6 +1,8 @@
 using ICP.Platform.Modules.MetadataConfigCenter.DTOs;
 using ICP.Platform.Modules.MetadataConfigCenter.Models;
 using ICP.Platform.Modules.MetadataConfigCenter.Storage;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ICP.Platform.Modules.MetadataConfigCenter.Services;
 
@@ -102,7 +104,7 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
         {
             var sourceContent = NormalizeLineEndings(File.ReadAllText(Path.Combine(sourceDirectory, fileName!)));
             var runtimeContent = NormalizeLineEndings(File.ReadAllText(Path.Combine(runtimeDirectory, fileName!)));
-            if (!sourceContent.Equals(runtimeContent, StringComparison.Ordinal))
+            if (!ContentsMatch(sourceContent, runtimeContent))
             {
                 return false;
             }
@@ -194,5 +196,30 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
     private static string NormalizeLineEndings(string content)
     {
         return content.Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
+
+    private static bool ContentsMatch(string sourceContent, string runtimeContent)
+    {
+        if (TryParseJson(sourceContent, out var sourceJson) && TryParseJson(runtimeContent, out var runtimeJson))
+        {
+            // Apply 阶段只关心 runtime 是否与 authoring 语义一致，不应把 JSON 属性顺序视为未应用变更。
+            return JsonNode.DeepEquals(sourceJson, runtimeJson);
+        }
+
+        return sourceContent.Equals(runtimeContent, StringComparison.Ordinal);
+    }
+
+    private static bool TryParseJson(string content, out JsonNode? node)
+    {
+        try
+        {
+            node = JsonNode.Parse(content);
+            return node is not null;
+        }
+        catch (JsonException)
+        {
+            node = null;
+            return false;
+        }
     }
 }

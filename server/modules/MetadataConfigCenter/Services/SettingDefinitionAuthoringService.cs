@@ -2,6 +2,8 @@ using ICP.Platform.Modules.MetadataConfigCenter.Adapters;
 using ICP.Platform.Modules.MetadataConfigCenter.DTOs;
 using ICP.Platform.Modules.MetadataConfigCenter.Models;
 using ICP.Platform.Modules.MetadataConfigCenter.Storage;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ICP.Platform.Modules.MetadataConfigCenter.Services;
 
@@ -150,7 +152,7 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         }
 
         var actualContent = await _moduleMetadataStore.ReadTextAsync(filePath, cancellationToken);
-        return NormalizeLineEndings(actualContent).Equals(NormalizeLineEndings(expectedContent), StringComparison.Ordinal);
+        return ContentsMatch(actualContent, expectedContent);
     }
 
     private static string BuildStatus(bool gitSyncPending, bool hasUnappliedChanges)
@@ -178,5 +180,30 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
     private static string NormalizeLineEndings(string content)
     {
         return content.Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
+
+    private static bool ContentsMatch(string actualContent, string expectedContent)
+    {
+        if (TryParseJson(actualContent, out var actualJson) && TryParseJson(expectedContent, out var expectedJson))
+        {
+            // settings 进入对象映射后，序列化属性顺序不应再影响“是否有真实待应用变更”的判定。
+            return JsonNode.DeepEquals(actualJson, expectedJson);
+        }
+
+        return NormalizeLineEndings(actualContent).Equals(NormalizeLineEndings(expectedContent), StringComparison.Ordinal);
+    }
+
+    private static bool TryParseJson(string content, out JsonNode? node)
+    {
+        try
+        {
+            node = JsonNode.Parse(content);
+            return node is not null;
+        }
+        catch (JsonException)
+        {
+            node = null;
+            return false;
+        }
     }
 }

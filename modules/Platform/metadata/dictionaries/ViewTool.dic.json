@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "ViewTool":  {
+                     "ViewTool.LightWeight":  {
+                                                  "zhs":  "轻量化浏览器",
+                                                  "en":  "Lightweight browser"
+                                              },
+                     "ViewTool.AutoVue":  {
+                                              "zhs":  "AutoVue浏览器（19.2；20.0）",
+                                              "en":  "AutoVue browser (19.2; 20.0)"
+                                          }
+                 }
+}

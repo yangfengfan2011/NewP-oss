@@ -1,0 +1,17 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "ObjectPermissionMode":  {
+                                 "items":  [
+                                               {
+                                                   "name":  "Manual"
+                                               },
+                                               {
+                                                   "name":  "SetActorByWorkflow"
+                                               },
+                                               {
+                                                   "name":  "SetAgentByWorkflow"
+                                               }
+                                           ]
+                             }
+}

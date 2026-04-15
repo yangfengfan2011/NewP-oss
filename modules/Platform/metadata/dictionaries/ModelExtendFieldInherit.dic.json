@@ -1,0 +1,22 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "ModelExtendFieldInherit":  {
+                                    "ModelExtendFieldInherit.Show":  {
+                                                                         "zhs":  "显示",
+                                                                         "en":  "Display"
+                                                                     },
+                                    "ModelExtendFieldInherit.Inherit":  {
+                                                                            "zhs":  "继承",
+                                                                            "en":  "Inheritance"
+                                                                        },
+                                    "ModelExtendFieldInherit.Hidden":  {
+                                                                           "zhs":  "隐藏",
+                                                                           "en":  "Hide"
+                                                                       },
+                                    "ModelExtendFieldInherit.Innate":  {
+                                                                           "zhs":  "固有",
+                                                                           "en":  "Inherent"
+                                                                       }
+                                }
+}

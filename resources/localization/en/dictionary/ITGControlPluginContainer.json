@@ -1,4 +1,0 @@
-{
-    "ITGControlPluginContainer.ChoosePlugin":  "Choose plugin",
-    "ITGControlPluginContainer.LoadValueError":  "The plugin choosen cannot load current value. Use default plugin instead? The value would be cleared if you shouldn\u0027t use default plugin."
-}

@@ -87,7 +87,7 @@ public class SettingDefinitionAuthoringServiceTests
 
         Assert.Contains("运行时读取、源码保存", repositoryContent);
         Assert.DoesNotContain("运行时读取、源码保存", runtimeContent);
-        Assert.Contains("\"defaultValue\": \"75\"", runtimeContent);
+        Assert.Contains("\"value\": \"75\"", runtimeContent);
     }
 
     private sealed class MetadataTestRepository : IDisposable
@@ -129,8 +129,8 @@ public class SettingDefinitionAuthoringServiceTests
                 var runtimeSettingsPath = Path.Combine(runtimeMetadata, "settings", "ConfigCenter.settings.json");
                 var runtimeSettings = await File.ReadAllTextAsync(runtimeSettingsPath);
                 runtimeSettings = runtimeSettings.Replace(
-                    "\"defaultValue\": \"40\"",
-                    $"\"defaultValue\": \"{runtimeRefreshIntervalSeconds}\"",
+                    "\"value\": \"40\"",
+                    $"\"value\": \"{runtimeRefreshIntervalSeconds}\"",
                     StringComparison.Ordinal);
                 await File.WriteAllTextAsync(runtimeSettingsPath, runtimeSettings);
             }

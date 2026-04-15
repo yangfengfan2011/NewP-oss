@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "MessageState":  {
+                         "MessageState.Unread":  {
+                                                     "zhs":  "未读",
+                                                     "en":  "Unread"
+                                                 },
+                         "MessageState.Read":  {
+                                                   "zhs":  "已读",
+                                                   "en":  "Read"
+                                               }
+                     }
+}

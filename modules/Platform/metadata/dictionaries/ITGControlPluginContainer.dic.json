@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "ITGControlPluginContainer":  {
+                                      "ITGControlPluginContainer.ChoosePlugin":  {
+                                                                                     "zhs":  "选择插件",
+                                                                                     "en":  "Choose plugin"
+                                                                                 },
+                                      "ITGControlPluginContainer.LoadValueError":  {
+                                                                                       "zhs":  "选择的插件无法加载输入的值，是否使用缺省插件？如不使用默认插件，值将被清空",
+                                                                                       "en":  "The plugin choosen cannot load current value. Use default plugin instead? The value would be cleared if you shouldn\u0027t use default plugin."
+                                                                                   }
+                                  }
+}

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "ConfigItem": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME"
+    ],
+    "fields": [
+      {
+        "name": "Key",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Value",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      },
+      {
+        "name": "Type",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "ModuleId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Group",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "Environment",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "TenantId",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      },
+      {
+        "name": "IsSensitive",
+        "storage": {
+          "type": "bool"
+        }
+      }
+    ]
+  }
+}

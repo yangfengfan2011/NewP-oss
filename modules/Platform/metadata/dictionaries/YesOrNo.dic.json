@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "YesOrNo":  {
+                    "YesOrNo.0":  {
+                                      "zhs":  "否",
+                                      "en":  "No"
+                                  },
+                    "YesOrNo.1":  {
+                                      "zhs":  "是",
+                                      "en":  "Yes"
+                                  }
+                }
+}

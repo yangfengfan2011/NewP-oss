@@ -1,0 +1,11 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "HomePageMode":  {
+                         "items":  [
+                                       {
+                                           "name":  "ClassicHomePage"
+                                       }
+                                   ]
+                     }
+}

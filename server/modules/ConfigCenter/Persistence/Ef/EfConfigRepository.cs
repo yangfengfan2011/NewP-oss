@@ -24,7 +24,7 @@ public sealed class EfConfigRepository : IConfigRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => EF.Property<string>(item, "Id") == id, cancellationToken);
+            .FirstOrDefaultAsync(item => EF.Property<string>(item, "EID") == id, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -115,7 +115,7 @@ public sealed class EfConfigRepository : IConfigRepository
     public async Task UpdateAsync(ConfigItem item, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == item.Id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == item.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -129,7 +129,7 @@ public sealed class EfConfigRepository : IConfigRepository
     public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == id, cancellationToken);
 
         if (entity is null)
         {
@@ -146,7 +146,7 @@ public sealed class EfConfigRepository : IConfigRepository
     // 避免模块仓储绕开建模约束直接绑定数据库实现细节。
     private static ConfigItem Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        Id = GetString(entity, "EID")!,
         Key = GetString(entity, "Key")!,
         Value = GetString(entity, "Value"),
         Type = GetString(entity, "Type")!,
@@ -154,7 +154,7 @@ public sealed class EfConfigRepository : IConfigRepository
         Group = GetString(entity, "Group"),
         Environment = GetString(entity, "Environment"),
         TenantId = GetString(entity, "TenantId"),
-        DisplayName = GetString(entity, "DisplayName")!,
+        DisplayName = GetString(entity, "ENAME") ?? GetString(entity, "DisplayName")!,
         Description = GetString(entity, "Description"),
         IsSensitive = GetBool(entity, "IsSensitive"),
         CreatedAt = GetDateTime(entity, "CreatedAt"),
@@ -166,7 +166,9 @@ public sealed class EfConfigRepository : IConfigRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = item.Id
+            // ConfigItem 新模型由 metadata projector 生成后，底层主键字段名回到平台内核约定的 EID；
+            // 仓储层继续对外暴露领域对象的 Id，避免上层服务感知到底层建模字段细节。
+            ["EID"] = item.Id
         };
 
         CopyToEntity(item, entity);
@@ -176,7 +178,8 @@ public sealed class EfConfigRepository : IConfigRepository
     private static void CopyToEntity(ConfigItem item, IDictionary<string, object?> entity)
     {
         // 更新时显式回写全部受控字段，保证仓储输出和建模层字段集合保持一致。
-        entity["Id"] = item.Id;
+        entity["EID"] = item.Id;
+        entity["ENAME"] = item.DisplayName;
         entity["Key"] = item.Key;
         entity["Value"] = item.Value;
         entity["Type"] = item.Type;
@@ -184,7 +187,6 @@ public sealed class EfConfigRepository : IConfigRepository
         entity["Group"] = item.Group;
         entity["Environment"] = item.Environment;
         entity["TenantId"] = item.TenantId;
-        entity["DisplayName"] = item.DisplayName;
         entity["Description"] = item.Description;
         entity["IsSensitive"] = item.IsSensitive;
         entity["CreatedAt"] = item.CreatedAt;

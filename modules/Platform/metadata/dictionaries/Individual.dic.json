@@ -1,0 +1,10 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "Individual":  {
+                       "Individual.UserView":  {
+                                                   "zhs":  "用户视图",
+                                                   "en":  "User view"
+                                               }
+                   }
+}

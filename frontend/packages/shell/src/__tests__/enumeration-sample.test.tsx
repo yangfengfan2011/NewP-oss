@@ -11,6 +11,10 @@ import {
   useEnumeration,
   useLocalization,
 } from '@icp-platform/core';
+import {
+  enumerationCatalogs as platformEnumerationCatalogs,
+  enumerationDefinitions as platformEnumerationDefinitions,
+} from '../localization/catalogs';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -153,5 +157,12 @@ describe('Enumeration localization sample', () => {
 
     expect(container.querySelector('[data-testid="language"]')?.textContent).toBe('zhs');
     expect(container.querySelector('[data-testid="gender"]')?.textContent).toBe('女,男');
+  });
+
+  it('loads platform enumerations from modules/Platform/metadata', () => {
+    expect(platformEnumerationDefinitions.Gender.name).toBe('Gender');
+    expect(platformEnumerationDefinitions.MessageState.items.map((item) => item.name)).toEqual(['Read', 'Unread']);
+    expect(platformEnumerationCatalogs.zhs['Gender.Female']).toBe('女');
+    expect(platformEnumerationCatalogs.en['MessageState.Read']).toBe('Read');
   });
 });

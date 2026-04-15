@@ -1,0 +1,20 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "TreeQueryControlType":  {
+                                 "items":  [
+                                               {
+                                                   "name":  "Tree"
+                                               },
+                                               {
+                                                   "name":  "List"
+                                               },
+                                               {
+                                                   "name":  "TreeList"
+                                               },
+                                               {
+                                                   "name":  "ListTree"
+                                               }
+                                           ]
+                             }
+}

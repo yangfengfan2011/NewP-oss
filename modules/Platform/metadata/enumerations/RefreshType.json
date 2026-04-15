@@ -1,0 +1,77 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "RefreshType":  {
+                        "items":  [
+                                      {
+                                          "name":  "RefreshList"
+                                      },
+                                      {
+                                          "name":  "RefreshEditList"
+                                      },
+                                      {
+                                          "name":  "RefreshFilterList"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentNode"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentNodeAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentStruct"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentAndStruct"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentStructAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentAndStructAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshParentStruct"
+                                      },
+                                      {
+                                          "name":  "RefreshParentAndStruct"
+                                      },
+                                      {
+                                          "name":  "RefreshParentStructAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshParentAndStructAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshRootStruct"
+                                      },
+                                      {
+                                          "name":  "RefreshRootStructAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshSelectTab"
+                                      },
+                                      {
+                                          "name":  "RefreshQuickNav"
+                                      },
+                                      {
+                                          "name":  "RefreshObjectInspector"
+                                      },
+                                      {
+                                          "name":  "DeleteObjectInspector"
+                                      },
+                                      {
+                                          "name":  "RefreshParentStructAndRootCountAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentStructAndRootCountAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshCurrentCountAndTab"
+                                      },
+                                      {
+                                          "name":  "RefreshParentCountAndTab"
+                                      }
+                                  ]
+                    }
+}

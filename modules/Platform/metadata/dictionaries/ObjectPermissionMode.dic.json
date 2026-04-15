@@ -1,0 +1,18 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "ObjectPermissionMode":  {
+                                 "ObjectPermissionMode.SetActorByWorkflow":  {
+                                                                                 "zhs":  "流程中设置执行人权限",
+                                                                                 "en":  "Set the performer permissions in the process"
+                                                                             },
+                                 "ObjectPermissionMode.SetAgentByWorkflow":  {
+                                                                                 "zhs":  "流程中设置代理人权限",
+                                                                                 "en":  "Set the agent permissions in the process"
+                                                                             },
+                                 "ObjectPermissionMode.Manual":  {
+                                                                     "zhs":  "手动设置",
+                                                                     "en":  "Manual settings"
+                                                                 }
+                             }
+}

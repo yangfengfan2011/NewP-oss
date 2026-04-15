@@ -1,0 +1,14 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "enum",
+    "LovType":  {
+                    "items":  [
+                                  {
+                                      "name":  "System"
+                                  },
+                                  {
+                                      "name":  "Custom"
+                                  }
+                              ]
+                }
+}

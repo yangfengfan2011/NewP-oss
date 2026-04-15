@@ -1,0 +1,10 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "SignatureUploadValue":  {
+                                 "SignatureUploadValue.NotUploadSignature":  {
+                                                                                 "zhs":  "还未上传签名！",
+                                                                                 "en":  "Signature has not been uploaded yet! "
+                                                                             }
+                             }
+}

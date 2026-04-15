@@ -1,0 +1,38 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "type":  "dic",
+    "AcademicRecord":  {
+                           "AcademicRecord.Junior":  {
+                                                         "zhs":  "初中",
+                                                         "en":  "Junior middle school"
+                                                     },
+                           "AcademicRecord.Other":  {
+                                                        "zhs":  "其它",
+                                                        "en":  "Other"
+                                                    },
+                           "AcademicRecord.JuniorCollege":  {
+                                                                "zhs":  "专科",
+                                                                "en":  "Junior college"
+                                                            },
+                           "AcademicRecord.RegularCollege":  {
+                                                                 "zhs":  "本科",
+                                                                 "en":  "Undergraduate course"
+                                                             },
+                           "AcademicRecord.Master":  {
+                                                         "zhs":  "硕士",
+                                                         "en":  "Master"
+                                                     },
+                           "AcademicRecord.Primary":  {
+                                                          "zhs":  "小学",
+                                                          "en":  "Primary school"
+                                                      },
+                           "AcademicRecord.Senior":  {
+                                                         "zhs":  "高中",
+                                                         "en":  "High school"
+                                                     },
+                           "AcademicRecord.Doctor":  {
+                                                         "zhs":  "博士",
+                                                         "en":  "Ph. D."
+                                                     }
+                       }
+}

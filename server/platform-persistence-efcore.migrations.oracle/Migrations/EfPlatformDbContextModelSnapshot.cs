@@ -70,86 +70,87 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
 
             modelBuilder.Entity("ConfigItem", b =>
                 {
-                    b.Property<string>("Id")
+                    b.Property<string>("EID")
                         .HasMaxLength(128)
                         .HasColumnType("NVARCHAR2(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("EID");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TIMESTAMP(7)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("NVARCHAR2(128)")
+                        .HasColumnName("CreatedBy");
 
                     b.Property<string>("Description")
                         .HasColumnType("NVARCHAR2(2000)")
-                        .HasColumnName("description");
+                        .HasColumnName("Description");
 
-                    b.Property<string>("DisplayName")
+                    b.Property<string>("ENAME")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("display_name");
+                        .HasColumnName("ENAME");
 
                     b.Property<string>("Environment")
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("environment");
+                        .HasColumnName("Environment");
 
                     b.Property<string>("Group")
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("config_group");
+                        .HasColumnName("Group");
 
                     b.Property<bool>("IsSensitive")
                         .HasColumnType("BOOLEAN")
-                        .HasColumnName("is_sensitive");
+                        .HasColumnName("IsSensitive");
 
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("config_key");
+                        .HasColumnName("Key");
 
                     b.Property<string>("ModuleId")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("module_id");
+                        .HasColumnName("ModuleId");
 
                     b.Property<string>("TenantId")
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("tenant_id");
+                        .HasColumnName("TenantId");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
-                        .HasColumnName("config_type");
+                        .HasColumnName("Type");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TIMESTAMP(7)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
                         .HasMaxLength(128)
                         .HasColumnType("NVARCHAR2(128)")
-                        .HasColumnName("updated_by");
+                        .HasColumnName("UpdatedBy");
 
                     b.Property<string>("Value")
                         .HasColumnType("NVARCHAR2(2000)")
-                        .HasColumnName("config_value");
+                        .HasColumnName("Value");
 
-                    b.HasKey("Id");
+                    b.HasKey("EID");
 
-                    b.HasIndex("ModuleId")
-                        .HasDatabaseName("IX_ConfigItem_Module");
-
-                    b.HasIndex("Key", "Environment", "TenantId")
+                    b.HasIndex("EID")
                         .IsUnique()
-                        .HasDatabaseName("UX_ConfigItem_Key_Environment_Tenant")
-                        .HasFilter("\"environment\" IS NOT NULL AND \"tenant_id\" IS NOT NULL");
+                        .HasDatabaseName("UX_ConfigItem_EID");
 
-                    b.ToTable("config_items", (string)null);
+                    b.ToTable("ConfigItem", (string)null);
                 });
 
             modelBuilder.Entity("Department", b =>

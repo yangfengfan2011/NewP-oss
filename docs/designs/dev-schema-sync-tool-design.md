@@ -367,13 +367,15 @@
 ## 15. AI-First 最小检查清单
 
 1. 入口在哪里
-   - `server/tools/dev-schema-sync/`，通过独立 `exe` 运行。
+   - 第一版已实现为 `server/tools/dev-schema-sync/DevSchemaSync.csproj` 对应的独立 `dev-schema-sync.exe`。
+   - 当前命令入口支持 `--json`、`--sql`、`--apply`。
 
 2. 边界在哪里
    - 只读 `model` 文件；只管开发环境 schema sync；不接管手写定义；不替代正式 migration。
 
 3. 如何验证
    - 通过 plan 输出、SQL 预览、`--apply` 执行、高风险确认、SQL Server smoke 进行验证。
+   - 验证记录落点见 `docs/verification/dev-schema-sync-tool-verification.md`。
 
 4. 失败信号是什么
    - `model` 校验失败、`historyName` 冲突、数据库连接失败、SQL 执行失败、用户拒绝确认。

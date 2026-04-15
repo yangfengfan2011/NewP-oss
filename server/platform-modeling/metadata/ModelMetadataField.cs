@@ -5,6 +5,9 @@ public sealed class ModelMetadataField
 {
     public string Name { get; init; } = string.Empty;
 
+    // 历史名称只用于显式 rename 识别，不参与当前字段名的运行时解析。
+    public string? HistoryName { get; init; }
+
     public ModelMetadataStorageSection? Storage { get; init; }
 
     public string? UiType { get; init; }

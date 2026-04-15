@@ -76,6 +76,7 @@ public sealed class SingleRootModelDocumentLoader
             Model = new ModelMetadataModel
             {
                 Name = businessRootName,
+                HistoryName = model.HistoryName,
                 Kind = model.Kind,
                 BuiltinFields = model.BuiltinFields,
                 Fields = model.Fields,

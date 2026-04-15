@@ -19,9 +19,9 @@ public class ToolBootstrapTests
         var output = writer.ToString();
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Provider: SqlServer", output, StringComparison.Ordinal);
-        Assert.Contains("HostApiRoot:", output, StringComparison.Ordinal);
-        Assert.Contains("{\"status\":\"ok\"}", output, StringComparison.Ordinal);
-        Assert.True(output.IndexOf("Provider: SqlServer", StringComparison.Ordinal) < output.IndexOf("{\"status\":\"ok\"}", StringComparison.Ordinal));
+        Assert.Contains("\"summary\"", output, StringComparison.Ordinal);
+        Assert.Contains("\"managedObjects\"", output, StringComparison.Ordinal);
+        Assert.Contains("\"operations\"", output, StringComparison.Ordinal);
+        Assert.Contains("\"unmanagedTables\"", output, StringComparison.Ordinal);
     }
 }

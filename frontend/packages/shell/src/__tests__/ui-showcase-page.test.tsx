@@ -7,9 +7,16 @@ import { LocalizationProvider } from '@icp-platform/core';
 import { MemoryRouter, Outlet } from 'react-router-dom';
 import App from '../App';
 import UiShowcase from '../pages/UiShowcase';
-import { dictionaryCatalogs, dictionaryLanguageConfig } from '../localization/catalogs';
 
 const runtimeLocalizationManifest = {
+  defaultLanguage: 'zhs',
+  supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
+  catalogs: {
+    zhs: {},
+  },
+};
+
+const localizationProps = {
   defaultLanguage: 'zhs',
   supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
   catalogs: {
@@ -102,11 +109,7 @@ describe('UiShowcase page', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <LocalizationProvider
-          defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
-          supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
-          catalogs={dictionaryCatalogs}
-        >
+        <LocalizationProvider {...localizationProps}>
           <MemoryRouter>
             <UiShowcase />
           </MemoryRouter>

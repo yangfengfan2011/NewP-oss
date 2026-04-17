@@ -10,23 +10,9 @@ import App from '../App';
 
 const runtimeLocalizationManifest = {
   defaultLanguage: 'zhs',
-  supportedLanguages: [
-    { code: 'zhs', displayName: '简体中文' },
-    { code: 'en', displayName: 'English' },
-  ],
+  supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
   catalogs: {
-    zhs: {
-      'Common.SystemTitle': 'InforCenter',
-      'Common.OK': '确定',
-      'Common.Cancel': '取消',
-      'Platform.Prompt': '提示',
-    },
-    en: {
-      'Common.SystemTitle': 'InforCenter',
-      'Common.OK': 'OK',
-      'Common.Cancel': 'Cancel',
-      'Platform.Prompt': 'Prompt',
-    },
+    zhs: {},
   },
 };
 
@@ -94,11 +80,13 @@ describe('Home localization sample', () => {
     vi.unstubAllGlobals();
   });
 
-  it('loads runtime localization manifest before rendering the localization sample', async () => {
-    let resolveResponse!: (response: Response) => void;
-    const fetchMock = vi.fn().mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveResponse = resolve;
+  it('does not render legacy localization sample panels after runtime manifest migration', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(runtimeLocalizationManifest), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -110,29 +98,16 @@ describe('Home localization sample', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/plugins/localization-manifest.json', {
       credentials: 'same-origin',
     });
+    expect(container.textContent).toContain('业务门户');
+    expect(container.textContent).toContain('平台门户');
     expect(container.textContent).not.toContain('语言资源样例');
-
-    await act(async () => {
-      resolveResponse(
-        new Response(JSON.stringify(runtimeLocalizationManifest), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('语言资源样例');
-    expect(container.textContent).toContain('Common.SystemTitle: InforCenter');
-    expect(container.textContent).toContain('Common.OK: 确定');
-    expect(container.textContent).toContain('Common.Cancel: 取消');
-    expect(container.textContent).toContain('Platform.Prompt: 提示');
+    expect(container.textContent).not.toContain('枚举资源样例');
   });
 });

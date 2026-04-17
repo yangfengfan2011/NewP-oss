@@ -6,7 +6,14 @@ import { createRoot, Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import Home from '../pages/Home';
-import { dictionaryCatalogs, dictionaryLanguageConfig } from '../localization/catalogs';
+
+const localizationProps = {
+  defaultLanguage: 'zhs',
+  supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
+  catalogs: {
+    zhs: {},
+  },
+};
 
 vi.mock('../contexts/PlatformContext', () => ({
   usePlatform: () => ({
@@ -40,11 +47,7 @@ describe('Home shortcuts', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <LocalizationProvider
-          defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
-          supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
-          catalogs={dictionaryCatalogs}
-        >
+        <LocalizationProvider {...localizationProps}>
           <MemoryRouter>
             <Home />
           </MemoryRouter>
@@ -66,11 +69,7 @@ describe('Home shortcuts', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <LocalizationProvider
-          defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
-          supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
-          catalogs={dictionaryCatalogs}
-        >
+        <LocalizationProvider {...localizationProps}>
           <MemoryRouter>
             <Home />
           </MemoryRouter>

@@ -393,9 +393,9 @@ AI-First 对齐：
 - validator 还没有补 section、`position` 与 `dataSource.type` 等更完整核心契约校验
 - schema builder 还没有补固定字段自动展开、section 列表与更完整默认值策略
 - `ConfigCenterModelDefinitions.ConfigItem` 已通过 metadata provider 暴露；当前仍只有 `ValueListItem` 保留手写定义
-- 当前 `ConfigItem` 试点元数据仍只覆盖 `EID / ENAME / Value`，与现有 `EfConfigRepository` 使用的 `Id / Key / Type / ModuleId / DisplayName / ...` 契约尚未对齐
+- 当前 `ConfigItem` 试点元数据已扩到 `EID / ENAME / Key / Value / Type / ModuleId / Group / Environment / TenantId / Description / IsSensitive`，并已对齐 `EfConfigRepository` 的核心契约
 - `ValueListItem` 仍未接入同一条模型元数据链路
-- 本轮未包含 migration 生成、EF Core 差异比对或前端模块级真实接入验证
+- migration、EF Core 差异比对与前端模块级真实构建验证已在“数据库对象命名规范与单 DTO 收口”批次中补齐
 
 对应文档：
 
@@ -823,6 +823,44 @@ AI-First 对齐：
 - [designs/organization-structure-design.md](designs/organization-structure-design.md)
 - [modules/organization-implementation.md](modules/organization-implementation.md)
 - [verification/organization-module-verification.md](verification/organization-module-verification.md)
+
+### Post-Phase-6：数据库对象命名规范与单 DTO 收口
+
+状态：已完成并通过
+
+已落地：
+
+- `ConfigCenter / Authorization / Organization` 已统一切到 `PascalCase` 表名与普通列名
+- `ConfigItem` metadata 试点已对齐 `PascalCase` 表列投影，同时继续保留 `EID / ENAME` 协议字段
+- `ValueListItem / Role / Permission / RolePermission / UserRole / Company / Department / Position / Person / PersonUserLink` 的手写 `ModelDefinition` 已按新命名规则统一
+- `server/platform-modeling/Dto` 与 `server/tools/model-dto-sync` 已落地，作为 `model -> DTO` 的受控生成入口
+- `ConfigCenter / Authorization / Organization` 已收口为单模型单 DTO 接口；`Organization` 的引用字段与枚举字段已补齐 `*_DisplayValue`
+- `server/platform-persistence-efcore` 已补上基于 `ModelDefinition` 的 EF 模型缓存键，避免动态模型在同一进程内被错误复用
+- 三套 provider migration snapshot 已同步到新命名口径
+
+已验证：
+
+- `dotnet build .\ICP-Platform.sln -nr:false -v minimal`
+- `dotnet test .\tests\Modeling.Tests\Modeling.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\tests\Persistence.Tests\Persistence.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj -nr:false -v minimal`
+- `dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal`
+- `pnpm --dir .\frontend build`
+
+当前边界：
+
+- `Audit / Files / Demo / ModuleTemplateSample` 不在本轮命名统一与 DTO 收口范围内
+- `ValueListItem` 仍保留手写定义，第二阶段 metadata model 迁移尚未启动
+- 当前验证中仍会看到 `System.Security.Cryptography.Xml 9.0.0` 的已知漏洞告警，本轮未在同一批里处理依赖升级
+
+对应文档：
+
+- [designs/database-object-naming-design.md](designs/database-object-naming-design.md)
+- [superpowers/plans/2026-04-17-database-object-naming.md](superpowers/plans/2026-04-17-database-object-naming.md)
+- [modules/configcenter-implementation.md](modules/configcenter-implementation.md)
+- [modules/authorization-implementation.md](modules/authorization-implementation.md)
+- [modules/organization-implementation.md](modules/organization-implementation.md)
 
 已验证：
 

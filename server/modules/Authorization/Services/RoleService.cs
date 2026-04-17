@@ -41,19 +41,19 @@ public class RoleService : IRoleService
         return role != null ? MapToDto(role) : null;
     }
 
-    public async Task<RoleDto> CreateRoleAsync(CreateRoleRequest request, string? createdBy = null, CancellationToken cancellationToken = default)
+    public async Task<RoleDto> CreateRoleAsync(RoleDto dto, string? createdBy = null, CancellationToken cancellationToken = default)
     {
-        var existing = await _roleRepository.GetByCodeAsync(request.Code, cancellationToken);
+        var existing = await _roleRepository.GetByCodeAsync(dto.Code, cancellationToken);
         if (existing != null)
         {
-            throw new InvalidOperationException($"角色代码 '{request.Code}' 已存在");
+            throw new InvalidOperationException($"角色代码 '{dto.Code}' 已存在");
         }
 
         var role = new Role
         {
-            Code = request.Code,
-            Name = request.Name,
-            Description = request.Description,
+            Code = dto.Code,
+            Name = dto.Name,
+            Description = dto.Description,
             CreatedBy = createdBy
         };
 
@@ -61,7 +61,7 @@ public class RoleService : IRoleService
         return MapToDto(role);
     }
 
-    public async Task<RoleDto> UpdateRoleAsync(string roleId, UpdateRoleRequest request, string? updatedBy = null, CancellationToken cancellationToken = default)
+    public async Task<RoleDto> UpdateRoleAsync(string roleId, RoleDto dto, string? updatedBy = null, CancellationToken cancellationToken = default)
     {
         var role = await _roleRepository.GetByIdAsync(roleId, cancellationToken);
         if (role == null)
@@ -74,9 +74,10 @@ public class RoleService : IRoleService
             throw new InvalidOperationException("系统内置角色不允许修改");
         }
 
-        role.Name = request.Name;
-        role.Description = request.Description;
-        role.IsEnabled = request.IsEnabled;
+        // 单 DTO 不代表所有字段都可编辑；更新仍保持当前“代码不可改、系统字段不可回写”的边界。
+        role.Name = dto.Name;
+        role.Description = dto.Description;
+        role.IsEnabled = dto.IsEnabled;
         role.UpdatedAt = DateTime.UtcNow;
         role.UpdatedBy = updatedBy;
 

@@ -2,8 +2,10 @@ namespace ICP.Platform.Modules.Organization.DTOs;
 
 public sealed record PersonUserLinkDto
 {
-    public required Guid PersonId { get; init; }
-    public required string UserId { get; init; }
+    public Guid PersonId { get; init; }
+    public string? PersonId_DisplayValue { get; init; }
+    public string UserId { get; init; } = string.Empty;
+    public string? UserId_DisplayValue { get; init; }
     public DateTime LinkedAt { get; init; }
-    public required string LinkedBy { get; init; }
+    public string LinkedBy { get; init; } = string.Empty;
 }

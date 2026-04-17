@@ -1,5 +1,4 @@
 using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 
@@ -26,23 +25,23 @@ public sealed class PositionService : IPositionService
         return position is null ? null : MapToDto(position);
     }
 
-    public async Task<PositionDto> CreateAsync(CreatePositionRequest request, CancellationToken cancellationToken = default)
+    public async Task<PositionDto> CreateAsync(PositionDto dto, CancellationToken cancellationToken = default)
     {
         var position = new Position
         {
-            CompanyId = request.CompanyId,
-            DepartmentId = request.DepartmentId,
-            Code = request.Code,
-            Name = request.Name,
-            EmploymentStatus = request.EmploymentStatus,
-            SortOrder = request.SortOrder
+            CompanyId = dto.CompanyId,
+            DepartmentId = dto.DepartmentId,
+            Code = dto.Code,
+            Name = dto.Name,
+            EmploymentStatus = dto.EmploymentStatus,
+            SortOrder = dto.SortOrder
         };
 
         await _positionRepository.CreateAsync(position, cancellationToken);
         return MapToDto(position);
     }
 
-    public async Task<PositionDto> UpdateAsync(Guid positionId, UpdatePositionRequest request, CancellationToken cancellationToken = default)
+    public async Task<PositionDto> UpdateAsync(Guid positionId, PositionDto dto, CancellationToken cancellationToken = default)
     {
         var position = await _positionRepository.GetByIdAsync(positionId, cancellationToken);
         if (position is null)
@@ -50,11 +49,12 @@ public sealed class PositionService : IPositionService
             throw new InvalidOperationException($"岗位 '{positionId}' 不存在。");
         }
 
-        position.DepartmentId = request.DepartmentId;
-        position.Name = request.Name;
-        position.EmploymentStatus = request.EmploymentStatus;
-        position.IsEnabled = request.IsEnabled;
-        position.SortOrder = request.SortOrder;
+        // 岗位更新继续沿用现有边界：部门、名称、状态可改，代码与公司归属保持稳定。
+        position.DepartmentId = dto.DepartmentId;
+        position.Name = dto.Name;
+        position.EmploymentStatus = dto.EmploymentStatus;
+        position.IsEnabled = dto.IsEnabled;
+        position.SortOrder = dto.SortOrder;
         position.UpdatedAt = DateTime.UtcNow;
 
         await _positionRepository.UpdateAsync(position, cancellationToken);

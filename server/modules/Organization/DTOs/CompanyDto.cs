@@ -2,9 +2,9 @@ namespace ICP.Platform.Modules.Organization.DTOs;
 
 public sealed record CompanyDto
 {
-    public required Guid Id { get; init; }
-    public required string Code { get; init; }
-    public required string Name { get; init; }
+    public Guid Id { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
     public bool IsEnabled { get; init; }
     public int SortOrder { get; init; }
     public DateTime CreatedAt { get; init; }

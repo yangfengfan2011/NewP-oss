@@ -26,7 +26,7 @@ public class ConfigCenterModelDefinitionTests
             ConfigCenterModelDefinitions.All,
             model => model.Name == "ValueListItem");
 
-        Assert.Equal("value_list_items", definition.TableName);
+        Assert.Equal("ValueListItem", definition.TableName);
         Assert.Contains(definition.Fields, static field => field.Name == "Code" && field.Required);
         Assert.Contains(definition.Fields, static field => field.Name == "Name" && field.Required);
         Assert.Contains(
@@ -35,5 +35,17 @@ public class ConfigCenterModelDefinitionTests
 
         var validator = new ModelDefinitionValidator();
         validator.Validate(definition);
+    }
+
+    [Fact]
+    public void ValueListItem_UsesPascalCaseTableAndStoreNames()
+    {
+        var definition = Assert.Single(
+            ConfigCenterModelDefinitions.All,
+            model => model.Name == "ValueListItem");
+
+        Assert.Equal("ValueListItem", definition.TableName);
+        Assert.Contains(definition.Fields, static field => field.Name == "Id" && field.StoreName == "Id" && field.IsPrimaryKey);
+        Assert.Contains(definition.Fields, static field => field.Name == "Name" && field.StoreName == "Name");
     }
 }

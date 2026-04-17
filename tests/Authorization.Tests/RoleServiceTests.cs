@@ -33,7 +33,7 @@ public class RoleServiceTests
     public async Task CreateRole_ValidRequest_CreatesRole()
     {
         // Arrange
-        var request = new CreateRoleRequest
+        var request = new RoleDto
         {
             Code = "TestRole",
             Name = "测试角色",
@@ -53,7 +53,7 @@ public class RoleServiceTests
     public async Task CreateRole_DuplicateCode_ThrowsException()
     {
         // Arrange
-        var request = new CreateRoleRequest
+        var request = new RoleDto
         {
             Code = "TestRole",
             Name = "测试角色"
@@ -71,14 +71,14 @@ public class RoleServiceTests
     public async Task UpdateRole_ValidRequest_UpdatesRole()
     {
         // Arrange
-        var createRequest = new CreateRoleRequest
+        var createRequest = new RoleDto
         {
             Code = "TestRole",
             Name = "测试角色"
         };
         var role = await _roleService.CreateRoleAsync(createRequest);
 
-        var updateRequest = new UpdateRoleRequest
+        var updateRequest = new RoleDto
         {
             Name = "更新后的角色",
             Description = "更新后的描述",
@@ -92,6 +92,7 @@ public class RoleServiceTests
         Assert.Equal("更新后的角色", result.Name);
         Assert.Equal("更新后的描述", result.Description);
         Assert.False(result.IsEnabled);
+        Assert.Equal("TestRole", result.Code);
     }
 
     [Fact]

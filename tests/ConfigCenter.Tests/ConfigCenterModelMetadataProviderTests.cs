@@ -36,17 +36,18 @@ public class ConfigCenterModelMetadataProviderTests
         var definition = provider.LoadConfigItem();
 
         Assert.Equal("ConfigItem", definition.Name);
+        Assert.Equal("ConfigItem", definition.TableName);
         Assert.Contains(definition.Fields, static x => x.Name == "EID" && x.IsPrimaryKey);
         Assert.Contains(definition.Fields, static x => x.Name == "ENAME");
-        Assert.Contains(definition.Fields, static x => x.Name == "Key");
-        Assert.Contains(definition.Fields, static x => x.Name == "Value");
-        Assert.Contains(definition.Fields, static x => x.Name == "Type");
-        Assert.Contains(definition.Fields, static x => x.Name == "ModuleId");
-        Assert.Contains(definition.Fields, static x => x.Name == "Group");
-        Assert.Contains(definition.Fields, static x => x.Name == "Environment");
-        Assert.Contains(definition.Fields, static x => x.Name == "TenantId");
-        Assert.Contains(definition.Fields, static x => x.Name == "Description");
-        Assert.Contains(definition.Fields, static x => x.Name == "IsSensitive");
+        Assert.Contains(definition.Fields, static x => x.Name == "Key" && x.StoreName == "Key");
+        Assert.Contains(definition.Fields, static x => x.Name == "Value" && x.StoreName == "Value");
+        Assert.Contains(definition.Fields, static x => x.Name == "Type" && x.StoreName == "Type");
+        Assert.Contains(definition.Fields, static x => x.Name == "ModuleId" && x.StoreName == "ModuleId");
+        Assert.Contains(definition.Fields, static x => x.Name == "Group" && x.StoreName == "Group");
+        Assert.Contains(definition.Fields, static x => x.Name == "Environment" && x.StoreName == "Environment");
+        Assert.Contains(definition.Fields, static x => x.Name == "TenantId" && x.StoreName == "TenantId");
+        Assert.Contains(definition.Fields, static x => x.Name == "Description" && x.StoreName == "Description");
+        Assert.Contains(definition.Fields, static x => x.Name == "IsSensitive" && x.StoreName == "IsSensitive");
     }
 
     [Fact]
@@ -78,6 +79,27 @@ public class ConfigCenterModelMetadataProviderTests
         AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.TenantId");
         AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Description");
         AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.IsSensitive");
+    }
+
+    [Fact]
+    public void SqlServerSnapshot_UsesPascalCaseTableAndColumnNames_ForConfigItem()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var snapshotPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs");
+
+        var snapshot = File.ReadAllText(snapshotPath);
+
+        Assert.Contains("b.ToTable(\"ConfigItem\"", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasColumnName(\"Key\")", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasColumnName(\"ModuleId\")", snapshot, StringComparison.Ordinal);
+        Assert.Contains("b.ToTable(\"ValueListItem\"", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasColumnName(\"Name\")", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasColumnName(\"UpdatedBy\")", snapshot, StringComparison.Ordinal);
     }
 
     private static string GetRepositoryRoot()

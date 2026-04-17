@@ -7,9 +7,9 @@
 **后端实现（25 个文件）**
 - 实体模型：Role, Permission, RolePermission, UserRole
 - 服务层：AuthorizationService, RoleService, PermissionService
-- 仓储层：内存实现（RoleRepository, PermissionRepository, RolePermissionRepository, UserRoleRepository）
+- 仓储层：EF Core 实现（EfRoleRepository, EfPermissionRepository, EfRolePermissionRepository, EfUserRoleRepository）
 - API 控制器：RoleController, PermissionController, UserRoleController
-- DTO 定义：完整的请求/响应对象（PermissionDto, RoleDto, UserRoleDto）
+- DTO 定义：单模型 DTO（PermissionDto, RoleDto, UserRoleDto）+ 动作型请求对象（AssignRolePermissionsRequest, AssignUserRolesRequest）
 - 模块契约：实现 IPermissionProvider 和 IMenuProvider
 
 **前端实现（6 个文件）**
@@ -37,7 +37,7 @@
 3. **审批流程**：不包含权限审批逻辑
 4. **旧权限迁移**：不做旧平台权限体系的全量迁移
 5. **租户隔离**：暂不处理多租户权限隔离，为 Tenant 模块预留接口
-6. **数据库持久化**：当前使用内存仓储，待替换为 EF Core 实现
+6. **复杂授权演进**：当前只覆盖角色、权限、用户角色三条主线，不扩展到更复杂的审批、租户隔离和数据权限
 
 ## 与其他模块的衔接点
 
@@ -60,19 +60,25 @@
 
 - ✅ 后端构建通过
 - ✅ 前端构建通过（pnpm build）
-- ✅ 单元测试通过（12/12 测试用例全部通过）
+- ✅ 单元测试通过（16/16 测试用例全部通过）
   - AuthorizationServiceTests: 6 个测试用例
-  - RoleServiceTests: 6 个测试用例
+  - RoleServiceTests: 10 个测试用例
 
 ## 文件清单
 
 **后端核心文件（25 个）**
 - 模块入口：`AuthorizationModule.cs`
 - 服务层（6 个）：`IAuthorizationService.cs`, `AuthorizationService.cs`, `IRoleService.cs`, `RoleService.cs`, `IPermissionService.cs`, `PermissionService.cs`
-- 仓储层（8 个）：4 个接口 + 4 个内存实现
+- 仓储层（8 个）：4 个接口 + 4 个 EF Core 实现
 - 控制器（3 个）：`RoleController.cs`, `PermissionController.cs`, `UserRoleController.cs`
 - 模型（4 个）：`Role.cs`, `Permission.cs`, `RolePermission.cs`, `UserRole.cs`
 - DTO（3 个）：`RoleDto.cs`, `PermissionDto.cs`, `UserRoleDto.cs`
+
+## 当前实现口径补充
+
+- `Role / Permission / RolePermission / UserRole` 已统一切到 `PascalCase` 表名与普通列名
+- `RoleController` 与 `IRoleService / RoleService` 已改为直接使用 `RoleDto` 作为读写主 DTO，不再维护独立 `CreateRoleRequest / UpdateRoleRequest`
+- 角色权限分配、用户角色分配仍保留动作型请求对象，避免把动作语义混进主模型 DTO
 
 **前端核心文件（6 个）**
 - 模块入口：`frontend/modules/authorization/src/index.ts`

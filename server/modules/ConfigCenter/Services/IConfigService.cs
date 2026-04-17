@@ -8,7 +8,7 @@ public interface IConfigService
     Task<ConfigItemDto?> GetConfigAsync(string key, string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default);
     Task<List<ConfigItemDto>> GetConfigsByModuleAsync(string moduleId, string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default);
     Task<List<ConfigGroupDto>> GetConfigsGroupedAsync(string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default);
-    Task<ConfigItemDto> CreateConfigAsync(ConfigItemCreateDto dto, string? createdBy = null, CancellationToken cancellationToken = default);
-    Task<ConfigItemDto> UpdateConfigAsync(string id, ConfigItemUpdateDto dto, string? updatedBy = null, CancellationToken cancellationToken = default);
+    Task<ConfigItemDto> CreateConfigAsync(ConfigItemDto dto, string? createdBy = null, CancellationToken cancellationToken = default);
+    Task<ConfigItemDto> UpdateConfigAsync(string id, ConfigItemDto dto, string? updatedBy = null, CancellationToken cancellationToken = default);
     Task DeleteConfigAsync(string id, CancellationToken cancellationToken = default);
 }

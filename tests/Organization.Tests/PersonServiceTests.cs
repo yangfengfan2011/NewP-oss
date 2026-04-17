@@ -19,7 +19,7 @@ public class PersonServiceTests
     {
         var service = BuildService();
 
-        var result = await service.CreateAsync(new CreatePersonRequest
+        var result = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "张三",
@@ -40,7 +40,7 @@ public class PersonServiceTests
     public async Task UpdatePerson_ValidRequest_UpdatesFields()
     {
         var service = BuildService();
-        var created = await service.CreateAsync(new CreatePersonRequest
+        var created = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "张三",
@@ -48,7 +48,7 @@ public class PersonServiceTests
             DepartmentId = DepartmentId
         });
 
-        var updated = await service.UpdateAsync(created.Id, new UpdatePersonRequest
+        var updated = await service.UpdateAsync(created.Id, new PersonDto
         {
             CompanyId = CompanyId,
             DepartmentId = DepartmentId,
@@ -64,13 +64,14 @@ public class PersonServiceTests
         Assert.Equal(PositionId, updated.PositionId);
         Assert.Equal(EmploymentStatus.Contractor, updated.EmploymentStatus);
         Assert.False(updated.IsEnabled);
+        Assert.Equal("P001", updated.PersonNo);
     }
 
     [Fact]
     public async Task CreatePerson_WhenPersonNoAlreadyExistsInCompany_ThrowsInvalidOperationException()
     {
         var service = BuildService();
-        await service.CreateAsync(new CreatePersonRequest
+        await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "张三",
@@ -79,7 +80,7 @@ public class PersonServiceTests
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.CreateAsync(new CreatePersonRequest
+            service.CreateAsync(new PersonDto
             {
                 PersonNo = "P001",
                 Name = "李四",
@@ -92,14 +93,14 @@ public class PersonServiceTests
     public async Task UpdatePerson_WhenPersonNoAlreadyExistsInCompany_ThrowsInvalidOperationException()
     {
         var service = BuildService();
-        var personA = await service.CreateAsync(new CreatePersonRequest
+        var personA = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "张三",
             CompanyId = CompanyId,
             DepartmentId = DepartmentId
         });
-        var personB = await service.CreateAsync(new CreatePersonRequest
+        var personB = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "李四",
@@ -108,7 +109,7 @@ public class PersonServiceTests
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateAsync(personB.Id, new UpdatePersonRequest
+            service.UpdateAsync(personB.Id, new PersonDto
             {
                 CompanyId = CompanyId,
                 DepartmentId = DepartmentId,
@@ -123,14 +124,14 @@ public class PersonServiceTests
     public async Task LinkUser_WhenUserAlreadyBound_ThrowsInvalidOperationException()
     {
         var service = BuildService();
-        var personA = await service.CreateAsync(new CreatePersonRequest
+        var personA = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "张三",
             CompanyId = CompanyId,
             DepartmentId = DepartmentId
         });
-        var personB = await service.CreateAsync(new CreatePersonRequest
+        var personB = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P002",
             Name = "李四",
@@ -162,7 +163,7 @@ public class PersonServiceTests
             new InMemoryPersonUserLinkRepository(operations),
             identityUserDirectory,
             new FakeAuthorizationSummaryReader());
-        var person = await service.CreateAsync(new CreatePersonRequest
+        var person = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "张三",
@@ -190,7 +191,7 @@ public class PersonServiceTests
             new InMemoryPersonUserLinkRepository(),
             new NullIdentityUserDirectory(),
             new FakeAuthorizationSummaryReader());
-        var person = await service.CreateAsync(new CreatePersonRequest
+        var person = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P004",
             Name = "赵六",
@@ -216,10 +217,30 @@ public class PersonServiceTests
     }
 
     [Fact]
+    public void PersonDto_ContainsReferenceAndEnumDisplayValueFields()
+    {
+        var dtoType = typeof(PersonDto);
+
+        Assert.NotNull(dtoType.GetProperty("CompanyId_DisplayValue"));
+        Assert.NotNull(dtoType.GetProperty("DepartmentId_DisplayValue"));
+        Assert.NotNull(dtoType.GetProperty("PositionId_DisplayValue"));
+        Assert.NotNull(dtoType.GetProperty("EmploymentStatus_DisplayValue"));
+    }
+
+    [Fact]
+    public void PersonDetailDto_RemainsManualAggregateDto()
+    {
+        var dtoType = typeof(PersonDetailDto);
+
+        Assert.NotNull(dtoType.GetProperty("AuthorizationSummary"));
+        Assert.Null(dtoType.GetProperty("Person"));
+    }
+
+    [Fact]
     public async Task GetDetail_WhenPersonLinked_ReturnsUserLink()
     {
         var service = BuildService();
-        var person = await service.CreateAsync(new CreatePersonRequest
+        var person = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P003",
             Name = "王五",
@@ -249,7 +270,7 @@ public class PersonServiceTests
             new InMemoryPersonUserLinkRepository(),
             new FakeIdentityUserDirectory(),
             new FakeAuthorizationSummaryReader(["平台管理员"]));
-        var person = await service.CreateAsync(new CreatePersonRequest
+        var person = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P100",
             Name = "王五",
@@ -277,7 +298,7 @@ public class PersonServiceTests
             new InMemoryPersonUserLinkRepository(),
             new FakeIdentityUserDirectory(),
             new ThrowingAuthorizationSummaryReader());
-        var person = await service.CreateAsync(new CreatePersonRequest
+        var person = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P101",
             Name = "赵七",

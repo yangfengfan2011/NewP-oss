@@ -23,4 +23,15 @@ public class AuthorizationModelDefinitionTests
             validator.Validate(definition);
         }
     }
+
+    [Fact]
+    public void Authorization_DefinitionsUsePascalCaseStoreNames()
+    {
+        var role = Assert.Single(AuthorizationModelDefinitions.All, item => item.Name == "Role");
+
+        Assert.Equal("Role", role.TableName);
+        Assert.Contains(role.Fields, static field => field.Name == "Id" && field.StoreName == "Id");
+        Assert.Contains(role.Fields, static field => field.Name == "Code" && field.StoreName == "Code");
+        Assert.Contains(role.Fields, static field => field.Name == "Name" && field.StoreName == "Name");
+    }
 }

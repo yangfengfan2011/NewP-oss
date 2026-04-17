@@ -1,5 +1,4 @@
 using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
@@ -16,7 +15,7 @@ public class DepartmentServiceTests
     {
         var service = BuildService();
 
-        var result = await service.CreateAsync(new CreateDepartmentRequest
+        var result = await service.CreateAsync(new DepartmentDto
         {
             CompanyId = CompanyId,
             Code = "ROOT",
@@ -37,7 +36,7 @@ public class DepartmentServiceTests
     {
         var service = BuildService();
 
-        await service.CreateAsync(new CreateDepartmentRequest
+        await service.CreateAsync(new DepartmentDto
         {
             CompanyId = CompanyId,
             Code = "OPS",
@@ -45,7 +44,7 @@ public class DepartmentServiceTests
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.CreateAsync(new CreateDepartmentRequest
+            service.CreateAsync(new DepartmentDto
             {
                 CompanyId = CompanyId,
                 Code = "OPS",
@@ -57,7 +56,7 @@ public class DepartmentServiceTests
     public async Task UpdateDepartment_WithCircularParent_ThrowsInvalidOperationException()
     {
         var service = BuildService();
-        var root = await service.CreateAsync(new CreateDepartmentRequest
+        var root = await service.CreateAsync(new DepartmentDto
         {
             CompanyId = CompanyId,
             Code = "ROOT",
@@ -65,7 +64,7 @@ public class DepartmentServiceTests
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateAsync(root.Id, new UpdateDepartmentRequest
+            service.UpdateAsync(root.Id, new DepartmentDto
             {
                 CompanyId = CompanyId,
                 ParentDepartmentId = root.Id,
@@ -77,14 +76,14 @@ public class DepartmentServiceTests
     public async Task UpdateDepartment_ValidRequest_UpdatesDepartment()
     {
         var service = BuildService();
-        var root = await service.CreateAsync(new CreateDepartmentRequest
+        var root = await service.CreateAsync(new DepartmentDto
         {
             CompanyId = CompanyId,
             Code = "ROOT",
             Name = "根部门"
         });
 
-        var child = await service.CreateAsync(new CreateDepartmentRequest
+        var child = await service.CreateAsync(new DepartmentDto
         {
             CompanyId = CompanyId,
             ParentDepartmentId = root.Id,
@@ -92,7 +91,7 @@ public class DepartmentServiceTests
             Name = "工程部"
         });
 
-        var updated = await service.UpdateAsync(child.Id, new UpdateDepartmentRequest
+        var updated = await service.UpdateAsync(child.Id, new DepartmentDto
         {
             CompanyId = CompanyId,
             ParentDepartmentId = root.Id,

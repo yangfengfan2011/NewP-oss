@@ -7,17 +7,17 @@ public static class OrganizationModelDefinitions
 {
     public static readonly ModelDefinition Company = new(
         "Company",
-        "org_companies",
+        "Company",
         ModelKind.Entity,
         new[]
         {
-            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("Code", "code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("IsEnabled", "is_enabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
-            new FieldDefinition("SortOrder", "sort_order", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("CreatedAt", "created_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "updated_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
+            new FieldDefinition("Id", "Id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("Code", "Code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("IsEnabled", "IsEnabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
+            new FieldDefinition("SortOrder", "SortOrder", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
         },
         new[]
         {
@@ -26,19 +26,19 @@ public static class OrganizationModelDefinitions
 
     public static readonly ModelDefinition Department = new(
         "Department",
-        "org_departments",
+        "Department",
         ModelKind.Entity,
         new[]
         {
-            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("CompanyId", "company_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
-            new FieldDefinition("ParentDepartmentId", "parent_department_id", FieldKind.Reference, FieldValueType.ObjectId, "string", false, false, false),
-            new FieldDefinition("Code", "code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("IsEnabled", "is_enabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
-            new FieldDefinition("SortOrder", "sort_order", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("CreatedAt", "created_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "updated_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
+            new FieldDefinition("Id", "Id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("CompanyId", "CompanyId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
+            new FieldDefinition("ParentDepartmentId", "ParentDepartmentId", FieldKind.Reference, FieldValueType.ObjectId, "string", false, false, false),
+            new FieldDefinition("Code", "Code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("IsEnabled", "IsEnabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
+            new FieldDefinition("SortOrder", "SortOrder", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
         },
         new[]
         {
@@ -49,20 +49,20 @@ public static class OrganizationModelDefinitions
 
     public static readonly ModelDefinition Position = new(
         "Position",
-        "org_positions",
+        "Position",
         ModelKind.Entity,
         new[]
         {
-            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("CompanyId", "company_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
-            new FieldDefinition("DepartmentId", "department_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
-            new FieldDefinition("Code", "code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("EmploymentStatus", "employment_status", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false),
-            new FieldDefinition("IsEnabled", "is_enabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
-            new FieldDefinition("SortOrder", "sort_order", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("CreatedAt", "created_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "updated_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
+            new FieldDefinition("Id", "Id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("CompanyId", "CompanyId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
+            new FieldDefinition("DepartmentId", "DepartmentId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
+            new FieldDefinition("Code", "Code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("EmploymentStatus", "EmploymentStatus", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false),
+            new FieldDefinition("IsEnabled", "IsEnabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
+            new FieldDefinition("SortOrder", "SortOrder", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
         },
         new[]
         {
@@ -72,20 +72,20 @@ public static class OrganizationModelDefinitions
 
     public static readonly ModelDefinition Person = new(
         "Person",
-        "org_persons",
+        "Person",
         ModelKind.Entity,
         new[]
         {
-            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("PersonNo", "person_no", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("CompanyId", "company_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
-            new FieldDefinition("DepartmentId", "department_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
-            new FieldDefinition("PositionId", "position_id", FieldKind.Reference, FieldValueType.ObjectId, "string", false, false, false),
-            new FieldDefinition("EmploymentStatus", "employment_status", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false),
-            new FieldDefinition("IsEnabled", "is_enabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
-            new FieldDefinition("CreatedAt", "created_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "updated_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
+            new FieldDefinition("Id", "Id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("PersonNo", "PersonNo", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("CompanyId", "CompanyId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
+            new FieldDefinition("DepartmentId", "DepartmentId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
+            new FieldDefinition("PositionId", "PositionId", FieldKind.Reference, FieldValueType.ObjectId, "string", false, false, false),
+            new FieldDefinition("EmploymentStatus", "EmploymentStatus", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false),
+            new FieldDefinition("IsEnabled", "IsEnabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
+            new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
         },
         new[]
         {
@@ -96,14 +96,14 @@ public static class OrganizationModelDefinitions
 
     public static readonly ModelDefinition PersonUserLink = new(
         "PersonUserLink",
-        "org_person_user_links",
+        "PersonUserLink",
         ModelKind.Entity,
         new[]
         {
-            new FieldDefinition("PersonId", "person_id", FieldKind.Reference, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("UserId", "user_id", FieldKind.Reference, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("LinkedAt", "linked_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("LinkedBy", "linked_by", FieldKind.Reference, FieldValueType.Text, "string", true, false, false)
+            new FieldDefinition("PersonId", "PersonId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("UserId", "UserId", FieldKind.Reference, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("LinkedAt", "LinkedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("LinkedBy", "LinkedBy", FieldKind.Reference, FieldValueType.Text, "string", true, false, false)
         },
         new[]
         {

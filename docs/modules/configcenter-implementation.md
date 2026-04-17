@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-状态：已落地基础实现，验证通过
+状态：已完成持久化与 DTO 收口，验证通过
 
 当前仓库中，ConfigCenter 已具备后端模块、前端模块、测试项目与基础说明文档，不再是纯占位目录。
 
@@ -27,15 +27,17 @@
   - 环境和租户过滤（优先级：租户+环境 > 环境 > 租户 > 全局）
   - 敏感配置脱敏（返回 `******`）
   - 配置 schema 同步（`SyncConfigSchemaAsync`）
-- 仓储层：`IConfigRepository`、`ConfigRepository`
-  - 内存实现，使用 `List<ConfigItem>` 和锁保证线程安全
-  - 支持按 ID、Key、Module、Keys 批量查询
-  - 支持环境和租户维度过滤
+- 仓储层：`IConfigRepository`、`IValueListRepository`
+  - 当前默认使用 `EfConfigRepository`、`EfValueListRepository`
+  - 已接入统一持久化内核与三套 provider migration
+  - 支持按 ID、Key、Module、Keys 批量查询，以及环境和租户维度过滤
 - 数据模型：`ConfigItem`
   - 包含 Id、Key、Value、Type、ModuleId、Group、Environment、TenantId
   - 包含 DisplayName、Description、IsSensitive
   - 包含 CreatedAt、UpdatedAt、UpdatedBy
-- DTO：`ConfigItemDto`、`ConfigItemCreateDto`、`ConfigItemUpdateDto`、`ConfigGroupDto`
+- DTO：`ConfigItemDto`、`ValueListItemDto`、`ConfigGroupDto`
+  - `ConfigItem` 与 `ValueListItem` 已切到单 DTO 读写接口，不再拆分 `Create / Update DTO`
+  - `ConfigGroupDto` 继续作为聚合读取模型保留
 
 ### 前端
 
@@ -74,11 +76,18 @@
 
 - 以最小可运行能力为目标
 - 已有 API 设计与基础服务实现
-- 内存仓储实现，适合开发和测试阶段
-- 服务和 DTO 层为后续数据库化保留稳定接口
+- 已切到 EF Core 持久化实现，支持 `SqlServer / MySql / Oracle`
+- `ConfigItem` 已由 metadata provider 驱动并投影到 `PascalCase` 表列命名
+- 服务和 DTO 层已收口为当前稳定接口，不再额外维护 `Create / Update DTO`
 - 适合作为后续接入持久化、导入能力和更复杂配置治理的基础
 
 ## 技术实现细节
+
+### 命名与 DTO 规则
+
+- `ConfigItem` / `ValueListItem` 当前统一使用 `PascalCase` 表名与普通列名
+- `ConfigItem` metadata 试点继续保留 `EID / ENAME` 协议字段，与普通字段命名边界分离
+- `ConfigController` / `ValueListController` 已直接使用单一 DTO 作为创建、更新、读取的主模型
 
 ### 配置优先级解析
 
@@ -99,7 +108,7 @@
 
 ## 已知后续工作
 
-- 持久化能力替换/增强（替换内存仓储为数据库实现）
+- 将 `ValueListItem` 继续迁入 metadata model 链路
 - 与迁移跑道的配置导入对接
 - 与审计模块的变更记录联动
 - 配置类型校验（当前 Type 仅为描述信息）

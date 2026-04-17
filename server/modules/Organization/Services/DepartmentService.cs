@@ -1,5 +1,4 @@
 using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 
@@ -26,12 +25,12 @@ public sealed class DepartmentService : IDepartmentService
         return department is null ? null : MapToDto(department);
     }
 
-    public async Task<DepartmentDto> CreateAsync(CreateDepartmentRequest request, CancellationToken cancellationToken = default)
+    public async Task<DepartmentDto> CreateAsync(DepartmentDto dto, CancellationToken cancellationToken = default)
     {
         if (await _departmentRepository.ExistsSiblingCodeAsync(
-                request.CompanyId,
-                request.ParentDepartmentId,
-                request.Code,
+                dto.CompanyId,
+                dto.ParentDepartmentId,
+                dto.Code,
                 cancellationToken: cancellationToken))
         {
             throw new InvalidOperationException("同一父节点下部门编码必须唯一。");
@@ -39,18 +38,18 @@ public sealed class DepartmentService : IDepartmentService
 
         var department = new Department
         {
-            CompanyId = request.CompanyId,
-            ParentDepartmentId = request.ParentDepartmentId,
-            Code = request.Code,
-            Name = request.Name,
-            SortOrder = request.SortOrder
+            CompanyId = dto.CompanyId,
+            ParentDepartmentId = dto.ParentDepartmentId,
+            Code = dto.Code,
+            Name = dto.Name,
+            SortOrder = dto.SortOrder
         };
 
         await _departmentRepository.CreateAsync(department, cancellationToken);
         return MapToDto(department);
     }
 
-    public async Task<DepartmentDto> UpdateAsync(Guid departmentId, UpdateDepartmentRequest request, CancellationToken cancellationToken = default)
+    public async Task<DepartmentDto> UpdateAsync(Guid departmentId, DepartmentDto dto, CancellationToken cancellationToken = default)
     {
         var department = await _departmentRepository.GetByIdAsync(departmentId, cancellationToken);
         if (department is null)
@@ -58,14 +57,14 @@ public sealed class DepartmentService : IDepartmentService
             throw new InvalidOperationException($"部门 '{departmentId}' 不存在。");
         }
 
-        if (request.ParentDepartmentId == departmentId)
+        if (dto.ParentDepartmentId == departmentId)
         {
             throw new InvalidOperationException("部门不能指向自己作为上级。");
         }
 
         if (await _departmentRepository.ExistsSiblingCodeAsync(
-                request.CompanyId,
-                request.ParentDepartmentId,
+                dto.CompanyId,
+                dto.ParentDepartmentId,
                 department.Code,
                 departmentId,
                 cancellationToken))
@@ -73,11 +72,11 @@ public sealed class DepartmentService : IDepartmentService
             throw new InvalidOperationException("同一父节点下部门编码必须唯一。");
         }
 
-        department.CompanyId = request.CompanyId;
-        department.ParentDepartmentId = request.ParentDepartmentId;
-        department.Name = request.Name;
-        department.IsEnabled = request.IsEnabled;
-        department.SortOrder = request.SortOrder;
+        department.CompanyId = dto.CompanyId;
+        department.ParentDepartmentId = dto.ParentDepartmentId;
+        department.Name = dto.Name;
+        department.IsEnabled = dto.IsEnabled;
+        department.SortOrder = dto.SortOrder;
         department.UpdatedAt = DateTime.UtcNow;
 
         await _departmentRepository.UpdateAsync(department, cancellationToken);

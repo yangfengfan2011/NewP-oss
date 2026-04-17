@@ -203,7 +203,7 @@ public class ConfigServiceTests
     public async Task CreateConfig_CreatesNewConfig()
     {
         // Arrange
-        var dto = new ConfigItemCreateDto
+        var dto = new ConfigItemDto
         {
             Key = "Test.NewSetting",
             Value = "newvalue",
@@ -238,7 +238,7 @@ public class ConfigServiceTests
         };
         await _configRepository.CreateAsync(item);
 
-        var updateDto = new ConfigItemUpdateDto
+        var updateDto = new ConfigItemDto
         {
             Value = "newvalue"
         };

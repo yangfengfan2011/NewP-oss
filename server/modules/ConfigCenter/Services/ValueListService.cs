@@ -23,7 +23,7 @@ public class ValueListService : IValueListService
     }
 
     public async Task<ValueListItemDto> CreateAsync(
-        ValueListItemCreateDto dto,
+        ValueListItemDto dto,
         string? updatedBy = null,
         CancellationToken cancellationToken = default)
     {
@@ -49,7 +49,7 @@ public class ValueListService : IValueListService
 
     public async Task<ValueListItemDto> UpdateAsync(
         string id,
-        ValueListItemUpdateDto dto,
+        ValueListItemDto dto,
         string? updatedBy = null,
         CancellationToken cancellationToken = default)
     {

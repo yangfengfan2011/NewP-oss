@@ -20,6 +20,8 @@
 
 - 独立后端模块 `server/modules/Organization`
 - 模型定义与 EF 仓储：`Company / Department / Position / Person / PersonUserLink`
+- 单模型 DTO：`CompanyDto / DepartmentDto / PositionDto / PersonDto / PersonUserLinkDto`
+- 聚合 DTO 继续手工维护：`PersonDetailDto / DepartmentTreeNodeDto / IdentityUserOptionDto`
 - 服务层规则：
   - 部门自环阻断
   - 同父部门编码唯一
@@ -77,6 +79,9 @@
 - 人员详情页可展示基础信息、账号绑定状态和授权摘要
 - 详情页可打开绑定账号对话框，搜索可绑定账号并调用绑定接口
 - 宿主可装载 Organization 模块，前端 workspace 可整体构建
+- `Company / Department / Position / Person / PersonUserLink` 已统一切到 `PascalCase` 表名与普通列名
+- `PersonDto` 已补齐 `CompanyId_DisplayValue / DepartmentId_DisplayValue / PositionId_DisplayValue / EmploymentStatus_DisplayValue`
+- `Companies / Departments / Positions / Persons` 控制器已直接使用单模型 DTO，不再拆分 `Create*Request / Update*Request`
 
 ### 当前限制
 
@@ -85,6 +90,7 @@
   - 真实绑定会报“未接入”错误
 - 授权摘要读取失败时当前回退为空摘要，不区分“真的为空”与“依赖暂不可用”
 - 人员中心页尚未接真实列表 API
+- `PersonDetailDto` 等聚合读取模型仍保持手工维护，不纳入自动 DTO 覆盖范围
 
 ## 对应提交
 

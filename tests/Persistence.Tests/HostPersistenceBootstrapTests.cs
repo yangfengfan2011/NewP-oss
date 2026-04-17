@@ -40,11 +40,11 @@ public class HostPersistenceBootstrapTests
             .ToList();
 
         Assert.NotNull(runner);
-        Assert.Contains("config_items", tableNames);
-        Assert.Contains("auth_roles", tableNames);
-        Assert.Contains("auth_permissions", tableNames);
-        Assert.Contains("auth_role_permissions", tableNames);
-        Assert.Contains("auth_user_roles", tableNames);
+        Assert.Contains("ConfigItem", tableNames);
+        Assert.Contains("Role", tableNames);
+        Assert.Contains("Permission", tableNames);
+        Assert.Contains("RolePermission", tableNames);
+        Assert.Contains("UserRole", tableNames);
     }
 
     [Fact]

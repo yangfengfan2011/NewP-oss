@@ -36,7 +36,7 @@ public sealed class LocalAuthSeeder
         var role = await _roleService.GetRoleByCodeAsync(_options.AdminRoleCode, cancellationToken);
         if (role is null)
         {
-            role = await _roleService.CreateRoleAsync(new CreateRoleRequest
+            role = await _roleService.CreateRoleAsync(new RoleDto
             {
                 Code = _options.AdminRoleCode,
                 Name = _options.AdminRoleName,

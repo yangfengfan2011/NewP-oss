@@ -66,7 +66,7 @@ public class ConfigController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<ConfigItemDto>> CreateConfig(
-        [FromBody] ConfigItemCreateDto dto,
+        [FromBody] ConfigItemDto dto,
         CancellationToken cancellationToken = default)
     {
         var config = await _configService.CreateConfigAsync(dto, User?.Identity?.Name, cancellationToken);
@@ -76,7 +76,7 @@ public class ConfigController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<ConfigItemDto>> UpdateConfig(
         string id,
-        [FromBody] ConfigItemUpdateDto dto,
+        [FromBody] ConfigItemDto dto,
         CancellationToken cancellationToken = default)
     {
         try

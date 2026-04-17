@@ -59,27 +59,27 @@ public sealed class PersonService : IPersonService
         };
     }
 
-    public async Task<PersonDto> CreateAsync(CreatePersonRequest request, CancellationToken cancellationToken = default)
+    public async Task<PersonDto> CreateAsync(PersonDto dto, CancellationToken cancellationToken = default)
     {
         // 人员工号唯一性按“同一公司”收口，而不是全平台全局唯一。
-        await EnsurePersonNoAvailableAsync(request.CompanyId, request.PersonNo, null, cancellationToken);
+        await EnsurePersonNoAvailableAsync(dto.CompanyId, dto.PersonNo, null, cancellationToken);
 
         var person = new Person
         {
-            PersonNo = request.PersonNo,
-            Name = request.Name,
-            CompanyId = request.CompanyId,
-            DepartmentId = request.DepartmentId,
-            PositionId = request.PositionId,
-            EmploymentStatus = request.EmploymentStatus,
-            IsEnabled = request.IsEnabled
+            PersonNo = dto.PersonNo,
+            Name = dto.Name,
+            CompanyId = dto.CompanyId,
+            DepartmentId = dto.DepartmentId,
+            PositionId = dto.PositionId,
+            EmploymentStatus = dto.EmploymentStatus,
+            IsEnabled = dto.IsEnabled
         };
 
         await _personRepository.CreateAsync(person, cancellationToken);
         return MapToDto(person);
     }
 
-    public async Task<PersonDto> UpdateAsync(Guid personId, UpdatePersonRequest request, CancellationToken cancellationToken = default)
+    public async Task<PersonDto> UpdateAsync(Guid personId, PersonDto dto, CancellationToken cancellationToken = default)
     {
         var person = await _personRepository.GetByIdAsync(personId, cancellationToken);
         if (person is null)
@@ -87,14 +87,15 @@ public sealed class PersonService : IPersonService
             throw new InvalidOperationException($"人员 '{personId}' 不存在。");
         }
 
-        await EnsurePersonNoAvailableAsync(request.CompanyId, person.PersonNo, personId, cancellationToken);
+        await EnsurePersonNoAvailableAsync(dto.CompanyId, person.PersonNo, personId, cancellationToken);
 
-        person.CompanyId = request.CompanyId;
-        person.DepartmentId = request.DepartmentId;
-        person.PositionId = request.PositionId;
-        person.Name = request.Name;
-        person.EmploymentStatus = request.EmploymentStatus;
-        person.IsEnabled = request.IsEnabled;
+        // PersonNo 继续保持只读，避免 DTO 合并后把人员工号修改放进同一批行为变更里。
+        person.CompanyId = dto.CompanyId;
+        person.DepartmentId = dto.DepartmentId;
+        person.PositionId = dto.PositionId;
+        person.Name = dto.Name;
+        person.EmploymentStatus = dto.EmploymentStatus;
+        person.IsEnabled = dto.IsEnabled;
         person.UpdatedAt = DateTime.UtcNow;
 
         await _personRepository.UpdateAsync(person, cancellationToken);

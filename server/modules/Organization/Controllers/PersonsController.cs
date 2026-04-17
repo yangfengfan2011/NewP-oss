@@ -27,12 +27,12 @@ public sealed class PersonsController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<PersonDto>> Create(
-        [FromBody] CreatePersonRequest request,
+        [FromBody] PersonDto dto,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var person = await _personService.CreateAsync(request, cancellationToken);
+            var person = await _personService.CreateAsync(dto, cancellationToken);
             return CreatedAtAction(nameof(Get), new { id = person.Id }, person);
         }
         catch (InvalidOperationException ex)
@@ -44,12 +44,12 @@ public sealed class PersonsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<PersonDto>> Update(
         Guid id,
-        [FromBody] UpdatePersonRequest request,
+        [FromBody] PersonDto dto,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var person = await _personService.UpdateAsync(id, request, cancellationToken);
+            var person = await _personService.UpdateAsync(id, dto, cancellationToken);
             return Ok(person);
         }
         catch (InvalidOperationException ex)

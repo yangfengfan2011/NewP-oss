@@ -1,5 +1,4 @@
 using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
@@ -14,7 +13,7 @@ public class CompanyServiceTests
     {
         var service = BuildService();
 
-        var result = await service.CreateAsync(new CreateCompanyRequest
+        var result = await service.CreateAsync(new CompanyDto
         {
             Code = "ICP",
             Name = "研发中心",
@@ -32,14 +31,14 @@ public class CompanyServiceTests
     {
         var service = BuildService();
 
-        await service.CreateAsync(new CreateCompanyRequest
+        await service.CreateAsync(new CompanyDto
         {
             Code = "ICP",
             Name = "研发中心"
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.CreateAsync(new CreateCompanyRequest
+            service.CreateAsync(new CompanyDto
             {
                 Code = "ICP",
                 Name = "重复公司"
@@ -50,13 +49,13 @@ public class CompanyServiceTests
     public async Task UpdateCompany_ValidRequest_UpdatesCompany()
     {
         var service = BuildService();
-        var company = await service.CreateAsync(new CreateCompanyRequest
+        var company = await service.CreateAsync(new CompanyDto
         {
             Code = "ICP",
             Name = "研发中心"
         });
 
-        var updated = await service.UpdateAsync(company.Id, new UpdateCompanyRequest
+        var updated = await service.UpdateAsync(company.Id, new CompanyDto
         {
             Name = "研发中心（更新）",
             IsEnabled = false,

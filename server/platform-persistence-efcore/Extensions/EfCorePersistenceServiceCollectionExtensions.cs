@@ -3,6 +3,7 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore.Sql;
 using ICP.Platform.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -41,6 +42,7 @@ public static class EfCorePersistenceServiceCollectionExtensions
             var connectionString = ResolveConnectionString(configuration, options.Provider);
             var migrationsAssembly = EfCoreProviderOptions.GetDefaultMigrationsAssembly(options.Provider);
             EfCoreProviderOptions.Configure(builder, options.Provider, connectionString, migrationsAssembly);
+            builder.ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>();
 
             _ = modelDefinitions;
         });

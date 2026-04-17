@@ -1,5 +1,4 @@
 using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,12 +33,12 @@ public sealed class DepartmentsController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<DepartmentDto>> Create(
-        [FromBody] CreateDepartmentRequest request,
+        [FromBody] DepartmentDto dto,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var department = await _departmentService.CreateAsync(request, cancellationToken);
+            var department = await _departmentService.CreateAsync(dto, cancellationToken);
             return CreatedAtAction(nameof(Get), new { id = department.Id }, department);
         }
         catch (InvalidOperationException ex)
@@ -51,12 +50,12 @@ public sealed class DepartmentsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<DepartmentDto>> Update(
         Guid id,
-        [FromBody] UpdateDepartmentRequest request,
+        [FromBody] DepartmentDto dto,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var department = await _departmentService.UpdateAsync(id, request, cancellationToken);
+            var department = await _departmentService.UpdateAsync(id, dto, cancellationToken);
             return Ok(department);
         }
         catch (InvalidOperationException ex)

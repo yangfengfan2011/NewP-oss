@@ -44,6 +44,40 @@ public class EfAuthorizationRepositoryTests
         Assert.True(hasPermission);
     }
 
+    [Fact]
+    public void MigrationSnapshots_UsePascalCaseTableAndColumnNames_ForAuthorizationModels()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var sqlServerSnapshot = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs"));
+        var mySqlSnapshot = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.mysql",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs"));
+        var oracleSnapshot = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.oracle",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs"));
+
+        foreach (var snapshot in new[] { sqlServerSnapshot, mySqlSnapshot, oracleSnapshot })
+        {
+            Assert.Contains("b.ToTable(\"Role\"", snapshot, StringComparison.Ordinal);
+            Assert.Contains("b.ToTable(\"Permission\"", snapshot, StringComparison.Ordinal);
+            Assert.Contains("b.ToTable(\"RolePermission\"", snapshot, StringComparison.Ordinal);
+            Assert.Contains("b.ToTable(\"UserRole\"", snapshot, StringComparison.Ordinal);
+            Assert.Contains(".HasColumnName(\"Code\")", snapshot, StringComparison.Ordinal);
+            Assert.Contains(".HasColumnName(\"RoleId\")", snapshot, StringComparison.Ordinal);
+        }
+    }
+
     private static EfPlatformDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -51,5 +85,21 @@ public class EfAuthorizationRepositoryTests
             .Options;
 
         return new EfPlatformDbContext(options, AuthorizationModelDefinitions.All);
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "server")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException("无法定位仓库根目录。");
     }
 }

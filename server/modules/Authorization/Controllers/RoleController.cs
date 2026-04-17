@@ -34,11 +34,11 @@ public class RoleController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<RoleDto>> CreateRole([FromBody] CreateRoleRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RoleDto>> CreateRole([FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            var role = await _roleService.CreateRoleAsync(request, User.Identity?.Name, cancellationToken);
+            var role = await _roleService.CreateRoleAsync(dto, User.Identity?.Name, cancellationToken);
             return CreatedAtAction(nameof(GetRoleById), new { roleId = role.Id }, role);
         }
         catch (InvalidOperationException ex)
@@ -48,11 +48,11 @@ public class RoleController : ControllerBase
     }
 
     [HttpPut("{roleId}")]
-    public async Task<ActionResult<RoleDto>> UpdateRole(string roleId, [FromBody] UpdateRoleRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RoleDto>> UpdateRole(string roleId, [FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            var role = await _roleService.UpdateRoleAsync(roleId, request, User.Identity?.Name, cancellationToken);
+            var role = await _roleService.UpdateRoleAsync(roleId, dto, User.Identity?.Name, cancellationToken);
             return Ok(role);
         }
         catch (InvalidOperationException ex)

@@ -19,7 +19,7 @@ public class ValueListServiceTests
     [Fact]
     public async Task CreateAsync_CreatesNewItem()
     {
-        var result = await _service.CreateAsync(new ValueListItemCreateDto
+        var result = await _service.CreateAsync(new ValueListItemDto
         {
             Code = "STATUS_ACTIVE",
             Name = "启用",
@@ -36,14 +36,14 @@ public class ValueListServiceTests
     [Fact]
     public async Task CreateAsync_DuplicateCode_ThrowsInvalidOperationException()
     {
-        await _service.CreateAsync(new ValueListItemCreateDto
+        await _service.CreateAsync(new ValueListItemDto
         {
             Code = "STATUS_ACTIVE",
             Name = "启用"
         });
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateAsync(
-            new ValueListItemCreateDto
+            new ValueListItemDto
             {
                 Code = "STATUS_ACTIVE",
                 Name = "重复"
@@ -55,13 +55,13 @@ public class ValueListServiceTests
     [Fact]
     public async Task UpdateAsync_UpdatesExistingItem()
     {
-        var created = await _service.CreateAsync(new ValueListItemCreateDto
+        var created = await _service.CreateAsync(new ValueListItemDto
         {
             Code = "STATUS_ACTIVE",
             Name = "启用"
         });
 
-        var updated = await _service.UpdateAsync(created.Id, new ValueListItemUpdateDto
+        var updated = await _service.UpdateAsync(created.Id, new ValueListItemDto
         {
             Code = "STATUS_ENABLED",
             Name = "已启用",
@@ -77,7 +77,7 @@ public class ValueListServiceTests
     [Fact]
     public async Task DeleteAsync_RemovesExistingItem()
     {
-        var created = await _service.CreateAsync(new ValueListItemCreateDto
+        var created = await _service.CreateAsync(new ValueListItemDto
         {
             Code = "STATUS_ACTIVE",
             Name = "启用"

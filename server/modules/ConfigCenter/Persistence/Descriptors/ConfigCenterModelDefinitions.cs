@@ -7,17 +7,17 @@ public static class ConfigCenterModelDefinitions
 {
     public static readonly ModelDefinition ValueListItem = new(
         "ValueListItem",
-        "value_list_items",
+        "ValueListItem",
         ModelKind.Entity,
         new[]
         {
-            new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("Code", "code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Name", "name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Description", "description", FieldKind.Scalar, FieldValueType.Description, "string", false, false, false),
-            new FieldDefinition("CreatedAt", "created_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "updated_at", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedBy", "updated_by", FieldKind.Audit, FieldValueType.User, "string", false, false, true)
+            new FieldDefinition("Id", "Id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+            new FieldDefinition("Code", "Code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+            new FieldDefinition("Description", "Description", FieldKind.Scalar, FieldValueType.Description, "string", false, false, false),
+            new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
+            new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true)
         },
         new[]
         {

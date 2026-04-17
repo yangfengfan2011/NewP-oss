@@ -58,7 +58,7 @@ public class ConfigService : IConfigService
         return grouped;
     }
 
-    public async Task<ConfigItemDto> CreateConfigAsync(ConfigItemCreateDto dto, string? createdBy = null, CancellationToken cancellationToken = default)
+    public async Task<ConfigItemDto> CreateConfigAsync(ConfigItemDto dto, string? createdBy = null, CancellationToken cancellationToken = default)
     {
         var item = new ConfigItem
         {
@@ -79,7 +79,7 @@ public class ConfigService : IConfigService
         return MapToDto(item);
     }
 
-    public async Task<ConfigItemDto> UpdateConfigAsync(string id, ConfigItemUpdateDto dto, string? updatedBy = null, CancellationToken cancellationToken = default)
+    public async Task<ConfigItemDto> UpdateConfigAsync(string id, ConfigItemDto dto, string? updatedBy = null, CancellationToken cancellationToken = default)
     {
         var item = await _configRepository.GetByIdAsync(id, cancellationToken);
         if (item == null)
@@ -87,6 +87,7 @@ public class ConfigService : IConfigService
             throw new InvalidOperationException($"配置项 {id} 不存在");
         }
 
+        // 同一 DTO 只负责统一输入/输出模型，不改变当前 update 只允许编辑的字段范围。
         if (dto.Value != null)
         {
             item.Value = dto.Value;

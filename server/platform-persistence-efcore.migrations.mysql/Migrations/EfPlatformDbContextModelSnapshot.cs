@@ -24,37 +24,37 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("code");
+                        .HasColumnName("Code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_enabled");
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("Name");
 
                     b.Property<string>("SortOrder")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("sort_order");
+                        .HasColumnName("SortOrder");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
@@ -62,7 +62,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Company_Code");
 
-                    b.ToTable("org_companies", (string)null);
+                    b.ToTable("Company", (string)null);
                 });
 
             modelBuilder.Entity("ConfigItem", b =>
@@ -155,48 +155,48 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("code");
+                        .HasColumnName("Code");
 
                     b.Property<string>("CompanyId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("company_id");
+                        .HasColumnName("CompanyId");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_enabled");
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("Name");
 
                     b.Property<string>("ParentDepartmentId")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("parent_department_id");
+                        .HasColumnName("ParentDepartmentId");
 
                     b.Property<string>("SortOrder")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("sort_order");
+                        .HasColumnName("SortOrder");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
@@ -209,7 +209,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.HasIndex("CompanyId", "ParentDepartmentId", "Code")
                         .HasDatabaseName("IX_Department_Company_Parent_Code");
 
-                    b.ToTable("org_departments", (string)null);
+                    b.ToTable("Department", (string)null);
                 });
 
             modelBuilder.Entity("Permission", b =>
@@ -217,38 +217,38 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("code");
+                        .HasColumnName("Code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<string>("Description")
                         .HasColumnType("longtext")
-                        .HasColumnName("description");
+                        .HasColumnName("Description");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("display_name");
+                        .HasColumnName("DisplayName");
 
                     b.Property<string>("Group")
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("permission_group");
+                        .HasColumnName("Group");
 
                     b.Property<string>("ModuleId")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("module_id");
+                        .HasColumnName("ModuleId");
 
                     b.HasKey("Id");
 
@@ -259,7 +259,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.HasIndex("ModuleId")
                         .HasDatabaseName("IX_Permission_Module");
 
-                    b.ToTable("auth_permissions", (string)null);
+                    b.ToTable("Permission", (string)null);
                 });
 
             modelBuilder.Entity("Person", b =>
@@ -267,54 +267,54 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("CompanyId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("company_id");
+                        .HasColumnName("CompanyId");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<string>("DepartmentId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("department_id");
+                        .HasColumnName("DepartmentId");
 
                     b.Property<string>("EmploymentStatus")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("employment_status");
+                        .HasColumnName("EmploymentStatus");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_enabled");
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("Name");
 
                     b.Property<string>("PersonNo")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("person_no");
+                        .HasColumnName("PersonNo");
 
                     b.Property<string>("PositionId")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("position_id");
+                        .HasColumnName("PositionId");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
@@ -328,7 +328,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Person_Company_PersonNo");
 
-                    b.ToTable("org_persons", (string)null);
+                    b.ToTable("Person", (string)null);
                 });
 
             modelBuilder.Entity("PersonUserLink", b =>
@@ -336,23 +336,23 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("PersonId")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("person_id");
+                        .HasColumnName("PersonId");
 
                     b.Property<DateTime>("LinkedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("linked_at");
+                        .HasColumnName("LinkedAt");
 
                     b.Property<string>("LinkedBy")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("linked_by");
+                        .HasColumnName("LinkedBy");
 
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("user_id");
+                        .HasColumnName("UserId");
 
                     b.HasKey("PersonId");
 
@@ -364,7 +364,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_PersonUserLink_User");
 
-                    b.ToTable("org_person_user_links", (string)null);
+                    b.ToTable("PersonUserLink", (string)null);
                 });
 
             modelBuilder.Entity("Position", b =>
@@ -372,55 +372,55 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("code");
+                        .HasColumnName("Code");
 
                     b.Property<string>("CompanyId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("company_id");
+                        .HasColumnName("CompanyId");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<string>("DepartmentId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("department_id");
+                        .HasColumnName("DepartmentId");
 
                     b.Property<string>("EmploymentStatus")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("employment_status");
+                        .HasColumnName("EmploymentStatus");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_enabled");
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("Name");
 
                     b.Property<string>("SortOrder")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("sort_order");
+                        .HasColumnName("SortOrder");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
@@ -430,7 +430,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.HasIndex("DepartmentId")
                         .HasDatabaseName("IX_Position_Department");
 
-                    b.ToTable("org_positions", (string)null);
+                    b.ToTable("Position", (string)null);
                 });
 
             modelBuilder.Entity("Role", b =>
@@ -438,49 +438,49 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("code");
+                        .HasColumnName("Code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("created_by");
+                        .HasColumnName("CreatedBy");
 
                     b.Property<string>("Description")
                         .HasColumnType("longtext")
-                        .HasColumnName("description");
+                        .HasColumnName("Description");
 
                     b.Property<bool>("IsBuiltIn")
                         .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_built_in");
+                        .HasColumnName("IsBuiltIn");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_enabled");
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("Name");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("updated_by");
+                        .HasColumnName("UpdatedBy");
 
                     b.HasKey("Id");
 
@@ -488,7 +488,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Role_Code");
 
-                    b.ToTable("auth_roles", (string)null);
+                    b.ToTable("Role", (string)null);
                 });
 
             modelBuilder.Entity("RolePermission", b =>
@@ -496,28 +496,28 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<DateTime>("GrantedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("granted_at");
+                        .HasColumnName("GrantedAt");
 
                     b.Property<string>("GrantedBy")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("granted_by");
+                        .HasColumnName("GrantedBy");
 
                     b.Property<string>("PermissionId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("permission_id");
+                        .HasColumnName("PermissionId");
 
                     b.Property<string>("RoleId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("role_id");
+                        .HasColumnName("RoleId");
 
                     b.HasKey("Id");
 
@@ -525,7 +525,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_RolePermission_Role_Permission");
 
-                    b.ToTable("auth_role_permissions", (string)null);
+                    b.ToTable("RolePermission", (string)null);
                 });
 
             modelBuilder.Entity("UserRole", b =>
@@ -533,28 +533,28 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<DateTime>("AssignedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("assigned_at");
+                        .HasColumnName("AssignedAt");
 
                     b.Property<string>("AssignedBy")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("assigned_by");
+                        .HasColumnName("AssignedBy");
 
                     b.Property<string>("RoleId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("role_id");
+                        .HasColumnName("RoleId");
 
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("user_id");
+                        .HasColumnName("UserId");
 
                     b.HasKey("Id");
 
@@ -565,7 +565,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_UserRole_User_Role");
 
-                    b.ToTable("auth_user_roles", (string)null);
+                    b.ToTable("UserRole", (string)null);
                 });
 
             modelBuilder.Entity("ValueListItem", b =>
@@ -573,36 +573,36 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("id");
+                        .HasColumnName("Id");
 
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("code");
+                        .HasColumnName("Code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
+                        .HasColumnName("CreatedAt");
 
                     b.Property<string>("Description")
                         .HasColumnType("longtext")
-                        .HasColumnName("description");
+                        .HasColumnName("Description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("Name");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
-                        .HasColumnName("updated_by");
+                        .HasColumnName("UpdatedBy");
 
                     b.HasKey("Id");
 
@@ -610,7 +610,7 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_ValueListItem_Code");
 
-                    b.ToTable("value_list_items", (string)null);
+                    b.ToTable("ValueListItem", (string)null);
                 });
 #pragma warning restore 612, 618
         }

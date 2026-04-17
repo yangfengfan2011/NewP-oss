@@ -747,8 +747,8 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         public Task<List<RoleDto>> GetAllRolesAsync(CancellationToken cancellationToken = default) => Task.FromResult(new List<RoleDto>());
         public Task<RoleDto?> GetRoleByIdAsync(string roleId, CancellationToken cancellationToken = default) => Task.FromResult<RoleDto?>(null);
         public Task<RoleDto?> GetRoleByCodeAsync(string code, CancellationToken cancellationToken = default) => Task.FromResult<RoleDto?>(null);
-        public Task<RoleDto> CreateRoleAsync(CreateRoleRequest request, string? createdBy = null, CancellationToken cancellationToken = default) => Task.FromResult(new RoleDto { Id = "stub", Code = request.Code, Name = request.Name });
-        public Task<RoleDto> UpdateRoleAsync(string roleId, UpdateRoleRequest request, string? updatedBy = null, CancellationToken cancellationToken = default) => Task.FromResult(new RoleDto { Id = roleId, Code = "stub", Name = request.Name });
+        public Task<RoleDto> CreateRoleAsync(RoleDto dto, string? createdBy = null, CancellationToken cancellationToken = default) => Task.FromResult(new RoleDto { Id = "stub", Code = dto.Code, Name = dto.Name });
+        public Task<RoleDto> UpdateRoleAsync(string roleId, RoleDto dto, string? updatedBy = null, CancellationToken cancellationToken = default) => Task.FromResult(new RoleDto { Id = roleId, Code = "stub", Name = dto.Name });
         public Task DeleteRoleAsync(string roleId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<RolePermissionsDto> GetRolePermissionsAsync(string roleId, CancellationToken cancellationToken = default) => Task.FromResult(new RolePermissionsDto { RoleId = roleId, PermissionCodes = new List<string>() });
         public Task AssignRolePermissionsAsync(string roleId, AssignRolePermissionsRequest request, string? grantedBy = null, CancellationToken cancellationToken = default) => Task.CompletedTask;

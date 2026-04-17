@@ -1,5 +1,4 @@
 using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,12 +33,12 @@ public sealed class PositionsController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<PositionDto>> Create(
-        [FromBody] CreatePositionRequest request,
+        [FromBody] PositionDto dto,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var position = await _positionService.CreateAsync(request, cancellationToken);
+            var position = await _positionService.CreateAsync(dto, cancellationToken);
             return CreatedAtAction(nameof(Get), new { id = position.Id }, position);
         }
         catch (InvalidOperationException ex)
@@ -51,12 +50,12 @@ public sealed class PositionsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<PositionDto>> Update(
         Guid id,
-        [FromBody] UpdatePositionRequest request,
+        [FromBody] PositionDto dto,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var position = await _positionService.UpdateAsync(id, request, cancellationToken);
+            var position = await _positionService.UpdateAsync(id, dto, cancellationToken);
             return Ok(position);
         }
         catch (InvalidOperationException ex)

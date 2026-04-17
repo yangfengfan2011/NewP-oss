@@ -24,7 +24,7 @@ public class ValueListController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<ValueListItemDto>> Create(
-        [FromBody] ValueListItemCreateDto dto,
+        [FromBody] ValueListItemDto dto,
         CancellationToken cancellationToken = default)
     {
         try
@@ -41,7 +41,7 @@ public class ValueListController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<ValueListItemDto>> Update(
         string id,
-        [FromBody] ValueListItemUpdateDto dto,
+        [FromBody] ValueListItemDto dto,
         CancellationToken cancellationToken = default)
     {
         try

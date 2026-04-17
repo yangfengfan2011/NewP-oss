@@ -130,6 +130,114 @@ public class RuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void MaterializeEnabledPlugin_WritesLocalizationManifest_FromDictionaryMetadata()
+    {
+        var packageRoot = CreatePackageWithLocalizationMetadata();
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+        EnableInstalledPackage(CreatePlatformPackageWithLanguages(), installRoot, "Platform");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+
+        materializer.Materialize(installRoot);
+
+        var localizationManifestPath = Path.Combine(installRoot, "runtime", "localization-manifest.json");
+
+        Assert.True(File.Exists(localizationManifestPath));
+        using var manifestDocument = JsonDocument.Parse(File.ReadAllText(localizationManifestPath));
+        Assert.Equal("zhs", manifestDocument.RootElement.GetProperty("defaultLanguage").GetString());
+
+        var supportedLanguages = manifestDocument.RootElement.GetProperty("supportedLanguages");
+        Assert.Equal(2, supportedLanguages.GetArrayLength());
+
+        var catalogs = manifestDocument.RootElement.GetProperty("catalogs");
+        Assert.Equal("添加", catalogs.GetProperty("zhs").GetProperty("Common.Add").GetString());
+        Assert.Equal("Add", catalogs.GetProperty("en").GetProperty("Common.Add").GetString());
+        Assert.Equal("页面标题", catalogs.GetProperty("zhs").GetProperty("Pages.ListTitle").GetString());
+        Assert.Equal("List title", catalogs.GetProperty("en").GetProperty("Pages.ListTitle").GetString());
+    }
+
+    [Fact]
+    public void MaterializeEnabledPlugin_WhenLanguagesJsonIsMissing_WritesMinimalLocalizationManifest()
+    {
+        var packageRoot = CreatePackageWithLocalizationMetadata();
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+
+        materializer.Materialize(installRoot);
+
+        var localizationManifestPath = Path.Combine(installRoot, "runtime", "localization-manifest.json");
+
+        using var manifestDocument = JsonDocument.Parse(File.ReadAllText(localizationManifestPath));
+        Assert.Equal("zhs", manifestDocument.RootElement.GetProperty("defaultLanguage").GetString());
+        Assert.Empty(manifestDocument.RootElement.GetProperty("supportedLanguages").EnumerateArray());
+        Assert.Empty(manifestDocument.RootElement.GetProperty("catalogs").EnumerateObject());
+    }
+
+    [Fact]
+    public void MaterializeEnabledPlugin_WhenDictionaryMissingSupportedLanguage_Throws()
+    {
+        var packageRoot = CreatePackageWithLocalizationMetadata(includeEnglishTranslation: false);
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+        EnableInstalledPackage(CreatePlatformPackageWithLanguages(), installRoot, "Platform");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+
+        var exception = Assert.ThrowsAny<Exception>(() => materializer.Materialize(installRoot));
+        Assert.Contains("en", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Materialize_WhenPublicSwapFailsAfterRuntimeSwap_RestoresLocalizationManifest()
+    {
+        var packageRoot = CreatePackageWithLocalizationMetadata();
+        var platformPackageRoot = CreatePlatformPackageWithLanguages();
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+        EnableInstalledPackage(platformPackageRoot, installRoot, "Platform");
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var baselineMaterializer = new RuntimeViewMaterializer(stateStore);
+        baselineMaterializer.Materialize(installRoot);
+
+        var localizationManifestPath = Path.Combine(installRoot, "runtime", "localization-manifest.json");
+        var previousLocalizationManifest = File.ReadAllText(localizationManifestPath);
+
+        File.WriteAllText(
+            Path.Combine(installRoot, "packages", "Audit", "1.0.0", "modules", "Audit", "metadata", "dictionaries", "Common.dic.json"),
+            JsonSerializer.Serialize(
+                new Dictionary<string, object?>
+                {
+                    ["schemaVersion"] = "1.0",
+                    ["type"] = "dic",
+                    ["Common"] = new Dictionary<string, object?>
+                    {
+                        ["Common.Add"] = new Dictionary<string, string>
+                        {
+                            ["zhs"] = "新增",
+                            ["en"] = "Add"
+                        }
+                    }
+                },
+                new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(
+            Path.Combine(installRoot, "packages", "Audit", "1.0.0", "frontend", "assets", "entry.js"),
+            "updated-entry");
+
+        var materializer = CreateMaterializerWithSwapFailure(stateStore, 4, "Simulated public swap failure");
+
+        var exception = Assert.Throws<IOException>(() => materializer.Materialize(installRoot));
+        Assert.Contains("public swap failure", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(previousLocalizationManifest, File.ReadAllText(localizationManifestPath));
+    }
+
+    [Fact]
     public void Materialize_WhenEnabledPluginsShareIdenticalPlatformResources_AllowsProjection()
     {
         var auditPackageRoot = _testData.CreateValidPackageWithMetadataAndResources("Audit", "1.0.0", "zhs");
@@ -402,7 +510,12 @@ public class RuntimeViewMaterializerTests : IDisposable
         var constructor = typeof(RuntimeViewMaterializer).GetConstructor(
             BindingFlags.Instance | BindingFlags.NonPublic,
             binder: null,
-            [typeof(InstalledPluginStateStore), typeof(FrontendRuntimeManifestBuilder), typeof(Action<string, string>)],
+            [
+                typeof(InstalledPluginStateStore),
+                typeof(FrontendRuntimeManifestBuilder),
+                typeof(LocalizationRuntimeManifestBuilder),
+                typeof(Action<string, string>)
+            ],
             modifiers: null);
 
         Assert.NotNull(constructor);
@@ -412,6 +525,7 @@ public class RuntimeViewMaterializerTests : IDisposable
             [
                 stateStore,
                 new FrontendRuntimeManifestBuilder(),
+                new LocalizationRuntimeManifestBuilder(),
                 (Action<string, string>)((source, destination) =>
                 {
                     callCount++;
@@ -423,6 +537,94 @@ public class RuntimeViewMaterializerTests : IDisposable
                     Directory.Move(source, destination);
                 })
             ]);
+    }
+
+    private string CreatePackageWithLocalizationMetadata(bool includeEnglishTranslation = true)
+    {
+        var packageRoot = _testData.CreateValidPackage();
+        AddLocalizationMetadata(packageRoot, "Audit", includeEnglishTranslation);
+        return packageRoot;
+    }
+
+    private string CreatePlatformPackageWithLanguages()
+    {
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Platform", "1.0.0", "zhs");
+        var modulesRoot = Path.Combine(packageRoot, "modules", "Platform", "metadata");
+        Directory.CreateDirectory(Path.Combine(modulesRoot, "dictionaries"));
+        File.WriteAllText(
+            Path.Combine(modulesRoot, "languages.json"),
+            JsonSerializer.Serialize(
+                new
+                {
+                    defaultLanguage = "zhs",
+                    supportedLanguages = new[]
+                    {
+                        new { code = "zhs", displayName = "简体中文" },
+                        new { code = "en", displayName = "English" }
+                    }
+                },
+                new JsonSerializerOptions { WriteIndented = true }));
+        return packageRoot;
+    }
+
+    private static void AddLocalizationMetadata(string packageRoot, string moduleId, bool includeEnglishTranslation)
+    {
+        var dictionariesRoot = Path.Combine(packageRoot, "modules", moduleId, "metadata", "dictionaries");
+        Directory.CreateDirectory(dictionariesRoot);
+
+        File.WriteAllText(
+            Path.Combine(dictionariesRoot, "Common.dic.json"),
+            JsonSerializer.Serialize(
+                includeEnglishTranslation
+                    ? new Dictionary<string, object?>
+                    {
+                        ["schemaVersion"] = "1.0",
+                        ["type"] = "dic",
+                        ["Common"] = new Dictionary<string, object?>
+                        {
+                            ["Common.Add"] = new Dictionary<string, string>
+                            {
+                                ["zhs"] = "添加",
+                                ["en"] = "Add"
+                            },
+                            ["Common.Upload"] = new Dictionary<string, string>
+                            {
+                                ["zhs"] = "上传",
+                                ["en"] = "Upload"
+                            }
+                        }
+                    }
+                    : new Dictionary<string, object?>
+                    {
+                        ["schemaVersion"] = "1.0",
+                        ["type"] = "dic",
+                        ["Common"] = new Dictionary<string, object?>
+                        {
+                            ["Common.Add"] = new Dictionary<string, string>
+                            {
+                                ["zhs"] = "添加"
+                            }
+                        }
+                    },
+                new JsonSerializerOptions { WriteIndented = true }));
+
+        File.WriteAllText(
+            Path.Combine(dictionariesRoot, "Pages.dic.json"),
+            JsonSerializer.Serialize(
+                new Dictionary<string, object?>
+                {
+                    ["schemaVersion"] = "1.0",
+                    ["type"] = "dic",
+                    ["Pages"] = new Dictionary<string, object?>
+                    {
+                        ["ListTitle"] = new Dictionary<string, string>
+                        {
+                            ["zhs"] = "页面标题",
+                            ["en"] = "List title"
+                        }
+                    }
+                },
+                new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public void Dispose()

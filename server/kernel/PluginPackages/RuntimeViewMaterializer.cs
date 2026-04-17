@@ -16,6 +16,7 @@ public class RuntimeViewMaterializer
 
     private readonly InstalledPluginStateStore _stateStore;
     private readonly FrontendRuntimeManifestBuilder _frontendManifestBuilder;
+    private readonly LocalizationRuntimeManifestBuilder _localizationManifestBuilder;
     private readonly Action<string, string> _moveDirectory;
 
     public RuntimeViewMaterializer(InstalledPluginStateStore stateStore)
@@ -24,7 +25,7 @@ public class RuntimeViewMaterializer
     }
 
     public RuntimeViewMaterializer(InstalledPluginStateStore stateStore, FrontendRuntimeManifestBuilder frontendManifestBuilder)
-        : this(stateStore, frontendManifestBuilder, Directory.Move)
+        : this(stateStore, frontendManifestBuilder, new LocalizationRuntimeManifestBuilder(), Directory.Move)
     {
     }
 
@@ -32,9 +33,19 @@ public class RuntimeViewMaterializer
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
         Action<string, string> moveDirectory)
+        : this(stateStore, frontendManifestBuilder, new LocalizationRuntimeManifestBuilder(), moveDirectory)
+    {
+    }
+
+    internal RuntimeViewMaterializer(
+        InstalledPluginStateStore stateStore,
+        FrontendRuntimeManifestBuilder frontendManifestBuilder,
+        LocalizationRuntimeManifestBuilder localizationManifestBuilder,
+        Action<string, string> moveDirectory)
     {
         _stateStore = stateStore;
         _frontendManifestBuilder = frontendManifestBuilder;
+        _localizationManifestBuilder = localizationManifestBuilder;
         _moveDirectory = moveDirectory;
     }
 
@@ -64,6 +75,9 @@ public class RuntimeViewMaterializer
 
             var frontendManifestPath = Path.Combine(stagedRuntimeRoot, "frontend-plugin-manifest.json");
             File.WriteAllText(frontendManifestPath, _frontendManifestBuilder.Build(enabledRecords));
+
+            var localizationManifestPath = Path.Combine(stagedRuntimeRoot, "localization-manifest.json");
+            File.WriteAllText(localizationManifestPath, _localizationManifestBuilder.Build(stagedRuntimeRoot));
 
             ReplaceProjection(installRoot, stagedRuntimeRoot, stagedPublicRoot, commitWorkspaceRoot);
         }

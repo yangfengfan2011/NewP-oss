@@ -70,3 +70,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-targ
 - [metadata-config-center-design.md](metadata-config-center-design.md)
 - [frontend-ui-component-strategy-design.md](frontend-ui-component-strategy-design.md)
 - [post-phase-6-foundation-and-migration-design.md](post-phase-6-foundation-and-migration-design.md)
+- [user-visible-text-localization-foundation-design.md](user-visible-text-localization-foundation-design.md)

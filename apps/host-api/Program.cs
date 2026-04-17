@@ -142,6 +142,22 @@ app.Map("/plugins/frontend-plugin-manifest.json", manifestApp =>
     });
 });
 
+app.Map("/plugins/localization-manifest.json", manifestApp =>
+{
+    manifestApp.Run(async context =>
+    {
+        var manifestPath = Path.Combine(pluginInstallRoot, "runtime", "localization-manifest.json");
+        if (!File.Exists(manifestPath))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "application/json";
+        await context.Response.SendFileAsync(manifestPath);
+    });
+});
+
 var publicAssetsPath = Path.Combine(pluginInstallRoot, "public");
 if (Directory.Exists(publicAssetsPath))
 {

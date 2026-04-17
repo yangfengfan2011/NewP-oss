@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
@@ -8,11 +8,9 @@ import { shellUiConfig } from './config/uiConfig';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlatformProvider } from './contexts/PlatformContext';
 import {
-  dictionaryCatalogs,
-  dictionaryLanguageConfig,
-  enumerationCatalogs,
-  enumerationDefinitions,
-} from './localization/catalogs';
+  loadRuntimeLocalizationManifest,
+  type RuntimeLocalizationManifest,
+} from './localization/runtimeLocalizationManifest';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import UiShowcase from './pages/UiShowcase';
@@ -82,6 +80,8 @@ function getDefaultShellView(): ShellView {
 
 function App() {
   const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
+  const [localizationManifest, setLocalizationManifest] = useState<RuntimeLocalizationManifest | null>(null);
+  const [localizationError, setLocalizationError] = useState<Error | null>(null);
 
   const shellView = useMemo<ShellView>(() => {
     switch (shellUiConfig.shellExperienceMode) {
@@ -105,14 +105,44 @@ function App() {
     setShellViewState(view);
   };
 
+  useEffect(() => {
+    let disposed = false;
+
+    void loadRuntimeLocalizationManifest()
+      .then((manifest) => {
+        if (disposed) {
+          return;
+        }
+
+        setLocalizationManifest(manifest);
+      })
+      .catch((error) => {
+        if (disposed) {
+          return;
+        }
+
+        setLocalizationError(error instanceof Error ? error : new Error('Failed to load localization manifest.'));
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  if (localizationError) {
+    throw localizationError;
+  }
+
+  if (!localizationManifest) {
+    return null;
+  }
+
   return (
     <BrowserRouter>
       <LocalizationProvider
-        defaultLanguage={dictionaryLanguageConfig.defaultLanguage}
-        supportedLanguages={dictionaryLanguageConfig.supportedLanguages}
-        catalogs={dictionaryCatalogs}
-        enumerationDefinitions={enumerationDefinitions}
-        enumerationCatalogs={enumerationCatalogs}
+        defaultLanguage={localizationManifest.defaultLanguage}
+        supportedLanguages={localizationManifest.supportedLanguages}
+        catalogs={localizationManifest.catalogs}
       >
         <AuthProvider>
           <PlatformProvider

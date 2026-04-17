@@ -9,6 +9,14 @@ import App from '../App';
 import UiShowcase from '../pages/UiShowcase';
 import { dictionaryCatalogs, dictionaryLanguageConfig } from '../localization/catalogs';
 
+const runtimeLocalizationManifest = {
+  defaultLanguage: 'zhs',
+  supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
+  catalogs: {
+    zhs: {},
+  },
+};
+
 vi.mock('../contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => ({
@@ -43,10 +51,33 @@ describe('UiShowcase page', () => {
     window.history.replaceState({}, '', '/');
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => [],
-      } satisfies Partial<Response>),
+      vi.fn((input: string | URL | Request) => {
+        const requestUrl = typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+
+        if (requestUrl.endsWith('/plugins/localization-manifest.json')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(runtimeLocalizationManifest), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            }),
+          );
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }),
+        );
+      }),
     );
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

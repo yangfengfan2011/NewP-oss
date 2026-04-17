@@ -18,7 +18,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
     {
         var installRoot = CreateTempRoot();
 
-        await using var host = await HostApiProcess.StartAsync(installRoot, skipLocalAuthSeeding: false);
+        await using var host = await HostApiProcess.StartAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -61,6 +61,35 @@ public class HostApiPluginManifestRouteTests : IDisposable
         Assert.True(document.RootElement.TryGetProperty("plugins", out var plugins));
         Assert.Equal(JsonValueKind.Array, plugins.ValueKind);
         Assert.NotEmpty(plugins.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task LocalizationManifestRoute_ReturnsJson()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        await using var host = await HostApiProcess.StartAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/localization-manifest.json");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+
+        using var document = JsonDocument.Parse(body);
+        Assert.True(document.RootElement.TryGetProperty("defaultLanguage", out _));
+        Assert.True(document.RootElement.TryGetProperty("supportedLanguages", out _));
+        Assert.True(document.RootElement.TryGetProperty("catalogs", out _));
     }
 
     public void Dispose()
@@ -167,6 +196,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
             process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
             process.StartInfo.Environment["Platform__SkipLocalAuthSeeding"] = skipLocalAuthSeeding ? "true" : "false";
+            process.StartInfo.Environment["Persistence__AutoMigrate"] = "false";
+            process.StartInfo.Environment["ConnectionStrings__SqlServer"] = "Server=localhost;Database=icp_platform_route_tests;Trusted_Connection=True;TrustServerCertificate=True;";
 
             if (!process.Start())
             {

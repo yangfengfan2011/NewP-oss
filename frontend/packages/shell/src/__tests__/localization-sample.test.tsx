@@ -5,14 +5,30 @@ import { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { Outlet } from 'react-router-dom';
 import App from '../App';
-import {
-  buildLanguageCatalogs,
-  dictionaryCatalogs,
-  dictionaryLanguageConfig,
-  mergeDicEntries,
-} from '../localization/catalogs';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const runtimeLocalizationManifest = {
+  defaultLanguage: 'zhs',
+  supportedLanguages: [
+    { code: 'zhs', displayName: '简体中文' },
+    { code: 'en', displayName: 'English' },
+  ],
+  catalogs: {
+    zhs: {
+      'Common.SystemTitle': 'InforCenter',
+      'Common.OK': '确定',
+      'Common.Cancel': '取消',
+      'Platform.Prompt': '提示',
+    },
+    en: {
+      'Common.SystemTitle': 'InforCenter',
+      'Common.OK': 'OK',
+      'Common.Cancel': 'Cancel',
+      'Platform.Prompt': 'Prompt',
+    },
+  },
+};
 
 vi.mock('@icp-platform/core', async () => {
   const actual = await vi.importActual<typeof import('@icp-platform/core')>('@icp-platform/core');
@@ -74,9 +90,19 @@ describe('Home localization sample', () => {
     if (container) {
       container.remove();
     }
+
+    vi.unstubAllGlobals();
   });
 
-  it('shows the enumeration sample block on Home with fallback labels for SelectMode', async () => {
+  it('loads runtime localization manifest before rendering the localization sample', async () => {
+    let resolveResponse!: (response: Response) => void;
+    const fetchMock = vi.fn().mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
     container = document.createElement('div');
     document.body.appendChild(container);
     window.history.pushState({}, '', '/');
@@ -86,76 +112,27 @@ describe('Home localization sample', () => {
       root.render(<App />);
     });
 
-    const enumerationPanel = Array
-      .from(container.querySelectorAll('.sh-page-panel'))
-      .find((panel) => panel.textContent?.includes('枚举资源样例'));
+    expect(fetchMock).toHaveBeenCalledWith('/plugins/localization-manifest.json', {
+      credentials: 'same-origin',
+    });
+    expect(container.textContent).not.toContain('语言资源样例');
 
-    expect(enumerationPanel).not.toBeUndefined();
-    expect(enumerationPanel?.textContent).toContain('枚举资源样例');
-    expect(enumerationPanel?.textContent).toContain('Gender');
-    expect(enumerationPanel?.textContent).toContain('Female');
-    expect(enumerationPanel?.textContent).toContain('女');
-    expect(enumerationPanel?.textContent).toContain('MessageState');
-    expect(enumerationPanel?.textContent).toContain('Read');
-    expect(enumerationPanel?.textContent).toContain('已读');
-    expect(enumerationPanel?.textContent).toContain('SelectMode');
-    expect(enumerationPanel?.textContent).toContain('MULTI');
-    expect(enumerationPanel?.textContent).toContain('SINGLE');
-    expect(enumerationPanel?.textContent).toContain('ItemName');
-  });
-
-  it('loads dictionary catalogs from dic metadata files', () => {
-    expect(dictionaryLanguageConfig.defaultLanguage).toBe('zhs');
-    expect(dictionaryCatalogs.zhs['Common.Add']).toBe('添加');
-    expect(dictionaryCatalogs.en['Platform.QRCode']).toBe('QR Code');
-  });
-
-  it('merges dic entries by entry key and replaces the full language set on conflicts', () => {
-    const merged = mergeDicEntries(
-      {
-        'Common.Add': { zhs: '添加', en: 'Add' },
-      },
-      {
-        'Common.Add': { zhs: '新增', en: 'Create' },
-      },
-    );
-
-    expect(merged['Common.Add']).toEqual({ zhs: '新增', en: 'Create' });
-  });
-
-  it('fails when a dic entry does not cover all supported languages', () => {
-    expect(() =>
-      buildLanguageCatalogs(
-        dictionaryLanguageConfig,
-        {
-          schemaVersion: '1.0',
-          type: 'dic',
-          Broken: {
-            'Broken.Key': {
-              zhs: '缺少英文',
-            },
+    await act(async () => {
+      resolveResponse(
+        new Response(JSON.stringify(runtimeLocalizationManifest), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
           },
-        } as never,
-      ),
-    ).toThrow(/missing language 'en'/i);
-  });
+        }),
+      );
+      await Promise.resolve();
+    });
 
-  it('fails when a dic entry contains an unknown language', () => {
-    expect(() =>
-      buildLanguageCatalogs(
-        dictionaryLanguageConfig,
-        {
-          schemaVersion: '1.0',
-          type: 'dic',
-          Broken: {
-            'Broken.Key': {
-              zhs: '中文',
-              en: 'English',
-              fr: 'Francais',
-            },
-          },
-        } as never,
-      ),
-    ).toThrow(/unknown languages: fr/i);
+    expect(container.textContent).toContain('语言资源样例');
+    expect(container.textContent).toContain('Common.SystemTitle: InforCenter');
+    expect(container.textContent).toContain('Common.OK: 确定');
+    expect(container.textContent).toContain('Common.Cancel: 取消');
+    expect(container.textContent).toContain('Platform.Prompt: 提示');
   });
 });

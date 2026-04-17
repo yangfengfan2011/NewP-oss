@@ -441,7 +441,7 @@ AI-First 对齐：
 
 当前后续路线以平台治理和 AI-first 收口为优先，按以下工作包顺序推进：
 
-1. **WP4 最小迁移连续性**：`Stage 10` 与后续“枚举消费层 UI / 接入”子包已完成并通过，当前冻结范围内的 `Dictionary + Enumeration` 静态资源转换与最小前端消费闭环都已形成。
+1. **WP4 最小迁移连续性**：历史上的 `Stage 9 / Stage 10 / 枚举消费层 UI` 闭环已完成；当前真实运行时口径已在“用户可见文本多语言基础（第一包）”中进一步收口为宿主输出的纯 `localization manifest`，Shell 不再直接依赖 `Platform` 过渡样例资产。
 
 对应路线设计：
 
@@ -687,7 +687,7 @@ AI-First 对齐：
 
 ### Post-Phase-6：WP4 Stage 9 Dictionary 静态资源转换与最小 i18n 基座
 
-状态：已完成并通过
+状态：已完成（历史闭环保留，当前 Shell 接线已由第一包 runtime manifest 收口替换）
 
 已落地：
 
@@ -696,7 +696,7 @@ AI-First 对齐：
 - `resources/localization/languages.json` 已作为正式语言配置入口被脚本与前端共同消费
 - 已由真实样本生成 `resources/localization/{zhs,en}/dictionary/*.json`
 - `frontend/packages/core` 已补齐最小 `LocalizationProvider / useLocalization`
-- `frontend/packages/shell` 已接入真实 Dictionary 资源，并在 `Home` 页面展示最小消费样例
+- 历史上曾在 `frontend/packages/shell` 中展示最小 Dictionary 消费样例；当前已在“用户可见文本多语言基础（第一包）”中切换为宿主 runtime manifest，不再直接 import 这些过渡静态资源
 
 已验证：
 
@@ -710,7 +710,7 @@ AI-First 对齐：
 - `Stage 9` 已形成从真实冻结样本到仓库内静态资源的第一条闭环
 - `Common.dic` 与 `Platform.dic` 当前共生成每种语言 `7` 个 context 文件
 - `Common.json` 在 `zhs` 下共 `51` 个键，`Platform.json` 在 `zhs` 下共 `82` 个键
-- 最小 i18n 基座已经能在 Shell 中消费这些静态资源
+- 该阶段形成的静态资源转换链路仍作为历史迁移资产保留，但当前 Shell 运行时已不再直接消费这些过渡静态词典样例
 
 当前边界：
 
@@ -728,7 +728,7 @@ AI-First 对齐：
 
 ### Post-Phase-6：WP4 Stage 10 Enumeration 静态结构清单与本地化资源转换
 
-状态：已完成并通过
+状态：已完成（历史闭环保留，过渡 Platform 枚举资产已在第一包中清理）
 
 已落地：
 
@@ -759,14 +759,13 @@ AI-First 对齐：
 
 ### Post-Phase-6：WP4 Enumeration 消费层 UI / 接入
 
-状态：已完成并通过
+状态：已完成（历史样例已退场，能力保留）
 
 已落地：
 
-- `frontend/packages/core` 已补齐 `getEnumerationItems / getEnumerationLabel / useEnumeration`
-- `frontend/packages/shell` 已接入真实 `Gender / MessageState / SelectMode` 枚举静态资源
-- `Home` 页面已新增“枚举资源样例”区块
-- `SelectMode` 当前已明确展示为缺翻译时回退到 `ItemName` 的样例
+- `frontend/packages/core` 的 `getEnumerationItems / getEnumerationLabel / useEnumeration` 最小能力仍保留
+- 历史上曾在 `frontend/packages/shell` 中使用 `Gender / MessageState / SelectMode` 做最小样例接线
+- 该历史样例区块已在“用户可见文本多语言基础（第一包）”中下线，Shell 不再依赖 `Platform` 过渡枚举资产
 
 已验证：
 
@@ -775,8 +774,8 @@ AI-First 对齐：
 
 当前结论：
 
-- `Enumeration` 已形成从静态结构清单、本地化资源到前端真实消费样例的第一条闭环
-- `core` 与 `shell` 的最小接线口径已经稳定，可供后续页面继续复用
+- `Enumeration` 已形成从静态结构清单、本地化资源到前端最小消费样例的历史闭环
+- 当前保留的是 `core` 层最小枚举 helper 与独立单测，Shell 首页样例区块已退场
 
 当前边界：
 
@@ -791,6 +790,39 @@ AI-First 对齐：
 
 - [designs/enumeration-consumer-ui-integration-design.md](designs/enumeration-consumer-ui-integration-design.md)
 - [verification/enumeration-consumer-ui-integration-verification.md](verification/enumeration-consumer-ui-integration-verification.md)
+
+### Post-Phase-6：用户可见文本多语言基础（第一包）
+
+状态：已完成并通过
+
+已落地：
+
+- `server/kernel/PluginPackages/LocalizationRuntimeManifestBuilder.cs` 已落地，宿主 runtime 阶段会生成纯 `localization manifest`
+- `RuntimeViewMaterializer` 已在现有 staging / commit / rollback 机制中写出 `runtime/localization-manifest.json`
+- `apps/host-api/Program.cs` 已暴露 `/plugins/localization-manifest.json`
+- `frontend/packages/shell/src/App.tsx` 已切换为只消费 runtime manifest
+- `modules/Platform/metadata/dictionaries/*.dic.json` 与 `modules/Platform/metadata/enumerations/*.json` 已清理
+- `modules/Platform/metadata/languages.json` 保留为全局语言入口
+- Shell 首页旧“语言资源样例 / 枚举资源样例”区块已下线
+
+已验证：
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\user-visible-text-localization-foundation-design.md`
+- `dotnet build .\ICP-Platform.sln -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~RuntimeViewMaterializerTests -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~HostApiPluginManifestRouteTests -nr:false -v minimal`
+- `pnpm --dir .\frontend\packages\shell exec vitest --run src/__tests__/runtime-localization-manifest.test.ts src/__tests__/localization-sample.test.tsx src/__tests__/enumeration-sample.test.tsx src/__tests__/home-page-shortcuts.test.tsx src/__tests__/ui-showcase-page.test.tsx`
+- `pnpm --dir .\frontend build`
+
+当前边界：
+
+- 第一包只覆盖 runtime manifest、前端接线切换、Platform 过渡资产清理与验证收口
+- 后端用户消息契约 DTO 的正式落地仍属于后续独立包
+
+对应文档：
+
+- [designs/user-visible-text-localization-foundation-design.md](designs/user-visible-text-localization-foundation-design.md)
+- [verification/user-visible-text-localization-foundation-package-1-verification.md](verification/user-visible-text-localization-foundation-package-1-verification.md)
 
 ### Post-Phase-6：Organization 结构模块首版闭环
 

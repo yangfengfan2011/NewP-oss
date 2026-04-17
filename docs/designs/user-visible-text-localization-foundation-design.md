@@ -71,10 +71,11 @@
 
 1. 保留现有 `dic / enum / languages.json` 元数据结构。
 2. 新增或修改的用户可见文本必须进入模块自己的多语言元数据，不允许直接写中文用户可见文本。
-3. 多语言元数据 authoring 采用“两层 key”结构：
-   - 第一层：模块或共享归属
-   - 第二层：该归属下的稳定业务词条
-4. 运行时消费可以继续使用扁平 key 形式，例如 `ConfigCenter.ListTitle`，但这是消费投影形态，不是 authoring 结构本身。
+3. 多语言元数据 authoring 采用“路径表达模块归属 + 文件主题根对象 + 稳定业务词条”结构：
+   - 模块归属由 `modules/<ModuleId>/metadata/dictionaries/*.dic.json` 路径表达
+   - 第一层根对象表达文件主题，并与文件名一致
+   - 第二层 key 表达该主题下的稳定业务词条
+4. 运行时消费可以继续使用扁平 key 形式，例如 `Pages.ListTitle`，但这是消费投影形态，不是 authoring 结构本身。
 5. 宿主在启动阶段读取各模块 `dic` 元数据与全局语言配置，产出前端静态 `localization manifest`；前端 `LocalizationProvider` 只消费该 manifest，不直接 import 模块元数据文件。
 6. `localization manifest` 只承载语言配置与文本 catalogs，不承载枚举结构、模型结构、页面结构或其他非多语言数据。
 7. 后端返回给前端展示的用户消息默认采用 `messageKey + messageArgs + level` 作为主契约；`code` 仅在需要程序识别该结果语义时按需启用，由前端按当前语言翻译展示。
@@ -142,7 +143,7 @@
 {
   "schemaVersion": "1.0",
   "type": "dic",
-  "ConfigCenter": {
+  "Pages": {
     "ListTitle": {
       "zhs": "配置中心",
       "en": "Config Center"
@@ -157,10 +158,12 @@
 
 约束：
 
-- 第一层 key 表达模块或共享归属，例如 `ConfigCenter`、`Organization`、`Common`
+- 模块归属由文件路径表达，例如 `modules/ConfigCenter/metadata/dictionaries/Pages.dic.json`
+- 第一层 key 表达文件主题，并且应与文件名一致，例如 `Pages`
 - 第二层 key 表达稳定业务语义，例如 `ListTitle`、`DuplicateKey`
 - 第二层不重复第一层信息
-- 运行时如需扁平 key，可统一投影为 `ConfigCenter.ListTitle`
+- 运行时如需扁平 key，可统一投影为 `Pages.ListTitle`
+- 当前过渡期历史资产中已存在完整扁平 key 写法；runtime 投影可兼容，但它不再作为后续正式 authoring 基线
 
 ### 7.3 `enum` 结构
 

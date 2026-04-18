@@ -1,6 +1,7 @@
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
 using ICP.Platform.Modules.ConfigCenter.Services;
+using ICP.Platform.Sdk.UserMessages;
 using Xunit;
 
 namespace ICP.Platform.Modules.ConfigCenter.Tests;
@@ -34,7 +35,7 @@ public class ValueListServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_DuplicateCode_ThrowsInvalidOperationException()
+    public async Task CreateAsync_DuplicateCode_ThrowsUserMessageException()
     {
         await _service.CreateAsync(new ValueListItemDto
         {
@@ -42,14 +43,75 @@ public class ValueListServiceTests
             Name = "启用"
         });
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateAsync(
+        var error = await Assert.ThrowsAsync<UserMessageException>(() => _service.CreateAsync(
             new ValueListItemDto
             {
                 Code = "STATUS_ACTIVE",
                 Name = "重复"
             }));
 
-        Assert.Contains("已存在", error.Message);
+        Assert.Equal(400, error.StatusCode);
+        Assert.Equal("ValueLists.CodeAlreadyExists", error.MessageKey);
+        Assert.Equal("STATUS_ACTIVE", error.MessageArgs?["code"]);
+        Assert.Equal(RenderDictionaryText("CodeAlreadyExists", ("code", "STATUS_ACTIVE")), error.FallbackMessage);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_MissingId_ThrowsUserMessageException()
+    {
+        var error = await Assert.ThrowsAsync<UserMessageException>(() => _service.DeleteAsync("missing-id"));
+
+        Assert.Equal(404, error.StatusCode);
+        Assert.Equal("ValueLists.ItemNotFound", error.MessageKey);
+        Assert.Equal("missing-id", error.MessageArgs?["id"]);
+        Assert.Equal(RenderDictionaryText("ItemNotFound", ("id", "missing-id")), error.FallbackMessage);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DuplicateCode_ThrowsUserMessageException()
+    {
+        var first = await _service.CreateAsync(new ValueListItemDto
+        {
+            Code = "STATUS_ACTIVE",
+            Name = "启用"
+        });
+
+        var second = await _service.CreateAsync(new ValueListItemDto
+        {
+            Code = "STATUS_DISABLED",
+            Name = "停用"
+        });
+
+        var error = await Assert.ThrowsAsync<UserMessageException>(() => _service.UpdateAsync(second.Id, new ValueListItemDto
+        {
+            Code = first.Code,
+            Name = "重复编码"
+        }));
+
+        Assert.Equal(400, error.StatusCode);
+        Assert.Equal("ValueLists.CodeAlreadyExists", error.MessageKey);
+        Assert.Equal("STATUS_ACTIVE", error.MessageArgs?["code"]);
+        Assert.Equal(RenderDictionaryText("CodeAlreadyExists", ("code", "STATUS_ACTIVE")), error.FallbackMessage);
+    }
+
+    [Theory]
+    [InlineData("", "STATUS_ACTIVE", "ValueLists.CodeRequired")]
+    [InlineData("STATUS_ACTIVE", "", "ValueLists.NameRequired")]
+    public async Task CreateAsync_InvalidInput_ThrowsUserMessageException(
+        string code,
+        string name,
+        string expectedMessageKey)
+    {
+        var error = await Assert.ThrowsAsync<UserMessageException>(() => _service.CreateAsync(new ValueListItemDto
+        {
+            Code = code,
+            Name = name
+        }));
+
+        Assert.Equal(400, error.StatusCode);
+        Assert.Equal(expectedMessageKey, error.MessageKey);
+        Assert.True(error.MessageArgs is null || error.MessageArgs.Count == 0);
+        Assert.Equal(RenderDictionaryText(expectedMessageKey.Split('.').Last()), error.FallbackMessage);
     }
 
     [Fact]
@@ -87,5 +149,46 @@ public class ValueListServiceTests
 
         var items = await _service.GetAllAsync();
         Assert.Empty(items);
+    }
+
+    private static string RenderDictionaryText(string entryKey, params (string Key, string Value)[] args)
+    {
+        var template = LoadDictionaryTemplates()[entryKey];
+        foreach (var (key, value) in args)
+        {
+            template = template.Replace($"{{{key}}}", value, StringComparison.Ordinal);
+        }
+
+        return template;
+    }
+
+    private static IReadOnlyDictionary<string, string> LoadDictionaryTemplates()
+    {
+        var dictionaryPath = Path.Combine(FindRepositoryRoot(), "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json");
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(dictionaryPath));
+
+        return document.RootElement
+            .GetProperty("ValueLists")
+            .EnumerateObject()
+            .ToDictionary(
+                property => property.Name,
+                property => property.Value.GetProperty("zhs").GetString() ?? string.Empty,
+                StringComparer.Ordinal);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "ICP-Platform.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root not found.");
     }
 }

@@ -1,6 +1,7 @@
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
+using ICP.Platform.Sdk.UserMessages;
 
 namespace ICP.Platform.Modules.ConfigCenter.Services;
 
@@ -29,16 +30,19 @@ public class ValueListService : IValueListService
     {
         Validate(dto.Code, dto.Name);
 
-        var existing = await _repository.GetByCodeAsync(dto.Code, cancellationToken);
+        var code = dto.Code.Trim();
+        var name = dto.Name.Trim();
+
+        var existing = await _repository.GetByCodeAsync(code, cancellationToken);
         if (existing is not null)
         {
-            throw new InvalidOperationException($"值列表编码 '{dto.Code}' 已存在。");
+            throw CreateCodeAlreadyExistsException(code);
         }
 
         var item = new ValueListItem
         {
-            Code = dto.Code.Trim(),
-            Name = dto.Name.Trim(),
+            Code = code,
+            Name = name,
             Description = dto.Description?.Trim(),
             UpdatedBy = updatedBy
         };
@@ -55,20 +59,23 @@ public class ValueListService : IValueListService
     {
         Validate(dto.Code, dto.Name);
 
+        var code = dto.Code.Trim();
+        var name = dto.Name.Trim();
+
         var item = await _repository.GetByIdAsync(id, cancellationToken);
         if (item is null)
         {
-            throw new InvalidOperationException($"值列表项 '{id}' 不存在。");
+            throw CreateItemNotFoundException(id);
         }
 
-        var duplicated = await _repository.GetByCodeAsync(dto.Code, cancellationToken);
+        var duplicated = await _repository.GetByCodeAsync(code, cancellationToken);
         if (duplicated is not null && duplicated.Id != id)
         {
-            throw new InvalidOperationException($"值列表编码 '{dto.Code}' 已存在。");
+            throw CreateCodeAlreadyExistsException(code);
         }
 
-        item.Code = dto.Code.Trim();
-        item.Name = dto.Name.Trim();
+        item.Code = code;
+        item.Name = name;
         item.Description = dto.Description?.Trim();
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = updatedBy;
@@ -82,7 +89,7 @@ public class ValueListService : IValueListService
         var item = await _repository.GetByIdAsync(id, cancellationToken);
         if (item is null)
         {
-            throw new InvalidOperationException($"值列表项 '{id}' 不存在。");
+            throw CreateItemNotFoundException(id);
         }
 
         await _repository.DeleteAsync(id, cancellationToken);
@@ -92,13 +99,53 @@ public class ValueListService : IValueListService
     {
         if (string.IsNullOrWhiteSpace(code))
         {
-            throw new InvalidOperationException("值列表编码不能为空。");
+            throw CreateCodeRequiredException();
         }
 
         if (string.IsNullOrWhiteSpace(name))
         {
-            throw new InvalidOperationException("值列表名称不能为空。");
+            throw CreateNameRequiredException();
         }
+    }
+
+    private static UserMessageException CreateCodeRequiredException()
+    {
+        return new UserMessageException(
+            400,
+            "ValueLists.CodeRequired",
+            fallbackMessage: "值列表编码不能为空。");
+    }
+
+    private static UserMessageException CreateNameRequiredException()
+    {
+        return new UserMessageException(
+            400,
+            "ValueLists.NameRequired",
+            fallbackMessage: "值列表名称不能为空。");
+    }
+
+    private static UserMessageException CreateCodeAlreadyExistsException(string code)
+    {
+        return new UserMessageException(
+            400,
+            "ValueLists.CodeAlreadyExists",
+            new Dictionary<string, object?>
+            {
+                ["code"] = code
+            },
+            fallbackMessage: $"值列表编码 {code} 已存在。");
+    }
+
+    private static UserMessageException CreateItemNotFoundException(string id)
+    {
+        return new UserMessageException(
+            404,
+            "ValueLists.ItemNotFound",
+            new Dictionary<string, object?>
+            {
+                ["id"] = id
+            },
+            fallbackMessage: $"值列表项 {id} 不存在。");
     }
 
     private static ValueListItemDto MapToDto(ValueListItem item)

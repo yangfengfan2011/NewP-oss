@@ -1,5 +1,6 @@
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Services;
+using ICP.Platform.Sdk.UserMessages;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.ConfigCenter.Controllers;
@@ -32,9 +33,9 @@ public class ValueListController : ControllerBase
             var item = await _service.CreateAsync(dto, User?.Identity?.Name, cancellationToken);
             return Ok(item);
         }
-        catch (InvalidOperationException ex)
+        catch (UserMessageException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return StatusCode(ex.StatusCode, ex.ToDto());
         }
     }
 
@@ -49,9 +50,9 @@ public class ValueListController : ControllerBase
             var item = await _service.UpdateAsync(id, dto, User?.Identity?.Name, cancellationToken);
             return Ok(item);
         }
-        catch (InvalidOperationException ex)
+        catch (UserMessageException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return StatusCode(ex.StatusCode, ex.ToDto());
         }
     }
 
@@ -63,9 +64,9 @@ public class ValueListController : ControllerBase
             await _service.DeleteAsync(id, cancellationToken);
             return NoContent();
         }
-        catch (InvalidOperationException ex)
+        catch (UserMessageException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return StatusCode(ex.StatusCode, ex.ToDto());
         }
     }
 }

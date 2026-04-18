@@ -152,10 +152,14 @@ public class RuntimeViewMaterializerTests : IDisposable
         Assert.Equal(2, supportedLanguages.GetArrayLength());
 
         var catalogs = manifestDocument.RootElement.GetProperty("catalogs");
+        Assert.True(catalogs.GetProperty("zhs").TryGetProperty("ValueLists.CodeAlreadyExists", out var zhsValueListCodeAlreadyExists));
+        Assert.True(catalogs.GetProperty("en").TryGetProperty("ValueLists.CodeAlreadyExists", out var enValueListCodeAlreadyExists));
         Assert.Equal("添加", catalogs.GetProperty("zhs").GetProperty("Common.Add").GetString());
         Assert.Equal("Add", catalogs.GetProperty("en").GetProperty("Common.Add").GetString());
         Assert.Equal("页面标题", catalogs.GetProperty("zhs").GetProperty("Pages.ListTitle").GetString());
         Assert.Equal("List title", catalogs.GetProperty("en").GetProperty("Pages.ListTitle").GetString());
+        Assert.Equal("值列表编码 {code} 已存在。", zhsValueListCodeAlreadyExists.GetString());
+        Assert.Equal("Value list code {code} already exists.", enValueListCodeAlreadyExists.GetString());
     }
 
     [Fact]
@@ -625,6 +629,26 @@ public class RuntimeViewMaterializerTests : IDisposable
                     }
                 },
                 new JsonSerializerOptions { WriteIndented = true }));
+
+        File.WriteAllText(
+            Path.Combine(dictionariesRoot, "ValueLists.dic.json"),
+            File.ReadAllText(Path.Combine(FindRepositoryRoot(), "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json")));
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "ICP-Platform.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root not found.");
     }
 
     public void Dispose()

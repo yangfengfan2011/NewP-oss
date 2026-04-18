@@ -58,14 +58,21 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             ]);
 
         var packageRoot = Path.Combine(outputRoot, "ConfigCenter");
-        var moduleManifestPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "metadata.manifest.json");
+        var modelMetadataPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "models", "ConfigItem.model.json");
         var moduleSettingsPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
-        var languagesPath = Path.Combine(packageRoot, "resources", "localization", "languages.json");
+        var valueListsDictionaryPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json");
 
         Assert.True(result.ExitCode == 0, $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
-        Assert.True(File.Exists(moduleManifestPath), $"Expected module manifest at {moduleManifestPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(modelMetadataPath), $"Expected model metadata at {modelMetadataPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
         Assert.True(File.Exists(moduleSettingsPath), $"Expected module settings at {moduleSettingsPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
-        Assert.True(File.Exists(languagesPath), $"Expected platform resources at {languagesPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(valueListsDictionaryPath), $"Expected value list dictionary at {valueListsDictionaryPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+
+        using var dictionaryDocument = JsonDocument.Parse(File.ReadAllText(valueListsDictionaryPath));
+        var valueLists = dictionaryDocument.RootElement.GetProperty("ValueLists");
+        Assert.Equal("值列表编码不能为空。", valueLists.GetProperty("CodeRequired").GetProperty("zhs").GetString());
+        Assert.Equal("Value list name is required.", valueLists.GetProperty("NameRequired").GetProperty("en").GetString());
+        Assert.Equal("值列表编码 {code} 已存在。", valueLists.GetProperty("CodeAlreadyExists").GetProperty("zhs").GetString());
+        Assert.Equal("Value list item {id} does not exist.", valueLists.GetProperty("ItemNotFound").GetProperty("en").GetString());
     }
 
     public void Dispose()

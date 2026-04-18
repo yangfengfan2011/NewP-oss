@@ -5,6 +5,7 @@ export {
   useLocalization,
   getEnumerationItems,
   getEnumerationLabel,
+  formatUserMessage,
 } from './localization';
 
 export type {

@@ -32,6 +32,18 @@ export interface PermissionDeclaration {
   category?: string;
 }
 
+export type {
+  UserMessageArgValue,
+  UserMessageArgs,
+  UserMessageDto,
+  UserMessageLevel,
+} from './userMessage';
+
+export {
+  USER_MESSAGE_LEVELS,
+  isUserMessageDto,
+} from './userMessage';
+
 export interface I18nResource {
   locale: string;
   messages: Record<string, string>;

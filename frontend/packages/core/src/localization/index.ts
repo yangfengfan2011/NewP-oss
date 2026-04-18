@@ -6,6 +6,10 @@ export {
   getEnumerationLabel,
 } from './LocalizationContext';
 
+export {
+  formatUserMessage,
+} from './userMessage';
+
 export type {
   LocalizationLanguage,
   LocalizationCatalog,

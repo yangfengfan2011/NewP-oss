@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { usePermission } from '@icp-platform/core';
+import { formatUserMessage, useLocalization, usePermission } from '@icp-platform/core';
+import { isUserMessageDto, type UserMessageDto } from '@icp-platform/sdk';
 import {
   PageHeader, SummaryCard, Panel, Button, Input, Textarea,
   EmptyState, LoadingState, ErrorState, ConfirmDialog,
@@ -28,6 +29,7 @@ const EMPTY_FORM: ValueListFormState = {
 };
 
 export default function ValueListManagement() {
+  const { t } = useLocalization();
   const canView = usePermission('ConfigCenter.Config.View');
   const canCreate = usePermission('ConfigCenter.Config.Create');
   const canEdit = usePermission('ConfigCenter.Config.Edit');
@@ -116,6 +118,13 @@ export default function ValueListManagement() {
       return;
     }
 
+    if (mode === 'edit' && !selectedItem) {
+      // 编辑目标如果在保存前已经被刷新掉，必须在前端收口掉这次提交，
+      // 否则会把失效状态继续推给后端，形成 `/undefined` 这类无效请求。
+      setFormError('编辑目标已失效，请重新选择记录后再保存。');
+      return;
+    }
+
     try {
       setSubmitting(true);
       setFormError(null);
@@ -136,7 +145,7 @@ export default function ValueListManagement() {
       );
 
       if (!response.ok) {
-        const problem = await tryReadMessage(response);
+        const problem = await tryReadMessage(response, t);
         throw new Error(problem ?? '值列表保存失败');
       }
 
@@ -166,7 +175,7 @@ export default function ValueListManagement() {
       });
 
       if (!response.ok) {
-        const problem = await tryReadMessage(response);
+        const problem = await tryReadMessage(response, t);
         throw new Error(problem ?? '值列表删除失败');
       }
 
@@ -325,10 +334,22 @@ function formatDateTime(value: string) {
   return date.toLocaleString();
 }
 
-async function tryReadMessage(response: Response) {
+async function tryReadMessage(response: Response, t: (key: string, fallback?: string) => string) {
   try {
-    const payload = (await response.json()) as { message?: string };
-    return payload.message;
+    const payload = (await response.json()) as unknown;
+    if (isUserMessageDto(payload)) {
+      return formatUserMessage(payload as UserMessageDto, t);
+    }
+
+    // 兼容旧响应：如果不是共享 DTO，但仍带有 message 字段，就沿用旧文本。
+    if (payload && typeof payload === 'object') {
+      const legacyMessage = (payload as { message?: unknown }).message;
+      if (typeof legacyMessage === 'string') {
+        return legacyMessage;
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }

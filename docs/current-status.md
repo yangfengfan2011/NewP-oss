@@ -824,6 +824,41 @@ AI-First 对齐：
 - [designs/user-visible-text-localization-foundation-design.md](designs/user-visible-text-localization-foundation-design.md)
 - [verification/user-visible-text-localization-foundation-package-1-verification.md](verification/user-visible-text-localization-foundation-package-1-verification.md)
 
+### Post-Phase-6：用户可见文本多语言基础（第二包：后端用户消息契约）
+
+状态：已完成并通过
+
+已落地：
+
+- `server/sdk/UserMessages/*` 已形成共享用户消息契约基座，覆盖 `messageKey + messageArgs + level`、`fallbackMessage` 兼容字段与成功/失败态构造入口
+- `frontend/packages/sdk` 与 `frontend/packages/core` 已形成前端共享 `UserMessageDto` 类型、守卫与 `formatUserMessage(...)` 格式化入口
+- `server/modules/ConfigCenter/Services/ValueListService.cs` 已将值列表创建、编辑、删除失败链路切到 `UserMessageException`
+- `server/modules/ConfigCenter/Controllers/ValueListController.cs` 已统一返回 `StatusCode(ex.StatusCode, ex.ToDto())`
+- `modules/ConfigCenter/metadata/dictionaries/ValueLists.dic.json` 已作为值列表试点 authoring 真源落地，并包含 `{code}` / `{id}` 占位符
+- `frontend/modules/config-center/src/pages/ValueListManagement.tsx` 已优先消费后端 `UserMessageDto` 并按当前语言翻译展示，旧 `{ message }` 只保留兼容回退
+- `frontend/packages/core/package.json` 已补齐对 `@icp-platform/sdk` 的 workspace 依赖声明，前端全量构建链路恢复稳定
+
+已验证：
+
+- `dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj --filter FullyQualifiedName~ValueListServiceTests -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~UserMessageContractTests -nr:false -v minimal`
+- `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter "FullyQualifiedName~ValueListControllerMessageContractTests|FullyQualifiedName~RuntimeViewMaterializerTests|FullyQualifiedName~UnifiedPluginPackagingScriptsTests" -nr:false -v minimal`
+- `pnpm --dir .\frontend\packages\shell exec vitest --run src/__tests__/user-message.test.ts src/__tests__/value-list-management-message-contract.test.tsx`
+- `dotnet build .\ICP-Platform.sln -nr:false -v minimal`
+- `pnpm --dir .\frontend build`
+
+当前边界：
+
+- 第二包只覆盖共享用户消息契约基座、`ConfigCenter` 值列表试点、前端值列表页翻译消费与对应验证收口
+- `PluginOps`、`Organization`、`Authorization` 等历史接口的批量消息契约迁移仍不在本包范围
+- 真实数据库唯一约束/并发冲突到统一 `UserMessageDto` 的映射尚未纳入本包
+- 值列表页内的旧协议兼容读取仍保留在页面本地，若后续扩到更多页面，建议另拆受控前端适配收口包
+
+对应文档：
+
+- [designs/user-visible-text-localization-foundation-design.md](designs/user-visible-text-localization-foundation-design.md)
+- [verification/user-visible-text-localization-foundation-package-2-verification.md](verification/user-visible-text-localization-foundation-package-2-verification.md)
+
 ### Post-Phase-6：Organization 结构模块首版闭环
 
 状态：已完成首版闭环

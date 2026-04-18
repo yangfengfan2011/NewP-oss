@@ -8,6 +8,7 @@ import { shellUiConfig } from './config/uiConfig';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlatformProvider } from './contexts/PlatformContext';
 import {
+  getFallbackRuntimeLocalizationManifest,
   loadRuntimeLocalizationManifest,
   type RuntimeLocalizationManifest,
 } from './localization/runtimeLocalizationManifest';
@@ -81,7 +82,6 @@ function getDefaultShellView(): ShellView {
 function App() {
   const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
   const [localizationManifest, setLocalizationManifest] = useState<RuntimeLocalizationManifest | null>(null);
-  const [localizationError, setLocalizationError] = useState<Error | null>(null);
 
   const shellView = useMemo<ShellView>(() => {
     switch (shellUiConfig.shellExperienceMode) {
@@ -121,17 +121,19 @@ function App() {
           return;
         }
 
-        setLocalizationError(error instanceof Error ? error : new Error('Failed to load localization manifest.'));
+        // 登录页不能因为运行时本地化清单缺失而整页白屏；
+        // 这里回退到最小语言清单，同时保留告警，方便继续追宿主或运行时投影视图问题。
+        console.warn(
+          'Failed to load runtime localization manifest, falling back to the built-in minimal manifest.',
+          error,
+        );
+        setLocalizationManifest(getFallbackRuntimeLocalizationManifest());
       });
 
     return () => {
       disposed = true;
     };
   }, []);
-
-  if (localizationError) {
-    throw localizationError;
-  }
 
   if (!localizationManifest) {
     return null;

@@ -7,6 +7,21 @@ export type RuntimeLocalizationManifest = {
   catalogs: Record<string, Record<string, string>>;
 };
 
+export function getFallbackRuntimeLocalizationManifest(): RuntimeLocalizationManifest {
+  return {
+    defaultLanguage: 'zhs',
+    supportedLanguages: [
+      {
+        code: 'zhs',
+        displayName: '简体中文',
+      },
+    ],
+    catalogs: {
+      zhs: {},
+    },
+  };
+}
+
 export async function loadRuntimeLocalizationManifest(): Promise<RuntimeLocalizationManifest> {
   const response = await fetch('/plugins/localization-manifest.json', {
     credentials: 'same-origin',

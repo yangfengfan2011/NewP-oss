@@ -54,7 +54,7 @@
 - Create: `tests/DevSchemaSync.Tests/ModelDiscoveryServiceTests.cs`
 - Create: `tests/MetadataConfigCenter.Tests/SettingDefinitionSourceFilesTests.cs`
 
-- [ ] **Step 1: 为 `.dic` 写第一个失败测试，证明非 `dictionaries/` 目录下的 dic 也必须被识别**
+- [x] **Step 1: 为 `.dic` 写第一个失败测试，证明非 `dictionaries/` 目录下的 dic 也必须被识别**
 
 ```csharp
 [Fact]
@@ -87,7 +87,7 @@ public void Build_WhenDicFileLivesOutsideDictionariesDirectory_StillProjectsCata
 }
 ```
 
-- [ ] **Step 2: 为 `.model` 写第一个失败测试，证明 loader 不应要求 `metadata/models` 固定目录**
+- [x] **Step 2: 为 `.model` 写第一个失败测试，证明 loader 不应要求 `metadata/models` 固定目录**
 
 ```csharp
 [Fact]
@@ -116,7 +116,7 @@ public void DiscoverAll_WhenModelLivesOutsideModelsDirectory_StillFindsModel()
 }
 ```
 
-- [ ] **Step 3: 为 `.settings` 写第一个失败测试，证明 authoring 服务应按 `SourceFiles` 而不是单 `SourcePath` 读取**
+- [x] **Step 3: 为 `.settings` 写第一个失败测试，证明 authoring 服务应按 `SourceFiles` 而不是单 `SourcePath` 读取**
 
 ```csharp
 [Fact]
@@ -138,7 +138,7 @@ public async Task GetSettingDefinitionsAsync_WhenSourceFilesSpanMultipleDirector
 }
 ```
 
-- [ ] **Step 4: 跑三组定向测试，确认当前失败**
+- [x] **Step 4: 跑三组定向测试，确认当前失败**
 
 Run:
 
@@ -154,7 +154,7 @@ Expected:
 FAIL
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add tests/Kernel.Tests/LocalizationRuntimeManifestBuilderTests.cs tests/ConfigCenter.Tests/ConfigCenterModelMetadataProviderTests.cs tests/DevSchemaSync.Tests/ModelDiscoveryServiceTests.cs tests/MetadataConfigCenter.Tests/SettingDefinitionSourceFilesTests.cs
@@ -168,7 +168,7 @@ git commit -m "测试：冻结元数据消费链对齐目标行为"
 - Modify: `server/kernel/PluginPackages/RuntimeViewMaterializer.cs`
 - Modify: `tests/Kernel.Tests/RuntimeViewMaterializerTests.cs`
 
-- [ ] **Step 1: 先把 builder 改为显式接收模块顺序**
+- [x] **Step 1: 先把 builder 改为显式接收模块顺序**
 
 ```csharp
 public string Build(string runtimeRoot, IReadOnlyList<string> moduleOrder)
@@ -177,7 +177,7 @@ public string Build(string runtimeRoot, IReadOnlyList<string> moduleOrder)
 }
 ```
 
-- [ ] **Step 2: 改为扫描 `modules/<ModuleId>/metadata/**/*.json`，并用 `type = "dic"` 识别**
+- [x] **Step 2: 改为扫描 `modules/<ModuleId>/metadata/**/*.json`，并用 `type = "dic"` 识别**
 
 ```csharp
 foreach (var moduleId in moduleOrder)
@@ -195,7 +195,7 @@ foreach (var moduleId in moduleOrder)
 }
 ```
 
-- [ ] **Step 3: 用单业务根对象确定 `dicKey`，文件名只做一致性校验**
+- [x] **Step 3: 用单业务根对象确定 `dicKey`，文件名只做一致性校验**
 
 ```csharp
 var dicRoot = GetSingleBusinessRoot(root, dicPath);
@@ -207,7 +207,7 @@ if (!string.Equals(fileStem, dicKey, StringComparison.Ordinal))
 }
 ```
 
-- [ ] **Step 4: 把冲突规则改为 `dic-entry` 覆盖**
+- [x] **Step 4: 把冲突规则改为 `dic-entry` 覆盖**
 
 ```csharp
 foreach (var translation in translations)
@@ -216,7 +216,7 @@ foreach (var translation in translations)
 }
 ```
 
-- [ ] **Step 5: 在 `RuntimeViewMaterializer` 中传入已启用模块顺序**
+- [x] **Step 5: 在 `RuntimeViewMaterializer` 中传入已启用模块顺序**
 
 ```csharp
 var enabledModuleOrder = enabledRecords
@@ -229,7 +229,7 @@ File.WriteAllText(
     _localizationManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder));
 ```
 
-- [ ] **Step 6: 重跑 `.dic` 定向测试与 runtime 路由 smoke**
+- [x] **Step 6: 重跑 `.dic` 定向测试与 runtime 路由 smoke**
 
 Run:
 
@@ -243,7 +243,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add server/kernel/PluginPackages/LocalizationRuntimeManifestBuilder.cs server/kernel/PluginPackages/RuntimeViewMaterializer.cs tests/Kernel.Tests/LocalizationRuntimeManifestBuilderTests.cs tests/Kernel.Tests/RuntimeViewMaterializerTests.cs tests/Kernel.Tests/HostApiPluginManifestRouteTests.cs
@@ -259,7 +259,7 @@ git commit -m "功能：收口 dic 消费链到自描述规则"
 - Modify: `server/tools/dev-schema-sync/Models/ModelDiscoveryService.cs`
 - Modify: `server/tools/dev-schema-sync/Models/SingleRootModelDocumentLoader.cs`
 
-- [ ] **Step 1: 把单业务根对象解析规则收口到共享 model loader**
+- [x] **Step 1: 把单业务根对象解析规则收口到共享 model loader**
 
 ```csharp
 public interface IModelMetadataDocumentLoader
@@ -276,7 +276,7 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
 }
 ```
 
-- [ ] **Step 2: 删除工具侧对 `metadata/models` 的硬依赖**
+- [x] **Step 2: 删除工具侧对 `metadata/models` 的硬依赖**
 
 ```csharp
 private static string ExtractModuleId(string path)
@@ -297,7 +297,7 @@ private static string ExtractModuleId(string path)
 }
 ```
 
-- [ ] **Step 3: `ModelDiscoveryService` 仍可先保留 `*.model.json` 扫描，但不再要求固定目录名**
+- [x] **Step 3: `ModelDiscoveryService` 仍可先保留 `*.model.json` 扫描，但不再要求固定目录名**
 
 ```csharp
 var discovered = Directory.EnumerateFiles(modulesRoot, "*.model.json", SearchOption.AllDirectories)
@@ -305,7 +305,7 @@ var discovered = Directory.EnumerateFiles(modulesRoot, "*.model.json", SearchOpt
     .ToArray();
 ```
 
-- [ ] **Step 4: `ConfigCenterModelMetadataProvider` 不再内联重复解析逻辑**
+- [x] **Step 4: `ConfigCenterModelMetadataProvider` 不再内联重复解析逻辑**
 
 ```csharp
 private readonly IModelMetadataDocumentLoader _modelLoader = new JsonModelMetadataDocumentLoader();
@@ -319,7 +319,7 @@ public ModelDefinition LoadConfigItem()
 }
 ```
 
-- [ ] **Step 5: 重跑 `.model` 定向测试**
+- [x] **Step 5: 重跑 `.model` 定向测试**
 
 Run:
 
@@ -334,7 +334,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add server/platform-modeling/metadata/IModelMetadataDocumentLoader.cs server/platform-modeling/metadata/JsonModelMetadataDocumentLoader.cs server/modules/ConfigCenter/Persistence/Descriptors/ConfigCenterModelMetadataProvider.cs server/tools/dev-schema-sync/Models/ModelDiscoveryService.cs server/tools/dev-schema-sync/Models/SingleRootModelDocumentLoader.cs tests/ConfigCenter.Tests/ConfigCenterModelMetadataProviderTests.cs tests/DevSchemaSync.Tests/ModelDiscoveryServiceTests.cs
@@ -350,7 +350,7 @@ git commit -m "功能：收口 model 消费链到单根对象规则"
 - Modify: `server/modules/MetadataConfigCenter/Storage/ModuleMetadataStore.cs`
 - Modify: `tests/MetadataConfigCenter.Tests/SettingDefinitionSourceFilesTests.cs`
 
-- [ ] **Step 1: 在 adapter 中把 `type = "settings"` 补成硬门禁**
+- [x] **Step 1: 在 adapter 中把 `type = "settings"` 补成硬门禁**
 
 ```csharp
 if (!root.TryGetProperty("type", out var typeElement)
@@ -361,7 +361,7 @@ if (!root.TryGetProperty("type", out var typeElement)
 }
 ```
 
-- [ ] **Step 2: authoring 服务改为按 `SourceFiles` 精确读取**
+- [x] **Step 2: authoring 服务改为按 `SourceFiles` 精确读取**
 
 ```csharp
 var sourceFiles = await GetSettingsSourceFilesAsync(moduleId, cancellationToken);
@@ -373,7 +373,7 @@ foreach (var relativeFilePath in sourceFiles)
 }
 ```
 
-- [ ] **Step 3: `ModuleMetadataStore` 增加“按 metadata 根相对路径解析文件”的方法**
+- [x] **Step 3: `ModuleMetadataStore` 增加“按 metadata 根相对路径解析文件”的方法**
 
 ```csharp
 public string ResolveMetadataRelativeFilePath(string moduleId, string relativeFilePath)
@@ -389,7 +389,7 @@ public string ResolveAuthoringMetadataRelativeFilePath(string moduleId, string r
 }
 ```
 
-- [ ] **Step 4: apply 服务改为按精确文件集合投影，而不是只按单目录整体替换**
+- [x] **Step 4: apply 服务改为按精确文件集合投影，而不是只按单目录整体替换**
 
 ```csharp
 var sourceFiles = await GetSettingsSourceFilesAsync(moduleId, cancellationToken);
@@ -401,13 +401,13 @@ foreach (var relativeFilePath in sourceFiles)
 }
 ```
 
-- [ ] **Step 5: 如需兼容旧状态，仍可在单目录场景下复用现有目录级比较，但精确文件集必须优先**
+- [x] **Step 5: 如需兼容旧状态，仍可在单目录场景下复用现有目录级比较，但精确文件集必须优先**
 
 ```csharp
 // 先按 SourceFiles 比较和投影；只有旧测试数据仍是单目录时，目录级逻辑才作为兼容包装层存在。
 ```
 
-- [ ] **Step 6: 重跑 `settings` 定向测试**
+- [x] **Step 6: 重跑 `settings` 定向测试**
 
 Run:
 
@@ -421,7 +421,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add server/modules/MetadataConfigCenter/Services/SettingDefinitionAuthoringService.cs server/modules/MetadataConfigCenter/Services/SettingDefinitionApplyService.cs server/modules/MetadataConfigCenter/Adapters/SettingDefinitionAuthoringAdapter.cs server/modules/MetadataConfigCenter/Storage/ModuleMetadataStore.cs tests/MetadataConfigCenter.Tests/SettingDefinitionSourceFilesTests.cs
@@ -433,7 +433,7 @@ git commit -m "功能：收口 settings 消费链到精确文件集合"
 **Files:**
 - Modify: `docs/designs/platform/metadata-consumer-alignment-review.md`
 
-- [ ] **Step 1: 跑三条链的联调命令**
+- [x] **Step 1: 跑三条链的联调命令**
 
 Run:
 
@@ -450,7 +450,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 2: 如实现中边界有调整，最小回填 review 文档**
+- [x] **Step 2: 如实现中边界有调整，最小回填 review 文档**
 
 ```md
 - `.dic` 已改为按模块顺序 + type 门禁 + 业务根对象生成 manifest
@@ -458,7 +458,7 @@ Passed!
 - `.settings` 已改为按精确 `SourceFiles` 读取与 apply
 ```
 
-- [ ] **Step 3: 对 review 文档执行 AI-first 校验**
+- [x] **Step 3: 对 review 文档执行 AI-first 校验**
 
 Run:
 
@@ -472,7 +472,7 @@ Expected:
 AI-first design validation passed
 ```
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add docs/designs/platform/metadata-consumer-alignment-review.md

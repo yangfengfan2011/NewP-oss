@@ -403,3 +403,10 @@
 - 回退三条消费链的本轮实现
 - 保留文档与新增测试
 - 继续维持当前 authoring 布局设计，不回滚整体方向
+
+## 10. 实施状态（2026-04-20）
+
+- `.dic` 已改为按显式模块顺序扫描 `modules/<ModuleId>/metadata/**/*.json`，并以 `type = "dic"` + 单业务根对象生成 localization manifest；文件名仅作为业务根对象一致性校验。
+- `.model` 已把单业务根对象解析规则收口到共享 `JsonModelMetadataDocumentLoader`，`ConfigCenter` provider 与 `dev-schema-sync` 都已复用该 loader，并去掉了对 `metadata/models` 的路径硬依赖。
+- `.settings` 已改为由 authoring/apply 服务优先消费 manifest 的 `SourceFiles`；`SettingDefinitionAuthoringAdapter` 现已对 `type = "settings"` 执行硬门禁，apply 也改为按精确文件集合投影并保留回滚。
+- 为保证计划中的 `ConfigCenterModelMetadataProviderTests` 能在当前仓库真实通过，已最小补齐 `modules/Platform/metadata/dictionaries/ConfigCenter.dic.json`，不扩展到其他字典主线。

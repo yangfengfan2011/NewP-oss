@@ -76,8 +76,12 @@ public class RuntimeViewMaterializer
             var frontendManifestPath = Path.Combine(stagedRuntimeRoot, "frontend-plugin-manifest.json");
             File.WriteAllText(frontendManifestPath, _frontendManifestBuilder.Build(enabledRecords));
 
+            var enabledModuleOrder = enabledRecords
+                .Select(record => record.ModuleId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             var localizationManifestPath = Path.Combine(stagedRuntimeRoot, "localization-manifest.json");
-            File.WriteAllText(localizationManifestPath, _localizationManifestBuilder.Build(stagedRuntimeRoot));
+            File.WriteAllText(localizationManifestPath, _localizationManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder));
 
             ReplaceProjection(installRoot, stagedRuntimeRoot, stagedPublicRoot, commitWorkspaceRoot);
         }

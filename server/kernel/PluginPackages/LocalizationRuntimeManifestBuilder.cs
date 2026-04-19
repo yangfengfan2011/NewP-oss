@@ -21,6 +21,16 @@ public class LocalizationRuntimeManifestBuilder
     /// <returns>只包含 defaultLanguage、supportedLanguages、catalogs 的 manifest JSON。</returns>
     public string Build(string runtimeRoot)
     {
+        var moduleOrder = EnumerateModules(runtimeRoot).ToArray();
+        return Build(runtimeRoot, moduleOrder);
+    }
+
+    /// <summary>
+    /// 根据显式模块顺序生成 localization manifest。
+    /// 这里由调用方提供最终生效顺序，builder 不再从目录枚举顺序推导覆盖语义。
+    /// </summary>
+    public string Build(string runtimeRoot, IReadOnlyList<string> moduleOrder)
+    {
         var languagesManifestPath = Path.Combine(runtimeRoot, "modules", "Platform", "metadata", "languages.json");
         if (!File.Exists(languagesManifestPath))
         {
@@ -36,15 +46,24 @@ public class LocalizationRuntimeManifestBuilder
             _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var dicPath in EnumerateDictionaryFiles(runtimeRoot))
+        foreach (var moduleId in moduleOrder)
         {
-            MaterializeDictionary(dicPath, supportedLanguages, catalogs);
+            foreach (var metadataFile in EnumerateMetadataJsonFiles(runtimeRoot, moduleId))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(metadataFile));
+                if (!IsDicDocument(document.RootElement))
+                {
+                    continue;
+                }
+
+                MaterializeDictionary(metadataFile, document.RootElement, supportedLanguages, catalogs);
+            }
         }
 
         return SerializeManifest(languagesManifest.DefaultLanguage, supportedLanguages.Values, catalogs);
     }
 
-    private static IEnumerable<string> EnumerateDictionaryFiles(string runtimeRoot)
+    private static IEnumerable<string> EnumerateModules(string runtimeRoot)
     {
         var modulesRoot = Path.Combine(runtimeRoot, "modules");
         if (!Directory.Exists(modulesRoot))
@@ -52,40 +71,49 @@ public class LocalizationRuntimeManifestBuilder
             yield break;
         }
 
-        foreach (var metadataDirectory in Directory.EnumerateDirectories(modulesRoot, "metadata", SearchOption.AllDirectories))
+        foreach (var moduleDirectory in Directory.EnumerateDirectories(modulesRoot)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
-            var dictionariesDirectory = Path.Combine(metadataDirectory, "dictionaries");
-            if (!Directory.Exists(dictionariesDirectory))
-            {
-                continue;
-            }
+            yield return Path.GetFileName(moduleDirectory);
+        }
+    }
 
-            foreach (var dicFile in Directory.EnumerateFiles(dictionariesDirectory, "*.dic.json", SearchOption.TopDirectoryOnly))
-            {
-                yield return dicFile;
-            }
+    private static IEnumerable<string> EnumerateMetadataJsonFiles(string runtimeRoot, string moduleId)
+    {
+        var metadataRoot = Path.Combine(runtimeRoot, "modules", moduleId, "metadata");
+        if (!Directory.Exists(metadataRoot))
+        {
+            yield break;
+        }
+
+        foreach (var metadataFile in Directory
+                     .EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            yield return metadataFile;
         }
     }
 
     private static void MaterializeDictionary(
         string dicPath,
+        JsonElement root,
         IReadOnlyDictionary<string, LocalizationLanguage> supportedLanguages,
         IDictionary<string, Dictionary<string, string>> catalogs)
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(dicPath));
-        var root = document.RootElement;
-        var themeName = GetThemeName(dicPath);
+        var dicRoot = GetSingleBusinessRoot(root, dicPath);
+        var dicKey = dicRoot.Name;
+        var fileStem = GetDictionaryFileStem(dicPath);
 
-        if (!root.TryGetProperty(themeName, out var themeObject) || themeObject.ValueKind != JsonValueKind.Object)
+        if (!string.Equals(fileStem, dicKey, StringComparison.Ordinal))
         {
-            throw new JsonException($"Dictionary '{dicPath}' must contain root theme '{themeName}'.");
+            throw new JsonException($"Dictionary '{dicPath}' file name '{fileStem}' does not match business root '{dicKey}'.");
         }
 
         foreach (var property in root.EnumerateObject())
         {
             if (string.Equals(property.Name, "schemaVersion", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(property.Name, "type", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(property.Name, themeName, StringComparison.Ordinal))
+                || string.Equals(property.Name, dicKey, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -93,7 +121,12 @@ public class LocalizationRuntimeManifestBuilder
             throw new JsonException($"Dictionary '{dicPath}' contains unsupported top-level member '{property.Name}'.");
         }
 
-        foreach (var entry in themeObject.EnumerateObject())
+        if (dicRoot.Value.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException($"Dictionary '{dicPath}' business root '{dicKey}' must be an object.");
+        }
+
+        foreach (var entry in dicRoot.Value.EnumerateObject())
         {
             if (entry.Value.ValueKind != JsonValueKind.Object)
             {
@@ -123,29 +156,49 @@ public class LocalizationRuntimeManifestBuilder
                 if (!translations.ContainsKey(supportedLanguage.Code))
                 {
                     throw new JsonException(
-                        $"Dictionary '{dicPath}' entry '{entry.Name}' is missing supported language '{supportedLanguage.Code}'.");
+                    $"Dictionary '{dicPath}' entry '{entry.Name}' is missing supported language '{supportedLanguage.Code}'.");
                 }
             }
 
-            var catalogKey = ProjectCatalogKey(themeName, entry.Name);
+            var catalogKey = ProjectCatalogKey(dicKey, entry.Name);
 
             foreach (var translation in translations)
             {
-                var languageCatalog = catalogs[translation.Key];
-                if (languageCatalog.TryGetValue(catalogKey, out var existingValue))
-                {
-                    if (!string.Equals(existingValue, translation.Value, StringComparison.Ordinal))
-                    {
-                        throw new JsonException(
-                            $"Dictionary '{dicPath}' entry '{catalogKey}' conflicts with an existing localization value for language '{translation.Key}'.");
-                    }
-
-                    continue;
-                }
-
-                languageCatalog[catalogKey] = translation.Value;
+                catalogs[translation.Key][catalogKey] = translation.Value;
             }
         }
+    }
+
+    private static bool IsDicDocument(JsonElement root)
+    {
+        return root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("type", out var typeElement)
+            && typeElement.ValueKind == JsonValueKind.String
+            && string.Equals(typeElement.GetString(), "dic", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static JsonProperty GetSingleBusinessRoot(JsonElement root, string dicPath)
+    {
+        JsonProperty dicRoot = default;
+        var rootCount = 0;
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (property.NameEquals("schemaVersion") || property.NameEquals("type"))
+            {
+                continue;
+            }
+
+            dicRoot = property;
+            rootCount++;
+        }
+
+        if (rootCount != 1)
+        {
+            throw new JsonException($"Dictionary '{dicPath}' must contain exactly one business root object.");
+        }
+
+        return dicRoot;
     }
 
     private static string ProjectCatalogKey(string themeName, string entryName)
@@ -212,7 +265,7 @@ public class LocalizationRuntimeManifestBuilder
         }) + Environment.NewLine;
     }
 
-    private static string GetThemeName(string dicPath)
+    private static string GetDictionaryFileStem(string dicPath)
     {
         var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(dicPath);
         const string suffix = ".dic";

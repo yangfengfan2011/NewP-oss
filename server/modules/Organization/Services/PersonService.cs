@@ -9,6 +9,8 @@ public sealed class PersonService : IPersonService
 {
     private readonly IPersonRepository _personRepository;
     private readonly IPersonUserLinkRepository _personUserLinkRepository;
+    private readonly ICompanyRepository? _companyRepository;
+    private readonly IDepartmentRepository? _departmentRepository;
     private readonly IIdentityUserDirectory _identityUserDirectory;
     private readonly IAuthorizationSummaryReader _authorizationSummaryReader;
 
@@ -17,9 +19,22 @@ public sealed class PersonService : IPersonService
         IPersonUserLinkRepository personUserLinkRepository,
         IIdentityUserDirectory identityUserDirectory,
         IAuthorizationSummaryReader authorizationSummaryReader)
+        : this(personRepository, personUserLinkRepository, null, null, identityUserDirectory, authorizationSummaryReader)
+    {
+    }
+
+    public PersonService(
+        IPersonRepository personRepository,
+        IPersonUserLinkRepository personUserLinkRepository,
+        ICompanyRepository? companyRepository,
+        IDepartmentRepository? departmentRepository,
+        IIdentityUserDirectory identityUserDirectory,
+        IAuthorizationSummaryReader authorizationSummaryReader)
     {
         _personRepository = personRepository;
         _personUserLinkRepository = personUserLinkRepository;
+        _companyRepository = companyRepository;
+        _departmentRepository = departmentRepository;
         _identityUserDirectory = identityUserDirectory;
         _authorizationSummaryReader = authorizationSummaryReader;
     }
@@ -38,10 +53,22 @@ public sealed class PersonService : IPersonService
             return null;
         }
 
-        var link = await _personUserLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
-        // 权限摘要属于附加视图信息，不应反向决定人员详情是否可读；
-        // 因此即使授权汇总失败，也返回人员主体数据。
-        var authorizationSummary = await GetAuthorizationSummaryAsync(link, cancellationToken);
+        PersonUserLink? link;
+        var userLinkDependencyUnavailable = false;
+        try
+        {
+            link = await _personUserLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // 绑定摘要是只读承接，依赖异常时不阻断人员主体详情，只记录为 dependencyUnavailable。
+            link = null;
+            userLinkDependencyUnavailable = true;
+        }
+
+        // 摘要块是只读承接，不应反向影响人员主体详情的可读性。
+        var userLinkSummary = BuildUserLinkSummary(link, userLinkDependencyUnavailable);
+        var authorizationSummary = await BuildAuthorizationSummaryAsync(link, userLinkDependencyUnavailable, cancellationToken);
 
         return new PersonDetailDto
         {
@@ -55,8 +82,36 @@ public sealed class PersonService : IPersonService
             IsEnabled = person.IsEnabled,
             CreatedAt = person.CreatedAt,
             UserLink = link is null ? null : MapToDto(link),
+            UserLinkSummary = userLinkSummary,
             AuthorizationSummary = authorizationSummary
         };
+    }
+
+    public async Task<IReadOnlyList<PersonListItemDto>> GetListAsync(
+        string? keyword,
+        Guid? companyId,
+        Guid? departmentId,
+        EmploymentStatus? employmentStatus,
+        CancellationToken cancellationToken = default)
+    {
+        var persons = await _personRepository.GetListAsync(keyword, companyId, departmentId, employmentStatus, cancellationToken);
+        var items = new List<PersonListItemDto>(persons.Count);
+
+        foreach (var person in persons)
+        {
+            items.Add(new PersonListItemDto
+            {
+                Id = person.Id,
+                PersonNo = person.PersonNo,
+                Name = person.Name,
+                CompanyName = await ResolveCompanyNameAsync(person.CompanyId, cancellationToken),
+                DepartmentName = await ResolveDepartmentNameAsync(person.DepartmentId, cancellationToken),
+                EmploymentStatus = person.EmploymentStatus,
+                IsEnabled = person.IsEnabled
+            });
+        }
+
+        return items;
     }
 
     public async Task<PersonDto> CreateAsync(PersonDto dto, CancellationToken cancellationToken = default)
@@ -102,6 +157,23 @@ public sealed class PersonService : IPersonService
         return MapToDto(person);
     }
 
+    public async Task<PersonDetailDto> DisableAsync(Guid personId, CancellationToken cancellationToken = default)
+    {
+        var person = await _personRepository.GetByIdAsync(personId, cancellationToken);
+        if (person is null)
+        {
+            throw new InvalidOperationException($"人员 '{personId}' 不存在。");
+        }
+
+        // 停用只改变可用性，不改变人员主数据；返回刷新后的详情，方便页面直接接住状态切换结果。
+        person.IsEnabled = false;
+        person.UpdatedAt = DateTime.UtcNow;
+        await _personRepository.UpdateAsync(person, cancellationToken);
+
+        return await GetDetailAsync(personId, cancellationToken)
+            ?? throw new InvalidOperationException($"人员 '{personId}' 不存在。");
+    }
+
     public async Task<PersonUserLinkDto> LinkUserAsync(
         Guid personId,
         LinkPersonUserRequest request,
@@ -133,23 +205,91 @@ public sealed class PersonService : IPersonService
         return MapToDto(link);
     }
 
-    private async Task<IReadOnlyList<string>> GetAuthorizationSummaryAsync(
+    private static PersonSummaryBlockDto BuildUserLinkSummary(
         PersonUserLink? link,
-        CancellationToken cancellationToken)
+        bool dependencyUnavailable)
     {
+        if (dependencyUnavailable)
+        {
+            return new PersonSummaryBlockDto { Status = "dependencyUnavailable" };
+        }
+
         if (link is null)
         {
-            return [];
+            return new PersonSummaryBlockDto { Status = "notConfigured" };
+        }
+
+        return new PersonSummaryBlockDto
+        {
+            Status = "ready",
+            Data = MapToDto(link)
+        };
+    }
+
+    private async Task<PersonSummaryBlockDto> BuildAuthorizationSummaryAsync(
+        PersonUserLink? link,
+        bool dependencyUnavailable,
+        CancellationToken cancellationToken)
+    {
+        if (dependencyUnavailable)
+        {
+            return new PersonSummaryBlockDto { Status = "dependencyUnavailable" };
+        }
+
+        if (link is null)
+        {
+            return new PersonSummaryBlockDto { Status = "notConfigured" };
         }
 
         try
         {
-            return await _authorizationSummaryReader.GetRoleNamesAsync(link.UserId, cancellationToken);
+            var roleNames = await _authorizationSummaryReader.GetRoleNamesAsync(link.UserId, cancellationToken);
+            return new PersonSummaryBlockDto
+            {
+                Status = "ready",
+                Data = roleNames
+            };
         }
         catch (Exception)
         {
-            // 授权摘要是可降级信息；读取失败时返回空列表而不是放大成整页失败。
-            return [];
+            // 授权摘要是可降级信息；依赖不可用时只降级块状态，不放大为整页失败。
+            return new PersonSummaryBlockDto { Status = "dependencyUnavailable" };
+        }
+    }
+
+    private async Task<string> ResolveCompanyNameAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        if (_companyRepository is null)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
+            return company?.Name ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private async Task<string> ResolveDepartmentNameAsync(Guid departmentId, CancellationToken cancellationToken)
+    {
+        if (_departmentRepository is null)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var department = await _departmentRepository.GetByIdAsync(departmentId, cancellationToken);
+            return department?.Name ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            return string.Empty;
         }
     }
 

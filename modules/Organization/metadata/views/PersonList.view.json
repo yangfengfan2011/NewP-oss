@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.person.list",
+    "dicKey": "PersonListView",
+    "titleKey": "PersonListView.Title",
+    "descriptionKey": "PersonListView.Description",
+    "mode": "list",
+    "model": "Person",
+    "editorMode": "page",
+    "detailViewKey": "organization.person.detail",
+    "query": {
+      "fields": [
+        {
+          "key": "keyword",
+          "labelKey": "PersonListView.Query.Keyword",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        },
+        {
+          "key": "companyId",
+          "labelKey": "PersonListView.Query.Company",
+          "source": "model",
+          "field": "CompanyId",
+          "operator": "="
+        },
+        {
+          "key": "departmentId",
+          "labelKey": "PersonListView.Query.Department",
+          "source": "model",
+          "field": "DepartmentId",
+          "operator": "="
+        },
+        {
+          "key": "employmentStatus",
+          "labelKey": "PersonListView.Query.EmploymentStatus",
+          "source": "model",
+          "field": "EmploymentStatus",
+          "operator": "="
+        }
+      ]
+    },
+    "columns": [
+      {
+        "key": "personNo",
+        "labelKey": "PersonListView.Column.PersonNo"
+      },
+      {
+        "key": "name",
+        "labelKey": "PersonListView.Column.Name"
+      },
+      {
+        "key": "companyName",
+        "labelKey": "PersonListView.Column.CompanyName"
+      },
+      {
+        "key": "departmentName",
+        "labelKey": "PersonListView.Column.DepartmentName"
+      },
+      {
+        "key": "employmentStatus",
+        "labelKey": "PersonListView.Column.EmploymentStatus"
+      },
+      {
+        "key": "isEnabled",
+        "labelKey": "PersonListView.Column.IsEnabled"
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "create",
+        "labelKey": "PersonListView.Action.Create"
+      },
+      {
+        "key": "refresh",
+        "labelKey": "PersonListView.Action.Refresh"
+      }
+    ],
+    "rowActions": [
+      {
+        "key": "view",
+        "labelKey": "PersonListView.Action.View"
+      },
+      {
+        "key": "edit",
+        "labelKey": "PersonListView.Action.Edit"
+      },
+      {
+        "key": "disable",
+        "labelKey": "PersonListView.Action.Disable"
+      }
+    ],
+    "export": {
+      "modes": [
+        "current",
+        "all"
+      ]
+    }
+  }
+}

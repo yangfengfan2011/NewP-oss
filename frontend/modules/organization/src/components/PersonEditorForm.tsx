@@ -1,54 +1,388 @@
-import { Panel, StatusBadge, SummaryCard } from '@icp-platform/ui';
-import type { PersonDetailDto } from '../services/organizationService';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Button, ErrorState, Input, Select, StatusBadge, SummaryCard, Panel } from '@icp-platform/ui';
+import {
+  employmentStatusOptions,
+  getCompanies,
+  getDepartments,
+  getEmploymentStatusLabel,
+  getPositions,
+  type CompanyDto,
+  type DepartmentDto,
+  type PersonDetailDto,
+  type PersonUpsertRequest,
+  type PositionDto,
+} from '../services/organizationService';
 
 interface PersonEditorFormProps {
   person: PersonDetailDto;
+  onSave: (person: PersonUpsertRequest) => Promise<void>;
 }
 
-const fieldGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: 16,
-};
+interface PersonDraft {
+  personNo: string;
+  name: string;
+  companyId: string;
+  departmentId: string;
+  positionId: string;
+  employmentStatus: string;
+  isEnabled: boolean;
+}
 
-const fieldCardStyle: React.CSSProperties = {
-  border: '1px solid #e2e8f0',
-  borderRadius: 14,
-  padding: 16,
-  background: '#ffffff',
-};
+function buildDraft(person: PersonDetailDto): PersonDraft {
+  return {
+    personNo: person.personNo,
+    name: person.name,
+    companyId: person.companyId,
+    departmentId: person.departmentId,
+    positionId: person.positionId ?? '',
+    employmentStatus: person.employmentStatus,
+    isEnabled: person.isEnabled,
+  };
+}
 
-export default function PersonEditorForm({ person }: PersonEditorFormProps) {
+function ensureCurrentOption<T extends { value: string; label: string }>(
+  options: T[],
+  value: string,
+  label: string,
+): T[] {
+  if (!value || options.some((option) => option.value === value)) {
+    return options;
+  }
+
+  return [{ value, label } as T, ...options];
+}
+
+export default function PersonEditorForm({ person, onSave }: PersonEditorFormProps) {
+  const [draft, setDraft] = useState<PersonDraft>(() => buildDraft(person));
+  const [companies, setCompanies] = useState<CompanyDto[]>([]);
+  const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+  const [positions, setPositions] = useState<PositionDto[]>([]);
+  const [companyLoading, setCompanyLoading] = useState(true);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
+  const [positionLoading, setPositionLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 详情页保存后会把新读模型回填到本组件，确保表单草稿始终贴着真实详情。
+    setDraft(buildDraft(person));
+    setSaveError(null);
+  }, [person]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCompanies() {
+      try {
+        setLookupError(null);
+        setCompanyLoading(true);
+        const nextCompanies = await getCompanies();
+        if (!cancelled) {
+          setCompanies(nextCompanies);
+        }
+      }
+      catch (loadError) {
+        if (!cancelled) {
+          setCompanies([]);
+          setLookupError(loadError instanceof Error ? loadError.message : '加载公司选项失败');
+        }
+      }
+      finally {
+        if (!cancelled) {
+          setCompanyLoading(false);
+        }
+      }
+    }
+
+    void loadCompanies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!draft.companyId) {
+      setDepartments([]);
+      setDepartmentLoading(false);
+      setDraft((current) =>
+        current.departmentId || current.positionId
+          ? { ...current, departmentId: '', positionId: '' }
+          : current,
+      );
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadDepartments() {
+      try {
+        setLookupError(null);
+        setDepartmentLoading(true);
+        const nextDepartments = await getDepartments(draft.companyId);
+        if (cancelled) {
+          return;
+        }
+
+        setDepartments(nextDepartments);
+        // 公司切换后，部门如果不再属于当前公司，就自动清空，避免提交悬空组织归属。
+        setDraft((current) => {
+          if (current.companyId !== draft.companyId) {
+            return current;
+          }
+
+          if (!current.departmentId) {
+            return current;
+          }
+
+          const hasDepartment = nextDepartments.some((item) => item.id === current.departmentId);
+          return hasDepartment ? current : { ...current, departmentId: '', positionId: '' };
+        });
+      }
+      catch (loadError) {
+        if (!cancelled) {
+          setDepartments([]);
+          setLookupError(loadError instanceof Error ? loadError.message : '加载部门选项失败');
+        }
+      }
+      finally {
+        if (!cancelled) {
+          setDepartmentLoading(false);
+        }
+      }
+    }
+
+    void loadDepartments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.companyId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!draft.departmentId) {
+      setPositions([]);
+      setPositionLoading(false);
+      setDraft((current) => (current.positionId ? { ...current, positionId: '' } : current));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadPositions() {
+      try {
+        setLookupError(null);
+        setPositionLoading(true);
+        const nextPositions = await getPositions(draft.departmentId);
+        if (cancelled) {
+          return;
+        }
+
+        setPositions(nextPositions);
+        setDraft((current) => {
+          if (current.departmentId !== draft.departmentId) {
+            return current;
+          }
+
+          if (!current.positionId) {
+            return current;
+          }
+
+          const hasPosition = nextPositions.some((item) => item.id === current.positionId);
+          return hasPosition ? current : { ...current, positionId: '' };
+        });
+      }
+      catch (loadError) {
+        if (!cancelled) {
+          setPositions([]);
+          setLookupError(loadError instanceof Error ? loadError.message : '加载岗位选项失败');
+        }
+      }
+      finally {
+        if (!cancelled) {
+          setPositionLoading(false);
+        }
+      }
+    }
+
+    void loadPositions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.departmentId]);
+
+  const companyOptions = useMemo(
+    () =>
+      ensureCurrentOption(
+        companies.map((company) => ({
+          value: company.id,
+          label: company.name,
+        })),
+        draft.companyId,
+        person.companyName ?? draft.companyId,
+      ),
+    [companies, draft.companyId, person.companyName],
+  );
+
+  const departmentOptions = useMemo(
+    () =>
+      ensureCurrentOption(
+        departments.map((department) => ({
+          value: department.id,
+          label: department.name,
+        })),
+        draft.departmentId,
+        person.departmentName ?? draft.departmentId,
+      ),
+    [departments, draft.departmentId, person.departmentName],
+  );
+
+  const positionOptions = useMemo(
+    () =>
+      ensureCurrentOption(
+        positions.map((position) => ({
+          value: position.id,
+          label: position.name,
+        })),
+        draft.positionId,
+        person.positionName ?? draft.positionId,
+      ),
+    [person.positionName, positions, draft.positionId],
+  );
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setSaving(true);
+      setSaveError(null);
+      await onSave({
+        personNo: draft.personNo.trim(),
+        name: draft.name.trim(),
+        companyId: draft.companyId,
+        departmentId: draft.departmentId,
+        positionId: draft.positionId || null,
+        employmentStatus: draft.employmentStatus,
+        isEnabled: draft.isEnabled,
+      });
+    }
+    catch (submitError) {
+      setSaveError(submitError instanceof Error ? submitError.message : '保存人员信息失败');
+    }
+    finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <Panel title="基础信息" meta="首版先集中展示人员主档与组织归属">
+    <Panel
+      title="基础信息"
+      meta="首轮只收口主档与组织归属，停用动作由详情页单独承接，不在这里混成同一条交互链路。"
+      actions={(
+        <Button variant="primary" type="submit" form="person-editor-form" disabled={saving}>
+          {saving ? '保存中...' : '保存修改'}
+        </Button>
+      )}
+    >
       <div className="sh-section-grid">
-        <SummaryCard label="人员编号" value={person.personNo} meta="人员主键以外的业务识别码" />
-        <SummaryCard label="所属公司" value={person.companyId} meta="当前先展示标识，后续可补名称映射" />
-        <SummaryCard label="所属部门" value={person.departmentId} meta="保持与组织树选中上下文一致" />
+        <SummaryCard label="人员编号" value={person.personNo} meta="人员主数据的业务识别码" />
+        <SummaryCard
+          label="组织归属"
+          value={`${person.companyName ?? person.companyId} / ${person.departmentName ?? person.departmentId}`}
+          meta={person.positionName ?? person.positionId ?? '未分配岗位'}
+        />
+        <SummaryCard
+          label="当前状态"
+          value={<StatusBadge variant={person.isEnabled ? 'success' : 'warning'} label={person.isEnabled ? '启用' : '停用'} />}
+          meta={getEmploymentStatusLabel(person.employmentStatus)}
+        />
       </div>
 
-      <div style={{ marginTop: 20, ...fieldGridStyle }}>
-        <div style={fieldCardStyle}>
-          <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase' }}>姓名</div>
-          <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700 }}>{person.name}</div>
+      {lookupError ? <ErrorState message={lookupError} /> : null}
+      {saveError ? <ErrorState message={saveError} /> : null}
+
+      <form id="person-editor-form" onSubmit={(event) => void handleSubmit(event)} style={{ marginTop: 20 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <Input
+            label="工号"
+            value={draft.personNo}
+            readOnly
+            placeholder="工号首轮保持只读"
+            required
+          />
+
+          <Input
+            label="姓名"
+            value={draft.name}
+            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+            placeholder="输入人员姓名"
+            required
+          />
+
+          <Select
+            label="所属公司"
+            value={draft.companyId}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                companyId: event.target.value,
+                departmentId: '',
+                positionId: '',
+              }))
+            }
+            options={companyOptions}
+            placeholder="请选择公司"
+            disabled={companyLoading}
+            required
+          />
+
+          <Select
+            label="所属部门"
+            value={draft.departmentId}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                departmentId: event.target.value,
+                positionId: '',
+              }))
+            }
+            options={departmentOptions}
+            placeholder={draft.companyId ? '请选择部门' : '请先选择公司'}
+            disabled={!draft.companyId || departmentLoading}
+            required
+          />
+
+          <Select
+            label="岗位"
+            value={draft.positionId}
+            onChange={(event) => setDraft((current) => ({ ...current, positionId: event.target.value }))}
+            options={positionOptions}
+            placeholder={draft.departmentId ? '请选择岗位' : '可先保持空白'}
+            disabled={!draft.departmentId || positionLoading}
+          />
+
+          <Select
+            label="用工状态"
+            value={draft.employmentStatus}
+            onChange={(event) => setDraft((current) => ({ ...current, employmentStatus: event.target.value }))}
+            options={employmentStatusOptions}
+            placeholder="请选择状态"
+            required
+          />
         </div>
-        <div style={fieldCardStyle}>
-          <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase' }}>岗位</div>
-          <div style={{ marginTop: 8, fontSize: 16, fontWeight: 600 }}>{person.positionId ?? '未分配岗位'}</div>
-        </div>
-        <div style={fieldCardStyle}>
-          <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase' }}>用工状态</div>
-          <div style={{ marginTop: 8 }}>
-            <StatusBadge variant="info" label={person.employmentStatus} />
-          </div>
-        </div>
-        <div style={fieldCardStyle}>
-          <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase' }}>启用状态</div>
-          <div style={{ marginTop: 8 }}>
-            <StatusBadge variant={person.isEnabled ? 'success' : 'warning'} label={person.isEnabled ? '启用' : '停用'} />
-          </div>
-        </div>
-      </div>
+      </form>
     </Panel>
   );
 }

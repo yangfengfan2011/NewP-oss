@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.person.detail",
+    "dicKey": "PersonDetailView",
+    "titleKey": "PersonDetailView.Title",
+    "descriptionKey": "PersonDetailView.Description",
+    "mode": "detail",
+    "model": "Person",
+    "sections": [
+      "basic",
+      "organization"
+    ],
+    "summaryBlocks": [
+      "userLink",
+      "authorizationSummary"
+    ],
+    "pageActions": [
+      {
+        "key": "edit",
+        "labelKey": "PersonDetailView.Action.Edit"
+      },
+      {
+        "key": "disable",
+        "labelKey": "PersonDetailView.Action.Disable"
+      }
+    ]
+  }
+}

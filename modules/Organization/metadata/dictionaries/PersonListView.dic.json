@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PersonListView": {
+    "Title": {
+      "zhs": "人员中心",
+      "en": "Person Center"
+    },
+    "Description": {
+      "zhs": "维护组织模块中的人员基础信息。",
+      "en": "Manage person master data in the organization module."
+    },
+    "Query.Keyword": {
+      "zhs": "关键字",
+      "en": "Keyword"
+    },
+    "Query.Company": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "Query.Department": {
+      "zhs": "部门",
+      "en": "Department"
+    },
+    "Query.EmploymentStatus": {
+      "zhs": "在职状态",
+      "en": "Employment Status"
+    },
+    "Column.PersonNo": {
+      "zhs": "人员编号",
+      "en": "Person No."
+    },
+    "Column.Name": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "Column.CompanyName": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "Column.DepartmentName": {
+      "zhs": "部门",
+      "en": "Department"
+    },
+    "Column.EmploymentStatus": {
+      "zhs": "在职状态",
+      "en": "Employment Status"
+    },
+    "Column.IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Action.Create": {
+      "zhs": "新建",
+      "en": "Create"
+    },
+    "Action.Refresh": {
+      "zhs": "刷新",
+      "en": "Refresh"
+    },
+    "Action.View": {
+      "zhs": "查看",
+      "en": "View"
+    },
+    "Action.Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Action.Disable": {
+      "zhs": "停用",
+      "en": "Disable"
+    }
+  }
+}

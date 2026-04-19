@@ -23,6 +23,42 @@ public sealed class EfPersonRepository : IPersonRepository
         return entity is null ? null : Map(entity);
     }
 
+    public async Task<IReadOnlyList<Person>> GetListAsync(
+        string? keyword,
+        Guid? companyId,
+        Guid? departmentId,
+        EmploymentStatus? employmentStatus,
+        CancellationToken cancellationToken = default)
+    {
+        var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
+
+        IEnumerable<IReadOnlyDictionary<string, object?>> query = entities;
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            query = query.Where(entity =>
+                ContainsIgnoreCase(GetString(entity, "PersonNo"), keyword) ||
+                ContainsIgnoreCase(GetString(entity, "Name"), keyword));
+        }
+
+        if (companyId.HasValue)
+        {
+            query = query.Where(entity => GetGuid(entity, "CompanyId") == companyId.Value);
+        }
+
+        if (departmentId.HasValue)
+        {
+            query = query.Where(entity => GetGuid(entity, "DepartmentId") == departmentId.Value);
+        }
+
+        if (employmentStatus.HasValue)
+        {
+            query = query.Where(entity => GetEmploymentStatus(entity, "EmploymentStatus") == employmentStatus.Value);
+        }
+
+        return query.Select(Map).ToList();
+    }
+
     public async Task<bool> ExistsPersonNoAsync(
         Guid companyId,
         string personNo,
@@ -99,6 +135,10 @@ public sealed class EfPersonRepository : IPersonRepository
 
     private static string? GetString(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) ? value as string : null;
+
+    private static bool ContainsIgnoreCase(string? source, string keyword) =>
+        !string.IsNullOrWhiteSpace(source) &&
+        source.Contains(keyword, StringComparison.OrdinalIgnoreCase);
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;

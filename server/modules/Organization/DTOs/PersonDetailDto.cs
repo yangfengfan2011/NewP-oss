@@ -14,5 +14,6 @@ public sealed record PersonDetailDto
     public bool IsEnabled { get; init; }
     public DateTime CreatedAt { get; init; }
     public PersonUserLinkDto? UserLink { get; init; }
-    public IReadOnlyList<string> AuthorizationSummary { get; init; } = [];
+    public PersonSummaryBlockDto UserLinkSummary { get; init; } = new() { Status = "notConfigured" };
+    public PersonSummaryBlockDto AuthorizationSummary { get; init; } = new() { Status = "notConfigured" };
 }

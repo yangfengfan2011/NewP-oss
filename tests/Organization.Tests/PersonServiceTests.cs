@@ -228,16 +228,28 @@ public class PersonServiceTests
     }
 
     [Fact]
-    public void PersonDetailDto_RemainsManualAggregateDto()
+    public async Task GetDetail_WhenPersonHasNoUserLink_ReturnsNotConfiguredSummaries()
     {
-        var dtoType = typeof(PersonDetailDto);
+        var service = BuildService();
+        var person = await service.CreateAsync(new PersonDto
+        {
+            PersonNo = "P002",
+            Name = "未绑定人员",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
+        });
 
-        Assert.NotNull(dtoType.GetProperty("AuthorizationSummary"));
-        Assert.Null(dtoType.GetProperty("Person"));
+        dynamic detail = await service.GetDetailAsync(person.Id);
+
+        Assert.NotNull(detail);
+        Assert.Equal("notConfigured", (string)detail.UserLinkSummary.Status);
+        Assert.Null(detail.UserLinkSummary.Data);
+        Assert.Equal("notConfigured", (string)detail.AuthorizationSummary.Status);
+        Assert.Null(detail.AuthorizationSummary.Data);
     }
 
     [Fact]
-    public async Task GetDetail_WhenPersonLinked_ReturnsUserLink()
+    public async Task GetDetail_WhenPersonLinked_ReturnsReadyUserLinkSummary()
     {
         var service = BuildService();
         var person = await service.CreateAsync(new PersonDto
@@ -254,16 +266,16 @@ public class PersonServiceTests
             LinkedBy = "tester"
         });
 
-        var detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
-        Assert.Equal(person.Id, detail!.Id);
-        Assert.NotNull(detail.UserLink);
-        Assert.Equal("user-003", detail.UserLink!.UserId);
+        Assert.Equal(person.Id, (Guid)detail.Id);
+        Assert.Equal("ready", (string)detail.UserLinkSummary.Status);
+        Assert.NotNull(detail.UserLinkSummary.Data);
     }
 
     [Fact]
-    public async Task GetPersonDetail_WhenUserBound_ReturnsAuthorizationSummary()
+    public async Task GetPersonDetail_WhenUserBound_ReturnsReadyAuthorizationSummary()
     {
         var service = BuildService(
             new InMemoryPersonRepository(),
@@ -284,14 +296,15 @@ public class PersonServiceTests
             LinkedBy = "tester"
         });
 
-        var detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
-        Assert.Contains("平台管理员", detail!.AuthorizationSummary);
+        Assert.Equal("ready", (string)detail.AuthorizationSummary.Status);
+        Assert.Contains("平台管理员", ((IReadOnlyList<string>)detail.AuthorizationSummary.Data));
     }
 
     [Fact]
-    public async Task GetPersonDetail_WhenAuthorizationSummaryReaderFails_ReturnsEmptyAuthorizationSummary()
+    public async Task GetPersonDetail_WhenAuthorizationSummaryReaderFails_ReturnsDependencyUnavailableSummary()
     {
         var service = BuildService(
             new InMemoryPersonRepository(),
@@ -312,10 +325,29 @@ public class PersonServiceTests
             LinkedBy = "tester"
         });
 
-        var detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
-        Assert.Empty(detail!.AuthorizationSummary);
+        Assert.Equal("dependencyUnavailable", (string)detail.AuthorizationSummary.Status);
+        Assert.Null(detail.AuthorizationSummary.Data);
+    }
+
+    [Fact]
+    public async Task DisablePerson_SetsIsEnabledFalseAndReturnsUpdatedDetail()
+    {
+        var service = BuildService();
+        var created = await service.CreateAsync(new PersonDto
+        {
+            PersonNo = "P102",
+            Name = "待停用人员",
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
+            IsEnabled = true
+        });
+
+        dynamic detail = await ((dynamic)service).DisableAsync(created.Id);
+
+        Assert.False((bool)detail.IsEnabled);
     }
 
     private static IPersonService BuildService() =>
@@ -342,6 +374,40 @@ public class PersonServiceTests
 
         public Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_persons.FirstOrDefault(person => person.Id == personId) is { } person ? Clone(person) : null);
+
+        public Task<IReadOnlyList<Person>> GetListAsync(
+            string? keyword,
+            Guid? companyId,
+            Guid? departmentId,
+            EmploymentStatus? employmentStatus,
+            CancellationToken cancellationToken = default)
+        {
+            IEnumerable<Person> query = _persons;
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                query = query.Where(person =>
+                    person.PersonNo.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    person.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (companyId.HasValue)
+            {
+                query = query.Where(person => person.CompanyId == companyId.Value);
+            }
+
+            if (departmentId.HasValue)
+            {
+                query = query.Where(person => person.DepartmentId == departmentId.Value);
+            }
+
+            if (employmentStatus.HasValue)
+            {
+                query = query.Where(person => person.EmploymentStatus == employmentStatus.Value);
+            }
+
+            return Task.FromResult<IReadOnlyList<Person>>(query.Select(Clone).ToList());
+        }
 
         public Task<bool> ExistsPersonNoAsync(
             Guid companyId,

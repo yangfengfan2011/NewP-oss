@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Person": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME"
+    ],
+    "fields": [
+      {
+        "name": "PersonNo",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Name",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "CompanyId",
+        "storage": {
+          "type": "guid"
+        }
+      },
+      {
+        "name": "DepartmentId",
+        "storage": {
+          "type": "guid"
+        }
+      },
+      {
+        "name": "PositionId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        }
+      },
+      {
+        "name": "EmploymentStatus",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        }
+      }
+    ]
+  }
+}

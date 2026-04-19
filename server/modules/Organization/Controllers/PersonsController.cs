@@ -1,5 +1,6 @@
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
+using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,6 +17,18 @@ public sealed class PersonsController : ControllerBase
     {
         _personService = personService;
         _identityUserDirectory = identityUserDirectory;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<PersonListItemDto>>> GetList(
+        [FromQuery] string? keyword,
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? departmentId,
+        [FromQuery] EmploymentStatus? employmentStatus,
+        CancellationToken cancellationToken = default)
+    {
+        var persons = await _personService.GetListAsync(keyword, companyId, departmentId, employmentStatus, cancellationToken);
+        return Ok(persons);
     }
 
     [HttpGet("{id:guid}")]
@@ -51,6 +64,20 @@ public sealed class PersonsController : ControllerBase
         {
             var person = await _personService.UpdateAsync(id, dto, cancellationToken);
             return Ok(person);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:guid}/disable")]
+    public async Task<ActionResult<PersonDetailDto>> Disable(Guid id, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var detail = await _personService.DisableAsync(id, cancellationToken);
+            return Ok(detail);
         }
         catch (InvalidOperationException ex)
         {

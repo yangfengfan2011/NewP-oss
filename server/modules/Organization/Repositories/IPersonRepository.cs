@@ -5,6 +5,12 @@ namespace ICP.Platform.Modules.Organization.Repositories;
 public interface IPersonRepository
 {
     Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Person>> GetListAsync(
+        string? keyword,
+        Guid? companyId,
+        Guid? departmentId,
+        EmploymentStatus? employmentStatus,
+        CancellationToken cancellationToken = default);
     Task<bool> ExistsPersonNoAsync(
         Guid companyId,
         string personNo,

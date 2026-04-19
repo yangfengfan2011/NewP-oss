@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PersonDetailView": {
+    "Title": {
+      "zhs": "人员详情",
+      "en": "Person Detail"
+    },
+    "Description": {
+      "zhs": "查看并维护人员基础信息与摘要块。",
+      "en": "View and manage person master data and summary blocks."
+    },
+    "Section.Basic": {
+      "zhs": "基础信息",
+      "en": "Basic"
+    },
+    "Section.Organization": {
+      "zhs": "组织信息",
+      "en": "Organization"
+    },
+    "Block.UserLink": {
+      "zhs": "账号绑定",
+      "en": "User Link"
+    },
+    "Block.AuthorizationSummary": {
+      "zhs": "授权摘要",
+      "en": "Authorization Summary"
+    },
+    "Action.Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Action.Disable": {
+      "zhs": "停用",
+      "en": "Disable"
+    }
+  }
+}

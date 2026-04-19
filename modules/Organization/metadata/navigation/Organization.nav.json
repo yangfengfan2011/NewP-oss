@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "organization",
+        "titleKey": "Navigation.Organization",
+        "path": "",
+        "order": 100
+      },
+      {
+        "key": "organization.personCenter",
+        "titleKey": "Navigation.PersonCenter",
+        "parentKey": "organization",
+        "path": "/organization/persons",
+        "order": 110
+      }
+    ]
+  }
+}

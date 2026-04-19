@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
-import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui';
+import { Button, ErrorState, LoadingState, PageHeader } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
-import BindUserDialog from '../components/BindUserDialog';
 import PersonEditorForm from '../components/PersonEditorForm';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
-import { getPersonDetail, linkPersonUser, type PersonDetailDto } from '../services/organizationService';
+import {
+  disablePerson,
+  getPersonDetail,
+  updatePerson,
+  type PersonDetailDto,
+  type PersonUpsertRequest,
+} from '../services/organizationService';
 
 export default function PersonDetailPage() {
   const [detail, setDetail] = useState<PersonDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [bindDialogOpen, setBindDialogOpen] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
+  const [disabling, setDisabling] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,8 +33,7 @@ export default function PersonDetailPage() {
     const confirmedPersonId = personId;
 
     async function load() {
-      try
-      {
+      try {
         setLoading(true);
         setError(null);
         const nextDetail = await getPersonDetail(confirmedPersonId);
@@ -38,14 +42,12 @@ export default function PersonDetailPage() {
           setDetail(nextDetail);
         }
       }
-      catch (loadError)
-      {
+      catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : '加载人员详情失败');
         }
       }
-      finally
-      {
+      finally {
         if (!cancelled) {
           setLoading(false);
         }
@@ -57,23 +59,53 @@ export default function PersonDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, []);
 
-  async function handleBindUser(userId: string) {
+  async function handleSave(payload: PersonUpsertRequest) {
     if (!detail) {
-      throw new Error('当前没有可绑定的人员详情。');
+      throw new Error('当前没有可保存的人员详情。');
     }
 
-    await linkPersonUser(detail.id, userId);
-    setReloadToken((current) => current + 1);
+    setActionError(null);
+    const nextDetail = await updatePerson(detail.id, payload);
+    setDetail(nextDetail);
   }
+
+  async function handleDisable() {
+    if (!detail) {
+      return;
+    }
+
+    try {
+      setDisabling(true);
+      setActionError(null);
+      const nextDetail = await disablePerson(detail.id);
+      setDetail(nextDetail);
+    }
+    catch (disableError) {
+      setActionError(disableError instanceof Error ? disableError.message : '停用人员失败');
+    }
+    finally {
+      setDisabling(false);
+    }
+  }
+
+  const headerActions =
+    detail && detail.isEnabled ? (
+      <Button variant="danger" onClick={() => void handleDisable()} disabled={disabling}>
+        {disabling ? '停用中...' : '停用'}
+      </Button>
+    ) : detail ? (
+      <Button disabled>已停用</Button>
+    ) : null;
 
   return (
     <div className="sh-page">
       <PageHeader
         eyebrow="组织结构"
         title="人员详情"
-        description="人员详情工作台首版集中展示基础信息、账号绑定状态和授权摘要，不在本页复制其他模块的写操作。"
+        description="详情页首轮只承接编辑保存、停用和状态化摘要展示，不把绑定账号复杂交互与授权复杂交互拉回主流程。"
+        actions={headerActions}
       />
 
       {loading ? (
@@ -82,14 +114,10 @@ export default function PersonDetailPage() {
         <ErrorState message={error} />
       ) : detail ? (
         <div className="sh-page-stack">
-          <PersonEditorForm person={detail} />
-          <PersonUserLinkCard link={detail.userLink} onBind={() => setBindDialogOpen(true)} />
-          <AuthorizationSummaryCard items={detail.authorizationSummary} />
-          <BindUserDialog
-            open={bindDialogOpen}
-            onClose={() => setBindDialogOpen(false)}
-            onConfirm={handleBindUser}
-          />
+          {actionError ? <ErrorState message={actionError} /> : null}
+          <PersonEditorForm person={detail} onSave={handleSave} />
+          <PersonUserLinkCard summary={detail.userLinkSummary} />
+          <AuthorizationSummaryCard summary={detail.authorizationSummary} />
         </div>
       ) : (
         <ErrorState message="未找到人员详情。" />

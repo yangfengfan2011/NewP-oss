@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
+using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 using Xunit;
 
@@ -48,6 +50,50 @@ public class ConfigCenterModelMetadataProviderTests
         Assert.Contains(definition.Fields, static x => x.Name == "TenantId" && x.StoreName == "TenantId");
         Assert.Contains(definition.Fields, static x => x.Name == "Description" && x.StoreName == "Description");
         Assert.Contains(definition.Fields, static x => x.Name == "IsSensitive" && x.StoreName == "IsSensitive");
+    }
+
+    [Fact]
+    public void LoadConfigItem_WhenModelLivesOutsideModelsDirectory_StillReadsBySharedLoader()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"config-center-model-provider-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            var modelPath = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata", "domain", "ConfigItem.model.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
+            var repositoryRoot = GetRepositoryRoot();
+            var sampleModelPath = Path.Combine(
+                repositoryRoot,
+                "modules",
+                "ConfigCenter",
+                "metadata",
+                "models",
+                "ConfigItem.model.json");
+            File.WriteAllText(modelPath, File.ReadAllText(sampleModelPath));
+            var storageTypeMapPath = Path.Combine(repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json");
+            var constructor = typeof(ConfigCenterModelMetadataProvider).GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                [typeof(string), typeof(string), typeof(IModelMetadataDocumentLoader)],
+                modifiers: null);
+
+            Assert.NotNull(constructor);
+
+            var provider = (ConfigCenterModelMetadataProvider)constructor!.Invoke(
+                [modelPath, storageTypeMapPath, new JsonModelMetadataDocumentLoader()]);
+
+            var definition = provider.LoadConfigItem();
+
+            Assert.Equal("ConfigItem", definition.Name);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]

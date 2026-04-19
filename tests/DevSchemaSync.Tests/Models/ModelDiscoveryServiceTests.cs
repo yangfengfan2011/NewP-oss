@@ -51,4 +51,33 @@ public class ModelDiscoveryServiceTests
             }
         }
     }
+
+    [Fact]
+    public void DiscoverAll_WhenModelLivesOutsideModelsDirectory_StillFindsModel()
+    {
+        var repositoryRoot = RepositoryRootLocator.Find();
+        var sampleFile = Path.Combine(repositoryRoot, "modules", "ConfigCenter", "metadata", "models", "ConfigItem.model.json");
+        var sampleJson = File.ReadAllText(sampleFile);
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var modelPath = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata", "domain", "ConfigItem.model.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
+        File.WriteAllText(modelPath, sampleJson);
+
+        try
+        {
+            var service = new ModelDiscoveryService(new SingleRootModelDocumentLoader());
+
+            var discovered = service.DiscoverAll(tempRoot);
+
+            Assert.Contains(discovered, item => item.ModuleId == "ConfigCenter" && item.ModelName == "ConfigItem");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
 }

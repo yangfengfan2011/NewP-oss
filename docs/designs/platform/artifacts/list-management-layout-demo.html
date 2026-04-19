@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>新平台列表管理界面静态稿</title>
+    <style>
+      :root {
+        --bg: #efe7da;
+        --shell: #f7f3ec;
+        --panel: rgba(255, 255, 255, 0.88);
+        --line: rgba(108, 90, 69, 0.16);
+        --ink: #2f261f;
+        --muted: #6c6056;
+        --accent: #a44d2e;
+        --accent-soft: rgba(164, 77, 46, 0.12);
+        --success: #2d6a4f;
+        --success-soft: rgba(45, 106, 79, 0.12);
+        --nav-bg: rgba(52, 39, 28, 0.88);
+        --nav-line: rgba(255, 255, 255, 0.08);
+        --shadow: 0 24px 60px rgba(50, 36, 24, 0.14);
+        --sticky-top: 24px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(164, 77, 46, 0.12), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(45, 106, 79, 0.1), transparent 28%),
+          var(--bg);
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        padding: 28px 18px;
+        background: var(--nav-bg);
+        color: rgba(255, 255, 255, 0.92);
+        border-right: 1px solid var(--nav-line);
+      }
+
+      .brand {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 28px;
+      }
+
+      .brand strong {
+        font-size: 20px;
+      }
+
+      .brand span {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .nav-group {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--nav-line);
+      }
+
+      .nav-group h2 {
+        margin: 0 0 12px;
+        color: rgba(255, 255, 255, 0.52);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+        padding: 11px 12px;
+        border-radius: 14px;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 14px;
+      }
+
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.12);
+        color: white;
+      }
+
+      .main {
+        padding: 24px;
+      }
+
+      .workspace {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        background: var(--shell);
+        box-shadow: var(--shadow);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 24px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .topbar strong {
+        font-size: 15px;
+      }
+
+      .topbar span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .content {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        min-height: calc(100vh - 130px);
+      }
+
+      .center {
+        padding: 24px;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .page-header h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1.06;
+      }
+
+      .page-header p {
+        margin: 10px 0 0;
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.75;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .sticky-filter {
+        position: sticky;
+        top: var(--sticky-top);
+        z-index: 3;
+        margin-bottom: 18px;
+        padding: 16px;
+        border: 1px solid rgba(164, 77, 46, 0.12);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 14px 34px rgba(50, 36, 24, 0.08);
+        backdrop-filter: blur(10px);
+      }
+
+      .filter-row {
+        display: grid;
+        grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr)) auto;
+        gap: 12px;
+        align-items: end;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .control {
+        min-height: 44px;
+        padding: 12px 14px;
+        border: 1px solid rgba(108, 90, 69, 0.14);
+        border-radius: 14px;
+        background: #fcfbf8;
+        font-size: 14px;
+      }
+
+      .table-panel {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel);
+      }
+
+      .table-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .table-toolbar strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .table-toolbar span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .table-tools {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      thead th {
+        padding: 14px 18px;
+        text-align: left;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        background: rgba(247, 243, 236, 0.84);
+      }
+
+      tbody td {
+        padding: 16px 18px;
+        border-top: 1px solid rgba(108, 90, 69, 0.08);
+        font-size: 14px;
+      }
+
+      tbody tr:nth-child(2n) {
+        background: rgba(247, 243, 236, 0.46);
+      }
+
+      .status {
+        display: inline-flex;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: var(--success-soft);
+        color: var(--success);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .row-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .table-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px 18px;
+        border-top: 1px solid var(--line);
+        background: rgba(252, 251, 248, 0.8);
+      }
+
+      .export-group,
+      .pager {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .drawer {
+        position: relative;
+        border-left: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.34)),
+          rgba(244, 239, 231, 0.88);
+      }
+
+      .drawer-shell {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: auto;
+        padding: 22px 22px 28px;
+      }
+
+      .drawer-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        margin: -22px -22px 18px;
+        padding: 22px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(247, 243, 236, 0.95);
+        backdrop-filter: blur(10px);
+      }
+
+      .drawer-header h2 {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      .drawer-header p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .drawer-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      .drawer-section {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 16px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .drawer-section h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .drawer-note {
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(164, 77, 46, 0.08);
+        border: 1px solid rgba(164, 77, 46, 0.14);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      .button {
+        min-height: 42px;
+        padding: 0 16px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .button-primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .button-soft {
+        background: rgba(47, 38, 31, 0.05);
+        border-color: rgba(47, 38, 31, 0.08);
+        color: var(--ink);
+      }
+
+      .button-ghost {
+        background: rgba(164, 77, 46, 0.08);
+        border-color: rgba(164, 77, 46, 0.12);
+        color: var(--accent);
+      }
+
+      .icon-button {
+        position: relative;
+        width: 42px;
+        min-width: 42px;
+        padding: 0;
+        border-radius: 12px;
+      }
+
+      .icon-button svg {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        fill: none;
+      }
+
+      .icon-button::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 10px);
+        transform: translateX(-50%) translateY(4px);
+        opacity: 0;
+        pointer-events: none;
+        width: auto;
+        white-space: nowrap;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(47, 38, 31, 0.92);
+        color: white;
+        font-size: 12px;
+        line-height: 1.4;
+        box-shadow: 0 10px 24px rgba(47, 38, 31, 0.18);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+      }
+
+      .icon-button:hover::after {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      .pager-meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1320px) {
+        .filter-row {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 1100px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .content {
+          grid-template-columns: 1fr;
+        }
+
+        .drawer {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .drawer-shell {
+          position: static;
+          height: auto;
+        }
+
+        .drawer-header {
+          position: static;
+          margin: -22px -22px 18px;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .main {
+          padding: 14px;
+        }
+
+        .page-header,
+        .topbar,
+        .table-toolbar,
+        .table-footer {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .filter-row {
+          grid-template-columns: 1fr;
+        }
+
+        table,
+        thead,
+        tbody,
+        tr,
+        th,
+        td {
+          display: block;
+        }
+
+        thead {
+          display: none;
+        }
+
+        tbody tr {
+          padding: 12px 0;
+        }
+
+        tbody td {
+          padding: 10px 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <strong>ICP Platform</strong>
+          <span>新平台后台工作台静态稿。当前页面重点展示列表管理界面的推荐默认布局。</span>
+        </div>
+
+        <section class="nav-group">
+          <h2>组织结构</h2>
+          <div class="nav-item">组织树</div>
+          <div class="nav-item active">人员中心</div>
+          <div class="nav-item">岗位管理</div>
+        </section>
+
+        <section class="nav-group">
+          <h2>系统管理</h2>
+          <div class="nav-item">字典管理</div>
+          <div class="nav-item">配置中心</div>
+          <div class="nav-item">插件市场</div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <div class="workspace">
+          <div class="topbar">
+            <div>
+              <strong>列表管理界面讨论稿</strong>
+              <span>当前示例采用：页面头部 + 轻筛选条 + 表格区；并额外声明了高级筛选抽屉入口</span>
+            </div>
+            <div class="header-actions">
+              <button class="button button-soft">切换视图说明</button>
+              <button class="button button-ghost">查看元数据映射</button>
+            </div>
+          </div>
+
+          <div class="content">
+            <section class="center">
+              <div class="page-header">
+                <div>
+                  <h1>人员中心</h1>
+                  <p>
+                    用于管理人员档案、组织归属与账号关联状态，支持人员查询、维护与导出。
+                  </p>
+                </div>
+                <div class="header-actions">
+                  <button class="button button-primary">新建人员</button>
+                  <button class="button button-soft">刷新列表</button>
+                </div>
+              </div>
+
+              <div class="sticky-filter">
+                <div class="filter-row">
+                  <div class="field">
+                    <label>关键字</label>
+                    <div class="control">按工号 / 姓名搜索</div>
+                  </div>
+                  <div class="field">
+                    <label>所属公司</label>
+                    <div class="control">总部</div>
+                  </div>
+                  <div class="field">
+                    <label>所属部门</label>
+                    <div class="control">全部部门</div>
+                  </div>
+                  <div class="field">
+                    <label>在职状态</label>
+                    <div class="control">在职</div>
+                  </div>
+                  <div class="header-actions">
+                    <button class="button button-soft">重置</button>
+                    <button class="button button-primary">搜索</button>
+                    <button class="button button-ghost" title="当前示例声明了高级筛选能力，所以显示该入口">高级筛选</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="table-panel">
+                <div class="table-toolbar">
+                  <div>
+                    <strong>人员列表</strong>
+                    <span>这里承接列表主体、行操作，以及与 projection 对齐的列展示。</span>
+                  </div>
+                  <div class="table-tools">
+                    <button class="button button-soft">列设置</button>
+                    <button class="button button-soft">批量操作</button>
+                  </div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>工号</th>
+                      <th>姓名</th>
+                      <th>公司</th>
+                      <th>部门</th>
+                      <th>在职状态</th>
+                      <th>启用状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>P0001</td>
+                      <td>张三</td>
+                      <td>总部</td>
+                      <td>人力资源部</td>
+                      <td>在职</td>
+                      <td><span class="status">已启用</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="button button-soft">查看</button>
+                          <button class="button button-soft">编辑</button>
+                          <button class="button button-ghost">停用</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>P0007</td>
+                      <td>李静</td>
+                      <td>总部</td>
+                      <td>财务部</td>
+                      <td>在职</td>
+                      <td><span class="status">已启用</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="button button-soft">查看</button>
+                          <button class="button button-soft">编辑</button>
+                          <button class="button button-ghost">停用</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>P0015</td>
+                      <td>王晨</td>
+                      <td>华东分部</td>
+                      <td>运营部</td>
+                      <td>试用</td>
+                      <td><span class="status">已启用</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="button button-soft">查看</button>
+                          <button class="button button-soft">编辑</button>
+                          <button class="button button-ghost">停用</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>P0022</td>
+                      <td>赵敏</td>
+                      <td>华南分部</td>
+                      <td>市场部</td>
+                      <td>在职</td>
+                      <td><span class="status">已启用</span></td>
+                      <td>
+                        <div class="row-actions">
+                          <button class="button button-soft">查看</button>
+                          <button class="button button-soft">编辑</button>
+                          <button class="button button-ghost">停用</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div class="table-footer">
+                  <div class="export-group">
+                    <button class="button button-soft icon-button" data-tooltip="导出" aria-label="导出" title="导出">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 3.5h7l4 4V18a2 2 0 0 1-2 2H7.5A2.5 2.5 0 0 1 5 17.5V6A2.5 2.5 0 0 1 7.5 3.5Z" />
+                        <path d="M14 3.5V8h4" />
+                        <path d="M12 10v6" />
+                        <path d="m9.5 13.5 2.5 2.5 2.5-2.5" />
+                      </svg>
+                    </button>
+                    <button class="button button-soft icon-button" data-tooltip="导出全部" aria-label="导出全部" title="导出全部">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M8 4h7l3 3v9.5A1.5 1.5 0 0 1 16.5 18H8.8A1.8 1.8 0 0 1 7 16.2V5.8A1.8 1.8 0 0 1 8.8 4Z" />
+                        <path d="M15 4v4h4" />
+                        <path d="M5 9.5v8A2.5 2.5 0 0 0 7.5 20H14" />
+                        <path d="M12 9.5v5.5" />
+                        <path d="m9.5 12.5 2.5 2.5 2.5-2.5" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="pager">
+                    <span class="pager-meta">共 128 条</span>
+                    <button class="button button-soft">上一页</button>
+                    <span class="pager-meta">第 1 / 7 页</span>
+                    <button class="button button-soft">下一页</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="drawer">
+              <div class="drawer-shell">
+                <div class="drawer-header">
+                  <h2>高级筛选</h2>
+                  <p>当前示例显式声明了高级筛选能力，所以额外装配右侧抽屉。若某个列表页常用筛选已足够，则不显示这一入口。</p>
+                  <div class="drawer-actions">
+                    <button class="button button-soft">重置条件</button>
+                    <button class="button button-primary">应用筛选</button>
+                  </div>
+                </div>
+
+                <section class="drawer-section">
+                  <h3>组织范围</h3>
+                  <div class="field">
+                    <label>所属岗位</label>
+                    <div class="control">全部岗位</div>
+                  </div>
+                  <div class="field">
+                    <label>直属主管</label>
+                    <div class="control">全部</div>
+                  </div>
+                </section>
+
+                <section class="drawer-section">
+                  <h3>状态条件</h3>
+                  <div class="field">
+                    <label>启用状态</label>
+                    <div class="control">全部</div>
+                  </div>
+                  <div class="field">
+                    <label>账号绑定状态</label>
+                    <div class="control">全部</div>
+                  </div>
+                  <div class="field">
+                    <label>授权摘要状态</label>
+                    <div class="control">全部</div>
+                  </div>
+                </section>
+
+                <section class="drawer-section">
+                  <h3>更多条件</h3>
+                  <div class="field">
+                    <label>创建时间</label>
+                    <div class="control">最近 30 天</div>
+                  </div>
+                  <div class="field">
+                    <label>排序方式</label>
+                    <div class="control">工号升序</div>
+                  </div>
+                </section>
+
+                <div class="drawer-note">
+                  这个抽屉不是“长期固定右栏”，而是高级筛选容器。默认列表页只保留轻筛选条，复杂筛选按需打开。
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

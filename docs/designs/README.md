@@ -2,6 +2,26 @@
 
 本目录用于存放“实施前必须存在”的详细设计文档。
 
+## 目录分层
+
+为避免 `docs/designs/` 长期平铺失控，后续新增设计文档默认按以下子目录分类：
+
+- `platform/`
+  - 跨模块、跨能力的平台级详细设计
+- `modules/`
+  - 具体模块或试点主线的详细设计
+- `tooling/`
+  - 工具链、脚本、CI/CD、工程韧性相关设计
+- `roadmap/`
+  - 阶段规划、阶段收口、阶段路线图相关设计
+
+默认规则：
+
+- 详细设计仍然统一放在 `docs/designs/` 之下，不新增新的 `docs/` 顶层目录。
+- 新文档从现在开始按子目录分类落位，旧文档不要求一次性迁移。
+- 旧文档在后续被修改时，可顺手迁移到更合适的子目录。
+- 当某份设计稳定为长期规范后，可再提炼到 `docs/architecture/` 或 `docs/developer/`。
+
 ## 规则
 
 - 任何新的功能、模块、阶段性改造、行为变更，在正式实现前都必须先有详细设计文档。
@@ -19,6 +39,8 @@
 - `identity-lite-design.md`
 - `authorization-design.md`
 - `configcenter-import-design.md`
+- `platform/metadata-driven-backoffice-ui-design.md`
+- `modules/organization-person-center-pilot-design.md`
 
 ## 应包含的内容
 
@@ -53,13 +75,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignNam
 建议在提交前运行定向校验：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\<your-design>.md
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\<subdir>\<your-design>.md
 ```
 
 如果这份设计文档需要进入 AI-first 受控门禁，可登记到显式目标清单：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\designs\<your-design>.md
+powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\designs\<subdir>\<your-design>.md
 ```
 
 ## 当前设计文档
@@ -71,3 +93,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-targ
 - [frontend-ui-component-strategy-design.md](frontend-ui-component-strategy-design.md)
 - [post-phase-6-foundation-and-migration-design.md](post-phase-6-foundation-and-migration-design.md)
 - [user-visible-text-localization-foundation-design.md](user-visible-text-localization-foundation-design.md)
+- [platform/metadata-driven-backoffice-ui-design.md](platform/metadata-driven-backoffice-ui-design.md)
+- [platform/dic-localization-manifest-alignment-design.md](platform/dic-localization-manifest-alignment-design.md)
+- [platform/standard-crud-contract-design.md](platform/standard-crud-contract-design.md)
+- [platform/form-action-area-comparison-design.md](platform/form-action-area-comparison-design.md)
+- [platform/list-management-layout-demo-design.md](platform/list-management-layout-demo-design.md)
+- [modules/organization-person-center-pilot-design.md](modules/organization-person-center-pilot-design.md)

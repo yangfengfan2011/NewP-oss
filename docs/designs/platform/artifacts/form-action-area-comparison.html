@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>表单承载方式与操作区位置对比</title>
+    <style>
+      :root {
+        --bg: #f3efe7;
+        --paper: rgba(255, 255, 255, 0.88);
+        --line: rgba(111, 92, 70, 0.18);
+        --ink: #2f261f;
+        --muted: #6f6156;
+        --accent: #b4512d;
+        --accent-soft: rgba(180, 81, 45, 0.12);
+        --success: #2d6a4f;
+        --success-soft: rgba(45, 106, 79, 0.12);
+        --shadow: 0 24px 50px rgba(56, 42, 28, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(180, 81, 45, 0.12), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(45, 106, 79, 0.09), transparent 28%),
+          var(--bg);
+      }
+
+      .page {
+        max-width: 1560px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        margin-bottom: 26px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        width: fit-content;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(30px, 4vw, 50px);
+        line-height: 1.05;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 920px;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.75;
+      }
+
+      .notes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 30px;
+      }
+
+      .note {
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.68);
+        box-shadow: 0 10px 28px rgba(56, 42, 28, 0.05);
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .note span {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      .compare {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        align-items: start;
+      }
+
+      .card {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: var(--paper);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 22px 24px 18px;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.28));
+      }
+
+      .card-head h2 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      .card-head p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .chip {
+        flex-shrink: 0;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: var(--success-soft);
+        color: var(--success);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .mock {
+        padding: 22px;
+      }
+
+      .surface {
+        display: grid;
+        gap: 12px;
+      }
+
+      .surface-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .page-surface {
+        padding: 12px;
+        border: 1px dashed rgba(111, 92, 70, 0.18);
+        border-radius: 24px;
+        background: rgba(252, 251, 248, 0.74);
+      }
+
+      .drawer-surface {
+        padding: 12px;
+        border: 1px dashed rgba(111, 92, 70, 0.18);
+        border-radius: 24px;
+        background:
+          linear-gradient(90deg, rgba(47, 38, 31, 0.04) 0 54%, rgba(180, 81, 45, 0.04) 54% 100%);
+      }
+
+      .workspace {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      .drawer-shell {
+        margin-left: auto;
+        width: min(100%, 430px);
+        border-top-left-radius: 22px;
+        border-bottom-left-radius: 22px;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        box-shadow: -18px 0 38px rgba(56, 42, 28, 0.08);
+      }
+
+      .workspace-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .workspace-title {
+        display: grid;
+        gap: 4px;
+      }
+
+      .workspace-title strong {
+        font-size: 20px;
+      }
+
+      .workspace-title span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .section-grid {
+        display: grid;
+        gap: 18px;
+        padding: 20px;
+      }
+
+      .summary-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .summary-card {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(244, 241, 234, 0.72);
+      }
+
+      .summary-card span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .summary-card strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 16px;
+      }
+
+      .section {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+      }
+
+      .section h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .value {
+        min-height: 46px;
+        padding: 12px 14px;
+        border: 1px solid rgba(111, 92, 70, 0.16);
+        border-radius: 14px;
+        background: #fcfbf8;
+        font-size: 14px;
+      }
+
+      .summary-blocks {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .summary-box {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(180, 81, 45, 0.07);
+        border: 1px solid rgba(180, 81, 45, 0.14);
+      }
+
+      .summary-box h4 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+
+      .summary-box p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .footer-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 20px 20px;
+        border-top: 1px solid var(--line);
+        background: rgba(252, 251, 248, 0.84);
+      }
+
+      .button {
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        font-size: 14px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .button-primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .button-soft {
+        background: rgba(47, 38, 31, 0.06);
+        border-color: rgba(47, 38, 31, 0.08);
+        color: var(--ink);
+      }
+
+      .button-danger {
+        background: rgba(180, 81, 45, 0.08);
+        border-color: rgba(180, 81, 45, 0.14);
+        color: var(--accent);
+      }
+
+      .insight {
+        display: grid;
+        gap: 12px;
+        padding: 0 22px 22px;
+      }
+
+      .insight strong {
+        font-size: 13px;
+      }
+
+      .insight ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      @media (max-width: 1120px) {
+        .compare {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .workspace-header,
+        .footer-actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .summary-strip,
+        .field-grid,
+        .summary-blocks {
+          grid-template-columns: 1fr;
+        }
+
+        .drawer-shell {
+          width: 100%;
+          border-radius: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <span class="eyebrow">Form Pattern Study</span>
+        <h1>表单承载方式与操作区位置对比</h1>
+        <p>
+          同一份“人员详情维护”内容，这次把两个维度拆开一起看：一是它承载在独立页面还是侧边抽屉里，二是主要动作放在标题区还是表单底部。
+          页面故意不改变字段内容和 section 结构，只观察承载方式与按钮位置对阅读路径和操作感知的影响。
+        </p>
+      </section>
+
+      <section class="notes">
+        <article class="note">
+          <strong>page 是什么</strong>
+          <span>独立页面。进入后会离开列表或上一个页面，适合复杂对象、信息较多、需要多个 section 和摘要块的维护场景。</span>
+        </article>
+        <article class="note">
+          <strong>drawer 是什么</strong>
+          <span>侧边抽屉。原页面上下文还在，编辑容器从右侧滑出，适合轻量对象或“改完就回列表”的短流程维护。</span>
+        </article>
+        <article class="note">
+          <strong>dialog 是什么</strong>
+          <span>居中弹窗。比抽屉更轻，通常用于字段更少、流程更短的操作，例如绑定、选择、确认，不太适合复杂详情维护。</span>
+        </article>
+        <article class="note">
+          <strong>本页怎么看</strong>
+          <span>这次主对比是 `page / drawer × 标题区按钮 / 底部操作区`。`dialog` 先只解释概念，不单独画到四宫格里。</span>
+        </article>
+      </section>
+
+      <section class="compare">
+        <article class="card">
+          <header class="card-head">
+            <div>
+              <h2>方案 A：Page + 标题区按钮</h2>
+              <p>独立页面承载，保存与取消放在标题区，更像工作台式详情页。</p>
+            </div>
+            <span class="chip">首屏操作感更强</span>
+          </header>
+
+          <div class="mock">
+            <div class="surface page-surface">
+              <span class="surface-label">独立页面承载</span>
+              <div class="workspace">
+                <div class="workspace-header">
+                  <div class="workspace-title">
+                    <strong>人员详情维护</strong>
+                    <span>张三 · P0001 · 启用中</span>
+                  </div>
+                  <div class="header-actions">
+                    <button class="button button-soft">取消</button>
+                    <button class="button button-primary">保存</button>
+                    <button class="button button-danger">停用</button>
+                  </div>
+                </div>
+
+                <div class="section-grid">
+                  <div class="summary-strip">
+                    <div class="summary-card">
+                      <span>账号状态</span>
+                      <strong>已绑定</strong>
+                    </div>
+                    <div class="summary-card">
+                      <span>授权摘要</span>
+                      <strong>3 个角色</strong>
+                    </div>
+                    <div class="summary-card">
+                      <span>当前模式</span>
+                      <strong>编辑中</strong>
+                    </div>
+                  </div>
+
+                  <section class="section">
+                    <h3>基本信息</h3>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>工号</label>
+                        <div class="value">P0001</div>
+                      </div>
+                      <div class="field">
+                        <label>姓名</label>
+                        <div class="value">张三</div>
+                      </div>
+                      <div class="field">
+                        <label>在职状态</label>
+                        <div class="value">在职</div>
+                      </div>
+                      <div class="field">
+                        <label>启用状态</label>
+                        <div class="value">已启用</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="section">
+                    <h3>组织归属</h3>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>所属公司</label>
+                        <div class="value">总部</div>
+                      </div>
+                      <div class="field">
+                        <label>所属部门</label>
+                        <div class="value">人力资源部</div>
+                      </div>
+                      <div class="field">
+                        <label>所属岗位</label>
+                        <div class="value">组织发展专员</div>
+                      </div>
+                      <div class="field">
+                        <label>入职日期</label>
+                        <div class="value">2024-03-01</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="section">
+                    <h3>只读摘要</h3>
+                    <div class="summary-blocks">
+                      <div class="summary-box">
+                        <h4>账号绑定</h4>
+                        <p>当前已绑定账号：zhangsan@example.com</p>
+                      </div>
+                      <div class="summary-box">
+                        <h4>授权摘要</h4>
+                        <p>管理员、组织维护、报表查看</p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="insight">
+            <strong>感知特点</strong>
+            <ul>
+              <li>打开页面后，保存和取消很快进入视线。</li>
+              <li>如果表单很长，用户在页底提交时会和按钮产生距离。</li>
+              <li>“保存”和“停用”容易都挤在顶部，主次动作分层压力更大。</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="card">
+          <header class="card-head">
+            <div>
+              <h2>方案 B：Page + 底部操作区</h2>
+              <p>独立页面承载，标题区只保留状态与次级动作，保存与取消下沉到底部。</p>
+            </div>
+            <span class="chip">更适合长表单</span>
+          </header>
+
+          <div class="mock">
+            <div class="surface page-surface">
+              <span class="surface-label">独立页面承载</span>
+              <div class="workspace">
+                <div class="workspace-header">
+                  <div class="workspace-title">
+                    <strong>人员详情维护</strong>
+                    <span>张三 · P0001 · 启用中</span>
+                  </div>
+                  <div class="header-actions">
+                    <button class="button button-danger">停用</button>
+                  </div>
+                </div>
+
+                <div class="section-grid">
+                  <div class="summary-strip">
+                    <div class="summary-card">
+                      <span>账号状态</span>
+                      <strong>已绑定</strong>
+                    </div>
+                    <div class="summary-card">
+                      <span>授权摘要</span>
+                      <strong>3 个角色</strong>
+                    </div>
+                    <div class="summary-card">
+                      <span>当前模式</span>
+                      <strong>编辑中</strong>
+                    </div>
+                  </div>
+
+                  <section class="section">
+                    <h3>基本信息</h3>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>工号</label>
+                        <div class="value">P0001</div>
+                      </div>
+                      <div class="field">
+                        <label>姓名</label>
+                        <div class="value">张三</div>
+                      </div>
+                      <div class="field">
+                        <label>在职状态</label>
+                        <div class="value">在职</div>
+                      </div>
+                      <div class="field">
+                        <label>启用状态</label>
+                        <div class="value">已启用</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="section">
+                    <h3>组织归属</h3>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>所属公司</label>
+                        <div class="value">总部</div>
+                      </div>
+                      <div class="field">
+                        <label>所属部门</label>
+                        <div class="value">人力资源部</div>
+                      </div>
+                      <div class="field">
+                        <label>所属岗位</label>
+                        <div class="value">组织发展专员</div>
+                      </div>
+                      <div class="field">
+                        <label>入职日期</label>
+                        <div class="value">2024-03-01</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="section">
+                    <h3>只读摘要</h3>
+                    <div class="summary-blocks">
+                      <div class="summary-box">
+                        <h4>账号绑定</h4>
+                        <p>当前已绑定账号：zhangsan@example.com</p>
+                      </div>
+                      <div class="summary-box">
+                        <h4>授权摘要</h4>
+                        <p>管理员、组织维护、报表查看</p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="footer-actions">
+                  <button class="button button-soft">取消</button>
+                  <button class="button button-primary">保存修改</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="insight">
+            <strong>感知特点</strong>
+            <ul>
+              <li>保存和取消更像“读完整张表单后的最终提交”。</li>
+              <li>顶部可以只保留状态和少量次要动作，层次更清楚。</li>
+              <li>对复杂对象更稳，但对极轻量编辑来说会显得更正式。</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="card">
+          <header class="card-head">
+            <div>
+              <h2>方案 C：Drawer + 标题区按钮</h2>
+              <p>侧边抽屉承载，操作放在抽屉头部，适合短流程编辑。</p>
+            </div>
+            <span class="chip">更偏轻量编辑</span>
+          </header>
+
+          <div class="mock">
+            <div class="surface drawer-surface">
+              <span class="surface-label">侧边抽屉承载</span>
+              <div class="workspace drawer-shell">
+                <div class="workspace-header">
+                  <div class="workspace-title">
+                    <strong>编辑人员</strong>
+                    <span>保留列表上下文，仅在右侧编辑当前对象</span>
+                  </div>
+                  <div class="header-actions">
+                    <button class="button button-soft">关闭</button>
+                    <button class="button button-primary">保存</button>
+                  </div>
+                </div>
+
+                <div class="section-grid">
+                  <section class="section">
+                    <h3>基本信息</h3>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>工号</label>
+                        <div class="value">P0001</div>
+                      </div>
+                      <div class="field">
+                        <label>姓名</label>
+                        <div class="value">张三</div>
+                      </div>
+                      <div class="field">
+                        <label>所属公司</label>
+                        <div class="value">总部</div>
+                      </div>
+                      <div class="field">
+                        <label>所属部门</label>
+                        <div class="value">人力资源部</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="section">
+                    <h3>只读摘要</h3>
+                    <div class="summary-box">
+                      <h4>账号绑定</h4>
+                      <p>抽屉内可以保留少量摘要，但通常不会像详情页那样放太多信息。</p>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="insight">
+            <strong>感知特点</strong>
+            <ul>
+              <li>保留列表上下文，适合快速改一条记录。</li>
+              <li>头部按钮离用户更近，但抽屉一长也会有“按钮跑到上面去”的问题。</li>
+              <li>更适合轻量对象，不太适合 section 很多的复杂对象。</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="card">
+          <header class="card-head">
+            <div>
+              <h2>方案 D：Drawer + 底部操作区</h2>
+              <p>侧边抽屉承载，提交动作收在抽屉底部，更像标准小型表单。</p>
+            </div>
+            <span class="chip">层次更清楚</span>
+          </header>
+
+          <div class="mock">
+            <div class="surface drawer-surface">
+              <span class="surface-label">侧边抽屉承载</span>
+              <div class="workspace drawer-shell">
+                <div class="workspace-header">
+                  <div class="workspace-title">
+                    <strong>编辑人员</strong>
+                    <span>列表保持可见，编辑动作集中在抽屉主体</span>
+                  </div>
+                  <div class="header-actions">
+                    <button class="button button-danger">停用</button>
+                  </div>
+                </div>
+
+                <div class="section-grid">
+                  <section class="section">
+                    <h3>基本信息</h3>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>工号</label>
+                        <div class="value">P0001</div>
+                      </div>
+                      <div class="field">
+                        <label>姓名</label>
+                        <div class="value">张三</div>
+                      </div>
+                      <div class="field">
+                        <label>所属公司</label>
+                        <div class="value">总部</div>
+                      </div>
+                      <div class="field">
+                        <label>所属部门</label>
+                        <div class="value">人力资源部</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="section">
+                    <h3>只读摘要</h3>
+                    <div class="summary-box">
+                      <h4>账号绑定</h4>
+                      <p>主要编辑动作和次要动作天然分开，抽屉头部压力更小。</p>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="footer-actions">
+                  <button class="button button-soft">取消</button>
+                  <button class="button button-primary">保存修改</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="insight">
+            <strong>感知特点</strong>
+            <ul>
+              <li>抽屉里也能保持“读完再提交”的线性路径。</li>
+              <li>顶部可以只放少量状态或次级动作，表单主体更干净。</li>
+              <li>如果对象开始变复杂，这种方案通常比“抽屉头部全是按钮”更稳。</li>
+            </ul>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

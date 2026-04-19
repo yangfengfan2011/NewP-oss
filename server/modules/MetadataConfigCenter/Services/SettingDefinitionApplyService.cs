@@ -35,21 +35,20 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
 
     public async Task<ApplySettingDefinitionsResult> ApplySettingDefinitionsAsync(string moduleId, CancellationToken cancellationToken = default)
     {
-        var settingsSourcePath = await GetSettingsSourcePathAsync(moduleId, cancellationToken);
-        var sourceDirectory = _moduleMetadataStore.ResolveAuthoringMetadataDirectory(moduleId, settingsSourcePath);
-        var runtimeDirectory = _moduleMetadataStore.ResolveRuntimeMetadataDirectory(moduleId, settingsSourcePath);
+        var sourceFiles = await GetSettingsSourceFilesAsync(moduleId, cancellationToken);
+        var runtimeMetadataRoot = _moduleMetadataStore.ResolveRuntimeMetadataDirectory(moduleId, string.Empty);
 
-        if (string.IsNullOrWhiteSpace(runtimeDirectory))
+        if (string.IsNullOrWhiteSpace(runtimeMetadataRoot))
         {
             throw new InvalidOperationException($"Module {moduleId} does not have an available runtime metadata projection root.");
         }
 
         // 只有 authoring 与 runtime 投影不一致时才执行替换，
         // 这样前端的“当前没有待处理变更”状态才能和实际生效结果保持一致。
-        var hadPendingApply = !MetadataDirectoriesMatch(sourceDirectory, runtimeDirectory);
+        var hadPendingApply = await HasPendingApplyAsync(moduleId, sourceFiles, cancellationToken);
         if (hadPendingApply)
         {
-            await ReplaceRuntimeProjectionAsync(sourceDirectory, runtimeDirectory, cancellationToken);
+            await ReplaceRuntimeProjectionAsync(moduleId, sourceFiles, runtimeMetadataRoot, cancellationToken);
         }
 
         return new ApplySettingDefinitionsResult
@@ -59,7 +58,7 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
         };
     }
 
-    private async Task<string> GetSettingsSourcePathAsync(string moduleId, CancellationToken cancellationToken)
+    private async Task<MetadataTypeDescriptor> GetSettingsDescriptorAsync(string moduleId, CancellationToken cancellationToken)
     {
         var manifests = await _metadataManifestService.GetModuleManifestsAsync(cancellationToken);
         var manifest = manifests.SingleOrDefault(item => string.Equals(item.ModuleId, moduleId, StringComparison.OrdinalIgnoreCase));
@@ -68,74 +67,86 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
             throw new InvalidOperationException($"Module {moduleId} does not expose editable settings metadata.");
         }
 
-        return settingsDescriptor.SourcePath;
+        return settingsDescriptor;
     }
 
-    private static bool MetadataDirectoriesMatch(string sourceDirectory, string runtimeDirectory)
+    private async Task<IReadOnlyList<string>> GetSettingsSourceFilesAsync(string moduleId, CancellationToken cancellationToken)
     {
-        if (!Directory.Exists(sourceDirectory))
+        var descriptor = await GetSettingsDescriptorAsync(moduleId, cancellationToken);
+        if (descriptor.SourceFiles.Count > 0)
         {
-            return !Directory.Exists(runtimeDirectory);
+            return descriptor.SourceFiles
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
-        if (!Directory.Exists(runtimeDirectory))
-        {
-            return false;
-        }
+        var files = _moduleMetadataStore.EnumerateMetadataFiles(moduleId, descriptor.SourcePath, "*.json");
+        return files
+            .Select(file => string.IsNullOrWhiteSpace(descriptor.SourcePath)
+                ? Path.GetFileName(file)
+                : Path.Combine(descriptor.SourcePath, Path.GetFileName(file)))
+            .ToArray();
+    }
 
-        var sourceFiles = Directory
-            .EnumerateFiles(sourceDirectory, "*", SearchOption.TopDirectoryOnly)
-            .Select(Path.GetFileName)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var runtimeFiles = Directory
-            .EnumerateFiles(runtimeDirectory, "*", SearchOption.TopDirectoryOnly)
-            .Select(Path.GetFileName)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (!sourceFiles.SequenceEqual(runtimeFiles, StringComparer.OrdinalIgnoreCase))
+    private async Task<bool> HasPendingApplyAsync(
+        string moduleId,
+        IReadOnlyList<string> sourceFiles,
+        CancellationToken cancellationToken)
+    {
+        var runtimeSettingsFiles = await EnumerateRuntimeSettingsFilesAsync(moduleId, cancellationToken);
+        if (!sourceFiles.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .SequenceEqual(runtimeSettingsFiles.OrderBy(path => path, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
         {
-            return false;
+            return true;
         }
 
         // 比较前先统一换行，避免 Windows/Linux 行尾差异导致无意义的“未应用”提示。
         foreach (var fileName in sourceFiles)
         {
-            var sourceContent = NormalizeLineEndings(File.ReadAllText(Path.Combine(sourceDirectory, fileName!)));
-            var runtimeContent = NormalizeLineEndings(File.ReadAllText(Path.Combine(runtimeDirectory, fileName!)));
+            var sourcePath = _moduleMetadataStore.ResolveAuthoringMetadataRelativeFilePath(moduleId, fileName);
+            var runtimePath = _moduleMetadataStore.ResolveRuntimeMetadataRelativeFilePath(moduleId, fileName);
+            if (string.IsNullOrWhiteSpace(runtimePath) || !File.Exists(runtimePath))
+            {
+                return true;
+            }
+
+            var sourceContent = NormalizeLineEndings(await File.ReadAllTextAsync(sourcePath, cancellationToken));
+            var runtimeContent = NormalizeLineEndings(await File.ReadAllTextAsync(runtimePath, cancellationToken));
             if (!ContentsMatch(sourceContent, runtimeContent))
             {
-                return false;
+                return true;
             }
         }
 
-        return true;
+        return false;
     }
 
-    private async Task ReplaceRuntimeProjectionAsync(string sourceDirectory, string runtimeDirectory, CancellationToken cancellationToken)
+    private async Task ReplaceRuntimeProjectionAsync(
+        string moduleId,
+        IReadOnlyList<string> sourceFiles,
+        string runtimeMetadataRoot,
+        CancellationToken cancellationToken)
     {
-        var runtimeParentDirectory = Path.GetDirectoryName(runtimeDirectory)
-            ?? throw new InvalidOperationException($"Unable to resolve runtime parent directory for '{runtimeDirectory}'.");
+        var runtimeParentDirectory = Path.GetDirectoryName(runtimeMetadataRoot)
+            ?? throw new InvalidOperationException($"Unable to resolve runtime parent directory for '{runtimeMetadataRoot}'.");
         Directory.CreateDirectory(runtimeParentDirectory);
 
         var stagingDirectory = Path.Combine(runtimeParentDirectory, $".apply-staging-{Guid.NewGuid():N}");
         var backupDirectory = Path.Combine(runtimeParentDirectory, $".apply-backup-{Guid.NewGuid():N}");
-        var runtimeExists = Directory.Exists(runtimeDirectory);
+        var runtimeExists = Directory.Exists(runtimeMetadataRoot);
         var runtimeReplaced = false;
 
         try
         {
-            // 先构建 staging，再整体替换 runtime 目录；
-            // 如果提交阶段失败，catch 会把 backup 挪回去，避免 runtime 落在半更新状态。
-            await ProjectDirectoryAsync(sourceDirectory, stagingDirectory, cancellationToken);
+            await PrepareStagingMetadataRootAsync(moduleId, sourceFiles, runtimeMetadataRoot, stagingDirectory, cancellationToken);
 
             if (runtimeExists)
             {
-                _moveDirectory(runtimeDirectory, backupDirectory);
+                _moveDirectory(runtimeMetadataRoot, backupDirectory);
             }
 
-            _moveDirectory(stagingDirectory, runtimeDirectory);
+            _moveDirectory(stagingDirectory, runtimeMetadataRoot);
             runtimeReplaced = true;
 
             if (Directory.Exists(backupDirectory))
@@ -145,15 +156,15 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
         }
         catch
         {
-            if (runtimeReplaced && Directory.Exists(runtimeDirectory))
+            if (runtimeReplaced && Directory.Exists(runtimeMetadataRoot))
             {
-                Directory.Delete(runtimeDirectory, recursive: true);
+                Directory.Delete(runtimeMetadataRoot, recursive: true);
             }
 
             // 只有原 runtime 存在时才做恢复，避免把一个本不存在的目录错误“回滚”出来。
             if (runtimeExists && Directory.Exists(backupDirectory))
             {
-                Directory.Move(backupDirectory, runtimeDirectory);
+                Directory.Move(backupDirectory, runtimeMetadataRoot);
             }
 
             throw;
@@ -172,24 +183,109 @@ public class SettingDefinitionApplyService : ISettingDefinitionApplyService
         }
     }
 
-    private static async Task ProjectDirectoryAsync(string sourceDirectory, string runtimeDirectory, CancellationToken cancellationToken)
+    private async Task PrepareStagingMetadataRootAsync(
+        string moduleId,
+        IReadOnlyList<string> sourceFiles,
+        string runtimeMetadataRoot,
+        string stagingDirectory,
+        CancellationToken cancellationToken)
     {
-        if (Directory.Exists(runtimeDirectory))
+        if (Directory.Exists(stagingDirectory))
         {
-            Directory.Delete(runtimeDirectory, recursive: true);
+            Directory.Delete(stagingDirectory, recursive: true);
         }
 
-        Directory.CreateDirectory(runtimeDirectory);
-        if (!Directory.Exists(sourceDirectory))
+        if (Directory.Exists(runtimeMetadataRoot))
         {
-            return;
+            CopyDirectory(runtimeMetadataRoot, stagingDirectory);
+        }
+        else
+        {
+            Directory.CreateDirectory(stagingDirectory);
         }
 
-        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.TopDirectoryOnly))
+        foreach (var relativeFilePath in sourceFiles)
         {
-            var targetPath = Path.Combine(runtimeDirectory, Path.GetFileName(file));
-            var content = await File.ReadAllTextAsync(file, cancellationToken);
+            var sourcePath = _moduleMetadataStore.ResolveAuthoringMetadataRelativeFilePath(moduleId, relativeFilePath);
+            var targetPath = Path.Combine(stagingDirectory, relativeFilePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            var content = await File.ReadAllTextAsync(sourcePath, cancellationToken);
             await File.WriteAllTextAsync(targetPath, content, cancellationToken);
+        }
+
+        var stagedSettingsFiles = await EnumerateSettingsFilesAsync(stagingDirectory, cancellationToken);
+        foreach (var runtimeSettingsFile in stagedSettingsFiles)
+        {
+            if (sourceFiles.Contains(runtimeSettingsFile, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            File.Delete(Path.Combine(stagingDirectory, runtimeSettingsFile));
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> EnumerateRuntimeSettingsFilesAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        var runtimeMetadataRoot = _moduleMetadataStore.ResolveRuntimeMetadataDirectory(moduleId, string.Empty);
+        if (string.IsNullOrWhiteSpace(runtimeMetadataRoot))
+        {
+            return [];
+        }
+
+        return await EnumerateSettingsFilesAsync(runtimeMetadataRoot, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<string>> EnumerateSettingsFilesAsync(string metadataRoot, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(metadataRoot))
+        {
+            return [];
+        }
+
+        var settingsFiles = new List<string>();
+        foreach (var filePath in Directory.EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories))
+        {
+            if (!await IsSettingsMetadataFileAsync(filePath, cancellationToken))
+            {
+                continue;
+            }
+
+            settingsFiles.Add(Path.GetRelativePath(metadataRoot, filePath));
+        }
+
+        return settingsFiles
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static async Task<bool> IsSettingsMetadataFileAsync(string filePath, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(filePath);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var root = document.RootElement;
+        return root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("type", out var typeElement)
+            && typeElement.ValueKind == JsonValueKind.String
+            && string.Equals(typeElement.GetString(), "settings", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+    {
+        Directory.CreateDirectory(destinationDirectory);
+
+        foreach (var directory in Directory.GetDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, directory);
+            Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
+        }
+
+        foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, file);
+            var destinationPath = Path.Combine(destinationDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Copy(file, destinationPath, overwrite: true);
         }
     }
 

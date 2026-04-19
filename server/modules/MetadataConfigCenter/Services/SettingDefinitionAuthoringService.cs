@@ -29,17 +29,17 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
 
     public async Task<List<SettingDefinitionDto>> GetSettingDefinitionsAsync(string moduleId, CancellationToken cancellationToken = default)
     {
-        var settingsSourcePath = await GetSettingsSourcePathAsync(moduleId, cancellationToken);
-        var files = _moduleMetadataStore.EnumerateMetadataFiles(moduleId, settingsSourcePath, "*.json");
+        var sourceFiles = await GetSettingsSourceFilesAsync(moduleId, cancellationToken);
 
         var definitions = new List<SettingDefinition>();
         // 每个文件先带上版本摘要，再统一校验；
         // 这样前端既能知道定义来自哪个源文件，也能识别内容是否发生过 authoring 级变更。
-        foreach (var file in files)
+        foreach (var relativeFilePath in sourceFiles)
         {
-            var content = await _moduleMetadataStore.ReadTextAsync(file, cancellationToken);
+            var filePath = _moduleMetadataStore.ResolveMetadataRelativeFilePath(moduleId, relativeFilePath);
+            var content = await _moduleMetadataStore.ReadTextAsync(filePath, cancellationToken);
             var versionSummary = _moduleMetadataStore.ComputeVersionSummary(content);
-            var parsedDefinitions = _adapter.ParseDefinitions(Path.GetFileName(file), content);
+            var parsedDefinitions = _adapter.ParseDefinitions(relativeFilePath, content);
             foreach (var definition in parsedDefinitions)
             {
                 definition.VersionSummary = versionSummary;
@@ -57,24 +57,25 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         SaveSettingDefinitionsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var settingsSourcePath = await GetSettingsSourcePathAsync(moduleId, cancellationToken);
+        var descriptor = await GetSettingsDescriptorAsync(moduleId, cancellationToken);
         var definitions = request.Definitions.Select(MapToModel).ToList();
 
         _adapter.Validate(definitions);
 
         var generatedFiles = _adapter.BuildFileContents(moduleId, definitions);
+        ValidateGeneratedFiles(descriptor, generatedFiles);
         var gitSyncPending = false;
         var hasUnappliedChanges = false;
 
         foreach (var generatedFile in generatedFiles)
         {
-            var filePath = _moduleMetadataStore.ResolveAuthoringMetadataFilePath(moduleId, settingsSourcePath, generatedFile.SourceFile);
+            var filePath = _moduleMetadataStore.ResolveAuthoringMetadataRelativeFilePath(moduleId, generatedFile.SourceFile);
             if (!await FileContentMatchesAsync(filePath, generatedFile.Content, cancellationToken))
             {
                 gitSyncPending = true;
             }
 
-            var runtimeFilePath = _moduleMetadataStore.ResolveRuntimeMetadataFilePath(moduleId, settingsSourcePath, generatedFile.SourceFile);
+            var runtimeFilePath = _moduleMetadataStore.ResolveRuntimeMetadataRelativeFilePath(moduleId, generatedFile.SourceFile);
             // runtime 不存在或内容不一致都视为“已保存未应用”，
             // 因为 authoring 成功并不等于当前运行时已经切到新版本。
             if (string.IsNullOrWhiteSpace(runtimeFilePath)
@@ -96,7 +97,7 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
         };
     }
 
-    private async Task<string> GetSettingsSourcePathAsync(string moduleId, CancellationToken cancellationToken)
+    private async Task<MetadataTypeDescriptor> GetSettingsDescriptorAsync(string moduleId, CancellationToken cancellationToken)
     {
         var manifests = await _metadataManifestService.GetModuleManifestsAsync(cancellationToken);
         var manifest = manifests.SingleOrDefault(item => string.Equals(item.ModuleId, moduleId, StringComparison.OrdinalIgnoreCase));
@@ -105,7 +106,45 @@ public class SettingDefinitionAuthoringService : ISettingDefinitionAuthoringServ
             throw new InvalidOperationException($"Module {moduleId} does not expose editable settings metadata.");
         }
 
-        return settingsDescriptor.SourcePath;
+        return settingsDescriptor;
+    }
+
+    private async Task<IReadOnlyList<string>> GetSettingsSourceFilesAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        var descriptor = await GetSettingsDescriptorAsync(moduleId, cancellationToken);
+        if (descriptor.SourceFiles.Count > 0)
+        {
+            return descriptor.SourceFiles
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        var files = _moduleMetadataStore.EnumerateMetadataFiles(moduleId, descriptor.SourcePath, "*.json");
+        return files
+            .Select(file => string.IsNullOrWhiteSpace(descriptor.SourcePath)
+                ? Path.GetFileName(file)
+                : Path.Combine(descriptor.SourcePath, Path.GetFileName(file)))
+            .ToArray();
+    }
+
+    private static void ValidateGeneratedFiles(
+        MetadataTypeDescriptor descriptor,
+        IReadOnlyList<SettingDefinitionAuthoringAdapter.GeneratedSettingDefinitionFile> generatedFiles)
+    {
+        if (descriptor.SourceFiles.Count == 0)
+        {
+            return;
+        }
+
+        var allowedFiles = descriptor.SourceFiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unexpectedFile = generatedFiles
+            .Select(file => file.SourceFile)
+            .FirstOrDefault(sourceFile => !allowedFiles.Contains(sourceFile));
+        if (!string.IsNullOrWhiteSpace(unexpectedFile))
+        {
+            throw new InvalidOperationException($"Settings metadata file '{unexpectedFile}' is outside the manifest-declared SourceFiles set.");
+        }
     }
 
     private static SettingDefinitionDto MapToDto(SettingDefinition definition)

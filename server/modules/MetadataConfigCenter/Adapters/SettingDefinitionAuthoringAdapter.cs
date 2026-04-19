@@ -19,6 +19,13 @@ public class SettingDefinitionAuthoringAdapter
         using var document = JsonDocument.Parse(content);
         var root = document.RootElement;
 
+        if (!root.TryGetProperty("type", out var typeElement)
+            || typeElement.ValueKind != JsonValueKind.String
+            || !string.Equals(typeElement.GetString(), "settings", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Settings metadata file '{sourceFile}' must declare type = 'settings'.");
+        }
+
         if (!root.TryGetProperty("settings", out var settingsElement) || settingsElement.ValueKind != JsonValueKind.Object)
         {
             return [];

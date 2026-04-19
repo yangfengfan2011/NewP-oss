@@ -38,6 +38,23 @@ public class ModuleMetadataStore
         return Path.Combine(ResolveMetadataDirectory(moduleId, sourcePath), sourceFile);
     }
 
+    public string ResolveMetadataRelativeFilePath(string moduleId, string relativeFilePath)
+    {
+        foreach (var root in EnumerateMetadataRoots())
+        {
+            var candidatePath = ResolveMetadataRelativePath(root, moduleId, relativeFilePath);
+            if (File.Exists(candidatePath))
+            {
+                return candidatePath;
+            }
+        }
+
+        return ResolveMetadataRelativePath(
+            ResolvePreferredMetadataRoot(moduleId, string.Empty) ?? _repositoryRoot,
+            moduleId,
+            relativeFilePath);
+    }
+
     public string ResolveAuthoringMetadataDirectory(string moduleId, string sourcePath)
     {
         // authoring 写入默认优先回到仓库根；只有仓库根不存在该模块元数据时，
@@ -61,6 +78,14 @@ public class ModuleMetadataStore
         return Path.Combine(ResolveAuthoringMetadataDirectory(moduleId, sourcePath), sourceFile);
     }
 
+    public string ResolveAuthoringMetadataRelativeFilePath(string moduleId, string relativeFilePath)
+    {
+        return ResolveMetadataRelativePath(
+            ResolvePreferredAuthoringRoot(moduleId, string.Empty),
+            moduleId,
+            relativeFilePath);
+    }
+
     public string? ResolveRuntimeMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
     {
         if (string.IsNullOrWhiteSpace(_runtimeRoot))
@@ -69,6 +94,16 @@ public class ModuleMetadataStore
         }
 
         return Path.Combine(_runtimeRoot, "modules", moduleId, "metadata", sourcePath, sourceFile);
+    }
+
+    public string? ResolveRuntimeMetadataRelativeFilePath(string moduleId, string relativeFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(_runtimeRoot))
+        {
+            return null;
+        }
+
+        return ResolveMetadataRelativePath(_runtimeRoot, moduleId, relativeFilePath);
     }
 
     public string? ResolveRuntimeMetadataDirectory(string moduleId, string sourcePath)
@@ -188,6 +223,24 @@ public class ModuleMetadataStore
     private static bool MetadataRootExists(string root, string moduleId)
     {
         return Directory.Exists(Path.Combine(root, "modules", moduleId, "metadata"));
+    }
+
+    private static string ResolveMetadataRelativePath(string root, string moduleId, string relativeFilePath)
+    {
+        if (Path.IsPathRooted(relativeFilePath))
+        {
+            throw new InvalidOperationException($"Metadata relative file path must not be rooted: {relativeFilePath}");
+        }
+
+        var metadataRoot = Path.GetFullPath(Path.Combine(root, "modules", moduleId, "metadata"));
+        var candidatePath = Path.GetFullPath(Path.Combine(metadataRoot, relativeFilePath));
+        if (!candidatePath.StartsWith(metadataRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidatePath, metadataRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Metadata relative file path resolves outside metadata root: {relativeFilePath}");
+        }
+
+        return candidatePath;
     }
 
     private IEnumerable<string> EnumerateMetadataRoots()

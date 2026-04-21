@@ -22,18 +22,34 @@ public class PersonServiceTests
         var result = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
-            Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            Name = "张三"
         });
 
         Assert.Equal("P001", result.PersonNo);
         Assert.Equal("张三", result.Name);
-        Assert.Equal(CompanyId, result.CompanyId);
-        Assert.Equal(DepartmentId, result.DepartmentId);
+        Assert.Null(result.CompanyId);
+        Assert.Null(result.DepartmentId);
         Assert.Null(result.PositionId);
         Assert.Equal(EmploymentStatus.FullTime, result.EmploymentStatus);
         Assert.True(result.IsEnabled);
+    }
+
+    [Fact]
+    public async Task CreatePerson_WhenCompanyMissingAndPersonNoAlreadyExists_ThrowsInvalidOperationException()
+    {
+        var service = BuildService();
+        await service.CreateAsync(new PersonDto
+        {
+            PersonNo = "P001",
+            Name = "张三"
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateAsync(new PersonDto
+            {
+                PersonNo = "P001",
+                Name = "李四"
+            }));
     }
 
     [Fact]
@@ -410,7 +426,7 @@ public class PersonServiceTests
         }
 
         public Task<bool> ExistsPersonNoAsync(
-            Guid companyId,
+            Guid? companyId,
             string personNo,
             Guid? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>

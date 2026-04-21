@@ -163,6 +163,70 @@ public class RuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void MaterializeEnabledPlugin_WritesMetadataRuntimeManifest()
+    {
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Organization", "1.0.0", "zhs");
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Organization");
+
+        var packageMetadataRoot = Path.Combine(installRoot, "packages", "Organization", "1.0.0", "modules", "Organization", "metadata");
+        Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "navigation"));
+        Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "views"));
+        Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "models"));
+        File.WriteAllText(
+            Path.Combine(packageMetadataRoot, "navigation", "Organization.nav.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "nav",
+              "navigation": {
+                "items": []
+              }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(packageMetadataRoot, "views", "PersonList.view.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "view",
+              "view": {
+                "key": "organization.person.list",
+                "mode": "list",
+                "model": "Person"
+              }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(packageMetadataRoot, "models", "Person.model.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "model",
+              "Person": {
+                "kind": "Entity"
+              }
+            }
+            """);
+
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var materializer = new RuntimeViewMaterializer(stateStore);
+
+        materializer.Materialize(installRoot);
+
+        var manifestPath = Path.Combine(installRoot, "runtime", "metadata-runtime-manifest.json");
+        Assert.True(File.Exists(manifestPath));
+
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var modules = document.RootElement.GetProperty("modules");
+        Assert.Single(modules.EnumerateArray());
+        Assert.Equal("Organization", modules[0].GetProperty("moduleId").GetString());
+        Assert.Equal("navigation/Organization.nav.json", modules[0].GetProperty("navFiles")[0].GetString());
+        Assert.Equal("views/PersonList.view.json", modules[0].GetProperty("viewFiles")[0].GetString());
+        Assert.Equal("models/Person.model.json", modules[0].GetProperty("modelFiles")[0].GetString());
+    }
+
+    [Fact]
     public void MaterializeEnabledPlugin_WhenLanguagesJsonIsMissing_WritesMinimalLocalizationManifest()
     {
         var packageRoot = CreatePackageWithLocalizationMetadata();
@@ -518,6 +582,7 @@ public class RuntimeViewMaterializerTests : IDisposable
                 typeof(InstalledPluginStateStore),
                 typeof(FrontendRuntimeManifestBuilder),
                 typeof(LocalizationRuntimeManifestBuilder),
+                typeof(MetadataRuntimeManifestBuilder),
                 typeof(Action<string, string>)
             ],
             modifiers: null);
@@ -530,6 +595,7 @@ public class RuntimeViewMaterializerTests : IDisposable
                 stateStore,
                 new FrontendRuntimeManifestBuilder(),
                 new LocalizationRuntimeManifestBuilder(),
+                new MetadataRuntimeManifestBuilder(),
                 (Action<string, string>)((source, destination) =>
                 {
                     callCount++;

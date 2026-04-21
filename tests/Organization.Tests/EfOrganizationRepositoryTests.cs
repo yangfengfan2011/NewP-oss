@@ -177,6 +177,47 @@ public class EfOrganizationRepositoryTests
         }
     }
 
+    [Fact]
+    public void MigrationSnapshots_MatchNullablePersonFields_ForOrganizationModels()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var sqlServerSnapshot = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs"));
+        var mySqlSnapshot = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.mysql",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs"));
+        var oracleSnapshot = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.oracle",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs"));
+
+        foreach (var snapshot in new[] { sqlServerSnapshot, mySqlSnapshot, oracleSnapshot })
+        {
+            var personSection = ExtractPersonSection(snapshot);
+            Assert.DoesNotContain(
+                "b.Property<string>(\"CompanyId\")\r\n                        .IsRequired()",
+                personSection,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "b.Property<string>(\"DepartmentId\")\r\n                        .IsRequired()",
+                personSection,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "b.Property<string>(\"EmploymentStatus\")\r\n                        .IsRequired()",
+                personSection,
+                StringComparison.Ordinal);
+        }
+    }
+
     private static EfPlatformDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -200,5 +241,19 @@ public class EfOrganizationRepositoryTests
         }
 
         throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
+    private static string ExtractPersonSection(string snapshot)
+    {
+        const string personMarker = "modelBuilder.Entity(\"Person\", b =>";
+        const string nextEntityMarker = "modelBuilder.Entity(\"PersonUserLink\", b =>";
+
+        var start = snapshot.IndexOf(personMarker, StringComparison.Ordinal);
+        var end = snapshot.IndexOf(nextEntityMarker, StringComparison.Ordinal);
+
+        Assert.True(start >= 0, "快照中缺少 Person 实体定义。");
+        Assert.True(end > start, "快照中无法定位 Person 实体定义的结束位置。");
+
+        return snapshot[start..end];
     }
 }

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocalization } from '@icp-platform/core';
 import { Button, ErrorState, LoadingState, PageHeader } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonEditorForm from '../components/PersonEditorForm';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
+import { getPersonDetailRuntimeSchema } from '../runtime/personCenterRuntime';
 import {
   disablePerson,
   getPersonDetail,
@@ -12,11 +14,20 @@ import {
 } from '../services/organizationService';
 
 export default function PersonDetailPage() {
+  const { t } = useLocalization();
   const [detail, setDetail] = useState<PersonDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [disabling, setDisabling] = useState(false);
+  const schema = useMemo(() => getPersonDetailRuntimeSchema(), []);
+
+  function resolveText(localKey: string, fallback: string): string {
+    const resolvedKey = localKey.startsWith(`${schema.dicKey}.`)
+      ? localKey
+      : `${schema.dicKey}.${localKey}`;
+    return t(resolvedKey, fallback);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -90,21 +101,27 @@ export default function PersonDetailPage() {
     }
   }
 
+  const disableAction = schema.pageActions.find((action) => action.key === 'disable');
   const headerActions =
-    detail && detail.isEnabled ? (
+    detail && detail.isEnabled && disableAction ? (
       <Button variant="danger" onClick={() => void handleDisable()} disabled={disabling}>
-        {disabling ? '停用中...' : '停用'}
+        {disabling ? '停用中...' : resolveText(disableAction.labelKey, '停用')}
       </Button>
     ) : detail ? (
-      <Button disabled>已停用</Button>
+      <Button disabled>{resolveText('Action.Disabled', '已停用')}</Button>
     ) : null;
+
+  const blockTitleMap = new Map(schema.summaryBlocks.map((block) => [block.key, resolveText(block.titleKey, block.key)]));
 
   return (
     <div className="sh-page">
       <PageHeader
         eyebrow="组织结构"
-        title="人员详情"
-        description="详情页首轮只承接编辑保存、停用和状态化摘要展示，不把绑定账号复杂交互与授权复杂交互拉回主流程。"
+        title={resolveText(schema.titleKey, '人员详情')}
+        description={resolveText(
+          schema.descriptionKey,
+          '详情页首轮只承接编辑保存、停用和状态化摘要展示，不把绑定账号复杂交互与授权复杂交互拉回主流程。',
+        )}
         actions={headerActions}
       />
 
@@ -115,9 +132,20 @@ export default function PersonDetailPage() {
       ) : detail ? (
         <div className="sh-page-stack">
           {actionError ? <ErrorState message={actionError} /> : null}
-          <PersonEditorForm person={detail} onSave={handleSave} />
-          <PersonUserLinkCard summary={detail.userLinkSummary} />
-          <AuthorizationSummaryCard summary={detail.authorizationSummary} />
+          <PersonEditorForm
+            person={detail}
+            onSave={handleSave}
+            sections={schema.sections}
+            resolveTitle={resolveText}
+          />
+          <PersonUserLinkCard
+            summary={detail.userLinkSummary}
+            title={blockTitleMap.get('userLink') ?? '账号绑定'}
+          />
+          <AuthorizationSummaryCard
+            summary={detail.authorizationSummary}
+            title={blockTitleMap.get('authorizationSummary') ?? '授权摘要'}
+          />
         </div>
       ) : (
         <ErrorState message="未找到人员详情。" />

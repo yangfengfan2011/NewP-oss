@@ -17,6 +17,7 @@ public class RuntimeViewMaterializer
     private readonly InstalledPluginStateStore _stateStore;
     private readonly FrontendRuntimeManifestBuilder _frontendManifestBuilder;
     private readonly LocalizationRuntimeManifestBuilder _localizationManifestBuilder;
+    private readonly MetadataRuntimeManifestBuilder _metadataRuntimeManifestBuilder;
     private readonly Action<string, string> _moveDirectory;
 
     public RuntimeViewMaterializer(InstalledPluginStateStore stateStore)
@@ -25,7 +26,12 @@ public class RuntimeViewMaterializer
     }
 
     public RuntimeViewMaterializer(InstalledPluginStateStore stateStore, FrontendRuntimeManifestBuilder frontendManifestBuilder)
-        : this(stateStore, frontendManifestBuilder, new LocalizationRuntimeManifestBuilder(), Directory.Move)
+        : this(
+            stateStore,
+            frontendManifestBuilder,
+            new LocalizationRuntimeManifestBuilder(),
+            new MetadataRuntimeManifestBuilder(),
+            Directory.Move)
     {
     }
 
@@ -33,7 +39,12 @@ public class RuntimeViewMaterializer
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
         Action<string, string> moveDirectory)
-        : this(stateStore, frontendManifestBuilder, new LocalizationRuntimeManifestBuilder(), moveDirectory)
+        : this(
+            stateStore,
+            frontendManifestBuilder,
+            new LocalizationRuntimeManifestBuilder(),
+            new MetadataRuntimeManifestBuilder(),
+            moveDirectory)
     {
     }
 
@@ -41,11 +52,13 @@ public class RuntimeViewMaterializer
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
         LocalizationRuntimeManifestBuilder localizationManifestBuilder,
+        MetadataRuntimeManifestBuilder metadataRuntimeManifestBuilder,
         Action<string, string> moveDirectory)
     {
         _stateStore = stateStore;
         _frontendManifestBuilder = frontendManifestBuilder;
         _localizationManifestBuilder = localizationManifestBuilder;
+        _metadataRuntimeManifestBuilder = metadataRuntimeManifestBuilder;
         _moveDirectory = moveDirectory;
     }
 
@@ -82,6 +95,9 @@ public class RuntimeViewMaterializer
                 .ToArray();
             var localizationManifestPath = Path.Combine(stagedRuntimeRoot, "localization-manifest.json");
             File.WriteAllText(localizationManifestPath, _localizationManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder));
+
+            var metadataRuntimeManifestPath = Path.Combine(stagedRuntimeRoot, "metadata-runtime-manifest.json");
+            File.WriteAllText(metadataRuntimeManifestPath, _metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder));
 
             ReplaceProjection(installRoot, stagedRuntimeRoot, stagedPublicRoot, commitWorkspaceRoot);
         }

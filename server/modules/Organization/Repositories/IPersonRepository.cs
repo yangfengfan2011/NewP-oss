@@ -12,7 +12,7 @@ public interface IPersonRepository
         EmploymentStatus? employmentStatus,
         CancellationToken cancellationToken = default);
     Task<bool> ExistsPersonNoAsync(
-        Guid companyId,
+        Guid? companyId,
         string personNo,
         Guid? excludedPersonId = null,
         CancellationToken cancellationToken = default);

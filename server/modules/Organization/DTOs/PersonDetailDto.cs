@@ -7,8 +7,8 @@ public sealed record PersonDetailDto
     public required Guid Id { get; init; }
     public required string PersonNo { get; init; }
     public required string Name { get; init; }
-    public required Guid CompanyId { get; init; }
-    public required Guid DepartmentId { get; init; }
+    public Guid? CompanyId { get; init; }
+    public Guid? DepartmentId { get; init; }
     public Guid? PositionId { get; init; }
     public EmploymentStatus EmploymentStatus { get; init; }
     public bool IsEnabled { get; init; }

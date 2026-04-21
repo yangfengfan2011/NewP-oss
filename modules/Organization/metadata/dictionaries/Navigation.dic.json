@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "Organization": {
+      "zhs": "组织结构",
+      "en": "Organization"
+    },
+    "PersonCenter": {
+      "zhs": "人员中心",
+      "en": "Person Center"
+    }
+  }
+}

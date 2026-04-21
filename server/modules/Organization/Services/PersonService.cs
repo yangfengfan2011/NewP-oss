@@ -126,7 +126,7 @@ public sealed class PersonService : IPersonService
             CompanyId = dto.CompanyId,
             DepartmentId = dto.DepartmentId,
             PositionId = dto.PositionId,
-            EmploymentStatus = dto.EmploymentStatus,
+            EmploymentStatus = dto.EmploymentStatus ?? EmploymentStatus.FullTime,
             IsEnabled = dto.IsEnabled
         };
 
@@ -149,7 +149,7 @@ public sealed class PersonService : IPersonService
         person.DepartmentId = dto.DepartmentId;
         person.PositionId = dto.PositionId;
         person.Name = dto.Name;
-        person.EmploymentStatus = dto.EmploymentStatus;
+        person.EmploymentStatus = dto.EmploymentStatus ?? person.EmploymentStatus;
         person.IsEnabled = dto.IsEnabled;
         person.UpdatedAt = DateTime.UtcNow;
 
@@ -257,16 +257,16 @@ public sealed class PersonService : IPersonService
         }
     }
 
-    private async Task<string> ResolveCompanyNameAsync(Guid companyId, CancellationToken cancellationToken)
+    private async Task<string> ResolveCompanyNameAsync(Guid? companyId, CancellationToken cancellationToken)
     {
-        if (_companyRepository is null)
+        if (_companyRepository is null || !companyId.HasValue)
         {
             return string.Empty;
         }
 
         try
         {
-            var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
+            var company = await _companyRepository.GetByIdAsync(companyId.Value, cancellationToken);
             return company?.Name ?? string.Empty;
         }
         catch (Exception)
@@ -275,16 +275,16 @@ public sealed class PersonService : IPersonService
         }
     }
 
-    private async Task<string> ResolveDepartmentNameAsync(Guid departmentId, CancellationToken cancellationToken)
+    private async Task<string> ResolveDepartmentNameAsync(Guid? departmentId, CancellationToken cancellationToken)
     {
-        if (_departmentRepository is null)
+        if (_departmentRepository is null || !departmentId.HasValue)
         {
             return string.Empty;
         }
 
         try
         {
-            var department = await _departmentRepository.GetByIdAsync(departmentId, cancellationToken);
+            var department = await _departmentRepository.GetByIdAsync(departmentId.Value, cancellationToken);
             return department?.Name ?? string.Empty;
         }
         catch (Exception)
@@ -294,7 +294,7 @@ public sealed class PersonService : IPersonService
     }
 
     private async Task EnsurePersonNoAvailableAsync(
-        Guid companyId,
+        Guid? companyId,
         string personNo,
         Guid? excludedPersonId,
         CancellationToken cancellationToken)

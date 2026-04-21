@@ -26,6 +26,18 @@
       "zhs": "在职状态",
       "en": "Employment Status"
     },
+    "AdvancedFilter.Title": {
+      "zhs": "高级筛选",
+      "en": "Advanced Filter"
+    },
+    "AdvancedFilter.Organization": {
+      "zhs": "组织范围",
+      "en": "Organization Scope"
+    },
+    "AdvancedFilter.Status": {
+      "zhs": "状态条件",
+      "en": "Status Conditions"
+    },
     "Column.PersonNo": {
       "zhs": "人员编号",
       "en": "Person No."
@@ -69,6 +81,42 @@
     "Action.Disable": {
       "zhs": "停用",
       "en": "Disable"
+    },
+    "Action.ApplyAdvanced": {
+      "zhs": "应用筛选",
+      "en": "Apply Filter"
+    },
+    "Action.ResetAdvanced": {
+      "zhs": "重置条件",
+      "en": "Reset Conditions"
+    },
+    "Action.AdvancedFilter": {
+      "zhs": "高级筛选",
+      "en": "Advanced Filter"
+    },
+    "Toolbar.ColumnSettings": {
+      "zhs": "列设置",
+      "en": "Column Settings"
+    },
+    "Toolbar.BatchActions": {
+      "zhs": "批量操作",
+      "en": "Batch Actions"
+    },
+    "Export.Current": {
+      "zhs": "导出当前",
+      "en": "Export Current"
+    },
+    "Export.All": {
+      "zhs": "导出全部",
+      "en": "Export All"
+    },
+    "Pagination.Prev": {
+      "zhs": "上一页",
+      "en": "Previous"
+    },
+    "Pagination.Next": {
+      "zhs": "下一页",
+      "en": "Next"
     }
   }
 }

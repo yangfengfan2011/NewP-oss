@@ -273,7 +273,6 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
                         .HasColumnName("Id");
 
                     b.Property<string>("CompanyId")
-                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("NVARCHAR2(128)")
                         .HasColumnName("CompanyId");
@@ -283,13 +282,11 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("DepartmentId")
-                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("NVARCHAR2(128)")
                         .HasColumnName("DepartmentId");
 
                     b.Property<string>("EmploymentStatus")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("NVARCHAR2(256)")
                         .HasColumnName("EmploymentStatus");
@@ -329,7 +326,8 @@ namespace ICP.Platform.Persistence.EfCore.OracleMigrations.Migrations
 
                     b.HasIndex("CompanyId", "PersonNo")
                         .IsUnique()
-                        .HasDatabaseName("UX_Person_Company_PersonNo");
+                        .HasDatabaseName("UX_Person_Company_PersonNo")
+                        .HasFilter("\"CompanyId\" IS NOT NULL");
 
                     b.ToTable("Person", (string)null);
                 });

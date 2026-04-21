@@ -43,12 +43,12 @@ public sealed class EfPersonRepository : IPersonRepository
 
         if (companyId.HasValue)
         {
-            query = query.Where(entity => GetGuid(entity, "CompanyId") == companyId.Value);
+            query = query.Where(entity => GetNullableGuid(entity, "CompanyId") == companyId.Value);
         }
 
         if (departmentId.HasValue)
         {
-            query = query.Where(entity => GetGuid(entity, "DepartmentId") == departmentId.Value);
+            query = query.Where(entity => GetNullableGuid(entity, "DepartmentId") == departmentId.Value);
         }
 
         if (employmentStatus.HasValue)
@@ -60,14 +60,14 @@ public sealed class EfPersonRepository : IPersonRepository
     }
 
     public async Task<bool> ExistsPersonNoAsync(
-        Guid companyId,
+        Guid? companyId,
         string personNo,
         Guid? excludedPersonId = null,
         CancellationToken cancellationToken = default)
     {
         var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
         return entities.Any(entity =>
-            GetGuid(entity, "CompanyId") == companyId &&
+            GetNullableGuid(entity, "CompanyId") == companyId &&
             GetGuid(entity, "Id") != excludedPersonId &&
             string.Equals(GetString(entity, "PersonNo"), personNo, StringComparison.OrdinalIgnoreCase));
     }
@@ -99,8 +99,8 @@ public sealed class EfPersonRepository : IPersonRepository
         Id = GetGuid(entity, "Id"),
         PersonNo = GetString(entity, "PersonNo") ?? string.Empty,
         Name = GetString(entity, "Name") ?? string.Empty,
-        CompanyId = GetGuid(entity, "CompanyId"),
-        DepartmentId = GetGuid(entity, "DepartmentId"),
+        CompanyId = GetNullableGuid(entity, "CompanyId"),
+        DepartmentId = GetNullableGuid(entity, "DepartmentId"),
         PositionId = GetNullableGuid(entity, "PositionId"),
         EmploymentStatus = GetEmploymentStatus(entity, "EmploymentStatus"),
         IsEnabled = GetBool(entity, "IsEnabled"),
@@ -124,8 +124,8 @@ public sealed class EfPersonRepository : IPersonRepository
         entity["Id"] = person.Id.ToString();
         entity["PersonNo"] = person.PersonNo;
         entity["Name"] = person.Name;
-        entity["CompanyId"] = person.CompanyId.ToString();
-        entity["DepartmentId"] = person.DepartmentId.ToString();
+        entity["CompanyId"] = person.CompanyId?.ToString();
+        entity["DepartmentId"] = person.DepartmentId?.ToString();
         entity["PositionId"] = person.PositionId?.ToString();
         entity["EmploymentStatus"] = person.EmploymentStatus.ToString();
         entity["IsEnabled"] = person.IsEnabled;

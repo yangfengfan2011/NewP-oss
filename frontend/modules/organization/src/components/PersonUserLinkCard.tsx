@@ -3,6 +3,7 @@ import type { PersonSummaryBlockDto, PersonUserLinkSummaryData } from '../servic
 
 interface PersonUserLinkCardProps {
   summary: PersonSummaryBlockDto<PersonUserLinkSummaryData>;
+  title?: string;
 }
 
 function getSummaryStateLabel(status: PersonSummaryBlockDto['status']): string {
@@ -17,13 +18,13 @@ function getSummaryStateLabel(status: PersonSummaryBlockDto['status']): string {
   return '未配置';
 }
 
-export default function PersonUserLinkCard({ summary }: PersonUserLinkCardProps) {
+export default function PersonUserLinkCard({ summary, title = '账号绑定' }: PersonUserLinkCardProps) {
   const data = summary.status === 'ready' ? summary.data : null;
   const statusLabel = getSummaryStateLabel(summary.status);
 
   return (
     <Panel
-      title="账号绑定"
+      title={title}
       meta="首轮只保留状态化摘要块位与只读降级展示，不恢复复杂绑定交互"
     >
       <div style={{ display: 'grid', gap: 16 }}>

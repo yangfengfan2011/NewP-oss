@@ -6,6 +6,27 @@
     "builtinFields": [
       "ENAME"
     ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "PersonDetailView.Section.Basic",
+        "fields": [
+          "PersonNo",
+          "Name"
+        ]
+      },
+      {
+        "key": "organization",
+        "titleKey": "PersonDetailView.Section.Organization",
+        "fields": [
+          "CompanyId",
+          "DepartmentId",
+          "PositionId",
+          "EmploymentStatus",
+          "IsEnabled"
+        ]
+      }
+    ],
     "fields": [
       {
         "name": "PersonNo",

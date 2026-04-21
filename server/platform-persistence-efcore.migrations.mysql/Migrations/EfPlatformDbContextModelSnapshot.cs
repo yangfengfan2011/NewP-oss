@@ -270,7 +270,6 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .HasColumnName("Id");
 
                     b.Property<string>("CompanyId")
-                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
                         .HasColumnName("CompanyId");
@@ -280,13 +279,11 @@ namespace ICP.Platform.Persistence.EfCore.MySqlMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("DepartmentId")
-                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
                         .HasColumnName("DepartmentId");
 
                     b.Property<string>("EmploymentStatus")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)")
                         .HasColumnName("EmploymentStatus");

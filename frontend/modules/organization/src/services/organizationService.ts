@@ -97,10 +97,10 @@ export interface PersonDetailDto {
 export interface PersonUpsertRequest {
   personNo: string;
   name: string;
-  companyId: string;
-  departmentId: string;
+  companyId: string | null;
+  departmentId: string | null;
   positionId?: string | null;
-  employmentStatus: string;
+  employmentStatus?: string | null;
   isEnabled: boolean;
 }
 
@@ -353,6 +353,16 @@ async function refreshPersonDetail(personId: string): Promise<PersonDetailDto> {
   );
 }
 
+function normalizePersonUpsertRequest(dto: PersonUpsertRequest): PersonUpsertRequest {
+  return {
+    ...dto,
+    companyId: dto.companyId && dto.companyId.trim().length > 0 ? dto.companyId : null,
+    departmentId: dto.departmentId && dto.departmentId.trim().length > 0 ? dto.departmentId : null,
+    positionId: dto.positionId && dto.positionId.trim().length > 0 ? dto.positionId : null,
+    employmentStatus: dto.employmentStatus && dto.employmentStatus.trim().length > 0 ? dto.employmentStatus : null,
+  };
+}
+
 export async function getCompanies(): Promise<CompanyDto[]> {
   return fetchJson<CompanyDto[]>('/api/organization/companies', '加载公司列表失败');
 }
@@ -404,6 +414,28 @@ export async function getPersonDetail(id: string): Promise<PersonDetailDto> {
   return normalizePersonDetail(await fetchJson<unknown>(`/api/organization/persons/${id}`, '加载人员详情失败'));
 }
 
+export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDetailDto> {
+  const created = await requestJson<unknown>(
+    '/api/organization/persons',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(normalizePersonUpsertRequest(dto)),
+    },
+    '新建人员失败',
+  );
+
+  const createdRecord = isRecord(created) ? created : {};
+  const personId = readString(createdRecord, ['id', 'Id']);
+  if (!personId) {
+    throw new Error('新建人员成功，但返回结果缺少人员标识。');
+  }
+
+  return refreshPersonDetail(personId);
+}
+
 export async function updatePerson(personId: string, dto: PersonUpsertRequest): Promise<PersonDetailDto> {
   await requestJson<unknown>(
     `/api/organization/persons/${personId}`,
@@ -412,7 +444,7 @@ export async function updatePerson(personId: string, dto: PersonUpsertRequest): 
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(dto),
+      body: JSON.stringify(normalizePersonUpsertRequest(dto)),
     },
     '保存人员信息失败',
   );

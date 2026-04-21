@@ -8,7 +8,7 @@
     "descriptionKey": "PersonListView.Description",
     "mode": "list",
     "model": "Person",
-    "editorMode": "page",
+    "editorMode": "drawer",
     "detailViewKey": "organization.person.detail",
     "query": {
       "fields": [
@@ -39,6 +39,45 @@
           "source": "model",
           "field": "EmploymentStatus",
           "operator": "="
+        }
+      ]
+    },
+    "advancedFilter": {
+      "enabled": true,
+      "titleKey": "PersonListView.AdvancedFilter.Title",
+      "sections": [
+        {
+          "key": "organization",
+          "titleKey": "PersonListView.AdvancedFilter.Organization",
+          "fields": [
+            {
+              "key": "companyId",
+              "labelKey": "PersonListView.Query.Company",
+              "source": "model",
+              "field": "CompanyId",
+              "operator": "="
+            },
+            {
+              "key": "departmentId",
+              "labelKey": "PersonListView.Query.Department",
+              "source": "model",
+              "field": "DepartmentId",
+              "operator": "="
+            }
+          ]
+        },
+        {
+          "key": "status",
+          "titleKey": "PersonListView.AdvancedFilter.Status",
+          "fields": [
+            {
+              "key": "employmentStatus",
+              "labelKey": "PersonListView.Query.EmploymentStatus",
+              "source": "model",
+              "field": "EmploymentStatus",
+              "operator": "="
+            }
+          ]
         }
       ]
     },

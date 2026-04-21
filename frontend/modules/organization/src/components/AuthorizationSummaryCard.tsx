@@ -3,6 +3,7 @@ import type { PersonSummaryBlockDto } from '../services/organizationService';
 
 interface AuthorizationSummaryCardProps {
   summary: PersonSummaryBlockDto<string[]>;
+  title?: string;
 }
 
 function getSummaryStateLabel(status: PersonSummaryBlockDto['status']): string {
@@ -17,13 +18,13 @@ function getSummaryStateLabel(status: PersonSummaryBlockDto['status']): string {
   return '未配置';
 }
 
-export default function AuthorizationSummaryCard({ summary }: AuthorizationSummaryCardProps) {
+export default function AuthorizationSummaryCard({ summary, title = '授权摘要' }: AuthorizationSummaryCardProps) {
   const items = summary.status === 'ready' && Array.isArray(summary.data) ? summary.data : [];
   const hasItems = items.length > 0;
 
   return (
     <Panel
-      title="授权摘要"
+      title={title}
       meta="首轮只保留状态化块位和只读降级，不把授权编辑链路拉回人员中心"
     >
       <div style={{ display: 'grid', gap: 16 }}>

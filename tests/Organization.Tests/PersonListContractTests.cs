@@ -165,7 +165,7 @@ public class PersonListContractTests
         }
 
         public Task<bool> ExistsPersonNoAsync(
-            Guid companyId,
+            Guid? companyId,
             string personNo,
             Guid? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>

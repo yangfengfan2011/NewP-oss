@@ -12,6 +12,12 @@ import {
   loadRuntimeLocalizationManifest,
   type RuntimeLocalizationManifest,
 } from './localization/runtimeLocalizationManifest';
+import { RuntimeMetadataProvider } from './metadata/runtimeMetadataContext';
+import {
+  getFallbackRuntimeMetadata,
+  loadRuntimeMetadata,
+} from './metadata/runtimeMetadataLoader';
+import type { RuntimeMetadataState } from './metadata/runtimeMetadataManifest';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import UiShowcase from './pages/UiShowcase';
@@ -82,6 +88,7 @@ function getDefaultShellView(): ShellView {
 function App() {
   const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
   const [localizationManifest, setLocalizationManifest] = useState<RuntimeLocalizationManifest | null>(null);
+  const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeMetadataState | null>(null);
 
   const shellView = useMemo<ShellView>(() => {
     switch (shellUiConfig.shellExperienceMode) {
@@ -135,7 +142,35 @@ function App() {
     };
   }, []);
 
-  if (!localizationManifest) {
+  useEffect(() => {
+    let disposed = false;
+
+    void loadRuntimeMetadata()
+      .then((metadata) => {
+        if (disposed) {
+          return;
+        }
+
+        setRuntimeMetadata(metadata);
+      })
+      .catch((error) => {
+        if (disposed) {
+          return;
+        }
+
+        console.warn(
+          'Failed to load runtime metadata manifest, falling back to module-defined navigation.',
+          error,
+        );
+        setRuntimeMetadata(getFallbackRuntimeMetadata());
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  if (!localizationManifest || !runtimeMetadata) {
     return null;
   }
 
@@ -153,9 +188,11 @@ function App() {
             setShellView={setShellView}
             canSwitchShellView={canSwitchShellView}
           >
-            <AuthorizationGate>
-              <AppRoutes />
-            </AuthorizationGate>
+            <RuntimeMetadataProvider value={runtimeMetadata}>
+              <AuthorizationGate>
+                <AppRoutes />
+              </AuthorizationGate>
+            </RuntimeMetadataProvider>
           </PlatformProvider>
         </AuthProvider>
       </LocalizationProvider>

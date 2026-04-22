@@ -64,8 +64,7 @@ public sealed class ModelMetadataProjector
                 throw new InvalidOperationException($"Field '{field.Name}' must define storage.");
             }
 
-            var storage = field.Storage;
-            fields.Add(ProjectField(field.Name, storage, typeMap, provider));
+            fields.Add(ProjectField(field, typeMap, provider));
         }
 
         var indexes = BuildIndexes(document);
@@ -79,12 +78,12 @@ public sealed class ModelMetadataProjector
     }
 
     private static FieldDefinition ProjectField(
-        string fieldName,
-        ModelMetadataStorageSection storage,
+        ModelMetadataField field,
         StorageTypeMapDocument? typeMap,
         string? provider)
     {
-        var valueType = MapValueType(storage.Type);
+        var storage = field.Storage!;
+        var valueType = ResolveValueType(field.Contract?.ValueType, storage.Type);
 
         var storeType = storage.Type;
         if (typeMap is not null && provider is not null)
@@ -98,8 +97,8 @@ public sealed class ModelMetadataProjector
         }
 
         return new FieldDefinition(
-            fieldName,
-            fieldName,
+            field.Name,
+            field.Name,
             FieldKind.Scalar,
             valueType,
             storeType,
@@ -152,7 +151,26 @@ public sealed class ModelMetadataProjector
         }
     }
 
-    private static FieldValueType MapValueType(string storageType)
+    private static FieldValueType ResolveValueType(string? contractValueType, string storageType)
+    {
+        if (!string.IsNullOrWhiteSpace(contractValueType))
+        {
+            return contractValueType.Trim().ToLowerInvariant() switch
+            {
+                "enum" => FieldValueType.Enum,
+                "objectid" => FieldValueType.ObjectId,
+                "bool" => FieldValueType.Boolean,
+                "datetime" => FieldValueType.DateTime,
+                "description" => FieldValueType.Description,
+                "text" => FieldValueType.Text,
+                _ => FieldValueType.Text
+            };
+        }
+
+        return MapStorageValueType(storageType);
+    }
+
+    private static FieldValueType MapStorageValueType(string storageType)
     {
         return storageType.ToLowerInvariant() switch
         {

@@ -1,4 +1,3 @@
-using System.Reflection;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using Xunit;
@@ -33,17 +32,64 @@ public class ModelDtoGeneratorTests
         Assert.DoesNotContain("Name_DisplayValue", code);
     }
 
+    [Fact]
+    public void Generate_UsesStableAliasesForFixedFields()
+    {
+        var definition = new ModelDefinition(
+            "Person",
+            "Person",
+            ModelKind.Entity,
+            new[]
+            {
+                new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+                new FieldDefinition("ENAME", "ENAME", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
+                new FieldDefinition("ECODE", "ECODE", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false)
+            },
+            Array.Empty<IndexDefinition>());
+
+        var code = GenerateCode(definition);
+
+        Assert.Contains("public string Id { get; init; }", code);
+        Assert.Contains("public string DisplayName { get; init; }", code);
+        Assert.Contains("public string Code { get; init; }", code);
+        Assert.DoesNotContain("public string EID { get; init; }", code);
+        Assert.DoesNotContain("public string ENAME { get; init; }", code);
+        Assert.DoesNotContain("public string ECODE { get; init; }", code);
+    }
+
+    [Fact]
+    public void Generate_UsesExternalClrTypeMappingForEnumFields()
+    {
+        var definition = new ModelDefinition(
+            "Person",
+            "Person",
+            ModelKind.Entity,
+            new[]
+            {
+                new FieldDefinition("Status", "Status", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false)
+            },
+            Array.Empty<IndexDefinition>());
+
+        var code = GenerateCode(definition, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Status"] = "OrderStatus"
+        });
+
+        Assert.Contains("public OrderStatus Status { get; init; }", code);
+        Assert.Contains("public string? Status_DisplayValue { get; init; }", code);
+    }
+
     private static string GenerateCode(ModelDefinition definition)
     {
-        var generatorType = Type.GetType("ICP.Platform.Modeling.Dto.ModelDtoGenerator, PlatformModeling");
-        Assert.NotNull(generatorType);
+        var generator = new ICP.Platform.Modeling.Dto.ModelDtoGenerator();
+        return generator.Generate(definition);
+    }
 
-        var generator = Activator.CreateInstance(generatorType!);
-        Assert.NotNull(generator);
-
-        var method = generatorType!.GetMethod("Generate", BindingFlags.Instance | BindingFlags.Public);
-        Assert.NotNull(method);
-
-        return (string)method!.Invoke(generator, [definition])!;
+    private static string GenerateCode(
+        ModelDefinition definition,
+        IReadOnlyDictionary<string, string>? enumClrTypeMap)
+    {
+        var generator = new ICP.Platform.Modeling.Dto.ModelDtoGenerator();
+        return generator.Generate(definition, enumClrTypeMap);
     }
 }

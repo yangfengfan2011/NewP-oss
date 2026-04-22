@@ -8,6 +8,9 @@ public sealed class ModelMetadataField
     // 历史名称只用于显式 rename 识别，不参与当前字段名的运行时解析。
     public string? HistoryName { get; init; }
 
+    // contract 只表达字段语义，真正的投影分派仍由内核按显式规则处理。
+    public ModelMetadataContractSection? Contract { get; init; }
+
     public ModelMetadataStorageSection? Storage { get; init; }
 
     public string? UiType { get; init; }

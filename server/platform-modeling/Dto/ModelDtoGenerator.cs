@@ -10,20 +10,30 @@ public sealed class ModelDtoGenerator
     /// </summary>
     public ModelDtoDescriptor Describe(ModelDefinition definition)
     {
+        return Describe(definition, null);
+    }
+
+    /// <summary>
+    /// 将模型定义转换为单个 DTO 描述；枚举字段可通过外部映射改用强类型 CLR 名称。
+    /// </summary>
+    public ModelDtoDescriptor Describe(
+        ModelDefinition definition,
+        IReadOnlyDictionary<string, string>? enumClrTypeMap)
+    {
         ArgumentNullException.ThrowIfNull(definition);
 
         var properties = new List<ModelDtoProperty>();
         foreach (var field in definition.Fields)
         {
             properties.Add(new ModelDtoProperty(
-                field.Name,
-                ResolvePropertyType(field),
+                ResolvePropertyName(field),
+                ResolvePropertyType(field, enumClrTypeMap),
                 !field.Required));
 
             // 参考字段和枚举字段需要同时保留展示值，避免 UI 再维护一套补充 DTO。
             if (IsReferenceOrEnum(field))
             {
-                properties.Add(new ModelDtoProperty(field.Name + "_DisplayValue", "string", true));
+                properties.Add(new ModelDtoProperty(ResolveDisplayValuePropertyName(field), "string", true));
             }
         }
 
@@ -35,7 +45,17 @@ public sealed class ModelDtoGenerator
     /// </summary>
     public string Generate(ModelDefinition definition)
     {
-        var descriptor = Describe(definition);
+        return Generate(definition, null);
+    }
+
+    /// <summary>
+    /// 渲染 DTO 源码，枚举字段可按外部 CLR 类型映射输出强类型属性。
+    /// </summary>
+    public string Generate(
+        ModelDefinition definition,
+        IReadOnlyDictionary<string, string>? enumClrTypeMap)
+    {
+        var descriptor = Describe(definition, enumClrTypeMap);
         var builder = new StringBuilder();
 
         builder.AppendLine("public sealed class " + descriptor.Name + "Dto");
@@ -56,16 +76,55 @@ public sealed class ModelDtoGenerator
         return field.Kind == FieldKind.Reference || field.ValueType == FieldValueType.Enum;
     }
 
-    private static string ResolvePropertyType(FieldDefinition field)
+    private static string ResolvePropertyName(FieldDefinition field)
+    {
+        return field.Name switch
+        {
+            "EID" => "Id",
+            "ENAME" => "DisplayName",
+            "ECODE" => "Code",
+            _ => field.Name
+        };
+    }
+
+    private static string ResolveDisplayValuePropertyName(FieldDefinition field)
+    {
+        return ResolvePropertyName(field) + "_DisplayValue";
+    }
+
+    private static string ResolvePropertyType(
+        FieldDefinition field,
+        IReadOnlyDictionary<string, string>? enumClrTypeMap)
     {
         return field.ValueType switch
         {
             FieldValueType.Boolean => "bool",
             FieldValueType.DateTime => "DateTime",
             FieldValueType.ObjectId => ResolveObjectIdType(field.StoreType),
-            FieldValueType.Enum => "string",
+            FieldValueType.Enum => ResolveEnumType(field, enumClrTypeMap),
             _ => "string"
         };
+    }
+
+    private static string ResolveEnumType(
+        FieldDefinition field,
+        IReadOnlyDictionary<string, string>? enumClrTypeMap)
+    {
+        if (enumClrTypeMap is null)
+        {
+            return "string";
+        }
+
+        if (enumClrTypeMap.TryGetValue(field.Name, out var clrType)
+            && !string.IsNullOrWhiteSpace(clrType))
+        {
+            return clrType;
+        }
+
+        var matchedEntry = enumClrTypeMap.FirstOrDefault(entry =>
+            string.Equals(entry.Key, field.Name, StringComparison.OrdinalIgnoreCase));
+
+        return string.IsNullOrWhiteSpace(matchedEntry.Value) ? "string" : matchedEntry.Value;
     }
 
     private static string ResolveObjectIdType(string storeType)

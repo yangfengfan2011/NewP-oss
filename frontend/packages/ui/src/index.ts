@@ -54,6 +54,9 @@ export type { StatusBadgeProps, StatusBadgeVariant } from './patterns/StatusBadg
 export { FormInline } from './patterns/FormInline';
 export type { FormInlineProps } from './patterns/FormInline';
 
+export { StandardListPage } from './patterns/StandardListPage';
+export type { StandardListPageProps } from './patterns/StandardListPage.types';
+
 export { Pagination } from './components/Pagination';
 export type { PaginationProps } from './components/Pagination';
 

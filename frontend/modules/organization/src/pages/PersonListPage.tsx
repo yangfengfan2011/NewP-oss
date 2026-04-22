@@ -7,9 +7,9 @@ import {
   ErrorState,
   Input,
   LoadingState,
-  PageHeader,
   Panel,
   Select,
+  StandardListPage,
   StatusBadge,
   TableWrap,
 } from '@icp-platform/ui';
@@ -615,143 +615,134 @@ export default function PersonListPage() {
     </div>
   );
 
-  return (
-    <div className="sh-page">
-      <PageHeader
-        title={resolveListText(listSchema.titleKey, '人员中心')}
-        actions={headerActions}
-      />
-
-      <section
+  const filterBar = (
+    <section
+      style={{
+        border: '1px solid var(--sh-color-border-subtle, #dbe3f0)',
+        borderRadius: 16,
+        background: 'var(--sh-color-surface, #fff)',
+        padding: 16,
+        boxShadow: '0 8px 18px rgba(15, 23, 42, 0.035)',
+      }}
+    >
+      {lookupError ? <ErrorState message={lookupError} /> : null}
+      <div
         style={{
-          border: '1px solid var(--sh-color-border-subtle, #dbe3f0)',
-          borderRadius: 16,
-          background: 'var(--sh-color-surface, #fff)',
-          padding: 16,
-          marginBottom: 16,
-          boxShadow: '0 8px 18px rgba(15, 23, 42, 0.035)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+          gap: 10,
         }}
       >
-        {lookupError ? <ErrorState message={lookupError} /> : null}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-            gap: 10,
-          }}
-        >
-          {renderFilterField('keyword')}
-          {renderFilterField('companyId')}
-          {renderFilterField('departmentId')}
-          {renderFilterField('employmentStatus')}
-        </div>
+        {renderFilterField('keyword')}
+        {renderFilterField('companyId')}
+        {renderFilterField('departmentId')}
+        {renderFilterField('employmentStatus')}
+      </div>
 
-        <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Button size="sm" onClick={handleReset}>重置</Button>
-          <Button size="sm" variant="primary" onClick={handleQuery} disabled={loading}>
-            {loading ? '搜索中...' : '搜索'}
+      <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Button size="sm" onClick={handleReset}>重置</Button>
+        <Button size="sm" variant="primary" onClick={handleQuery} disabled={loading}>
+          {loading ? '搜索中...' : '搜索'}
+        </Button>
+        {hasAdvancedFilter ? (
+          <Button size="sm" onClick={() => setAdvancedFilterOpen(true)}>
+            {resolveListText('Action.AdvancedFilter', '高级筛选')}
           </Button>
-          {hasAdvancedFilter ? (
-            <Button size="sm" onClick={() => setAdvancedFilterOpen(true)}>
-              {resolveListText('Action.AdvancedFilter', '高级筛选')}
-            </Button>
-          ) : null}
+        ) : null}
+      </div>
+    </section>
+  );
+
+  const tableContent = (
+    <Panel
+      title="人员列表"
+      compact
+      actions={(
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Button size="sm">{resolveListText('Toolbar.ColumnSettings', '列设置')}</Button>
+          <Button size="sm" disabled={rows.length === 0}>{resolveListText('Toolbar.BatchActions', '批量操作')}</Button>
         </div>
-      </section>
+      )}
+    >
+      {actionError ? <ErrorState message={actionError} /> : null}
+      {error ? <ErrorState message={error} /> : null}
+      {loading ? (
+        <LoadingState message="正在加载人员列表..." />
+      ) : rows.length === 0 ? (
+        <EmptyState message="暂无符合筛选条件的人员。" />
+      ) : (
+        <TableWrap columns={columns} data={rows} rowKey={(item) => item.id} />
+      )}
+    </Panel>
+  );
 
-      <Panel
-        title="人员列表"
-        compact
-        actions={(
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button size="sm">{resolveListText('Toolbar.ColumnSettings', '列设置')}</Button>
-            <Button size="sm" disabled={rows.length === 0}>{resolveListText('Toolbar.BatchActions', '批量操作')}</Button>
-          </div>
-        )}
-      >
-        {actionError ? <ErrorState message={actionError} /> : null}
-        {error ? <ErrorState message={error} /> : null}
-        {loading ? (
-          <LoadingState message="正在加载人员列表..." />
-        ) : rows.length === 0 ? (
-          <EmptyState message="暂无符合筛选条件的人员。" />
-        ) : (
-          <TableWrap columns={columns} data={rows} rowKey={(item) => item.id} />
-        )}
+  const footerLeft = (
+    <>
+      {exportModes.includes('current') ? (
+        <Button size="sm" disabled={rows.length === 0}>
+          {resolveListText('Export.Current', '导出当前')}
+        </Button>
+      ) : null}
+      {exportModes.includes('all') ? (
+        <Button size="sm" disabled={rows.length === 0}>
+          {resolveListText('Export.All', '导出全部')}
+        </Button>
+      ) : null}
+    </>
+  );
 
+  const footerRight = (
+    <>
+      <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>
+        {`共 ${total} 条`}
+      </span>
+      <Button size="sm" disabled>{resolveListText('Pagination.Prev', '上一页')}</Button>
+      <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>第 1 / 1 页</span>
+      <Button size="sm" disabled>{resolveListText('Pagination.Next', '下一页')}</Button>
+    </>
+  );
+
+  const advancedFilterContent = (
+    <div style={{ display: 'grid', gap: 16 }}>
+      {advancedFilter.sections.map((section) => (
         <div
+          key={section.key}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            border: '1px solid var(--sh-color-border-subtle, #dbe3f0)',
+            borderRadius: 14,
+            padding: 12,
+            display: 'grid',
             gap: 12,
-            flexWrap: 'wrap',
-            marginTop: 14,
-            paddingTop: 12,
-            borderTop: '1px solid var(--sh-color-border-subtle, #dbe3f0)',
           }}
         >
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {exportModes.includes('current') ? (
-              <Button size="sm" disabled={rows.length === 0}>
-                {resolveListText('Export.Current', '导出当前')}
-              </Button>
-            ) : null}
-            {exportModes.includes('all') ? (
-              <Button size="sm" disabled={rows.length === 0}>
-                {resolveListText('Export.All', '导出全部')}
-              </Button>
-            ) : null}
+          <div style={{ fontSize: 15, fontWeight: 700 }}>
+            {resolveListText(section.titleKey, section.key)}
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>
-              {`共 ${total} 条`}
-            </span>
-            <Button size="sm" disabled>{resolveListText('Pagination.Prev', '上一页')}</Button>
-            <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>第 1 / 1 页</span>
-            <Button size="sm" disabled>{resolveListText('Pagination.Next', '下一页')}</Button>
-          </div>
-        </div>
-      </Panel>
-
-      <Drawer
-        open={advancedFilterOpen}
-        onClose={() => setAdvancedFilterOpen(false)}
-        title={resolveListText(advancedFilter.titleKey, '高级筛选')}
-        footer={(
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%', flexWrap: 'wrap' }}>
-            <Button size="sm" onClick={handleReset}>{resolveListText('Action.ResetAdvanced', '重置条件')}</Button>
-            <Button size="sm" variant="primary" onClick={handleQuery}>
-              {resolveListText('Action.ApplyAdvanced', '应用筛选')}
-            </Button>
-          </div>
-        )}
-      >
-        <div style={{ display: 'grid', gap: 16 }}>
-          {advancedFilter.sections.map((section) => (
-            <div
-              key={section.key}
-              style={{
-                border: '1px solid var(--sh-color-border-subtle, #dbe3f0)',
-                borderRadius: 14,
-                padding: 12,
-                display: 'grid',
-                gap: 12,
-              }}
-            >
-              <div style={{ fontSize: 15, fontWeight: 700 }}>
-                {resolveListText(section.titleKey, section.key)}
-              </div>
-              {section.fields.map((field) => (
-                <div key={`${section.key}-${field.key}`}>
-                  {renderFilterField(field.key)}
-                </div>
-              ))}
+          {section.fields.map((field) => (
+            <div key={`${section.key}-${field.key}`}>
+              {renderFilterField(field.key)}
             </div>
           ))}
         </div>
-      </Drawer>
+      ))}
+    </div>
+  );
+
+  return (
+    <>
+      <StandardListPage
+        title={resolveListText(listSchema.titleKey, '人员中心')}
+        description={resolveListText(listSchema.descriptionKey, '人员列表维护')}
+        headerActions={headerActions}
+        filterBar={filterBar}
+        content={tableContent}
+        footerLeft={footerLeft}
+        footerRight={footerRight}
+        advancedFilterOpen={advancedFilterOpen}
+        advancedFilterTitle={resolveListText(advancedFilter.titleKey, '高级筛选')}
+        advancedFilterContent={advancedFilterContent}
+        onAdvancedFilterClose={() => setAdvancedFilterOpen(false)}
+      />
 
       <Drawer
         open={personDrawer.open}
@@ -775,6 +766,6 @@ export default function PersonListPage() {
           />
         ) : null}
       </Drawer>
-    </div>
+    </>
   );
 }

@@ -679,6 +679,37 @@
   font-size: 0.875rem;
 }
 
+.sh-standard-list-page-filter,
+.sh-standard-list-page-content {
+  display: grid;
+  gap: var(--sh-space-4);
+}
+
+.sh-standard-list-page-footer-panel .sh-page-panel-body {
+  padding-top: var(--sh-space-4);
+  padding-bottom: var(--sh-space-4);
+}
+
+.sh-standard-list-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sh-space-4);
+  flex-wrap: wrap;
+}
+
+.sh-standard-list-page-footer-left,
+.sh-standard-list-page-footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sh-space-3);
+  flex-wrap: wrap;
+}
+
+.sh-standard-list-page-footer-right {
+  margin-left: auto;
+}
+
 /* ---- Progress ---- */
 .sh-progress {
   width: 100%;

@@ -98,4 +98,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-targ
 - [platform/standard-crud-contract-design.md](platform/standard-crud-contract-design.md)
 - [platform/form-action-area-comparison-design.md](platform/form-action-area-comparison-design.md)
 - [platform/list-management-layout-demo-design.md](platform/list-management-layout-demo-design.md)
+- [platform/model-truth-development-schema-sync-design.md](platform/model-truth-development-schema-sync-design.md)
 - [modules/organization-person-center-pilot-design.md](modules/organization-person-center-pilot-design.md)

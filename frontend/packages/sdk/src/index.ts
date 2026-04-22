@@ -32,6 +32,35 @@ export interface PermissionDeclaration {
   category?: string;
 }
 
+export interface StandardListPageDefinition {
+  title: string;
+  description?: string;
+  headerActions?: ReactNode;
+  filterBar?: ReactNode;
+  content: ReactNode;
+  footerLeft?: ReactNode;
+  footerRight?: ReactNode;
+  advancedFilterOpen?: boolean;
+  advancedFilterContent?: ReactNode;
+  onAdvancedFilterClose?: () => void;
+}
+
+export interface StandardListViewRendererProps {
+  viewKey: string;
+  viewMetadata: Record<string, unknown>;
+  children: (definition: StandardListPageDefinition) => ReactNode;
+}
+
+export interface StandardListViewRegistration {
+  viewKey: string;
+  component: ComponentType<StandardListViewRendererProps>;
+}
+
+export interface CustomPageRegistration {
+  pageKey: string;
+  component: ComponentType;
+}
+
 export type {
   UserMessageArgValue,
   UserMessageArgs,
@@ -51,6 +80,8 @@ export interface I18nResource {
 
 export interface FrontendModule {
   metadata: ModuleMetadata;
+  standardListViews?: StandardListViewRegistration[];
+  customPages?: CustomPageRegistration[];
   routes?: RouteConfig[];
   menus?: MenuConfig[];
   permissions?: PermissionDeclaration[];

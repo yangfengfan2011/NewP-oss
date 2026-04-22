@@ -6,7 +6,6 @@
       {
         "key": "organization",
         "titleKey": "Navigation.Organization",
-        "path": "",
         "order": 100
       },
       {
@@ -14,7 +13,30 @@
         "titleKey": "Navigation.PersonCenter",
         "parentKey": "organization",
         "path": "/organization/persons",
-        "order": 110
+        "order": 110,
+        "entryType": "standard-list",
+        "targetKey": "organization.person.list",
+        "permissions": ["Organization.Person.View"]
+      },
+      {
+        "key": "organization.tree",
+        "titleKey": "Navigation.OrganizationTree",
+        "parentKey": "organization",
+        "path": "/organization/tree",
+        "order": 120,
+        "entryType": "custom",
+        "targetKey": "organization.tree.page",
+        "permissions": ["Organization.Person.View"]
+      },
+      {
+        "key": "organization.positions",
+        "titleKey": "Navigation.PositionManagement",
+        "parentKey": "organization",
+        "path": "/organization/positions",
+        "order": 130,
+        "entryType": "custom",
+        "targetKey": "organization.positions.page",
+        "permissions": ["Organization.Person.View"]
       }
     ]
   }

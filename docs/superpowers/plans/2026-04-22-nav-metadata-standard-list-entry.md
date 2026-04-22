@@ -599,6 +599,65 @@ Passed
 - 已知风险
 - 回滚思路
 
+## 当前执行记录
+
+### 已完成实现核对
+
+- 已确认 `frontend/modules/organization/src/index.ts` 通过 `standardListViews` 注册 `organization.person.list`，并通过 `customPages` 注册组织树、岗位管理页面。
+- 已确认 `frontend/modules/organization/src/pages/PersonListPage.tsx` 保留兼容包装入口，主运行时入口已经转到 `nav metadata -> StandardListPageHost -> PersonListStandardListEntry -> StandardListPage`。
+- 已确认 `frontend/modules/organization/src/standard-list/PersonListStandardListEntry.tsx` 承接原人员中心列表的业务状态、查询、动作和抽屉逻辑。
+- 已确认平台侧与配置侧模块都补齐了 `customPages` 注册，并与 `modules/Platform/metadata/navigation/Platform.nav.json`、`modules/ConfigCenter/metadata/navigation/ConfigCenter.nav.json`、`modules/Organization/metadata/navigation/Organization.nav.json` 中的 `targetKey` 对齐。
+
+### 已完成验证
+
+- `cd frontend && pnpm --filter @icp-platform/shell test -- page-entry-routing standard-list-page-host metadata-navigation page-route-renderer`
+  - 结果：通过，`4` 个测试文件、`15` 个测试用例全部通过。
+- `cd frontend && pnpm --filter @icp-platform/shell test -- organization-person-center-list-layout`
+  - 结果：通过，`1` 个测试文件、`2` 个测试用例全部通过，覆盖人员中心列表页骨架、动作区和高级筛选抽屉的页面级渲染行为。
+- `cd frontend && pnpm --filter @icp-platform/shell build`
+  - 结果：通过。
+- `cd frontend && pnpm build`
+  - 结果：通过，前端 workspace 各包均已构建成功。
+- `dotnet build ICP-Platform.sln`
+  - 结果：通过。
+- `dotnet test tests/MetadataConfigCenter.Tests/MetadataConfigCenter.Tests.csproj --logger "console;verbosity=minimal"`
+  - 结果：通过，`21` 个测试全部通过；已验证补齐 `nav` type mapping 后，元数据配置中心不会再把 `*.nav.json` 视为非法类型。
+- `dotnet test tests/Kernel.Tests/Kernel.Tests.csproj --filter "FullyQualifiedName~MetadataRuntimeManifestBuilderTests|FullyQualifiedName~RuntimeViewMaterializerTests" --logger "console;verbosity=minimal"`
+  - 结果：通过，`21` 个测试全部通过；已验证 runtime manifest 与运行时物化链路能识别新增 `navigation` authoring。
+- `dotnet test tests/Organization.Tests/Organization.Tests.csproj --logger "console;verbosity=minimal"`
+  - 结果：通过，`41` 个测试全部通过。
+- 浏览器级 smoke：
+  - 使用 `ASPNETCORE_ENVIRONMENT=Development` 启动 `HostApi.dll`（`--contentRoot apps/host-api`）后，`http://localhost:5000/swagger/index.html` 返回 `200`。
+  - 使用 Edge headless + Selenium 登录 `http://localhost:3000/login`，凭据 `admin / admin123` 登录成功后访问 `http://localhost:3000/organization/persons`。
+  - 已确认 live 页面包含“人员中心 / 关键字 / 新建”，并生成截图 `.codex-temp/organization-persons-smoke.png`。
+
+### 已知验证限制
+
+- `cd frontend && pnpm test`
+  - 结果：失败，原因不是代码失败，而是根 workspace 未定义统一 `test` 脚本；当前前端测试需按包级命令执行。
+- `dotnet test ICP-Platform.sln --no-build --logger "console;verbosity=minimal"`
+  - 结果：失败，但当前剩余失败不再是本轮改动引入的回归。
+  - `MetadataConfigCenter.Tests` 已在补齐 `nav` type mapping 后单独回归通过。
+  - 剩余失败集中在 `Kernel.Tests` 的 `PluginDiscoveryTests` 与若干 PowerShell 脚本测试，表现为插件扫描结果不匹配，以及测试进程内拉起 `powershell.exe` 时出现“拒绝访问”。
+  - 这些失败超出本轮 `nav metadata / standard-list host` 变更范围，因此未在本任务中继续扩面修复。
+- live dev server 下的 `/plugins/metadata-runtime-manifest.json` 与 `/plugins/runtime/...` 当前返回的是 Vite `index.html` 回退页，而不是实际 JSON。
+  - 因此真实浏览器 smoke 只能验证“兼容入口仍然可工作”，不能把它当作 `nav metadata -> host` 运行时清单链路已在 dev server 中生效的证据。
+  - `nav metadata` 分流本身仍以 `page-entry-routing`、`standard-list-page-host`、`metadata-navigation`、`MetadataRuntimeManifestBuilderTests`、`RuntimeViewMaterializerTests` 这些仓库内测试为主证据。
+
+### repo 内外依赖边界
+
+- 当前仓库内已完成的范围，收口在 `nav metadata` authoring、Shell 运行时消费、模块注册表和测试夹具。
+- `metadata runtime manifest` 的生成/发布链路若仍在仓库外，本轮不静默把该链路拉回仓库实现。
+- 在外部链路未正式纳入前，继续保留“`metadata` 优先 + `ModuleRegistry` 回退”的兼容路径，避免把运行时切换建立在隐式顺序或外部状态之上。
+
+### 当前结论
+
+- 本轮已完成 `nav metadata` 统一入口、`standard-list` 宿主页链路和组织模块人员中心试点接入的仓库内实现。
+- 影响范围主要在 `frontend/packages/shell`、`frontend/packages/sdk`、组织/平台相关前端模块入口，以及 `modules/*/metadata/navigation/*.nav.json`。
+- 前端定向测试、前端整仓构建、相关后端构建/测试，以及一次真实浏览器登录与页面打开 smoke 均已给出通过证据。
+- 当前主要风险不在实现代码，而在仓库外的 metadata 清单生成链路尚未纳入，导致 live dev server 不能直接产出 runtime metadata JSON；同时全量 `Kernel.Tests` 仍存在与本轮改动无关的既有/环境型失败。
+- 若需回滚，可先回退 `App.tsx` / `Layout.tsx` 的 metadata 分流消费、删除新增注册表与宿主页接入，并恢复模块 `routes/menus` 作为唯一入口；该回滚不会要求改动既有 `view metadata` 结构。
+
 ---
 
 ## Self-Review

@@ -26,6 +26,8 @@ export interface RuntimeNavItem {
   order?: number;
   permissions?: string[];
   shellViews?: string[];
+  entryType?: 'standard-list' | 'custom';
+  targetKey?: string;
 }
 
 export interface RuntimeViewDocument {

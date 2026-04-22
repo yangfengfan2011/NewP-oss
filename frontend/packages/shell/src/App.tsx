@@ -18,6 +18,13 @@ import {
   loadRuntimeMetadata,
 } from './metadata/runtimeMetadataLoader';
 import type { RuntimeMetadataState } from './metadata/runtimeMetadataManifest';
+import { useRuntimeMetadata } from './metadata/runtimeMetadataContext';
+import {
+  buildPageEntriesFromNavDocuments,
+  filterFallbackRoutesByMetadataEntries,
+  resolveRouteableMetadataEntries,
+} from './navigation/pageEntryAdapter';
+import { renderPageEntry } from './navigation/pageRouteRenderer';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import UiShowcase from './pages/UiShowcase';
@@ -39,7 +46,20 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const routes = ModuleRegistry.getRoutes();
+  const runtimeMetadata = useRuntimeMetadata();
+  // 路由接管语义统一下沉到 adapter，这里只消费结果，避免 App 自己再分叉出权限或冲突规则。
+  const { metadataEntries, fallbackRoutes } = useMemo(() => {
+    const moduleRoutes = ModuleRegistry.getRoutes();
+    const projectedEntries = runtimeMetadata
+      ? buildPageEntriesFromNavDocuments(runtimeMetadata.navDocuments)
+      : [];
+    const routeableMetadataEntries = resolveRouteableMetadataEntries(projectedEntries, moduleRoutes);
+
+    return {
+      metadataEntries: routeableMetadataEntries,
+      fallbackRoutes: filterFallbackRoutesByMetadataEntries(moduleRoutes, routeableMetadataEntries),
+    };
+  }, [runtimeMetadata]);
 
   return (
     <Routes>
@@ -54,19 +74,30 @@ function AppRoutes() {
       >
         <Route index element={<Home />} />
         <Route path="ui-showcase" element={<UiShowcase />} />
-        {routes.map((route) => (
+        {metadataEntries.map((entry) => (
+          <Route
+            key={entry.path}
+            path={entry.path}
+            element={entry.permissions && entry.permissions.length > 0 ? (
+              <PermissionGuard permissions={entry.permissions}>
+                {renderPageEntry(entry)}
+              </PermissionGuard>
+            ) : (
+              renderPageEntry(entry)
+            )}
+          />
+        ))}
+        {fallbackRoutes.map((route) => (
           <Route
             key={route.path}
             path={route.path}
-            element={
-              route.permissions && route.permissions.length > 0 ? (
-                <PermissionGuard permissions={route.permissions}>
-                  <route.component />
-                </PermissionGuard>
-              ) : (
+            element={route.permissions && route.permissions.length > 0 ? (
+              <PermissionGuard permissions={route.permissions}>
                 <route.component />
-              )
-            }
+              </PermissionGuard>
+            ) : (
+              <route.component />
+            )}
           />
         ))}
       </Route>

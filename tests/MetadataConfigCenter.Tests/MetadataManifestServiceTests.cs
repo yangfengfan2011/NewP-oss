@@ -39,6 +39,10 @@ public class MetadataManifestServiceTests
                   "adapter": "ModelAuthoringAdapter",
                   "mergeMode": "replace"
                 },
+                "nav": {
+                  "adapter": "NavigationAuthoringAdapter",
+                  "mergeMode": "replace"
+                },
                 "dic": {
                   "adapter": "DictionaryAuthoringAdapter",
                   "mergeMode": "dic-entry"
@@ -141,6 +145,34 @@ public class MetadataManifestServiceTests
     }
 
     [Fact]
+    public async Task GetModuleManifests_AcceptsNavMetadataWhenMappingExists()
+    {
+        using var fixture = await MetadataManifestFixture.CreateAsync(
+            moduleId: "ConfigCenter",
+            relativeFilePath: Path.Combine("navigation", "ConfigCenter.nav.json"),
+            fileContent: """
+            {
+              "schemaVersion": "1.0",
+              "type": "nav",
+              "navigation": {
+                "items": []
+              }
+            }
+            """);
+
+        var service = new MetadataManifestService(fixture.RepositoryRoot, runtimeRoot: null);
+
+        var manifests = await service.GetModuleManifestsAsync();
+
+        var manifest = Assert.Single(manifests, item => item.ModuleId == "ConfigCenter");
+        var descriptor = Assert.Single(manifest.Types, pair => pair.Key == "nav").Value;
+        Assert.Equal("navigation", descriptor.SourcePath);
+        Assert.Equal("NavigationAuthoringAdapter", descriptor.Adapter);
+        Assert.Equal("replace", descriptor.MergeMode);
+        Assert.Contains(Path.Combine("navigation", "ConfigCenter.nav.json"), descriptor.SourceFiles);
+    }
+
+    [Fact]
     public async Task GetModuleManifests_ThrowsWhenDicEntryIsUsedForNonDicType()
     {
         using var fixture = await MetadataManifestFixture.CreateAsync(
@@ -233,6 +265,10 @@ public class MetadataManifestServiceTests
             },
             "model": {
               "adapter": "ModelAuthoringAdapter",
+              "mergeMode": "replace"
+            },
+            "nav": {
+              "adapter": "NavigationAuthoringAdapter",
               "mergeMode": "replace"
             },
             "dic": {

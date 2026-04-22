@@ -8,6 +8,13 @@ const pluginOpsModule: FrontendModule = {
     version: '1.0.0',
     description: '平台插件部署、状态监控与运维管理模块',
   },
+  customPages: [
+    {
+      pageKey: 'plugin-ops.home.page',
+      component: PluginOperationsCenter,
+    },
+  ],
+  // Task 4 先迁移主入口到 metadata + customPages，原 routes 继续保留为 metadata 缺席时的回退。
   routes: [
     {
       path: '/plugin-ops',
@@ -15,6 +22,7 @@ const pluginOpsModule: FrontendModule = {
       requireAuth: true,
     },
   ],
+  // menus 同样暂留，直到外部 metadata runtime manifest 生成链路纳入仓库后再统一收紧。
   menus: [
     {
       id: 'plugin-ops',

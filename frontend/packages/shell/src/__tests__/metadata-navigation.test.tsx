@@ -63,5 +63,69 @@ describe('metadata navigation', () => {
 
     expect(container.textContent).toContain('人员中心');
   });
+
+  it('keeps menu rendering stable when nav items carry entry metadata', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const menus = buildMenusFromNavDocuments(
+      [
+        {
+          type: 'nav',
+          navigation: {
+            items: [
+              { key: 'organization', titleKey: 'Navigation.Organization', order: 100 },
+              {
+                key: 'organization.personCenter',
+                titleKey: 'Navigation.PersonCenter',
+                path: '/organization/persons',
+                parentKey: 'organization',
+                order: 110,
+                entryType: 'standard-list',
+                targetKey: 'organization.person.list',
+              },
+            ],
+          },
+        },
+      ],
+      (titleKey) => (titleKey === 'Navigation.Organization' ? '组织结构' : '人员中心'),
+    );
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <MemoryRouter>
+          <Sidebar menus={menus} />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain('人员中心');
+  });
+
+  it('retains task 2 page-entry fixture fields in nav metadata', () => {
+    const navItems = [
+      {
+        key: 'organization.personCenter',
+        path: '/organization/persons',
+        entryType: 'standard-list',
+        targetKey: 'organization.person.list',
+      },
+      {
+        key: 'organization.tree',
+        path: '/organization/tree',
+        entryType: 'custom',
+        targetKey: 'organization.tree.page',
+      },
+    ] satisfies Array<{
+      key: string;
+      path: string;
+      entryType: 'standard-list' | 'custom';
+      targetKey: string;
+    }>;
+
+    expect(navItems).toHaveLength(2);
+    expect(navItems.map((item) => item.entryType)).toEqual(['standard-list', 'custom']);
+  });
 });
 

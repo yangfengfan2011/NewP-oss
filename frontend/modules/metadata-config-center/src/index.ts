@@ -8,6 +8,13 @@ const metadataConfigCenterModule: FrontendModule = {
     version: '1.0.0',
     description: '模块元数据定义层的独立可视化编辑入口'
   },
+  customPages: [
+    {
+      pageKey: 'metadata-config.modules.page',
+      component: SettingDefinitionManagement,
+    },
+  ],
+  // Task 4 先迁移主入口到 metadata + customPages，原 routes 继续保留为 metadata 缺席时的回退。
   routes: [
     {
       path: '/metadata-config/modules',
@@ -16,6 +23,7 @@ const metadataConfigCenterModule: FrontendModule = {
       permissions: ['MetadataConfigCenter.View']
     }
   ],
+  // menus 同样暂留，直到外部 metadata runtime manifest 生成链路纳入仓库后再统一收紧。
   menus: [
     {
       id: 'metadata-config-center',

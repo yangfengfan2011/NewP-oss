@@ -9,7 +9,17 @@ export const demoModule: FrontendModule = {
     version: '0.1.0',
     description: '展示模块接入和功能演示'
   },
-
+  customPages: [
+    {
+      pageKey: 'demo.home.page',
+      component: DemoHome,
+    },
+    {
+      pageKey: 'demo.list.page',
+      component: DemoList,
+    },
+  ],
+  // Task 4 先迁移主入口到 metadata + customPages，原 routes 继续保留为 metadata 缺席时的回退。
   routes: [
     {
       path: '/demo',
@@ -21,7 +31,7 @@ export const demoModule: FrontendModule = {
       permissions: ['Demo.View']
     }
   ],
-
+  // menus 同样暂留，直到外部 metadata runtime manifest 生成链路纳入仓库后再统一收紧。
   menus: [
     {
       id: 'demo',

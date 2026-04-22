@@ -18,6 +18,7 @@ export default function Layout() {
         : [],
     [runtimeMetadata, t],
   );
+  // 先让 metadata 菜单接管；等运行时清单覆盖完整后，再逐步收紧到模块注册回退。
   const menus = metadataMenus.length > 0 ? metadataMenus : ModuleRegistry.getMenus();
 
   return (

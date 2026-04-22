@@ -13,6 +13,10 @@
       "adapter": "ModelAuthoringAdapter",
       "mergeMode": "replace"
     },
+    "nav": {
+      "adapter": "NavigationAuthoringAdapter",
+      "mergeMode": "replace"
+    },
     "dic": {
       "adapter": "DictionaryAuthoringAdapter",
       "mergeMode": "dic-entry"

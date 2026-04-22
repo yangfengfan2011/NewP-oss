@@ -9,6 +9,17 @@ const authorizationModule: FrontendModule = {
     version: '1.0.0',
     description: '平台权限与授权管理模块'
   },
+  customPages: [
+    {
+      pageKey: 'authorization.roles.page',
+      component: RoleManagement,
+    },
+    {
+      pageKey: 'authorization.permissions.page',
+      component: PermissionList,
+    },
+  ],
+  // Task 4 先迁移主入口到 metadata + customPages，原 routes 继续保留为 metadata 缺席时的回退。
   routes: [
     {
       path: '/authorization/roles',
@@ -23,6 +34,7 @@ const authorizationModule: FrontendModule = {
       permissions: ['Authorization.Permission.View']
     }
   ],
+  // menus 同样暂留，直到外部 metadata runtime manifest 生成链路纳入仓库后再统一收紧。
   menus: [
     {
       id: 'authorization',

@@ -1,5 +1,12 @@
 # 标准列表页模板能力与人员中心试点 Implementation Plan
 
+## 状态
+
+- `StandardListPage` 已落地为标准列表页渲染内核。
+- `PersonListPage -> StandardListPage` 现仅保留为过渡兼容记录，不再作为后续主线架构继续扩散。
+- 后续正式实施主线已切换到 `docs/superpowers/plans/2026-04-22-nav-metadata-standard-list-entry.md`。
+- 本计划保留为“模板能力落地 + 人员中心过渡试点”的历史执行记录。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 先沉淀平台级标准列表页模板能力，再让组织模块人员中心列表页迁移到该模板上，验证后续同类功能可以通过调整模板层获得统一样式收益。
@@ -309,7 +316,10 @@ git commit -m "重构：人员中心列表页接入标准模板"
   - `pnpm --filter @icp-platform/ui build`
   - `pnpm --filter @icp-modules/organization build`
   - `pnpm build`
-- 当前线程没有附着可用的 app terminal / 浏览器会话，因此尚未完成浏览器级手动 smoke。
+- 已补充浏览器级 smoke：
+  - 启动本地 Host API 与前端 dev server 后，使用 Edge headless 登录 `admin / admin123`。
+  - 已验证 `http://localhost:3000/organization/persons` 能正常打开，并确认页面包含“人员中心 / 关键字 / 新建”。
+  - 当前 live dev server 不直接产出 runtime metadata JSON，因此该 smoke 验证的是兼容入口可用性；`nav metadata -> host` 链路以后续计划中的专项测试为主证据。
 
 - [x] **Step 2: 记录已知风险**
 
@@ -340,7 +350,7 @@ git commit -m "重构：人员中心列表页接入标准模板"
 - 已新增 `StandardListPage` 模板组件并导出到 `@icp-platform/ui`
 - 已将 `PersonListPage` 迁移为“业务容器页 + 标准模板”结构
 - 已完成 `ui` 包、组织模块包和前端整仓构建验证
-- 尚缺浏览器级手动 smoke 与本轮提交
+- 已补齐浏览器级手动 smoke；当前仍未做本轮提交
 
 - [ ] **Step 4: 提交验证记录**
 

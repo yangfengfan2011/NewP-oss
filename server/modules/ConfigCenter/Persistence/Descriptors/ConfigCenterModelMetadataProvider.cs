@@ -6,14 +6,13 @@ using ICP.Platform.Modeling.Validation;
 
 namespace ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 
-public sealed class ConfigCenterModelMetadataProvider
+public sealed class ConfigCenterModelMetadataProvider : IModelDefinitionProvider
 {
-    private static readonly string DefaultConfigItemPath = GetRepositoryPath(
+    private static readonly string DefaultModelDirectory = GetRepositoryPath(
         "modules",
         "ConfigCenter",
         "metadata",
-        "models",
-        "ConfigItem.model.json");
+        "models");
 
     private static readonly string DefaultStorageTypeMapPath = GetRepositoryPath(
         "server",
@@ -21,6 +20,7 @@ public sealed class ConfigCenterModelMetadataProvider
         "metadata",
         "storage-types.json");
 
+    private readonly string _modelDirectory;
     private readonly string _configItemPath;
     private readonly string _storageTypeMapPath;
     private readonly IModelMetadataDocumentLoader _modelLoader;
@@ -29,7 +29,7 @@ public sealed class ConfigCenterModelMetadataProvider
     private readonly ModelMetadataProjector _projector;
 
     public ConfigCenterModelMetadataProvider()
-        : this(DefaultConfigItemPath, DefaultStorageTypeMapPath, new JsonModelMetadataDocumentLoader())
+        : this(Path.Combine(DefaultModelDirectory, "ConfigItem.model.json"), DefaultStorageTypeMapPath, new JsonModelMetadataDocumentLoader())
     {
     }
 
@@ -39,6 +39,7 @@ public sealed class ConfigCenterModelMetadataProvider
         IModelMetadataDocumentLoader modelLoader)
     {
         _configItemPath = Path.GetFullPath(configItemPath);
+        _modelDirectory = Path.GetDirectoryName(_configItemPath) ?? throw new InvalidOperationException("无法定位模型目录。");
         _storageTypeMapPath = Path.GetFullPath(storageTypeMapPath);
         _modelLoader = modelLoader;
         _typeMapLoader = new JsonStorageTypeMapLoader();
@@ -48,16 +49,45 @@ public sealed class ConfigCenterModelMetadataProvider
 
     /// <summary>
     /// 读取 ConfigCenter 的配置项模型定义。
-    /// 模型 authoring 语义统一交给共享 loader 解析，provider 只负责装配验证与投影。
+    /// 旧入口保留不变，但读取逻辑统一收口到共享 loader。
     /// </summary>
     public ModelDefinition LoadConfigItem()
     {
-        var document = _modelLoader.LoadFromFile(_configItemPath);
         var typeMap = _typeMapLoader.LoadFromFile(_storageTypeMapPath);
+        var document = LoadDocument(_configItemPath);
 
         _validator.Validate(document, typeMap);
 
         return _projector.Project(document, typeMap, "SqlServer");
+    }
+
+    /// <summary>
+    /// 一次性返回 ConfigCenter 当前收口的两个模型定义。
+    /// 外部只消费聚合后的 definitions，避免继续依赖单文件入口。
+    /// </summary>
+    public IReadOnlyList<ModelDefinition> GetDefinitions()
+    {
+        var typeMap = _typeMapLoader.LoadFromFile(_storageTypeMapPath);
+
+        return new[]
+        {
+            LoadModel("ConfigItem.model.json", typeMap),
+            LoadModel("ValueListItem.model.json", typeMap)
+        };
+    }
+
+    private ModelDefinition LoadModel(string fileName, StorageTypeMapDocument typeMap)
+    {
+        var document = LoadDocument(Path.Combine(_modelDirectory, fileName));
+
+        _validator.Validate(document, typeMap);
+
+        return _projector.Project(document, typeMap, "SqlServer");
+    }
+
+    private ModelMetadataDocument LoadDocument(string path)
+    {
+        return _modelLoader.LoadFromFile(path);
     }
 
     private static string GetRepositoryPath(params string[] segments)

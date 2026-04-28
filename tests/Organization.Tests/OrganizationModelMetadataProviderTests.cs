@@ -1,0 +1,60 @@
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Validation;
+using ICP.Platform.Modules.Organization.Persistence.Descriptors;
+using Xunit;
+
+namespace ICP.Platform.Modules.Organization.Tests;
+
+public class OrganizationModelMetadataProviderTests
+{
+    [Fact]
+    public void GetDefinitions_ReturnsAllOrganizationModels_AndValidatesThem()
+    {
+        var provider = new OrganizationModelMetadataProvider();
+
+        var definitions = provider.GetDefinitions();
+
+        Assert.Equal(
+            ["Company", "Department", "Position", "Person", "PersonUserLink"],
+            definitions.Select(definition => definition.Name).ToArray());
+
+        var validator = new ModelDefinitionValidator();
+        foreach (var definition in definitions)
+        {
+            validator.Validate(definition);
+        }
+    }
+
+    [Fact]
+    public void PersonAndPosition_EmploymentStatus_AreProjectedAsEnum()
+    {
+        var provider = new OrganizationModelMetadataProvider();
+
+        var definitions = provider.GetDefinitions();
+
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
+        var position = Assert.Single(definitions, definition => definition.Name == "Position");
+
+        Assert.Contains(person.Fields, static field =>
+            field.Name == "EmploymentStatus"
+            && field.ValueType == FieldValueType.Enum);
+
+        Assert.Contains(position.Fields, static field =>
+            field.Name == "EmploymentStatus"
+            && field.ValueType == FieldValueType.Enum);
+    }
+
+    [Fact]
+    public void PersonUserLink_IsProjectedAsEntity()
+    {
+        var provider = new OrganizationModelMetadataProvider();
+
+        var definitions = provider.GetDefinitions();
+
+        var personUserLink = Assert.Single(definitions, definition => definition.Name == "PersonUserLink");
+
+        Assert.Equal(ModelKind.Entity, personUserLink.Kind);
+    }
+
+}

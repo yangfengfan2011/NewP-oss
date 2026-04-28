@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Department": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "CompanyId",
+        "storage": {
+          "type": "guid"
+        }
+      },
+      {
+        "name": "ParentDepartmentId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        }
+      },
+      {
+        "name": "Code",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Name",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        }
+      },
+      {
+        "name": "SortOrder",
+        "storage": {
+          "type": "string"
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_Department_Company",
+        "fields": [
+          "CompanyId"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_Department_Parent",
+        "fields": [
+          "ParentDepartmentId"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_Department_Company_Parent_Code",
+        "fields": [
+          "CompanyId",
+          "ParentDepartmentId",
+          "Code"
+        ],
+        "unique": false
+      }
+    ]
+  }
+}

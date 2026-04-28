@@ -1,8 +1,9 @@
 using System;
 using System.IO;
-using System.Reflection;
 using System.Text.Json;
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Validation;
 using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 using Xunit;
 
@@ -10,6 +11,21 @@ namespace ICP.Platform.Modules.ConfigCenter.Tests;
 
 public class ConfigCenterModelMetadataProviderTests
 {
+    [Fact]
+    public void GetDefinitions_ReturnsConfigItemAndValueListItem_AndValidatesThem()
+    {
+        var provider = new ConfigCenterModelMetadataProvider();
+        var definitions = provider.GetDefinitions();
+
+        Assert.Equal(["ConfigItem", "ValueListItem"], definitions.Select(definition => definition.Name).ToArray());
+
+        var validator = new ModelDefinitionValidator();
+        foreach (var definition in definitions)
+        {
+            validator.Validate(definition);
+        }
+    }
+
     [Fact]
     public void LoadConfigItem_ReadsModelFromUnifiedMetadataLayout()
     {
@@ -72,16 +88,10 @@ public class ConfigCenterModelMetadataProviderTests
                 "ConfigItem.model.json");
             File.WriteAllText(modelPath, File.ReadAllText(sampleModelPath));
             var storageTypeMapPath = Path.Combine(repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json");
-            var constructor = typeof(ConfigCenterModelMetadataProvider).GetConstructor(
-                BindingFlags.Instance | BindingFlags.NonPublic,
-                binder: null,
-                [typeof(string), typeof(string), typeof(IModelMetadataDocumentLoader)],
-                modifiers: null);
-
-            Assert.NotNull(constructor);
-
-            var provider = (ConfigCenterModelMetadataProvider)constructor!.Invoke(
-                [modelPath, storageTypeMapPath, new JsonModelMetadataDocumentLoader()]);
+            var provider = new ConfigCenterModelMetadataProvider(
+                modelPath,
+                storageTypeMapPath,
+                new JsonModelMetadataDocumentLoader());
 
             var definition = provider.LoadConfigItem();
 

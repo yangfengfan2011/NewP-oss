@@ -51,6 +51,8 @@ public sealed class ModelSchemaDataSourceDescriptor
 {
     public string Type { get; init; } = string.Empty;
 
+    public string? Key { get; init; }
+
     public string? Enum { get; init; }
 
     public string? Model { get; init; }

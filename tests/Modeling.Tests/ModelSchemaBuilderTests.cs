@@ -48,6 +48,7 @@ public class ModelSchemaBuilderTests
                         DataSource = new ModelMetadataDataSource
                         {
                             Type = "model",
+                            Key = "Owner",
                             Model = "User"
                         }
                     },
@@ -77,6 +78,7 @@ public class ModelSchemaBuilderTests
         Assert.True(nameField.View!.Visible);
         Assert.NotNull(nameField.DataSource);
         Assert.Equal("model", nameField.DataSource!.Type);
+        Assert.Equal("Owner", nameField.DataSource.Key);
         Assert.Equal("User", nameField.DataSource.Model);
 
         var descriptionField = Assert.Single(schema.Fields, static x => x.Name == "Description");

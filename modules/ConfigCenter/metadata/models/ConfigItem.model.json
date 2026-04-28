@@ -6,6 +6,29 @@
     "builtinFields": [
       "ENAME"
     ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "ConfigItemDetailView.Section.Basic",
+        "fields": [
+          "Key",
+          "Value",
+          "Type",
+          "ModuleId",
+          "Group"
+        ]
+      },
+      {
+        "key": "scope",
+        "titleKey": "ConfigItemDetailView.Section.Scope",
+        "fields": [
+          "Environment",
+          "TenantId",
+          "Description",
+          "IsSensitive"
+        ]
+      }
+    ],
     "fields": [
       {
         "name": "Key",

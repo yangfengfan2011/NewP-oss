@@ -38,4 +38,48 @@ public class JsonModelMetadataDocumentLoaderTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void LoadFromFile_ReadsDataSourceKey()
+    {
+        var path = Path.GetTempFileName();
+
+        try
+        {
+            File.WriteAllText(
+                path,
+                """
+                {
+                  "schemaVersion": "1.0",
+                  "moduleId": "Organization",
+                  "model": {
+                    "name": "Person",
+                    "kind": "Entity",
+                    "fields": [
+                      {
+                        "name": "EmploymentStatus",
+                        "dataSource": {
+                          "type": "enum",
+                          "key": "EmploymentStatus"
+                        }
+                      }
+                    ]
+                  }
+                }
+                """);
+
+            var loader = new JsonModelMetadataDocumentLoader();
+
+            var document = loader.LoadFromFile(path);
+
+            var field = Assert.Single(document.Model.Fields);
+            Assert.NotNull(field.DataSource);
+            Assert.Equal("enum", field.DataSource!.Type);
+            Assert.Equal("EmploymentStatus", field.DataSource.Key);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

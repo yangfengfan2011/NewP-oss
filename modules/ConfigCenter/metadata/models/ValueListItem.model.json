@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "ValueListItem": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "Code",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Name",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_ValueListItem_Code",
+        "fields": [
+          "Code"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

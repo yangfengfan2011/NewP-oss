@@ -17,10 +17,3 @@ public class ConfigItemDto
     public DateTime UpdatedAt { get; init; }
     public string? UpdatedBy { get; init; }
 }
-
-public class ConfigGroupDto
-{
-    public required string ModuleId { get; set; }
-    public string? Group { get; set; }
-    public List<ConfigItemDto> Items { get; set; } = new();
-}

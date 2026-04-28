@@ -63,6 +63,14 @@
         "name": "EmploymentStatus",
         "storage": {
           "type": "string"
+        },
+        "contract": {
+          "valueType": "enum",
+          "clrType": "EmploymentStatus"
+        },
+        "dataSource": {
+          "type": "enum",
+          "key": "EmploymentStatus"
         }
       },
       {

@@ -40,6 +40,7 @@ public sealed class ModelSchemaBuilder
                 : new ModelSchemaDataSourceDescriptor
                 {
                     Type = field.DataSource.Type,
+                    Key = field.DataSource.Key,
                     Enum = field.DataSource.Enum,
                     Model = field.DataSource.Model
                 }

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Permission": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "Code",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "DisplayName",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      },
+      {
+        "name": "ModuleId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Group",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Permission_Code",
+        "fields": [
+          "Code"
+        ],
+        "unique": true
+      },
+      {
+        "name": "IX_Permission_Module",
+        "fields": [
+          "ModuleId"
+        ],
+        "unique": false
+      }
+    ]
+  }
+}

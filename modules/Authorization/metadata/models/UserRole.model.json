@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "UserRole": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "UserId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "RoleId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "AssignedAt",
+        "storage": {
+          "type": "datetime"
+        }
+      },
+      {
+        "name": "AssignedBy",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_UserRole_User_Role",
+        "fields": [
+          "UserId",
+          "RoleId"
+        ],
+        "unique": true
+      },
+      {
+        "name": "IX_UserRole_Role",
+        "fields": [
+          "RoleId"
+        ],
+        "unique": false
+      }
+    ]
+  }
+}

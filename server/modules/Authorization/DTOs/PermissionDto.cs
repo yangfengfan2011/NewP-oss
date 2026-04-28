@@ -9,10 +9,3 @@ public record PermissionDto
     public required string ModuleId { get; init; }
     public string? Group { get; init; }
 }
-
-public record PermissionGroupDto
-{
-    public required string ModuleId { get; init; }
-    public string? Group { get; init; }
-    public required List<PermissionDto> Permissions { get; init; }
-}

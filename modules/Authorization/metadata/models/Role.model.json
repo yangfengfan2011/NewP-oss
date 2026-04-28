@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Role": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "Code",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Name",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        }
+      },
+      {
+        "name": "IsBuiltIn",
+        "storage": {
+          "type": "bool"
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Role_Code",
+        "fields": [
+          "Code"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

@@ -10,14 +10,3 @@ public record RoleDto
     public bool IsBuiltIn { get; init; }
     public DateTime CreatedAt { get; init; }
 }
-
-public record RolePermissionsDto
-{
-    public required string RoleId { get; init; }
-    public required List<string> PermissionCodes { get; init; }
-}
-
-public record AssignRolePermissionsRequest
-{
-    public required List<string> PermissionCodes { get; init; }
-}

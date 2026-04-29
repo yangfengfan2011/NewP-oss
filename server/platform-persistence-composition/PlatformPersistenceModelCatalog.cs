@@ -7,9 +7,17 @@ namespace ICP.Platform.Persistence.Composition;
 
 public static class PlatformPersistenceModelCatalog
 {
+    /// <summary>
+    /// 聚合平台内建模块 provider 投影后的持久化模型定义。
+    /// </summary>
     public static IReadOnlyList<ModelDefinition> GetDefinitions() =>
-        ConfigCenterModelDefinitions.All
-            .Concat(AuthorizationModelDefinitions.All)
-            .Concat(OrganizationModelDefinitions.All)
+        new IModelDefinitionProvider[]
+        {
+            new ConfigCenterModelMetadataProvider(),
+            new AuthorizationModelMetadataProvider(),
+            new OrganizationModelMetadataProvider()
+        }
+            // Catalog 只聚合 provider 的投影结果；模型真源读取和校验必须保留在各模块 provider 内。
+            .SelectMany(static provider => provider.GetDefinitions())
             .ToArray();
 }

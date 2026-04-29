@@ -13,7 +13,8 @@ public sealed class ModelSchemaBuilder
         {
             Name = field.Name,
             UiType = string.IsNullOrWhiteSpace(field.UiType) ? "readonly" : field.UiType,
-            LabelKey = $"Model.{document.Model.Name}.Field.{field.Name}",
+            // 模型字段 labelKey 会进入 dic localKey，使用下划线避免多语言查询把点号误判为路径。
+            LabelKey = $"Model_{document.Model.Name}_Field_{field.Name}",
             Layout = field.Layout is null
                 ? null
                 : new ModelSchemaLayoutDescriptor

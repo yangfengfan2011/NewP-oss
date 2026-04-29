@@ -46,33 +46,33 @@ vi.mock('../../../../modules/organization/src/runtime/personCenterRuntime', () =
     editorMode: 'drawer',
     detailViewKey: 'organization.person.detail',
     listColumns: [
-      { key: 'personNo', labelKey: 'Column.PersonNo' },
-      { key: 'name', labelKey: 'Column.Name' },
+      { key: 'personNo', labelKey: 'Column_PersonNo' },
+      { key: 'name', labelKey: 'Column_Name' },
     ],
     queryFields: [
-      { key: 'keyword', labelKey: 'Query.Keyword', source: 'preset', preset: 'keyword' },
-      { key: 'companyId', labelKey: 'Query.Company', source: 'model', field: 'CompanyId' },
-      { key: 'departmentId', labelKey: 'Query.Department', source: 'model', field: 'DepartmentId' },
-      { key: 'employmentStatus', labelKey: 'Query.EmploymentStatus', source: 'model', field: 'EmploymentStatus' },
+      { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword' },
+      { key: 'companyId', labelKey: 'Query_Company', source: 'model', field: 'CompanyId' },
+      { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId' },
+      { key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'model', field: 'EmploymentStatus' },
     ],
     pageActions: [
-      { key: 'create', labelKey: 'Action.Create' },
-      { key: 'refresh', labelKey: 'Action.Refresh' },
+      { key: 'create', labelKey: 'Action_Create' },
+      { key: 'refresh', labelKey: 'Action_Refresh' },
     ],
     advancedFilter: {
       enabled: true,
-      titleKey: 'AdvancedFilter.Title',
+      titleKey: 'AdvancedFilter_Title',
       sections: [
         {
           key: 'organization',
-          titleKey: 'AdvancedFilter.Organization',
+          titleKey: 'AdvancedFilter_Organization',
           fields: [
-            { key: 'companyId', labelKey: 'Query.Company', source: 'model', field: 'CompanyId' },
+            { key: 'companyId', labelKey: 'Query_Company', source: 'model', field: 'CompanyId' },
           ],
         },
       ],
     },
-    rowActions: [{ key: 'view', labelKey: 'Action.View' }],
+    rowActions: [{ key: 'view', labelKey: 'Action_View' }],
     exportModes: [],
   }),
   getPersonDetailRuntimeSchema: () => ({
@@ -82,7 +82,7 @@ vi.mock('../../../../modules/organization/src/runtime/personCenterRuntime', () =
     sections: [
       {
         key: 'basic',
-        titleKey: 'Section.Basic',
+        titleKey: 'Section_Basic',
         fields: ['PersonNo', 'Name', 'CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'],
       },
     ],

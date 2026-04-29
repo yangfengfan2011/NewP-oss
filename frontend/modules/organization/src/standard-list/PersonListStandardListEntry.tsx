@@ -413,7 +413,7 @@ export default function PersonListStandardListEntry({
         ...baseColumns,
         {
           key: 'actions',
-          title: resolveListText('Column.Actions', '操作'),
+          title: resolveListText('Column_Actions', '操作'),
           render: (item: PersonListItemDto) => (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {(listSchema.rowActions ?? [])
@@ -507,7 +507,7 @@ export default function PersonListStandardListEntry({
     if (fieldKey === 'keyword') {
       return (
         <Input
-          label={resolveListText('Query.Keyword', '关键字')}
+          label={resolveListText('Query_Keyword', '关键字')}
           value={filters.keyword}
           onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
           placeholder="按工号 / 姓名搜索"
@@ -519,7 +519,7 @@ export default function PersonListStandardListEntry({
     if (fieldKey === 'companyId') {
       return (
         <Select
-          label={resolveListText('Query.Company', '公司')}
+          label={resolveListText('Query_Company', '公司')}
           value={filters.companyId}
           onChange={(event) =>
             setFilters((current) => ({
@@ -539,7 +539,7 @@ export default function PersonListStandardListEntry({
     if (fieldKey === 'departmentId') {
       return (
         <Select
-          label={resolveListText('Query.Department', '部门')}
+          label={resolveListText('Query_Department', '部门')}
           value={filters.departmentId}
           onChange={(event) => setFilters((current) => ({ ...current, departmentId: event.target.value }))}
           options={departmentOptions}
@@ -553,7 +553,7 @@ export default function PersonListStandardListEntry({
     if (fieldKey === 'employmentStatus') {
       return (
         <Select
-          label={resolveListText('Query.EmploymentStatus', '在职状态')}
+          label={resolveListText('Query_EmploymentStatus', '在职状态')}
           value={filters.employmentStatus}
           onChange={(event) => setFilters((current) => ({ ...current, employmentStatus: event.target.value }))}
           options={employmentStatusOptions}
@@ -565,7 +565,7 @@ export default function PersonListStandardListEntry({
 
     return (
       <Input
-        label={resolveListText(`AdvancedFilter.Field.${fieldKey}`, fieldKey)}
+        label={resolveListText(`AdvancedFilter_Field_${fieldKey}`, fieldKey)}
         value=""
         readOnly
         placeholder="当前阶段暂未接入"
@@ -650,7 +650,7 @@ export default function PersonListStandardListEntry({
         </Button>
         {hasAdvancedFilter ? (
           <Button size="sm" onClick={() => setAdvancedFilterOpen(true)}>
-            {resolveListText('Action.AdvancedFilter', '高级筛选')}
+            {resolveListText('Action_AdvancedFilter', '高级筛选')}
           </Button>
         ) : null}
       </div>
@@ -663,8 +663,8 @@ export default function PersonListStandardListEntry({
       compact
       actions={(
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Button size="sm">{resolveListText('Toolbar.ColumnSettings', '列设置')}</Button>
-          <Button size="sm" disabled={rows.length === 0}>{resolveListText('Toolbar.BatchActions', '批量操作')}</Button>
+          <Button size="sm">{resolveListText('Toolbar_ColumnSettings', '列设置')}</Button>
+          <Button size="sm" disabled={rows.length === 0}>{resolveListText('Toolbar_BatchActions', '批量操作')}</Button>
         </div>
       )}
     >
@@ -684,12 +684,12 @@ export default function PersonListStandardListEntry({
     <>
       {exportModes.includes('current') ? (
         <Button size="sm" disabled={rows.length === 0}>
-          {resolveListText('Export.Current', '导出当前')}
+          {resolveListText('Export_Current', '导出当前')}
         </Button>
       ) : null}
       {exportModes.includes('all') ? (
         <Button size="sm" disabled={rows.length === 0}>
-          {resolveListText('Export.All', '导出全部')}
+          {resolveListText('Export_All', '导出全部')}
         </Button>
       ) : null}
     </>
@@ -700,9 +700,9 @@ export default function PersonListStandardListEntry({
       <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>
         {`共 ${total} 条`}
       </span>
-      <Button size="sm" disabled>{resolveListText('Pagination.Prev', '上一页')}</Button>
+      <Button size="sm" disabled>{resolveListText('Pagination_Prev', '上一页')}</Button>
       <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>第 1 / 1 页</span>
-      <Button size="sm" disabled>{resolveListText('Pagination.Next', '下一页')}</Button>
+      <Button size="sm" disabled>{resolveListText('Pagination_Next', '下一页')}</Button>
     </>
   );
 

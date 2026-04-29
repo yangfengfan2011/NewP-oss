@@ -4,8 +4,8 @@
   "view": {
     "key": "organization.person.list",
     "dicKey": "PersonListView",
-    "titleKey": "PersonListView.Title",
-    "descriptionKey": "PersonListView.Description",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
     "mode": "list",
     "model": "Person",
     "editorMode": "drawer",
@@ -14,28 +14,28 @@
       "fields": [
         {
           "key": "keyword",
-          "labelKey": "PersonListView.Query.Keyword",
+          "labelKey": "Query_Keyword",
           "source": "preset",
           "preset": "keyword",
           "operator": "like"
         },
         {
           "key": "companyId",
-          "labelKey": "PersonListView.Query.Company",
+          "labelKey": "Query_Company",
           "source": "model",
           "field": "CompanyId",
           "operator": "="
         },
         {
           "key": "departmentId",
-          "labelKey": "PersonListView.Query.Department",
+          "labelKey": "Query_Department",
           "source": "model",
           "field": "DepartmentId",
           "operator": "="
         },
         {
           "key": "employmentStatus",
-          "labelKey": "PersonListView.Query.EmploymentStatus",
+          "labelKey": "Query_EmploymentStatus",
           "source": "model",
           "field": "EmploymentStatus",
           "operator": "="
@@ -44,22 +44,22 @@
     },
     "advancedFilter": {
       "enabled": true,
-      "titleKey": "PersonListView.AdvancedFilter.Title",
+      "titleKey": "AdvancedFilter_Title",
       "sections": [
         {
           "key": "organization",
-          "titleKey": "PersonListView.AdvancedFilter.Organization",
+          "titleKey": "AdvancedFilter_Organization",
           "fields": [
             {
               "key": "companyId",
-              "labelKey": "PersonListView.Query.Company",
+              "labelKey": "Query_Company",
               "source": "model",
               "field": "CompanyId",
               "operator": "="
             },
             {
               "key": "departmentId",
-              "labelKey": "PersonListView.Query.Department",
+              "labelKey": "Query_Department",
               "source": "model",
               "field": "DepartmentId",
               "operator": "="
@@ -68,11 +68,11 @@
         },
         {
           "key": "status",
-          "titleKey": "PersonListView.AdvancedFilter.Status",
+          "titleKey": "AdvancedFilter_Status",
           "fields": [
             {
               "key": "employmentStatus",
-              "labelKey": "PersonListView.Query.EmploymentStatus",
+              "labelKey": "Query_EmploymentStatus",
               "source": "model",
               "field": "EmploymentStatus",
               "operator": "="
@@ -84,51 +84,51 @@
     "columns": [
       {
         "key": "personNo",
-        "labelKey": "PersonListView.Column.PersonNo"
+        "labelKey": "Column_PersonNo"
       },
       {
         "key": "name",
-        "labelKey": "PersonListView.Column.Name"
+        "labelKey": "Column_Name"
       },
       {
         "key": "companyName",
-        "labelKey": "PersonListView.Column.CompanyName"
+        "labelKey": "Column_CompanyName"
       },
       {
         "key": "departmentName",
-        "labelKey": "PersonListView.Column.DepartmentName"
+        "labelKey": "Column_DepartmentName"
       },
       {
         "key": "employmentStatus",
-        "labelKey": "PersonListView.Column.EmploymentStatus"
+        "labelKey": "Column_EmploymentStatus"
       },
       {
         "key": "isEnabled",
-        "labelKey": "PersonListView.Column.IsEnabled"
+        "labelKey": "Column_IsEnabled"
       }
     ],
     "pageActions": [
       {
         "key": "create",
-        "labelKey": "PersonListView.Action.Create"
+        "labelKey": "Action_Create"
       },
       {
         "key": "refresh",
-        "labelKey": "PersonListView.Action.Refresh"
+        "labelKey": "Action_Refresh"
       }
     ],
     "rowActions": [
       {
         "key": "view",
-        "labelKey": "PersonListView.Action.View"
+        "labelKey": "Action_View"
       },
       {
         "key": "edit",
-        "labelKey": "PersonListView.Action.Edit"
+        "labelKey": "Action_Edit"
       },
       {
         "key": "disable",
-        "labelKey": "PersonListView.Action.Disable"
+        "labelKey": "Action_Disable"
       }
     ],
     "export": {

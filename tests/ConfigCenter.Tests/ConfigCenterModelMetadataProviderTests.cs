@@ -123,18 +123,18 @@ public class ConfigCenterModelMetadataProviderTests
         using var document = JsonDocument.Parse(File.ReadAllText(dictionaryPath));
         var configCenterRoot = document.RootElement.GetProperty("ConfigCenter");
 
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.EID");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.ENAME");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Key");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Value");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Type");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.ModuleId");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Group");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Environment");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.TenantId");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.Description");
-        AssertLocalizedEntry(configCenterRoot, "Model.ConfigItem.Field.IsSensitive");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_EID");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_ENAME");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_Key");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_Value");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_Type");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_ModuleId");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_Group");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_Environment");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_TenantId");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_Description");
+        AssertLocalizedEntry(configCenterRoot, "Model_ConfigItem_Field_IsSensitive");
     }
 
     [Fact]

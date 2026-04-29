@@ -10,111 +10,111 @@
       "zhs": "维护组织模块中的人员基础信息。",
       "en": "Manage person master data in the organization module."
     },
-    "Query.Keyword": {
+    "Query_Keyword": {
       "zhs": "关键字",
       "en": "Keyword"
     },
-    "Query.Company": {
+    "Query_Company": {
       "zhs": "公司",
       "en": "Company"
     },
-    "Query.Department": {
+    "Query_Department": {
       "zhs": "部门",
       "en": "Department"
     },
-    "Query.EmploymentStatus": {
+    "Query_EmploymentStatus": {
       "zhs": "在职状态",
       "en": "Employment Status"
     },
-    "AdvancedFilter.Title": {
+    "AdvancedFilter_Title": {
       "zhs": "高级筛选",
       "en": "Advanced Filter"
     },
-    "AdvancedFilter.Organization": {
+    "AdvancedFilter_Organization": {
       "zhs": "组织范围",
       "en": "Organization Scope"
     },
-    "AdvancedFilter.Status": {
+    "AdvancedFilter_Status": {
       "zhs": "状态条件",
       "en": "Status Conditions"
     },
-    "Column.PersonNo": {
+    "Column_PersonNo": {
       "zhs": "人员编号",
       "en": "Person No."
     },
-    "Column.Name": {
+    "Column_Name": {
       "zhs": "姓名",
       "en": "Name"
     },
-    "Column.CompanyName": {
+    "Column_CompanyName": {
       "zhs": "公司",
       "en": "Company"
     },
-    "Column.DepartmentName": {
+    "Column_DepartmentName": {
       "zhs": "部门",
       "en": "Department"
     },
-    "Column.EmploymentStatus": {
+    "Column_EmploymentStatus": {
       "zhs": "在职状态",
       "en": "Employment Status"
     },
-    "Column.IsEnabled": {
+    "Column_IsEnabled": {
       "zhs": "启用状态",
       "en": "Enabled"
     },
-    "Action.Create": {
+    "Action_Create": {
       "zhs": "新建",
       "en": "Create"
     },
-    "Action.Refresh": {
+    "Action_Refresh": {
       "zhs": "刷新",
       "en": "Refresh"
     },
-    "Action.View": {
+    "Action_View": {
       "zhs": "查看",
       "en": "View"
     },
-    "Action.Edit": {
+    "Action_Edit": {
       "zhs": "编辑",
       "en": "Edit"
     },
-    "Action.Disable": {
+    "Action_Disable": {
       "zhs": "停用",
       "en": "Disable"
     },
-    "Action.ApplyAdvanced": {
+    "Action_ApplyAdvanced": {
       "zhs": "应用筛选",
       "en": "Apply Filter"
     },
-    "Action.ResetAdvanced": {
+    "Action_ResetAdvanced": {
       "zhs": "重置条件",
       "en": "Reset Conditions"
     },
-    "Action.AdvancedFilter": {
+    "Action_AdvancedFilter": {
       "zhs": "高级筛选",
       "en": "Advanced Filter"
     },
-    "Toolbar.ColumnSettings": {
+    "Toolbar_ColumnSettings": {
       "zhs": "列设置",
       "en": "Column Settings"
     },
-    "Toolbar.BatchActions": {
+    "Toolbar_BatchActions": {
       "zhs": "批量操作",
       "en": "Batch Actions"
     },
-    "Export.Current": {
+    "Export_Current": {
       "zhs": "导出当前",
       "en": "Export Current"
     },
-    "Export.All": {
+    "Export_All": {
       "zhs": "导出全部",
       "en": "Export All"
     },
-    "Pagination.Prev": {
+    "Pagination_Prev": {
       "zhs": "上一页",
       "en": "Previous"
     },
-    "Pagination.Next": {
+    "Pagination_Next": {
       "zhs": "下一页",
       "en": "Next"
     }

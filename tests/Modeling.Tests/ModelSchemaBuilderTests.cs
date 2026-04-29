@@ -66,7 +66,7 @@ public class ModelSchemaBuilderTests
 
         var nameField = Assert.Single(schema.Fields, static x => x.Name == "ENAME");
         Assert.Equal("text", nameField.UiType);
-        Assert.Equal("Model.ConfigItem.Field.ENAME", nameField.LabelKey);
+        Assert.Equal("Model_ConfigItem_Field_ENAME", nameField.LabelKey);
         Assert.NotNull(nameField.Layout);
         Assert.Equal("010", nameField.Layout!.Position);
         Assert.Equal(50, nameField.Layout.Width);

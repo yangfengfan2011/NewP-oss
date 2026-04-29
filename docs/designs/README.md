@@ -95,6 +95,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-targ
 - [user-visible-text-localization-foundation-design.md](user-visible-text-localization-foundation-design.md)
 - [platform/metadata-driven-backoffice-ui-design.md](platform/metadata-driven-backoffice-ui-design.md)
 - [platform/dic-localization-manifest-alignment-design.md](platform/dic-localization-manifest-alignment-design.md)
+- [platform/dic-local-key-dotless-consistency-review.md](platform/dic-local-key-dotless-consistency-review.md)
 - [platform/standard-crud-contract-design.md](platform/standard-crud-contract-design.md)
 - [platform/form-action-area-comparison-design.md](platform/form-action-area-comparison-design.md)
 - [platform/list-management-layout-demo-design.md](platform/list-management-layout-demo-design.md)

@@ -2,51 +2,51 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "ConfigCenter": {
-    "Model.ConfigItem": {
+    "Model_ConfigItem": {
       "zhs": "配置项",
       "en": "Config Item"
     },
-    "Model.ConfigItem.Field.EID": {
+    "Model_ConfigItem_Field_EID": {
       "zhs": "实体 ID",
       "en": "Entity ID"
     },
-    "Model.ConfigItem.Field.ENAME": {
+    "Model_ConfigItem_Field_ENAME": {
       "zhs": "实体名称",
       "en": "Entity Name"
     },
-    "Model.ConfigItem.Field.Key": {
+    "Model_ConfigItem_Field_Key": {
       "zhs": "键",
       "en": "Key"
     },
-    "Model.ConfigItem.Field.Value": {
+    "Model_ConfigItem_Field_Value": {
       "zhs": "值",
       "en": "Value"
     },
-    "Model.ConfigItem.Field.Type": {
+    "Model_ConfigItem_Field_Type": {
       "zhs": "类型",
       "en": "Type"
     },
-    "Model.ConfigItem.Field.ModuleId": {
+    "Model_ConfigItem_Field_ModuleId": {
       "zhs": "模块 ID",
       "en": "Module ID"
     },
-    "Model.ConfigItem.Field.Group": {
+    "Model_ConfigItem_Field_Group": {
       "zhs": "分组",
       "en": "Group"
     },
-    "Model.ConfigItem.Field.Environment": {
+    "Model_ConfigItem_Field_Environment": {
       "zhs": "环境",
       "en": "Environment"
     },
-    "Model.ConfigItem.Field.TenantId": {
+    "Model_ConfigItem_Field_TenantId": {
       "zhs": "租户 ID",
       "en": "Tenant ID"
     },
-    "Model.ConfigItem.Field.Description": {
+    "Model_ConfigItem_Field_Description": {
       "zhs": "说明",
       "en": "Description"
     },
-    "Model.ConfigItem.Field.IsSensitive": {
+    "Model_ConfigItem_Field_IsSensitive": {
       "zhs": "敏感项",
       "en": "Sensitive"
     }

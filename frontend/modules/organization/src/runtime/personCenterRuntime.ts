@@ -37,32 +37,32 @@ const fallbackPersonListSchema: PersonListRuntimeSchema = {
   editorMode: 'drawer',
   detailViewKey: 'organization.person.detail',
   queryFields: [
-    { key: 'keyword', labelKey: 'Query.Keyword', source: 'preset', preset: 'keyword', operator: 'contains' },
-    { key: 'companyId', labelKey: 'Query.Company', source: 'model', field: 'CompanyId', operator: '=' },
-    { key: 'departmentId', labelKey: 'Query.Department', source: 'model', field: 'DepartmentId', operator: '=' },
-    { key: 'employmentStatus', labelKey: 'Query.EmploymentStatus', source: 'model', field: 'EmploymentStatus', operator: '=' },
+    { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword', operator: 'contains' },
+    { key: 'companyId', labelKey: 'Query_Company', source: 'model', field: 'CompanyId', operator: '=' },
+    { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId', operator: '=' },
+    { key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'model', field: 'EmploymentStatus', operator: '=' },
   ],
   advancedFilter: {
     enabled: false,
-    titleKey: 'AdvancedFilter.Title',
+    titleKey: 'AdvancedFilter_Title',
     sections: [],
   },
   pageActions: [
-    { key: 'create', labelKey: 'Action.Create' },
-    { key: 'refresh', labelKey: 'Action.Refresh' },
+    { key: 'create', labelKey: 'Action_Create' },
+    { key: 'refresh', labelKey: 'Action_Refresh' },
   ],
   rowActions: [
-    { key: 'view', labelKey: 'Action.View' },
-    { key: 'edit', labelKey: 'Action.Edit' },
-    { key: 'disable', labelKey: 'Action.Disable' },
+    { key: 'view', labelKey: 'Action_View' },
+    { key: 'edit', labelKey: 'Action_Edit' },
+    { key: 'disable', labelKey: 'Action_Disable' },
   ],
   listColumns: [
-    { key: 'personNo', labelKey: 'Column.PersonNo' },
-    { key: 'name', labelKey: 'Column.Name' },
-    { key: 'companyName', labelKey: 'Column.CompanyName' },
-    { key: 'departmentName', labelKey: 'Column.DepartmentName' },
-    { key: 'employmentStatus', labelKey: 'Column.EmploymentStatus' },
-    { key: 'isEnabled', labelKey: 'Column.IsEnabled' },
+    { key: 'personNo', labelKey: 'Column_PersonNo' },
+    { key: 'name', labelKey: 'Column_Name' },
+    { key: 'companyName', labelKey: 'Column_CompanyName' },
+    { key: 'departmentName', labelKey: 'Column_DepartmentName' },
+    { key: 'employmentStatus', labelKey: 'Column_EmploymentStatus' },
+    { key: 'isEnabled', labelKey: 'Column_IsEnabled' },
   ],
   exportModes: ['current', 'all'],
 };
@@ -72,19 +72,19 @@ const fallbackPersonDetailSchema: PersonDetailRuntimeSchema = {
   titleKey: 'Title',
   descriptionKey: 'Description',
   sections: [
-    { key: 'basic', titleKey: 'Section.Basic', fields: ['PersonNo', 'Name'] },
+    { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'Name'] },
     {
       key: 'organization',
-      titleKey: 'Section.Organization',
+      titleKey: 'Section_Organization',
       fields: ['CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'],
     },
   ],
   summaryBlocks: [
-    { key: 'userLink', titleKey: 'Block.UserLink' },
-    { key: 'authorizationSummary', titleKey: 'Block.AuthorizationSummary' },
+    { key: 'userLink', titleKey: 'Block_UserLink' },
+    { key: 'authorizationSummary', titleKey: 'Block_AuthorizationSummary' },
   ],
   pageActions: [
-    { key: 'disable', labelKey: 'Action.Disable' },
+    { key: 'disable', labelKey: 'Action_Disable' },
   ],
 };
 
@@ -188,12 +188,12 @@ export function getPersonDetailRuntimeSchema(): PersonDetailRuntimeSchema {
     .filter((section): section is { key?: string; titleKey?: string; fields?: string[] } => Boolean(section))
     .map((section) => ({
       key: readString(section.key, ''),
-      titleKey: readString(section.titleKey, `Section.${section.key}`),
+      titleKey: readString(section.titleKey, `Section_${section.key}`),
       fields: readArray<string>(section.fields),
     }));
   const summaryBlocks = readArray<string>(view.summaryBlocks).map((blockKey) => ({
     key: blockKey,
-    titleKey: `Block.${blockKey === 'userLink' ? 'UserLink' : 'AuthorizationSummary'}`,
+    titleKey: `Block_${blockKey === 'userLink' ? 'UserLink' : 'AuthorizationSummary'}`,
   }));
   const pageActions = readArray<Record<string, unknown>>(view.pageActions).map((action) => ({
     key: readString(action.key, ''),

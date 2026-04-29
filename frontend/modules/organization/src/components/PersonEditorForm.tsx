@@ -334,7 +334,7 @@ export default function PersonEditorForm({
           </div>
         ) : null}
         {(sections.length > 0 ? sections : [
-          { key: 'basic', titleKey: 'Section.Basic', fields: ['PersonNo', 'Name', 'CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'] },
+          { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'Name', 'CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'] },
         ]).map((section, index) => (
           <Panel
             key={section.key}

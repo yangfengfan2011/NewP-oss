@@ -286,7 +286,7 @@ public class RuntimeViewMaterializerTests : IDisposable
                     ["type"] = "dic",
                     ["Common"] = new Dictionary<string, object?>
                     {
-                        ["Common.Add"] = new Dictionary<string, string>
+                        ["Add"] = new Dictionary<string, string>
                         {
                             ["zhs"] = "新增",
                             ["en"] = "Add"
@@ -652,12 +652,12 @@ public class RuntimeViewMaterializerTests : IDisposable
                         ["type"] = "dic",
                         ["Common"] = new Dictionary<string, object?>
                         {
-                            ["Common.Add"] = new Dictionary<string, string>
+                            ["Add"] = new Dictionary<string, string>
                             {
                                 ["zhs"] = "添加",
                                 ["en"] = "Add"
                             },
-                            ["Common.Upload"] = new Dictionary<string, string>
+                            ["Upload"] = new Dictionary<string, string>
                             {
                                 ["zhs"] = "上传",
                                 ["en"] = "Upload"
@@ -670,7 +670,7 @@ public class RuntimeViewMaterializerTests : IDisposable
                         ["type"] = "dic",
                         ["Common"] = new Dictionary<string, object?>
                         {
-                            ["Common.Add"] = new Dictionary<string, string>
+                            ["Add"] = new Dictionary<string, string>
                             {
                                 ["zhs"] = "添加"
                             }

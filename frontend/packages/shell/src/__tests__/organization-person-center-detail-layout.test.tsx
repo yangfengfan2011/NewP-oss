@@ -84,11 +84,11 @@ describe('organization person center detail layout', () => {
             zhs: {
               'PersonDetailView.Title': '人员详情',
               'PersonDetailView.Description': '人员详情说明',
-              'PersonDetailView.Action.Disable': '停用',
-              'PersonDetailView.Section.Basic': '基础信息',
-              'PersonDetailView.Section.Organization': '组织信息',
-              'PersonDetailView.Block.UserLink': '账号绑定',
-              'PersonDetailView.Block.AuthorizationSummary': '授权摘要',
+              'PersonDetailView.Action_Disable': '停用',
+              'PersonDetailView.Section_Basic': '基础信息',
+              'PersonDetailView.Section_Organization': '组织信息',
+              'PersonDetailView.Block_UserLink': '账号绑定',
+              'PersonDetailView.Block_AuthorizationSummary': '授权摘要',
             },
           }}
         >
@@ -119,12 +119,12 @@ describe('organization person center detail layout', () => {
         view: {
           key: 'organization.person.detail',
           dicKey: 'PersonDetailView',
-          titleKey: 'PersonDetailView.Title',
-          descriptionKey: 'PersonDetailView.Description',
+          titleKey: 'Title',
+          descriptionKey: 'Description',
           sections: ['basic', 'organization'],
           summaryBlocks: ['userLink', 'authorizationSummary'],
           pageActions: [
-            { key: 'disable', labelKey: 'PersonDetailView.Action.Disable' },
+            { key: 'disable', labelKey: 'Action_Disable' },
           ],
         },
       }],
@@ -132,8 +132,8 @@ describe('organization person center detail layout', () => {
         type: 'model',
         Person: {
           sections: [
-            { key: 'basic', titleKey: 'PersonDetailView.Section.Basic', fields: ['PersonNo', 'Name'] },
-            { key: 'organization', titleKey: 'PersonDetailView.Section.Organization', fields: ['CompanyId', 'DepartmentId', 'EmploymentStatus'] },
+            { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'Name'] },
+            { key: 'organization', titleKey: 'Section_Organization', fields: ['CompanyId', 'DepartmentId', 'EmploymentStatus'] },
           ],
         },
       }],
@@ -149,11 +149,11 @@ describe('organization person center detail layout', () => {
             zhs: {
               'PersonDetailView.Title': '元数据人员详情',
               'PersonDetailView.Description': '元数据人员详情说明',
-              'PersonDetailView.Action.Disable': '元数据停用',
-              'PersonDetailView.Section.Basic': '元数据基础信息',
-              'PersonDetailView.Section.Organization': '元数据组织信息',
-              'PersonDetailView.Block.UserLink': '元数据账号绑定',
-              'PersonDetailView.Block.AuthorizationSummary': '元数据授权摘要',
+              'PersonDetailView.Action_Disable': '元数据停用',
+              'PersonDetailView.Section_Basic': '元数据基础信息',
+              'PersonDetailView.Section_Organization': '元数据组织信息',
+              'PersonDetailView.Block_UserLink': '元数据账号绑定',
+              'PersonDetailView.Block_AuthorizationSummary': '元数据授权摘要',
             },
           }}
         >

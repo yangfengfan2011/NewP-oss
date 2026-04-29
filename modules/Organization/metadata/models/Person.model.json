@@ -9,7 +9,7 @@
     "sections": [
       {
         "key": "basic",
-        "titleKey": "PersonDetailView.Section.Basic",
+        "titleKey": "Section_Basic",
         "fields": [
           "PersonNo",
           "Name"
@@ -17,7 +17,7 @@
       },
       {
         "key": "organization",
-        "titleKey": "PersonDetailView.Section.Organization",
+        "titleKey": "Section_Organization",
         "fields": [
           "CompanyId",
           "DepartmentId",

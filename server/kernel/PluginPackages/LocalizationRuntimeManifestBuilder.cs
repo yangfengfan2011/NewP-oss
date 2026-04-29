@@ -133,6 +133,12 @@ public class LocalizationRuntimeManifestBuilder
                 throw new JsonException($"Dictionary '{dicPath}' entry '{entry.Name}' must be an object.");
             }
 
+            // localKey 中的点号会被部分查询实现当成路径分隔符；这里只允许运行时投影阶段生成 dicKey.localKey。
+            if (entry.Name.Contains('.', StringComparison.Ordinal))
+            {
+                throw new JsonException($"Dictionary '{dicPath}' entry key '{entry.Name}' must not contain '.'.");
+            }
+
             var translations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var translation in entry.Value.EnumerateObject())
             {

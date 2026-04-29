@@ -56,6 +56,7 @@
 
 - `dic` 是否成立必须由文件内容中的 `type = "dic"` 判定，不能只依赖目录名或文件名
 - `dicKey` 不得仅从文件名推导；文件名可以作为约束校验，但不应作为唯一语义来源
+- `localKey` 不允许包含 `.`；`.` 只允许作为运行时扁平 key 中 `dicKey` 与 `localKey` 的边界分隔符
 - `localization manifest` 继续保持“按语言分组后的扁平文本表”结构
 - 前端运行时继续只消费 manifest，不直接扫描 authoring 元数据
 - 扁平化规则必须与前端现有 `t(key)` 完全兼容
@@ -114,6 +115,8 @@
 - `dicKey` 来自 dic 文件内容中的业务根对象命名空间
 - `dic` 文件除元数据头外只允许一个业务根对象
 - 该业务根对象命名空间就是运行时扁平化时使用的 `dicKey`
+- `dicKey` 下的第二层词条是 `localKey`，不得写成 `Action.Create`、`Query.Keyword` 这类含点号的路径式 key
+- 需要表达分组语义时，使用 `Action_Create`、`Query_Keyword` 这类稳定业务 key；分组只是命名提示，不进入运行时路径解析
 
 例如：
 
@@ -179,6 +182,8 @@ t("${dicKey}.${localKey}")
 - `labelKey = Query_Keyword`
 - 运行时最终解析：
   - `t("PersonListView.Query_Keyword")`
+
+`PersonListView.Query.Keyword` 这类多段点号 key 不再作为合法 authoring 或消费基线，因为部分多语言查找实现会把 `.` 当作路径分隔，导致实际 lookup 发生偏移。
 
 ## 8. 核心流程
 

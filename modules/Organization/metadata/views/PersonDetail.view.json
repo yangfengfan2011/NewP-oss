@@ -4,8 +4,8 @@
   "view": {
     "key": "organization.person.detail",
     "dicKey": "PersonDetailView",
-    "titleKey": "PersonDetailView.Title",
-    "descriptionKey": "PersonDetailView.Description",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
     "mode": "detail",
     "model": "Person",
     "sections": [
@@ -19,11 +19,11 @@
     "pageActions": [
       {
         "key": "edit",
-        "labelKey": "PersonDetailView.Action.Edit"
+        "labelKey": "Action_Edit"
       },
       {
         "key": "disable",
-        "labelKey": "PersonDetailView.Action.Disable"
+        "labelKey": "Action_Disable"
       }
     ]
   }

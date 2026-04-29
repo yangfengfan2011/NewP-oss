@@ -44,6 +44,35 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
                 .GetString());
     }
 
+    [Fact]
+    public void Build_WhenDicEntryKeyContainsDot_ThrowsClearError()
+    {
+        var runtimeRoot = CreateRuntimeRoot();
+        WriteLanguages(runtimeRoot);
+        WriteMetadataFile(
+            runtimeRoot,
+            "Audit",
+            Path.Combine("presentation", "PersonListView.dic.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "dic",
+              "PersonListView": {
+                "Query.Keyword": {
+                  "zhs": "关键字",
+                  "en": "Keyword"
+                }
+              }
+            }
+            """);
+
+        var builder = new LocalizationRuntimeManifestBuilder();
+
+        var exception = Assert.Throws<JsonException>(() => builder.Build(runtimeRoot));
+        Assert.Contains("must not contain '.'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Query.Keyword", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         foreach (var tempRoot in _tempRoots)

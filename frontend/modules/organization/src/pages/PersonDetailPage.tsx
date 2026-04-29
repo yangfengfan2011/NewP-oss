@@ -108,7 +108,7 @@ export default function PersonDetailPage() {
         {disabling ? '停用中...' : resolveText(disableAction.labelKey, '停用')}
       </Button>
     ) : detail ? (
-      <Button disabled>{resolveText('Action.Disabled', '已停用')}</Button>
+      <Button disabled>{resolveText('Action_Disabled', '已停用')}</Button>
     ) : null;
 
   const blockTitleMap = new Map(schema.summaryBlocks.map((block) => [block.key, resolveText(block.titleKey, block.key)]));

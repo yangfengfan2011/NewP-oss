@@ -24,7 +24,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(permission => EF.Property<string>(permission, "Id") == permissionId, cancellationToken);
+            .FirstOrDefaultAsync(permission => EF.Property<string>(permission, "EID") == permissionId, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -43,7 +43,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
         var ids = permissionIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var entities = await Entities
             .AsNoTracking()
-            .Where(permission => ids.Contains(EF.Property<string>(permission, "Id")))
+            .Where(permission => ids.Contains(EF.Property<string>(permission, "EID")))
             .ToListAsync(cancellationToken);
 
         return entities.Select(Map).ToList();
@@ -69,7 +69,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
     public async Task UpdateAsync(Permission permission, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == permission.Id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == permission.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -84,7 +84,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
 
     private static Permission Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        Id = GetString(entity, "EID")!,
         Code = GetString(entity, "Code")!,
         DisplayName = GetString(entity, "DisplayName")!,
         Description = GetString(entity, "Description"),
@@ -97,7 +97,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = permission.Id
+            ["EID"] = permission.Id
         };
 
         CopyToEntity(permission, entity);
@@ -106,7 +106,8 @@ public sealed class EfPermissionRepository : IPermissionRepository
 
     private static void CopyToEntity(Permission permission, IDictionary<string, object?> entity)
     {
-        entity["Id"] = permission.Id;
+        // 领域对象仍暴露 Id；持久化真源切换后主键字段固定为 EID。
+        entity["EID"] = permission.Id;
         entity["Code"] = permission.Code;
         entity["DisplayName"] = permission.DisplayName;
         entity["Description"] = permission.Description;

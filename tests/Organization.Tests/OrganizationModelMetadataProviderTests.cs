@@ -57,4 +57,16 @@ public class OrganizationModelMetadataProviderTests
         Assert.Equal(ModelKind.Entity, personUserLink.Kind);
     }
 
+    [Fact]
+    public void Person_OrganizationFields_AreProjectedAsOptional()
+    {
+        var provider = new OrganizationModelMetadataProvider();
+
+        var definitions = provider.GetDefinitions();
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
+
+        Assert.Contains(person.Fields, static field => field.Name == "CompanyId" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "DepartmentId" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "EmploymentStatus" && !field.Required);
+    }
 }

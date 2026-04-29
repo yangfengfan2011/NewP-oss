@@ -18,7 +18,7 @@ public sealed class EfPersonRepository : IPersonRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(person => EF.Property<string>(person, "Id") == personId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(person => EF.Property<string>(person, "EID") == personId.ToString(), cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -68,7 +68,7 @@ public sealed class EfPersonRepository : IPersonRepository
         var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
         return entities.Any(entity =>
             GetNullableGuid(entity, "CompanyId") == companyId &&
-            GetGuid(entity, "Id") != excludedPersonId &&
+            GetGuid(entity, "EID") != excludedPersonId &&
             string.Equals(GetString(entity, "PersonNo"), personNo, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -81,7 +81,7 @@ public sealed class EfPersonRepository : IPersonRepository
     public async Task UpdateAsync(Person person, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == person.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == person.Id.ToString(), cancellationToken);
 
         if (entity is null)
         {
@@ -96,7 +96,7 @@ public sealed class EfPersonRepository : IPersonRepository
 
     private static Person Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "Id"),
+        Id = GetGuid(entity, "EID"),
         PersonNo = GetString(entity, "PersonNo") ?? string.Empty,
         Name = GetString(entity, "Name") ?? string.Empty,
         CompanyId = GetNullableGuid(entity, "CompanyId"),
@@ -112,7 +112,7 @@ public sealed class EfPersonRepository : IPersonRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = person.Id.ToString()
+            ["EID"] = person.Id.ToString()
         };
 
         CopyToEntity(person, entity);
@@ -121,7 +121,8 @@ public sealed class EfPersonRepository : IPersonRepository
 
     private static void CopyToEntity(Person person, IDictionary<string, object?> entity)
     {
-        entity["Id"] = person.Id.ToString();
+        // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
+        entity["EID"] = person.Id.ToString();
         entity["PersonNo"] = person.PersonNo;
         entity["Name"] = person.Name;
         entity["CompanyId"] = person.CompanyId?.ToString();

@@ -174,6 +174,11 @@ public class EfOrganizationRepositoryTests
             Assert.Contains("b.ToTable(\"PersonUserLink\"", snapshot, StringComparison.Ordinal);
             Assert.Contains(".HasColumnName(\"CompanyId\")", snapshot, StringComparison.Ordinal);
             Assert.Contains(".HasColumnName(\"EmploymentStatus\")", snapshot, StringComparison.Ordinal);
+            AssertModelPrimaryKey(snapshot, "Company", "EID");
+            AssertModelPrimaryKey(snapshot, "Department", "EID");
+            AssertModelPrimaryKey(snapshot, "Position", "EID");
+            AssertModelPrimaryKey(snapshot, "Person", "EID");
+            AssertModelPrimaryKey(snapshot, "PersonUserLink", "EID");
         }
     }
 
@@ -218,6 +223,28 @@ public class EfOrganizationRepositoryTests
         }
     }
 
+    [Fact]
+    public void MigrationFiles_BackfillPersonUserLinkEidBeforePrimaryKeySwitch()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var sqlServerMigration = ReadMigration(
+            repositoryRoot,
+            "platform-persistence-efcore.migrations.sqlserver",
+            "AlignModelMetadataEntityKeys");
+        var mySqlMigration = ReadMigration(
+            repositoryRoot,
+            "platform-persistence-efcore.migrations.mysql",
+            "AlignModelMetadataEntityKeys");
+        var oracleMigration = ReadMigration(
+            repositoryRoot,
+            "platform-persistence-efcore.migrations.oracle",
+            "AlignModelMetadataEntityKeys");
+
+        AssertPersonUserLinkBackfillPrecedesKeySwitch(sqlServerMigration, "SET [EID] = [PersonId]");
+        AssertPersonUserLinkBackfillPrecedesKeySwitch(mySqlMigration, "SET `EID` = `PersonId`");
+        AssertPersonUserLinkBackfillPrecedesKeySwitch(oracleMigration, @"SET \""EID\"" = \""PersonId\""");
+    }
+
     private static EfPlatformDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -245,15 +272,52 @@ public class EfOrganizationRepositoryTests
 
     private static string ExtractPersonSection(string snapshot)
     {
-        const string personMarker = "modelBuilder.Entity(\"Person\", b =>";
-        const string nextEntityMarker = "modelBuilder.Entity(\"PersonUserLink\", b =>";
+        return ExtractModelSection(snapshot, "Person");
+    }
 
-        var start = snapshot.IndexOf(personMarker, StringComparison.Ordinal);
-        var end = snapshot.IndexOf(nextEntityMarker, StringComparison.Ordinal);
+    private static void AssertModelPrimaryKey(string snapshot, string modelName, string primaryKey)
+    {
+        var section = ExtractModelSection(snapshot, modelName);
 
-        Assert.True(start >= 0, "快照中缺少 Person 实体定义。");
-        Assert.True(end > start, "快照中无法定位 Person 实体定义的结束位置。");
+        Assert.Contains($"b.HasKey(\"{primaryKey}\")", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.HasKey(\"Id\")", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.HasKey(\"PersonId\")", section, StringComparison.Ordinal);
+    }
 
-        return snapshot[start..end];
+    private static string ExtractModelSection(string snapshot, string modelName)
+    {
+        var marker = $"modelBuilder.Entity(\"{modelName}\", b =>";
+        const string nextMarker = "modelBuilder.Entity(\"";
+
+        var start = snapshot.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"快照中缺少 {modelName} 实体定义。");
+
+        var next = snapshot.IndexOf(nextMarker, start + marker.Length, StringComparison.Ordinal);
+        return next > start ? snapshot[start..next] : snapshot[start..];
+    }
+
+    private static string ReadMigration(string repositoryRoot, string migrationProject, string migrationName)
+    {
+        var migrationDirectory = Path.Combine(repositoryRoot, "server", migrationProject, "Migrations");
+        var migrationPath = Directory
+            .GetFiles(migrationDirectory, $"*_{migrationName}.cs")
+            .Single(path => !path.EndsWith(".Designer.cs", StringComparison.Ordinal));
+
+        return File.ReadAllText(migrationPath);
+    }
+
+    private static void AssertPersonUserLinkBackfillPrecedesKeySwitch(string migration, string backfillSql)
+    {
+        var backfillIndex = migration.IndexOf(backfillSql, StringComparison.Ordinal);
+        var primaryKeyIndex = migration.IndexOf(
+            "AddPrimaryKey(\r\n                name: \"PK_PersonUserLink\"",
+            StringComparison.Ordinal);
+        var uniqueIndexIndex = migration.IndexOf(
+            "CreateIndex(\r\n                name: \"UX_PersonUserLink_EID\"",
+            StringComparison.Ordinal);
+
+        Assert.True(backfillIndex >= 0, "迁移缺少 PersonUserLink.EID 历史数据回填。");
+        Assert.True(primaryKeyIndex > backfillIndex, "PersonUserLink.EID 必须先回填，再切换主键。");
+        Assert.True(uniqueIndexIndex > backfillIndex, "PersonUserLink.EID 必须先回填，再创建唯一索引。");
     }
 }

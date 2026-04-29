@@ -65,6 +65,8 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
+            // PersonUserLink 的业务唯一键仍是 PersonId；实体主键 EID 用同一稳定值承接。
+            ["EID"] = link.PersonId.ToString(),
             ["PersonId"] = link.PersonId.ToString()
         };
 
@@ -74,6 +76,7 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
 
     private static void CopyToEntity(PersonUserLink link, IDictionary<string, object?> entity)
     {
+        entity["EID"] = link.PersonId.ToString();
         entity["PersonId"] = link.PersonId.ToString();
         entity["UserId"] = link.UserId;
         entity["LinkedAt"] = link.LinkedAt;

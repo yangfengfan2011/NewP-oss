@@ -28,7 +28,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(department => EF.Property<string>(department, "Id") == departmentId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(department => EF.Property<string>(department, "EID") == departmentId.ToString(), cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -44,7 +44,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
         return entities.Any(entity =>
             GetGuid(entity, "CompanyId") == companyId &&
             GetNullableGuid(entity, "ParentDepartmentId") == parentDepartmentId &&
-            GetGuid(entity, "Id") != excludedDepartmentId &&
+            GetGuid(entity, "EID") != excludedDepartmentId &&
             string.Equals(GetString(entity, "Code"), code, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -57,7 +57,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
     public async Task UpdateAsync(Department department, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == department.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == department.Id.ToString(), cancellationToken);
 
         if (entity is null)
         {
@@ -72,7 +72,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
 
     private static Department Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "Id"),
+        Id = GetGuid(entity, "EID"),
         CompanyId = GetGuid(entity, "CompanyId"),
         ParentDepartmentId = GetNullableGuid(entity, "ParentDepartmentId"),
         Code = GetString(entity, "Code") ?? string.Empty,
@@ -87,7 +87,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = department.Id.ToString()
+            ["EID"] = department.Id.ToString()
         };
 
         CopyToEntity(department, entity);
@@ -96,7 +96,8 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
 
     private static void CopyToEntity(Department department, IDictionary<string, object?> entity)
     {
-        entity["Id"] = department.Id.ToString();
+        // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
+        entity["EID"] = department.Id.ToString();
         entity["CompanyId"] = department.CompanyId.ToString();
         entity["ParentDepartmentId"] = department.ParentDepartmentId?.ToString();
         entity["Code"] = department.Code;

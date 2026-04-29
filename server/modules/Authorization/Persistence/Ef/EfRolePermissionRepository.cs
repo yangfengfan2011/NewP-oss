@@ -61,7 +61,7 @@ public sealed class EfRolePermissionRepository : IRolePermissionRepository
 
     private static RolePermission Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        Id = GetString(entity, "EID")!,
         RoleId = GetString(entity, "RoleId")!,
         PermissionId = GetString(entity, "PermissionId")!,
         GrantedAt = GetDateTime(entity, "GrantedAt"),
@@ -70,7 +70,8 @@ public sealed class EfRolePermissionRepository : IRolePermissionRepository
 
     private static Dictionary<string, object?> ToEntity(RolePermission item) => new(StringComparer.Ordinal)
     {
-        ["Id"] = item.Id,
+        // RolePermission 已按 metadata 投影为实体，关系对象自身主键固定为 EID。
+        ["EID"] = item.Id,
         ["RoleId"] = item.RoleId,
         ["PermissionId"] = item.PermissionId,
         ["GrantedAt"] = item.GrantedAt,

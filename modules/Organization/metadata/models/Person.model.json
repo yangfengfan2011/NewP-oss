@@ -43,13 +43,15 @@
       {
         "name": "CompanyId",
         "storage": {
-          "type": "guid"
+          "type": "guid",
+          "nullable": true
         }
       },
       {
         "name": "DepartmentId",
         "storage": {
-          "type": "guid"
+          "type": "guid",
+          "nullable": true
         }
       },
       {
@@ -62,7 +64,8 @@
       {
         "name": "EmploymentStatus",
         "storage": {
-          "type": "string"
+          "type": "string",
+          "nullable": true
         },
         "contract": {
           "valueType": "enum",

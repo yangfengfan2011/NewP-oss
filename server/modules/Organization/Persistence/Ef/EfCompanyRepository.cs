@@ -24,7 +24,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(company => EF.Property<string>(company, "Id") == companyId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(company => EF.Property<string>(company, "EID") == companyId.ToString(), cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -47,7 +47,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     public async Task UpdateAsync(Company company, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == company.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == company.Id.ToString(), cancellationToken);
 
         if (entity is null)
         {
@@ -62,7 +62,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
 
     private static Company Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "Id"),
+        Id = GetGuid(entity, "EID"),
         Code = GetString(entity, "Code") ?? string.Empty,
         Name = GetString(entity, "Name") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
@@ -75,7 +75,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = company.Id.ToString()
+            ["EID"] = company.Id.ToString()
         };
 
         CopyToEntity(company, entity);
@@ -84,7 +84,8 @@ public sealed class EfCompanyRepository : ICompanyRepository
 
     private static void CopyToEntity(Company company, IDictionary<string, object?> entity)
     {
-        entity["Id"] = company.Id.ToString();
+        // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
+        entity["EID"] = company.Id.ToString();
         entity["Code"] = company.Code;
         entity["Name"] = company.Name;
         entity["IsEnabled"] = company.IsEnabled;

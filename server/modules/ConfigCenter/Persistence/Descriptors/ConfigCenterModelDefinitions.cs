@@ -1,38 +1,20 @@
-using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 
 namespace ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 
 public static class ConfigCenterModelDefinitions
 {
-    public static readonly ModelDefinition ValueListItem = new(
-        "ValueListItem",
-        "ValueListItem",
-        ModelKind.Entity,
-        new[]
-        {
-            new FieldDefinition("Id", "Id", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
-            new FieldDefinition("Code", "Code", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false),
-            new FieldDefinition("Description", "Description", FieldKind.Scalar, FieldValueType.Description, "string", false, false, false),
-            new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true)
-        },
-        new[]
-        {
-            new IndexDefinition("UX_ValueListItem_Code", new[] { "Code" }, true)
-        });
+    private static readonly Lazy<IReadOnlyList<ModelDefinition>> Definitions = new(
+        static () => new ConfigCenterModelMetadataProvider().GetDefinitions());
 
-    private static readonly Lazy<ModelDefinition> ConfigItemDefinition = new(() =>
-        // ConfigItem 先通过元数据 provider 进入新链路，ValueListItem 仍保留现有手写定义。
-        new ConfigCenterModelMetadataProvider().LoadConfigItem());
+    /// <summary>
+    /// 配置中心运行时模型定义。
+    /// 该 legacy facade 只转发 metadata provider，避免重新形成手写定义真源。
+    /// </summary>
+    public static IReadOnlyList<ModelDefinition> All => Definitions.Value;
 
-    public static ModelDefinition ConfigItem => ConfigItemDefinition.Value;
-
-    public static readonly IReadOnlyList<ModelDefinition> All = new[]
-    {
-        ValueListItem,
-        ConfigItem
-    };
+    /// <summary>
+    /// 兼容既有调用方的单模型入口；真实定义仍只来自 metadata provider 聚合结果。
+    /// </summary>
+    public static ModelDefinition ConfigItem => All.Single(static model => model.Name == "ConfigItem");
 }

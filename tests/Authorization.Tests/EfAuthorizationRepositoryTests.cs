@@ -75,6 +75,10 @@ public class EfAuthorizationRepositoryTests
             Assert.Contains("b.ToTable(\"UserRole\"", snapshot, StringComparison.Ordinal);
             Assert.Contains(".HasColumnName(\"Code\")", snapshot, StringComparison.Ordinal);
             Assert.Contains(".HasColumnName(\"RoleId\")", snapshot, StringComparison.Ordinal);
+            AssertModelPrimaryKey(snapshot, "Role", "EID");
+            AssertModelPrimaryKey(snapshot, "Permission", "EID");
+            AssertModelPrimaryKey(snapshot, "RolePermission", "EID");
+            AssertModelPrimaryKey(snapshot, "UserRole", "EID");
         }
     }
 
@@ -101,5 +105,25 @@ public class EfAuthorizationRepositoryTests
         }
 
         throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
+    private static void AssertModelPrimaryKey(string snapshot, string modelName, string primaryKey)
+    {
+        var section = ExtractModelSection(snapshot, modelName);
+
+        Assert.Contains($"b.HasKey(\"{primaryKey}\")", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.HasKey(\"Id\")", section, StringComparison.Ordinal);
+    }
+
+    private static string ExtractModelSection(string snapshot, string modelName)
+    {
+        var marker = $"modelBuilder.Entity(\"{modelName}\", b =>";
+        const string nextMarker = "modelBuilder.Entity(\"";
+
+        var start = snapshot.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"快照中缺少 {modelName} 实体定义。");
+
+        var next = snapshot.IndexOf(nextMarker, start + marker.Length, StringComparison.Ordinal);
+        return next > start ? snapshot[start..next] : snapshot[start..];
     }
 }

@@ -24,7 +24,7 @@ public sealed class EfRoleRepository : IRoleRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(role => EF.Property<string>(role, "Id") == roleId, cancellationToken);
+            .FirstOrDefaultAsync(role => EF.Property<string>(role, "EID") == roleId, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -43,7 +43,7 @@ public sealed class EfRoleRepository : IRoleRepository
         var ids = roleIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var entities = await Entities
             .AsNoTracking()
-            .Where(role => ids.Contains(EF.Property<string>(role, "Id")))
+            .Where(role => ids.Contains(EF.Property<string>(role, "EID")))
             .ToListAsync(cancellationToken);
 
         return entities.Select(Map).ToList();
@@ -69,7 +69,7 @@ public sealed class EfRoleRepository : IRoleRepository
     public async Task UpdateAsync(Role role, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == role.Id, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == role.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -83,7 +83,7 @@ public sealed class EfRoleRepository : IRoleRepository
     public async Task DeleteAsync(string roleId, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == roleId, cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == roleId, cancellationToken);
 
         if (entity is null)
         {
@@ -98,7 +98,7 @@ public sealed class EfRoleRepository : IRoleRepository
 
     private static Role Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        Id = GetString(entity, "EID")!,
         Code = GetString(entity, "Code")!,
         Name = GetString(entity, "Name")!,
         Description = GetString(entity, "Description"),
@@ -114,7 +114,7 @@ public sealed class EfRoleRepository : IRoleRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = role.Id
+            ["EID"] = role.Id
         };
 
         CopyToEntity(role, entity);
@@ -123,7 +123,8 @@ public sealed class EfRoleRepository : IRoleRepository
 
     private static void CopyToEntity(Role role, IDictionary<string, object?> entity)
     {
-        entity["Id"] = role.Id;
+        // 领域对象仍暴露 Id；持久化真源切换后主键字段固定为 EID。
+        entity["EID"] = role.Id;
         entity["Code"] = role.Code;
         entity["Name"] = role.Name;
         entity["Description"] = role.Description;

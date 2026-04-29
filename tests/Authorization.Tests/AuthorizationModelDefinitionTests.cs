@@ -1,5 +1,4 @@
-using ICP.Platform.Modeling;
-using ICP.Platform.Modeling.Validation;
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using Xunit;
 
@@ -8,30 +7,70 @@ namespace ICP.Platform.Modules.Authorization.Tests;
 public class AuthorizationModelDefinitionTests
 {
     [Fact]
-    public void Definitions_ContainExpectedEntityAndLinkModels()
+    public void LegacyFacade_DefinitionsMatchMetadataProvider()
     {
-        var definitions = AuthorizationModelDefinitions.All;
+        var expected = new AuthorizationModelMetadataProvider().GetDefinitions();
+        var actual = AuthorizationModelDefinitions.All;
 
-        Assert.Contains(definitions, static definition => definition.Name == "Role" && definition.Kind == ModelKind.Entity);
-        Assert.Contains(definitions, static definition => definition.Name == "Permission" && definition.Kind == ModelKind.Entity);
-        Assert.Contains(definitions, static definition => definition.Name == "RolePermission" && definition.Kind == ModelKind.Link);
-        Assert.Contains(definitions, static definition => definition.Name == "UserRole" && definition.Kind == ModelKind.Link);
+        AssertDefinitionsEquivalent(expected, actual);
+    }
 
-        var validator = new ModelDefinitionValidator();
-        foreach (var definition in definitions)
+    private static void AssertDefinitionsEquivalent(
+        IReadOnlyList<ModelDefinition> expected,
+        IReadOnlyList<ModelDefinition> actual)
+    {
+        Assert.Equal(expected.Select(static definition => definition.Name), actual.Select(static definition => definition.Name));
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (var index = 0; index < expected.Count; index++)
         {
-            validator.Validate(definition);
+            var expectedDefinition = expected[index];
+            var actualDefinition = actual[index];
+
+            Assert.Equal(expectedDefinition.Name, actualDefinition.Name);
+            Assert.Equal(expectedDefinition.Kind, actualDefinition.Kind);
+            Assert.Equal(expectedDefinition.TableName, actualDefinition.TableName);
+            AssertFieldsEquivalent(expectedDefinition.Fields, actualDefinition.Fields);
+            AssertIndexesEquivalent(expectedDefinition.Indexes, actualDefinition.Indexes);
         }
     }
 
-    [Fact]
-    public void Authorization_DefinitionsUsePascalCaseStoreNames()
+    private static void AssertFieldsEquivalent(
+        IReadOnlyList<FieldDefinition> expected,
+        IReadOnlyList<FieldDefinition> actual)
     {
-        var role = Assert.Single(AuthorizationModelDefinitions.All, item => item.Name == "Role");
+        Assert.Equal(expected.Count, actual.Count);
 
-        Assert.Equal("Role", role.TableName);
-        Assert.Contains(role.Fields, static field => field.Name == "Id" && field.StoreName == "Id");
-        Assert.Contains(role.Fields, static field => field.Name == "Code" && field.StoreName == "Code");
-        Assert.Contains(role.Fields, static field => field.Name == "Name" && field.StoreName == "Name");
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var expectedField = expected[index];
+            var actualField = actual[index];
+
+            Assert.Equal(expectedField.Name, actualField.Name);
+            Assert.Equal(expectedField.StoreName, actualField.StoreName);
+            Assert.Equal(expectedField.Kind, actualField.Kind);
+            Assert.Equal(expectedField.ValueType, actualField.ValueType);
+            Assert.Equal(expectedField.StoreType, actualField.StoreType);
+            Assert.Equal(expectedField.Required, actualField.Required);
+            Assert.Equal(expectedField.IsPrimaryKey, actualField.IsPrimaryKey);
+            Assert.Equal(expectedField.IsAuditField, actualField.IsAuditField);
+        }
+    }
+
+    private static void AssertIndexesEquivalent(
+        IReadOnlyList<IndexDefinition> expected,
+        IReadOnlyList<IndexDefinition> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var expectedIndex = expected[index];
+            var actualIndex = actual[index];
+
+            Assert.Equal(expectedIndex.Name, actualIndex.Name);
+            Assert.Equal(expectedIndex.Fields, actualIndex.Fields);
+            Assert.Equal(expectedIndex.IsUnique, actualIndex.IsUnique);
+        }
     }
 }

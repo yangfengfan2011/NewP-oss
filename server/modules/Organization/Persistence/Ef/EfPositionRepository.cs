@@ -28,7 +28,7 @@ public sealed class EfPositionRepository : IPositionRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(position => EF.Property<string>(position, "Id") == positionId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(position => EF.Property<string>(position, "EID") == positionId.ToString(), cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -42,7 +42,7 @@ public sealed class EfPositionRepository : IPositionRepository
     public async Task UpdateAsync(Position position, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "Id") == position.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == position.Id.ToString(), cancellationToken);
 
         if (entity is null)
         {
@@ -57,7 +57,7 @@ public sealed class EfPositionRepository : IPositionRepository
 
     private static Position Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "Id"),
+        Id = GetGuid(entity, "EID"),
         CompanyId = GetGuid(entity, "CompanyId"),
         DepartmentId = GetGuid(entity, "DepartmentId"),
         Code = GetString(entity, "Code") ?? string.Empty,
@@ -73,7 +73,7 @@ public sealed class EfPositionRepository : IPositionRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["Id"] = position.Id.ToString()
+            ["EID"] = position.Id.ToString()
         };
 
         CopyToEntity(position, entity);
@@ -82,7 +82,8 @@ public sealed class EfPositionRepository : IPositionRepository
 
     private static void CopyToEntity(Position position, IDictionary<string, object?> entity)
     {
-        entity["Id"] = position.Id.ToString();
+        // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
+        entity["EID"] = position.Id.ToString();
         entity["CompanyId"] = position.CompanyId.ToString();
         entity["DepartmentId"] = position.DepartmentId.ToString();
         entity["Code"] = position.Code;

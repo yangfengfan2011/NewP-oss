@@ -65,7 +65,7 @@ public sealed class EfUserRoleRepository : IUserRoleRepository
 
     private static UserRole Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetString(entity, "Id")!,
+        Id = GetString(entity, "EID")!,
         UserId = GetString(entity, "UserId")!,
         RoleId = GetString(entity, "RoleId")!,
         AssignedAt = GetDateTime(entity, "AssignedAt"),
@@ -74,7 +74,8 @@ public sealed class EfUserRoleRepository : IUserRoleRepository
 
     private static Dictionary<string, object?> ToEntity(UserRole item) => new(StringComparer.Ordinal)
     {
-        ["Id"] = item.Id,
+        // UserRole 已按 metadata 投影为实体，关系对象自身主键固定为 EID。
+        ["EID"] = item.Id,
         ["UserId"] = item.UserId,
         ["RoleId"] = item.RoleId,
         ["AssignedAt"] = item.AssignedAt,

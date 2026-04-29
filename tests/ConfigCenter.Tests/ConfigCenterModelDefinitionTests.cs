@@ -1,4 +1,4 @@
-using ICP.Platform.Modeling.Validation;
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 using Xunit;
 
@@ -7,45 +7,78 @@ namespace ICP.Platform.Modules.ConfigCenter.Tests;
 public class ConfigCenterModelDefinitionTests
 {
     [Fact]
-    public void ConfigItem_DefinitionContainsPrimaryKeyAndUniqueIndex()
+    public void ConfigItem_CompatPropertyResolvesFromAll()
     {
-        var definition = ConfigCenterModelDefinitions.ConfigItem;
+        var fromAll = Assert.Single(ConfigCenterModelDefinitions.All, definition => definition.Name == "ConfigItem");
 
-        Assert.Contains(definition.Fields, static field => field.Name == "EID" && field.IsPrimaryKey);
-        Assert.Contains(definition.Fields, static field => field.Name == "ENAME");
-        Assert.Contains(definition.Fields, static field => field.Name == "Value");
-
-        var validator = new ModelDefinitionValidator();
-        validator.Validate(definition);
+        Assert.Same(fromAll, ConfigCenterModelDefinitions.ConfigItem);
     }
 
     [Fact]
-    public void All_DefinitionsContainValueListItemModel()
+    public void LegacyFacade_DefinitionsMatchMetadataProvider()
     {
-        var definition = Assert.Single(
-            ConfigCenterModelDefinitions.All,
-            model => model.Name == "ValueListItem");
+        var expected = new ConfigCenterModelMetadataProvider().GetDefinitions();
+        var actual = ConfigCenterModelDefinitions.All;
 
-        Assert.Equal("ValueListItem", definition.TableName);
-        Assert.Contains(definition.Fields, static field => field.Name == "Code" && field.Required);
-        Assert.Contains(definition.Fields, static field => field.Name == "Name" && field.Required);
-        Assert.Contains(
-            definition.Indexes,
-            static index => index.Name == "UX_ValueListItem_Code" && index.IsUnique);
-
-        var validator = new ModelDefinitionValidator();
-        validator.Validate(definition);
+        AssertDefinitionsEquivalent(expected, actual);
     }
 
-    [Fact]
-    public void ValueListItem_UsesPascalCaseTableAndStoreNames()
+    private static void AssertDefinitionsEquivalent(
+        IReadOnlyList<ModelDefinition> expected,
+        IReadOnlyList<ModelDefinition> actual)
     {
-        var definition = Assert.Single(
-            ConfigCenterModelDefinitions.All,
-            model => model.Name == "ValueListItem");
+        Assert.Equal(expected.Select(static definition => definition.Name), actual.Select(static definition => definition.Name));
+        Assert.Equal(expected.Count, actual.Count);
 
-        Assert.Equal("ValueListItem", definition.TableName);
-        Assert.Contains(definition.Fields, static field => field.Name == "Id" && field.StoreName == "Id" && field.IsPrimaryKey);
-        Assert.Contains(definition.Fields, static field => field.Name == "Name" && field.StoreName == "Name");
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var expectedDefinition = expected[index];
+            var actualDefinition = actual[index];
+
+            Assert.Equal(expectedDefinition.Name, actualDefinition.Name);
+            Assert.Equal(expectedDefinition.Kind, actualDefinition.Kind);
+            Assert.Equal(expectedDefinition.TableName, actualDefinition.TableName);
+            AssertFieldsEquivalent(expectedDefinition.Fields, actualDefinition.Fields);
+            AssertIndexesEquivalent(expectedDefinition.Indexes, actualDefinition.Indexes);
+        }
+    }
+
+    private static void AssertFieldsEquivalent(
+        IReadOnlyList<FieldDefinition> expected,
+        IReadOnlyList<FieldDefinition> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var expectedField = expected[index];
+            var actualField = actual[index];
+
+            Assert.Equal(expectedField.Name, actualField.Name);
+            Assert.Equal(expectedField.StoreName, actualField.StoreName);
+            Assert.Equal(expectedField.Kind, actualField.Kind);
+            Assert.Equal(expectedField.ValueType, actualField.ValueType);
+            Assert.Equal(expectedField.StoreType, actualField.StoreType);
+            Assert.Equal(expectedField.Required, actualField.Required);
+            Assert.Equal(expectedField.IsPrimaryKey, actualField.IsPrimaryKey);
+            Assert.Equal(expectedField.IsAuditField, actualField.IsAuditField);
+        }
+    }
+
+    private static void AssertIndexesEquivalent(
+        IReadOnlyList<IndexDefinition> expected,
+        IReadOnlyList<IndexDefinition> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var expectedIndex = expected[index];
+            var actualIndex = actual[index];
+
+            Assert.Equal(expectedIndex.Name, actualIndex.Name);
+            Assert.Equal(expectedIndex.Fields, actualIndex.Fields);
+            Assert.Equal(expectedIndex.IsUnique, actualIndex.IsUnique);
+        }
     }
 }

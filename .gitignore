@@ -94,3 +94,9 @@ artifacts/
 !docs/designs/platform/artifacts/**
 .codex-temp/dev-frontend.pid
 .codex-temp/dev-host-api.pid
+.codex-temp/model-switch-video-frames/direct-video-page.png
+.codex-temp/model-switch-video-frames/seek-0_1.png
+.codex-temp/model-switch-video-frames/seek-1.png
+.codex-temp/model-switch-video-frames/seek-2.png
+.codex-temp/model-switch-video-frames/seek-3.png
+.codex-temp/model-switch-video-frames/seek-4.png

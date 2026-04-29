@@ -2,4 +2,5 @@
 # 相对路径以本文件所在目录为基准解析。
 
 ../designs/detailed-design-template.md
+../designs/subagents-new-platform-collaboration-design.md
 ai-first-execution-standard.md

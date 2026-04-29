@@ -1,10 +1,14 @@
 using System.Text;
-using ICP.Platform.Tools.DevSchemaSync.Database;
-using ICP.Platform.Tools.DevSchemaSync.Planning;
-using ICP.Platform.Tools.DevSchemaSync.Schema;
+using ICP.Platform.Persistence.DevSync.Database;
+using ICP.Platform.Persistence.DevSync.Planning;
+using ICP.Platform.Persistence.DevSync.Schema;
 
-namespace ICP.Platform.Tools.DevSchemaSync.Execution;
+namespace ICP.Platform.Persistence.DevSync.Execution;
 
+/// <summary>
+/// 为结构同步计划生成 SQL Server 预览语句。
+/// 预览既供 CLI 展示，也作为执行器输入；无法安全定位表/列时会抛出异常并阻断执行。
+/// </summary>
 public sealed class SchemaSqlGenerator
 {
     /// <summary>

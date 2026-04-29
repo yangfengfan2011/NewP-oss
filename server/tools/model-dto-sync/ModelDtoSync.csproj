@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\..\platform-persistence-devsync\PlatformPersistence.DevSync.csproj" />
     <ProjectReference Include="..\..\platform-persistence-composition\PlatformPersistence.Composition.csproj" />
   </ItemGroup>
 

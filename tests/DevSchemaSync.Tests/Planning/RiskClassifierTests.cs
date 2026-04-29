@@ -1,4 +1,4 @@
-using ICP.Platform.Tools.DevSchemaSync.Planning;
+using ICP.Platform.Persistence.DevSync.Planning;
 using Xunit;
 
 namespace ICP.Platform.DevSchemaSync.Tests.Planning;

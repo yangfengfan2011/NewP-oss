@@ -1,10 +1,14 @@
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modeling.Validation;
-using ICP.Platform.Tools.DevSchemaSync.Models;
+using ICP.Platform.Persistence.DevSync.Models;
 
-namespace ICP.Platform.Tools.DevSchemaSync.Schema;
+namespace ICP.Platform.Persistence.DevSync.Schema;
 
+/// <summary>
+/// 将模型 authoring 文档投影为目标数据库结构。
+/// 该 builder 复用 modeling 投影链，避免 devsync 复制字段、索引或类型规则；校验失败会直接向上暴露。
+/// </summary>
 public sealed class TargetSchemaBuilder
 {
     private readonly string _repositoryRoot;
@@ -12,11 +16,20 @@ public sealed class TargetSchemaBuilder
     private readonly ModelMetadataValidator _validator = new();
     private readonly ModelMetadataProjector _projector = new();
 
+    /// <summary>
+    /// 创建目标 schema builder。
+    /// </summary>
+    /// <param name="repositoryRoot">仓库根目录，用于定位共享 storage type map。</param>
     public TargetSchemaBuilder(string repositoryRoot)
     {
         _repositoryRoot = repositoryRoot;
     }
 
+    /// <summary>
+    /// 从已发现模型生成目标 schema；模型校验或类型映射失败即表示 authoring 输入不可用于同步。
+    /// </summary>
+    /// <param name="models">已发现的模型文档集合。</param>
+    /// <returns>目标数据库结构视图。</returns>
     public TargetSchema Build(IReadOnlyList<DiscoveredModelDocument> models)
     {
         ArgumentNullException.ThrowIfNull(models);

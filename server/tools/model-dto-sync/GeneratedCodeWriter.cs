@@ -1,4 +1,5 @@
 using System.Text;
+using ICP.Platform.Persistence.DevSync.Rendering;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -23,32 +24,17 @@ public sealed class GeneratedCodeWriter
     // 生成物签名跨平台复现依赖稳定源码文本，这里统一收口 LF 换行。
     internal static string NormalizeLineEndings(string sourceCode)
     {
-        return sourceCode.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+        return BaseDtoSourceRenderer.NormalizeLineEndings(sourceCode);
     }
 
-    // 基础 DTO 仍落在模块 DTO 命名空间，避免任务 6 替换手写 DTO 后破坏既有引用。
-    internal static string WrapInNamespace(
+    /// <summary>
+    /// 基础 DTO 仍落在模块 DTO 命名空间；实际包装规则委托给 devsync 共享 helper，避免校验端与写入端分叉。
+    /// </summary>
+    public static string WrapInNamespace(
         string sourceCode,
         string namespaceName,
         IReadOnlyList<string>? usingNamespaces = null)
     {
-        ArgumentNullException.ThrowIfNull(sourceCode);
-        ArgumentException.ThrowIfNullOrWhiteSpace(namespaceName);
-
-        var normalizedSourceCode = NormalizeLineEndings(sourceCode);
-        if (usingNamespaces is null || usingNamespaces.Count == 0)
-        {
-            return NormalizeLineEndings($"#nullable enable annotations\n\nnamespace {namespaceName};\n\n{normalizedSourceCode}");
-        }
-
-        var usings = string.Join(
-            "\n",
-            usingNamespaces
-                .Where(static item => !string.IsNullOrWhiteSpace(item))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(static item => item, StringComparer.Ordinal)
-                .Select(static item => $"using {item};"));
-
-        return NormalizeLineEndings($"#nullable enable annotations\n\n{usings}\n\nnamespace {namespaceName};\n\n{normalizedSourceCode}");
+        return BaseDtoSourceRenderer.WrapInNamespace(sourceCode, namespaceName, usingNamespaces);
     }
 }

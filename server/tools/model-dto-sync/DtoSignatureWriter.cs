@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using System.Text;
+using ICP.Platform.Persistence.DevSync.Rendering;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -30,9 +30,7 @@ public sealed class DtoSignatureWriter
     {
         ArgumentNullException.ThrowIfNull(sourceCode);
 
-        var normalizedSourceCode = GeneratedCodeWriter.NormalizeLineEndings(sourceCode);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedSourceCode));
-        return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
+        return BaseDtoSourceRenderer.ComputeSignature(sourceCode);
     }
 
     private static string Render(string moduleId, IReadOnlyDictionary<string, string> signatures)

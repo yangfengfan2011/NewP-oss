@@ -1,15 +1,27 @@
-namespace ICP.Platform.Tools.DevSchemaSync.Models;
+namespace ICP.Platform.Persistence.DevSync.Models;
 
-// 模型发现只负责全量扫描和排序，不做额外解释，方便后续把发现结果交给独立内核处理。
+/// <summary>
+/// 发现模块目录下的模型 authoring 文档，并保持稳定排序。
+/// 该服务只负责扫描与加载；校验、投影和失败阻断由后续内核阶段处理。
+/// </summary>
 public sealed class ModelDiscoveryService
 {
     private readonly SingleRootModelDocumentLoader loader;
 
+    /// <summary>
+    /// 创建模型发现服务；调用方注入 loader 以便测试复用同一发现规则。
+    /// </summary>
+    /// <param name="loader">模型文档加载器。</param>
     public ModelDiscoveryService(SingleRootModelDocumentLoader loader)
     {
         this.loader = loader;
     }
 
+    /// <summary>
+    /// 从仓库根的 <c>modules/*/metadata/models</c> 发现全部模型文档；缺少 modules 目录时返回空集合。
+    /// </summary>
+    /// <param name="repositoryRoot">仓库根目录。</param>
+    /// <returns>按模块和模型名稳定排序的发现结果。</returns>
     public IReadOnlyList<DiscoveredModelDocument> DiscoverAll(string repositoryRoot)
     {
         var modulesRoot = Path.Combine(Path.GetFullPath(repositoryRoot), "modules");

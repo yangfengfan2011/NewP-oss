@@ -1,12 +1,20 @@
-using ICP.Platform.Tools.DevSchemaSync.Database;
-using ICP.Platform.Tools.DevSchemaSync.Schema;
+using ICP.Platform.Persistence.DevSync.Database;
+using ICP.Platform.Persistence.DevSync.Schema;
 
-namespace ICP.Platform.Tools.DevSchemaSync.Planning;
+namespace ICP.Platform.Persistence.DevSync.Planning;
 
+/// <summary>
+/// 对比目标 schema 与数据库快照并生成结构同步计划。
+/// 该内核只做显式 diff 和冲突阻断，不依赖复制顺序、隐式覆盖或运行时视图作为 authoring 真源。
+/// </summary>
 public sealed class SchemaDiffEngine
 {
     private readonly RiskClassifier _riskClassifier;
 
+    /// <summary>
+    /// 创建结构 diff 内核。
+    /// </summary>
+    /// <param name="riskClassifier">结构操作风险分类器。</param>
     public SchemaDiffEngine(RiskClassifier riskClassifier)
     {
         _riskClassifier = riskClassifier ?? throw new ArgumentNullException(nameof(riskClassifier));

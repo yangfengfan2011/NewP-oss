@@ -1,5 +1,5 @@
 using ICP.Platform.Tools.DevSchemaSync.Configuration;
-using ICP.Platform.Tools.DevSchemaSync.Models;
+using ICP.Platform.Persistence.DevSync.Models;
 using Xunit;
 
 namespace ICP.Platform.DevSchemaSync.Tests.Models;

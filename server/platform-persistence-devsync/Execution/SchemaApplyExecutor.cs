@@ -1,20 +1,36 @@
 using Microsoft.Data.SqlClient;
-using ICP.Platform.Tools.DevSchemaSync.Planning;
+using ICP.Platform.Persistence.DevSync.Planning;
 
-namespace ICP.Platform.Tools.DevSchemaSync.Execution;
+namespace ICP.Platform.Persistence.DevSync.Execution;
 
+/// <summary>
+/// 结构同步执行结果，供 Host/CLI 判断是否已执行、是否由确认策略取消，以及实际影响的操作/语句数量。
+/// </summary>
+/// <param name="Applied">是否完成执行；为 false 时调用方应结合 Cancelled 或上层 diagnostics 定位失败信号。</param>
+/// <param name="Cancelled">是否被确认策略取消；取消必须阻断开发态启动。</param>
+/// <param name="ExecutedOperationCount">已执行的计划操作数量。</param>
+/// <param name="ExecutedStatementCount">已执行的 SQL 语句数量。</param>
 public sealed record ApplyResult(
     bool Applied,
     bool Cancelled,
     int ExecutedOperationCount,
     int ExecutedStatementCount);
 
+/// <summary>
+/// 结构同步 SQL 执行器；执行职责收口在代码内核，调用方必须先完成计划审查和显式确认。
+/// </summary>
 public sealed class SchemaApplyExecutor
 {
     private readonly Func<SchemaPlan, bool> _confirmAll;
     private readonly Func<IReadOnlyList<SchemaOperation>, bool> _confirmRisk;
     private readonly Func<IReadOnlyList<string>, CancellationToken, Task<int>> _executeSqlAsync;
 
+    /// <summary>
+    /// 创建可注入确认策略和 SQL 执行委托的执行器；测试可借此验证阻断路径不会触达数据库。
+    /// </summary>
+    /// <param name="confirmAll">整体计划确认策略。</param>
+    /// <param name="confirmRisk">Confirm 风险操作确认策略；任务 7 正常路径不会放行 Confirm 操作。</param>
+    /// <param name="executeSqlAsync">SQL 批量执行委托。</param>
     public SchemaApplyExecutor(
         Func<SchemaPlan, bool> confirmAll,
         Func<IReadOnlyList<SchemaOperation>, bool> confirmRisk,
@@ -41,6 +57,12 @@ public sealed class SchemaApplyExecutor
             (sqlBatch, cancellationToken) => ExecuteSqlServerBatchAsync(connectionString, sqlBatch, cancellationToken));
     }
 
+    /// <summary>
+    /// 执行已生成 SQL 预览的结构计划；缺少 SQL 预览会抛出异常，供上层 diagnostics 暴露失败信号。
+    /// </summary>
+    /// <param name="plan">已完成风险分类和 SQL 预览生成的结构计划。</param>
+    /// <param name="cancellationToken">取消信号。</param>
+    /// <returns>执行结果，包含取消状态和执行计数。</returns>
     public async Task<ApplyResult> ApplyAsync(SchemaPlan plan, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);

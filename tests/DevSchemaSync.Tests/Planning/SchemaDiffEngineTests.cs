@@ -1,6 +1,6 @@
-using ICP.Platform.Tools.DevSchemaSync.Database;
-using ICP.Platform.Tools.DevSchemaSync.Planning;
-using ICP.Platform.Tools.DevSchemaSync.Schema;
+using ICP.Platform.Persistence.DevSync.Database;
+using ICP.Platform.Persistence.DevSync.Planning;
+using ICP.Platform.Persistence.DevSync.Schema;
 using Xunit;
 
 namespace ICP.Platform.DevSchemaSync.Tests.Planning;

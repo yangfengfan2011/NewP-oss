@@ -1,4 +1,5 @@
 using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Persistence.DevSync.Rendering;
 using ICP.Platform.Tools.ModelDtoSync;
 using Xunit;
 
@@ -83,6 +84,20 @@ public class ModelDtoSyncRunnerTests
         Assert.Equal(
             DtoSignatureWriter.ComputeSignature(linuxSource),
             DtoSignatureWriter.ComputeSignature(windowsSource));
+    }
+
+    [Fact]
+    public void ModelDtoSyncWriters_UseDevSyncSharedRenderingRules()
+    {
+        var sourceCode = "public sealed class RoleDto\r\n{\r\n}\r\n";
+        var namespaceName = "ICP.Platform.Modules.Authorization.DTOs";
+
+        Assert.Equal(
+            BaseDtoSourceRenderer.WrapInNamespace(sourceCode, namespaceName),
+            GeneratedCodeWriter.WrapInNamespace(sourceCode, namespaceName));
+        Assert.Equal(
+            BaseDtoSourceRenderer.ComputeSignature(sourceCode),
+            DtoSignatureWriter.ComputeSignature(sourceCode));
     }
 
     private static string CreateTemporaryRepositoryRoot()

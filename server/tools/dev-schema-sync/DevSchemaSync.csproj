@@ -10,8 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
-    <ProjectReference Include="..\..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+    <ProjectReference Include="..\..\platform-persistence-devsync\PlatformPersistence.DevSync.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,3 +1,5 @@
+using ICP.Platform.Persistence.DevSync.Planning;
+
 namespace ICP.Platform.Tools.DevSchemaSync.Planning;
 
 public static class PlanConsoleWriter

@@ -2,25 +2,26 @@
 
 ## 1. 背景
 
-当前仓库已登记 `platform_explorer`、`contract_reviewer`、`docs_researcher`、`test_fixer` 四类 subagents，能够覆盖摸底、契约审查、资料核对和验证修复。受控实现角色 `module_worker` 已在协作口径中被使用，但本地 agent 配置尚未形成可提交真源，需要在本轮补齐。
+当前仓库已登记 `platform_explorer`、`capability_designer`、`design_reviewer`、`contract_reviewer`、`docs_researcher`、`module_worker`、`test_fixer` 七类 subagents，能够覆盖能力草案、摸底、设计审查、契约审查、资料核对、受控实现和验证修复。
 
 后续路线不再以完整迁移旧平台为目标，而是吸收旧平台中有价值的内容和思想，按新平台目标逐步设计、开发和验证。因此 subagents 的默认分工也应从“迁移盘点”转向“新平台能力设计、设计一致性审查、契约治理和局部实现”。
 
 ## 2. 目标
 
-- 新增 `design_reviewer`，在正式实施前审查详细设计或实施计划是否满足仓库约束。
-- 新增 `capability_designer`，把需求、旧平台经验或产品诉求整理成新平台能力设计草案。
-- 补齐 `module_worker` 本地配置，使“明确文件边界后的受控实现”也有稳定调度入口。
+- 保留 `design_reviewer`，在正式实施前审查详细设计或实施计划是否满足仓库约束。
+- 保留 `capability_designer`，把需求、旧平台经验或产品诉求整理成新平台能力设计草案。
+- 保留 `module_worker` 本地配置，使“明确文件边界后的受控实现”有稳定调度入口。
 - 调整 `platform_explorer` 的描述，避免继续把旧平台迁移作为默认心智。
 - 更新 subagents 指南，让后续 agent 能在小上下文内判断何时使用这些角色。
+- 记录当前 `.codex` 基线模型配置已同步到更高能力模型，用于支撑设计审查和受控实现类任务。
 
 ## 3. 非目标
 
 - 不新增迁移盘点型 agent。
-- 不调整主模型、线程数、沙箱和审批策略。
-- 不改变现有 `contract_reviewer`、`docs_researcher`、`test_fixer` 的模型配置。
+- 不调整线程数、沙箱和审批策略。
+- 不改变 `docs_researcher` 的轻量只读核对定位。
 - 不让任何新增 agent 取代主线程的最终架构决策权。
-- 不把当前工作区中已有的其它模型配置调整纳入本轮设计验收。
+- 不把运行时代码、CI、部署或具体业务模块实现纳入本轮设计验收。
 
 ## 4. 范围
 
@@ -30,6 +31,10 @@
 - `.codex/agents/capability-designer.toml`
 - `.codex/agents/module-worker.toml`
 - `.codex/agents/platform-explorer.toml`
+- `.codex/agents/contract-reviewer.toml`
+- `.codex/agents/test-fixer.toml`
+- `.codex/config.toml`
+- `.gitignore`
 - `docs/guides/subagents-guide.md`
 - `docs/prompts/13_通用subagents触发模板.md`
 - `docs/architecture/ai-first-design-check-targets.txt`
@@ -39,7 +44,7 @@
 
 - Host / Shell / Kernel / Module 运行时代码
 - 构建、部署、CI 和密钥相关脚本
-- 已有未提交的模型配置调整
+- 与 subagents 协作配置无关的模型、工具或临时文件规则调整
 
 ## 5. 设计约束
 
@@ -51,7 +56,7 @@
 
 ## 6. 总体方案
 
-采用“补充两个设计治理角色 + 收窄一个探索角色措辞”的方案。
+采用“明确两个设计治理角色 + 保留一个受控实现角色 + 收窄一个探索角色措辞”的方案。
 
 `design_reviewer` 作为设计阶段守门角色，只读审查详细设计、实施计划、范围边界、受控入口和 AI-first 检查项。它不负责产出最终方案，也不直接改代码。
 
@@ -100,11 +105,15 @@
 - `docs/prompts/13_通用subagents触发模板.md` 作为可直接复制的任务提示模板。
 - `docs/architecture/ai-first-design-check-targets.txt` 将本设计纳入 AI-first 文档检查。
 
+`.codex/config.toml`、`contract_reviewer` 和 `test_fixer` 的模型基线已随本轮配置收口同步更新，用于匹配当前新平台设计审查和验证修复任务的复杂度。该调整不改变线程数、沙箱、审批策略或各角色职责边界。
+
+`.gitignore` 保留对 `.codex-temp/model-switch-video-frames/*` 这类本地临时帧文件的忽略规则，避免协作配置验证过程中的临时产物进入提交范围。
+
 ## 10. 数据与状态
 
 本轮不引入运行时数据状态。配置状态以仓库内可提交文件为 authoring 真源。
 
-如果后续 Codex 运行时加载这些配置失败，应回到 `.codex/agents/*.toml` 检查 TOML 语法、角色名和说明边界。若失败只出现在本轮外模型配置调整，应先隔离为单独任务，不与本轮 subagents 协作配置混合处理。
+如果后续 Codex 运行时加载这些配置失败，应回到 `.codex/agents/*.toml` 和 `.codex/config.toml` 检查 TOML 语法、角色名、模型配置和说明边界。
 
 ## 11. 错误处理与风险
 
@@ -139,7 +148,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 配置级验证：
 
 ```powershell
-Get-ChildItem .\.codex\agents -Filter *.toml | ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName | Out-Null }
+@'
+import pathlib
+import tomllib
+for path in sorted(pathlib.Path(".codex/agents").glob("*.toml")):
+    with path.open("rb") as f:
+        tomllib.load(f)
+    print(path.as_posix())
+'@ | python -
 ```
 
 ## 13. 未决问题
@@ -149,16 +165,17 @@ Get-ChildItem .\.codex\agents -Filter *.toml | ForEach-Object { Get-Content -Raw
 ## 14. 实施拆分建议
 
 1. 新增本设计文档和一致性 review。
-2. 新增两个设计治理 agent 配置文件，并补齐 `module_worker` 配置文件。
+2. 新增两个设计治理 agent 配置文件，并保留 `module_worker` 配置文件。
 3. 调整 `platform_explorer` 描述。
-4. 更新 subagents 指南。
-5. 登记本设计到 AI-first 目标清单。
-6. 执行设计校验和受控目标集校验。
+4. 同步 `.codex` 基线模型配置和本地临时帧忽略规则。
+5. 更新 subagents 指南。
+6. 登记本设计到 AI-first 目标清单。
+7. 执行设计校验和受控目标集校验。
 
 ## 15. AI-First 最小检查清单
 
 - 入口在哪里：从 `.codex/agents/*.toml` 和 `docs/guides/subagents-guide.md` 开始实施。
-- 边界在哪里：只允许修改本轮列出的 agent 配置、协作指南、subagents 提示模板和本轮设计/review 文档，不触碰运行时代码和部署脚本；其它未提交模型配置调整不属于本轮。
-- 如何验证：运行 `validate-ai-first-design.ps1`、`check-ai-first-design-targets.ps1`，并读取所有 `.codex/agents/*.toml` 确认文件可访问。
+- 边界在哪里：只允许修改本轮列出的 agent 配置、`.codex/config.toml`、协作指南、subagents 提示模板、临时帧忽略规则和本轮设计/review 文档，不触碰运行时代码和部署脚本。
+- 如何验证：运行 `validate-ai-first-design.ps1`、`check-ai-first-design-targets.ps1`，并用 Python `tomllib` 解析所有 `.codex/agents/*.toml` 确认配置语法有效。
 - 失败信号是什么：设计校验报缺失项、目标集校验失败、TOML 文件不可读取、指南仍把迁移盘点作为默认方向。
-- 如何回滚：删除新增的 `capability_designer`、`design_reviewer` 和 `module_worker` 配置，恢复 `platform_explorer`、`subagents-guide.md` 和提示模板的本轮改动，并从 `ai-first-design-check-targets.txt` 移除本设计路径。
+- 如何回滚：删除新增的 `capability_designer`、`design_reviewer` 和 `module_worker` 配置，恢复 `.codex/config.toml`、`contract-reviewer.toml`、`test-fixer.toml`、`platform-explorer.toml`、`.gitignore`、`subagents-guide.md` 和提示模板的本轮改动，并从 `ai-first-design-check-targets.txt` 移除本设计路径。

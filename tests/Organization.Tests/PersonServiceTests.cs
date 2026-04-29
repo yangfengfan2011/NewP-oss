@@ -53,6 +53,21 @@ public class PersonServiceTests
     }
 
     [Fact]
+    public async Task CreatePerson_WithExplicitDisabledState_ReturnsDisabledPerson()
+    {
+        var service = BuildService();
+
+        var result = await service.CreateAsync(new PersonDto
+        {
+            PersonNo = "P000",
+            Name = "预停用人员",
+            IsEnabled = false
+        });
+
+        Assert.False(result.IsEnabled);
+    }
+
+    [Fact]
     public async Task UpdatePerson_ValidRequest_UpdatesFields()
     {
         var service = BuildService();
@@ -60,15 +75,15 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        var updated = await service.UpdateAsync(created.Id, new PersonDto
+        var updated = await service.UpdateAsync(Guid.Parse(created.Id), new PersonDto
         {
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId,
-            PositionId = PositionId,
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D"),
+            PositionId = PositionId.ToString("D"),
             Name = "张三（更新）",
             EmploymentStatus = EmploymentStatus.Contractor,
             IsEnabled = false
@@ -77,10 +92,12 @@ public class PersonServiceTests
         Assert.Equal(created.Id, updated.Id);
         Assert.Equal("P001", updated.PersonNo);
         Assert.Equal("张三（更新）", updated.Name);
-        Assert.Equal(PositionId, updated.PositionId);
+        Assert.Equal("张三（更新）", updated.DisplayName);
+        Assert.Equal(PositionId.ToString("D"), updated.PositionId);
         Assert.Equal(EmploymentStatus.Contractor, updated.EmploymentStatus);
         Assert.False(updated.IsEnabled);
         Assert.Equal("P001", updated.PersonNo);
+        Assert.NotNull(updated.UpdatedAt);
     }
 
     [Fact]
@@ -91,8 +108,8 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -100,8 +117,8 @@ public class PersonServiceTests
             {
                 PersonNo = "P001",
                 Name = "李四",
-                CompanyId = CompanyId,
-                DepartmentId = DepartmentId
+                CompanyId = CompanyId.ToString("D"),
+                DepartmentId = DepartmentId.ToString("D")
             }));
     }
 
@@ -113,22 +130,22 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
         var personB = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "李四",
-            CompanyId = CompanyId2,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId2.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateAsync(personB.Id, new PersonDto
+            service.UpdateAsync(Guid.Parse(personB.Id), new PersonDto
             {
-                CompanyId = CompanyId,
-                DepartmentId = DepartmentId,
+                CompanyId = CompanyId.ToString("D"),
+                DepartmentId = DepartmentId.ToString("D"),
                 PositionId = personB.PositionId,
                 Name = "李四（更新）",
                 EmploymentStatus = personB.EmploymentStatus,
@@ -144,25 +161,25 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
         var personB = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P002",
             Name = "李四",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        await service.LinkUserAsync(personA.Id, new LinkPersonUserRequest
+        await service.LinkUserAsync(Guid.Parse(personA.Id), new LinkPersonUserRequest
         {
             UserId = "user-001",
             LinkedBy = "tester"
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.LinkUserAsync(personB.Id, new LinkPersonUserRequest
+            service.LinkUserAsync(Guid.Parse(personB.Id), new LinkPersonUserRequest
             {
                 UserId = "user-001",
                 LinkedBy = "tester"
@@ -183,17 +200,19 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        var result = await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        var result = await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
         {
             UserId = "user-002",
             LinkedBy = "tester"
         });
 
         Assert.Equal("user-002", result.UserId);
+        Assert.Equal(person.Id, result.Id);
+        Assert.Equal(result.LinkedAt, result.CreatedAt);
         Assert.Equal(
             ["ensure:user-002", "upsert:user-002"],
             operations);
@@ -211,12 +230,12 @@ public class PersonServiceTests
         {
             PersonNo = "P004",
             Name = "赵六",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+            service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
             {
                 UserId = "user-null"
             }));
@@ -233,13 +252,10 @@ public class PersonServiceTests
     }
 
     [Fact]
-    public void PersonDto_ContainsReferenceAndEnumDisplayValueFields()
+    public void PersonDto_ContainsEnumDisplayValueField()
     {
         var dtoType = typeof(PersonDto);
 
-        Assert.NotNull(dtoType.GetProperty("CompanyId_DisplayValue"));
-        Assert.NotNull(dtoType.GetProperty("DepartmentId_DisplayValue"));
-        Assert.NotNull(dtoType.GetProperty("PositionId_DisplayValue"));
         Assert.NotNull(dtoType.GetProperty("EmploymentStatus_DisplayValue"));
     }
 
@@ -251,11 +267,11 @@ public class PersonServiceTests
         {
             PersonNo = "P002",
             Name = "未绑定人员",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        dynamic detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
 
         Assert.NotNull(detail);
         Assert.Equal("notConfigured", (string)detail.UserLinkSummary.Status);
@@ -272,20 +288,20 @@ public class PersonServiceTests
         {
             PersonNo = "P003",
             Name = "王五",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
         {
             UserId = "user-003",
             LinkedBy = "tester"
         });
 
-        dynamic detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
 
         Assert.NotNull(detail);
-        Assert.Equal(person.Id, (Guid)detail.Id);
+        Assert.Equal(Guid.Parse(person.Id), (Guid)detail.Id);
         Assert.Equal("ready", (string)detail.UserLinkSummary.Status);
         Assert.NotNull(detail.UserLinkSummary.Data);
     }
@@ -302,17 +318,17 @@ public class PersonServiceTests
         {
             PersonNo = "P100",
             Name = "王五",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
         {
             UserId = "admin",
             LinkedBy = "tester"
         });
 
-        dynamic detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
 
         Assert.NotNull(detail);
         Assert.Equal("ready", (string)detail.AuthorizationSummary.Status);
@@ -331,17 +347,17 @@ public class PersonServiceTests
         {
             PersonNo = "P101",
             Name = "赵七",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D")
         });
 
-        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
         {
             UserId = "ops-user",
             LinkedBy = "tester"
         });
 
-        dynamic detail = await service.GetDetailAsync(person.Id);
+        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
 
         Assert.NotNull(detail);
         Assert.Equal("dependencyUnavailable", (string)detail.AuthorizationSummary.Status);
@@ -356,12 +372,12 @@ public class PersonServiceTests
         {
             PersonNo = "P102",
             Name = "待停用人员",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId,
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D"),
             IsEnabled = true
         });
 
-        dynamic detail = await ((dynamic)service).DisableAsync(created.Id);
+        dynamic detail = await ((dynamic)service).DisableAsync(Guid.Parse(created.Id));
 
         Assert.False((bool)detail.IsEnabled);
     }

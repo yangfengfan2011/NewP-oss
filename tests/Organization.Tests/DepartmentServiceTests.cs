@@ -17,18 +17,18 @@ public class DepartmentServiceTests
 
         var result = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId,
+            CompanyId = CompanyId.ToString("D"),
             Code = "ROOT",
             Name = "根部门",
-            SortOrder = 1
+            SortOrder = "1"
         });
 
-        Assert.Equal(CompanyId, result.CompanyId);
+        Assert.Equal(CompanyId.ToString("D"), result.CompanyId);
         Assert.Equal("ROOT", result.Code);
         Assert.Equal("根部门", result.Name);
         Assert.Null(result.ParentDepartmentId);
         Assert.True(result.IsEnabled);
-        Assert.Equal(1, result.SortOrder);
+        Assert.Equal("1", result.SortOrder);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class DepartmentServiceTests
 
         await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId,
+            CompanyId = CompanyId.ToString("D"),
             Code = "OPS",
             Name = "运营部"
         });
@@ -46,7 +46,7 @@ public class DepartmentServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CreateAsync(new DepartmentDto
             {
-                CompanyId = CompanyId,
+                CompanyId = CompanyId.ToString("D"),
                 Code = "OPS",
                 Name = "重复运营部"
             }));
@@ -58,15 +58,15 @@ public class DepartmentServiceTests
         var service = BuildService();
         var root = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId,
+            CompanyId = CompanyId.ToString("D"),
             Code = "ROOT",
             Name = "根部门"
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateAsync(root.Id, new DepartmentDto
+            service.UpdateAsync(Guid.Parse(root.Id), new DepartmentDto
             {
-                CompanyId = CompanyId,
+                CompanyId = CompanyId.ToString("D"),
                 ParentDepartmentId = root.Id,
                 Name = "根部门"
             }));
@@ -78,26 +78,26 @@ public class DepartmentServiceTests
         var service = BuildService();
         var root = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId,
+            CompanyId = CompanyId.ToString("D"),
             Code = "ROOT",
             Name = "根部门"
         });
 
         var child = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId,
+            CompanyId = CompanyId.ToString("D"),
             ParentDepartmentId = root.Id,
             Code = "ENG",
             Name = "工程部"
         });
 
-        var updated = await service.UpdateAsync(child.Id, new DepartmentDto
+        var updated = await service.UpdateAsync(Guid.Parse(child.Id), new DepartmentDto
         {
-            CompanyId = CompanyId,
+            CompanyId = CompanyId.ToString("D"),
             ParentDepartmentId = root.Id,
             Name = "平台工程部",
             IsEnabled = false,
-            SortOrder = 3
+            SortOrder = "3"
         });
 
         Assert.Equal(child.Id, updated.Id);
@@ -105,7 +105,8 @@ public class DepartmentServiceTests
         Assert.Equal("平台工程部", updated.Name);
         Assert.Equal(root.Id, updated.ParentDepartmentId);
         Assert.False(updated.IsEnabled);
-        Assert.Equal(3, updated.SortOrder);
+        Assert.Equal("3", updated.SortOrder);
+        Assert.NotNull(updated.UpdatedAt);
     }
 
     private static IDepartmentService BuildService() => new DepartmentService(new InMemoryDepartmentRepository());

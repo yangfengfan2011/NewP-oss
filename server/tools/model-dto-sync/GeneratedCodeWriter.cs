@@ -38,7 +38,7 @@ public sealed class GeneratedCodeWriter
         var normalizedSourceCode = NormalizeLineEndings(sourceCode);
         if (usingNamespaces is null || usingNamespaces.Count == 0)
         {
-            return NormalizeLineEndings($"namespace {namespaceName};\n\n{normalizedSourceCode}");
+            return NormalizeLineEndings($"#nullable enable annotations\n\nnamespace {namespaceName};\n\n{normalizedSourceCode}");
         }
 
         var usings = string.Join(
@@ -49,6 +49,6 @@ public sealed class GeneratedCodeWriter
                 .OrderBy(static item => item, StringComparer.Ordinal)
                 .Select(static item => $"using {item};"));
 
-        return NormalizeLineEndings($"{usings}\n\nnamespace {namespaceName};\n\n{normalizedSourceCode}");
+        return NormalizeLineEndings($"#nullable enable annotations\n\n{usings}\n\nnamespace {namespaceName};\n\n{normalizedSourceCode}");
     }
 }

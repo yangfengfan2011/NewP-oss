@@ -25,10 +25,12 @@ public sealed class ModelDtoGenerator
         var properties = new List<ModelDtoProperty>();
         foreach (var field in definition.Fields)
         {
+            var typeName = ResolvePropertyType(field, enumClrTypeMap);
             properties.Add(new ModelDtoProperty(
                 ResolvePropertyName(field),
-                ResolvePropertyType(field, enumClrTypeMap),
-                !field.Required));
+                typeName,
+                !field.Required,
+                ResolvePropertyInitializer(field, typeName)));
 
             // 参考字段和枚举字段需要同时保留展示值，避免 UI 再维护一套补充 DTO。
             if (IsReferenceOrEnum(field))
@@ -64,7 +66,7 @@ public sealed class ModelDtoGenerator
         foreach (var property in descriptor.Properties)
         {
             builder.AppendLine(
-                $"    public {property.TypeName}{(property.Nullable ? "?" : string.Empty)} {property.PropertyName} {{ get; init; }}");
+                $"    public {property.TypeName}{(property.Nullable ? "?" : string.Empty)} {property.PropertyName} {{ get; init; }}{property.Initializer}");
         }
 
         builder.AppendLine("}");
@@ -104,6 +106,26 @@ public sealed class ModelDtoGenerator
             FieldValueType.Enum => ResolveEnumType(field, enumClrTypeMap),
             _ => "string"
         };
+    }
+
+    private static string? ResolvePropertyInitializer(FieldDefinition field, string typeName)
+    {
+        // 这些默认值是受管基础 DTO 的创建边界兼容约定：省略字段沿用旧手写 DTO 行为，显式赋值仍覆盖。
+        if (field.ValueType == FieldValueType.Boolean
+            && string.Equals(field.Name, "IsEnabled", StringComparison.Ordinal))
+        {
+            return " = true;";
+        }
+
+        if (field.ValueType == FieldValueType.Enum
+            && string.Equals(field.Name, "EmploymentStatus", StringComparison.Ordinal)
+            && field.Required
+            && !string.Equals(typeName, "string", StringComparison.Ordinal))
+        {
+            return $" = ({typeName})1;";
+        }
+
+        return null;
     }
 
     private static string ResolveEnumType(

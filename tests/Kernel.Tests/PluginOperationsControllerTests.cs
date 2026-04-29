@@ -752,7 +752,8 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         public Task DeleteRoleAsync(string roleId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<RolePermissionsDto> GetRolePermissionsAsync(string roleId, CancellationToken cancellationToken = default) => Task.FromResult(new RolePermissionsDto { RoleId = roleId, PermissionCodes = new List<string>() });
         public Task AssignRolePermissionsAsync(string roleId, AssignRolePermissionsRequest request, string? grantedBy = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<UserRoleDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) => Task.FromResult(new UserRoleDto { UserId = userId, RoleCodes = new List<string>() });
+        public Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new UserRoleAssignmentsDto { UserId = userId, RoleCodes = new List<string>() });
         public Task AssignUserRolesAsync(string userId, AssignUserRolesRequest request, string? assignedBy = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 

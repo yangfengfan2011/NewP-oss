@@ -12,6 +12,6 @@ public interface IRoleService
     Task DeleteRoleAsync(string roleId, CancellationToken cancellationToken = default);
     Task<RolePermissionsDto> GetRolePermissionsAsync(string roleId, CancellationToken cancellationToken = default);
     Task AssignRolePermissionsAsync(string roleId, AssignRolePermissionsRequest request, string? grantedBy = null, CancellationToken cancellationToken = default);
-    Task<UserRoleDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default);
+    Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default);
     Task AssignUserRolesAsync(string userId, AssignUserRolesRequest request, string? assignedBy = null, CancellationToken cancellationToken = default);
 }

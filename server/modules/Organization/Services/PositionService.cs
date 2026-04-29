@@ -1,6 +1,7 @@
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
+using System.Globalization;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
@@ -29,12 +30,12 @@ public sealed class PositionService : IPositionService
     {
         var position = new Position
         {
-            CompanyId = dto.CompanyId,
-            DepartmentId = dto.DepartmentId,
+            CompanyId = ParseGuid(dto.CompanyId, nameof(dto.CompanyId)),
+            DepartmentId = ParseGuid(dto.DepartmentId, nameof(dto.DepartmentId)),
             Code = dto.Code,
             Name = dto.Name,
             EmploymentStatus = dto.EmploymentStatus,
-            SortOrder = dto.SortOrder
+            SortOrder = ParseSortOrder(dto.SortOrder)
         };
 
         await _positionRepository.CreateAsync(position, cancellationToken);
@@ -50,11 +51,11 @@ public sealed class PositionService : IPositionService
         }
 
         // 岗位更新继续沿用现有边界：部门、名称、状态可改，代码与公司归属保持稳定。
-        position.DepartmentId = dto.DepartmentId;
+        position.DepartmentId = ParseGuid(dto.DepartmentId, nameof(dto.DepartmentId));
         position.Name = dto.Name;
         position.EmploymentStatus = dto.EmploymentStatus;
         position.IsEnabled = dto.IsEnabled;
-        position.SortOrder = dto.SortOrder;
+        position.SortOrder = ParseSortOrder(dto.SortOrder);
         position.UpdatedAt = DateTime.UtcNow;
 
         await _positionRepository.UpdateAsync(position, cancellationToken);
@@ -63,14 +64,28 @@ public sealed class PositionService : IPositionService
 
     private static PositionDto MapToDto(Position position) => new()
     {
-        Id = position.Id,
-        CompanyId = position.CompanyId,
-        DepartmentId = position.DepartmentId,
+        Id = position.Id.ToString("D"),
+        CompanyId = position.CompanyId.ToString("D"),
+        DepartmentId = position.DepartmentId.ToString("D"),
         Code = position.Code,
         Name = position.Name,
         EmploymentStatus = position.EmploymentStatus,
         IsEnabled = position.IsEnabled,
-        SortOrder = position.SortOrder,
-        CreatedAt = position.CreatedAt
+        SortOrder = position.SortOrder.ToString(CultureInfo.InvariantCulture),
+        CreatedAt = position.CreatedAt,
+        UpdatedAt = position.UpdatedAt
     };
+
+    // 生成 DTO 保持 string 形态，领域模型仍坚持强类型标识与排序字段。
+    private static Guid ParseGuid(string value, string propertyName) =>
+        Guid.TryParse(value, out var guid)
+            ? guid
+            : throw new InvalidOperationException($"{propertyName} 必须是有效 GUID。");
+
+    private static int ParseSortOrder(string? sortOrder) =>
+        string.IsNullOrWhiteSpace(sortOrder)
+            ? 0
+            : int.TryParse(sortOrder, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : throw new InvalidOperationException("SortOrder 必须是有效整数。");
 }

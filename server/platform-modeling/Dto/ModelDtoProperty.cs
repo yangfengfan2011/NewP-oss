@@ -7,4 +7,5 @@ namespace ICP.Platform.Modeling.Dto;
 public sealed record ModelDtoProperty(
     string PropertyName,
     string TypeName,
-    bool Nullable);
+    bool Nullable,
+    string? Initializer = null);

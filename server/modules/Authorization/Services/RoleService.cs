@@ -149,7 +149,7 @@ public class RoleService : IRoleService
         await _rolePermissionRepository.CreateBatchAsync(rolePermissions, cancellationToken);
     }
 
-    public async Task<UserRoleDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default)
     {
         var userRoles = await _userRoleRepository.GetByUserIdAsync(userId, cancellationToken);
         var roleIds = userRoles.Select(ur => ur.RoleId).ToList();
@@ -157,7 +157,7 @@ public class RoleService : IRoleService
         var roles = await _roleRepository.GetByIdsAsync(roleIds, cancellationToken);
         var roleCodes = roles.Select(r => r.Code).ToList();
 
-        return new UserRoleDto
+        return new UserRoleAssignmentsDto
         {
             UserId = userId,
             RoleCodes = roleCodes
@@ -194,7 +194,10 @@ public class RoleService : IRoleService
             Description = role.Description,
             IsEnabled = role.IsEnabled,
             IsBuiltIn = role.IsBuiltIn,
-            CreatedAt = role.CreatedAt
+            CreatedBy = role.CreatedBy,
+            CreatedAt = role.CreatedAt,
+            UpdatedBy = role.UpdatedBy,
+            UpdatedAt = role.UpdatedAt
         };
     }
 }

@@ -1,6 +1,7 @@
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
+using System.Globalization;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
@@ -37,7 +38,7 @@ public sealed class CompanyService : ICompanyService
         {
             Code = dto.Code,
             Name = dto.Name,
-            SortOrder = dto.SortOrder
+            SortOrder = ParseSortOrder(dto.SortOrder)
         };
 
         await _companyRepository.CreateAsync(company, cancellationToken);
@@ -55,7 +56,7 @@ public sealed class CompanyService : ICompanyService
         // 公司编码仍保持创建后不可改，避免本轮 DTO 收口顺带扩大行为变化。
         company.Name = dto.Name;
         company.IsEnabled = dto.IsEnabled;
-        company.SortOrder = dto.SortOrder;
+        company.SortOrder = ParseSortOrder(dto.SortOrder);
         company.UpdatedAt = DateTime.UtcNow;
 
         await _companyRepository.UpdateAsync(company, cancellationToken);
@@ -64,11 +65,20 @@ public sealed class CompanyService : ICompanyService
 
     private static CompanyDto MapToDto(Company company) => new()
     {
-        Id = company.Id,
+        Id = company.Id.ToString("D"),
         Code = company.Code,
         Name = company.Name,
         IsEnabled = company.IsEnabled,
-        SortOrder = company.SortOrder,
-        CreatedAt = company.CreatedAt
+        SortOrder = company.SortOrder.ToString(CultureInfo.InvariantCulture),
+        CreatedAt = company.CreatedAt,
+        UpdatedAt = company.UpdatedAt
     };
+
+    // 生成基础 DTO 以 catalog 字段类型为准；服务入口负责把可提交契约转换回领域模型类型。
+    private static int ParseSortOrder(string? sortOrder) =>
+        string.IsNullOrWhiteSpace(sortOrder)
+            ? 0
+            : int.TryParse(sortOrder, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : throw new InvalidOperationException("SortOrder 必须是有效整数。");
 }

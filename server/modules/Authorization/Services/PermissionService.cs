@@ -77,7 +77,8 @@ public class PermissionService : IPermissionService
             DisplayName = permission.DisplayName,
             Description = permission.Description,
             ModuleId = permission.ModuleId,
-            Group = permission.Group
+            Group = permission.Group,
+            CreatedAt = permission.CreatedAt
         };
     }
 }

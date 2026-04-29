@@ -79,6 +79,45 @@ public class ModelDtoGeneratorTests
         Assert.Contains("public string? Status_DisplayValue { get; init; }", code);
     }
 
+    [Fact]
+    public void Generate_ForIsEnabledBooleanField_KeepsEnabledDefault()
+    {
+        var definition = new ModelDefinition(
+            "Person",
+            "Person",
+            ModelKind.Entity,
+            new[]
+            {
+                new FieldDefinition("IsEnabled", "IsEnabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false)
+            },
+            Array.Empty<IndexDefinition>());
+
+        var code = GenerateCode(definition);
+
+        Assert.Contains("public bool IsEnabled { get; init; } = true;", code);
+    }
+
+    [Fact]
+    public void Generate_ForEmploymentStatusEnumField_KeepsFullTimeDefault()
+    {
+        var definition = new ModelDefinition(
+            "Position",
+            "Position",
+            ModelKind.Entity,
+            new[]
+            {
+                new FieldDefinition("EmploymentStatus", "EmploymentStatus", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false)
+            },
+            Array.Empty<IndexDefinition>());
+
+        var code = GenerateCode(definition, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["EmploymentStatus"] = "EmploymentStatus"
+        });
+
+        Assert.Contains("public EmploymentStatus EmploymentStatus { get; init; } = (EmploymentStatus)1;", code);
+    }
+
     private static string GenerateCode(ModelDefinition definition)
     {
         var generator = new ICP.Platform.Modeling.Dto.ModelDtoGenerator();

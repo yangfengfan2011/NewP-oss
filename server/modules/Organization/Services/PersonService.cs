@@ -116,16 +116,20 @@ public sealed class PersonService : IPersonService
 
     public async Task<PersonDto> CreateAsync(PersonDto dto, CancellationToken cancellationToken = default)
     {
+        var companyId = ParseNullableGuid(dto.CompanyId, nameof(dto.CompanyId));
+        var departmentId = ParseNullableGuid(dto.DepartmentId, nameof(dto.DepartmentId));
+        var positionId = ParseNullableGuid(dto.PositionId, nameof(dto.PositionId));
+
         // 人员工号唯一性按“同一公司”收口，而不是全平台全局唯一。
-        await EnsurePersonNoAvailableAsync(dto.CompanyId, dto.PersonNo, null, cancellationToken);
+        await EnsurePersonNoAvailableAsync(companyId, dto.PersonNo, null, cancellationToken);
 
         var person = new Person
         {
             PersonNo = dto.PersonNo,
             Name = dto.Name,
-            CompanyId = dto.CompanyId,
-            DepartmentId = dto.DepartmentId,
-            PositionId = dto.PositionId,
+            CompanyId = companyId,
+            DepartmentId = departmentId,
+            PositionId = positionId,
             EmploymentStatus = dto.EmploymentStatus ?? EmploymentStatus.FullTime,
             IsEnabled = dto.IsEnabled
         };
@@ -142,12 +146,16 @@ public sealed class PersonService : IPersonService
             throw new InvalidOperationException($"人员 '{personId}' 不存在。");
         }
 
-        await EnsurePersonNoAvailableAsync(dto.CompanyId, person.PersonNo, personId, cancellationToken);
+        var companyId = ParseNullableGuid(dto.CompanyId, nameof(dto.CompanyId));
+        var departmentId = ParseNullableGuid(dto.DepartmentId, nameof(dto.DepartmentId));
+        var positionId = ParseNullableGuid(dto.PositionId, nameof(dto.PositionId));
+
+        await EnsurePersonNoAvailableAsync(companyId, person.PersonNo, personId, cancellationToken);
 
         // PersonNo 继续保持只读，避免 DTO 合并后把人员工号修改放进同一批行为变更里。
-        person.CompanyId = dto.CompanyId;
-        person.DepartmentId = dto.DepartmentId;
-        person.PositionId = dto.PositionId;
+        person.CompanyId = companyId;
+        person.DepartmentId = departmentId;
+        person.PositionId = positionId;
         person.Name = dto.Name;
         person.EmploymentStatus = dto.EmploymentStatus ?? person.EmploymentStatus;
         person.IsEnabled = dto.IsEnabled;
@@ -307,22 +315,34 @@ public sealed class PersonService : IPersonService
 
     private static PersonDto MapToDto(Person person) => new()
     {
-        Id = person.Id,
+        Id = person.Id.ToString("D"),
+        DisplayName = person.Name,
         PersonNo = person.PersonNo,
         Name = person.Name,
-        CompanyId = person.CompanyId,
-        DepartmentId = person.DepartmentId,
-        PositionId = person.PositionId,
+        CompanyId = person.CompanyId?.ToString("D"),
+        DepartmentId = person.DepartmentId?.ToString("D"),
+        PositionId = person.PositionId?.ToString("D"),
         EmploymentStatus = person.EmploymentStatus,
         IsEnabled = person.IsEnabled,
-        CreatedAt = person.CreatedAt
+        CreatedAt = person.CreatedAt,
+        UpdatedAt = person.UpdatedAt
     };
 
     private static PersonUserLinkDto MapToDto(PersonUserLink link) => new()
     {
-        PersonId = link.PersonId,
+        Id = link.PersonId.ToString("D"),
+        PersonId = link.PersonId.ToString("D"),
         UserId = link.UserId,
+        CreatedAt = link.LinkedAt,
         LinkedAt = link.LinkedAt,
         LinkedBy = link.LinkedBy
     };
+
+    // 生成基础 DTO 不再把组织外键暴露为 Guid；这里是进入领域模型前的唯一解析边界。
+    private static Guid? ParseNullableGuid(string? value, string propertyName) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : Guid.TryParse(value, out var guid)
+                ? guid
+                : throw new InvalidOperationException($"{propertyName} 必须是有效 GUID。");
 }

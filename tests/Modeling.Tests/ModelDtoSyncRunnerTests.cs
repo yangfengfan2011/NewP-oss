@@ -59,11 +59,11 @@ public class ModelDtoSyncRunnerTests
         var signatureProviderSource = File.ReadAllText(signaturePath);
         var roleDtoSignature = ExtractSignature(signatureProviderSource, "RoleDto");
 
-        Assert.StartsWith("namespace ICP.Platform.Modules.Authorization.DTOs;\n", roleDtoSource, StringComparison.Ordinal);
+        Assert.StartsWith("#nullable enable annotations\n\nnamespace ICP.Platform.Modules.Authorization.DTOs;\n", roleDtoSource, StringComparison.Ordinal);
         Assert.Contains("public sealed class RoleDto", roleDtoSource, StringComparison.Ordinal);
         Assert.Contains("using ICP.Platform.Modules.Organization.Models;\n", positionDtoSource, StringComparison.Ordinal);
         Assert.StartsWith(
-            "using ICP.Platform.Modules.Organization.Models;\n\nnamespace ICP.Platform.Modules.Organization.DTOs;\n",
+            "#nullable enable annotations\n\nusing ICP.Platform.Modules.Organization.Models;\n\nnamespace ICP.Platform.Modules.Organization.DTOs;\n",
             positionDtoSource,
             StringComparison.Ordinal);
         Assert.Contains("public EmploymentStatus EmploymentStatus { get; init; }", positionDtoSource, StringComparison.Ordinal);

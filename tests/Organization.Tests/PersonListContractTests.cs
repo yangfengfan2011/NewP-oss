@@ -86,8 +86,8 @@ public class PersonListContractTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId,
-            DepartmentId = DepartmentId,
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D"),
             EmploymentStatus = EmploymentStatus.FullTime,
             IsEnabled = true
         });

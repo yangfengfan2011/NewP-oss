@@ -17,12 +17,12 @@ public class CompanyServiceTests
         {
             Code = "ICP",
             Name = "研发中心",
-            SortOrder = 10
+            SortOrder = "10"
         });
 
         Assert.Equal("ICP", result.Code);
         Assert.Equal("研发中心", result.Name);
-        Assert.Equal(10, result.SortOrder);
+        Assert.Equal("10", result.SortOrder);
         Assert.True(result.IsEnabled);
     }
 
@@ -55,18 +55,19 @@ public class CompanyServiceTests
             Name = "研发中心"
         });
 
-        var updated = await service.UpdateAsync(company.Id, new CompanyDto
+        var updated = await service.UpdateAsync(Guid.Parse(company.Id), new CompanyDto
         {
             Name = "研发中心（更新）",
             IsEnabled = false,
-            SortOrder = 20
+            SortOrder = "20"
         });
 
         Assert.Equal(company.Id, updated.Id);
         Assert.Equal("ICP", updated.Code);
         Assert.Equal("研发中心（更新）", updated.Name);
         Assert.False(updated.IsEnabled);
-        Assert.Equal(20, updated.SortOrder);
+        Assert.Equal("20", updated.SortOrder);
+        Assert.NotNull(updated.UpdatedAt);
     }
 
     private static ICompanyService BuildService() => new CompanyService(new InMemoryCompanyRepository());

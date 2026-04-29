@@ -86,13 +86,15 @@ public class RoleServiceTests
         };
 
         // Act
-        var result = await _roleService.UpdateRoleAsync(role.Id, updateRequest);
+        var result = await _roleService.UpdateRoleAsync(role.Id, updateRequest, updatedBy: "reviewer");
 
         // Assert
         Assert.Equal("更新后的角色", result.Name);
         Assert.Equal("更新后的描述", result.Description);
         Assert.False(result.IsEnabled);
         Assert.Equal("TestRole", result.Code);
+        Assert.Equal("reviewer", result.UpdatedBy);
+        Assert.NotNull(result.UpdatedAt);
     }
 
     [Fact]

@@ -18,7 +18,7 @@ public class UserRoleController : ControllerBase
     }
 
     [HttpGet("{userId}/roles")]
-    public async Task<ActionResult<UserRoleDto>> GetUserRoles(string userId, CancellationToken cancellationToken)
+    public async Task<ActionResult<UserRoleAssignmentsDto>> GetUserRoles(string userId, CancellationToken cancellationToken)
     {
         var userRoles = await _roleService.GetUserRolesAsync(userId, cancellationToken);
         return Ok(userRoles);

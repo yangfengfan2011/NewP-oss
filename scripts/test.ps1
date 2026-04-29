@@ -39,4 +39,8 @@ Set-Location $repoRoot
 & (Join-Path $PSScriptRoot "check-ai-first-design-targets.ps1")
 
 Write-Host ""
+Write-Host "=== dic localization checks ===" -ForegroundColor Green
+& (Join-Path $PSScriptRoot "validate-dic-localization.ps1") -Root $repoRoot
+
+Write-Host ""
 Write-Host "=== Tests complete ===" -ForegroundColor Green

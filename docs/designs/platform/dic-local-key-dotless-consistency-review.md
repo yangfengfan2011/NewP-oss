@@ -30,6 +30,7 @@
 ## 4. 验证要求
 
 - 先通过测试证明含点号 dic entry 当前不会被拒绝。
+- 新增并运行 `scripts/validate-dic-localization.ps1`，在静态校验阶段提前拒绝含点号 localKey。
 - 实现后运行 `dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj --filter FullyQualifiedName~LocalizationRuntimeManifestBuilderTests -nr:false -v minimal`。
 - 视影响面补跑 runtime materializer 与前端组织页面相关测试。
 
@@ -48,10 +49,10 @@
 只处理 dic localKey 去点号、对应 metadata 引用和测试夹具，不改变 `LocalizationProvider`、`languages.json`、Host/Shell 装载模型。
 
 3. 如何验证  
-运行设计校验、dic entry 扫描、`LocalizationRuntimeManifestBuilderTests`、`RuntimeViewMaterializerTests`、相关组织页面 vitest。
+运行设计校验、`validate-dic-localization.ps1`、`LocalizationRuntimeManifestBuilderTests`、`RuntimeViewMaterializerTests`、相关组织页面 vitest。
 
 4. 失败信号是什么  
-dic entry 仍包含点号、builder 未拒绝含点号 entry、运行时 manifest 缺少预期 `dicKey.localKey`、页面显示 fallback key。
+静态脚本未拒绝含点号 dic entry、builder 未拒绝含点号 entry、运行时 manifest 缺少预期 `dicKey.localKey`、页面显示 fallback key。
 
 5. 如何回滚  
 回退 key 重命名、builder 校验与测试修改；必要时暂时恢复接受旧含点号 entry 的兼容行为。

@@ -272,6 +272,19 @@ t("${dicKey}.${localKey}")
 3. 与前端现有 `LocalizationProvider` 消费结构一致
 4. AI-first 文档校验通过
 
+实现阶段新增静态门禁：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-dic-localization.ps1 -Root .
+```
+
+该脚本应在进入 runtime manifest 生成前提前拦截：
+
+- `dic` entry localKey 包含 `.`
+- `dic` 缺少唯一业务根
+- 业务根与文件名不一致
+- 支持语言缺失或出现未启用语言
+
 ## 13. 未决问题
 
 - builder 从“目录 + 文件名推导”切到“扫描 metadata + `type = dic` 识别”时，是否需要保留一段兼容窗口

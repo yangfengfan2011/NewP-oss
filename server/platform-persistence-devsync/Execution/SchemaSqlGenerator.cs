@@ -47,7 +47,7 @@ public sealed class SchemaSqlGenerator
 
         return operation.Kind switch
         {
-            SchemaOperationKind.CreateTable => [BuildCreateTableSql(targetTable ?? throw CreateMissingTableException(operation), schemaName)],
+            SchemaOperationKind.CreateTable => BuildCreateTableSqlPreview(targetTable ?? throw CreateMissingTableException(operation), schemaName),
             SchemaOperationKind.AddColumn => [BuildAddColumnSql(targetTable ?? throw CreateMissingTableException(operation), operation.ColumnName, schemaName)],
             SchemaOperationKind.DropColumn => [BuildDropColumnSql(operation, schemaName)],
             SchemaOperationKind.RenameTable => [BuildRenameTableSql(operation, schemaName)],
@@ -56,6 +56,18 @@ public sealed class SchemaSqlGenerator
             SchemaOperationKind.AlterNullability => [BuildAlterColumnSql(targetTable ?? throw CreateMissingTableException(operation), operation.ColumnName, schemaName)],
             _ => throw new NotSupportedException($"当前不支持为操作 '{operation.Kind}' 生成 SQL。")
         };
+    }
+
+    private static IReadOnlyList<string> BuildCreateTableSqlPreview(TargetTableSchema targetTable, string schemaName)
+    {
+        var statements = new List<string>
+        {
+            BuildCreateTableSql(targetTable, schemaName)
+        };
+
+        // 新表同步时 migration runner 会被跳过，索引必须随表创建一并落地，避免空库启动后缺唯一约束。
+        statements.AddRange(targetTable.Indexes.Select(index => BuildCreateIndexSql(targetTable, index, schemaName)));
+        return statements;
     }
 
     private static string BuildCreateTableSql(TargetTableSchema targetTable, string schemaName)
@@ -86,6 +98,21 @@ public sealed class SchemaSqlGenerator
 
         builder.Append(");");
         return builder.ToString();
+    }
+
+    private static string BuildCreateIndexSql(TargetTableSchema targetTable, TargetIndexSchema index, string schemaName)
+    {
+        if (index.Columns.Count == 0)
+        {
+            throw new InvalidOperationException($"索引 '{index.Name}' 没有可生成的列定义。");
+        }
+
+        var columns = index.Columns
+            .Select(column => ResolveIndexColumnStoreName(targetTable, column))
+            .Select(QuoteIdentifier);
+        var unique = index.IsUnique ? "UNIQUE " : string.Empty;
+
+        return $"CREATE {unique}INDEX {QuoteIdentifier(index.Name)} ON {QuoteTableName(schemaName, targetTable.TableName)} ({string.Join(", ", columns)});";
     }
 
     private static string BuildAddColumnSql(TargetTableSchema targetTable, string? columnName, string schemaName)
@@ -232,6 +259,16 @@ public sealed class SchemaSqlGenerator
         return targetTable.Columns.FirstOrDefault(
                 column => string.Equals(column.StoreName, columnName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"无法在目标 schema 中找到列 '{targetTable.TableName}.{columnName}'。");
+    }
+
+    private static string ResolveIndexColumnStoreName(TargetTableSchema targetTable, string columnName)
+    {
+        var column = targetTable.Columns.FirstOrDefault(item =>
+            string.Equals(item.Name, columnName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(item.StoreName, columnName, StringComparison.OrdinalIgnoreCase));
+
+        return column?.StoreName
+            ?? throw new InvalidOperationException($"无法在目标 schema 中找到索引列 '{targetTable.TableName}.{columnName}'。");
     }
 
     private static InvalidOperationException CreateMissingTableException(SchemaOperation operation)

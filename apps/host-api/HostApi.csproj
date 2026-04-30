@@ -20,7 +20,7 @@
     <Content Update="modules\**\plugin.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(EnableDevelopmentSchemaSyncAssets)' == 'true'">
+  <ItemGroup>
     <Content Include="..\..\modules\**\metadata\models\*.model.json">
       <Link>modules\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -29,6 +29,9 @@
       <Link>server\platform-modeling\metadata\storage-types.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableDevelopmentSchemaSyncAssets)' == 'true'">
     <Content Include="..\..\server\modules\**\DTOs\Generated\*Dto.g.cs">
       <Link>server\modules\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

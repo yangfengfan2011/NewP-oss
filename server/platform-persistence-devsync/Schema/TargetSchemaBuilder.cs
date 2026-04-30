@@ -61,12 +61,27 @@ public sealed class TargetSchemaBuilder
                     field.Name,
                     field.StoreName,
                     model.Document.Model.Fields.FirstOrDefault(item => string.Equals(item.Name, field.Name, StringComparison.Ordinal))?.HistoryName,
-                    field.StoreType,
+                    ResolveSqlServerStoreType(field),
                     field.Required)).ToList(),
                 definition.Indexes.Select(index => new TargetIndexSchema(
                     index.Name,
                     index.Fields,
                     index.IsUnique)).ToList());
         }
+    }
+
+    // devsync 目标结构必须贴近当前 EF runtime 投影；storage-types 中的历史 bigint 映射不能覆盖 DateTime 等 CLR 语义。
+    private static string ResolveSqlServerStoreType(ICP.Platform.Modeling.Definitions.FieldDefinition field)
+    {
+        return field.ValueType switch
+        {
+            ICP.Platform.Modeling.FieldValueType.DateTime => "datetime2",
+            ICP.Platform.Modeling.FieldValueType.Boolean => "bit",
+            ICP.Platform.Modeling.FieldValueType.Description => "nvarchar(max)",
+            ICP.Platform.Modeling.FieldValueType.ObjectId => "nvarchar(128)",
+            ICP.Platform.Modeling.FieldValueType.User => "nvarchar(128)",
+            ICP.Platform.Modeling.FieldValueType.Group => "nvarchar(128)",
+            _ => "nvarchar(256)"
+        };
     }
 }

@@ -95,6 +95,81 @@ public sealed class TargetSchemaBuilderTests
         }
     }
 
+    [Fact]
+    public void Build_ProjectsSqlServerStoreTypesWithEfRuntimeCompatibility()
+    {
+        var path = CreateModelFile(
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "model",
+              "ConfigItem": {
+                "kind": "Entity",
+                "fields": [
+                  {
+                    "name": "PublishedAt",
+                    "storage": {
+                      "type": "datetime"
+                    }
+                  },
+                  {
+                    "name": "IsEnabled",
+                    "storage": {
+                      "type": "bool"
+                    }
+                  },
+                  {
+                    "name": "OwnerId",
+                    "storage": {
+                      "type": "guid"
+                    }
+                  },
+                  {
+                    "name": "DisplayName",
+                    "storage": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "name": "Description",
+                    "storage": {
+                      "type": "text",
+                      "nullable": true
+                    }
+                  }
+                ]
+              }
+            }
+            """);
+
+        try
+        {
+            var document = new SingleRootModelDocumentLoader().LoadFromFile(path);
+            var schema = new TargetSchemaBuilder(RepositoryRootLocator.Find())
+                .Build(
+                [
+                    new DiscoveredModelDocument
+                    {
+                        ModuleId = document.ModuleId,
+                        ModelName = document.Model.Name,
+                        FilePath = path,
+                        Document = document
+                    }
+                ]);
+
+            var table = Assert.Single(schema.Tables);
+            Assert.Contains(table.Columns, static column => column.Name == "PublishedAt" && column.StoreType == "datetime2");
+            Assert.Contains(table.Columns, static column => column.Name == "IsEnabled" && column.StoreType == "bit");
+            Assert.Contains(table.Columns, static column => column.Name == "OwnerId" && column.StoreType == "nvarchar(128)");
+            Assert.Contains(table.Columns, static column => column.Name == "DisplayName" && column.StoreType == "nvarchar(256)");
+            Assert.Contains(table.Columns, static column => column.Name == "Description" && column.StoreType == "nvarchar(max)");
+        }
+        finally
+        {
+            DeleteModelFile(path);
+        }
+    }
+
     private static string CreateModelFile(string json)
     {
         var root = Path.Combine(Path.GetTempPath(), $"dev-schema-sync-tests-{Guid.NewGuid():N}");

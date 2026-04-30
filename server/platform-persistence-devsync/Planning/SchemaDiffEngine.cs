@@ -184,7 +184,7 @@ public sealed class SchemaDiffEngine
             StringComparison.Ordinal);
     }
 
-    // 这里故意只收口当前 Task 6 已确认的等价关系，避免在缺少设计的情况下扩大类型折叠范围。
+    // 数据库快照当前不含长度信息；这里按 EF runtime 投影折叠文本族，避免把 nvarchar(128/256/max) 误判成类型变更。
     private static string NormalizeStoreType(string storeType)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storeType);
@@ -194,6 +194,8 @@ public sealed class SchemaDiffEngine
         {
             "string" => "nvarchar",
             "datetime2" => "datetime",
+            _ when normalized.StartsWith("nvarchar(", StringComparison.Ordinal) => "nvarchar",
+            _ when normalized.StartsWith("varchar(", StringComparison.Ordinal) => "varchar",
             _ => normalized
         };
     }

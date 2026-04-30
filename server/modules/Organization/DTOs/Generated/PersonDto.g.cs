@@ -15,8 +15,11 @@ public sealed class PersonDto
     public string PersonNo { get; init; }
     public string Name { get; init; }
     public string? CompanyId { get; init; }
+    public string? CompanyId_DisplayValue { get; init; }
     public string? DepartmentId { get; init; }
+    public string? DepartmentId_DisplayValue { get; init; }
     public string? PositionId { get; init; }
+    public string? PositionId_DisplayValue { get; init; }
     public EmploymentStatus? EmploymentStatus { get; init; }
     public string? EmploymentStatus_DisplayValue { get; init; }
     public bool IsEnabled { get; init; } = true;

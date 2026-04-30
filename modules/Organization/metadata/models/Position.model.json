@@ -8,12 +8,22 @@
         "name": "CompanyId",
         "storage": {
           "type": "guid"
+        },
+        "dataSource": {
+          "type": "model",
+          "key": "Company",
+          "model": "Company"
         }
       },
       {
         "name": "DepartmentId",
         "storage": {
           "type": "guid"
+        },
+        "dataSource": {
+          "type": "model",
+          "key": "Department",
+          "model": "Department"
         }
       },
       {

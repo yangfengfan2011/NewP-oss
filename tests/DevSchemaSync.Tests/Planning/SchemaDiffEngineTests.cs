@@ -125,4 +125,37 @@ public sealed class SchemaDiffEngineTests
             plan.Operations,
             static item => item.Kind == SchemaOperationKind.AlterColumnType && item.ColumnName == "CreatedAt");
     }
+
+    [Fact]
+    public void BuildPlan_DoesNotReportAlterColumnTypeForDatetime2TargetAndDatetime2Database()
+    {
+        var target = new TargetSchema(
+        [
+            new TargetTableSchema(
+                "ConfigCenter",
+                "ConfigItem",
+                "ConfigItem",
+                null,
+                [
+                    new TargetColumnSchema("CreatedAt", "CreatedAt", null, "datetime2", true)
+                ],
+                [])
+        ]);
+
+        var database = new[]
+        {
+            new DatabaseTableSchema(
+                "dbo",
+                "ConfigItem",
+                [
+                    new DatabaseColumnSchema("CreatedAt", "datetime2", false)
+                ])
+        };
+
+        var plan = new SchemaDiffEngine(new RiskClassifier()).BuildPlan(target, database);
+
+        Assert.DoesNotContain(
+            plan.Operations,
+            static item => item.Kind == SchemaOperationKind.AlterColumnType && item.ColumnName == "CreatedAt");
+    }
 }

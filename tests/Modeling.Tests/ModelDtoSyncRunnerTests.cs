@@ -68,6 +68,8 @@ public class ModelDtoSyncRunnerTests
             positionDtoSource,
             StringComparison.Ordinal);
         Assert.Contains("public EmploymentStatus EmploymentStatus { get; init; }", positionDtoSource, StringComparison.Ordinal);
+        Assert.Contains("public string? CompanyId_DisplayValue { get; init; }", positionDtoSource, StringComparison.Ordinal);
+        Assert.Contains("public string? DepartmentId_DisplayValue { get; init; }", positionDtoSource, StringComparison.Ordinal);
         Assert.Contains("public string? EmploymentStatus_DisplayValue { get; init; }", positionDtoSource, StringComparison.Ordinal);
         Assert.DoesNotContain("\r\n", roleDtoSource, StringComparison.Ordinal);
         Assert.DoesNotContain("\r\n", positionDtoSource, StringComparison.Ordinal);

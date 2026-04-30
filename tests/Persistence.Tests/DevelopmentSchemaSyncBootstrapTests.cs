@@ -73,14 +73,35 @@ public class DevelopmentSchemaSyncBootstrapTests
     }
 
     [Fact]
-    public void HostApiProject_DevelopmentSchemaSyncAssets_AreCopiedOnlyForDebugOrExplicitOptIn()
+    public void HostApiProject_RuntimeModelTruthAssets_AreCopiedForAllConfigurations()
+    {
+        var projectPath = Path.Combine(FindRepositoryRoot(), "apps", "host-api", "HostApi.csproj");
+        var document = XDocument.Load(projectPath);
+        var runtimeIncludes = new[]
+        {
+            @"..\..\modules\**\metadata\models\*.model.json",
+            @"..\..\server\platform-modeling\metadata\storage-types.json"
+        };
+
+        foreach (var include in runtimeIncludes)
+        {
+            var content = Assert.Single(document.Descendants("Content"),
+                element => string.Equals(element.Attribute("Include")?.Value, include, StringComparison.Ordinal));
+            var condition = content.Attribute("Condition")?.Value
+                ?? content.Parent?.Attribute("Condition")?.Value;
+
+            Assert.True(string.IsNullOrWhiteSpace(condition));
+            Assert.Equal("PreserveNewest", content.Element("CopyToOutputDirectory")?.Value);
+        }
+    }
+
+    [Fact]
+    public void HostApiProject_GeneratedDevSyncAssets_AreCopiedOnlyForDebugOrExplicitOptIn()
     {
         var projectPath = Path.Combine(FindRepositoryRoot(), "apps", "host-api", "HostApi.csproj");
         var document = XDocument.Load(projectPath);
         var devSyncIncludes = new[]
         {
-            @"..\..\modules\**\metadata\models\*.model.json",
-            @"..\..\server\platform-modeling\metadata\storage-types.json",
             @"..\..\server\modules\**\DTOs\Generated\*Dto.g.cs",
             @"..\..\server\modules\**\DTOs\Generated\*BaseDtoSignatureProvider.g.cs"
         };

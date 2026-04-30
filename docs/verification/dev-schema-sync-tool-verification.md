@@ -19,8 +19,8 @@
 - Confirm 风险会在 coordinator 的 `PrepareAsync` 阶段阻断，不会进入 apply；Safe plan 会在启动期间自动 apply。
 - 开发态检查失败、Confirm 风险、apply cancelled/failed/throws 时会抛出 `InvalidOperationException(result.BuildMessage())` 并阻断启动；Safe apply 通过后不再进入 EF migration runner。
 - Repository root 不依赖当前工作目录：Host 从 `AppContext.BaseDirectory` 向上查找包含 `apps`、`server`、`modules` 的仓库根；找不到时回退到 AppBase，并由 coordinator 暴露缺失 authoring/DTO 依赖的失败信号。
-- `HostApi.csproj` 在 `Debug` 默认启用 `EnableDevelopmentSchemaSyncAssets=true`，并仅在该属性为 `true` 时复制 `modules/**/metadata/models/*.model.json`、`server/platform-modeling/metadata/storage-types.json`、`server/modules/**/DTOs/Generated/*Dto.g.cs`、`server/modules/**/DTOs/Generated/*BaseDtoSignatureProvider.g.cs`。
-- `PlatformPersistence.DevSync` 项目引用保留无条件引用，因为 `PersistenceBootstrapExtensions.cs` 的运行时代码直接引用 coordinator/options 类型；Release 输出不会复制上述 authoring/support artifacts，但仍会包含 devsync assembly。
+- `HostApi.csproj` 将 `modules/**/metadata/models/*.model.json` 与 `server/platform-modeling/metadata/storage-types.json` 视为运行时模型真源产物，所有配置都复制；`server/modules/**/DTOs/Generated/*Dto.g.cs` 与 `server/modules/**/DTOs/Generated/*BaseDtoSignatureProvider.g.cs` 仍只在 `EnableDevelopmentSchemaSyncAssets=true` 时复制。
+- `PlatformPersistence.DevSync` 项目引用保留无条件引用，因为 `PersistenceBootstrapExtensions.cs` 的运行时代码直接引用 coordinator/options 类型；Release 输出应包含模型真源与 storage-types，不默认包含 generated DTO/signature 源文件。
 - 本任务未修改 `apps/host-api/Program.cs`；现有 `await app.ApplyPlatformPersistenceAsync()` 注册顺序可满足接入要求。
 
 ## 3. TDD 红/绿记录
@@ -37,6 +37,10 @@
   - 结果：失败，`HostApiProject_DevelopmentSchemaSyncAssets_AreCopiedOnlyForDebugOrExplicitOptIn` 检出 devsync artifacts 的 `Content` 缺少 `EnableDevelopmentSchemaSyncAssets` 条件
 - 条件复制绿灯：同命令
   - 结果：通过，`8/8` 用例通过
+- Release 模型真源红灯：`dotnet test tests/Persistence.Tests/Persistence.Tests.csproj --filter "RuntimeModelTruthAssets|GeneratedDevSyncAssets" -v minimal`
+  - 结果：失败，`HostApiProject_RuntimeModelTruthAssets_AreCopiedForAllConfigurations` 检出模型真源仍受 `EnableDevelopmentSchemaSyncAssets` 条件限制
+- Release 模型真源绿灯：同命令
+  - 结果：通过，`2/2` 用例通过
 - Safe apply 红灯：`dotnet test tests/Persistence.Tests/Persistence.Tests.csproj --filter DevelopmentSchemaSyncBootstrapTests -v minimal`
   - 结果：失败，`AddPlatformPersistence_WhenDevelopmentSchemaSyncEnabled_ResolvesCoordinatorAndOptions` 检出 Host devsync options 的 `ApplyChanges=false`
 - Safe apply 绿灯：同命令
@@ -54,8 +58,8 @@
 - `dotnet build apps/host-api/HostApi.csproj -c Release -v minimal`
   - 结果：通过，`0` 错误，`0` 警告
 - `Release 输出 smoke`
-  - 结果：`ModelJson=0`、`StorageTypes=0`、`GeneratedDtos=0`、`DevSyncAssembly=1`
-  - 备注：Release 不再复制开发态 authoring/support artifacts；devsync assembly 因 Host 运行时代码类型引用仍会随项目引用输出
+  - 结果：`ModelJson=11`、`StorageTypes=1`、`GeneratedDtos=0`
+  - 备注：Release 需要复制运行时模型真源与 storage type map；generated DTO/signature 源文件默认仍不复制
 - `Debug 输出 smoke`
   - 结果：`ModelJson=11`、`StorageTypes=1`、`GeneratedDtos=14`
 - `dotnet build ICP-Platform.sln -v minimal`
@@ -100,7 +104,7 @@
 
 - 关闭开发启动检查：将 `apps/host-api/appsettings.Development.json` 中 `DevelopmentSchemaSync:Enabled` 改为 `false`。
 - 回退 Host 接入：移除 `apps/host-api/Extensions/PersistenceBootstrapExtensions.cs` 中 devsync 注册与开发态分支，Host 会重新只走 `IPersistenceMigrationRunner`。
-- 回退输出复制：移除 `apps/host-api/HostApi.csproj` 中 `EnableDevelopmentSchemaSyncAssets` 属性和受其控制的 `modules/**/metadata/models/*.model.json`、`server/platform-modeling/metadata/storage-types.json`、`server/modules/**/DTOs/Generated/*Dto.g.cs`、`server/modules/**/DTOs/Generated/*BaseDtoSignatureProvider.g.cs` 的 `Content Include`。
+- 回退输出复制：移除 `apps/host-api/HostApi.csproj` 中无条件复制的 `modules/**/metadata/models/*.model.json`、`server/platform-modeling/metadata/storage-types.json`，以及受 `EnableDevelopmentSchemaSyncAssets` 控制的 `server/modules/**/DTOs/Generated/*Dto.g.cs`、`server/modules/**/DTOs/Generated/*BaseDtoSignatureProvider.g.cs` 的 `Content Include`。
 - 回退依赖：移除 `HostApi.csproj` 对 `server/platform-persistence-devsync/PlatformPersistence.DevSync.csproj` 的引用。
 
 ## 8. 正式链路隔离验证结论

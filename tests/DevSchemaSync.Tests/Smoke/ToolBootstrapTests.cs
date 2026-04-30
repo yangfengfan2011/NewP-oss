@@ -102,6 +102,38 @@ public class ToolBootstrapTests
     }
 
     [Fact]
+    public async Task DevSchemaSyncProgram_JsonMode_WhenPrepareThrows_WritesDiagnosticsEnvelope()
+    {
+        var writer = new StringWriter();
+        var repositoryRoot = Path.Combine(Path.GetTempPath(), "dev-schema-sync-fake-repo");
+        var context = new DevSchemaSyncExecutionContext(
+            "SqlServer",
+            "Server=(local);Database=fake;",
+            repositoryRoot,
+            Path.Combine(repositoryRoot, "apps", "host-api"));
+        using var _ = DevSchemaSyncCliBootstrap.OverrideCoordinatorFactoryForTests(_ =>
+            DevelopmentSchemaSyncCoordinator.CreateForTests(
+                ModelSourceInventory.Success(["Role"]),
+                signaturesMatch: true,
+                new SchemaPlan(
+                    new SchemaPlanSummary(1, 0, 0, 0, 0),
+                    ["Role"],
+                    [],
+                    []),
+                buildPlanException: new InvalidOperationException("metadata path invalid")));
+
+        var exitCode = await DevSchemaSyncProgram.RunAsync(["--json"], context, writer);
+        var output = writer.ToString();
+        using var document = JsonDocument.Parse(output);
+
+        Assert.Equal(3, exitCode);
+        Assert.False(document.RootElement.GetProperty("startupAllowed").GetBoolean());
+        Assert.Equal("PrepareFailed", document.RootElement.GetProperty("failureReason").GetString());
+        Assert.Contains("InvalidOperationException", output, StringComparison.Ordinal);
+        Assert.Contains("metadata path invalid", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DevSchemaSyncProgram_ApplyMode_WhenUserRejectsConfirmation_WritesPreviewBeforePromptAndDoesNotExecute()
     {
         var writer = new StringWriter();

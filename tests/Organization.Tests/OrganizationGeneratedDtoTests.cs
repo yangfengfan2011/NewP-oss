@@ -16,6 +16,9 @@ public class OrganizationGeneratedDtoTests
         Assert.NotNull(dtoType);
         var employmentStatusType = dtoType!.GetProperty("EmploymentStatus")!.PropertyType;
         Assert.Equal("EmploymentStatus", Nullable.GetUnderlyingType(employmentStatusType)!.Name);
+        Assert.Equal(typeof(string), dtoType.GetProperty("CompanyId_DisplayValue")!.PropertyType);
+        Assert.Equal(typeof(string), dtoType.GetProperty("DepartmentId_DisplayValue")!.PropertyType);
+        Assert.Equal(typeof(string), dtoType.GetProperty("PositionId_DisplayValue")!.PropertyType);
         Assert.Equal(typeof(string), dtoType.GetProperty("EmploymentStatus_DisplayValue")!.PropertyType);
         Assert.NotNull(dtoType.GetProperty("Id"));
     }

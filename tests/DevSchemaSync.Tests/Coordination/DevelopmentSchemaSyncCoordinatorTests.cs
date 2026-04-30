@@ -148,6 +148,29 @@ public class DevelopmentSchemaSyncCoordinatorTests
     }
 
     [Fact]
+    public async Task PrepareAsync_WhenBuildPlanThrows_ReturnsStableDiagnosticsEnvelope()
+    {
+        var coordinator = DevelopmentSchemaSyncCoordinator.CreateForTests(
+            inventory: ModelSourceInventory.Success(["Role"]),
+            signaturesMatch: true,
+            plan: new SchemaPlan(
+                new SchemaPlanSummary(1, 0, 0, 0, 0),
+                ["Role"],
+                [],
+                []),
+            buildPlanException: new InvalidOperationException("metadata path invalid"));
+
+        var result = await coordinator.PrepareAsync(CancellationToken.None);
+
+        Assert.False(result.StartupAllowed);
+        Assert.Equal("PrepareFailed", result.FailureReason);
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains(result.Diagnostics, static diagnostic => diagnostic.Contains("InvalidOperationException", StringComparison.Ordinal));
+        Assert.Contains(result.Diagnostics, static diagnostic => diagnostic.Contains("metadata path invalid", StringComparison.Ordinal));
+        Assert.Contains("metadata path invalid", result.BuildMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CheckAsync_WhenCatalogModelHasNoMetadataFile_ReturnsMissingModel()
     {
         var repositoryRoot = Path.Combine(Path.GetTempPath(), $"dev-sync-inventory-{Guid.NewGuid():N}");

@@ -185,6 +185,44 @@ public class ModelMetadataProjectorTests
     }
 
     [Fact]
+    public void Project_TreatsModelDataSourceFieldsAsReferencesWithoutChangingStorageType()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Organization",
+            Model = new ModelMetadataModel
+            {
+                Name = "Person",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "CompanyId",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "guid",
+                            Nullable = true
+                        },
+                        DataSource = new ModelMetadataDataSource
+                        {
+                            Type = "model",
+                            Key = "Company",
+                            Model = "Company"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        Assert.Contains(definition.Fields, static field =>
+            field is { Name: "CompanyId", Kind: FieldKind.Reference, ValueType: FieldValueType.ObjectId, StoreType: "guid" });
+    }
+
+    [Fact]
     public void Project_AddsEntityFixedFieldsAndSkipsBuiltinFieldAuthoringEntry()
     {
         var document = new ModelMetadataDocument

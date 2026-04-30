@@ -99,12 +99,20 @@ public sealed class ModelMetadataProjector
         return new FieldDefinition(
             field.Name,
             field.Name,
-            FieldKind.Scalar,
+            ResolveFieldKind(field),
             valueType,
             storeType,
             !storage.Nullable,
             false,
             false);
+    }
+
+    private static FieldKind ResolveFieldKind(ModelMetadataField field)
+    {
+        // model 数据源表示受控模型引用，只影响 DTO 展示伴随字段等契约语义，不改变 storage 投影。
+        return string.Equals(field.DataSource?.Type, "model", StringComparison.OrdinalIgnoreCase)
+            ? FieldKind.Reference
+            : FieldKind.Scalar;
     }
 
     private static bool IsProjectedByKernel(string modelKind, string fieldName)

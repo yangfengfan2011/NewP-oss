@@ -12,7 +12,9 @@ public sealed class PositionDto
     public string? UpdatedBy { get; init; }
     public DateTime? UpdatedAt { get; init; }
     public string CompanyId { get; init; }
+    public string? CompanyId_DisplayValue { get; init; }
     public string DepartmentId { get; init; }
+    public string? DepartmentId_DisplayValue { get; init; }
     public string Code { get; init; }
     public string Name { get; init; }
     public EmploymentStatus EmploymentStatus { get; init; } = (EmploymentStatus)1;

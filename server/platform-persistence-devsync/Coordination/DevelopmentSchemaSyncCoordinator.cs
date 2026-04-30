@@ -49,6 +49,9 @@ public sealed record DevelopmentSchemaSyncResult(
             "ApplyFailed" => Diagnostics.Count == 0
                 ? "结构同步执行失败，已阻止启动。"
                 : $"结构同步执行失败，已阻止启动。诊断: {string.Join("; ", Diagnostics)}",
+            "PrepareFailed" => Diagnostics.Count == 0
+                ? "开发态结构同步准备失败，已阻止启动。"
+                : $"开发态结构同步准备失败，已阻止启动。诊断: {string.Join("; ", Diagnostics)}",
             _ => $"开发态结构同步失败: {FailureReason}"
         };
     }
@@ -109,6 +112,7 @@ public sealed class DevelopmentSchemaSyncCoordinator
         SchemaPlan plan,
         ApplyResult? applyResult = null,
         Exception? applyException = null,
+        Exception? buildPlanException = null,
         Func<SchemaPlan, bool>? applyConfirmation = null,
         Func<SchemaPlan, CancellationToken, Task<ApplyResult>>? applyAsync = null)
     {
@@ -125,7 +129,9 @@ public sealed class DevelopmentSchemaSyncCoordinator
             _ => Task.FromResult(new BaseDtoSignatureVerificationResult(
                 signaturesMatch,
                 signaturesMatch ? [] : ["BaseDto"])),
-            _ => Task.FromResult(new SchemaPlanningResult(plan, 0)),
+            _ => buildPlanException is not null
+                ? Task.FromException<SchemaPlanningResult>(buildPlanException)
+                : Task.FromResult(new SchemaPlanningResult(plan, 0)),
             applyAsync ?? ((_, _) => applyException is not null
                 ? Task.FromException<ApplyResult>(applyException)
                 : Task.FromResult(applyResult ?? new ApplyResult(true, false, 0, 0))),
@@ -139,39 +145,53 @@ public sealed class DevelopmentSchemaSyncCoordinator
     /// </summary>
     public async Task<DevelopmentSchemaSyncResult> PrepareAsync(CancellationToken cancellationToken = default)
     {
-        var inventory = await _inventory.CheckAsync(cancellationToken);
-        if (!inventory.Success)
+        try
         {
-            return Blocked("ModelSourcesMissing", inventory, [], null, 0, null);
-        }
+            var inventory = await _inventory.CheckAsync(cancellationToken);
+            if (!inventory.Success)
+            {
+                return Blocked("ModelSourcesMissing", inventory, [], null, 0, null);
+            }
 
-        var signatures = await _verifySignaturesAsync(cancellationToken);
-        if (!signatures.Success)
+            var signatures = await _verifySignaturesAsync(cancellationToken);
+            if (!signatures.Success)
+            {
+                return Blocked("BaseDtoSignaturesMismatch", inventory, signatures.Mismatches, null, 0, null);
+            }
+
+            var planning = await _buildPlanAsync(cancellationToken);
+            var confirmOperations = planning.Plan.Operations
+                .Where(static operation => string.Equals(operation.RiskLevel, RiskLevel.Confirm, StringComparison.Ordinal))
+                .ToArray();
+
+            if (confirmOperations.Length > 0)
+            {
+                // 任务 7 阶段统一禁止 Confirm 风险进入执行层；任务 8 若要放开，必须重新设计显式安全策略。
+                return Blocked("ConfirmOperationsDetected", inventory, [], planning.Plan, planning.DatabaseTableCount, null);
+            }
+
+            return new DevelopmentSchemaSyncResult(
+                true,
+                null,
+                0,
+                inventory,
+                [],
+                planning.Plan,
+                planning.DatabaseTableCount,
+                null,
+                []);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            return Blocked("BaseDtoSignaturesMismatch", inventory, signatures.Mismatches, null, 0, null);
+            return Blocked(
+                "PrepareFailed",
+                null,
+                [],
+                null,
+                0,
+                null,
+                diagnostics: [$"{exception.GetType().Name}: {exception.Message}"]);
         }
-
-        var planning = await _buildPlanAsync(cancellationToken);
-        var confirmOperations = planning.Plan.Operations
-            .Where(static operation => string.Equals(operation.RiskLevel, RiskLevel.Confirm, StringComparison.Ordinal))
-            .ToArray();
-
-        if (confirmOperations.Length > 0)
-        {
-            // 任务 7 阶段统一禁止 Confirm 风险进入执行层；任务 8 若要放开，必须重新设计显式安全策略。
-            return Blocked("ConfirmOperationsDetected", inventory, [], planning.Plan, planning.DatabaseTableCount, null);
-        }
-
-        return new DevelopmentSchemaSyncResult(
-            true,
-            null,
-            0,
-            inventory,
-            [],
-            planning.Plan,
-            planning.DatabaseTableCount,
-            null,
-            []);
     }
 
     /// <summary>

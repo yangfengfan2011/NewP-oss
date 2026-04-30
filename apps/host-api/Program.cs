@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Text.Json.Serialization;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.PluginOperations;
@@ -15,7 +16,16 @@ using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+    {
+        // 生成 DTO 同时承载 create/update/response；Id 等服务端生成字段不能因为 C# 非空标注被请求模型绑定强制必填。
+        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+    })
+    .AddJsonOptions(options =>
+    {
+        // 前端与生成 DTO 之间的枚举契约使用字符串值；Host 统一接住，避免各模块重复配置。
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAuthorization(options =>

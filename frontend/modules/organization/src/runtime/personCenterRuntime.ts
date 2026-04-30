@@ -72,7 +72,7 @@ const fallbackPersonDetailSchema: PersonDetailRuntimeSchema = {
   titleKey: 'Title',
   descriptionKey: 'Description',
   sections: [
-    { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'Name'] },
+    { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
     {
       key: 'organization',
       titleKey: 'Section_Organization',

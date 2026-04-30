@@ -58,6 +58,10 @@ function ensureCurrentOption<T extends { value: string; label: string }>(
   return [{ value, label } as T, ...options];
 }
 
+function hasAnyField(fields: string[], ...candidates: string[]): boolean {
+  return candidates.some((candidate) => fields.includes(candidate));
+}
+
 export default function PersonEditorForm({
   person,
   onSave,
@@ -334,7 +338,7 @@ export default function PersonEditorForm({
           </div>
         ) : null}
         {(sections.length > 0 ? sections : [
-          { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'Name', 'CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'] },
+          { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME', 'CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'] },
         ]).map((section, index) => (
           <Panel
             key={section.key}
@@ -365,7 +369,7 @@ export default function PersonEditorForm({
                   required
                 />
               ) : null}
-              {section.fields.includes('Name') ? (
+              {hasAnyField(section.fields, 'ENAME', 'Name') ? (
                 <Input
                   id="person-name"
                   label="姓名 *"

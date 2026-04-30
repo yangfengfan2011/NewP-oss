@@ -12,7 +12,7 @@
         "titleKey": "Section_Basic",
         "fields": [
           "PersonNo",
-          "Name"
+          "ENAME"
         ]
       },
       {
@@ -30,12 +30,6 @@
     "fields": [
       {
         "name": "PersonNo",
-        "storage": {
-          "type": "string"
-        }
-      },
-      {
-        "name": "Name",
         "storage": {
           "type": "string"
         }

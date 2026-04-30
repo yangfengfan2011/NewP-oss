@@ -3,19 +3,11 @@
   "type": "model",
   "Permission": {
     "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
     "fields": [
-      {
-        "name": "Code",
-        "storage": {
-          "type": "string"
-        }
-      },
-      {
-        "name": "DisplayName",
-        "storage": {
-          "type": "string"
-        }
-      },
       {
         "name": "Description",
         "storage": {
@@ -39,9 +31,9 @@
     ],
     "indexes": [
       {
-        "name": "UX_Permission_Code",
+        "name": "UX_Permission_ECODE",
         "fields": [
-          "Code"
+          "ECODE"
         ],
         "unique": true
       },

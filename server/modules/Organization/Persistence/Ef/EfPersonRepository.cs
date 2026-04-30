@@ -38,7 +38,7 @@ public sealed class EfPersonRepository : IPersonRepository
         {
             query = query.Where(entity =>
                 ContainsIgnoreCase(GetString(entity, "PersonNo"), keyword) ||
-                ContainsIgnoreCase(GetString(entity, "Name"), keyword));
+                ContainsIgnoreCase(GetString(entity, "ENAME"), keyword));
         }
 
         if (companyId.HasValue)
@@ -98,7 +98,7 @@ public sealed class EfPersonRepository : IPersonRepository
     {
         Id = GetGuid(entity, "EID"),
         PersonNo = GetString(entity, "PersonNo") ?? string.Empty,
-        Name = GetString(entity, "Name") ?? string.Empty,
+        Name = GetString(entity, "ENAME") ?? string.Empty,
         CompanyId = GetNullableGuid(entity, "CompanyId"),
         DepartmentId = GetNullableGuid(entity, "DepartmentId"),
         PositionId = GetNullableGuid(entity, "PositionId"),
@@ -124,7 +124,7 @@ public sealed class EfPersonRepository : IPersonRepository
         // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
         entity["EID"] = person.Id.ToString();
         entity["PersonNo"] = person.PersonNo;
-        entity["Name"] = person.Name;
+        entity["ENAME"] = person.Name;
         entity["CompanyId"] = person.CompanyId?.ToString();
         entity["DepartmentId"] = person.DepartmentId?.ToString();
         entity["PositionId"] = person.PositionId?.ToString();

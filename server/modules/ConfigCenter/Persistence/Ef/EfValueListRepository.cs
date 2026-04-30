@@ -18,7 +18,7 @@ public sealed class EfValueListRepository : IValueListRepository
     {
         var entities = await Entities
             .AsNoTracking()
-            .OrderBy(item => EF.Property<string>(item, "Code"))
+            .OrderBy(item => EF.Property<string>(item, "ECODE"))
             .ToListAsync(cancellationToken);
 
         return entities.Select(Map).ToList();
@@ -37,7 +37,7 @@ public sealed class EfValueListRepository : IValueListRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => EF.Property<string>(item, "Code") == code, cancellationToken);
+            .FirstOrDefaultAsync(item => EF.Property<string>(item, "ECODE") == code, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -81,8 +81,8 @@ public sealed class EfValueListRepository : IValueListRepository
     private static ValueListItem Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         Id = GetString(entity, "EID")!,
-        Code = GetString(entity, "Code")!,
-        Name = GetString(entity, "Name")!,
+        Code = GetString(entity, "ECODE")!,
+        Name = GetString(entity, "ENAME")!,
         Description = GetString(entity, "Description"),
         CreatedAt = GetDateTime(entity, "CreatedAt"),
         UpdatedAt = GetDateTime(entity, "UpdatedAt"),
@@ -104,8 +104,8 @@ public sealed class EfValueListRepository : IValueListRepository
     {
         // 领域对象仍暴露 Id；metadata 投影后的实体主键统一写入 EID。
         entity["EID"] = item.Id;
-        entity["Code"] = item.Code;
-        entity["Name"] = item.Name;
+        entity["ECODE"] = item.Code;
+        entity["ENAME"] = item.Name;
         entity["Description"] = item.Description;
         entity["CreatedAt"] = item.CreatedAt;
         entity["UpdatedAt"] = item.UpdatedAt;

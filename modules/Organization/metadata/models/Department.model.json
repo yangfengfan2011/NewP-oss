@@ -3,6 +3,10 @@
   "type": "model",
   "Department": {
     "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
     "fields": [
       {
         "name": "CompanyId",
@@ -15,18 +19,6 @@
         "storage": {
           "type": "guid",
           "nullable": true
-        }
-      },
-      {
-        "name": "Code",
-        "storage": {
-          "type": "string"
-        }
-      },
-      {
-        "name": "Name",
-        "storage": {
-          "type": "string"
         }
       },
       {
@@ -58,11 +50,11 @@
         "unique": false
       },
       {
-        "name": "IX_Department_Company_Parent_Code",
+        "name": "IX_Department_Company_Parent_ECODE",
         "fields": [
           "CompanyId",
           "ParentDepartmentId",
-          "Code"
+          "ECODE"
         ],
         "unique": false
       }

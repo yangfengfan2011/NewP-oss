@@ -47,15 +47,26 @@ public class AuthorizationModelMetadataProviderTests
             role =>
             {
                 Assert.Equal("Role", role.Name);
-                Assert.Contains(role.Fields, static field => field.Name == "Code");
-                Assert.Contains(role.Indexes, static index => index.Name == "UX_Role_Code");
+                Assert.Contains(role.Fields, static field => field.Name == "EID" && field.IsPrimaryKey);
+                Assert.DoesNotContain(role.Fields, static field => field.Name == "Id");
+                Assert.Contains(role.Fields, static field => field.Name == "ECODE");
+                Assert.Contains(role.Fields, static field => field.Name == "ENAME");
+                Assert.DoesNotContain(role.Fields, static field => field.Name == "Code");
+                Assert.DoesNotContain(role.Fields, static field => field.Name == "Name");
+                Assert.Contains(role.Indexes, static index => index.Name == "UX_Role_ECODE");
                 validator.Validate(role);
             },
             permission =>
             {
                 Assert.Equal("Permission", permission.Name);
+                Assert.Contains(permission.Fields, static field => field.Name == "EID" && field.IsPrimaryKey);
+                Assert.DoesNotContain(permission.Fields, static field => field.Name == "Id");
+                Assert.Contains(permission.Fields, static field => field.Name == "ECODE");
+                Assert.Contains(permission.Fields, static field => field.Name == "ENAME");
+                Assert.DoesNotContain(permission.Fields, static field => field.Name == "Code");
+                Assert.DoesNotContain(permission.Fields, static field => field.Name == "DisplayName");
                 Assert.Contains(permission.Fields, static field => field.Name == "ModuleId");
-                Assert.Contains(permission.Indexes, static index => index.Name == "UX_Permission_Code");
+                Assert.Contains(permission.Indexes, static index => index.Name == "UX_Permission_ECODE");
                 Assert.Contains(permission.Indexes, static index => index.Name == "IX_Permission_Module");
                 validator.Validate(permission);
             },

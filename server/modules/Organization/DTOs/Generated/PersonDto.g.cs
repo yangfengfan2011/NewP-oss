@@ -12,8 +12,8 @@ public sealed class PersonDto
     public string? UpdatedBy { get; init; }
     public DateTime? UpdatedAt { get; init; }
     public string DisplayName { get; init; }
+    public string Name { get => DisplayName; init => DisplayName = value; }
     public string PersonNo { get; init; }
-    public string Name { get; init; }
     public string? CompanyId { get; init; }
     public string? CompanyId_DisplayValue { get; init; }
     public string? DepartmentId { get; init; }

@@ -45,7 +45,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
             GetGuid(entity, "CompanyId") == companyId &&
             GetNullableGuid(entity, "ParentDepartmentId") == parentDepartmentId &&
             GetGuid(entity, "EID") != excludedDepartmentId &&
-            string.Equals(GetString(entity, "Code"), code, StringComparison.OrdinalIgnoreCase));
+            string.Equals(GetString(entity, "ECODE"), code, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task CreateAsync(Department department, CancellationToken cancellationToken = default)
@@ -75,8 +75,8 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
         Id = GetGuid(entity, "EID"),
         CompanyId = GetGuid(entity, "CompanyId"),
         ParentDepartmentId = GetNullableGuid(entity, "ParentDepartmentId"),
-        Code = GetString(entity, "Code") ?? string.Empty,
-        Name = GetString(entity, "Name") ?? string.Empty,
+        Code = GetString(entity, "ECODE") ?? string.Empty,
+        Name = GetString(entity, "ENAME") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
         SortOrder = GetInt(entity, "SortOrder"),
         CreatedAt = GetDateTime(entity, "CreatedAt"),
@@ -100,8 +100,8 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
         entity["EID"] = department.Id.ToString();
         entity["CompanyId"] = department.CompanyId.ToString();
         entity["ParentDepartmentId"] = department.ParentDepartmentId?.ToString();
-        entity["Code"] = department.Code;
-        entity["Name"] = department.Name;
+        entity["ECODE"] = department.Code;
+        entity["ENAME"] = department.Name;
         entity["IsEnabled"] = department.IsEnabled;
         entity["SortOrder"] = department.SortOrder.ToString();
         entity["CreatedAt"] = department.CreatedAt;

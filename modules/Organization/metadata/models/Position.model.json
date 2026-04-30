@@ -3,6 +3,10 @@
   "type": "model",
   "Position": {
     "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
     "fields": [
       {
         "name": "CompanyId",
@@ -24,18 +28,6 @@
           "type": "model",
           "key": "Department",
           "model": "Department"
-        }
-      },
-      {
-        "name": "Code",
-        "storage": {
-          "type": "string"
-        }
-      },
-      {
-        "name": "Name",
-        "storage": {
-          "type": "string"
         }
       },
       {

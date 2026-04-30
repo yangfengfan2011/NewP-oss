@@ -126,7 +126,7 @@ public sealed class PersonService : IPersonService
         var person = new Person
         {
             PersonNo = dto.PersonNo,
-            Name = dto.Name,
+            Name = dto.DisplayName,
             CompanyId = companyId,
             DepartmentId = departmentId,
             PositionId = positionId,
@@ -156,7 +156,7 @@ public sealed class PersonService : IPersonService
         person.CompanyId = companyId;
         person.DepartmentId = departmentId;
         person.PositionId = positionId;
-        person.Name = dto.Name;
+        person.Name = dto.DisplayName;
         person.EmploymentStatus = dto.EmploymentStatus ?? person.EmploymentStatus;
         person.IsEnabled = dto.IsEnabled;
         person.UpdatedAt = DateTime.UtcNow;
@@ -318,7 +318,6 @@ public sealed class PersonService : IPersonService
         Id = person.Id.ToString("D"),
         DisplayName = person.Name,
         PersonNo = person.PersonNo,
-        Name = person.Name,
         CompanyId = person.CompanyId?.ToString("D"),
         DepartmentId = person.DepartmentId?.ToString("D"),
         PositionId = person.PositionId?.ToString("D"),

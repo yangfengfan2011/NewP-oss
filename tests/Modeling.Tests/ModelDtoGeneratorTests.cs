@@ -51,6 +51,7 @@ public class ModelDtoGeneratorTests
 
         Assert.Contains("public string Id { get; init; }", code);
         Assert.Contains("public string DisplayName { get; init; }", code);
+        Assert.Contains("public string Name { get => DisplayName; init => DisplayName = value; }", code);
         Assert.Contains("public string Code { get; init; }", code);
         Assert.DoesNotContain("public string EID { get; init; }", code);
         Assert.DoesNotContain("public string ENAME { get; init; }", code);

@@ -40,6 +40,48 @@ public class DevelopmentSchemaSyncCoordinatorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenConfirmOperationsExplicitlyAllowed_ExecutesAfterConfirmations()
+    {
+        var confirmCalled = false;
+        var riskConfirmCalled = false;
+        var applyCalled = false;
+        var coordinator = DevelopmentSchemaSyncCoordinator.CreateForTests(
+            inventory: ModelSourceInventory.Success(["Role"]),
+            signaturesMatch: true,
+            plan: new SchemaPlan(
+                new SchemaPlanSummary(1, 1, 0, 1, 0),
+                ["Role"],
+                [new SchemaOperation("DropColumn", "Confirm", "Role", "Description", null, "drop Description", ["ALTER TABLE [Role] DROP COLUMN [Description]"])],
+                []),
+            allowConfirmOperations: true,
+            applyConfirmation: _ =>
+            {
+                confirmCalled = true;
+                return true;
+            },
+            riskConfirmation: operations =>
+            {
+                riskConfirmCalled = true;
+                Assert.Single(operations);
+                return true;
+            },
+            applyAsync: (_, _) =>
+            {
+                applyCalled = true;
+                return Task.FromResult(new ApplyResult(true, false, 1, 1));
+            });
+
+        var result = await coordinator.ExecuteAsync(CancellationToken.None);
+
+        Assert.True(result.StartupAllowed);
+        Assert.Null(result.FailureReason);
+        Assert.True(confirmCalled);
+        Assert.True(riskConfirmCalled);
+        Assert.True(applyCalled);
+        Assert.Equal(1, result.ApplyResult?.ExecutedOperationCount);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenBaseDtoSignaturesMismatch_ReturnsBlockedResult()
     {
         var coordinator = DevelopmentSchemaSyncCoordinator.CreateForTests(

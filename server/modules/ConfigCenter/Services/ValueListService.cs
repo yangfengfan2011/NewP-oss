@@ -28,10 +28,10 @@ public class ValueListService : IValueListService
         string? updatedBy = null,
         CancellationToken cancellationToken = default)
     {
-        Validate(dto.Code, dto.Name);
+        Validate(dto.Code, dto.DisplayName);
 
         var code = dto.Code.Trim();
-        var name = dto.Name.Trim();
+        var name = dto.DisplayName.Trim();
 
         var existing = await _repository.GetByCodeAsync(code, cancellationToken);
         if (existing is not null)
@@ -57,10 +57,10 @@ public class ValueListService : IValueListService
         string? updatedBy = null,
         CancellationToken cancellationToken = default)
     {
-        Validate(dto.Code, dto.Name);
+        Validate(dto.Code, dto.DisplayName);
 
         var code = dto.Code.Trim();
-        var name = dto.Name.Trim();
+        var name = dto.DisplayName.Trim();
 
         var item = await _repository.GetByIdAsync(id, cancellationToken);
         if (item is null)
@@ -154,7 +154,7 @@ public class ValueListService : IValueListService
         {
             Id = item.Id,
             Code = item.Code,
-            Name = item.Name,
+            DisplayName = item.Name,
             Description = item.Description,
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,

@@ -67,6 +67,14 @@ public sealed class ModelDtoGenerator
         {
             builder.AppendLine(
                 $"    public {property.TypeName}{(property.Nullable ? "?" : string.Empty)} {property.PropertyName} {{ get; init; }}{property.Initializer}");
+
+            if (string.Equals(property.PropertyName, "DisplayName", StringComparison.Ordinal)
+                && string.Equals(property.TypeName, "string", StringComparison.Ordinal)
+                && !property.Nullable)
+            {
+                // ENAME 是存储协议字段；Name 只作为 DTO 兼容别名，避免旧调用方在协议字段切换时立刻断裂。
+                builder.AppendLine("    public string Name { get => DisplayName; init => DisplayName = value; }");
+            }
         }
 
         builder.AppendLine("}");

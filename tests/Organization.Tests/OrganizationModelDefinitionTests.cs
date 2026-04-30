@@ -7,6 +7,17 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class OrganizationModelDefinitionTests
 {
     [Fact]
+    public void MetadataDefinitions_UseProtocolFieldsForGenericCodeAndName()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+
+        AssertProtocolFields(definitions, "Company", expectsCode: true);
+        AssertProtocolFields(definitions, "Department", expectsCode: true);
+        AssertProtocolFields(definitions, "Position", expectsCode: true);
+        AssertProtocolFields(definitions, "Person", expectsCode: false);
+    }
+
+    [Fact]
     public void LegacyFacade_DefinitionsMatchMetadataProvider()
     {
         var expected = new OrganizationModelMetadataProvider().GetDefinitions();
@@ -71,6 +82,25 @@ public class OrganizationModelDefinitionTests
             Assert.Equal(expectedIndex.Name, actualIndex.Name);
             Assert.Equal(expectedIndex.Fields, actualIndex.Fields);
             Assert.Equal(expectedIndex.IsUnique, actualIndex.IsUnique);
+        }
+    }
+
+    private static void AssertProtocolFields(
+        IReadOnlyList<ModelDefinition> definitions,
+        string modelName,
+        bool expectsCode)
+    {
+        var definition = Assert.Single(definitions, item => item.Name == modelName);
+
+        Assert.Contains(definition.Fields, static field => field.Name == "EID" && field.IsPrimaryKey);
+        Assert.DoesNotContain(definition.Fields, static field => field.Name == "Id");
+        Assert.Contains(definition.Fields, static field => field.Name == "ENAME");
+        Assert.DoesNotContain(definition.Fields, static field => field.Name == "Name");
+
+        if (expectsCode)
+        {
+            Assert.Contains(definition.Fields, static field => field.Name == "ECODE");
+            Assert.DoesNotContain(definition.Fields, static field => field.Name == "Code");
         }
     }
 }

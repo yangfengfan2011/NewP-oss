@@ -60,8 +60,8 @@ public sealed class EfPositionRepository : IPositionRepository
         Id = GetGuid(entity, "EID"),
         CompanyId = GetGuid(entity, "CompanyId"),
         DepartmentId = GetGuid(entity, "DepartmentId"),
-        Code = GetString(entity, "Code") ?? string.Empty,
-        Name = GetString(entity, "Name") ?? string.Empty,
+        Code = GetString(entity, "ECODE") ?? string.Empty,
+        Name = GetString(entity, "ENAME") ?? string.Empty,
         EmploymentStatus = GetEmploymentStatus(entity, "EmploymentStatus"),
         IsEnabled = GetBool(entity, "IsEnabled"),
         SortOrder = GetInt(entity, "SortOrder"),
@@ -86,8 +86,8 @@ public sealed class EfPositionRepository : IPositionRepository
         entity["EID"] = position.Id.ToString();
         entity["CompanyId"] = position.CompanyId.ToString();
         entity["DepartmentId"] = position.DepartmentId.ToString();
-        entity["Code"] = position.Code;
-        entity["Name"] = position.Name;
+        entity["ECODE"] = position.Code;
+        entity["ENAME"] = position.Name;
         entity["EmploymentStatus"] = position.EmploymentStatus.ToString();
         entity["IsEnabled"] = position.IsEnabled;
         entity["SortOrder"] = position.SortOrder.ToString();

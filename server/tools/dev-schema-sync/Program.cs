@@ -56,7 +56,9 @@ namespace ICP.Platform.Tools.DevSchemaSync
                     context.Provider,
                     applyChanges,
                     writeSqlPreview,
-                    ConfirmApply: plan => ConfirmationPrompts.ConfirmApply(reader, writer, plan)));
+                    ConfirmApply: plan => ConfirmationPrompts.ConfirmApply(reader, writer, plan),
+                    AllowConfirmOperations: applyChanges,
+                    ConfirmRisk: operations => ConfirmationPrompts.ConfirmRisk(reader, writer, operations)));
             var result = await coordinator.PrepareAsync(CancellationToken.None);
 
             if (useJson)
@@ -216,7 +218,8 @@ namespace ICP.Platform.Tools.DevSchemaSync
                 context.ConnectionString,
                 context.Provider,
                 applyChanges,
-                showSqlPreview || applyChanges));
+                showSqlPreview || applyChanges,
+                AllowConfirmOperations: applyChanges));
         }
 
         internal static DevelopmentSchemaSyncCoordinator CreateCoordinator(DevelopmentSchemaSyncOptions options)

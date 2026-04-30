@@ -3,19 +3,11 @@
   "type": "model",
   "Role": {
     "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
     "fields": [
-      {
-        "name": "Code",
-        "storage": {
-          "type": "string"
-        }
-      },
-      {
-        "name": "Name",
-        "storage": {
-          "type": "string"
-        }
-      },
       {
         "name": "Description",
         "storage": {
@@ -38,9 +30,9 @@
     ],
     "indexes": [
       {
-        "name": "UX_Role_Code",
+        "name": "UX_Role_ECODE",
         "fields": [
-          "Code"
+          "ECODE"
         ],
         "unique": true
       }

@@ -37,7 +37,7 @@ public sealed class CompanyService : ICompanyService
         var company = new Company
         {
             Code = dto.Code,
-            Name = dto.Name,
+            Name = dto.DisplayName,
             SortOrder = ParseSortOrder(dto.SortOrder)
         };
 
@@ -54,7 +54,7 @@ public sealed class CompanyService : ICompanyService
         }
 
         // 公司编码仍保持创建后不可改，避免本轮 DTO 收口顺带扩大行为变化。
-        company.Name = dto.Name;
+        company.Name = dto.DisplayName;
         company.IsEnabled = dto.IsEnabled;
         company.SortOrder = ParseSortOrder(dto.SortOrder);
         company.UpdatedAt = DateTime.UtcNow;
@@ -67,7 +67,7 @@ public sealed class CompanyService : ICompanyService
     {
         Id = company.Id.ToString("D"),
         Code = company.Code,
-        Name = company.Name,
+        DisplayName = company.Name,
         IsEnabled = company.IsEnabled,
         SortOrder = company.SortOrder.ToString(CultureInfo.InvariantCulture),
         CreatedAt = company.CreatedAt,

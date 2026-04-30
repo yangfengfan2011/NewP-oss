@@ -10,6 +10,7 @@ public sealed class ConfigItemDto
     public string? UpdatedBy { get; init; }
     public DateTime? UpdatedAt { get; init; }
     public string DisplayName { get; init; }
+    public string Name { get => DisplayName; init => DisplayName = value; }
     public string Key { get; init; }
     public string? Value { get; init; }
     public string Type { get; init; }

@@ -33,7 +33,7 @@ public sealed class EfRoleRepository : IRoleRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(role => EF.Property<string>(role, "Code") == code, cancellationToken);
+            .FirstOrDefaultAsync(role => EF.Property<string>(role, "ECODE") == code, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -54,7 +54,7 @@ public sealed class EfRoleRepository : IRoleRepository
         var codeList = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var entities = await Entities
             .AsNoTracking()
-            .Where(role => codeList.Contains(EF.Property<string>(role, "Code")))
+            .Where(role => codeList.Contains(EF.Property<string>(role, "ECODE")))
             .ToListAsync(cancellationToken);
 
         return entities.Select(Map).ToList();
@@ -99,8 +99,8 @@ public sealed class EfRoleRepository : IRoleRepository
     private static Role Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         Id = GetString(entity, "EID")!,
-        Code = GetString(entity, "Code")!,
-        Name = GetString(entity, "Name")!,
+        Code = GetString(entity, "ECODE")!,
+        Name = GetString(entity, "ENAME")!,
         Description = GetString(entity, "Description"),
         IsEnabled = GetBool(entity, "IsEnabled"),
         IsBuiltIn = GetBool(entity, "IsBuiltIn"),
@@ -125,8 +125,8 @@ public sealed class EfRoleRepository : IRoleRepository
     {
         // 领域对象仍暴露 Id；持久化真源切换后主键字段固定为 EID。
         entity["EID"] = role.Id;
-        entity["Code"] = role.Code;
-        entity["Name"] = role.Name;
+        entity["ECODE"] = role.Code;
+        entity["ENAME"] = role.Name;
         entity["Description"] = role.Description;
         entity["IsEnabled"] = role.IsEnabled;
         entity["IsBuiltIn"] = role.IsBuiltIn;

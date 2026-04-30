@@ -9,7 +9,8 @@ public sealed class ValueListItemDto
     public DateTime CreatedAt { get; init; }
     public string? UpdatedBy { get; init; }
     public DateTime? UpdatedAt { get; init; }
+    public string DisplayName { get; init; }
+    public string Name { get => DisplayName; init => DisplayName = value; }
     public string Code { get; init; }
-    public string Name { get; init; }
     public string? Description { get; init; }
 }

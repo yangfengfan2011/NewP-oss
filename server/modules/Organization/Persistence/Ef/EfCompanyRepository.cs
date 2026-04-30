@@ -33,7 +33,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     {
         var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
         var entity = entities.FirstOrDefault(company =>
-            string.Equals(GetString(company, "Code"), code, StringComparison.OrdinalIgnoreCase));
+            string.Equals(GetString(company, "ECODE"), code, StringComparison.OrdinalIgnoreCase));
 
         return entity is null ? null : Map(entity);
     }
@@ -63,8 +63,8 @@ public sealed class EfCompanyRepository : ICompanyRepository
     private static Company Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         Id = GetGuid(entity, "EID"),
-        Code = GetString(entity, "Code") ?? string.Empty,
-        Name = GetString(entity, "Name") ?? string.Empty,
+        Code = GetString(entity, "ECODE") ?? string.Empty,
+        Name = GetString(entity, "ENAME") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
         SortOrder = GetInt(entity, "SortOrder"),
         CreatedAt = GetDateTime(entity, "CreatedAt"),
@@ -86,8 +86,8 @@ public sealed class EfCompanyRepository : ICompanyRepository
     {
         // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
         entity["EID"] = company.Id.ToString();
-        entity["Code"] = company.Code;
-        entity["Name"] = company.Name;
+        entity["ECODE"] = company.Code;
+        entity["ENAME"] = company.Name;
         entity["IsEnabled"] = company.IsEnabled;
         entity["SortOrder"] = company.SortOrder.ToString();
         entity["CreatedAt"] = company.CreatedAt;

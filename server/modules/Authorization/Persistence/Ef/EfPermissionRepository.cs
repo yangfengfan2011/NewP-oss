@@ -33,7 +33,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(permission => EF.Property<string>(permission, "Code") == code, cancellationToken);
+            .FirstOrDefaultAsync(permission => EF.Property<string>(permission, "ECODE") == code, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -54,7 +54,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
         var codeList = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var entities = await Entities
             .AsNoTracking()
-            .Where(permission => codeList.Contains(EF.Property<string>(permission, "Code")))
+            .Where(permission => codeList.Contains(EF.Property<string>(permission, "ECODE")))
             .ToListAsync(cancellationToken);
 
         return entities.Select(Map).ToList();
@@ -85,8 +85,8 @@ public sealed class EfPermissionRepository : IPermissionRepository
     private static Permission Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         Id = GetString(entity, "EID")!,
-        Code = GetString(entity, "Code")!,
-        DisplayName = GetString(entity, "DisplayName")!,
+        Code = GetString(entity, "ECODE")!,
+        DisplayName = GetString(entity, "ENAME")!,
         Description = GetString(entity, "Description"),
         ModuleId = GetString(entity, "ModuleId")!,
         Group = GetString(entity, "Group"),
@@ -108,8 +108,8 @@ public sealed class EfPermissionRepository : IPermissionRepository
     {
         // 领域对象仍暴露 Id；持久化真源切换后主键字段固定为 EID。
         entity["EID"] = permission.Id;
-        entity["Code"] = permission.Code;
-        entity["DisplayName"] = permission.DisplayName;
+        entity["ECODE"] = permission.Code;
+        entity["ENAME"] = permission.DisplayName;
         entity["Description"] = permission.Description;
         entity["ModuleId"] = permission.ModuleId;
         entity["Group"] = permission.Group;

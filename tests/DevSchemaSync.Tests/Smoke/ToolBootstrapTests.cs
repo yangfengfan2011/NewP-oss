@@ -224,6 +224,95 @@ public class ToolBootstrapTests
     }
 
     [Fact]
+    public async Task DevSchemaSyncProgram_SqlApplyMode_WhenConfirmPlanAndUserApprovesRisk_ExecutesAfterSqlPreview()
+    {
+        var writer = new StringWriter();
+        var reader = new StringReader("y" + Environment.NewLine + "APPLY RISK");
+        var applyCalled = false;
+        var repositoryRoot = Path.Combine(Path.GetTempPath(), "dev-schema-sync-fake-repo");
+        var context = new DevSchemaSyncExecutionContext(
+            "SqlServer",
+            "Server=(local);Database=fake;",
+            repositoryRoot,
+            Path.Combine(repositoryRoot, "apps", "host-api"));
+        using var _ = DevSchemaSyncCliBootstrap.OverrideCoordinatorFactoryForTests(options =>
+            DevelopmentSchemaSyncCoordinator.CreateForTests(
+                ModelSourceInventory.Success(["Role"]),
+                signaturesMatch: true,
+                new SchemaPlan(
+                    new SchemaPlanSummary(1, 1, 0, 1, 0),
+                    ["Role"],
+                    [new SchemaOperation("DropColumn", "Confirm", "Role", "Description", null, "drop Description", ["ALTER TABLE [Role] DROP COLUMN [Description]"])],
+                    []),
+                allowConfirmOperations: options.AllowConfirmOperations,
+                applyConfirmation: options.ConfirmApply,
+                riskConfirmation: options.ConfirmRisk,
+                applyAsync: (_, _) =>
+                {
+                    applyCalled = true;
+                    return Task.FromResult(new ApplyResult(true, false, 1, 1));
+                }));
+
+        var exitCode = await DevSchemaSyncProgram.RunAsync(["--sql", "--apply"], context, reader, writer);
+        var output = writer.ToString();
+
+        var sqlPreviewIndex = output.IndexOf("SQL Preview", StringComparison.Ordinal);
+        var applyPromptIndex = output.IndexOf("是否继续执行本次同步计划", StringComparison.Ordinal);
+        var riskPromptIndex = output.IndexOf("请输入 APPLY RISK", StringComparison.Ordinal);
+        var executedIndex = output.IndexOf("已执行 1 条 SQL", StringComparison.Ordinal);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(applyCalled);
+        Assert.NotEqual(-1, sqlPreviewIndex);
+        Assert.NotEqual(-1, applyPromptIndex);
+        Assert.NotEqual(-1, riskPromptIndex);
+        Assert.NotEqual(-1, executedIndex);
+        Assert.True(sqlPreviewIndex < applyPromptIndex);
+        Assert.True(applyPromptIndex < riskPromptIndex);
+        Assert.True(riskPromptIndex < executedIndex);
+        Assert.Contains("ALTER TABLE [Role] DROP COLUMN [Description]", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DevSchemaSyncProgram_SqlApplyMode_WhenConfirmPlanAndUserRejectsRisk_DoesNotExecute()
+    {
+        var writer = new StringWriter();
+        var reader = new StringReader("y" + Environment.NewLine + "n");
+        var applyCalled = false;
+        var repositoryRoot = Path.Combine(Path.GetTempPath(), "dev-schema-sync-fake-repo");
+        var context = new DevSchemaSyncExecutionContext(
+            "SqlServer",
+            "Server=(local);Database=fake;",
+            repositoryRoot,
+            Path.Combine(repositoryRoot, "apps", "host-api"));
+        using var _ = DevSchemaSyncCliBootstrap.OverrideCoordinatorFactoryForTests(options =>
+            DevelopmentSchemaSyncCoordinator.CreateForTests(
+                ModelSourceInventory.Success(["Role"]),
+                signaturesMatch: true,
+                new SchemaPlan(
+                    new SchemaPlanSummary(1, 1, 0, 1, 0),
+                    ["Role"],
+                    [new SchemaOperation("DropColumn", "Confirm", "Role", "Description", null, "drop Description", ["ALTER TABLE [Role] DROP COLUMN [Description]"])],
+                    []),
+                allowConfirmOperations: options.AllowConfirmOperations,
+                applyConfirmation: options.ConfirmApply,
+                riskConfirmation: options.ConfirmRisk,
+                applyAsync: (_, _) =>
+                {
+                    applyCalled = true;
+                    return Task.FromResult(new ApplyResult(true, false, 1, 1));
+                }));
+
+        var exitCode = await DevSchemaSyncProgram.RunAsync(["--sql", "--apply"], context, reader, writer);
+        var output = writer.ToString();
+
+        Assert.Equal(4, exitCode);
+        Assert.False(applyCalled);
+        Assert.Contains("请输入 APPLY RISK", output, StringComparison.Ordinal);
+        Assert.Contains("结构同步执行已取消", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DevSchemaSyncProgram_JsonApplyMode_ReturnsJsonFailureWithoutPromptOrExecution()
     {
         var writer = new StringWriter();

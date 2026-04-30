@@ -52,7 +52,7 @@ public class RoleService : IRoleService
         var role = new Role
         {
             Code = dto.Code,
-            Name = dto.Name,
+            Name = dto.DisplayName,
             Description = dto.Description,
             CreatedBy = createdBy
         };
@@ -75,7 +75,7 @@ public class RoleService : IRoleService
         }
 
         // 单 DTO 不代表所有字段都可编辑；更新仍保持当前“代码不可改、系统字段不可回写”的边界。
-        role.Name = dto.Name;
+        role.Name = dto.DisplayName;
         role.Description = dto.Description;
         role.IsEnabled = dto.IsEnabled;
         role.UpdatedAt = DateTime.UtcNow;
@@ -190,7 +190,7 @@ public class RoleService : IRoleService
         {
             Id = role.Id,
             Code = role.Code,
-            Name = role.Name,
+            DisplayName = role.Name,
             Description = role.Description,
             IsEnabled = role.IsEnabled,
             IsBuiltIn = role.IsBuiltIn,

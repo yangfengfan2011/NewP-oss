@@ -24,6 +24,15 @@ public class ConfigCenterModelMetadataProviderTests
         {
             validator.Validate(definition);
         }
+
+        var valueListItem = Assert.Single(definitions, static definition => definition.Name == "ValueListItem");
+        Assert.Contains(valueListItem.Fields, static field => field.Name == "EID" && field.IsPrimaryKey);
+        Assert.DoesNotContain(valueListItem.Fields, static field => field.Name == "Id");
+        Assert.Contains(valueListItem.Fields, static field => field.Name == "ECODE");
+        Assert.Contains(valueListItem.Fields, static field => field.Name == "ENAME");
+        Assert.DoesNotContain(valueListItem.Fields, static field => field.Name == "Code");
+        Assert.DoesNotContain(valueListItem.Fields, static field => field.Name == "Name");
+        Assert.Contains(valueListItem.Indexes, static index => index.Name == "UX_ValueListItem_ECODE");
     }
 
     [Fact]
@@ -154,7 +163,7 @@ public class ConfigCenterModelMetadataProviderTests
         Assert.Contains(".HasColumnName(\"Key\")", snapshot, StringComparison.Ordinal);
         Assert.Contains(".HasColumnName(\"ModuleId\")", snapshot, StringComparison.Ordinal);
         Assert.Contains("b.ToTable(\"ValueListItem\"", snapshot, StringComparison.Ordinal);
-        Assert.Contains(".HasColumnName(\"Name\")", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasColumnName(\"ENAME\")", snapshot, StringComparison.Ordinal);
         Assert.Contains(".HasColumnName(\"UpdatedBy\")", snapshot, StringComparison.Ordinal);
     }
 

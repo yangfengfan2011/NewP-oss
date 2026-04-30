@@ -45,7 +45,7 @@ public sealed class DepartmentService : IDepartmentService
             CompanyId = companyId,
             ParentDepartmentId = parentDepartmentId,
             Code = dto.Code,
-            Name = dto.Name,
+            Name = dto.DisplayName,
             SortOrder = ParseSortOrder(dto.SortOrder)
         };
 
@@ -81,7 +81,7 @@ public sealed class DepartmentService : IDepartmentService
 
         department.CompanyId = companyId;
         department.ParentDepartmentId = parentDepartmentId;
-        department.Name = dto.Name;
+        department.Name = dto.DisplayName;
         department.IsEnabled = dto.IsEnabled;
         department.SortOrder = ParseSortOrder(dto.SortOrder);
         department.UpdatedAt = DateTime.UtcNow;
@@ -96,7 +96,7 @@ public sealed class DepartmentService : IDepartmentService
         CompanyId = department.CompanyId.ToString("D"),
         ParentDepartmentId = department.ParentDepartmentId?.ToString("D"),
         Code = department.Code,
-        Name = department.Name,
+        DisplayName = department.Name,
         IsEnabled = department.IsEnabled,
         SortOrder = department.SortOrder.ToString(CultureInfo.InvariantCulture),
         CreatedAt = department.CreatedAt,

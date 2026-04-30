@@ -217,7 +217,109 @@ powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-MyS
 - 临时覆盖对应连接串
 - 在启动宿主前控制 `Persistence__AutoMigrate`
 
-## 9. 本地数据库准备入口
+## 9. 开发期结构同步工具怎么用
+
+如果只是让本地 SQL Server 开发库跟上当前 `*.model.json`，可以使用开发期结构同步工具：
+
+```powershell
+dotnet build .\server\tools\dev-schema-sync\DevSchemaSync.csproj -v minimal
+```
+
+构建后可直接执行 exe：
+
+```powershell
+.\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe
+```
+
+也可以不显式构建，直接通过 `dotnet run` 执行：
+
+```powershell
+dotnet run --project .\server\tools\dev-schema-sync\DevSchemaSync.csproj --
+```
+
+### 9.1 常用命令
+
+只看计划，不执行：
+
+```powershell
+.\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe
+```
+
+看计划和 SQL，不执行：
+
+```powershell
+.\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe --sql
+```
+
+看计划和 SQL，然后确认执行：
+
+```powershell
+.\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe --sql --apply
+```
+
+输出 JSON 计划，供 agent 或脚本读取，不执行：
+
+```powershell
+.\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe --json
+```
+
+`--json --apply` 不支持，因为 JSON 模式不提供交互确认。
+
+### 9.2 确认流程
+
+`--sql --apply` 会先输出结构计划和 SQL Preview，然后进入确认：
+
+```text
+是否继续执行本次同步计划？输入 y 继续，其他任意输入取消 [y/N]:
+```
+
+输入 `y` 后，如果计划只包含 Safe 操作，会直接执行。
+
+如果计划包含 `Confirm` 级高风险操作，工具会继续输出高风险摘要，并要求输入固定短语：
+
+```text
+请输入 APPLY RISK 继续执行高风险操作，其他任意输入取消:
+```
+
+只有完整输入 `APPLY RISK` 才会继续执行高风险 SQL。输入 `y`、`yes` 或其他内容都会取消，不执行任何 SQL。
+
+### 9.3 高风险操作有哪些
+
+当前常见 `Confirm` 操作包括：
+
+- 删除列
+- 表重命名
+- 列重命名
+- 列类型变更
+- 可空性从可空收紧为非空
+- 需要重建或影响唯一性的索引调整
+
+执行前应仔细检查 SQL Preview。这个工具不做自动数据备份和自动回滚。
+
+### 9.4 和 Host 自动启动的区别
+
+Host 在 `DevelopmentSchemaSync:Enabled=true`、`Persistence:Provider=SqlServer`、开发环境下会自动执行 Safe 结构同步。
+
+但 Host 自动启动不会执行 `Confirm` 高风险计划；遇到高风险计划时仍会阻断启动。需要执行高风险计划时，应回到 CLI，使用：
+
+```powershell
+.\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe --sql --apply
+```
+
+这样可以先看 SQL，再经过整体确认和高风险二次确认。
+
+### 9.5 边界
+
+- 当前只支持 SQL Server。
+- 工具只读取仓库中的 `modules/**/metadata/models/*.model.json`。
+- 工具不生成 migration 文件。
+- 工具不修改 `ModelSnapshot`。
+- 工具不写 `__EFMigrationsHistory`。
+- 工具第一版不自动删表；数据库中多出的表只作为未托管对象提示。
+
+正式发布和可审计回滚仍应使用 EF Core migration 链路。
+
+## 10. 本地数据库准备入口
 
 如果你还没有准备本地三库容器，请先看：
 
@@ -227,7 +329,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-MyS
 
 - [`../guides/2026-04-09-local-multi-db-runtime-record.md`](../guides/2026-04-09-local-multi-db-runtime-record.md)
 
-## 10. 模块作者通常需要改哪些位置
+## 11. 模块作者通常需要改哪些位置
 
 以首批模块为例：
 
@@ -242,7 +344,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-MyS
 - EF 仓储改动进入 `Ef`
 - 宿主装配和 migration 配置留在平台层
 
-## 11. 当前边界与注意事项
+## 12. 当前边界与注意事项
 
 - 当前默认适配器只有 `EfCore`
 - 当前 `AutoMigrate` 已实际生效
@@ -250,8 +352,9 @@ powershell -ExecutionPolicy Bypass -File .\tests\integration\persistence\Run-MyS
 - 当前 smoke 依赖本机数据库容器和连接串可用
 - 更换环境后，应重新跑 smoke 确认
 
-## 12. 进一步阅读
+## 13. 进一步阅读
 
 - API 边界：[`persistence-public-api.md`](./persistence-public-api.md)
 - 开发顺序：[`persistence-development-workflow.md`](./persistence-development-workflow.md)
+- 开发期结构同步高风险确认设计：[`../designs/dev-schema-sync-risk-confirm-apply-design.md`](../designs/dev-schema-sync-risk-confirm-apply-design.md)
 - 测试入口：[`../../tests/README.md`](../../tests/README.md)

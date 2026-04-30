@@ -68,7 +68,9 @@ public sealed class DevelopmentSchemaSyncCoordinator
     private readonly Func<CancellationToken, Task<SchemaPlanningResult>> _buildPlanAsync;
     private readonly Func<SchemaPlan, CancellationToken, Task<ApplyResult>> _applyAsync;
     private readonly Func<SchemaPlan, bool> _confirmApply;
+    private readonly Func<IReadOnlyList<SchemaOperation>, bool> _confirmRisk;
     private readonly bool _applyChanges;
+    private readonly bool _allowConfirmOperations;
 
     private DevelopmentSchemaSyncCoordinator(
         ModelSourceInventory inventory,
@@ -76,14 +78,18 @@ public sealed class DevelopmentSchemaSyncCoordinator
         Func<CancellationToken, Task<SchemaPlanningResult>> buildPlanAsync,
         Func<SchemaPlan, CancellationToken, Task<ApplyResult>> applyAsync,
         Func<SchemaPlan, bool> confirmApply,
-        bool applyChanges)
+        Func<IReadOnlyList<SchemaOperation>, bool> confirmRisk,
+        bool applyChanges,
+        bool allowConfirmOperations)
     {
         _inventory = inventory;
         _verifySignaturesAsync = verifySignaturesAsync;
         _buildPlanAsync = buildPlanAsync;
         _applyAsync = applyAsync;
         _confirmApply = confirmApply ?? throw new ArgumentNullException(nameof(confirmApply));
+        _confirmRisk = confirmRisk ?? throw new ArgumentNullException(nameof(confirmRisk));
         _applyChanges = applyChanges;
+        _allowConfirmOperations = allowConfirmOperations;
     }
 
     /// <summary>
@@ -100,7 +106,9 @@ public sealed class DevelopmentSchemaSyncCoordinator
             cancellationToken => BuildPlanAsync(options, cancellationToken),
             (plan, cancellationToken) => ApplySafePlanAsync(options, plan, cancellationToken),
             options.ConfirmApply ?? (static _ => false),
-            options.ApplyChanges);
+            options.ConfirmRisk ?? (static _ => false),
+            options.ApplyChanges,
+            options.AllowConfirmOperations);
     }
 
     /// <summary>
@@ -114,7 +122,9 @@ public sealed class DevelopmentSchemaSyncCoordinator
         Exception? applyException = null,
         Exception? buildPlanException = null,
         Func<SchemaPlan, bool>? applyConfirmation = null,
-        Func<SchemaPlan, CancellationToken, Task<ApplyResult>>? applyAsync = null)
+        Func<IReadOnlyList<SchemaOperation>, bool>? riskConfirmation = null,
+        Func<SchemaPlan, CancellationToken, Task<ApplyResult>>? applyAsync = null,
+        bool allowConfirmOperations = false)
     {
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(plan);
@@ -122,7 +132,13 @@ public sealed class DevelopmentSchemaSyncCoordinator
         var applyChanges = applyResult is not null
             || applyException is not null
             || applyConfirmation is not null
+            || riskConfirmation is not null
             || applyAsync is not null;
+
+        var effectiveRiskConfirmation = riskConfirmation ?? (static _ => false);
+        var effectiveApplyAsync = applyAsync ?? ((_, _) => applyException is not null
+            ? Task.FromException<ApplyResult>(applyException)
+            : Task.FromResult(applyResult ?? new ApplyResult(true, false, 0, 0)));
 
         return new DevelopmentSchemaSyncCoordinator(
             inventory,
@@ -132,11 +148,23 @@ public sealed class DevelopmentSchemaSyncCoordinator
             _ => buildPlanException is not null
                 ? Task.FromException<SchemaPlanningResult>(buildPlanException)
                 : Task.FromResult(new SchemaPlanningResult(plan, 0)),
-            applyAsync ?? ((_, _) => applyException is not null
-                ? Task.FromException<ApplyResult>(applyException)
-                : Task.FromResult(applyResult ?? new ApplyResult(true, false, 0, 0))),
+            async (schemaPlan, cancellationToken) =>
+            {
+                var confirmOperations = schemaPlan.Operations
+                    .Where(static operation => string.Equals(operation.RiskLevel, RiskLevel.Confirm, StringComparison.Ordinal))
+                    .ToArray();
+
+                if (confirmOperations.Length > 0 && !effectiveRiskConfirmation(confirmOperations))
+                {
+                    return new ApplyResult(false, true, 0, 0);
+                }
+
+                return await effectiveApplyAsync(schemaPlan, cancellationToken);
+            },
             applyConfirmation ?? (static _ => false),
-            applyChanges);
+            effectiveRiskConfirmation,
+            applyChanges,
+            allowConfirmOperations);
     }
 
     /// <summary>
@@ -164,9 +192,9 @@ public sealed class DevelopmentSchemaSyncCoordinator
                 .Where(static operation => string.Equals(operation.RiskLevel, RiskLevel.Confirm, StringComparison.Ordinal))
                 .ToArray();
 
-            if (confirmOperations.Length > 0)
+            if (confirmOperations.Length > 0 && !_allowConfirmOperations)
             {
-                // 任务 7 阶段统一禁止 Confirm 风险进入执行层；任务 8 若要放开，必须重新设计显式安全策略。
+                // 默认阻断 Confirm 风险，只有 CLI 交互路径显式开启后才允许进入二次确认和执行层。
                 return Blocked("ConfirmOperationsDetected", inventory, [], planning.Plan, planning.DatabaseTableCount, null);
             }
 
@@ -310,7 +338,7 @@ public sealed class DevelopmentSchemaSyncCoordinator
             options.ConnectionString,
             // 整体确认已由 coordinator 的 ConfirmApply 委托完成，执行器这里只保留 SQL 执行职责。
             _ => true,
-            _ => false);
+            options.ConfirmRisk ?? (static _ => false));
 
         return executor.ApplyAsync(plan, cancellationToken);
     }

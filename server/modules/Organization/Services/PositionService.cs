@@ -33,7 +33,7 @@ public sealed class PositionService : IPositionService
             CompanyId = ParseGuid(dto.CompanyId, nameof(dto.CompanyId)),
             DepartmentId = ParseGuid(dto.DepartmentId, nameof(dto.DepartmentId)),
             Code = dto.Code,
-            Name = dto.Name,
+            Name = dto.DisplayName,
             EmploymentStatus = dto.EmploymentStatus,
             SortOrder = ParseSortOrder(dto.SortOrder)
         };
@@ -52,7 +52,7 @@ public sealed class PositionService : IPositionService
 
         // 岗位更新继续沿用现有边界：部门、名称、状态可改，代码与公司归属保持稳定。
         position.DepartmentId = ParseGuid(dto.DepartmentId, nameof(dto.DepartmentId));
-        position.Name = dto.Name;
+        position.Name = dto.DisplayName;
         position.EmploymentStatus = dto.EmploymentStatus;
         position.IsEnabled = dto.IsEnabled;
         position.SortOrder = ParseSortOrder(dto.SortOrder);
@@ -68,7 +68,7 @@ public sealed class PositionService : IPositionService
         CompanyId = position.CompanyId.ToString("D"),
         DepartmentId = position.DepartmentId.ToString("D"),
         Code = position.Code,
-        Name = position.Name,
+        DisplayName = position.Name,
         EmploymentStatus = position.EmploymentStatus,
         IsEnabled = position.IsEnabled,
         SortOrder = position.SortOrder.ToString(CultureInfo.InvariantCulture),

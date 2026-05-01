@@ -10,7 +10,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
 function Get-ChangedDesignPaths {
-    $gitStatusOutput = git status --short --untracked-files=all -- docs/designs 2>$null
+    $gitStatusOutput = git status --short --untracked-files=all -- docs/designs docs/superpowers/specs 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $gitStatusOutput) {
         return @()
     }
@@ -26,7 +26,7 @@ function Get-ChangedDesignPaths {
             $pathPortion = ($pathPortion.Split("->")[-1]).Trim()
         }
 
-        if ($pathPortion -like "docs/designs/*-design.md") {
+        if ($pathPortion -like "docs/designs/*-design.md" -or $pathPortion -like "docs/superpowers/specs/*-design.md") {
             $results.Add((Join-Path $repoRoot $pathPortion))
         }
     }

@@ -23,6 +23,7 @@
 - `AGENTS.md`
 - `CLAUDE.md`
 - `docs/designs/*`
+- `docs/superpowers/specs/*`
 
 如果这些文件被改动，必须确认：
 

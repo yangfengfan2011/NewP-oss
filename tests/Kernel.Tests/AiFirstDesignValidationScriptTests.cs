@@ -348,14 +348,116 @@ public class AiFirstDesignValidationScriptTests : IDisposable
                 "-RegisterAiFirst", "1"
             ]);
 
-        var createdDesignPath = Path.Combine(designsDir, "sample-capability-design.md");
+        var todayPrefix = DateTime.Today.ToString("yyyy-MM-dd");
+        var createdDesignPath = Path.Combine(designsDir, $"{todayPrefix}-sample-capability-design.md");
 
         Assert.Equal(0, result.ExitCode);
         Assert.True(File.Exists(createdDesignPath));
         Assert.Equal(File.ReadAllText(templatePath, Encoding.UTF8), File.ReadAllText(createdDesignPath, Encoding.UTF8));
 
         var targets = File.ReadAllLines(targetsFilePath, Encoding.UTF8);
-        Assert.Contains("../designs/sample-capability-design.md", targets);
+        Assert.Contains($"../designs/{todayPrefix}-sample-capability-design.md", targets);
+    }
+
+    [Fact]
+    public void NewDesignDoc_DoesNotDuplicateExistingDatePrefix()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempRoot(repoRoot);
+        var architectureDir = Path.Combine(tempRoot, "docs", "architecture");
+        var designsDir = Path.Combine(tempRoot, "docs", "designs");
+        Directory.CreateDirectory(architectureDir);
+        Directory.CreateDirectory(designsDir);
+
+        var templatePath = Path.Combine(designsDir, "detailed-design-template.md");
+        var targetsFilePath = Path.Combine(architectureDir, "ai-first-design-check-targets.txt");
+        File.WriteAllText(
+            templatePath,
+            """
+            # 模板内容
+
+            ## AI-First 最小检查清单
+
+            - 入口在哪里：`scripts/new-design-doc.ps1`
+            - 边界在哪里：仅覆盖设计创建脚本测试
+            - 如何验证：运行设计创建脚本测试
+            - 失败信号是什么：脚本返回非零退出码
+            - 如何回滚：删除本轮新增设计文件与目标清单项
+            """,
+            Encoding.UTF8);
+        File.WriteAllLines(targetsFilePath, ["# targets"]);
+
+        var scriptPath = Path.Combine(repoRoot, "scripts", "new-design-doc.ps1");
+        var result = RunPowerShellScript(
+            repoRoot,
+            scriptPath,
+            [
+                "-DesignName", "2026-04-30-sample-capability",
+                "-DesignsRoot", designsDir,
+                "-TemplatePath", templatePath,
+                "-TargetsFile", targetsFilePath,
+                "-RegisterAiFirst", "1"
+            ]);
+
+        var createdDesignPath = Path.Combine(designsDir, "2026-04-30-sample-capability-design.md");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(createdDesignPath));
+        Assert.False(File.Exists(Path.Combine(designsDir, $"{DateTime.Today:yyyy-MM-dd}-2026-04-30-sample-capability-design.md")));
+
+        var targets = File.ReadAllLines(targetsFilePath, Encoding.UTF8);
+        Assert.Contains("../designs/2026-04-30-sample-capability-design.md", targets);
+    }
+
+    [Fact]
+    public void NewDesignDoc_CreatesDesignUnderCategoryWhenProvided()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempRoot(repoRoot);
+        var architectureDir = Path.Combine(tempRoot, "docs", "architecture");
+        var designsDir = Path.Combine(tempRoot, "docs", "designs");
+        Directory.CreateDirectory(architectureDir);
+        Directory.CreateDirectory(designsDir);
+
+        var templatePath = Path.Combine(designsDir, "detailed-design-template.md");
+        var targetsFilePath = Path.Combine(architectureDir, "ai-first-design-check-targets.txt");
+        File.WriteAllText(
+            templatePath,
+            """
+            # 模板内容
+
+            ## AI-First 最小检查清单
+
+            - 入口在哪里：`scripts/new-design-doc.ps1`
+            - 边界在哪里：仅覆盖设计创建脚本分类测试
+            - 如何验证：运行设计创建脚本测试
+            - 失败信号是什么：脚本返回非零退出码
+            - 如何回滚：删除本轮新增设计文件与目标清单项
+            """,
+            Encoding.UTF8);
+        File.WriteAllLines(targetsFilePath, ["# targets"]);
+
+        var scriptPath = Path.Combine(repoRoot, "scripts", "new-design-doc.ps1");
+        var result = RunPowerShellScript(
+            repoRoot,
+            scriptPath,
+            [
+                "-DesignName", "categorized-capability",
+                "-Category", "platform",
+                "-DesignsRoot", designsDir,
+                "-TemplatePath", templatePath,
+                "-TargetsFile", targetsFilePath,
+                "-RegisterAiFirst", "1"
+            ]);
+
+        var todayPrefix = DateTime.Today.ToString("yyyy-MM-dd");
+        var createdDesignPath = Path.Combine(designsDir, "platform", $"{todayPrefix}-categorized-capability-design.md");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(createdDesignPath));
+
+        var targets = File.ReadAllLines(targetsFilePath, Encoding.UTF8);
+        Assert.Contains($"../designs/platform/{todayPrefix}-categorized-capability-design.md", targets);
     }
 
     [Fact]

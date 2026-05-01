@@ -125,7 +125,7 @@
 - 方案讨论
 - 设计草稿
 
-详细设计文档默认放在 `docs/designs/`，模板见 `docs/designs/detailed-design-template.md`。
+后续新增详细设计文档默认放在 `docs/superpowers/specs/`，模板仍见 `docs/designs/detailed-design-template.md`。
 
 ### 8.3 禁止口口相传
 

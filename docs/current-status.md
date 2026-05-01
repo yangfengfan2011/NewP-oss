@@ -2,6 +2,12 @@
 
 本文档用于给出仓库当前的统一口径，避免项目状态分散在会话摘要、阶段文档和模块文档中。
 
+## 当前文档入口口径
+
+- 后续新增详细设计默认放在 `docs/superpowers/specs/<category>/`，分类为 `platform / modules / tooling / roadmap`。
+- 后续新增实施计划默认放在 `docs/superpowers/plans/<category>/`，分类为 `platform / modules / tooling / roadmap`。
+- `docs/designs/` 作为既有历史设计与模板目录继续保留，不要求一次性迁移。
+
 ## 阶段完成度
 
 ### Phase 0：盘点与处置
@@ -548,20 +554,20 @@ AI-First 对齐：
 
 - 新增正式标准文档 `docs/architecture/ai-first-execution-standard.md`，把分散在 `AGENTS.md`、AI-first 判定准则、组件化护栏和设计模板中的规则收成统一执行入口
 - `docs/designs/detailed-design-template.md` 已补齐 AI-first 最小检查清单，明确要求新设计回答“入口、边界、验证、失败信号、回滚”5 项必答项
-- `docs/designs/README.md` 已补充提交前定向校验命令，形成设计入口到校验入口的最小流程闭环
+- `docs/designs/README.md` 已调整为历史设计与模板入口，新增设计默认入口已收敛到 `docs/superpowers/specs/`
 - 新增 `scripts/validate-ai-first-design.ps1`，可对指定设计文档执行 5 项必答项与占位词检查
 - `tests/Kernel.Tests` 已补齐脚本级回归测试，覆盖“缺项失败”“占位词失败”“模板通过”三类核心行为
 - 新增 `scripts/check-ai-first-design-targets.ps1` / `scripts/check-ai-first-design-targets.sh`，将当前受控规范文档集收敛为单一检查入口
 - `scripts/test.ps1` / `scripts/test.sh` 已接入 AI-first 设计目标检查段，根测试入口不再完全忽略 WP2 门禁
 - `.github/workflows/ci.yml` 已接入 AI-first 设计目标校验步骤，使主线 CI 能检查当前受控规范文档集
-- `check-ai-first-design-targets.ps1` 已支持显式传入附加设计文档，并默认自动发现当前工作区中新增或修改的 `docs/designs/*-design.md`
+- `check-ai-first-design-targets.ps1` 已支持显式传入附加设计文档，并默认自动发现当前工作区中新增或修改的 `docs/designs/*-design.md` 与 `docs/superpowers/specs/*-design.md`
 - 受控门禁已从“只校验固定规范入口”扩展到“固定规范入口 + 本轮新增设计文档”，开始覆盖真实新增工作流
 - 回归测试已覆盖显式附加设计失败与未跟踪新增设计自动发现失败两类关键路径
 - 新增 `docs/architecture/ai-first-design-check-targets.txt`，将受控基础目标集合从脚本硬编码下沉为仓库内显式清单
 - `check-ai-first-design-targets.ps1` 已支持 `-TargetsFile`，后续可在不改脚本逻辑的前提下调整受控基础集
 - 新增 `scripts/register-ai-first-design-target.ps1` / `scripts/register-ai-first-design-target.sh`，可将新增设计文档以相对路径登记到显式目标清单
 - `docs/designs/README.md` 与 `docs/architecture/ai-first-execution-standard.md` 已补充“如何登记到 AI-first 门禁”的命令入口
-- 新增 `scripts/new-design-doc.ps1` / `scripts/new-design-doc.sh`，可按模板创建 `<name>-design.md`，并默认将其登记到 AI-first 显式目标清单
+- 新增 `scripts/new-design-doc.ps1` / `scripts/new-design-doc.sh`，可按模板创建 `YYYY-MM-DD-<name>-design.md`，并默认将其登记到 AI-first 显式目标清单
 - 新增设计的最小标准路径已从“手工复制模板 + 手工登记”收敛为单一脚本入口
 - `scripts/new-design-doc.ps1` 已补上模板预校验，避免无效模板被直接创建并登记进 AI-first 目标集
 - `tests/Kernel.Tests` 已新增“无效模板不能创建也不能登记”的回归测试，补齐设计创建入口的健壮性验证

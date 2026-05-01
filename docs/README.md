@@ -38,7 +38,7 @@
 
 ## 4. designs
 
-实施前必须存在的详细设计文档。
+既有历史详细设计文档与设计模板。后续新增设计默认进入 `docs/superpowers/specs/`。
 
 - [designs/README.md](designs/README.md)
 - [designs/detailed-design-template.md](designs/detailed-design-template.md)
@@ -119,7 +119,7 @@
 
 ## 10. superpowers
 
-设计规格与实施计划沉淀。
+后续新增设计规格与实施计划沉淀。新增详细设计默认放在 `superpowers/specs/`，实施计划默认放在 `superpowers/plans/`。
 
 - [superpowers/specs/](superpowers/specs/)
 - [superpowers/plans/](superpowers/plans/)
@@ -133,7 +133,7 @@
 - 架构总览：[architecture/architecture.md](architecture/architecture.md)
 - 组件化开发入口：[developer/componentized-development.md](developer/componentized-development.md)
 - 组件化 Example：[developer/componentized-example-module.md](developer/componentized-example-module.md)
-- 详细设计入口：[designs/README.md](designs/README.md)
+- 详细设计入口：[superpowers/README.md](superpowers/README.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
 - 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
 - 当前阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)

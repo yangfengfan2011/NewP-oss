@@ -1,10 +1,10 @@
-# 详细设计文档
+# 历史详细设计文档
 
-本目录用于存放“实施前必须存在”的详细设计文档。
+本目录保留既有历史详细设计文档与详细设计模板。后续新增详细设计文档默认放在 `docs/superpowers/specs/`，实施计划默认放在 `docs/superpowers/plans/`。
 
 ## 目录分层
 
-为避免 `docs/designs/` 长期平铺失控，后续新增设计文档默认按以下子目录分类：
+本目录中的既有设计文档按以下子目录分类：
 
 - `platform/`
   - 跨模块、跨能力的平台级详细设计
@@ -17,9 +17,9 @@
 
 默认规则：
 
-- 详细设计仍然统一放在 `docs/designs/` 之下，不新增新的 `docs/` 顶层目录。
-- 新文档从现在开始按子目录分类落位，旧文档不要求一次性迁移。
-- 旧文档在后续被修改时，可顺手迁移到更合适的子目录。
+- 后续新增详细设计默认放在 `docs/superpowers/specs/`。
+- `docs/designs/` 下旧文档不要求一次性迁移。
+- 旧文档在后续被修改时，可按当时工作包要求顺手迁移到 `docs/superpowers/specs/` 或继续在原位置维护。
 - 当某份设计稳定为长期规范后，可再提炼到 `docs/architecture/` 或 `docs/developer/`。
 
 ## 规则
@@ -67,6 +67,9 @@
 powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignName <your-design-name>
 ```
 
+脚本默认会在文件名前补当天日期，生成 `docs/superpowers/specs/YYYY-MM-DD-<your-design-name>-design.md`；如果名称已带 `YYYY-MM-DD-` 前缀，则保持原样。
+如主题明确，可通过 `-Category platform|modules|tooling|roadmap` 直接落到 `docs/superpowers/specs/<category>/`。
+
 新增设计文档还应同时满足：
 
 - 明确回答 AI-first 最小检查清单中的 5 项必答项：入口、边界、验证、失败信号、回滚
@@ -75,13 +78,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignNam
 建议在提交前运行定向校验：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\<subdir>\<your-design>.md
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\<your-design>.md
 ```
 
 如果这份设计文档需要进入 AI-first 受控门禁，可登记到显式目标清单：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\designs\<subdir>\<your-design>.md
+powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\superpowers\specs\<your-design>.md
 ```
 
 ## 当前设计文档

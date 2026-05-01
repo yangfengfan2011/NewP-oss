@@ -1,7 +1,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$DesignName,
-    [string]$DesignsRoot = ".\docs\designs",
+    [ValidateSet("", "platform", "modules", "tooling", "roadmap")]
+    [string]$Category = "",
+    [string]$DesignsRoot = ".\docs\superpowers\specs",
     [string]$TemplatePath = ".\docs\designs\detailed-design-template.md",
     [string]$TargetsFile = ".\docs\architecture\ai-first-design-check-targets.txt",
     [string]$RegisterAiFirst = "true"
@@ -19,6 +21,19 @@ function Test-Enabled {
     return $normalized -notin @("0", "false", "no")
 }
 
+function Add-DatePrefix {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    if ($Value -match "^\d{4}-\d{2}-\d{2}-") {
+        return $Value
+    }
+
+    return "{0}-{1}" -f (Get-Date -Format "yyyy-MM-dd"), $Value
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -31,6 +46,8 @@ if ([string]::IsNullOrWhiteSpace($normalizedName)) {
     throw "DesignName must not be empty."
 }
 
+$normalizedName = Add-DatePrefix -Value $normalizedName
+
 if ($normalizedName.EndsWith("-design", [System.StringComparison]::OrdinalIgnoreCase)) {
     $fileName = "$normalizedName.md"
 }
@@ -38,7 +55,15 @@ else {
     $fileName = "$normalizedName-design.md"
 }
 
-$designPath = Join-Path $resolvedDesignsRoot $fileName
+$targetDesignsRoot = $resolvedDesignsRoot
+if (-not [string]::IsNullOrWhiteSpace($Category)) {
+    $targetDesignsRoot = Join-Path $resolvedDesignsRoot $Category
+    if (-not (Test-Path -LiteralPath $targetDesignsRoot)) {
+        New-Item -ItemType Directory -Path $targetDesignsRoot | Out-Null
+    }
+}
+
+$designPath = Join-Path $targetDesignsRoot $fileName
 if (Test-Path -LiteralPath $designPath) {
     throw "Design file already exists: $designPath"
 }

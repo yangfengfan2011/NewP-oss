@@ -60,6 +60,7 @@
 - `docs/current-status.md`
 - `AGENTS.md`
 - `docs/designs/*`
+- `docs/superpowers/specs/*`
 - `docs/phases/post-phase-6-stage-map.md`
 
 下列内容更适合交给辅助执行单元：
@@ -73,10 +74,10 @@
 
 如果当前任务需要新增或更新设计文档，默认按下面的 AI-first 闭环执行：
 
-1. 先阅读 [../architecture/ai-first-execution-standard.md](../architecture/ai-first-execution-standard.md) 和 [../designs/README.md](../designs/README.md)
+1. 先阅读 [../architecture/ai-first-execution-standard.md](../architecture/ai-first-execution-standard.md) 和 [../superpowers/README.md](../superpowers/README.md)
 2. 使用 `scripts/new-design-doc.ps1` / `scripts/new-design-doc.sh` 按模板创建设计文档，而不是手工复制旧文档
 3. 在提交前至少运行一次 `scripts/validate-ai-first-design.ps1`
-4. 如果当前设计已进入显式目标清单，或工作区存在新增 `docs/designs/*-design.md`，再运行一次 `scripts/check-ai-first-design-targets.ps1`
+4. 如果当前设计已进入显式目标清单，或工作区存在新增 `docs/superpowers/specs/*-design.md`，再运行一次 `scripts/check-ai-first-design-targets.ps1`
 
 ## 6. 当前有效入口
 

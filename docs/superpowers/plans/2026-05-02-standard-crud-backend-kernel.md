@@ -79,7 +79,7 @@
 - Create: `tests/PlatformCrud.Tests/Support/PlatformCrudModelDefinitions.cs`
 - Modify: `ICP-Platform.sln`
 
-- [ ] **Step 1: 创建 `PlatformCrud.csproj`**
+- [x] **Step 1: 创建 `PlatformCrud.csproj`**
 
 Create `server/platform-crud/PlatformCrud.csproj`:
 
@@ -107,7 +107,7 @@ Create `server/platform-crud/PlatformCrud.csproj`:
 </Project>
 ```
 
-- [ ] **Step 2: 创建 `PlatformCrud.Tests.csproj`**
+- [x] **Step 2: 创建 `PlatformCrud.Tests.csproj`**
 
 Create `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`:
 
@@ -138,7 +138,7 @@ Create `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`:
 </Project>
 ```
 
-- [ ] **Step 3: 创建当前 `ModelDefinition` 签名测试辅助**
+- [x] **Step 3: 创建当前 `ModelDefinition` 签名测试辅助**
 
 Create `tests/PlatformCrud.Tests/Support/PlatformCrudModelDefinitions.cs`:
 
@@ -169,7 +169,7 @@ public static class PlatformCrudModelDefinitions
 }
 ```
 
-- [ ] **Step 4: 加入 solution 并验证工程能构建**
+- [x] **Step 4: 加入 solution 并验证工程能构建**
 
 Run:
 
@@ -185,7 +185,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add .\ICP-Platform.sln .\server\platform-crud .\tests\PlatformCrud.Tests

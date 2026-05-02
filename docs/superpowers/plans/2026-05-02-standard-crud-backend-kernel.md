@@ -214,7 +214,7 @@ git commit -m "功能：建立标准CRUD内核工程"
 - Create: `server/platform-crud/Abstractions/IStandardCrudDeleteGuard.cs`
 - Create: `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`
 
-- [ ] **Step 1: 写 descriptor 校验测试**
+- [x] **Step 1: 写 descriptor 校验测试**
 
 Create `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`:
 
@@ -253,7 +253,7 @@ public sealed class StandardCrudDescriptorTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -267,7 +267,7 @@ Expected:
 error CS0234: The type or namespace name 'Descriptors' does not exist
 ```
 
-- [ ] **Step 3: 创建 descriptor 类型**
+- [x] **Step 3: 创建 descriptor 类型**
 
 Create `server/platform-crud/Descriptors/StandardCrudDeletePolicy.cs`:
 
@@ -316,7 +316,7 @@ public sealed class StandardCrudDescriptor
 }
 ```
 
-- [ ] **Step 4: 创建标准模型**
+- [x] **Step 4: 创建标准模型**
 
 Create `server/platform-crud/Models/StandardCrudQueryCondition.cs`:
 
@@ -434,7 +434,7 @@ public sealed record StandardCrudMutationResult
 }
 ```
 
-- [ ] **Step 5: 创建扩展点接口**
+- [x] **Step 5: 创建扩展点接口**
 
 Create `server/platform-crud/Abstractions/IStandardCrudQueryCustomizer.cs`:
 
@@ -556,7 +556,7 @@ public interface IStandardCrudDeleteGuard
 }
 ```
 
-- [ ] **Step 6: 创建 descriptor 校验器**
+- [x] **Step 6: 创建 descriptor 校验器**
 
 Create `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`:
 
@@ -597,7 +597,7 @@ public static class StandardCrudDescriptorValidator
 }
 ```
 
-- [ ] **Step 7: 运行测试并提交**
+- [x] **Step 7: 运行测试并提交**
 
 Run:
 

@@ -1794,7 +1794,7 @@ git commit -m "功能：接入人员标准CRUD扩展点"
 - Modify: `server/platform-crud/Runtime/StandardCrudService.cs`
 - Create: `tests/PlatformCrud.Tests/StandardCrudServiceWriteTests.cs`
 
-- [ ] **Step 1: 写 write/disable/delete guard 测试**
+- [x] **Step 1: 写 write/disable/delete guard 测试**
 
 Create `tests/PlatformCrud.Tests/StandardCrudServiceWriteTests.cs`:
 
@@ -1907,7 +1907,7 @@ public sealed class StandardCrudServiceWriteTests
 }
 ```
 
-- [ ] **Step 2: 实现服务写操作**
+- [x] **Step 2: 实现服务写操作**
 
 Modify `server/platform-crud/Runtime/StandardCrudService.cs`:
 
@@ -2038,7 +2038,7 @@ private static StandardCrudError NotFound(StandardCrudDescriptor descriptor, str
 };
 ```
 
-- [ ] **Step 3: 运行测试并提交**
+- [x] **Step 3: 运行测试并提交**
 
 Run:
 

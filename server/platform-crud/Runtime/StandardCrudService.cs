@@ -89,61 +89,130 @@ public sealed class StandardCrudService : IStandardCrudService
         return _repository.OptionsAsync(descriptor, query, cancellationToken);
     }
 
-    public Task<StandardCrudMutationResult> CreateAsync(
+    public async Task<StandardCrudMutationResult> CreateAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(StandardCrudMutationResult.Failure(new StandardCrudError
+        StandardCrudDescriptorValidator.Validate(descriptor);
+        var allowed = FilterFields(values, descriptor.FieldSet.CreateFields);
+        if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
         {
-            StatusCode = 409,
-            Code = "StandardCrud.CreateNotEnabled",
-            Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 尚未启用创建主干。",
-            ReasonKey = "standardCrud.createNotEnabled"
-        }));
+            var error = await validator.ValidateCreateAsync(descriptor, allowed, cancellationToken);
+            if (error is not null)
+            {
+                return StandardCrudMutationResult.Failure(error);
+            }
+        }
+
+        var created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
+        return StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, created, cancellationToken));
     }
 
-    public Task<StandardCrudMutationResult> UpdateAsync(
+    public async Task<StandardCrudMutationResult> UpdateAsync(
         StandardCrudDescriptor descriptor,
         string id,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(StandardCrudMutationResult.Failure(new StandardCrudError
+        StandardCrudDescriptorValidator.Validate(descriptor);
+        var allowed = FilterFields(values, descriptor.FieldSet.UpdateFields);
+        if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
         {
-            StatusCode = 409,
-            Code = "StandardCrud.UpdateNotEnabled",
-            Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 尚未启用更新主干。",
-            ReasonKey = "standardCrud.updateNotEnabled"
-        }));
+            var error = await validator.ValidateUpdateAsync(descriptor, id, allowed, cancellationToken);
+            if (error is not null)
+            {
+                return StandardCrudMutationResult.Failure(error);
+            }
+        }
+
+        var updated = await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
+        return updated is null
+            ? StandardCrudMutationResult.Failure(NotFound(descriptor, id))
+            : StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, updated, cancellationToken));
     }
 
-    public Task<StandardCrudMutationResult> DisableAsync(
+    public async Task<StandardCrudMutationResult> DisableAsync(
         StandardCrudDescriptor descriptor,
         string id,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(StandardCrudMutationResult.Failure(new StandardCrudError
+        StandardCrudDescriptorValidator.Validate(descriptor);
+        if (string.IsNullOrWhiteSpace(descriptor.EnabledField))
         {
-            StatusCode = 409,
-            Code = "StandardCrud.DisableNotEnabled",
-            Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 尚未启用停用主干。",
-            ReasonKey = "standardCrud.disableNotEnabled"
-        }));
+            return StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "StandardCrud.EnabledFieldMissing",
+                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 未声明启停字段。",
+                ReasonKey = "standardCrud.enabledFieldMissing"
+            });
+        }
+
+        if (!descriptor.FieldSet.UpdateFields.Contains(descriptor.EnabledField, StringComparer.Ordinal))
+        {
+            return StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "StandardCrud.EnabledFieldNotWritable",
+                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的启停字段未纳入更新字段白名单。",
+                ReasonKey = "standardCrud.enabledFieldNotWritable"
+            });
+        }
+
+        return await UpdateAsync(descriptor, id, new Dictionary<string, object?> { [descriptor.EnabledField] = false }, cancellationToken);
     }
 
-    public Task<StandardCrudMutationResult> DeleteAsync(
+    public async Task<StandardCrudMutationResult> DeleteAsync(
         StandardCrudDescriptor descriptor,
         string id,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(StandardCrudMutationResult.Failure(new StandardCrudError
+        StandardCrudDescriptorValidator.Validate(descriptor);
+        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.None)
         {
-            StatusCode = 409,
-            Code = "StandardCrud.DeleteNotEnabled",
-            Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 尚未启用删除主干。",
-            ReasonKey = "standardCrud.deleteNotEnabled"
-        }));
+            return StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "StandardCrud.DeleteNotSupported",
+                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 不支持删除。",
+                ReasonKey = "standardCrud.deleteNotSupported"
+            });
+        }
+
+        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Auditable)
+        {
+            return StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "StandardCrud.AuditableDeleteNotSupported",
+                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 声明了审计删除，但当前内核尚未提供审计删除实现。",
+                ReasonKey = "standardCrud.auditableDeleteNotSupported"
+            });
+        }
+
+        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Conditional && !_deleteGuards.TryGetValue(descriptor.ResourceKey, out var guard))
+        {
+            return StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "StandardCrud.DeleteGuardMissing",
+                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 使用条件删除但未注册删除守卫。",
+                ReasonKey = "standardCrud.deleteGuardMissing"
+            });
+        }
+
+        if (_deleteGuards.TryGetValue(descriptor.ResourceKey, out var deleteGuard))
+        {
+            var guardError = await deleteGuard.CanDeleteAsync(descriptor, id, cancellationToken);
+            if (guardError is not null)
+            {
+                return StandardCrudMutationResult.Failure(guardError);
+            }
+        }
+
+        var deleted = await _repository.DeleteAsync(descriptor, id, cancellationToken);
+        return deleted ? StandardCrudMutationResult.Success() : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
     }
 
     // 查询扩展点只产出标准条件，仓储仍负责具体执行，避免模块逻辑直接进入持久化实现。
@@ -172,6 +241,22 @@ public sealed class StandardCrudService : IStandardCrudService
         return values;
     }
 
+    // 写入后统一按 detail 流程补齐显示值和摘要块，保证 create/update/disable 的返回结构与详情读取一致。
+    private async Task<StandardCrudDetail> BuildDetailFromRowAsync(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> row,
+        CancellationToken cancellationToken)
+    {
+        var fields = await ApplyDisplayValuesAsync(descriptor, row, cancellationToken);
+        var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
+        foreach (var key in descriptor.SummaryBlockKeys)
+        {
+            summaries[key] = await BuildSummaryAsync(descriptor, fields, key, cancellationToken);
+        }
+
+        return new StandardCrudDetail { Fields = fields, Summaries = summaries };
+    }
+
     // 摘要 provider 是跨模块依赖入口，失败时返回稳定状态，避免详情主数据被附属摘要拖垮。
     private async Task<StandardCrudSummaryBlock> BuildSummaryAsync(
         StandardCrudDescriptor descriptor,
@@ -193,4 +278,28 @@ public sealed class StandardCrudService : IStandardCrudService
             return new StandardCrudSummaryBlock { Status = "dependencyUnavailable" };
         }
     }
+
+    private static IReadOnlyDictionary<string, object?> FilterFields(
+        IReadOnlyDictionary<string, object?> values,
+        IReadOnlyList<string> allowedFields)
+    {
+        var filtered = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var field in allowedFields)
+        {
+            if (values.TryGetValue(field, out var value))
+            {
+                filtered[field] = value;
+            }
+        }
+
+        return filtered;
+    }
+
+    private static StandardCrudError NotFound(StandardCrudDescriptor descriptor, string id) => new()
+    {
+        StatusCode = 404,
+        Code = "StandardCrud.NotFound",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的对象 {id} 不存在。",
+        ReasonKey = "standardCrud.notFound"
+    };
 }

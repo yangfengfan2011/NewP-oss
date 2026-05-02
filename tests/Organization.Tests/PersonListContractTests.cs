@@ -1,6 +1,9 @@
 using System.Collections;
 using System.Reflection;
+using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Controllers;
+using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
@@ -76,6 +79,33 @@ public class PersonListContractTests
         Assert.Equal(summaryType, detailType.GetProperty("AuthorizationSummary")!.PropertyType);
         Assert.NotNull(summaryType!.GetProperty("Status"));
         Assert.NotNull(summaryType.GetProperty("Data"));
+    }
+
+    [Fact]
+    public void PersonCrudDescriptor_DeclaresQueryDisplaySummaryAndConditionalDelete()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        Assert.Equal("organization.person", descriptor.ResourceKey);
+        Assert.Equal("Person", descriptor.ModelName);
+        Assert.Equal("api/organization/persons", descriptor.Route);
+        Assert.Equal(StandardCrudDeletePolicy.Conditional, descriptor.DeletePolicy);
+        Assert.Contains("CompanyName", descriptor.DisplayValueFields);
+        Assert.Contains("DepartmentName", descriptor.DisplayValueFields);
+        Assert.Contains("userLink", descriptor.SummaryBlockKeys);
+        Assert.Contains("authorizationSummary", descriptor.SummaryBlockKeys);
+    }
+
+    [Fact]
+    public void PersonCrudQueryCustomizer_MapsKeywordToPersonNoAndName()
+    {
+        var customizer = new PersonCrudQueryCustomizer();
+        var conditions = customizer.BuildConditions(
+            PersonCrudDescriptorFactory.Create(),
+            new StandardCrudListQuery(Filters: new Dictionary<string, string?> { ["keyword"] = "张" }));
+
+        Assert.Contains(conditions, condition => condition.Field == "PersonNo" && condition.Operator == "contains");
+        Assert.Contains(conditions, condition => condition.Field == "ENAME" && condition.Operator == "contains");
     }
 
     [Fact]

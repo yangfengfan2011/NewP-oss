@@ -1483,7 +1483,7 @@ git commit -m "功能：实现标准CRUD读取编排"
 - Modify: `tests/Organization.Tests/Organization.Tests.csproj`
 - Modify: `tests/Organization.Tests/PersonListContractTests.cs`
 
-- [ ] **Step 1: 引用 PlatformCrud**
+- [x] **Step 1: 引用 PlatformCrud**
 
 Modify `server/modules/Organization/OrganizationModule.csproj`:
 
@@ -1497,7 +1497,7 @@ Modify `tests/Organization.Tests/Organization.Tests.csproj`:
 <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
 ```
 
-- [ ] **Step 2: 写 Person descriptor 和扩展点合同测试**
+- [x] **Step 2: 写 Person descriptor 和扩展点合同测试**
 
 Append to `tests/Organization.Tests/PersonListContractTests.cs`:
 
@@ -1538,7 +1538,7 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Crud;
 ```
 
-- [ ] **Step 3: 创建 Person descriptor 和 query customizer**
+- [x] **Step 3: 创建 Person descriptor 和 query customizer**
 
 Create `server/modules/Organization/Crud/PersonCrudDescriptorFactory.cs`:
 
@@ -1615,7 +1615,7 @@ public sealed class PersonCrudQueryCustomizer : IStandardCrudQueryCustomizer
 }
 ```
 
-- [ ] **Step 4: 创建显示值 resolver**
+- [x] **Step 4: 创建显示值 resolver**
 
 Create `server/modules/Organization/Crud/PersonCrudDisplayValueResolver.cs`:
 
@@ -1674,7 +1674,7 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
 }
 ```
 
-- [ ] **Step 5: 创建 summary providers**
+- [x] **Step 5: 创建 summary providers**
 
 Create `server/modules/Organization/Crud/PersonUserLinkSummaryProvider.cs`:
 
@@ -1767,7 +1767,7 @@ public sealed class PersonAuthorizationSummaryProvider : IStandardCrudSummaryPro
 }
 ```
 
-- [ ] **Step 6: 运行测试并提交**
+- [x] **Step 6: 运行测试并提交**
 
 Run:
 

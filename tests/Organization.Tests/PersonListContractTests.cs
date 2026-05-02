@@ -109,6 +109,18 @@ public class PersonListContractTests
     }
 
     [Fact]
+    public async Task PersonCrudDeleteGuard_WhenPersonHasUserLink_ReturnsConflict()
+    {
+        var personId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var guard = new PersonCrudDeleteGuard(new InMemoryPersonUserLinkRepositoryWithLink(personId));
+
+        var error = await guard.CanDeleteAsync(PersonCrudDescriptorFactory.Create(), personId.ToString("D"));
+
+        Assert.NotNull(error);
+        Assert.Equal("Organization.Person.DeleteBlockedByUserLink", error!.Code);
+    }
+
+    [Fact]
     public async Task GetListAsync_ProjectsRequiredFields()
     {
         dynamic service = BuildService();
@@ -254,6 +266,36 @@ public class PersonListContractTests
             _links.Add(link);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class InMemoryPersonUserLinkRepositoryWithLink : IPersonUserLinkRepository
+    {
+        private readonly Guid _personId;
+
+        public InMemoryPersonUserLinkRepositoryWithLink(Guid personId)
+        {
+            _personId = personId;
+        }
+
+        public Task<PersonUserLink?> GetByPersonIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<PersonUserLink?>(personId == _personId
+                ? new PersonUserLink
+                {
+                    PersonId = personId,
+                    UserId = "user-1",
+                    LinkedAt = DateTime.UtcNow,
+                    LinkedBy = "test"
+                }
+                : null);
+
+        public Task<bool> ExistsByUserIdAsync(
+            string userId,
+            Guid? excludedPersonId = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public Task UpsertAsync(PersonUserLink link, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class InMemoryCompanyRepository : ICompanyRepository

@@ -1,4 +1,7 @@
+using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
@@ -17,6 +20,7 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
 
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddStandardCrudKernel();
         services.AddScoped<ICompanyRepository, EfCompanyRepository>();
         services.AddScoped<IDepartmentRepository, EfDepartmentRepository>();
         services.AddScoped<IPositionRepository, EfPositionRepository>();
@@ -28,6 +32,12 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
         services.AddScoped<IIdentityUserDirectory, NullIdentityUserDirectory>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
         services.AddScoped<IPersonService, PersonService>();
+        services.AddScoped<IStandardCrudQueryCustomizer, PersonCrudQueryCustomizer>();
+        services.AddScoped<IStandardCrudDisplayValueResolver, PersonCrudDisplayValueResolver>();
+        services.AddScoped<IStandardCrudSummaryProvider, PersonUserLinkSummaryProvider>();
+        services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();
+        services.AddScoped<IStandardCrudValidator, PersonCrudValidator>();
+        services.AddScoped<IStandardCrudDeleteGuard, PersonCrudDeleteGuard>();
     }
 
     public IReadOnlyList<PermissionDescriptor> GetPermissions()

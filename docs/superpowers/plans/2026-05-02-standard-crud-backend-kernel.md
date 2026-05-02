@@ -2068,7 +2068,7 @@ git commit -m "功能：实现标准CRUD写操作与删除守卫"
 - Modify: `server/modules/Organization/OrganizationModule.cs`
 - Modify: `tests/Organization.Tests/PersonListContractTests.cs`
 
-- [ ] **Step 1: 写 Person delete guard 合同测试**
+- [x] **Step 1: 写 Person delete guard 合同测试**
 
 Append to `tests/Organization.Tests/PersonListContractTests.cs`:
 
@@ -2115,7 +2115,7 @@ private sealed class InMemoryPersonUserLinkRepositoryWithLink : IPersonUserLinkR
 }
 ```
 
-- [ ] **Step 2: 创建 Person validator 和 delete guard**
+- [x] **Step 2: 创建 Person validator 和 delete guard**
 
 Create `server/modules/Organization/Crud/PersonCrudValidator.cs`:
 
@@ -2222,7 +2222,7 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard
 }
 ```
 
-- [ ] **Step 3: 创建 DI 注册**
+- [x] **Step 3: 创建 DI 注册**
 
 Create `server/platform-crud/Extensions/StandardCrudServiceCollectionExtensions.cs`:
 
@@ -2266,7 +2266,7 @@ services.AddScoped<IStandardCrudValidator, PersonCrudValidator>();
 services.AddScoped<IStandardCrudDeleteGuard, PersonCrudDeleteGuard>();
 ```
 
-- [ ] **Step 4: 运行测试并提交**
+- [x] **Step 4: 运行测试并提交**
 
 Run:
 

@@ -625,7 +625,7 @@ git commit -m "功能：定义标准CRUD契约与扩展点"
 - Create: `server/platform-crud/Persistence/EfStandardCrudRepository.cs`
 - Create: `tests/PlatformCrud.Tests/StandardCrudEfRepositoryTests.cs`
 
-- [ ] **Step 1: 写 EF list filter/sort/options 测试**
+- [x] **Step 1: 写 EF list filter/sort/options 测试**
 
 Create `tests/PlatformCrud.Tests/StandardCrudEfRepositoryTests.cs`:
 
@@ -717,7 +717,7 @@ public sealed class StandardCrudEfRepositoryTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -731,7 +731,7 @@ Expected:
 error CS0246: The type or namespace name 'EfStandardCrudRepository' could not be found
 ```
 
-- [ ] **Step 3: 创建仓储抽象**
+- [x] **Step 3: 创建仓储抽象**
 
 Create `server/platform-crud/Abstractions/IStandardCrudRepository.cs`:
 
@@ -777,7 +777,7 @@ public interface IStandardCrudRepository
 }
 ```
 
-- [ ] **Step 4: 实现 EF 仓储读取、过滤、排序、options**
+- [x] **Step 4: 实现 EF 仓储读取、过滤、排序、options**
 
 Create `server/platform-crud/Persistence/EfStandardCrudRepository.cs` with these required members:
 
@@ -963,7 +963,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
 }
 ```
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
 Run:
 

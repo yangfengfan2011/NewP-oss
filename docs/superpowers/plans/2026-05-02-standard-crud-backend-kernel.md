@@ -993,7 +993,7 @@ git commit -m "功能：实现标准CRUD仓储读取与选项"
 - Create: `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`
 - Create: `tests/PlatformCrud.Tests/StandardCrudServiceReadTests.cs`
 
-- [ ] **Step 1: 写服务读取编排测试**
+- [x] **Step 1: 写服务读取编排测试**
 
 Create `tests/PlatformCrud.Tests/StandardCrudServiceReadTests.cs` with tests covering query customizer, display resolver, summary fallback and options:
 
@@ -1118,7 +1118,7 @@ public sealed class StandardCrudServiceReadTests
 }
 ```
 
-- [ ] **Step 2: 创建测试仓储**
+- [x] **Step 2: 创建测试仓储**
 
 Create `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`:
 
@@ -1213,7 +1213,7 @@ public sealed class InMemoryStandardCrudRepository : IStandardCrudRepository
 }
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run:
 
@@ -1227,7 +1227,7 @@ Expected:
 error CS0246: The type or namespace name 'StandardCrudService' could not be found
 ```
 
-- [ ] **Step 4: 创建服务接口和实现**
+- [x] **Step 4: 创建服务接口和实现**
 
 Create `server/platform-crud/Abstractions/IStandardCrudService.cs`:
 
@@ -1450,7 +1450,7 @@ public sealed class StandardCrudEndpoint
 }
 ```
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
 Run:
 

@@ -13,6 +13,36 @@
 
 本设计以 `Person` 作为首轮试点对象，目标是把通用 CRUD 主干平台化，同时保留人员中心特有的领域规则、跨模块摘要和特殊动作扩展点。
 
+## 1.1 设计基线与推进关系
+
+本设计不是重新定义 CRUD 语义，而是在既有平台设计基础上继续推进“后端代码内核”。
+
+后续实施计划应以本文作为直接输入，同时必须继承以下基线：
+
+1. `docs/designs/platform/standard-crud-contract-design.md`  
+   作为标准 CRUD 的契约语义基线，继续定义 `list / detail / create / update / enable-disable / delete / options` 的接口分类、读取模型、删除策略和错误语义。本文不替代它，而是把这些契约推进到后端内核实现层。
+
+2. `docs/designs/platform/metadata-driven-backoffice-ui-design.md`  
+   作为前后端元数据边界基线，继续约束 `nav / view / model` 只表达静态 authoring，不承载执行逻辑。后端 CRUD 内核只能消费稳定契约和 descriptor，不能把元数据变成规则脚本。
+
+3. `docs/designs/modules/organization-person-center-pilot-scope-freeze-review.md`  
+   作为 Person 试点范围基线，继续确认首轮以人员中心为试点对象，保留账号绑定和授权摘要为模块扩展点，不把权限、规则中心、复杂摘要交互拉入当前主线。
+
+4. `docs/superpowers/specs/2026-05-02-standard-crud-backend-kernel-design.md`  
+   也就是本文，作为后续实施计划的直接设计输入。实施计划应从本文拆任务，而不是回到 `standard-crud-contract-design.md` 重新设计一遍 CRUD 语义。
+
+因此，推进顺序应明确为：
+
+```text
+standard-crud-contract-design.md
+        ↓
+standard-crud-backend-kernel-design.md（本文）
+        ↓
+后端平台化实施计划
+        ↓
+Person 试点实现
+```
+
 ## 2. 目标
 
 - 新增平台级标准 CRUD 后端内核设计，承接标准 CRUD 契约的代码实现主线。

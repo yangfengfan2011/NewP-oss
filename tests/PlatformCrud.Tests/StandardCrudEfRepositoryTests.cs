@@ -31,6 +31,53 @@ public sealed class StandardCrudEfRepositoryTests
     }
 
     [Fact]
+    public async Task ListAsync_AppliesExplicitOrConditionGroup()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("person-1", "P001", "张三", true),
+            Row("person-2", "P002", "李四", true),
+            Row("person-3", "X003", "王五", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext);
+        var result = await repository.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Page: 1, PageSize: 20, SortBy: "PersonNo"),
+            [
+                new StandardCrudQueryCondition("PersonNo", "contains", "P", GroupKey: "keyword", GroupOperator: "or"),
+                new StandardCrudQueryCondition("ENAME", "contains", "五", GroupKey: "keyword", GroupOperator: "or")
+            ]);
+
+        Assert.Equal(3, result.Total);
+        Assert.Collection(
+            result.Items,
+            row => Assert.Equal("P001", row["PersonNo"]),
+            row => Assert.Equal("P002", row["PersonNo"]),
+            row => Assert.Equal("X003", row["PersonNo"]));
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenConditionGroupMixesOperators_ThrowsStableMessage()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(),
+            [
+                new StandardCrudQueryCondition("PersonNo", "contains", "P", GroupKey: "keyword", GroupOperator: "or"),
+                new StandardCrudQueryCondition("ENAME", "contains", "张", GroupKey: "keyword")
+            ]));
+
+        Assert.Equal("标准 CRUD 查询条件组 keyword 不能混用组合操作符。", ex.Message);
+    }
+
+    [Fact]
     public async Task OptionsAsync_UsesConfiguredLabelFields()
     {
         await using var dbContext = BuildDbContext();

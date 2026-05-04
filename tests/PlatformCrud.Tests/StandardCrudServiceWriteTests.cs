@@ -42,6 +42,53 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenUpdatedAtIsWritable_RefreshesMutationTimestamp()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["IsEnabled"] = true,
+                ["UpdatedAt"] = null
+            }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            Descriptor(includeUpdatedAt: true),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "张三-更新" });
+
+        Assert.True(result.Succeeded);
+        Assert.IsType<DateTime>(result.Detail!.Fields["UpdatedAt"]);
+    }
+
+    [Fact]
+    public async Task DisableAsync_WhenUpdatedAtIsWritable_RefreshesMutationTimestamp()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["IsEnabled"] = true,
+                ["UpdatedAt"] = null
+            }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.DisableAsync(Descriptor(includeUpdatedAt: true), "person-1");
+
+        Assert.True(result.Succeeded);
+        Assert.IsType<DateTime>(result.Detail!.Fields["UpdatedAt"]);
+    }
+
+    [Fact]
     public async Task DisableAsync_WhenEnabledFieldIsNotUpdatable_FailsClosed()
     {
         var repository = new InMemoryStandardCrudRepository(
@@ -99,7 +146,8 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudDescriptor Descriptor(
         StandardCrudDeletePolicy policy = StandardCrudDeletePolicy.None,
-        bool includeEnabledInUpdateFields = true) => new()
+        bool includeEnabledInUpdateFields = true,
+        bool includeUpdatedAt = false) => new()
     {
         ResourceKey = "organization.person",
         ModuleId = "Organization",
@@ -110,9 +158,13 @@ public sealed class StandardCrudServiceWriteTests
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
+            DetailFields: includeUpdatedAt
+                ? ["EID", "PersonNo", "ENAME", "IsEnabled", "UpdatedAt"]
+                : ["EID", "PersonNo", "ENAME", "IsEnabled"],
             CreateFields: ["PersonNo", "ENAME"],
-            UpdateFields: includeEnabledInUpdateFields ? ["ENAME", "IsEnabled"] : ["ENAME"]),
+            UpdateFields: includeUpdatedAt
+                ? ["ENAME", "IsEnabled", "UpdatedAt"]
+                : includeEnabledInUpdateFields ? ["ENAME", "IsEnabled"] : ["ENAME"]),
         DeletePolicy = policy
     };
 

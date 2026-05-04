@@ -18,8 +18,8 @@ public sealed class PersonCrudQueryCustomizer : IStandardCrudQueryCustomizer
 
         if (filters.TryGetValue("keyword", out var keyword) && !string.IsNullOrWhiteSpace(keyword))
         {
-            conditions.Add(new StandardCrudQueryCondition("PersonNo", "contains", keyword));
-            conditions.Add(new StandardCrudQueryCondition("ENAME", "contains", keyword));
+            conditions.Add(new StandardCrudQueryCondition("PersonNo", "contains", keyword, GroupKey: "keyword", GroupOperator: "or"));
+            conditions.Add(new StandardCrudQueryCondition("ENAME", "contains", keyword, GroupKey: "keyword", GroupOperator: "or"));
         }
 
         AddEquals(filters, conditions, "companyId", "CompanyId");

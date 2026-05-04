@@ -116,7 +116,10 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var allowed = FilterFields(values, descriptor.FieldSet.UpdateFields);
+        var allowed = new Dictionary<string, object?>(
+            FilterFields(values, descriptor.FieldSet.UpdateFields),
+            StringComparer.Ordinal);
+        ApplyUpdateAuditFields(descriptor, allowed);
         if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
         {
             var error = await validator.ValidateUpdateAsync(descriptor, id, allowed, cancellationToken);
@@ -293,6 +296,15 @@ public sealed class StandardCrudService : IStandardCrudService
         }
 
         return filtered;
+    }
+
+    // UpdatedAt 属于更新行为的内核责任：只要资源显式把该字段纳入更新白名单，就由内核覆盖为当前时间。
+    private static void ApplyUpdateAuditFields(StandardCrudDescriptor descriptor, IDictionary<string, object?> values)
+    {
+        if (descriptor.FieldSet.UpdateFields.Contains("UpdatedAt", StringComparer.Ordinal))
+        {
+            values["UpdatedAt"] = DateTime.UtcNow;
+        }
     }
 
     private static StandardCrudError NotFound(StandardCrudDescriptor descriptor, string id) => new()

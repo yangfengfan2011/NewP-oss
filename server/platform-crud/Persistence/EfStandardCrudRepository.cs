@@ -154,24 +154,58 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         IEnumerable<IReadOnlyDictionary<string, object?>> source,
         IReadOnlyList<StandardCrudQueryCondition> conditions)
     {
-        foreach (var condition in conditions)
+        var executableConditions = conditions.Where(IsExecutableCondition).ToList();
+        foreach (var condition in executableConditions.Where(condition => string.IsNullOrWhiteSpace(condition.GroupKey)))
         {
-            if (condition.Operator == "=" && condition.Value is not null)
+            source = source.Where(row => MatchesCondition(row, condition));
+        }
+
+        foreach (var group in executableConditions
+            .Where(condition => !string.IsNullOrWhiteSpace(condition.GroupKey))
+            .GroupBy(condition => condition.GroupKey, StringComparer.Ordinal))
+        {
+            var groupOperators = group
+                .Select(condition => string.IsNullOrWhiteSpace(condition.GroupOperator) ? "and" : condition.GroupOperator)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (groupOperators.Count > 1)
             {
-                source = source.Where(row =>
-                    row.TryGetValue(condition.Field, out var value) &&
-                    ValuesEqual(value, condition.Value));
+                throw new InvalidOperationException($"标准 CRUD 查询条件组 {group.Key} 不能混用组合操作符。");
             }
 
-            if (condition.Operator == "contains" && condition.Value is not null)
+            var groupOperator = groupOperators[0];
+            if (!string.Equals(groupOperator, "or", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(groupOperator, "and", StringComparison.OrdinalIgnoreCase))
             {
-                source = source.Where(row =>
-                    row.TryGetValue(condition.Field, out var value) &&
-                    ReadString(value).Contains(ReadString(condition.Value), StringComparison.OrdinalIgnoreCase));
+                throw new InvalidOperationException($"标准 CRUD 查询条件组 {group.Key} 不支持组合操作符 {groupOperator}。");
             }
+
+            source = string.Equals(groupOperator, "or", StringComparison.OrdinalIgnoreCase)
+                ? source.Where(row => group.Any(condition => MatchesCondition(row, condition)))
+                : source.Where(row => group.All(condition => MatchesCondition(row, condition)));
         }
 
         return source;
+    }
+
+    private static bool IsExecutableCondition(StandardCrudQueryCondition condition) =>
+        condition.Value is not null &&
+        (string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase));
+
+    private static bool MatchesCondition(IReadOnlyDictionary<string, object?> row, StandardCrudQueryCondition condition)
+    {
+        if (!row.TryGetValue(condition.Field, out var value))
+        {
+            return false;
+        }
+
+        if (string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase))
+        {
+            return ValuesEqual(value, condition.Value);
+        }
+
+        return ReadString(value).Contains(ReadString(condition.Value), StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<IReadOnlyDictionary<string, object?>> ApplySort(

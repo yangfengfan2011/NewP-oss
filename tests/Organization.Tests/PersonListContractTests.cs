@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Reflection;
+using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.DTOs;
@@ -30,6 +32,90 @@ public class PersonListContractTests
         Assert.NotNull(disableAction);
         Assert.Contains(listAction!.GetCustomAttributes<HttpGetAttribute>(), attribute => attribute.Template is null);
         Assert.Contains(disableAction!.GetCustomAttributes<HttpPostAttribute>(), attribute => attribute.Template == "{id:guid}/disable");
+    }
+
+    [Fact]
+    public void PersonsController_DeclaresOptionsAndDeleteEndpoints()
+    {
+        var controllerType = typeof(PersonsController);
+
+        var optionsAction = controllerType.GetMethod("Options");
+        var deleteAction = controllerType.GetMethod("Delete");
+
+        Assert.NotNull(optionsAction);
+        Assert.NotNull(deleteAction);
+        Assert.Contains(optionsAction!.GetCustomAttributes<HttpGetAttribute>(), attribute => attribute.Template == "options");
+        Assert.Contains(deleteAction!.GetCustomAttributes<HttpDeleteAttribute>(), attribute => attribute.Template == "{id:guid}");
+    }
+
+    [Fact]
+    public async Task PersonsController_GetList_PreservesCompatibilityListShapeWithoutTruncatingAtOneHundred()
+    {
+        var standardCrudService = new RecordingStandardCrudService([]);
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.GetList(
+            keyword: null,
+            companyId: null,
+            departmentId: null,
+            employmentStatus: null);
+
+        Assert.IsType<OkObjectResult>(response.Result);
+        Assert.Equal(int.MaxValue, standardCrudService.LastListQuery!.PageSize);
+    }
+
+    [Fact]
+    public async Task PersonsController_GetList_ParsesEmploymentStatusIgnoringCase()
+    {
+        var standardCrudService = new RecordingStandardCrudService(
+        [
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["EID"] = Guid.Parse("33333333-3333-3333-3333-333333333333").ToString("D"),
+                ["PersonNo"] = "P003",
+                ["ENAME"] = "王五",
+                ["CompanyName"] = "ICP研发中心",
+                ["DepartmentName"] = "人力资源部",
+                ["EmploymentStatus"] = "parttime",
+                ["IsEnabled"] = true
+            }
+        ]);
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.GetList(
+            keyword: null,
+            companyId: null,
+            departmentId: null,
+            employmentStatus: null);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var item = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<PersonListItemDto>>(ok.Value));
+        Assert.Equal(EmploymentStatus.PartTime, item.EmploymentStatus);
+    }
+
+    [Fact]
+    public async Task PersonsController_Get_ParsesEmploymentStatusIgnoringCase()
+    {
+        var personId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var standardCrudService = new RecordingStandardCrudService([], new StandardCrudDetail
+        {
+            Fields = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["EID"] = personId.ToString("D"),
+                ["PersonNo"] = "P004",
+                ["ENAME"] = "赵六",
+                ["EmploymentStatus"] = "contractor",
+                ["IsEnabled"] = true,
+                ["CreatedAt"] = DateTime.UtcNow
+            }
+        });
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.Get(personId);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var detail = Assert.IsType<PersonDetailDto>(ok.Value);
+        Assert.Equal(EmploymentStatus.Contractor, detail.EmploymentStatus);
     }
 
     [Fact]
@@ -163,7 +249,81 @@ public class PersonListContractTests
                 new FakeAuthorizationSummaryReader()
             })!;
 
+    private static PersonsController BuildController(RecordingStandardCrudService standardCrudService) =>
+        new(
+            BuildService(),
+            new FakeIdentityUserDirectory(),
+            new StandardCrudEndpoint(standardCrudService));
+
     private static Assembly GetOrganizationAssembly() => typeof(PersonDto).Assembly;
+
+    private sealed class RecordingStandardCrudService : IStandardCrudService
+    {
+        private readonly IReadOnlyList<IReadOnlyDictionary<string, object?>> _items;
+        private readonly StandardCrudDetail? _detail;
+
+        public RecordingStandardCrudService(
+            IReadOnlyList<IReadOnlyDictionary<string, object?>> items,
+            StandardCrudDetail? detail = null)
+        {
+            _items = items;
+            _detail = detail;
+        }
+
+        public StandardCrudListQuery? LastListQuery { get; private set; }
+
+        public Task<StandardCrudListResult> ListAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            LastListQuery = query;
+            return Task.FromResult(new StandardCrudListResult(
+                _items,
+                _items.Count,
+                query.Page,
+                query.PageSize,
+                query.SortBy,
+                query.SortDirection));
+        }
+
+        public Task<StandardCrudDetail?> GetDetailAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_detail);
+
+        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<StandardCrudOptionItem>>([]);
+
+        public Task<StandardCrudMutationResult> CreateAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(StandardCrudMutationResult.Success());
+
+        public Task<StandardCrudMutationResult> UpdateAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(StandardCrudMutationResult.Success());
+
+        public Task<StandardCrudMutationResult> DisableAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(StandardCrudMutationResult.Success(_detail));
+
+        public Task<StandardCrudMutationResult> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(StandardCrudMutationResult.Success());
+    }
 
     private sealed class InMemoryPersonRepository : IPersonRepository
     {

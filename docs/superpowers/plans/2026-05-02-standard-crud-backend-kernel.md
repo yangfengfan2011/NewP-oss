@@ -21,6 +21,7 @@
 - 使用当前 `ModelDefinition / FieldDefinition` 构造签名。
 - 第二阶段先实现 create/update 字段白名单、disable 状态切换，再切 Controller。
 - `conditional delete` 必须通过 `IStandardCrudDeleteGuard`，无 guard 时 fail closed。
+- 所有标准 update/disable 类更新行为都由 CRUD 内核自动维护 `UpdatedAt`；资源声明该字段可写时，内核覆盖为当前时间，不接受客户端时间作为真源。
 
 ## 文件结构与职责
 
@@ -2293,7 +2294,7 @@ git commit -m "功能：注册人员标准CRUD守卫与扩展"
 - Modify: `server/modules/Organization/Controllers/PersonsController.cs`
 - Modify: `tests/Organization.Tests/PersonListContractTests.cs`
 
-- [ ] **Step 1: 写 Controller endpoint 合同测试**
+- [x] **Step 1: 写 Controller endpoint 合同测试**
 
 Append to `tests/Organization.Tests/PersonListContractTests.cs`:
 
@@ -2313,7 +2314,7 @@ public void PersonsController_DeclaresOptionsAndDeleteEndpoints()
 }
 ```
 
-- [ ] **Step 2: 修改 Controller 构造函数**
+- [x] **Step 2: 修改 Controller 构造函数**
 
 Modify `server/modules/Organization/Controllers/PersonsController.cs` constructor:
 
@@ -2341,7 +2342,7 @@ using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Organization.Crud;
 ```
 
-- [ ] **Step 3: 切换 list/detail/options/disable/delete**
+- [x] **Step 3: 切换 list/detail/options/disable/delete**
 
 Replace `GetList`, `Get`, `Disable`, and add `Options`, `Delete`:
 
@@ -2358,7 +2359,7 @@ public async Task<ActionResult<IReadOnlyList<PersonListItemDto>>> GetList(
         PersonCrudDescriptor,
         new StandardCrudListQuery(
             Page: 1,
-            PageSize: 100,
+            PageSize: int.MaxValue,
             Filters: new Dictionary<string, string?>
             {
                 ["keyword"] = keyword,
@@ -2453,7 +2454,7 @@ private static PersonSummaryBlockDto MapSummary(IReadOnlyDictionary<string, Stan
         : new PersonSummaryBlockDto { Status = "notConfigured" };
 ```
 
-- [ ] **Step 4: 运行测试并提交**
+- [x] **Step 4: 运行测试并提交**
 
 Run:
 

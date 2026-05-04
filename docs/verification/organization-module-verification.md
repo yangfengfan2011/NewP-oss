@@ -184,3 +184,41 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 - 删除能力按 Person `conditional` 策略显式接入，不作为隐式通用删除暴露。
 - 查询、显示值、摘要块、校验和删除守卫均通过代码扩展点接入，未下沉为元数据执行逻辑。
 - 更新审计字段由内核统一维护，保持写行为可验证、可回滚。
+
+## 标准 CRUD 写入接管与唯一约束验证
+
+验证日期：2026-05-04
+
+本轮验证目标：
+
+- `Person create/update` 已由 `PersonsController` 委托 `StandardCrudEndpoint` 接管。
+- `PersonNo` 全局唯一由 `StandardCrudUniqueConstraint` 声明并由 `StandardCrudService` 执行。
+- `PersonCrudValidator` 不再承载人员工号唯一性，避免资源专属 service 样板继续扩散。
+- `user-link` 特殊入口仍保留在 Organization 模块服务内。
+
+验证命令：
+
+```powershell
+dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+pnpm --dir .\frontend --filter @icp-modules/organization build
+```
+
+验证结果：
+
+- `PlatformCrud.Tests`：通过，31/31。
+- `Organization.Tests`：通过，67/67。
+- `HostApi` 构建：通过，0 warning，0 error。
+- `@icp-modules/organization` 前端构建：通过。
+
+验证结论：
+
+- 标准 CRUD 唯一约束、仓储存在性检查和 Person 写入接管通过验证。
+- `PersonNo` 按当前阶段要求为平台内全局唯一，不再按 `CompanyId` 分组。
+- 本轮未引入数据库唯一索引；并发强一致性如需支持，应另开设计。
+- 标准 CRUD 创建路径已由内核补齐 `CreatedAt`，更新路径继续由内核维护 `UpdatedAt`。
+
+已知风险：
+
+- `ENAME` 等字段必填校验仍应由后续标准 CRUD required field / 模型必填校验设计承接，本轮按计划不把资源必填规则塞回 `PersonCrudValidator`。

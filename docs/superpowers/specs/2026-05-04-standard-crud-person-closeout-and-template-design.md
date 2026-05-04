@@ -4,12 +4,12 @@
 
 标准 CRUD 后端内核与 Organization `Person` 试点已经完成首轮落地。当前 `Person` 的 `list / detail / options / disable / delete` 已经由 `PersonsController` 委托 `StandardCrudEndpoint` 接管，但 `create / update` 仍走 `PersonService`。
 
-这不符合标准 CRUD 后端内核的目标。人员资源的创建和更新是最基本的 CRUD 主干，应由标准 CRUD 内核接管；模块只保留领域差异、跨模块集成和特殊动作。与此同时，`PersonNo` 在同一公司下唯一这一类规则不应继续作为 Person 专属样板散落在 service/repository 中，而应评估为标准 CRUD 的通用唯一约束能力。
+这不符合标准 CRUD 后端内核的目标。人员资源的创建和更新是最基本的 CRUD 主干，应由标准 CRUD 内核接管；模块只保留领域差异、跨模块集成和特殊动作。与此同时，`PersonNo` 唯一这一类规则不应继续作为 Person 专属样板散落在 service/repository 中，而应评估为标准 CRUD 的通用唯一约束能力。
 
 本阶段先处理两件事：
 
 1. 让 `Person create/update` 切到 `StandardCrudEndpoint`。
-2. 在 `server/platform-crud` 中新增标准唯一约束能力，用 descriptor 声明 `PersonNo + CompanyId` 这种 scoped uniqueness。
+2. 在 `server/platform-crud` 中新增标准唯一约束能力，用 descriptor 声明 `PersonNo` 全局唯一。
 
 模板文档和完成后 review 仍然需要做，但必须建立在 create/update 已由标准 CRUD 接管、唯一性能力已平台化之后。
 
@@ -40,14 +40,14 @@
 
 ### 2.3 PersonNo 唯一性现状
 
-当前唯一性规则在 `IPersonRepository.ExistsPersonNoAsync(companyId, personNo, excludedPersonId)` 和 `PersonService` 中完成。
+当前旧实现的唯一性规则在 `IPersonRepository.ExistsPersonNoAsync(companyId, personNo, excludedPersonId)` 和 `PersonService` 中完成，历史上按公司归属做了 scope。当前阶段不考虑集团化，多公司编码隔离不进入本阶段设计，因此新标准 CRUD 接管后应改为 `PersonNo` 全局唯一。
 
 这条规则具有明显的通用形状：
 
 - 唯一字段：`PersonNo`
-- 作用域字段：`CompanyId`
-- 创建时：检查同一 `CompanyId` 下是否存在相同 `PersonNo`
-- 更新时：排除当前行，并且即使请求没有提交 `PersonNo`，也要用现有行的 `PersonNo` 与新 `CompanyId` 一起检查
+- 作用域字段：无
+- 创建时：检查平台内是否存在相同 `PersonNo`
+- 更新时：排除当前行，并且即使请求没有提交 `PersonNo`，也要用现有行的 `PersonNo` 检查全局冲突
 - 比较方式：字符串大小写不敏感
 
 因此它适合作为标准 CRUD 唯一约束能力，而不是继续作为 Person 专属 service 逻辑。
@@ -57,7 +57,7 @@
 - `PersonsController.Create` 委托 `StandardCrudEndpoint.CreateAsync`。
 - `PersonsController.Update` 委托 `StandardCrudEndpoint.UpdateAsync`。
 - 新增标准 CRUD 唯一约束声明与校验流程。
-- `PersonCrudDescriptorFactory` 声明 `PersonNo` 在 `CompanyId` scope 内唯一。
+- `PersonCrudDescriptorFactory` 声明 `PersonNo` 全局唯一。
 - 更新时标准 CRUD 内核先读取现有行，合并现有值与更新值，再执行唯一性校验。
 - `PersonCrudValidator` 不再承载 `PersonNo` 唯一性，只保留无法用标准约束表达的资源专属规则。
 - 保持 `user-link` 特殊入口和跨模块摘要 provider 不进入平台内核。
@@ -82,7 +82,7 @@
 理由：
 
 - 唯一性是 CRUD 写入前最常见的跨资源通用校验，不应每个模块重复实现。
-- 它可以被静态声明：哪些字段唯一、在哪些 scope 字段内唯一、如何比较、冲突时返回什么错误。
+- 它可以被静态声明：哪些字段唯一、是否存在 scope 字段、如何比较、冲突时返回什么错误。
 - 它属于“声明、约束、静态可校验输入”，符合 descriptor 的职责。
 - 执行流程仍由 `StandardCrudService` 和 repository 完成，没有把算法下沉到 metadata。
 - update 场景的“合并现有行 + 更新字段 + 排除当前 id”可以由代码内核统一处理，减少模块遗漏。
@@ -121,13 +121,13 @@ UniqueConstraints =
 [
     new StandardCrudUniqueConstraint
     {
-        Key = "personNoWithinCompany",
+        Key = "personNo",
         Fields = ["PersonNo"],
-        ScopeFields = ["CompanyId"],
+        ScopeFields = [],
         CaseInsensitive = true,
         TrimWhitespace = true,
         ErrorCode = "Organization.Person.PersonNoDuplicated",
-        Message = "同一公司下人员工号必须唯一。",
+        Message = "人员工号必须唯一。",
         ReasonKey = "organization.person.personNoDuplicated"
     }
 ]
@@ -163,7 +163,7 @@ UniqueConstraints =
 {
   "statusCode": 409,
   "code": "Organization.Person.PersonNoDuplicated",
-  "message": "同一公司下人员工号必须唯一。",
+  "message": "人员工号必须唯一。",
   "reasonKey": "organization.person.personNoDuplicated"
 }
 ```
@@ -182,7 +182,7 @@ UniqueConstraints =
 8. 调用 repository 更新。
 9. 按 detail 流程返回标准详情。
 
-这个顺序是关键。对于 Person，如果请求只提交新的 `CompanyId`，没有提交 `PersonNo`，内核仍能用现有 `PersonNo` 和新 `CompanyId` 判断是否冲突。
+这个顺序是关键。对于 Person，即使 update 请求不提交 `PersonNo`，内核仍能用现有 `PersonNo` 判断是否与其他行冲突；后续如果某个资源启用 scope 字段，也会使用合并后的 candidate row 统一判断。
 
 ## 7. 仓储接口设计
 
@@ -258,7 +258,7 @@ Task<bool> ExistsAsync(
 - `UniqueConstraints[*].Key` 必填且同资源内唯一。
 - `Fields` 必须非空。
 - `Fields + ScopeFields` 必须存在于资源字段集合中。
-- 对 update 有效的唯一约束，其字段和 scope 字段必须能从 `DetailFields` 读取。
+- 对 update 有效的唯一约束，其字段和可选 scope 字段必须能从 `DetailFields` 读取。
 - `ErrorCode / Message / ReasonKey` 必填。
 - 约束字段不得包含 `IdField`。
 
@@ -270,10 +270,10 @@ Task<bool> ExistsAsync(
 
 新增或扩展测试覆盖：
 
-- create 时 scoped unique 冲突返回 `409`。
-- create 时不同 scope 允许相同唯一字段。
+- create 时全局 unique 冲突返回 `409`。
+- create 时不同非唯一字段值不影响唯一字段冲突判断。
 - update 时排除当前 id，不因自身冲突。
-- update 时 scope 变化会用现有唯一字段重新检查冲突。
+- update 时即使请求未提交唯一字段，也会用现有唯一字段重新检查冲突。
 - descriptor 唯一约束缺字段时校验失败。
 - `ExistsAsync` 排除当前 id 生效。
 
@@ -283,8 +283,8 @@ Task<bool> ExistsAsync(
 
 - `PersonsController.Create` 通过标准 CRUD endpoint 创建人员。
 - `PersonsController.Update` 通过标准 CRUD endpoint 更新人员。
-- `PersonNo` 同公司重复创建返回标准 `409` 错误。
-- 更新人员公司时，如果目标公司已有相同 `PersonNo`，返回标准 `409` 错误。
+- `PersonNo` 重复创建返回标准 `409` 错误。
+- 更新人员其他字段时，不会绕过既有 `PersonNo` 全局唯一校验。
 - 更新时提交不同 `PersonNo` 不会修改工号。
 - `user-link` 特殊入口仍走 `PersonService.LinkUserAsync`。
 
@@ -305,7 +305,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 
 风险：
 
-- update 未合并现有行就做唯一性校验，导致 scope 变化漏检。
+- update 未合并现有行就做唯一性校验，导致未提交唯一字段时漏检。
 - 唯一性能力被设计成 metadata 脚本，突破“强约束元数据 + 清晰代码内核”边界。
 - Person create/update 切换后返回 DTO 形态变化，破坏前端或测试。
 - 旧 `PersonService` 仍保留，后续 agent 误以为 Controller 仍应走旧 service。
@@ -317,7 +317,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 - `StandardCrudService.UpdateAsync` 没有读取现有行。
 - descriptor 唯一约束允许引用不在 `DetailFields` 中的字段。
 - Controller 中出现唯一性查询或领域判断。
-- 平台内核出现 `PersonNo`、`CompanyId` 的 Person 专属分支。
+- 平台内核出现 `PersonNo` 的 Person 专属分支。
 
 ## 13. 回滚思路
 
@@ -363,7 +363,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
   - HostApi 构建。
   - Organization 前端构建 smoke。
 - 失败时看什么：
-  - update scope 变化是否漏检。
+  - update 未提交唯一字段时是否漏检。
   - 错误码是否稳定。
   - Controller 是否夹带领域规则。
   - descriptor 是否引用了不可读取字段。

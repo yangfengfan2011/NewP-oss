@@ -74,6 +74,61 @@ public sealed class StandardCrudDescriptorTests
         Assert.Equal("标准 CRUD 资源 organization.person 的唯一约束 key personNo 重复。", ex.Message);
     }
 
+    [Fact]
+    public void Validate_WhenUniqueConstraintFieldIsBlank_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithUniqueConstraints(
+            new StandardCrudUniqueConstraint
+            {
+                Key = "personNo",
+                Fields = [" "],
+                ErrorCode = "personNoConflict",
+                Message = "人员编号已存在。",
+                ReasonKey = "personNo"
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的唯一约束 personNo 字段不能为空。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenUniqueConstraintFieldDuplicated_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithUniqueConstraints(
+            new StandardCrudUniqueConstraint
+            {
+                Key = "personNo",
+                Fields = ["ENAME", "ENAME"],
+                ErrorCode = "personNoConflict",
+                Message = "人员编号已存在。",
+                ReasonKey = "personNo"
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的唯一约束 personNo Fields 字段 ENAME 重复。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenUniqueConstraintScopeFieldDuplicated_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithUniqueConstraints(
+            new StandardCrudUniqueConstraint
+            {
+                Key = "personNo",
+                Fields = ["ENAME"],
+                ScopeFields = ["CompanyId", "CompanyId"],
+                ErrorCode = "personNoConflict",
+                Message = "人员编号已存在。",
+                ReasonKey = "personNo"
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的唯一约束 personNo ScopeFields 字段 CompanyId 重复。", ex.Message);
+    }
+
     private static StandardCrudDescriptor DescriptorWithUniqueConstraints(params StandardCrudUniqueConstraint[] constraints)
     {
         return new StandardCrudDescriptor
@@ -85,10 +140,10 @@ public sealed class StandardCrudDescriptorTests
             IdField = "EID",
             DisplayField = "ENAME",
             FieldSet = new StandardCrudFieldSet(
-                ListFields: ["EID", "ENAME", "PersonNo"],
-                DetailFields: ["EID", "ENAME"],
-                CreateFields: ["ENAME", "PersonNo"],
-                UpdateFields: ["ENAME", "PersonNo"]),
+                ListFields: ["EID", "ENAME", "PersonNo", "CompanyId"],
+                DetailFields: ["EID", "ENAME", "CompanyId"],
+                CreateFields: ["ENAME", "PersonNo", "CompanyId"],
+                UpdateFields: ["ENAME", "PersonNo", "CompanyId"]),
             DeletePolicy = StandardCrudDeletePolicy.None,
             UniqueConstraints = constraints
         };

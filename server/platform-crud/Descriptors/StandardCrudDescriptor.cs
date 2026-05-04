@@ -14,5 +14,9 @@ public sealed class StandardCrudDescriptor
     public IReadOnlyList<string> OptionLabelFields { get; init; } = [];
     public IReadOnlyList<string> SummaryBlockKeys { get; init; } = [];
     public IReadOnlyList<string> DisplayValueFields { get; init; } = [];
+
+    /// <summary>
+    /// 标准写入前置唯一约束声明；这里只描述字段、作用域和错误契约，查重流程由运行时内核执行。
+    /// </summary>
     public IReadOnlyList<StandardCrudUniqueConstraint> UniqueConstraints { get; init; } = [];
 }

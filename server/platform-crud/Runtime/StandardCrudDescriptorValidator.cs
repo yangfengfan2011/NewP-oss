@@ -65,22 +65,46 @@ public static class StandardCrudDescriptorValidator
                 throw new InvalidOperationException($"标准 CRUD 资源 {descriptor.ResourceKey} 的唯一约束 {constraint.Key} 必须声明 Fields。");
             }
 
+            ValidateUniqueFieldList(descriptor.ResourceKey, constraint.Key, nameof(constraint.Fields), constraint.Fields);
+            ValidateUniqueFieldList(descriptor.ResourceKey, constraint.Key, nameof(constraint.ScopeFields), constraint.ScopeFields);
+
             foreach (var field in constraint.Fields.Concat(constraint.ScopeFields))
             {
                 if (string.Equals(field, descriptor.IdField, StringComparison.Ordinal))
                 {
-                    throw new InvalidOperationException($"标准 CRUD 资源 {descriptor.ResourceKey} 的唯一约束 {constraint.Key} 字段 {field} 不得包含 IdField。");
+                    throw new InvalidOperationException($"标准 CRUD 资源 {descriptor.ResourceKey} 的唯一约束 {constraint.Key} 不能包含 IdField。");
                 }
 
                 if (!declaredFields.Contains(field))
                 {
-                    throw new InvalidOperationException($"标准 CRUD 资源 {descriptor.ResourceKey} 的唯一约束 {constraint.Key} 字段 {field} 必须在 ListFields、DetailFields、CreateFields 或 UpdateFields 中声明。");
+                    throw new InvalidOperationException($"标准 CRUD 资源 {descriptor.ResourceKey} 的唯一约束 {constraint.Key} 字段 {field} 未在字段集合中声明。");
                 }
 
                 if (!descriptor.FieldSet.DetailFields.Contains(field, StringComparer.Ordinal))
                 {
                     throw new InvalidOperationException($"标准 CRUD 资源 {descriptor.ResourceKey} 的唯一约束 {constraint.Key} 字段 {field} 必须包含在 DetailFields 中。");
                 }
+            }
+        }
+    }
+
+    private static void ValidateUniqueFieldList(
+        string resourceKey,
+        string constraintKey,
+        string listName,
+        IReadOnlyList<string> fields)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in fields)
+        {
+            if (string.IsNullOrWhiteSpace(field))
+            {
+                throw new InvalidOperationException($"标准 CRUD 资源 {resourceKey} 的唯一约束 {constraintKey} 字段不能为空。");
+            }
+
+            if (!names.Add(field))
+            {
+                throw new InvalidOperationException($"标准 CRUD 资源 {resourceKey} 的唯一约束 {constraintKey} {listName} 字段 {field} 重复。");
             }
         }
     }

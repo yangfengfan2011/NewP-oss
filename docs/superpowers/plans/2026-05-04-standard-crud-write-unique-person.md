@@ -66,7 +66,7 @@
 - Modify: `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`
 - Modify: `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`
 
-- [ ] **Step 1: 写唯一约束 descriptor 失败测试**
+- [x] **Step 1: 写唯一约束 descriptor 失败测试**
 
 Append to `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`:
 
@@ -148,7 +148,7 @@ private static StandardCrudDescriptor DescriptorWithUniqueConstraints(params Sta
 };
 ```
 
-- [ ] **Step 2: 运行 descriptor 测试确认失败**
+- [x] **Step 2: 运行 descriptor 测试确认失败**
 
 Run:
 
@@ -163,7 +163,7 @@ FAIL
 CS0246: The type or namespace name 'StandardCrudUniqueConstraint' could not be found
 ```
 
-- [ ] **Step 3: 新增唯一约束 descriptor 类型**
+- [x] **Step 3: 新增唯一约束 descriptor 类型**
 
 Create `server/platform-crud/Descriptors/StandardCrudUniqueConstraint.cs`:
 
@@ -184,7 +184,7 @@ public sealed class StandardCrudUniqueConstraint
 }
 ```
 
-- [ ] **Step 4: 在 `StandardCrudDescriptor` 增加唯一约束集合**
+- [x] **Step 4: 在 `StandardCrudDescriptor` 增加唯一约束集合**
 
 Modify `server/platform-crud/Descriptors/StandardCrudDescriptor.cs` and add this property after `DisplayValueFields`:
 
@@ -192,7 +192,7 @@ Modify `server/platform-crud/Descriptors/StandardCrudDescriptor.cs` and add this
 public IReadOnlyList<StandardCrudUniqueConstraint> UniqueConstraints { get; init; } = [];
 ```
 
-- [ ] **Step 5: 增加 descriptor 唯一约束校验**
+- [x] **Step 5: 增加 descriptor 唯一约束校验**
 
 Modify `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`:
 
@@ -262,7 +262,7 @@ private static void ValidateUniqueConstraints(StandardCrudDescriptor descriptor)
 }
 ```
 
-- [ ] **Step 6: 运行 descriptor 测试确认通过**
+- [x] **Step 6: 运行 descriptor 测试确认通过**
 
 Run:
 
@@ -276,7 +276,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add .\server\platform-crud\Descriptors .\server\platform-crud\Runtime\StandardCrudDescriptorValidator.cs .\tests\PlatformCrud.Tests\StandardCrudDescriptorTests.cs

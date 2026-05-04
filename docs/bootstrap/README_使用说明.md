@@ -84,7 +84,8 @@
 
 当前应优先参考：
 
-- [../../Plan.md](../../Plan.md)
-- [../current-status.md](../current-status.md)
+- [../../AGENTS.md](../../AGENTS.md)
+- [../phases/post-phase-6-stage-map.md](../phases/post-phase-6-stage-map.md)
+- [../superpowers/README.md](../superpowers/README.md)
 - [../architecture/scope-v1.md](../architecture/scope-v1.md)
 - [../phases/phase-2-minimum-runnable-plan.md](../phases/phase-2-minimum-runnable-plan.md)

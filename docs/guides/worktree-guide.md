@@ -28,7 +28,7 @@
 先阅读并确认：
 
 - [../../AGENTS.md](../../AGENTS.md)
-- [../../Plan.md](../../Plan.md)
+- [../phases/post-phase-6-stage-map.md](../phases/post-phase-6-stage-map.md)
 - [../architecture/scope-v1.md](../architecture/scope-v1.md)
 - 与当前任务直接相关的模块边界文档
 

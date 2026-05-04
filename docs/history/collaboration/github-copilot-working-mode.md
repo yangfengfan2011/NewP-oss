@@ -5,7 +5,7 @@
 原因：
 
 - 当前仓库已不再按 `Codex + GitHub Copilot` 的双工具协作模式推进
-- 当前正式入口已收敛到 [../../collaboration/current-collaboration-mode.md](../../collaboration/current-collaboration-mode.md)
+- 当前正式规则入口已收敛到 [../../../AGENTS.md](../../../AGENTS.md)
 - 当前阶段总控入口已迁移到 [../../phases/post-phase-6-stage-map.md](../../phases/post-phase-6-stage-map.md)
 
 保留本文档仅用于：

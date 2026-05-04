@@ -4,5 +4,5 @@
 
 当前正式协作入口请使用：
 
-- [../../collaboration/current-collaboration-mode.md](../../collaboration/current-collaboration-mode.md)
+- [../../../AGENTS.md](../../../AGENTS.md)
 - [../../phases/post-phase-6-stage-map.md](../../phases/post-phase-6-stage-map.md)

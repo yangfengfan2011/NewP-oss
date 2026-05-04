@@ -6,6 +6,6 @@
 
 - 其语境主要面向旧阶段
 - 当前主线已进入 post-Phase-6 路线
-- 当前正式协作入口已改为 [../../collaboration/current-collaboration-mode.md](../../collaboration/current-collaboration-mode.md)
+- 当前正式协作入口已改为 [../../../AGENTS.md](../../../AGENTS.md) 和 [../../phases/post-phase-6-stage-map.md](../../phases/post-phase-6-stage-map.md)
 
 保留本文档仅用于历史参考，不再作为当前执行入口。

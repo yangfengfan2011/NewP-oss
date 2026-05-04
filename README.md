@@ -2,7 +2,7 @@
 
 这是 ICP 平台的新一代实现仓库，采用“平台主壳 + 内建模块 + 前后端 SDK”的模块化单体架构。
 
-## 当前状态
+## 项目基线
 
 - Phase 0 已完成：旧平台资产盘点、处置矩阵与 V1 范围冻结文档已形成
 - Phase 1 已完成：后端 Host / Kernel / SDK、前端 Shell / Core / SDK 骨架已落地并可构建
@@ -12,8 +12,9 @@
 - Phase 5 已完成：首个旧资产迁移 POC 已落地，并形成可复跑的迁移模板交付
 - Phase 6 已完成：后端和前端组件化模板已落地，端到端示例模块已验证，集成文档已完善
 
-更完整的项目现状见 [docs/current-status.md](docs/current-status.md)。
-Phase 6 之后的建议路线见 [docs/designs/post-phase-6-foundation-and-migration-design.md](docs/designs/post-phase-6-foundation-and-migration-design.md)。
+当前协作规则见 [AGENTS.md](AGENTS.md)。
+阶段图与后续方向见 [docs/phases/post-phase-6-stage-map.md](docs/phases/post-phase-6-stage-map.md)。
+历史状态归档见 [docs/current-status.md](docs/current-status.md)。
 
 ## 仓库结构
 
@@ -121,7 +122,6 @@ macOS / Linux:
 
 - 文档总览：[docs/README.md](docs/README.md)
 - 组件化开发指南：[docs/guides/componentized-development.md](docs/guides/componentized-development.md)
-- 项目现状：[docs/current-status.md](docs/current-status.md)
 - 架构与范围：[docs/architecture/](docs/architecture/)
 - 阶段文档：[docs/phases/](docs/phases/)
 - 模块文档：[docs/modules/](docs/modules/)
@@ -132,20 +132,22 @@ macOS / Linux:
 ## 当前推荐阅读顺序
 
 1. [AGENTS.md](AGENTS.md)
-2. [Plan.md](Plan.md)
-3. [docs/current-status.md](docs/current-status.md)
+2. [docs/phases/post-phase-6-stage-map.md](docs/phases/post-phase-6-stage-map.md)
+3. [docs/superpowers/README.md](docs/superpowers/README.md)
 4. [docs/architecture/scope-v1.md](docs/architecture/scope-v1.md)
 5. [docs/architecture/architecture.md](docs/architecture/architecture.md)
 6. [docs/guides/componentized-development.md](docs/guides/componentized-development.md)
 7. [docs/architecture/module-contract.md](docs/architecture/module-contract.md)
 8. [docs/architecture/module-boundaries-v1.md](docs/architecture/module-boundaries-v1.md)
-9. [docs/phases/phase-2-minimum-runnable-plan.md](docs/phases/phase-2-minimum-runnable-plan.md)
+9. 当前任务直接相关的设计、计划、模块说明和验证记录
 
 ## 说明
 
 - `OldP/` 是旧平台参考来源，不是直接复制来源
 - `docs/prompts/` 和 `docs/bootstrap/` 主要服务于协作与执行流程，不是产品主文档
+- `docs/current-status.md` 仅作为历史状态归档保留，不再作为当前事实源
 - 后续新增文档请优先放入对应分类目录
+
 ## Componentization Guardrails
 
 - Primary entry: [docs/guides/componentized-development.md](docs/guides/componentized-development.md)

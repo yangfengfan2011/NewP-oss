@@ -1,6 +1,6 @@
 # Codex 审查清单
 
-本文档用于 Codex 审查 GitHub Copilot 的执行结果，目标是让“Copilot 执行，Codex 复核”的流程稳定且可重复。
+本文档用于 Codex 审查执行结果，目标是让实现、文档和验证收口保持稳定且可重复。
 
 ## 1. 范围审查
 
@@ -12,18 +12,17 @@
 ## 2. 口径审查
 
 - 是否与 `AGENTS.md` 的架构和 AI-first 规则一致？
-- 是否与 `Plan.md` 和 `docs/current-status.md` 的阶段口径一致？
+- 是否与 `docs/phases/post-phase-6-stage-map.md` 和任务相关设计、计划、验证记录的阶段口径一致？
 - 是否把“建议”“边界”“待实现”误写成“已完成”？
 - 是否引入了仓库内没有依据的新机制或新术语？
 
 ## 3. 文件边界审查
 
-- `Plan.md`
-- `docs/current-status.md`
 - `AGENTS.md`
-- `CLAUDE.md`
+- `docs/phases/post-phase-6-stage-map.md`
 - `docs/designs/*`
 - `docs/superpowers/specs/*`
+- `docs/superpowers/plans/*`
 
 如果这些文件被改动，必须确认：
 

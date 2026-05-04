@@ -1,6 +1,8 @@
-# 当前项目状态
+# 当前项目状态（历史归档）
 
-本文档用于给出仓库当前的统一口径，避免项目状态分散在会话摘要、阶段文档和模块文档中。
+> 归档说明：本文档曾用于集中维护仓库阶段状态，但当前已不再作为“当前事实源”或新任务入口继续维护。
+> 现阶段请以 `AGENTS.md`、`docs/phases/post-phase-6-stage-map.md`、`docs/superpowers/README.md` 以及任务直接相关的设计、计划、模块说明和验证记录为准。
+> 下方内容仅作为历史状态流水和旧阶段线索保留，不能单独用来判断当前下一步。
 
 ## 当前文档入口口径
 
@@ -597,7 +599,7 @@ AI-First 对齐：
 对应文档：
 
 - [architecture/ai-first-execution-standard.md](architecture/ai-first-execution-standard.md)
-- [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
+- `docs/collaboration/current-collaboration-mode.md`（历史协作入口，已退场）
 - [history/collaboration/github-copilot-working-mode.md](history/collaboration/github-copilot-working-mode.md)
 - [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
 - [collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md](collaboration/work-packages/wp2-ai-first-execution-standard-closeout.md)
@@ -643,7 +645,7 @@ AI-First 对齐：
 对应文档：
 
 - [designs/post-phase-6-status-alignment-design.md](designs/post-phase-6-status-alignment-design.md)
-- [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
+- `docs/collaboration/current-collaboration-mode.md`（历史协作入口，已退场）
 - [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
 - [collaboration/work-packages/wp3-post-phase-6-status-alignment.md](collaboration/work-packages/wp3-post-phase-6-status-alignment.md)
 - [verification/verification-matrix.md](verification/verification-matrix.md)

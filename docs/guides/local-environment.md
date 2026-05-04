@@ -74,6 +74,7 @@ pnpm build
 
 ## 推荐阅读
 
-- 项目现状：[../current-status.md](../current-status.md)
+- 仓库规则：[../../AGENTS.md](../../AGENTS.md)
+- 当前阶段图：[../phases/post-phase-6-stage-map.md](../phases/post-phase-6-stage-map.md)
 - 快速验证：[../verification/quick-verification.md](../verification/quick-verification.md)
 - 架构总览：[../architecture/architecture.md](../architecture/architecture.md)

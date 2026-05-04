@@ -104,7 +104,7 @@
 6. 受控门禁入口：`scripts/check-ai-first-design-targets.ps1`
 7. 目标登记入口：`scripts/register-ai-first-design-target.ps1`
 8. 设计创建入口：`scripts/new-design-doc.ps1`（默认创建到 `docs/superpowers/specs/`，支持 `-Category platform|modules|tooling|roadmap` 分类落位，文件名自动带 `YYYY-MM-DD-` 前缀，创建前会先校验模板是否满足 AI-first 最小要求）
-9. 协作入口：[../collaboration/current-collaboration-mode.md](../collaboration/current-collaboration-mode.md)
+9. 仓库协作规则入口：[../../AGENTS.md](../../AGENTS.md)
 10. 阶段拆包与验收入口：[../phases/post-phase-6-stage-map.md](../phases/post-phase-6-stage-map.md)
 
 示例命令：
@@ -150,7 +150,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignNam
 
 - 不对现有全部设计文档做一次性回填
 - 不把 AI-first 校验强绑到整仓所有文档
-- 不在本轮修改 `Plan.md`
+- 不在本轮修改已退场的历史路线文档
 - 不把状态一致性治理与全量文档补链并入本轮
 
 ## 9. 对应源文档

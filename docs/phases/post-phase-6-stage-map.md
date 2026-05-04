@@ -14,7 +14,7 @@
 
 推荐顺序：
 
-1. 先阅读 `docs/collaboration/current-collaboration-mode.md`
+1. 先阅读 `AGENTS.md`
 2. 再阅读 `docs/architecture/ai-first-execution-standard.md`
 3. 再阅读本文件，确认当前所在阶段和下一阶段
 4. 只执行当前工作包，不顺手扩范围
@@ -32,14 +32,14 @@
 
 | 阶段 | 归属 | 当前状态 | 主要目标 | 主要依据 |
 |------|------|----------|----------|----------|
-| Stage 0 | 协作基线 | 已完成 | 建立当前协作入口、审查清单和基础工作包结构 | `docs/collaboration/current-collaboration-mode.md`、`docs/collaboration/codex-review-checklist.md` |
+| Stage 0 | 协作基线 | 已完成 | 建立审查清单和基础工作包结构 | `AGENTS.md`、`docs/collaboration/codex-review-checklist.md` |
 | Stage 1 | WP1 设计 | 已完成 | 完成插件治理增强设计 | `docs/designs/plugin-governance-enhancement-design.md` |
 | Stage 2 | WP2 设计 | 已完成 | 完成 AI-first 执行标准设计 | `docs/designs/ai-first-execution-standard-design.md` |
 | Stage 3 | WP3 设计 | 已完成 | 完成状态与计划对齐设计 | `docs/designs/post-phase-6-status-alignment-design.md` |
 | Stage 4 | WP4 设计 | 已完成 | 完成 Dictionary / Enumeration 迁移准备设计 | `docs/designs/dictionary-enumeration-migration-preparation-design.md` |
-| Stage 5 | WP1 实施收口 | 已完成 | 插件治理增强已完成实现、验证与状态收口 | `docs/current-status.md`、`docs/verification/plugin-governance-enhancement-verification.md` |
-| Stage 6 | WP2 执行标准落地 | 已完成 | AI-first 执行标准已形成正式标准、校验、登记、创建与协作入口闭环 | `docs/architecture/ai-first-execution-standard.md`、`docs/current-status.md` |
-| Stage 7 | WP3 状态对齐收口 | 已完成并收口 | 完成入口统一与历史链路补齐，结束 `WP3` 的专项待办 | `docs/current-status.md`、`docs/verification/post-phase-6-status-alignment-phase-1-verification.md`、`docs/verification/post-phase-6-status-alignment-phase-2-verification.md` |
+| Stage 5 | WP1 实施收口 | 已完成 | 插件治理增强已完成实现、验证与状态收口 | `docs/verification/plugin-governance-enhancement-verification.md` |
+| Stage 6 | WP2 执行标准落地 | 已完成 | AI-first 执行标准已形成正式标准、校验、登记、创建与协作入口闭环 | `docs/architecture/ai-first-execution-standard.md` |
+| Stage 7 | WP3 状态对齐收口 | 已完成并收口 | 完成入口统一与历史链路补齐，结束 `WP3` 的专项待办 | `docs/verification/post-phase-6-status-alignment-phase-1-verification.md`、`docs/verification/post-phase-6-status-alignment-phase-2-verification.md` |
 | Stage 8 | WP4 实施准入复核 | 已完成并通过 | 复核迁移正式实施准入条件，并确认静态资源/静态清单路线可进入实施 | `docs/designs/dictionary-enumeration-migration-preparation-design.md` 第 8 节、`docs/verification/wp4-stage-8-admission-review-verification.md` |
 | Stage 9 | WP4 Dictionary 实施 | 已完成并通过 | 完成首批 Dictionary 静态资源转换、语言配置消费与最小 i18n 基座 | `docs/verification/wp4-stage-9-dictionary-static-resources-verification.md` |
 | Stage 10 | WP4 Enumeration 实施 | 已完成并通过 | 完成首批 Enumeration 静态结构清单与本地化资源转换 | `docs/verification/wp4-stage-10-enumeration-static-resources-verification.md` |
@@ -54,14 +54,14 @@
 
 ### 5.2 已完成阶段对应文档
 
-- Stage 0：`docs/collaboration/current-collaboration-mode.md`、`docs/collaboration/codex-review-checklist.md`
+- Stage 0：`AGENTS.md`、`docs/collaboration/codex-review-checklist.md`
 - Stage 1：`docs/designs/plugin-governance-enhancement-design.md`
 - Stage 2：`docs/designs/ai-first-execution-standard-design.md`
 - Stage 3：`docs/designs/post-phase-6-status-alignment-design.md`
 - Stage 4：`docs/designs/dictionary-enumeration-migration-preparation-design.md`
-- Stage 5：`docs/verification/plugin-governance-enhancement-verification.md`、`docs/current-status.md`
-- Stage 6：`docs/architecture/ai-first-execution-standard.md`、`docs/current-status.md`
-- Stage 7：`docs/current-status.md`、`docs/verification/post-phase-6-status-alignment-phase-1-verification.md`、`docs/verification/post-phase-6-status-alignment-phase-2-verification.md`
+- Stage 5：`docs/verification/plugin-governance-enhancement-verification.md`
+- Stage 6：`docs/architecture/ai-first-execution-standard.md`
+- Stage 7：`docs/verification/post-phase-6-status-alignment-phase-1-verification.md`、`docs/verification/post-phase-6-status-alignment-phase-2-verification.md`
 - Stage 8：`docs/verification/wp4-stage-8-admission-review-verification.md`
 - Stage 9：`docs/verification/wp4-stage-9-dictionary-static-resources-verification.md`
 - Stage 10：`docs/verification/wp4-stage-10-enumeration-static-resources-verification.md`
@@ -100,10 +100,10 @@
 
 如果现在开始下一轮工作，建议从这里进入：
 
-1. `docs/collaboration/current-collaboration-mode.md`
+1. `AGENTS.md`
 2. `docs/architecture/ai-first-execution-standard.md`
 3. `docs/phases/post-phase-6-stage-map.md`
-4. 当前阶段对应的工作包文档
+4. 当前阶段对应的设计、计划、模块说明和验证记录
 
 当前推荐的后续方向是：
 

@@ -11,17 +11,25 @@
 - 保持模块边界清晰。
 - 优先通过扩展契约集成，而不是直接耦合。
 - 将平台内核与产品业务逻辑分离。
-- 将迁移视为代码、元数据、数据、宿主与工具的整体问题。
 - 所有改动都应尽量可验证、可回退。
-- 将“更适合 AI 辅助开发并逐步过渡到 AI 主导开发”作为首要目标，而不是单纯追求功能堆叠或旧平台等比例重做。
+- 将“更适合 Codex 理解、修改、验证和回滚”作为首要目标，而不是单纯追求功能堆叠。
 
 ## AI-First 约束
 
 - 任何设计都要优先判断：AI 是否能在小上下文内理解、修改、验证和回滚。
-- 单个任务应尽量保持单一目标，避免把重构、新功能、迁移混在一起。
-- 新增模块、迁移链路和扩展能力要优先形成可复制模板，方便后续 agent 复用。
+- 单个任务应尽量保持单一目标，避免把重构和新功能混在一起。
+- 新增模块和扩展能力要优先形成可复制模板，方便后续 Codex 复用。
 - 文档不仅要解释结果，还要说明入口、边界、验证方式、失败信号和回滚思路。
 - 如果某项实现只能依赖人工口口相传才能继续推进，则说明它还不符合当前项目目标。
+
+## 当前状态与任务入口
+
+- 本文件是仓库级执行规则入口；开始具体任务前，先确认本文件中关于边界、设计先行、验证和输出的要求。
+- `docs/superpowers/README.md` 是新增设计规格与实施计划的入口；新增设计和计划默认遵守其中的分类与脚本约定。
+- 当前阶段和后续方向默认参考 `docs/phases/post-phase-6-stage-map.md`；具体任务以相关设计、计划、模块说明和验证记录为准。
+- 任务涉及具体能力时，应继续阅读对应的 `docs/superpowers/specs/<category>/`、`docs/superpowers/plans/<category>/`、`docs/modules/`、`docs/developer/` 或 `docs/architecture/` 文档。
+- 任务涉及验证或收口时，应查看 `docs/verification/verification-matrix.md` 和相关验证记录，避免用过期阶段口径判断当前状态。
+- `docs/current-status.md` 已降级为历史状态归档，不再作为当前事实源；`Plan.md` 和 `docs/collaboration/current-collaboration-mode.md` 已退场，不再作为当前入口。
 
 ## 强约束元数据 + 清晰代码内核
 
@@ -39,16 +47,7 @@
 - 新的扩展能力必须通过模块契约与 SDK 暴露。
 - 不允许跨模块直接访问对方数据库或持久化细节。
 - 不要把产品专属页面或流程直接放进平台 Shell。
-- 不要让迁移期的临时方案固化成长期平台架构。
-
-## 迁移规则
-
-- 先盘点，再实施。
-- 每一类旧资产都必须先被归类为：`Retire / Rewrite / Wrap / Import / Postpone` 之一。
-- 不要隐式迁移旧运行时元数据，必须先文档化其目标形态。
-- 未经契约审查，不要把旧框架启动代码直接搬进新 Host。
-- 任何临时兼容层都要保留明确清单。
-- 除非当前阶段明确纳入，否则 `WinApp`、`Studio`、`File Service` 重写默认都视为范围外。
+- 不要把临时验证、样例代码或单模块特例固化成长期平台架构。
 
 ## 后端规则
 
@@ -65,7 +64,7 @@
 - 共享组件放在 `frontend/packages/ui`。
 - 模块前端必须通过前端 SDK 注册，不应直接修改 Shell 内部结构实现接入。
 - 除非有充分理由，否则避免引入全局可变状态。
-- 任何旧页面或旧元数据兼容路径都必须被隔离并文档化。
+- 兼容路径、实验入口或过渡页面必须被隔离并文档化，不得混入长期 Shell 结构。
 
 ## 变更规则
 
@@ -74,17 +73,20 @@
 - 先阅读相关文件，再形成方案，再开始编辑。
 - 如果本地工作区存在未提交内容，绝对不允许切换本地分支；如需在其他分支继续工作，必须新建 `git worktree` 并在对应 worktree 中操作。
 - 尽量保持 diff 小而清晰。
-- 默认在实现代码中补足高价值注释，尤其是跨模块边界、状态切换、迁移/回滚、宿主装配、失败信号与非常规约束。
+- 默认在实现代码中补足高价值注释，尤其是跨模块边界、状态切换、回滚、宿主装配、失败信号与非常规约束。
 - 默认新增代码注释使用简体中文；只有文件既有约定明显使用英文，或必须保留英文术语/API 契约时，才允许英文注释。
 - 注释应优先解释“为什么这样做”“边界在哪里”“失败时看什么”，不要把显而易见的语句翻译成自然语言。
-- 公共契约、SDK 入口、宿主装配点、复杂页面状态编排、插件运行时流程，默认都应有足以让新 agent 在小上下文内继续工作的注释。
+- 公共契约、SDK 入口、宿主装配点、复杂页面状态编排、插件运行时流程，默认都应有足以让后续 Codex 在小上下文内继续工作的注释。
 - 公共契约与 SDK 的 `public` 方法默认补 XML 方法注释；关键实现方法默认在方法前补中文注释说明意图、边界或失败信号。
 - 如果一段关键实现的意图、入口、回滚方式只能靠口头说明补充，提交前应补代码注释或相邻文档。
-- 当契约、架构或迁移决策变化时，必须同步更新文档。
+- 当契约、架构或模块边界决策变化时，必须同步更新文档。
 - 任何新的功能、模块、阶段改动或行为变更，在正式实施前都必须先有详细设计文档。
 - 如果还没有详细设计文档，工作只能停留在调研、澄清或设计草案阶段，不得直接进入实现。
 - 详细设计文档或实施计划完成后，在进入正式实施前，必须先做一次一致性 review，确认设计、计划、契约、范围边界、目录位置与当前架构约束保持一致。
-- 后续新增详细设计文档默认放在 `docs/superpowers/specs/` 下；`docs/designs/` 仅作为既有历史设计与模板目录继续保留，不再作为新增设计的强制默认位置。
+- 后续新增详细设计文档默认放在 `docs/superpowers/specs/<category>/` 下，分类使用 `platform / modules / tooling / roadmap`；如果暂时无法稳定归类，才允许短期放在 `docs/superpowers/specs/` 根目录。
+- 后续新增实施计划默认放在 `docs/superpowers/plans/<category>/` 下，分类同样使用 `platform / modules / tooling / roadmap`；计划横跨多个主题且尚未拆分时，才允许短期放在 `docs/superpowers/plans/` 根目录。
+- `docs/designs/` 仅作为既有历史设计与模板目录继续保留，不再作为新增设计的强制默认位置。
+- 新建设计优先使用 `scripts/new-design-doc.ps1` 或 `scripts/new-design-doc.sh`；设计完成后默认执行 `scripts/validate-ai-first-design.ps1` 和 `scripts/check-ai-first-design-targets.ps1`，确认入口、边界、验证、失败信号和回滚思路齐备。
 - `docs/superpowers/plans/` 下的计划文档在引用本项目库内文件、目录、命令参数或输出位置时，默认只能使用仓库相对路径；只有目标不在本项目库内时，才允许写绝对路径，并应明确标注其仓库外属性。
 
 ## 未经明确请求不得做的改动
@@ -92,17 +94,19 @@
 - 不要擅自引入微服务拆分。
 - 不要随意修改部署脚本、密钥处理、CI 流水线或基础设施编排。
 - 不要在没有记录权衡的情况下替换基础库。
-- 不要因为旧元数据或旧配置“看起来过时”就静默丢弃它们。
+- 不要因为现有元数据、配置或契约“看起来过时”就静默丢弃它们；删除或替换必须有设计依据和回滚思路。
 
 ## 验证要求
 
 每次改动都应尽量尝试执行：
 
-1. 后端构建
-2. 后端测试
-3. 前端构建
-4. 前端测试
-5. 契约检查或 smoke 验证（如果相关）
+1. 后端构建：优先使用 `scripts/build.ps1` / `scripts/build.sh`，或按改动范围执行定向 `dotnet build`。
+2. 后端测试：优先使用 `scripts/test.ps1` / `scripts/test.sh`，或按改动范围执行定向 `dotnet test`。
+3. 前端构建：按改动范围执行 `pnpm --dir frontend build` 或相关 package/module 构建。
+4. 前端测试：按改动范围执行 `pnpm` 定向测试或全量测试。
+5. 设计与契约检查：涉及设计文档时执行 `scripts/validate-ai-first-design.ps1` 和 `scripts/check-ai-first-design-targets.ps1`；涉及插件、元数据或宿主装配时补充契约检查或 smoke 验证。
+
+如果因环境、耗时或依赖限制无法执行全量验证，必须在最终输出中说明实际执行的验证、未执行项和原因。
 
 ## 输出要求
 
@@ -113,13 +117,14 @@
 - 验证结果
 - 已知风险
 - 回滚思路
-## Componentization Guardrails
 
-- New modules should go through `Contracts / SDK / templates / controlled entry points` before changing Host or Shell internals.
-- `Host` should only own startup, composition, module loading, and host-level concerns.
-- `Shell` should only own layout, global providers, menu aggregation, route aggregation, and controlled registration.
-- Normal frontend module integration may update `frontend/packages/shell/src/builtin-runtime-plugins.ts`; `registerModules.ts` should remain focused on shell-side loading/composition logic.
-- The full guardrails reference lives in `docs/architecture/componentization-guardrails.md`.
+## 组件化护栏
+
+- 新模块应优先通过 `Contracts / SDK / templates / controlled entry points` 接入，再考虑修改 Host 或 Shell 内部实现。
+- `Host` 只拥有启动、组合、模块加载和宿主级横切关注点。
+- `Shell` 只拥有布局、全局 Provider、菜单聚合、路由聚合和受控注册。
+- 常规前端模块接入可以更新 `frontend/packages/shell/src/builtin-runtime-plugins.ts`；`registerModules.ts` 应继续聚焦 Shell 侧加载与组合逻辑。
+- 完整护栏参考 `docs/architecture/componentization-guardrails.md`。
 
 ## 提交约定
 

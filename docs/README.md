@@ -101,9 +101,8 @@
 
 ## 9. collaboration
 
-面向当前主线程协作方式、评审清单与工作包的执行入口。
+面向审查清单、历史工作包和协作资料的文档区。
 
-- [collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
 - [collaboration/codex-review-checklist.md](collaboration/codex-review-checklist.md)
 - [collaboration/work-packages/wp1-plugin-governance-design.md](collaboration/work-packages/wp1-plugin-governance-design.md)
 - [collaboration/work-packages/wp2-ai-first-execution-standard-design.md](collaboration/work-packages/wp2-ai-first-execution-standard-design.md)
@@ -126,14 +125,14 @@
 
 ## 11. 当前推荐入口
 
-- 项目现状：[current-status.md](current-status.md)
 - 仓库入口：[../README.md](../README.md)
+- 仓库规则：[../AGENTS.md](../AGENTS.md)
+- 当前阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
+- 详细设计入口：[superpowers/README.md](superpowers/README.md)
 - 组件化开发超短版：[developer/componentized-development-quickstart.md](developer/componentized-development-quickstart.md)
 - 代码注释规则：[developer/code-commenting-guidelines.md](developer/code-commenting-guidelines.md)
 - 架构总览：[architecture/architecture.md](architecture/architecture.md)
 - 组件化开发入口：[developer/componentized-development.md](developer/componentized-development.md)
 - 组件化 Example：[developer/componentized-example-module.md](developer/componentized-example-module.md)
-- 详细设计入口：[superpowers/README.md](superpowers/README.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
-- 当前协作模式：[collaboration/current-collaboration-mode.md](collaboration/current-collaboration-mode.md)
-- 当前阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
+- 历史状态归档：[current-status.md](current-status.md)

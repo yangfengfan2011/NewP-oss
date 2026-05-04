@@ -540,7 +540,7 @@ git commit -m "功能：增加标准CRUD存在性检查"
 - Modify: `server/platform-crud/Runtime/StandardCrudService.cs`
 - Modify: `tests/PlatformCrud.Tests/StandardCrudServiceWriteTests.cs`
 
-- [ ] **Step 1: 写 create/update 唯一性失败测试**
+- [x] **Step 1: 写 create/update 唯一性失败测试**
 
 Append to `tests/PlatformCrud.Tests/StandardCrudServiceWriteTests.cs`:
 
@@ -672,7 +672,7 @@ private sealed class RecordingExistsStandardCrudRepository : InMemoryStandardCru
 }
 ```
 
-- [ ] **Step 2: 运行写入测试确认失败**
+- [x] **Step 2: 运行写入测试确认失败**
 
 Run:
 
@@ -688,7 +688,7 @@ CreateAsync_WhenUniqueConstraintConflicts ... Assert.False() Failure
 UpdateAsync_WhenUniqueValueChangesToExistingValue ... Assert.False() Failure
 ```
 
-- [ ] **Step 3: 在 CreateAsync 中调用唯一性校验**
+- [x] **Step 3: 在 CreateAsync 中调用唯一性校验**
 
 Modify `server/platform-crud/Runtime/StandardCrudService.cs` inside `CreateAsync` so the first part becomes:
 
@@ -711,7 +711,7 @@ if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
 }
 ```
 
-- [ ] **Step 4: 在 UpdateAsync 中先读现有行并合并 candidate row**
+- [x] **Step 4: 在 UpdateAsync 中先读现有行并合并 candidate row**
 
 Replace `UpdateAsync` in `server/platform-crud/Runtime/StandardCrudService.cs` with:
 
@@ -762,7 +762,7 @@ public async Task<StandardCrudMutationResult> UpdateAsync(
 }
 ```
 
-- [ ] **Step 5: 增加唯一约束校验 helper**
+- [x] **Step 5: 增加唯一约束校验 helper**
 
 Add these private helpers to `server/platform-crud/Runtime/StandardCrudService.cs` before `FilterFields`:
 
@@ -833,7 +833,7 @@ private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueCon
 }
 ```
 
-- [ ] **Step 6: 确认仓储比较按约束规范化双方值**
+- [x] **Step 6: 确认仓储比较按约束规范化双方值**
 
 确认 `server/platform-crud/Persistence/EfStandardCrudRepository.cs` 和 `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs` 的 `ExistsAsync` 都调用 `UniqueValuesEqual(value, pair.Value, constraint)`，而不是直接调用 `ValuesEqual` 或固定使用 `StringComparison.OrdinalIgnoreCase`。这一点保证存量值和候选值都按 `TrimWhitespace / CaseInsensitive` 统一比较。
 
@@ -841,7 +841,7 @@ private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueCon
 equalityValues.All(pair => row.TryGetValue(pair.Key, out var value) && UniqueValuesEqual(value, pair.Value, constraint))
 ```
 
-- [ ] **Step 7: 运行写入测试确认通过**
+- [x] **Step 7: 运行写入测试确认通过**
 
 Run:
 
@@ -855,7 +855,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 git add .\server\platform-crud\Runtime\StandardCrudService.cs .\tests\PlatformCrud.Tests\StandardCrudServiceWriteTests.cs

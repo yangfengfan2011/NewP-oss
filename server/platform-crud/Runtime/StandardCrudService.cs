@@ -96,6 +96,12 @@ public sealed class StandardCrudService : IStandardCrudService
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
         var allowed = FilterFields(values, descriptor.FieldSet.CreateFields);
+        var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, allowed, excludedId: null, cancellationToken);
+        if (uniqueError is not null)
+        {
+            return StandardCrudMutationResult.Failure(uniqueError);
+        }
+
         if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
         {
             var error = await validator.ValidateCreateAsync(descriptor, allowed, cancellationToken);
@@ -116,10 +122,29 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
+        var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
+        if (existing is null)
+        {
+            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+        }
+
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.UpdateFields),
             StringComparer.Ordinal);
         ApplyUpdateAuditFields(descriptor, allowed);
+
+        var candidate = new Dictionary<string, object?>(existing, StringComparer.Ordinal);
+        foreach (var pair in allowed)
+        {
+            candidate[pair.Key] = pair.Value;
+        }
+
+        var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, candidate, excludedId: id, cancellationToken);
+        if (uniqueError is not null)
+        {
+            return StandardCrudMutationResult.Failure(uniqueError);
+        }
+
         if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
         {
             var error = await validator.ValidateUpdateAsync(descriptor, id, allowed, cancellationToken);
@@ -296,6 +321,71 @@ public sealed class StandardCrudService : IStandardCrudService
         }
 
         return filtered;
+    }
+
+    // 唯一约束属于标准写入前置校验；descriptor 只声明约束，执行顺序由内核统一控制。
+    private async Task<StandardCrudError?> ValidateUniqueConstraintsAsync(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values,
+        string? excludedId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var constraint in descriptor.UniqueConstraints)
+        {
+            var equalityValues = BuildUniqueEqualityValues(constraint, values);
+            if (equalityValues is null)
+            {
+                continue;
+            }
+
+            if (await _repository.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken))
+            {
+                return new StandardCrudError
+                {
+                    StatusCode = 409,
+                    Code = constraint.ErrorCode,
+                    Message = constraint.Message,
+                    ReasonKey = constraint.ReasonKey
+                };
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, object?>? BuildUniqueEqualityValues(
+        StandardCrudUniqueConstraint constraint,
+        IReadOnlyDictionary<string, object?> values)
+    {
+        var equalityValues = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var field in constraint.Fields.Concat(constraint.ScopeFields))
+        {
+            if (!values.TryGetValue(field, out var value) || value is null)
+            {
+                if (constraint.IgnoreWhenAnyFieldMissing)
+                {
+                    return null;
+                }
+
+                equalityValues[field] = null;
+                continue;
+            }
+
+            equalityValues[field] = NormalizeUniqueValue(value, constraint);
+        }
+
+        return equalityValues;
+    }
+
+    private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+    {
+        if (value is not string text)
+        {
+            return value;
+        }
+
+        var normalized = constraint.TrimWhitespace ? text.Trim() : text;
+        return constraint.CaseInsensitive ? normalized.ToUpperInvariant() : normalized;
     }
 
     // UpdatedAt 属于更新行为的内核责任：只要资源显式把该字段纳入更新白名单，就由内核覆盖为当前时间。

@@ -1,165 +1,296 @@
-# 标准 CRUD Person 收口与接入模板设计
+# 标准 CRUD 写入接管、唯一约束与模板收口设计
 
 ## 1. 背景
 
-`docs/superpowers/specs/2026-05-02-standard-crud-backend-kernel-design.md` 已完成标准 CRUD 后端内核与 Organization `Person` 试点的首轮落地。当前代码已经具备平台级 descriptor、仓储、服务、endpoint 门面，以及 Person 资源的查询扩展、显示值解析、摘要块、校验和删除守卫。
+标准 CRUD 后端内核与 Organization `Person` 试点已经完成首轮落地。当前 `Person` 的 `list / detail / options / disable / delete` 已经由 `PersonsController` 委托 `StandardCrudEndpoint` 接管，但 `create / update` 仍走 `PersonService`。
 
-这一轮不继续扩展到 `Position / Company / Department` 等第二资源，也不直接调整运行时代码。下一阶段先完成两个收口动作：
+这不符合标准 CRUD 后端内核的目标。人员资源的创建和更新是最基本的 CRUD 主干，应由标准 CRUD 内核接管；模块只保留领域差异、跨模块集成和特殊动作。与此同时，`PersonNo` 在同一公司下唯一这一类规则不应继续作为 Person 专属样板散落在 service/repository 中，而应评估为标准 CRUD 的通用唯一约束能力。
 
-1. 对 `Person` 试点做完成后一致性 review，明确当前接管矩阵、保留锚点、风险和后续可收缩范围。
-2. 把已验证的标准 CRUD 接入方式沉淀成模板文档，供后续 agent 复制到新资源时使用。
+本阶段先处理两件事：
 
-这样可以避免把 `Person` 当前的过渡状态误认为长期架构，也避免后续试点在没有模板的情况下重复理解同一套接入边界。
+1. 让 `Person create/update` 切到 `StandardCrudEndpoint`。
+2. 在 `server/platform-crud` 中新增标准唯一约束能力，用 descriptor 声明 `PersonNo + CompanyId` 这种 scoped uniqueness。
+
+模板文档和完成后 review 仍然需要做，但必须建立在 create/update 已由标准 CRUD 接管、唯一性能力已平台化之后。
 
 ## 2. 当前事实
 
-### 2.1 标准 CRUD 内核现状
+### 2.1 已有标准 CRUD 能力
 
-`server/platform-crud` 已提供以下能力：
+`server/platform-crud` 已提供：
 
-- `StandardCrudDescriptor` 声明资源、模型、字段集合、显示字段、摘要块、删除策略和扩展点。
-- `EfStandardCrudRepository` 基于 `EfPlatformDbContext` shared-type entity 执行标准读取、写入、启停和删除。
-- `StandardCrudService` 编排 `list / detail / options / create / update / disable / delete`。
-- `StandardCrudEndpoint` 作为 Controller adapter 门面，避免 Controller 直接依赖仓储。
-- 扩展点包括 query customizer、display value resolver、summary provider、validator、action handler、delete guard。
+- `StandardCrudDescriptor`：声明资源、模型、字段集合、显示字段、摘要块、删除策略和扩展点。
+- `EfStandardCrudRepository`：基于 `EfPlatformDbContext` shared-type entity 执行标准读取、创建、更新、启停和删除。
+- `StandardCrudService`：编排 `list / detail / options / create / update / disable / delete`。
+- `StandardCrudEndpoint`：作为 Controller adapter 门面，避免 Controller 直接依赖仓储。
+- 扩展点：query customizer、display value resolver、summary provider、validator、action handler、delete guard。
 
 ### 2.2 Person 当前接管矩阵
 
-| 能力 | 当前入口 | 当前状态 | 收口判断 |
+| 能力 | 当前入口 | 当前状态 | 本阶段目标 |
 | --- | --- | --- | --- |
-| `list` | `PersonsController` -> `StandardCrudEndpoint.ListAsync` | 已接管 | 保持标准 CRUD 接管 |
-| `detail` | `PersonsController` -> `StandardCrudEndpoint.GetDetailAsync` | 已接管 | 保持标准 CRUD 接管 |
-| `options` | `PersonsController` -> `StandardCrudEndpoint.OptionsAsync` | 已接管 | 保持标准 CRUD 接管 |
-| `disable` | `PersonsController` -> `StandardCrudEndpoint.DisableAsync` | 已接管 | 保持标准 CRUD 接管 |
-| `delete` | `PersonsController` -> `StandardCrudEndpoint.DeleteAsync` + `PersonCrudDeleteGuard` | 已接管 | 保持条件删除接管 |
-| `create` | `PersonsController` -> `PersonService.CreateAsync` | 未切到 endpoint | 本阶段只记录，不直接切换 |
-| `update` | `PersonsController` -> `PersonService.UpdateAsync` | 未切到 endpoint | 本阶段只记录，不直接切换 |
-| `user-link` | `PersonsController` -> `PersonService.LinkUserAsync` | 模块特殊入口 | 必须继续留在 Organization 模块内 |
+| `list` | `PersonsController` -> `StandardCrudEndpoint.ListAsync` | 已接管 | 保持 |
+| `detail` | `PersonsController` -> `StandardCrudEndpoint.GetDetailAsync` | 已接管 | 保持 |
+| `options` | `PersonsController` -> `StandardCrudEndpoint.OptionsAsync` | 已接管 | 保持 |
+| `disable` | `PersonsController` -> `StandardCrudEndpoint.DisableAsync` | 已接管 | 保持 |
+| `delete` | `PersonsController` -> `StandardCrudEndpoint.DeleteAsync` + `PersonCrudDeleteGuard` | 已接管 | 保持 |
+| `create` | `PersonsController` -> `PersonService.CreateAsync` | 未接管 | 切到 `StandardCrudEndpoint.CreateAsync` |
+| `update` | `PersonsController` -> `PersonService.UpdateAsync` | 未接管 | 切到 `StandardCrudEndpoint.UpdateAsync` |
+| `user-link` | `PersonsController` -> `PersonService.LinkUserAsync` | 模块特殊入口 | 保持在 Organization 模块 |
 
-这意味着“标准 CRUD 写能力已在内核具备”与“Person Controller 的 create/update 已切到标准 endpoint”不是同一件事。当前代码中 create/update 仍走 `PersonService`，因此下一阶段必须把这个状态显式写入 review 结果，不能让计划文档里的完成口径掩盖实际接管边界。
+### 2.3 PersonNo 唯一性现状
 
-### 2.3 PersonService 保留职责
+当前唯一性规则在 `IPersonRepository.ExistsPersonNoAsync(companyId, personNo, excludedPersonId)` 和 `PersonService` 中完成。
 
-`PersonService` 当前仍承接：
+这条规则具有明显的通用形状：
 
-- `create/update` 的人员领域写入入口。
-- 同公司 `PersonNo` 唯一性校验。
-- `CompanyId / DepartmentId / PositionId` 从 DTO 字符串进入领域前的解析边界。
-- `PersonNo` 更新只读约束。
-- `user-link` 账号绑定入口。
-- 旧读取路径和摘要构造逻辑，作为试点回滚锚点仍有价值。
+- 唯一字段：`PersonNo`
+- 作用域字段：`CompanyId`
+- 创建时：检查同一 `CompanyId` 下是否存在相同 `PersonNo`
+- 更新时：排除当前行，并且即使请求没有提交 `PersonNo`，也要用现有行的 `PersonNo` 与新 `CompanyId` 一起检查
+- 比较方式：字符串大小写不敏感
 
-其中 `user-link` 与账号目录、授权摘要属于 Organization 模块跨模块集成，不应进入平台 CRUD 内核。`create/update` 是否继续切到标准 CRUD endpoint，需要先补齐 validator 对“更新时公司变化导致现有 PersonNo 冲突”的覆盖，再单独设计，不在本轮直接改代码。
+因此它适合作为标准 CRUD 唯一约束能力，而不是继续作为 Person 专属 service 逻辑。
 
 ## 3. 目标
 
-- 产出一份 Person 标准 CRUD 接管完成后一致性 review 文档。
-- 产出一份标准 CRUD 新资源接入模板文档。
-- 明确 Person 当前过渡状态：哪些能力已由标准 CRUD 接管，哪些仍由模块服务持有。
-- 明确 `create/update` 暂不在本轮切换，避免无设计地改变人员写入路径。
-- 明确下一次接入新资源前必须遵守的文件、扩展点、测试、验证和回滚要求。
-- 保持本轮 diff 聚焦文档，不触碰运行时代码。
+- `PersonsController.Create` 委托 `StandardCrudEndpoint.CreateAsync`。
+- `PersonsController.Update` 委托 `StandardCrudEndpoint.UpdateAsync`。
+- 新增标准 CRUD 唯一约束声明与校验流程。
+- `PersonCrudDescriptorFactory` 声明 `PersonNo` 在 `CompanyId` scope 内唯一。
+- 更新时标准 CRUD 内核先读取现有行，合并现有值与更新值，再执行唯一性校验。
+- `PersonCrudValidator` 不再承载 `PersonNo` 唯一性，只保留无法用标准约束表达的资源专属规则。
+- 保持 `user-link` 特殊入口和跨模块摘要 provider 不进入平台内核。
+- 形成后续模板文档的真实基线。
 
 ## 4. 非目标
 
-- 不把 `Position / Company / Department` 接入标准 CRUD。
-- 不修改 `PersonsController` 的 create/update 路径。
-- 不删除 `PersonService / IPersonRepository / EfPersonRepository` 中的回滚锚点。
-- 不实现审计删除。
-- 不新增规则 DSL、元数据执行器或授权规则中心。
+- 不接入 `Position / Company / Department` 等第二资源。
+- 不删除 `PersonService`；本阶段只把 create/update 主路径切走，`user-link` 和回滚锚点仍保留。
+- 不实现数据库唯一索引迁移。
+- 不解决并发竞争下的最终一致性问题；本阶段先提供应用层标准校验，后续如需强一致再补数据库索引设计。
+- 不把唯一约束写入 metadata 文件。
+- 不引入规则 DSL、表达式脚本或元数据执行器。
 - 不改变前端页面运行时。
 
-## 5. 设计输出
+## 5. 唯一约束能力评估
 
-### 5.1 Person 收口 Review 文档
+### 5.1 是否适合平台化
 
-新增：
+适合。
 
-```text
-docs/superpowers/specs/2026-05-04-standard-crud-person-closeout-review.md
+理由：
+
+- 唯一性是 CRUD 写入前最常见的跨资源通用校验，不应每个模块重复实现。
+- 它可以被静态声明：哪些字段唯一、在哪些 scope 字段内唯一、如何比较、冲突时返回什么错误。
+- 它属于“声明、约束、静态可校验输入”，符合 descriptor 的职责。
+- 执行流程仍由 `StandardCrudService` 和 repository 完成，没有把算法下沉到 metadata。
+- update 场景的“合并现有行 + 更新字段 + 排除当前 id”可以由代码内核统一处理，减少模块遗漏。
+
+### 5.2 平台化边界
+
+唯一约束进入 `StandardCrudDescriptor`，但只表达约束，不表达执行流程。
+
+建议新增：
+
+```csharp
+public sealed class StandardCrudUniqueConstraint
+{
+    public required string Key { get; init; }
+    public required IReadOnlyList<string> Fields { get; init; }
+    public IReadOnlyList<string> ScopeFields { get; init; } = [];
+    public bool CaseInsensitive { get; init; } = true;
+    public bool TrimWhitespace { get; init; } = true;
+    public bool IgnoreWhenAnyFieldMissing { get; init; } = false;
+    public required string ErrorCode { get; init; }
+    public required string Message { get; init; }
+    public required string ReasonKey { get; init; }
+}
 ```
 
-该文档用于记录实际代码与原设计之间的收口结论。建议包含：
+并在 `StandardCrudDescriptor` 上新增：
 
-- 当前接管矩阵。
-- `PersonService` 保留职责。
-- `PersonCrudDescriptorFactory` 的字段白名单、摘要块和删除策略审查。
-- `PersonCrudValidator` 与 `PersonCrudDeleteGuard` 的边界审查。
-- Controller adapter 映射层审查。
-- 验证命令和当前已知 warning。
-- 风险、失败信号和回滚方式。
-
-review 文档必须直接引用当前文件路径和行为，不写抽象口号。若发现计划文档与代码事实不一致，应在 review 中记录差异，不通过静默改代码来“抹平”差异。
-
-### 5.2 标准 CRUD 接入模板文档
-
-新增：
-
-```text
-docs/superpowers/specs/2026-05-04-standard-crud-resource-template.md
+```csharp
+public IReadOnlyList<StandardCrudUniqueConstraint> UniqueConstraints { get; init; } = [];
 ```
 
-该文档用于指导后续资源接入。建议按“新资源要做什么”和“禁止做什么”组织：
+Person 声明示例：
 
-- 适用条件：普通主数据、稳定 DTO、可声明字段白名单、删除策略可显式表达。
-- 不适用条件：复杂工作流、审批、跨聚合事务、强授权规则、需要专属导入导出的资源。
-- 必备文件：
-  - `server/modules/<Module>/Crud/<Resource>CrudDescriptorFactory.cs`
-  - `server/modules/<Module>/Crud/<Resource>CrudQueryCustomizer.cs`
-  - `server/modules/<Module>/Crud/<Resource>CrudDisplayValueResolver.cs`
-  - `server/modules/<Module>/Crud/<Resource>CrudValidator.cs`
-  - `server/modules/<Module>/Crud/<Resource>CrudDeleteGuard.cs`，仅 `conditional` 删除需要
-  - Controller adapter 映射方法
-  - 模块 DI 注册
-  - 单元测试和契约测试
-- descriptor 模板字段。
-- query customizer 模板。
-- validator 模板。
-- summary provider 模板。
-- delete guard 模板。
-- controller adapter 模板。
-- 验证命令。
-- 失败信号。
-- 回滚方式。
+```csharp
+UniqueConstraints =
+[
+    new StandardCrudUniqueConstraint
+    {
+        Key = "personNoWithinCompany",
+        Fields = ["PersonNo"],
+        ScopeFields = ["CompanyId"],
+        CaseInsensitive = true,
+        TrimWhitespace = true,
+        ErrorCode = "Organization.Person.PersonNoDuplicated",
+        Message = "同一公司下人员工号必须唯一。",
+        ReasonKey = "organization.person.personNoDuplicated"
+    }
+]
+```
 
-模板文档应强调：descriptor 只声明“是什么、归谁、允许什么”，不能承载执行流程、分支算法、切换逻辑或回滚逻辑。
+### 5.3 不进入通用能力的内容
 
-## 6. 一致性 Review 规则
+以下内容不放进标准唯一约束：
 
-Person 收口 review 必须逐项回答以下问题：
+- 复杂条件唯一，例如“仅当状态为某几类时唯一”。
+- 依赖外部服务的唯一性，例如跨系统账号名。
+- 需要事务锁、数据库索引或最终一致补偿的强并发约束。
+- 需要动态规则、脚本或用户可配置表达式的唯一性。
 
-1. `StandardCrudDescriptor` 是否只声明字段、资源和扩展点，没有脚本、表达式或流程编排。
-2. `server/platform-crud` 是否没有出现 Person 专属字段判断或 Organization 业务规则。
-3. Person 的跨模块摘要是否通过 provider 降级，失败时不拖垮 detail 主体。
-4. 删除是否显式声明 `Conditional` 并注册 `PersonCrudDeleteGuard`，无 guard 时是否 fail closed。
-5. `UpdatedAt` 是否由标准 CRUD 内核在 update/disable 类行为中统一维护。
-6. Controller adapter 是否只做请求转发和 DTO 映射，不承载领域规则。
-7. `PersonService` 保留职责是否都是模块领域、跨模块集成或回滚锚点。
-8. create/update 未切换到 endpoint 是否已被文档化，且没有被模板误写成标准要求。
-9. 现有测试是否覆盖 list/detail/options/disable/delete、summary 降级、validator 和 delete guard。
-10. 回滚路径是否仍成立：停用 descriptor 接管后，Person 模块服务仍能作为读取或写入锚点恢复。
+这些场景仍由模块 validator 或后续专门设计承接。
 
-## 7. create/update 后续策略
+## 6. 写入流程设计
 
-本轮设计明确：**不直接切换 Person create/update 到 `StandardCrudEndpoint`。**
+### 6.1 Create 流程
 
-原因：
+`StandardCrudService.CreateAsync` 调整为：
 
-- 当前 `PersonService.UpdateAsync` 会在公司变化时用原有 `PersonNo` 重新检查同公司唯一性。
-- 当前 `PersonCrudValidator.ValidateUpdateAsync` 只阻断 `PersonNo` 直接修改，还没有在标准 update 路径中读取现有行并校验“公司变化 + 原工号”的冲突。
-- 若直接切换 Controller，可能让部分领域校验从写入路径中消失。
+1. 校验 descriptor。
+2. 按 `CreateFields` 裁剪输入字段。
+3. 执行标准唯一约束校验。
+4. 执行模块 validator。
+5. 调用 repository 创建。
+6. 按 detail 流程返回标准详情。
 
-后续若要切换 create/update，必须另开设计，至少补齐：
+唯一性校验失败返回：
 
-- validator 或 action handler 读取现有行的方式。
-- update 时 `PersonNo` 只读但仍参与唯一性校验的规则。
-- 标准错误码与现有 `BadRequest` 兼容策略。
-- Controller 返回 DTO 与标准 detail 的映射策略。
-- 定向测试证明切换前后行为一致。
+```json
+{
+  "statusCode": 409,
+  "code": "Organization.Person.PersonNoDuplicated",
+  "message": "同一公司下人员工号必须唯一。",
+  "reasonKey": "organization.person.personNoDuplicated"
+}
+```
 
-## 8. 验证方案
+### 6.2 Update 流程
 
-本轮主要验证文档与现状一致，不验证新代码行为。完成 review 和模板文档后，应运行：
+`StandardCrudService.UpdateAsync` 必须先读取现有行，再执行写入校验：
+
+1. 校验 descriptor。
+2. 按 `UpdateFields` 裁剪输入字段。
+3. 读取现有 detail 行；不存在时返回 `StandardCrud.NotFound`。
+4. 合并现有行与本次更新字段，得到 candidate row。
+5. 由内核覆盖 `UpdatedAt`。
+6. 对 candidate row 执行标准唯一约束校验，并排除当前 id。
+7. 执行模块 validator。
+8. 调用 repository 更新。
+9. 按 detail 流程返回标准详情。
+
+这个顺序是关键。对于 Person，如果请求只提交新的 `CompanyId`，没有提交 `PersonNo`，内核仍能用现有 `PersonNo` 和新 `CompanyId` 判断是否冲突。
+
+## 7. 仓储接口设计
+
+`IStandardCrudRepository` 新增通用存在性检查：
+
+```csharp
+Task<bool> ExistsAsync(
+    StandardCrudDescriptor descriptor,
+    IReadOnlyDictionary<string, object?> equalityValues,
+    string? excludedId = null,
+    CancellationToken cancellationToken = default);
+```
+
+职责：
+
+- 只执行等值条件。
+- `excludedId` 不为空时排除当前主键。
+- 字段比较遵循服务层已规范化后的值。
+- 不理解业务语义。
+
+`EfStandardCrudRepository.ExistsAsync` 可先沿用当前 shared-type entity 的内存过滤方式，与现有 list/filter 实现保持一致。后续性能优化可以单独改为表达式查询，不影响服务层契约。
+
+## 8. Person 接管设计
+
+### 8.1 Controller adapter
+
+`PersonsController.Create` 改为：
+
+- 将 `PersonDto` 映射成标准字段字典：
+  - `PersonNo`
+  - `ENAME`
+  - `CompanyId`
+  - `DepartmentId`
+  - `PositionId`
+  - `EmploymentStatus`
+  - `IsEnabled`
+- 调用 `StandardCrudEndpoint.CreateAsync(PersonCrudDescriptor, values)`。
+- 成功时将 `StandardCrudDetail` 映射回既有 `PersonDetailDto` 或 `PersonDto`。
+- 失败时使用 `result.Error.StatusCode` 和标准错误体。
+
+`PersonsController.Update` 改为：
+
+- 不传入 `PersonNo`，保持工号只读。
+- 传入 `ENAME / CompanyId / DepartmentId / PositionId / EmploymentStatus / IsEnabled`。
+- 调用 `StandardCrudEndpoint.UpdateAsync`。
+- 成功时映射回既有 DTO。
+
+### 8.2 PersonCrudValidator 收缩
+
+`PersonCrudValidator` 不再检查 `PersonNo` 唯一性。
+
+它可以保留：
+
+- 对无法通过 descriptor 表达的资源专属规则。
+- 对特殊字段组合的业务冲突检查。
+
+如果本阶段没有剩余资源专属规则，可以暂时保留空实现或移除注册。优先选择保留空实现并在注释中说明唯一性已经由标准约束承接，避免后续 agent 误把唯一性补回模块 service。
+
+### 8.3 PersonService 保留范围
+
+`PersonService` 本阶段仍保留：
+
+- `user-link` 账号绑定入口。
+- 旧 create/update 实现作为短期回滚锚点。
+- 模块内测试仍可覆盖旧 service 行为，但新 Controller 契约必须证明 create/update 已走标准 CRUD endpoint。
+
+后续完成 review 后，再决定是否删除或收缩旧 create/update。
+
+## 9. Descriptor 校验规则
+
+`StandardCrudDescriptorValidator` 需要新增唯一约束静态校验：
+
+- `UniqueConstraints[*].Key` 必填且同资源内唯一。
+- `Fields` 必须非空。
+- `Fields + ScopeFields` 必须存在于资源字段集合中。
+- 对 update 有效的唯一约束，其字段和 scope 字段必须能从 `DetailFields` 读取。
+- `ErrorCode / Message / ReasonKey` 必填。
+- 约束字段不得包含 `IdField`。
+
+这些失败都应返回稳定中文异常，帮助后续 agent 在小上下文内定位 descriptor 写错，而不是在运行时静默漏检。
+
+## 10. 测试设计
+
+### 10.1 PlatformCrud.Tests
+
+新增或扩展测试覆盖：
+
+- create 时 scoped unique 冲突返回 `409`。
+- create 时不同 scope 允许相同唯一字段。
+- update 时排除当前 id，不因自身冲突。
+- update 时 scope 变化会用现有唯一字段重新检查冲突。
+- descriptor 唯一约束缺字段时校验失败。
+- `ExistsAsync` 排除当前 id 生效。
+
+### 10.2 Organization.Tests
+
+新增或扩展测试覆盖：
+
+- `PersonsController.Create` 通过标准 CRUD endpoint 创建人员。
+- `PersonsController.Update` 通过标准 CRUD endpoint 更新人员。
+- `PersonNo` 同公司重复创建返回标准 `409` 错误。
+- 更新人员公司时，如果目标公司已有相同 `PersonNo`，返回标准 `409` 错误。
+- 更新时提交不同 `PersonNo` 不会修改工号。
+- `user-link` 特殊入口仍走 `PersonService.LinkUserAsync`。
+
+## 11. 验证方案
+
+实现完成后至少运行：
 
 ```powershell
 dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
@@ -168,58 +299,75 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 pnpm --dir .\frontend --filter @icp-modules/organization build
 ```
 
-如果只是新增文档且没有代码改动，可以把验证范围降为：
+如果未改前端代码，仍建议保留 Organization 前端构建 smoke，确认 DTO 返回形态没有破坏页面消费。
 
-```powershell
-git diff --check
-```
-
-同时在最终报告中说明未重跑后端和前端构建的原因。
-
-## 9. 风险与失败信号
+## 12. 风险与失败信号
 
 风险：
 
-- 把当前 Person 过渡态误写成所有资源的推荐模板。
-- 模板过度依赖 Person 的账号绑定和授权摘要，导致简单资源接入成本变高。
-- 在没有设计的情况下切换 create/update，丢失人员领域校验。
-- review 文档只复述计划，不核对实际代码。
+- update 未合并现有行就做唯一性校验，导致 scope 变化漏检。
+- 唯一性能力被设计成 metadata 脚本，突破“强约束元数据 + 清晰代码内核”边界。
+- Person create/update 切换后返回 DTO 形态变化，破坏前端或测试。
+- 旧 `PersonService` 仍保留，后续 agent 误以为 Controller 仍应走旧 service。
+- 应用层唯一校验不能替代数据库唯一索引，并发写入仍可能竞态。
 
 失败信号：
 
-- 模板要求每个资源都实现 summary provider。
-- descriptor 示例包含规则算法、执行顺序或回滚步骤。
-- review 没有明确写出 create/update 仍走 `PersonService`。
-- 后续新资源为了接入标准 CRUD 直接修改 Host 或 Shell 内部结构。
-- 删除策略没有显式声明就暴露 delete 入口。
+- `PersonNo` 唯一性仍通过 `PersonService` 或 `PersonCrudValidator` 专属逻辑完成。
+- `StandardCrudService.UpdateAsync` 没有读取现有行。
+- descriptor 唯一约束允许引用不在 `DetailFields` 中的字段。
+- Controller 中出现唯一性查询或领域判断。
+- 平台内核出现 `PersonNo`、`CompanyId` 的 Person 专属分支。
 
-## 10. 回滚思路
+## 13. 回滚思路
 
-本轮只新增文档，回滚方式是删除本设计产生的 review 和模板文档，不影响运行时代码。
+如果 create/update 接管失败：
 
-如果后续基于 review 发现 Person 接管存在问题，回滚仍沿用原标准 CRUD 设计：
+- 将 `PersonsController.Create/Update` 临时切回 `PersonService.CreateAsync/UpdateAsync`。
+- 保留标准唯一约束代码，但从 `PersonCrudDescriptorFactory` 移除 Person 约束声明即可停止生效。
+- 不影响已接管的 `list/detail/options/disable/delete`。
+- `user-link` 特殊入口不参与本次切换，无需回滚。
 
-- 停用 `PersonsController` 对 `StandardCrudEndpoint` 的读取或动作接管。
-- 恢复 `PersonService / EfPersonRepository` 对相应能力的主路径。
-- 保留 `user-link` 特殊入口不变，避免账号绑定降级能力受影响。
+如果通用唯一约束方向不成立：
 
-## 11. AI-First 检查清单
+- 删除 `StandardCrudUniqueConstraint`、descriptor 属性、repository `ExistsAsync` 和服务层唯一性调用。
+- 将 Person 唯一性校验短期恢复到 `PersonCrudValidator` 或 `PersonService`。
+- 保留 create/update endpoint 接管设计，重新评估唯一性扩展点边界。
+
+## 14. 后续模板与 Review
+
+本阶段完成后，再生成两份文档：
+
+- `docs/superpowers/specs/2026-05-04-standard-crud-person-closeout-review.md`
+- `docs/superpowers/specs/2026-05-04-standard-crud-resource-template.md`
+
+其中模板必须以“create/update 已由标准 CRUD 接管”和“唯一性通过 descriptor 标准约束声明”为基线，不再把 Person 当前旧 service 写入路径作为推荐模式。
+
+## 15. AI-First 检查清单
 
 - 入口在哪里：
-  - `docs/superpowers/specs/2026-05-04-standard-crud-person-closeout-review.md`
-  - `docs/superpowers/specs/2026-05-04-standard-crud-resource-template.md`
+  - `server/platform-crud/Descriptors/StandardCrudUniqueConstraint.cs`
+  - `server/platform-crud/Descriptors/StandardCrudDescriptor.cs`
+  - `server/platform-crud/Runtime/StandardCrudService.cs`
+  - `server/platform-crud/Persistence/EfStandardCrudRepository.cs`
+  - `server/modules/Organization/Crud/PersonCrudDescriptorFactory.cs`
+  - `server/modules/Organization/Controllers/PersonsController.cs`
 - 边界在哪里：
-  - 本轮只做 review 和模板文档。
-  - 不切换 Person create/update。
-  - 不接入第二资源。
+  - descriptor 只声明唯一约束。
+  - 唯一性执行流程在 `StandardCrudService`。
+  - Person 专属账号绑定仍在 Organization 模块。
+  - 平台内核不出现 Person 特判。
 - 如何验证：
-  - 文档自检。
-  - `git diff --check`。
-  - 如有代码改动，再运行平台 CRUD、Organization、HostApi 和前端模块构建。
+  - 平台 CRUD 唯一约束单测。
+  - Organization Person create/update 契约测试。
+  - HostApi 构建。
+  - Organization 前端构建 smoke。
 - 失败时看什么：
-  - review 是否脱离当前代码事实。
-  - 模板是否把 Person 专属逻辑写成通用要求。
-  - 是否出现未设计的运行时代码改动。
+  - update scope 变化是否漏检。
+  - 错误码是否稳定。
+  - Controller 是否夹带领域规则。
+  - descriptor 是否引用了不可读取字段。
 - 如何回滚：
-  - 删除本轮新增文档。
-  - 不需要数据库、Host 或前端回滚。
+  - Controller create/update 切回 `PersonService`。
+  - 移除 Person descriptor 的唯一约束声明。
+  - 保留其他标准 CRUD 接管能力不动。

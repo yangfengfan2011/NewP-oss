@@ -14,4 +14,5 @@ public sealed class StandardCrudDescriptor
     public IReadOnlyList<string> OptionLabelFields { get; init; } = [];
     public IReadOnlyList<string> SummaryBlockKeys { get; init; } = [];
     public IReadOnlyList<string> DisplayValueFields { get; init; } = [];
+    public IReadOnlyList<StandardCrudUniqueConstraint> UniqueConstraints { get; init; } = [];
 }

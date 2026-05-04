@@ -257,6 +257,8 @@ dotnet run --project .\server\tools\dev-schema-sync\DevSchemaSync.csproj --
 .\server\tools\dev-schema-sync\bin\Debug\net10.0\dev-schema-sync.exe --sql --apply
 ```
 
+`--apply` 即使不显式带 `--sql`，也会自动输出 SQL Preview 后再进入确认流程；日常仍建议写成 `--sql --apply`，让“预览后执行”的意图更清楚。
+
 输出 JSON 计划，供 agent 或脚本读取，不执行：
 
 ```powershell
@@ -273,7 +275,7 @@ dotnet run --project .\server\tools\dev-schema-sync\DevSchemaSync.csproj --
 是否继续执行本次同步计划？输入 y 继续，其他任意输入取消 [y/N]:
 ```
 
-输入 `y` 后，如果计划只包含 Safe 操作，会直接执行。
+输入 `y` 或 `yes` 后，如果计划只包含 Safe 操作，会直接执行。
 
 如果计划包含 `Confirm` 级高风险操作，工具会继续输出高风险摘要，并要求输入固定短语：
 

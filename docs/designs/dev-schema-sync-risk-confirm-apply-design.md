@@ -46,10 +46,12 @@
 CLI 文本模式行为如下：
 
 1. `--sql`：输出计划和 SQL，不执行。
-2. `--apply`：输出计划和 SQL，先进行整体确认。
+2. `--apply`：输出计划和 SQL，先进行整体确认；`--sql --apply` 是推荐写法，`--apply` 本身也会强制输出 SQL Preview。
 3. 若计划包含 `Confirm` 操作，整体确认通过后继续输出高风险摘要，并要求输入固定确认短语 `APPLY RISK`。
 4. 用户拒绝任一确认时返回取消，不执行任何 SQL。
 5. `--json --apply` 继续返回 `JsonApplyNotSupported`。
+
+整体确认当前接受 `y` 或 `yes`；高风险确认只接受精确的 `APPLY RISK`，不接受 `y` / `yes`。
 
 ### 4.3 Host 行为
 

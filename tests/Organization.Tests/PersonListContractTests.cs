@@ -193,6 +193,44 @@ public class PersonListContractTests
     }
 
     [Fact]
+    public async Task PersonsController_Create_WhenStandardCrudSucceedsWithoutDetail_ReturnsStableError()
+    {
+        var standardCrudService = new RecordingStandardCrudService([]);
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.Create(new PersonDto
+        {
+            PersonNo = "P100",
+            Name = "缺失详情",
+            IsEnabled = true
+        });
+
+        var result = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(500, result.StatusCode);
+        var error = Assert.IsType<StandardCrudError>(result.Value);
+        Assert.Equal("StandardCrud.MutationDetailMissing", error.Code);
+    }
+
+    [Fact]
+    public async Task PersonsController_Update_WhenStandardCrudSucceedsWithoutDetail_ReturnsStableError()
+    {
+        var standardCrudService = new RecordingStandardCrudService([]);
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.Update(Guid.Parse("55555555-5555-5555-5555-555555555555"), new PersonDto
+        {
+            PersonNo = "SHOULD-NOT-BE-SENT",
+            Name = "缺失详情",
+            IsEnabled = true
+        });
+
+        var result = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(500, result.StatusCode);
+        var error = Assert.IsType<StandardCrudError>(result.Value);
+        Assert.Equal("StandardCrud.MutationDetailMissing", error.Code);
+    }
+
+    [Fact]
     public async Task PersonsController_Create_WithDuplicatePersonNo_UsesRealStandardCrudUniqueConstraint()
     {
         var controller = BuildControllerWithRealStandardCrudRows(

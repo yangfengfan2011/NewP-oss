@@ -95,7 +95,10 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var allowed = FilterFields(values, descriptor.FieldSet.CreateFields);
+        var allowed = new Dictionary<string, object?>(
+            FilterFields(values, descriptor.FieldSet.CreateFields),
+            StringComparer.Ordinal);
+        ApplyCreateAuditFields(descriptor, allowed);
         var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, allowed, excludedId: null, cancellationToken);
         if (uniqueError is not null)
         {
@@ -386,6 +389,15 @@ public sealed class StandardCrudService : IStandardCrudService
 
         var normalized = constraint.TrimWhitespace ? text.Trim() : text;
         return constraint.CaseInsensitive ? normalized.ToUpperInvariant() : normalized;
+    }
+
+    // CreatedAt 属于创建行为的内核责任；资源只要在详情中暴露该审计字段，就由内核生成而不是要求客户端提交。
+    private static void ApplyCreateAuditFields(StandardCrudDescriptor descriptor, IDictionary<string, object?> values)
+    {
+        if (descriptor.FieldSet.DetailFields.Contains("CreatedAt", StringComparer.Ordinal))
+        {
+            values["CreatedAt"] = DateTime.UtcNow;
+        }
     }
 
     // UpdatedAt 属于更新行为的内核责任：只要资源显式把该字段纳入更新白名单，就由内核覆盖为当前时间。

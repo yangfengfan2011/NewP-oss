@@ -27,6 +27,21 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenCreatedAtIsReadable_SetsCreationTimestamp()
+    {
+        var service = Service();
+
+        var result = await service.CreateAsync(Descriptor(includeCreatedAt: true), new Dictionary<string, object?>
+        {
+            ["PersonNo"] = "P001",
+            ["ENAME"] = "张三"
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.IsType<DateTime>(result.Detail!.Fields["CreatedAt"]);
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenUniqueConstraintConflicts_ReturnsConflict()
     {
         var repository = new InMemoryStandardCrudRepository(
@@ -223,7 +238,8 @@ public sealed class StandardCrudServiceWriteTests
     private static StandardCrudDescriptor Descriptor(
         StandardCrudDeletePolicy policy = StandardCrudDeletePolicy.None,
         bool includeEnabledInUpdateFields = true,
-        bool includeUpdatedAt = false) => new()
+        bool includeUpdatedAt = false,
+        bool includeCreatedAt = false) => new()
     {
         ResourceKey = "organization.person",
         ModuleId = "Organization",
@@ -234,7 +250,9 @@ public sealed class StandardCrudServiceWriteTests
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
-            DetailFields: includeUpdatedAt
+            DetailFields: includeCreatedAt
+                ? ["EID", "PersonNo", "ENAME", "IsEnabled", "CreatedAt"]
+                : includeUpdatedAt
                 ? ["EID", "PersonNo", "ENAME", "IsEnabled", "UpdatedAt"]
                 : ["EID", "PersonNo", "ENAME", "IsEnabled"],
             CreateFields: ["PersonNo", "ENAME"],

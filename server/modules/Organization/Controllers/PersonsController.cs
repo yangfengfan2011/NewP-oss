@@ -67,9 +67,13 @@ public sealed class PersonsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _standardCrudEndpoint.CreateAsync(PersonCrudDescriptor, MapCreateValues(dto), cancellationToken);
-        return result.Succeeded && result.Detail is not null
-            ? CreatedAtAction(nameof(Get), new { id = ReadString(result.Detail.Fields, "EID") }, MapMutationDto(result.Detail))
-            : StatusCode(result.Error!.StatusCode, result.Error);
+        if (result.Succeeded && result.Detail is not null)
+        {
+            return CreatedAtAction(nameof(Get), new { id = ReadString(result.Detail.Fields, "EID") }, MapMutationDto(result.Detail));
+        }
+
+        var error = result.Error ?? MutationDetailMissing();
+        return StatusCode(error.StatusCode, error);
     }
 
     [HttpPut("{id:guid}")]
@@ -79,9 +83,13 @@ public sealed class PersonsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _standardCrudEndpoint.UpdateAsync(PersonCrudDescriptor, id.ToString("D"), MapUpdateValues(dto), cancellationToken);
-        return result.Succeeded && result.Detail is not null
-            ? Ok(MapMutationDto(result.Detail))
-            : StatusCode(result.Error!.StatusCode, result.Error);
+        if (result.Succeeded && result.Detail is not null)
+        {
+            return Ok(MapMutationDto(result.Detail));
+        }
+
+        var error = result.Error ?? MutationDetailMissing();
+        return StatusCode(error.StatusCode, error);
     }
 
     [HttpPost("{id:guid}/disable")]
@@ -243,4 +251,12 @@ public sealed class PersonsController : ControllerBase
 
     private static DateTime? ReadNullableDateTime(IReadOnlyDictionary<string, object?> row, string key) =>
         row.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : null;
+
+    private static StandardCrudError MutationDetailMissing() => new()
+    {
+        StatusCode = 500,
+        Code = "StandardCrud.MutationDetailMissing",
+        Message = "标准 CRUD 写入成功但未返回详情。",
+        ReasonKey = "standardCrud.mutationDetailMissing"
+    };
 }

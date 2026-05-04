@@ -869,7 +869,7 @@ git commit -m "功能：执行标准CRUD唯一约束校验"
 - Modify: `server/modules/Organization/Crud/PersonCrudValidator.cs`
 - Modify: `tests/Organization.Tests/PersonListContractTests.cs`
 
-- [ ] **Step 1: 写 Person descriptor 唯一约束合同测试**
+- [x] **Step 1: 写 Person descriptor 唯一约束合同测试**
 
 Append to `tests/Organization.Tests/PersonListContractTests.cs`:
 
@@ -888,7 +888,7 @@ public void PersonCrudDescriptor_DeclaresPersonNoGlobalUniqueConstraint()
 }
 ```
 
-- [ ] **Step 2: 运行 Organization 合同测试确认失败**
+- [x] **Step 2: 运行 Organization 合同测试确认失败**
 
 Run:
 
@@ -903,7 +903,7 @@ FAIL
 Assert.Single() Failure
 ```
 
-- [ ] **Step 3: 在 Person descriptor 声明全局唯一**
+- [x] **Step 3: 在 Person descriptor 声明全局唯一**
 
 Modify `server/modules/Organization/Crud/PersonCrudDescriptorFactory.cs`:
 
@@ -950,7 +950,7 @@ public static class PersonCrudDescriptorFactory
 }
 ```
 
-- [ ] **Step 4: 收缩 PersonCrudValidator**
+- [x] **Step 4: 收缩 PersonCrudValidator**
 
 Replace `server/modules/Organization/Crud/PersonCrudValidator.cs` with:
 
@@ -986,7 +986,7 @@ public sealed class PersonCrudValidator : IStandardCrudValidator
 }
 ```
 
-- [ ] **Step 5: 运行 Organization 合同测试确认通过**
+- [x] **Step 5: 运行 Organization 合同测试确认通过**
 
 Run:
 
@@ -1000,7 +1000,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add .\server\modules\Organization\Crud\PersonCrudDescriptorFactory.cs .\server\modules\Organization\Crud\PersonCrudValidator.cs .\tests\Organization.Tests\PersonListContractTests.cs

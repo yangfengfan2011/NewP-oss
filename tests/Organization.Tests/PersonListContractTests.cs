@@ -183,6 +183,19 @@ public class PersonListContractTests
     }
 
     [Fact]
+    public void PersonCrudDescriptor_DeclaresPersonNoGlobalUniqueConstraint()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        var constraint = Assert.Single(descriptor.UniqueConstraints);
+        Assert.Equal("personNo", constraint.Key);
+        Assert.Equal(["PersonNo"], constraint.Fields);
+        Assert.Empty(constraint.ScopeFields);
+        Assert.Equal("Organization.Person.PersonNoDuplicated", constraint.ErrorCode);
+        Assert.Equal("人员工号必须唯一。", constraint.Message);
+    }
+
+    [Fact]
     public void PersonCrudQueryCustomizer_MapsKeywordToPersonNoAndName()
     {
         var customizer = new PersonCrudQueryCustomizer();

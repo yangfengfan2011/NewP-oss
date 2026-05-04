@@ -24,6 +24,17 @@ public static class PersonCrudDescriptorFactory
         OptionLabelFields = ["PersonNo", "ENAME"],
         SummaryBlockKeys = ["userLink", "authorizationSummary"],
         DisplayValueFields = ["CompanyName", "DepartmentName", "PositionName"],
-        DeletePolicy = StandardCrudDeletePolicy.Conditional
+        DeletePolicy = StandardCrudDeletePolicy.Conditional,
+        UniqueConstraints =
+        [
+            new StandardCrudUniqueConstraint
+            {
+                Key = "personNo",
+                Fields = ["PersonNo"],
+                ErrorCode = "Organization.Person.PersonNoDuplicated",
+                Message = "人员工号必须唯一。",
+                ReasonKey = "organization.person.personNoDuplicated"
+            }
+        ]
     };
 }

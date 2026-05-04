@@ -1013,7 +1013,7 @@ git commit -m "功能：声明人员工号全局唯一约束"
 - Modify: `server/modules/Organization/Controllers/PersonsController.cs`
 - Modify: `tests/Organization.Tests/PersonListContractTests.cs`
 
-- [ ] **Step 1: 增加 Controller create/update 接管测试**
+- [x] **Step 1: 增加 Controller create/update 接管测试**
 
 Modify `tests/Organization.Tests/PersonListContractTests.cs`.
 
@@ -1185,7 +1185,7 @@ private static Dictionary<string, object?> StandardCrudPersonRow(Guid id, string
 };
 ```
 
-- [ ] **Step 2: 扩展 RecordingStandardCrudService 记录 mutation**
+- [x] **Step 2: 扩展 RecordingStandardCrudService 记录 mutation**
 
 Modify nested `RecordingStandardCrudService` in `tests/Organization.Tests/PersonListContractTests.cs`:
 
@@ -1364,7 +1364,7 @@ private sealed class ControllerStandardCrudRepository : IStandardCrudRepository
 }
 ```
 
-- [ ] **Step 3: 运行 Controller 测试确认失败**
+- [x] **Step 3: 运行 Controller 测试确认失败**
 
 Run:
 
@@ -1381,7 +1381,7 @@ Expected: CreateAsync
 Actual:   null
 ```
 
-- [ ] **Step 4: 在 PersonsController 增加 mutation mapping helpers**
+- [x] **Step 4: 在 PersonsController 增加 mutation mapping helpers**
 
 Modify `server/modules/Organization/Controllers/PersonsController.cs` and add these helpers before `MapListItem`:
 
@@ -1441,7 +1441,7 @@ private static DateTime? ReadNullableDateTime(IReadOnlyDictionary<string, object
     row.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : null;
 ```
 
-- [ ] **Step 5: 切换 Create/Update 方法**
+- [x] **Step 5: 切换 Create/Update 方法**
 
 Replace `Create` and `Update` in `server/modules/Organization/Controllers/PersonsController.cs`:
 
@@ -1470,7 +1470,7 @@ public async Task<ActionResult<PersonDto>> Update(
 }
 ```
 
-- [ ] **Step 6: 运行 Controller 测试确认通过**
+- [x] **Step 6: 运行 Controller 测试确认通过**
 
 Run:
 
@@ -1484,7 +1484,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add .\server\modules\Organization\Controllers\PersonsController.cs .\tests\Organization.Tests\PersonListContractTests.cs

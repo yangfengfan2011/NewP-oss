@@ -66,15 +66,10 @@ public sealed class PersonsController : ControllerBase
         [FromBody] PersonDto dto,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var person = await _personService.CreateAsync(dto, cancellationToken);
-            return CreatedAtAction(nameof(Get), new { id = person.Id }, person);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _standardCrudEndpoint.CreateAsync(PersonCrudDescriptor, MapCreateValues(dto), cancellationToken);
+        return result.Succeeded && result.Detail is not null
+            ? CreatedAtAction(nameof(Get), new { id = ReadString(result.Detail.Fields, "EID") }, MapMutationDto(result.Detail))
+            : StatusCode(result.Error!.StatusCode, result.Error);
     }
 
     [HttpPut("{id:guid}")]
@@ -83,15 +78,10 @@ public sealed class PersonsController : ControllerBase
         [FromBody] PersonDto dto,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var person = await _personService.UpdateAsync(id, dto, cancellationToken);
-            return Ok(person);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _standardCrudEndpoint.UpdateAsync(PersonCrudDescriptor, id.ToString("D"), MapUpdateValues(dto), cancellationToken);
+        return result.Succeeded && result.Detail is not null
+            ? Ok(MapMutationDto(result.Detail))
+            : StatusCode(result.Error!.StatusCode, result.Error);
     }
 
     [HttpPost("{id:guid}/disable")]
@@ -199,4 +189,58 @@ public sealed class PersonsController : ControllerBase
         summaries.TryGetValue(key, out var block)
             ? new PersonSummaryBlockDto { Status = block.Status, Data = block.Data }
             : new PersonSummaryBlockDto { Status = "notConfigured" };
+
+    /// <summary>
+    /// 将既有 PersonDto 写入请求映射为标准 CRUD 字段，创建允许写入 PersonNo。
+    /// </summary>
+    private static IReadOnlyDictionary<string, object?> MapCreateValues(PersonDto dto) =>
+        new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["PersonNo"] = dto.PersonNo,
+            ["ENAME"] = dto.DisplayName,
+            ["CompanyId"] = dto.CompanyId,
+            ["DepartmentId"] = dto.DepartmentId,
+            ["PositionId"] = dto.PositionId,
+            ["EmploymentStatus"] = dto.EmploymentStatus?.ToString(),
+            ["IsEnabled"] = dto.IsEnabled
+        };
+
+    /// <summary>
+    /// 更新请求不传 PersonNo，工号只读由字段白名单和映射层共同保护。
+    /// </summary>
+    private static IReadOnlyDictionary<string, object?> MapUpdateValues(PersonDto dto) =>
+        new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["ENAME"] = dto.DisplayName,
+            ["CompanyId"] = dto.CompanyId,
+            ["DepartmentId"] = dto.DepartmentId,
+            ["PositionId"] = dto.PositionId,
+            ["EmploymentStatus"] = dto.EmploymentStatus?.ToString(),
+            ["IsEnabled"] = dto.IsEnabled
+        };
+
+    private static PersonDto MapMutationDto(StandardCrudDetail detail) => new()
+    {
+        Id = ReadString(detail.Fields, "EID"),
+        PersonNo = ReadString(detail.Fields, "PersonNo"),
+        DisplayName = ReadString(detail.Fields, "ENAME"),
+        CompanyId = ReadStringOrNull(detail.Fields, "CompanyId"),
+        DepartmentId = ReadStringOrNull(detail.Fields, "DepartmentId"),
+        PositionId = ReadStringOrNull(detail.Fields, "PositionId"),
+        EmploymentStatus = Enum.TryParse<EmploymentStatus>(ReadString(detail.Fields, "EmploymentStatus"), ignoreCase: true, out var status)
+            ? status
+            : EmploymentStatus.FullTime,
+        IsEnabled = ReadBool(detail.Fields, "IsEnabled", true),
+        CreatedAt = ReadDateTime(detail.Fields, "CreatedAt"),
+        UpdatedAt = ReadNullableDateTime(detail.Fields, "UpdatedAt")
+    };
+
+    private static string? ReadStringOrNull(IReadOnlyDictionary<string, object?> row, string key)
+    {
+        var value = ReadString(row, key);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static DateTime? ReadNullableDateTime(IReadOnlyDictionary<string, object?> row, string key) =>
+        row.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : null;
 }

@@ -119,6 +119,120 @@ public class PersonListContractTests
     }
 
     [Fact]
+    public async Task PersonsController_Create_DelegatesToStandardCrudEndpoint()
+    {
+        var standardCrudService = new RecordingStandardCrudService([], MutationDetail());
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.Create(new PersonDto
+        {
+            PersonNo = "P100",
+            Name = "标准人员",
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D"),
+            EmploymentStatus = EmploymentStatus.FullTime,
+            IsEnabled = true
+        });
+
+        Assert.Equal(nameof(IStandardCrudService.CreateAsync), standardCrudService.LastMutation);
+        Assert.Equal("P100", standardCrudService.LastMutationValues!["PersonNo"]);
+        Assert.Equal("标准人员", standardCrudService.LastMutationValues["ENAME"]);
+        Assert.Equal(CompanyId.ToString("D"), standardCrudService.LastMutationValues["CompanyId"]);
+        Assert.IsType<CreatedAtActionResult>(response.Result);
+    }
+
+    [Fact]
+    public async Task PersonsController_Update_DelegatesToStandardCrudEndpointWithoutPersonNo()
+    {
+        var personId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var standardCrudService = new RecordingStandardCrudService([], MutationDetail(personId));
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.Update(personId, new PersonDto
+        {
+            PersonNo = "SHOULD-NOT-BE-SENT",
+            Name = "标准更新",
+            CompanyId = CompanyId.ToString("D"),
+            DepartmentId = DepartmentId.ToString("D"),
+            EmploymentStatus = EmploymentStatus.FullTime,
+            IsEnabled = true
+        });
+
+        Assert.Equal(nameof(IStandardCrudService.UpdateAsync), standardCrudService.LastMutation);
+        Assert.False(standardCrudService.LastMutationValues!.ContainsKey("PersonNo"));
+        Assert.Equal("标准更新", standardCrudService.LastMutationValues["ENAME"]);
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        Assert.IsType<PersonDto>(ok.Value);
+    }
+
+    [Fact]
+    public async Task PersonsController_Create_WhenStandardCrudReturnsConflict_UsesStandardError()
+    {
+        var standardCrudService = new RecordingStandardCrudService(
+            [],
+            mutationError: new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "Organization.Person.PersonNoDuplicated",
+                Message = "人员工号必须唯一。",
+                ReasonKey = "organization.person.personNoDuplicated"
+            });
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.Create(new PersonDto
+        {
+            PersonNo = "P100",
+            Name = "重复人员",
+            IsEnabled = true
+        });
+
+        var conflict = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(409, conflict.StatusCode);
+        var error = Assert.IsType<StandardCrudError>(conflict.Value);
+        Assert.Equal("Organization.Person.PersonNoDuplicated", error.Code);
+    }
+
+    [Fact]
+    public async Task PersonsController_Create_WithDuplicatePersonNo_UsesRealStandardCrudUniqueConstraint()
+    {
+        var controller = BuildControllerWithRealStandardCrudRows(
+            StandardCrudPersonRow(Guid.Parse("66666666-6666-6666-6666-666666666666"), "P100", "已存在人员"));
+
+        var response = await controller.Create(new PersonDto
+        {
+            PersonNo = " p100 ",
+            Name = "重复人员",
+            IsEnabled = true
+        });
+
+        var conflict = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(409, conflict.StatusCode);
+        var error = Assert.IsType<StandardCrudError>(conflict.Value);
+        Assert.Equal("Organization.Person.PersonNoDuplicated", error.Code);
+    }
+
+    [Fact]
+    public async Task PersonsController_Update_WhenExistingPersonNoAlreadyConflicts_UsesRealStandardCrudUniqueConstraint()
+    {
+        var personId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var controller = BuildControllerWithRealStandardCrudRows(
+            StandardCrudPersonRow(personId, "P100", "待更新人员"),
+            StandardCrudPersonRow(Guid.Parse("88888888-8888-8888-8888-888888888888"), "p100", "冲突人员"));
+
+        var response = await controller.Update(personId, new PersonDto
+        {
+            PersonNo = "SHOULD-NOT-BE-SENT",
+            Name = "更新人员",
+            IsEnabled = true
+        });
+
+        var conflict = Assert.IsType<ObjectResult>(response.Result);
+        Assert.Equal(409, conflict.StatusCode);
+        var error = Assert.IsType<StandardCrudError>(conflict.Value);
+        Assert.Equal("Organization.Person.PersonNoDuplicated", error.Code);
+    }
+
+    [Fact]
     public void IPersonService_DeclaresListAndDisableContracts()
     {
         var serviceType = typeof(IPersonService);
@@ -268,22 +382,73 @@ public class PersonListContractTests
             new FakeIdentityUserDirectory(),
             new StandardCrudEndpoint(standardCrudService));
 
+    private static StandardCrudDetail MutationDetail(Guid? id = null) => new()
+    {
+        Fields = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["EID"] = (id ?? Guid.Parse("55555555-5555-5555-5555-555555555555")).ToString("D"),
+            ["PersonNo"] = "P100",
+            ["ENAME"] = "标准人员",
+            ["CompanyId"] = CompanyId.ToString("D"),
+            ["DepartmentId"] = DepartmentId.ToString("D"),
+            ["EmploymentStatus"] = "FullTime",
+            ["IsEnabled"] = true,
+            ["CreatedAt"] = DateTime.UtcNow
+        }
+    };
+
+    private static PersonsController BuildControllerWithRealStandardCrudRows(params Dictionary<string, object?>[] rows)
+    {
+        var standardCrudService = new StandardCrudService(
+            new ControllerStandardCrudRepository(rows),
+            [],
+            [],
+            [],
+            [new PersonCrudValidator()],
+            [],
+            []);
+
+        return new PersonsController(
+            BuildService(),
+            new FakeIdentityUserDirectory(),
+            new StandardCrudEndpoint(standardCrudService));
+    }
+
+    private static Dictionary<string, object?> StandardCrudPersonRow(Guid id, string personNo, string name) => new(StringComparer.Ordinal)
+    {
+        ["EID"] = id.ToString("D"),
+        ["PersonNo"] = personNo,
+        ["ENAME"] = name,
+        ["CompanyId"] = null,
+        ["DepartmentId"] = null,
+        ["PositionId"] = null,
+        ["EmploymentStatus"] = "FullTime",
+        ["IsEnabled"] = true,
+        ["CreatedAt"] = DateTime.UtcNow,
+        ["UpdatedAt"] = null
+    };
+
     private static Assembly GetOrganizationAssembly() => typeof(PersonDto).Assembly;
 
     private sealed class RecordingStandardCrudService : IStandardCrudService
     {
         private readonly IReadOnlyList<IReadOnlyDictionary<string, object?>> _items;
         private readonly StandardCrudDetail? _detail;
+        private readonly StandardCrudError? _mutationError;
 
         public RecordingStandardCrudService(
             IReadOnlyList<IReadOnlyDictionary<string, object?>> items,
-            StandardCrudDetail? detail = null)
+            StandardCrudDetail? detail = null,
+            StandardCrudError? mutationError = null)
         {
             _items = items;
             _detail = detail;
+            _mutationError = mutationError;
         }
 
         public StandardCrudListQuery? LastListQuery { get; private set; }
+        public string? LastMutation { get; private set; }
+        public IReadOnlyDictionary<string, object?>? LastMutationValues { get; private set; }
 
         public Task<StandardCrudListResult> ListAsync(
             StandardCrudDescriptor descriptor,
@@ -315,15 +480,27 @@ public class PersonListContractTests
         public Task<StandardCrudMutationResult> CreateAsync(
             StandardCrudDescriptor descriptor,
             IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(StandardCrudMutationResult.Success());
+            CancellationToken cancellationToken = default)
+        {
+            LastMutation = nameof(CreateAsync);
+            LastMutationValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            return Task.FromResult(_mutationError is null
+                ? StandardCrudMutationResult.Success(_detail)
+                : StandardCrudMutationResult.Failure(_mutationError));
+        }
 
         public Task<StandardCrudMutationResult> UpdateAsync(
             StandardCrudDescriptor descriptor,
             string id,
             IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(StandardCrudMutationResult.Success());
+            CancellationToken cancellationToken = default)
+        {
+            LastMutation = nameof(UpdateAsync);
+            LastMutationValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            return Task.FromResult(_mutationError is null
+                ? StandardCrudMutationResult.Success(_detail)
+                : StandardCrudMutationResult.Failure(_mutationError));
+        }
 
         public Task<StandardCrudMutationResult> DisableAsync(
             StandardCrudDescriptor descriptor,
@@ -336,6 +513,131 @@ public class PersonListContractTests
             string id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(StandardCrudMutationResult.Success());
+    }
+
+    private sealed class ControllerStandardCrudRepository : IStandardCrudRepository
+    {
+        private readonly List<Dictionary<string, object?>> _rows;
+
+        public ControllerStandardCrudRepository(IEnumerable<Dictionary<string, object?>> rows)
+        {
+            _rows = rows.Select(row => new Dictionary<string, object?>(row, StringComparer.Ordinal)).ToList();
+        }
+
+        public Task<StandardCrudListResult> ListAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            IReadOnlyList<StandardCrudQueryCondition> conditions,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new StandardCrudListResult([], 0, query.Page, query.PageSize, query.SortBy, query.SortDirection));
+
+        public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default)
+        {
+            var row = _rows.FirstOrDefault(item => string.Equals(item[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
+            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row is null ? null : Project(row, descriptor.FieldSet.DetailFields));
+        }
+
+        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<StandardCrudOptionItem>>([]);
+
+        public Task<bool> ExistsAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudUniqueConstraint constraint,
+            IReadOnlyDictionary<string, object?> equalityValues,
+            string? excludedId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var exists = _rows.Any(row =>
+                (string.IsNullOrWhiteSpace(excludedId) ||
+                    !string.Equals(row[descriptor.IdField]?.ToString(), excludedId, StringComparison.Ordinal)) &&
+                equalityValues.All(pair =>
+                    row.TryGetValue(pair.Key, out var value) &&
+                    UniqueValuesEqual(value, pair.Value, constraint)));
+
+            return Task.FromResult(exists);
+        }
+
+        public Task<IReadOnlyDictionary<string, object?>> CreateAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default)
+        {
+            var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            row[descriptor.IdField] = Guid.NewGuid().ToString("D");
+            row["CreatedAt"] = DateTime.UtcNow;
+            _rows.Add(row);
+            return Task.FromResult(Project(row, descriptor.FieldSet.DetailFields));
+        }
+
+        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default)
+        {
+            var row = _rows.FirstOrDefault(item => string.Equals(item[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
+            if (row is null)
+            {
+                return Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
+            }
+
+            foreach (var pair in values)
+            {
+                row[pair.Key] = pair.Value;
+            }
+
+            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(Project(row, descriptor.FieldSet.DetailFields));
+        }
+
+        public Task<bool> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        private static IReadOnlyDictionary<string, object?> Project(IReadOnlyDictionary<string, object?> row, IReadOnlyList<string> fields)
+        {
+            var projected = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var field in fields)
+            {
+                projected[field] = row.TryGetValue(field, out var value) ? value : null;
+            }
+
+            return projected;
+        }
+
+        private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
+        {
+            var normalizedLeft = NormalizeUniqueValue(left, constraint);
+            var normalizedRight = NormalizeUniqueValue(right, constraint);
+            if (normalizedLeft is null || normalizedRight is null)
+            {
+                return normalizedLeft is null && normalizedRight is null;
+            }
+
+            return normalizedLeft is string leftText && normalizedRight is string rightText
+                ? string.Equals(
+                    leftText,
+                    rightText,
+                    constraint.CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                : Equals(normalizedLeft, normalizedRight);
+        }
+
+        private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+        {
+            if (value is not string text)
+            {
+                return value;
+            }
+
+            return constraint.TrimWhitespace ? text.Trim() : text;
+        }
     }
 
     private sealed class InMemoryPersonRepository : IPersonRepository

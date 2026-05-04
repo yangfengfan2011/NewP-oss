@@ -24,9 +24,9 @@
 - `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`
   增加唯一约束静态校验。
 - `server/platform-crud/Abstractions/IStandardCrudRepository.cs`
-  增加通用 `ExistsAsync` 等值存在性检查。
+  增加通用 `ExistsAsync` 等值存在性检查，并接收唯一约束以统一比较规则。
 - `server/platform-crud/Persistence/EfStandardCrudRepository.cs`
-  实现 `ExistsAsync`。
+  实现 `ExistsAsync`，按唯一约束同时规范化存量值与候选值。
 - `server/platform-crud/Runtime/StandardCrudService.cs`
   在 create/update 前执行唯一约束；update 先读现有行并合并 candidate row。
 - `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`
@@ -309,6 +309,7 @@ public async Task ExistsAsync_WhenMatchingRowExists_ReturnsTrue()
 
     var exists = await repository.ExistsAsync(
         Descriptor(),
+        UniqueConstraint(),
         new Dictionary<string, object?> { ["PersonNo"] = "p001" });
 
     Assert.True(exists);
@@ -325,11 +326,57 @@ public async Task ExistsAsync_WhenExcludedIdMatchesOnlyRow_ReturnsFalse()
 
     var exists = await repository.ExistsAsync(
         Descriptor(),
+        UniqueConstraint(),
         new Dictionary<string, object?> { ["PersonNo"] = "P001" },
         excludedId: "person-1");
 
     Assert.False(exists);
 }
+
+[Fact]
+public async Task ExistsAsync_WhenConstraintTrimsStoredValue_ReturnsTrue()
+{
+    await using var dbContext = BuildDbContext();
+    dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", " P001 ", "张三", true));
+    await dbContext.SaveChangesAsync();
+
+    var repository = new EfStandardCrudRepository(dbContext);
+
+    var exists = await repository.ExistsAsync(
+        Descriptor(),
+        UniqueConstraint(),
+        new Dictionary<string, object?> { ["PersonNo"] = "P001" });
+
+    Assert.True(exists);
+}
+
+[Fact]
+public async Task ExistsAsync_WhenConstraintIsCaseSensitive_RespectsCase()
+{
+    await using var dbContext = BuildDbContext();
+    dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
+    await dbContext.SaveChangesAsync();
+
+    var repository = new EfStandardCrudRepository(dbContext);
+
+    var exists = await repository.ExistsAsync(
+        Descriptor(),
+        UniqueConstraint(caseInsensitive: false),
+        new Dictionary<string, object?> { ["PersonNo"] = "p001" });
+
+    Assert.False(exists);
+}
+
+private static StandardCrudUniqueConstraint UniqueConstraint(bool caseInsensitive = true) => new()
+{
+    Key = "personNo",
+    Fields = ["PersonNo"],
+    CaseInsensitive = caseInsensitive,
+    TrimWhitespace = true,
+    ErrorCode = "Organization.Person.PersonNoDuplicated",
+    Message = "人员工号必须唯一。",
+    ReasonKey = "organization.person.personNoDuplicated"
+};
 ```
 
 - [ ] **Step 2: 运行 EF 仓储测试确认失败**
@@ -357,6 +404,7 @@ Modify `server/platform-crud/Abstractions/IStandardCrudRepository.cs` and add be
 /// </summary>
 Task<bool> ExistsAsync(
     StandardCrudDescriptor descriptor,
+    StandardCrudUniqueConstraint constraint,
     IReadOnlyDictionary<string, object?> equalityValues,
     string? excludedId = null,
     CancellationToken cancellationToken = default);
@@ -372,6 +420,7 @@ Modify `server/platform-crud/Persistence/EfStandardCrudRepository.cs` and add th
 /// </summary>
 public async Task<bool> ExistsAsync(
     StandardCrudDescriptor descriptor,
+    StandardCrudUniqueConstraint constraint,
     IReadOnlyDictionary<string, object?> equalityValues,
     string? excludedId = null,
     CancellationToken cancellationToken = default)
@@ -383,17 +432,45 @@ public async Task<bool> ExistsAsync(
     return rows.Any(row =>
         (string.IsNullOrWhiteSpace(excludedId) ||
             !string.Equals(ReadString(row, descriptor.IdField), excludedId, StringComparison.Ordinal)) &&
-        equalityValues.All(pair => row.TryGetValue(pair.Key, out var value) && ValuesEqual(value, pair.Value)));
+        equalityValues.All(pair => row.TryGetValue(pair.Key, out var value) && UniqueValuesEqual(value, pair.Value, constraint)));
+}
+
+private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
+{
+    var normalizedLeft = NormalizeUniqueValue(left, constraint);
+    var normalizedRight = NormalizeUniqueValue(right, constraint);
+    if (normalizedLeft is null || normalizedRight is null)
+    {
+        return normalizedLeft is null && normalizedRight is null;
+    }
+
+    return normalizedLeft is string leftText && normalizedRight is string rightText
+        ? string.Equals(
+            leftText,
+            rightText,
+            constraint.CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+        : Equals(normalizedLeft, normalizedRight);
+}
+
+private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+{
+    if (value is not string text)
+    {
+        return value;
+    }
+
+    return constraint.TrimWhitespace ? text.Trim() : text;
 }
 ```
 
 - [ ] **Step 5: 实现测试仓储 ExistsAsync**
 
-Modify `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs` and add this method before `CreateAsync`:
+Modify `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`: first change the class declaration from `public sealed class InMemoryStandardCrudRepository` to `public class InMemoryStandardCrudRepository`, then add this virtual method before `CreateAsync`:
 
 ```csharp
-public Task<bool> ExistsAsync(
+public virtual Task<bool> ExistsAsync(
     StandardCrudDescriptor descriptor,
+    StandardCrudUniqueConstraint constraint,
     IReadOnlyDictionary<string, object?> equalityValues,
     string? excludedId = null,
     CancellationToken cancellationToken = default)
@@ -403,9 +480,36 @@ public Task<bool> ExistsAsync(
             !string.Equals(row[descriptor.IdField]?.ToString(), excludedId, StringComparison.Ordinal)) &&
         equalityValues.All(pair =>
             row.TryGetValue(pair.Key, out var value) &&
-            string.Equals(value?.ToString(), pair.Value?.ToString(), StringComparison.OrdinalIgnoreCase)));
+            UniqueValuesEqual(value, pair.Value, constraint)));
 
     return Task.FromResult(exists);
+}
+
+private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
+{
+    var normalizedLeft = NormalizeUniqueValue(left, constraint);
+    var normalizedRight = NormalizeUniqueValue(right, constraint);
+    if (normalizedLeft is null || normalizedRight is null)
+    {
+        return normalizedLeft is null && normalizedRight is null;
+    }
+
+    return normalizedLeft is string leftText && normalizedRight is string rightText
+        ? string.Equals(
+            leftText,
+            rightText,
+            constraint.CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+        : Equals(normalizedLeft, normalizedRight);
+}
+
+private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+{
+    if (value is not string text)
+    {
+        return value;
+    }
+
+    return constraint.TrimWhitespace ? text.Trim() : text;
 }
 ```
 
@@ -479,6 +583,26 @@ public async Task UpdateAsync_WhenUniqueFieldNotSubmitted_StillChecksExistingUni
 }
 
 [Fact]
+public async Task UpdateAsync_WhenUniqueFieldNotSubmitted_PassesExistingValueToUniqueCheck()
+{
+    var repository = new RecordingExistsStandardCrudRepository(
+    [
+        new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+    ]);
+    var service = Service(repository);
+
+    var result = await service.UpdateAsync(
+        DescriptorWithUniqueConstraint(),
+        "person-1",
+        new Dictionary<string, object?> { ["ENAME"] = "张三-更新" });
+
+    Assert.True(result.Succeeded);
+    Assert.Equal("person-1", repository.LastExcludedId);
+    Assert.NotNull(repository.LastExistsValues);
+    Assert.Equal("P001", repository.LastExistsValues!["PersonNo"]);
+}
+
+[Fact]
 public async Task UpdateAsync_WhenUniqueValueChangesToExistingValue_ReturnsConflict()
 {
     var repository = new InMemoryStandardCrudRepository(
@@ -523,6 +647,29 @@ private static StandardCrudDescriptor DescriptorWithUniqueConstraint(bool includ
         }
     ]
 };
+
+private sealed class RecordingExistsStandardCrudRepository : InMemoryStandardCrudRepository
+{
+    public RecordingExistsStandardCrudRepository(IEnumerable<Dictionary<string, object?>> rows)
+        : base(rows)
+    {
+    }
+
+    public IReadOnlyDictionary<string, object?>? LastExistsValues { get; private set; }
+    public string? LastExcludedId { get; private set; }
+
+    public override Task<bool> ExistsAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudUniqueConstraint constraint,
+        IReadOnlyDictionary<string, object?> equalityValues,
+        string? excludedId = null,
+        CancellationToken cancellationToken = default)
+    {
+        LastExistsValues = new Dictionary<string, object?>(equalityValues, StringComparer.Ordinal);
+        LastExcludedId = excludedId;
+        return base.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken);
+    }
+}
 ```
 
 - [ ] **Step 2: 运行写入测试确认失败**
@@ -635,7 +782,7 @@ private async Task<StandardCrudError?> ValidateUniqueConstraintsAsync(
             continue;
         }
 
-        if (await _repository.ExistsAsync(descriptor, equalityValues, excludedId, cancellationToken))
+        if (await _repository.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken))
         {
             return new StandardCrudError
             {
@@ -686,12 +833,12 @@ private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueCon
 }
 ```
 
-- [ ] **Step 6: 让仓储比较兼容标准化字符串**
+- [ ] **Step 6: 确认仓储比较按约束规范化双方值**
 
-Modify `ValuesEqual` in `server/platform-crud/Persistence/EfStandardCrudRepository.cs` and in `InMemoryStandardCrudRepository.ExistsAsync` if needed so string equality remains case-insensitive. Use this comparison rule:
+确认 `server/platform-crud/Persistence/EfStandardCrudRepository.cs` 和 `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs` 的 `ExistsAsync` 都调用 `UniqueValuesEqual(value, pair.Value, constraint)`，而不是直接调用 `ValuesEqual` 或固定使用 `StringComparison.OrdinalIgnoreCase`。这一点保证存量值和候选值都按 `TrimWhitespace / CaseInsensitive` 统一比较。
 
 ```csharp
-return string.Equals(ReadString(left), ReadString(right), StringComparison.OrdinalIgnoreCase);
+equalityValues.All(pair => row.TryGetValue(pair.Key, out var value) && UniqueValuesEqual(value, pair.Value, constraint))
 ```
 
 - [ ] **Step 7: 运行写入测试确认通过**
@@ -946,6 +1093,46 @@ public async Task PersonsController_Create_WhenStandardCrudReturnsConflict_UsesS
     var error = Assert.IsType<StandardCrudError>(conflict.Value);
     Assert.Equal("Organization.Person.PersonNoDuplicated", error.Code);
 }
+
+[Fact]
+public async Task PersonsController_Create_WithDuplicatePersonNo_UsesRealStandardCrudUniqueConstraint()
+{
+    var controller = BuildControllerWithRealStandardCrudRows(
+        StandardCrudPersonRow(Guid.Parse("66666666-6666-6666-6666-666666666666"), "P100", "已存在人员"));
+
+    var response = await controller.Create(new PersonDto
+    {
+        PersonNo = " p100 ",
+        Name = "重复人员",
+        IsEnabled = true
+    });
+
+    var conflict = Assert.IsType<ObjectResult>(response.Result);
+    Assert.Equal(409, conflict.StatusCode);
+    var error = Assert.IsType<StandardCrudError>(conflict.Value);
+    Assert.Equal("Organization.Person.PersonNoDuplicated", error.Code);
+}
+
+[Fact]
+public async Task PersonsController_Update_WhenExistingPersonNoAlreadyConflicts_UsesRealStandardCrudUniqueConstraint()
+{
+    var personId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+    var controller = BuildControllerWithRealStandardCrudRows(
+        StandardCrudPersonRow(personId, "P100", "待更新人员"),
+        StandardCrudPersonRow(Guid.Parse("88888888-8888-8888-8888-888888888888"), "p100", "冲突人员"));
+
+    var response = await controller.Update(personId, new PersonDto
+    {
+        PersonNo = "SHOULD-NOT-BE-SENT",
+        Name = "更新人员",
+        IsEnabled = true
+    });
+
+    var conflict = Assert.IsType<ObjectResult>(response.Result);
+    Assert.Equal(409, conflict.StatusCode);
+    var error = Assert.IsType<StandardCrudError>(conflict.Value);
+    Assert.Equal("Organization.Person.PersonNoDuplicated", error.Code);
+}
 ```
 
 Add this helper near other helpers:
@@ -964,6 +1151,37 @@ private static StandardCrudDetail MutationDetail(Guid? id = null) => new()
         ["IsEnabled"] = true,
         ["CreatedAt"] = DateTime.UtcNow
     }
+};
+
+private static PersonsController BuildControllerWithRealStandardCrudRows(params Dictionary<string, object?>[] rows)
+{
+    var standardCrudService = new StandardCrudService(
+        new ControllerStandardCrudRepository(rows),
+        [],
+        [],
+        [],
+        [new PersonCrudValidator()],
+        [],
+        []);
+
+    return new PersonsController(
+        BuildService(),
+        new FakeIdentityUserDirectory(),
+        new StandardCrudEndpoint(standardCrudService));
+}
+
+private static Dictionary<string, object?> StandardCrudPersonRow(Guid id, string personNo, string name) => new(StringComparer.Ordinal)
+{
+    ["EID"] = id.ToString("D"),
+    ["PersonNo"] = personNo,
+    ["ENAME"] = name,
+    ["CompanyId"] = null,
+    ["DepartmentId"] = null,
+    ["PositionId"] = null,
+    ["EmploymentStatus"] = "FullTime",
+    ["IsEnabled"] = true,
+    ["CreatedAt"] = DateTime.UtcNow,
+    ["UpdatedAt"] = null
 };
 ```
 
@@ -1017,12 +1235,141 @@ public Task<StandardCrudMutationResult> UpdateAsync(
 }
 ```
 
+Add this nested repository to the test file for the real `StandardCrudService` link tests:
+
+```csharp
+private sealed class ControllerStandardCrudRepository : IStandardCrudRepository
+{
+    private readonly List<Dictionary<string, object?>> _rows;
+
+    public ControllerStandardCrudRepository(IEnumerable<Dictionary<string, object?>> rows)
+    {
+        _rows = rows.Select(row => new Dictionary<string, object?>(row, StringComparer.Ordinal)).ToList();
+    }
+
+    public Task<StandardCrudListResult> ListAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudListQuery query,
+        IReadOnlyList<StandardCrudQueryCondition> conditions,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new StandardCrudListResult([], 0, query.Page, query.PageSize, query.SortBy, query.SortDirection));
+
+    public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var row = _rows.FirstOrDefault(item => string.Equals(item[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
+        return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row is null ? null : Project(row, descriptor.FieldSet.DetailFields));
+    }
+
+    public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudListQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<StandardCrudOptionItem>>([]);
+
+    public Task<bool> ExistsAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudUniqueConstraint constraint,
+        IReadOnlyDictionary<string, object?> equalityValues,
+        string? excludedId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = _rows.Any(row =>
+            (string.IsNullOrWhiteSpace(excludedId) ||
+                !string.Equals(row[descriptor.IdField]?.ToString(), excludedId, StringComparison.Ordinal)) &&
+            equalityValues.All(pair =>
+                row.TryGetValue(pair.Key, out var value) &&
+                UniqueValuesEqual(value, pair.Value, constraint)));
+
+        return Task.FromResult(exists);
+    }
+
+    public Task<IReadOnlyDictionary<string, object?>> CreateAsync(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken = default)
+    {
+        var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        row[descriptor.IdField] = Guid.NewGuid().ToString("D");
+        row["CreatedAt"] = DateTime.UtcNow;
+        _rows.Add(row);
+        return Task.FromResult(Project(row, descriptor.FieldSet.DetailFields));
+    }
+
+    public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken = default)
+    {
+        var row = _rows.FirstOrDefault(item => string.Equals(item[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
+        if (row is null)
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
+        }
+
+        foreach (var pair in values)
+        {
+            row[pair.Key] = pair.Value;
+        }
+
+        return Task.FromResult<IReadOnlyDictionary<string, object?>?>(Project(row, descriptor.FieldSet.DetailFields));
+    }
+
+    public Task<bool> DeleteAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
+    private static IReadOnlyDictionary<string, object?> Project(IReadOnlyDictionary<string, object?> row, IReadOnlyList<string> fields)
+    {
+        var projected = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var field in fields)
+        {
+            projected[field] = row.TryGetValue(field, out var value) ? value : null;
+        }
+
+        return projected;
+    }
+
+    private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
+    {
+        var normalizedLeft = NormalizeUniqueValue(left, constraint);
+        var normalizedRight = NormalizeUniqueValue(right, constraint);
+        if (normalizedLeft is null || normalizedRight is null)
+        {
+            return normalizedLeft is null && normalizedRight is null;
+        }
+
+        return normalizedLeft is string leftText && normalizedRight is string rightText
+            ? string.Equals(
+                leftText,
+                rightText,
+                constraint.CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            : Equals(normalizedLeft, normalizedRight);
+    }
+
+    private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+    {
+        if (value is not string text)
+        {
+            return value;
+        }
+
+        return constraint.TrimWhitespace ? text.Trim() : text;
+    }
+}
+```
+
 - [ ] **Step 3: 运行 Controller 测试确认失败**
 
 Run:
 
 ```powershell
-dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "PersonsController_Create_DelegatesToStandardCrudEndpoint|PersonsController_Update_DelegatesToStandardCrudEndpointWithoutPersonNo|PersonsController_Create_WhenStandardCrudReturnsConflict" -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "PersonsController_Create_DelegatesToStandardCrudEndpoint|PersonsController_Update_DelegatesToStandardCrudEndpointWithoutPersonNo|PersonsController_Create_WhenStandardCrudReturnsConflict|PersonsController_Create_WithDuplicatePersonNo_UsesRealStandardCrudUniqueConstraint|PersonsController_Update_WhenExistingPersonNoAlreadyConflicts_UsesRealStandardCrudUniqueConstraint" -nr:false -v minimal
 ```
 
 Expected:
@@ -1128,7 +1475,7 @@ public async Task<ActionResult<PersonDto>> Update(
 Run:
 
 ```powershell
-dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "PersonsController_Create_DelegatesToStandardCrudEndpoint|PersonsController_Update_DelegatesToStandardCrudEndpointWithoutPersonNo|PersonsController_Create_WhenStandardCrudReturnsConflict" -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "PersonsController_Create_DelegatesToStandardCrudEndpoint|PersonsController_Update_DelegatesToStandardCrudEndpointWithoutPersonNo|PersonsController_Create_WhenStandardCrudReturnsConflict|PersonsController_Create_WithDuplicatePersonNo_UsesRealStandardCrudUniqueConstraint|PersonsController_Update_WhenExistingPersonNoAlreadyConflicts_UsesRealStandardCrudUniqueConstraint" -nr:false -v minimal
 ```
 
 Expected:

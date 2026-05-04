@@ -143,3 +143,44 @@ Organization 模块已经完成首版闭环：
 - 前端模块可构建
 - 组织主数据、人员详情、账号绑定入口和授权摘要只读展示均已落地
 - 关键的计划/现状差异已被显式记录，而不是隐含在提交历史中
+
+## 标准 CRUD 后端内核试点验证
+
+验证日期：2026-05-04
+
+本轮验证目标：
+
+- `server/platform-crud` 已提供 descriptor、扩展点、EF 仓储、标准服务和 endpoint 门面。
+- Person 已接入标准 CRUD descriptor、query customizer、display resolver、summary provider、validator 和 delete guard。
+- 第一阶段读取主干覆盖 list/detail/options/summary。
+- 第二阶段写操作覆盖 create/update/disable/delete，其中 delete 按 `conditional` 策略通过 delete guard 控制。
+- 标准 update/disable 类更新行为由 CRUD 内核自动维护 `UpdatedAt`，客户端提交时间不作为真源。
+- `user-link` 特殊入口仍保留在 Organization 模块内。
+
+验证命令：
+
+```powershell
+dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+pnpm --dir .\frontend --filter @icp-modules/organization build
+```
+
+验证结果：
+
+- `PlatformCrud.Tests`：通过，17/17。
+- `Organization.Tests`：通过，59/59。
+- `HostApi` 构建：通过，0 error。
+- `@icp-modules/organization` 前端构建：通过。
+
+验证说明：
+
+- 并行执行多个 `dotnet` 命令时曾出现 `obj/bin` 文件锁，随后按计划命令单独重跑 `Organization.Tests` 通过。
+- 构建仍保留既有 `NU1510` 与 `System.Security.Cryptography.Xml 9.0.0` 漏洞 warning，本轮未处理依赖治理。
+
+验证结论：
+
+- 标准 CRUD 后端内核与 Person 试点通过全量验证。
+- 删除能力按 Person `conditional` 策略显式接入，不作为隐式通用删除暴露。
+- 查询、显示值、摘要块、校验和删除守卫均通过代码扩展点接入，未下沉为元数据执行逻辑。
+- 更新审计字段由内核统一维护，保持写行为可验证、可回滚。

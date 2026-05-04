@@ -2480,7 +2480,7 @@ git commit -m "功能：切换人员接口到标准CRUD端点"
 **Files:**
 - Modify: `docs/verification/organization-module-verification.md`
 
-- [ ] **Step 1: 运行平台 CRUD 测试**
+- [x] **Step 1: 运行平台 CRUD 测试**
 
 Run:
 
@@ -2494,7 +2494,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 2: 运行 Organization 测试**
+- [x] **Step 2: 运行 Organization 测试**
 
 Run:
 
@@ -2508,7 +2508,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 3: 运行 HostApi 构建**
+- [x] **Step 3: 运行 HostApi 构建**
 
 Run:
 
@@ -2522,7 +2522,7 @@ Expected:
 Build succeeded.
 ```
 
-- [ ] **Step 4: 运行 Organization 前端构建 smoke**
+- [x] **Step 4: 运行 Organization 前端构建 smoke**
 
 Run:
 
@@ -2536,7 +2536,7 @@ Expected:
 build completed successfully
 ```
 
-- [ ] **Step 5: 回填验证记录**
+- [x] **Step 5: 回填验证记录**
 
 Append to `docs/verification/organization-module-verification.md`:
 
@@ -2570,7 +2570,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 - 查询、显示值、摘要块、校验和删除守卫均通过代码扩展点接入，未下沉为元数据执行逻辑。
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add .\docs\verification\organization-module-verification.md

@@ -85,6 +85,26 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
     }
 
     /// <summary>
+    /// 执行标准等值存在性检查；当前实现与列表查询一样先保持 shared-type entity 的显式内核过滤。
+    /// </summary>
+    public async Task<bool> ExistsAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudUniqueConstraint constraint,
+        IReadOnlyDictionary<string, object?> equalityValues,
+        string? excludedId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return rows.Any(row =>
+            (string.IsNullOrWhiteSpace(excludedId) ||
+                !string.Equals(ReadString(row, descriptor.IdField), excludedId, StringComparison.Ordinal)) &&
+            equalityValues.All(pair => row.TryGetValue(pair.Key, out var value) && UniqueValuesEqual(value, pair.Value, constraint)));
+    }
+
+    /// <summary>
     /// 创建 shared-type entity；缺省主键由代码内核生成，后续可由服务层控制字段白名单和默认值。
     /// </summary>
     public async Task<IReadOnlyDictionary<string, object?>> CreateAsync(
@@ -250,6 +270,33 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         }
 
         return string.Equals(ReadString(left), ReadString(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
+    {
+        var normalizedLeft = NormalizeUniqueValue(left, constraint);
+        var normalizedRight = NormalizeUniqueValue(right, constraint);
+        if (normalizedLeft is null || normalizedRight is null)
+        {
+            return normalizedLeft is null && normalizedRight is null;
+        }
+
+        return normalizedLeft is string leftText && normalizedRight is string rightText
+            ? string.Equals(
+                leftText,
+                rightText,
+                constraint.CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            : Equals(normalizedLeft, normalizedRight);
+    }
+
+    private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+    {
+        if (value is not string text)
+        {
+            return value;
+        }
+
+        return constraint.TrimWhitespace ? text.Trim() : text;
     }
 
     private static string ReadString(IReadOnlyDictionary<string, object?> row, string key) =>

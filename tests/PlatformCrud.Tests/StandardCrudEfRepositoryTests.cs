@@ -92,6 +92,77 @@ public sealed class StandardCrudEfRepositoryTests
         Assert.Equal("P001 张三", option.Label);
     }
 
+    [Fact]
+    public async Task ExistsAsync_WhenMatchingRowExists_ReturnsTrue()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+            Row("person-1", "P001", "张三", true),
+            Row("person-2", "P002", "李四", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext);
+
+        var exists = await repository.ExistsAsync(
+            Descriptor(),
+            UniqueConstraint(),
+            new Dictionary<string, object?> { ["PersonNo"] = "p001" });
+
+        Assert.True(exists);
+    }
+
+    [Fact]
+    public async Task ExistsAsync_WhenExcludedIdMatchesOnlyRow_ReturnsFalse()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext);
+
+        var exists = await repository.ExistsAsync(
+            Descriptor(),
+            UniqueConstraint(),
+            new Dictionary<string, object?> { ["PersonNo"] = "P001" },
+            excludedId: "person-1");
+
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public async Task ExistsAsync_WhenConstraintTrimsStoredValue_ReturnsTrue()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", " P001 ", "张三", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext);
+
+        var exists = await repository.ExistsAsync(
+            Descriptor(),
+            UniqueConstraint(),
+            new Dictionary<string, object?> { ["PersonNo"] = "P001" });
+
+        Assert.True(exists);
+    }
+
+    [Fact]
+    public async Task ExistsAsync_WhenConstraintIsCaseSensitive_RespectsCase()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext);
+
+        var exists = await repository.ExistsAsync(
+            Descriptor(),
+            UniqueConstraint(caseInsensitive: false),
+            new Dictionary<string, object?> { ["PersonNo"] = "p001" });
+
+        Assert.False(exists);
+    }
+
     private static EfPlatformDbContext BuildDbContext()
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -128,5 +199,16 @@ public sealed class StandardCrudEfRepositoryTests
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"]),
         OptionLabelFields = ["PersonNo", "ENAME"]
+    };
+
+    private static StandardCrudUniqueConstraint UniqueConstraint(bool caseInsensitive = true) => new()
+    {
+        Key = "personNo",
+        Fields = ["PersonNo"],
+        CaseInsensitive = caseInsensitive,
+        TrimWhitespace = true,
+        ErrorCode = "Organization.Person.PersonNoDuplicated",
+        Message = "人员工号必须唯一。",
+        ReasonKey = "organization.person.personNoDuplicated"
     };
 }

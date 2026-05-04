@@ -4,7 +4,7 @@ using ICP.Platform.Crud.Models;
 
 namespace ICP.Platform.Crud.Tests.Support;
 
-public sealed class InMemoryStandardCrudRepository : IStandardCrudRepository
+public class InMemoryStandardCrudRepository : IStandardCrudRepository
 {
     private readonly List<Dictionary<string, object?>> _rows;
 
@@ -64,6 +64,23 @@ public sealed class InMemoryStandardCrudRepository : IStandardCrudRepository
         return Task.FromResult(options);
     }
 
+    public virtual Task<bool> ExistsAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudUniqueConstraint constraint,
+        IReadOnlyDictionary<string, object?> equalityValues,
+        string? excludedId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = _rows.Any(row =>
+            (string.IsNullOrWhiteSpace(excludedId) ||
+                !string.Equals(row[descriptor.IdField]?.ToString(), excludedId, StringComparison.Ordinal)) &&
+            equalityValues.All(pair =>
+                row.TryGetValue(pair.Key, out var value) &&
+                UniqueValuesEqual(value, pair.Value, constraint)));
+
+        return Task.FromResult(exists);
+    }
+
     public Task<IReadOnlyDictionary<string, object?>> CreateAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values,
@@ -116,5 +133,32 @@ public sealed class InMemoryStandardCrudRepository : IStandardCrudRepository
         }
 
         return projected;
+    }
+
+    private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
+    {
+        var normalizedLeft = NormalizeUniqueValue(left, constraint);
+        var normalizedRight = NormalizeUniqueValue(right, constraint);
+        if (normalizedLeft is null || normalizedRight is null)
+        {
+            return normalizedLeft is null && normalizedRight is null;
+        }
+
+        return normalizedLeft is string leftText && normalizedRight is string rightText
+            ? string.Equals(
+                leftText,
+                rightText,
+                constraint.CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            : Equals(normalizedLeft, normalizedRight);
+    }
+
+    private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
+    {
+        if (value is not string text)
+        {
+            return value;
+        }
+
+        return constraint.TrimWhitespace ? text.Trim() : text;
     }
 }

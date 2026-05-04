@@ -31,6 +31,16 @@ public interface IStandardCrudRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 按等值字段检查资源行是否存在；excludedId 用于 update 时排除当前对象。
+    /// </summary>
+    Task<bool> ExistsAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudUniqueConstraint constraint,
+        IReadOnlyDictionary<string, object?> equalityValues,
+        string? excludedId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 创建一条标准 CRUD 资源记录；字段白名单由服务层处理，仓储只写入已确认值。
     /// </summary>
     Task<IReadOnlyDictionary<string, object?>> CreateAsync(

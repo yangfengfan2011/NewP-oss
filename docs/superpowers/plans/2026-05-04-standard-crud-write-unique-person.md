@@ -291,7 +291,7 @@ git commit -m "功能：定义标准CRUD唯一约束描述符"
 - Modify: `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`
 - Modify: `tests/PlatformCrud.Tests/StandardCrudEfRepositoryTests.cs`
 
-- [ ] **Step 1: 写 EF ExistsAsync 失败测试**
+- [x] **Step 1: 写 EF ExistsAsync 失败测试**
 
 Append to `tests/PlatformCrud.Tests/StandardCrudEfRepositoryTests.cs`:
 
@@ -379,7 +379,7 @@ private static StandardCrudUniqueConstraint UniqueConstraint(bool caseInsensitiv
 };
 ```
 
-- [ ] **Step 2: 运行 EF 仓储测试确认失败**
+- [x] **Step 2: 运行 EF 仓储测试确认失败**
 
 Run:
 
@@ -394,7 +394,7 @@ FAIL
 CS1061: 'EfStandardCrudRepository' does not contain a definition for 'ExistsAsync'
 ```
 
-- [ ] **Step 3: 在仓储接口增加 ExistsAsync**
+- [x] **Step 3: 在仓储接口增加 ExistsAsync**
 
 Modify `server/platform-crud/Abstractions/IStandardCrudRepository.cs` and add before `CreateAsync`:
 
@@ -410,7 +410,7 @@ Task<bool> ExistsAsync(
     CancellationToken cancellationToken = default);
 ```
 
-- [ ] **Step 4: 实现 EF ExistsAsync**
+- [x] **Step 4: 实现 EF ExistsAsync**
 
 Modify `server/platform-crud/Persistence/EfStandardCrudRepository.cs` and add this method after `OptionsAsync`:
 
@@ -463,7 +463,7 @@ private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueCon
 }
 ```
 
-- [ ] **Step 5: 实现测试仓储 ExistsAsync**
+- [x] **Step 5: 实现测试仓储 ExistsAsync**
 
 Modify `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`: first change the class declaration from `public sealed class InMemoryStandardCrudRepository` to `public class InMemoryStandardCrudRepository`, then add this virtual method before `CreateAsync`:
 
@@ -513,7 +513,7 @@ private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueCon
 }
 ```
 
-- [ ] **Step 6: 运行 EF 仓储测试确认通过**
+- [x] **Step 6: 运行 EF 仓储测试确认通过**
 
 Run:
 
@@ -527,7 +527,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add .\server\platform-crud\Abstractions\IStandardCrudRepository.cs .\server\platform-crud\Persistence\EfStandardCrudRepository.cs .\tests\PlatformCrud.Tests\Support\InMemoryStandardCrudRepository.cs .\tests\PlatformCrud.Tests\StandardCrudEfRepositoryTests.cs

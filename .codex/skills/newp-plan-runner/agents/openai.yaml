@@ -1,0 +1,6 @@
+interface:
+  display_name: NewP Plan Runner
+  short_description: 按锁、检查点、验证和只读 review 执行一个既有 NewP 计划任务。
+  default_prompt: 使用 newp-plan-runner 执行指定 NewP 计划中的第一个未完成任务。
+policy:
+  allow_implicit_invocation: true

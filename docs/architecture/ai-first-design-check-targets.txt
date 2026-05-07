@@ -4,3 +4,4 @@
 ../designs/detailed-design-template.md
 ../designs/subagents-new-platform-collaboration-design.md
 ai-first-execution-standard.md
+../superpowers/specs/tooling/2026-05-05-newp-plan-runner-design.md

@@ -1,6 +1,7 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,10 +10,14 @@ namespace ICP.Platform.Crud.Persistence;
 public sealed class EfStandardCrudRepository : IStandardCrudRepository
 {
     private readonly EfPlatformDbContext _dbContext;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
-    public EfStandardCrudRepository(EfPlatformDbContext dbContext)
+    public EfStandardCrudRepository(
+        EfPlatformDbContext dbContext,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _dbContext = dbContext;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     /// <summary>
@@ -115,7 +120,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
         if (!row.ContainsKey(descriptor.IdField))
         {
-            row[descriptor.IdField] = Guid.NewGuid().ToString("D");
+            row[descriptor.IdField] = _objectIdGenerator.NewId(descriptor.ModelName);
         }
 
         _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName).Add(row);

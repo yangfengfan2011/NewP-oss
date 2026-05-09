@@ -77,7 +77,7 @@
 - Modify: `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`
 - Test: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 
-- [ ] **Step 1: 写对象 ID 生成器和 EF 创建路径失败测试**
+- [x] **Step 1: 写对象 ID 生成器和 EF 创建路径失败测试**
 
 Append to `tests/PlatformCrud.Tests/StandardCrudEfRepositoryTests.cs`:
 
@@ -140,7 +140,7 @@ Also add:
 using ICP.Platform.Crud.ObjectIds;
 ```
 
-- [ ] **Step 2: 运行平台 CRUD 测试确认失败**
+- [x] **Step 2: 运行平台 CRUD 测试确认失败**
 
 Run:
 
@@ -155,7 +155,7 @@ FAIL
 CS0246: The type or namespace name 'IPlatformObjectIdGenerator' could not be found
 ```
 
-- [ ] **Step 3: 新增对象 ID 生成器接口和实现**
+- [x] **Step 3: 新增对象 ID 生成器接口和实现**
 
 Create `server/platform-crud/ObjectIds/IPlatformObjectIdGenerator.cs`:
 
@@ -198,7 +198,7 @@ public sealed partial class PlatformObjectIdGenerator : IPlatformObjectIdGenerat
 }
 ```
 
-- [ ] **Step 4: 在标准 CRUD DI 和 EF 仓储中接入生成器**
+- [x] **Step 4: 在标准 CRUD DI 和 EF 仓储中接入生成器**
 
 Modify `server/platform-crud/Extensions/StandardCrudServiceCollectionExtensions.cs`:
 
@@ -272,7 +272,7 @@ if (!row.ContainsKey(descriptor.IdField))
 }
 ```
 
-- [ ] **Step 5: 更新测试仓储默认生成规则**
+- [x] **Step 5: 更新测试仓储默认生成规则**
 
 Modify `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`:
 
@@ -283,7 +283,7 @@ if (!row.ContainsKey(descriptor.IdField))
 }
 ```
 
-- [ ] **Step 6: 运行平台 CRUD 定向测试确认通过**
+- [x] **Step 6: 运行平台 CRUD 定向测试确认通过**
 
 Run:
 
@@ -297,7 +297,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 7: 运行平台 CRUD 全量测试**
+- [x] **Step 7: 运行平台 CRUD 全量测试**
 
 Run:
 
@@ -311,7 +311,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 git add .\server\platform-crud\ObjectIds .\server\platform-crud\Extensions\StandardCrudServiceCollectionExtensions.cs .\server\platform-crud\Persistence\EfStandardCrudRepository.cs .\tests\PlatformCrud.Tests\StandardCrudEfRepositoryTests.cs .\tests\PlatformCrud.Tests\Support\InMemoryStandardCrudRepository.cs

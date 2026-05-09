@@ -89,7 +89,7 @@ public class InMemoryStandardCrudRepository : IStandardCrudRepository
         var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
         if (!row.ContainsKey(descriptor.IdField))
         {
-            row[descriptor.IdField] = Guid.NewGuid().ToString("D");
+            row[descriptor.IdField] = $"{descriptor.ModelName}_{Guid.NewGuid():N}";
         }
 
         _rows.Add(row);

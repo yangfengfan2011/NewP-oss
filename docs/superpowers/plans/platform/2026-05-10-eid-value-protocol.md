@@ -1579,7 +1579,7 @@ git commit -m "功能：人员账号关联使用独立EID"
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 - Build: `apps/host-api/HostApi.csproj`
 
-- [ ] **Step 1: 搜索裸 GUID 生成残留**
+- [x] **Step 1: 搜索裸 GUID 生成残留**
 
 Run:
 
@@ -1596,7 +1596,7 @@ No matches for platform object ID creation, EID parsing, route GUID constraints,
 
 If matches remain only for temp directories, non-platform file IDs, or test database names outside the searched platform object paths, leave them and record that they are outside this EID protocol scope.
 
-- [ ] **Step 2: 回填验证记录**
+- [x] **Step 2: 回填验证记录**
 
 Append to `docs/verification/organization-module-verification.md`:
 
@@ -1633,7 +1633,7 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 - 本轮未做历史数据回填；如需导入旧库数据，应单独设计迁移。
 ```
 
-- [ ] **Step 3: 运行全链路后端验证**
+- [x] **Step 3: 运行全链路后端验证**
 
 Run:
 
@@ -1652,7 +1652,7 @@ All test commands pass.
 HostApi build succeeds.
 ```
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```powershell
 git add .\docs\verification\organization-module-verification.md

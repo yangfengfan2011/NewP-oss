@@ -222,3 +222,40 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 已知风险：
 
 - `ENAME` 等字段必填校验仍应由后续标准 CRUD required field / 模型必填校验设计承接，本轮按计划不把资源必填规则塞回 `PersonCrudValidator`。
+
+## EID 值协议平台化验证
+
+验证日期：2026-05-10
+
+前提：
+
+- 当前开发数据库按空库重建处理，不保留旧裸 GUID 主键数据兼容承诺。
+
+验证目标：
+
+- 平台对象新建 `EID` 使用 `{ModelName}_{Guid:N}`。
+- PlatformCrud、ConfigCenter、Authorization、Organization 的新建路径不再生成裸 GUID `EID`。
+- Organization 人员、组织主数据和人员账号关联的主键与引用字段按字符串 ID 流转。
+- API 路由不再使用 `{id:guid}` 约束。
+
+验证命令：
+
+```powershell
+rg -n 'Id \{ get; set; \} = Guid\.NewGuid|Guid\.(Parse|TryParse)\(|\{id:guid\}|Guid\.NewGuid\(\)\.ToString\("D"\)' server/modules/Organization server/platform-crud
+rg -n 'Id \{ get; set; \} = Guid\.NewGuid|Guid\.NewGuid\(\)\.ToString\(\)' server/modules/ConfigCenter server/modules/Authorization
+dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+```
+
+残留扫描结果：
+
+- `server/modules/Organization` 与 `server/platform-crud` 中未发现平台对象 ID 创建、`EID` GUID 解析、`{id:guid}` 路由约束或 `Guid.NewGuid().ToString("D")` 裸 GUID 生成残留。
+- `server/modules/ConfigCenter` 与 `server/modules/Authorization` 中未发现模型默认 `Guid.NewGuid` 或 `Guid.NewGuid().ToString()` 裸 GUID 生成残留。
+
+验证结论：
+
+- 新建平台对象 ID 协议已由平台生成器统一承接。
+- 本轮未做历史数据回填；如需导入旧库数据，应单独设计迁移。

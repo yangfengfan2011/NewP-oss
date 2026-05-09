@@ -38,12 +38,12 @@ public sealed class PersonUserLinkSummaryProvider : IStandardCrudSummaryProvider
             Status = "ready",
             Data = new PersonUserLinkDto
             {
-                Id = link.PersonId,
+                Id = link.Id,
                 PersonId = link.PersonId,
                 UserId = link.UserId,
                 CreatedAt = link.LinkedAt,
                 LinkedAt = link.LinkedAt,
-                LinkedBy = link.LinkedBy
+                LinkedBy = string.IsNullOrWhiteSpace(link.LinkedBy) ? "system" : link.LinkedBy
             }
         };
     }

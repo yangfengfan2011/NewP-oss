@@ -821,6 +821,7 @@ public class PersonListContractTests
             Task.FromResult<PersonUserLink?>(personId == _personId
                 ? new PersonUserLink
                 {
+                    Id = "PersonUserLink_11111111111111111111111111111111",
                     PersonId = personId,
                     UserId = "user-1",
                     LinkedAt = DateTime.UtcNow,

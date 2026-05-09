@@ -55,18 +55,19 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
 
     private static PersonUserLink Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
+        Id = GetString(entity, "EID") ?? string.Empty,
         PersonId = GetString(entity, "PersonId") ?? string.Empty,
         UserId = GetString(entity, "UserId") ?? string.Empty,
         LinkedAt = GetDateTime(entity, "LinkedAt"),
-        LinkedBy = GetString(entity, "LinkedBy") ?? "system"
+        LinkedBy = GetString(entity, "LinkedBy")
     };
 
     private static Dictionary<string, object?> ToEntity(PersonUserLink link)
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            // PersonUserLink 的业务唯一键仍是 PersonId；实体主键 EID 用同一稳定值承接。
-            ["EID"] = link.PersonId,
+            // PersonUserLink 拥有独立 EID；PersonId 只保留为人员引用和 upsert 唯一边界。
+            ["EID"] = link.Id,
             ["PersonId"] = link.PersonId
         };
 
@@ -76,11 +77,11 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
 
     private static void CopyToEntity(PersonUserLink link, IDictionary<string, object?> entity)
     {
-        entity["EID"] = link.PersonId;
+        entity["EID"] = link.Id;
         entity["PersonId"] = link.PersonId;
         entity["UserId"] = link.UserId;
         entity["LinkedAt"] = link.LinkedAt;
-        entity["LinkedBy"] = link.LinkedBy;
+        entity["LinkedBy"] = string.IsNullOrWhiteSpace(link.LinkedBy) ? "system" : link.LinkedBy;
     }
 
     private static string? GetString(IReadOnlyDictionary<string, object?> entity, string key) =>

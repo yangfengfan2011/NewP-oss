@@ -207,8 +207,13 @@ public sealed class PersonService : IPersonService
         // 绑定前先通过身份目录确认用户存在，避免组织模块自己持有“悬空用户 ID”。
         await _identityUserDirectory.EnsureUserExistsAsync(request.UserId, cancellationToken);
 
+        var existingLink = await _personUserLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
         var link = new PersonUserLink
         {
+            // 重新绑定同一人员只替换账号引用，不刷新关系对象身份，避免 EID 变成可变状态。
+            Id = string.IsNullOrWhiteSpace(existingLink?.Id)
+                ? _objectIdGenerator.NewId(nameof(PersonUserLink))
+                : existingLink.Id,
             PersonId = personId,
             UserId = request.UserId,
             LinkedAt = DateTime.UtcNow,
@@ -335,15 +340,18 @@ public sealed class PersonService : IPersonService
 
     private static PersonUserLinkDto MapToDto(PersonUserLink link) => new()
     {
-        Id = link.PersonId.ToString(),
-        PersonId = link.PersonId.ToString(),
+        Id = link.Id,
+        PersonId = link.PersonId,
         UserId = link.UserId,
         CreatedAt = link.LinkedAt,
         LinkedAt = link.LinkedAt,
-        LinkedBy = link.LinkedBy
+        LinkedBy = NormalizeLinkedBy(link.LinkedBy)
     };
 
     // 平台对象引用按字符串协议流转；空白值在领域层统一视为未关联。
     private static string? NormalizeOptionalId(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static string NormalizeLinkedBy(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "system" : value;
 }

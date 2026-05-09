@@ -7,7 +7,7 @@
       {
         "name": "PersonId",
         "storage": {
-          "type": "guid"
+          "type": "string"
         }
       },
       {

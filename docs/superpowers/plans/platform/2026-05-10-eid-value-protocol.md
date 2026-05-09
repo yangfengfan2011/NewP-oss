@@ -1383,7 +1383,7 @@ git commit -m "功能：Organization收口平台对象ID"
 - Modify: `server/modules/Organization/Crud/PersonCrudDeleteGuard.cs`
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 
-- [ ] **Step 1: 写 PersonUserLink 独立 EID 失败测试**
+- [x] **Step 1: 写 PersonUserLink 独立 EID 失败测试**
 
 Append to `tests/Organization.Tests/PersonServiceTests.cs`:
 
@@ -1412,7 +1412,7 @@ public async Task LinkUserAsync_AssignsPersonUserLinkPrefixedId()
 }
 ```
 
-- [ ] **Step 2: 运行 PersonUserLink 定向测试确认失败**
+- [x] **Step 2: 运行 PersonUserLink 定向测试确认失败**
 
 Run:
 
@@ -1429,7 +1429,7 @@ Expected: PersonUserLink_00000000000000000000000000000001
 Actual:   Person_00000000000000000000000000000001
 ```
 
-- [ ] **Step 3: 改 PersonUserLink 模型**
+- [x] **Step 3: 改 PersonUserLink 模型**
 
 Modify `server/modules/Organization/Models/PersonUserLink.cs`:
 
@@ -1446,7 +1446,7 @@ public sealed class PersonUserLink
 }
 ```
 
-- [ ] **Step 4: 改 PersonUserLinkRepository 接口和 EF 实现**
+- [x] **Step 4: 改 PersonUserLinkRepository 接口和 EF 实现**
 
 Modify `server/modules/Organization/Repositories/IPersonUserLinkRepository.cs`:
 
@@ -1484,7 +1484,7 @@ entity["LinkedAt"] = link.LinkedAt;
 entity["LinkedBy"] = link.LinkedBy;
 ```
 
-- [ ] **Step 5: 改 PersonService 绑定逻辑**
+- [x] **Step 5: 改 PersonService 绑定逻辑**
 
 In `LinkUserAsync`, set:
 
@@ -1513,7 +1513,7 @@ private static PersonUserLinkDto MapToDto(PersonUserLink link) => new()
 };
 ```
 
-- [ ] **Step 6: 改 summary provider 和 delete guard**
+- [x] **Step 6: 改 summary provider 和 delete guard**
 
 In `PersonUserLinkSummaryProvider`:
 
@@ -1546,7 +1546,7 @@ if (string.IsNullOrWhiteSpace(id))
 var link = await _userLinkRepository.GetByPersonIdAsync(id, cancellationToken);
 ```
 
-- [ ] **Step 7: 运行 Organization 全量测试**
+- [x] **Step 7: 运行 Organization 全量测试**
 
 Run:
 
@@ -1560,7 +1560,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 git add .\server\modules\Organization .\tests\Organization.Tests

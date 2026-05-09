@@ -155,6 +155,59 @@ public class PersonServiceTests
     }
 
     [Fact]
+    public async Task LinkUserAsync_AssignsPersonUserLinkPrefixedId()
+    {
+        var service = BuildService(new SequenceObjectIdGenerator(
+            "Person_00000000000000000000000000000001",
+            "PersonUserLink_00000000000000000000000000000001"));
+        var person = await service.CreateAsync(new PersonDto
+        {
+            PersonNo = "P900",
+            Name = "绑定人员",
+            IsEnabled = true
+        });
+
+        var link = await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        {
+            UserId = "user-1",
+            LinkedBy = "tester"
+        });
+
+        Assert.Equal("PersonUserLink_00000000000000000000000000000001", link.Id);
+        Assert.Equal(person.Id, link.PersonId);
+    }
+
+    [Fact]
+    public async Task LinkUserAsync_WhenRelinkingSamePerson_PreservesPersonUserLinkId()
+    {
+        var service = BuildService(new SequenceObjectIdGenerator(
+            "Person_00000000000000000000000000000001",
+            "PersonUserLink_00000000000000000000000000000001",
+            "PersonUserLink_00000000000000000000000000000002"));
+        var person = await service.CreateAsync(new PersonDto
+        {
+            PersonNo = "P901",
+            Name = "重新绑定人员",
+            IsEnabled = true
+        });
+
+        var firstLink = await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        {
+            UserId = "user-1",
+            LinkedBy = "tester"
+        });
+        var secondLink = await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
+        {
+            UserId = "user-2",
+            LinkedBy = "tester"
+        });
+
+        Assert.Equal(firstLink.Id, secondLink.Id);
+        Assert.Equal("user-2", secondLink.UserId);
+        Assert.Equal(person.Id, secondLink.PersonId);
+    }
+
+    [Fact]
     public async Task LinkUser_WhenUserAlreadyBound_ThrowsInvalidOperationException()
     {
         var service = BuildService();
@@ -212,7 +265,8 @@ public class PersonServiceTests
         });
 
         Assert.Equal("user-002", result.UserId);
-        Assert.Equal(person.Id, result.Id);
+        Assert.StartsWith("PersonUserLink_", result.Id, StringComparison.Ordinal);
+        Assert.Equal(person.Id, result.PersonId);
         Assert.Equal(result.LinkedAt, result.CreatedAt);
         Assert.Equal(
             ["ensure:user-002", "upsert:user-002"],
@@ -390,17 +444,38 @@ public class PersonServiceTests
             new FakeIdentityUserDirectory(),
             new FakeAuthorizationSummaryReader());
 
+    private static IPersonService BuildService(IPlatformObjectIdGenerator objectIdGenerator) =>
+        BuildService(
+            new InMemoryPersonRepository(),
+            new InMemoryPersonUserLinkRepository(),
+            new FakeIdentityUserDirectory(),
+            new FakeAuthorizationSummaryReader(),
+            objectIdGenerator);
+
     private static IPersonService BuildService(
         IPersonRepository personRepository,
         IPersonUserLinkRepository personUserLinkRepository,
         IIdentityUserDirectory identityUserDirectory,
         IAuthorizationSummaryReader authorizationSummaryReader) =>
-        new PersonService(
+        BuildService(
             personRepository,
             personUserLinkRepository,
             identityUserDirectory,
             authorizationSummaryReader,
             new PlatformObjectIdGenerator());
+
+    private static IPersonService BuildService(
+        IPersonRepository personRepository,
+        IPersonUserLinkRepository personUserLinkRepository,
+        IIdentityUserDirectory identityUserDirectory,
+        IAuthorizationSummaryReader authorizationSummaryReader,
+        IPlatformObjectIdGenerator objectIdGenerator) =>
+        new PersonService(
+            personRepository,
+            personUserLinkRepository,
+            identityUserDirectory,
+            authorizationSummaryReader,
+            objectIdGenerator);
 
     private sealed class InMemoryPersonRepository : IPersonRepository
     {
@@ -525,6 +600,7 @@ public class PersonServiceTests
 
         private static PersonUserLink Clone(PersonUserLink link) => new()
         {
+            Id = link.Id,
             PersonId = link.PersonId,
             UserId = link.UserId,
             LinkedAt = link.LinkedAt,
@@ -577,5 +653,17 @@ public class PersonServiceTests
     {
         public Task<IReadOnlyList<string>> GetRoleNamesAsync(string userId, CancellationToken cancellationToken = default) =>
             throw new Exception("authorization unavailable");
+    }
+
+    private sealed class SequenceObjectIdGenerator : IPlatformObjectIdGenerator
+    {
+        private readonly Queue<string> _ids;
+
+        public SequenceObjectIdGenerator(params string[] ids)
+        {
+            _ids = new Queue<string>(ids);
+        }
+
+        public string NewId(string objectName) => _ids.Dequeue();
     }
 }

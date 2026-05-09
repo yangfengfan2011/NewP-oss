@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
@@ -17,8 +18,8 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public class PersonListContractTests
 {
-    private static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid DepartmentId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private const string CompanyId = "Company_11111111111111111111111111111111";
+    private const string DepartmentId = "Department_22222222222222222222222222222222";
 
     [Fact]
     public void PersonsController_DeclaresListAndDisableEndpoints()
@@ -31,7 +32,7 @@ public class PersonListContractTests
         Assert.NotNull(listAction);
         Assert.NotNull(disableAction);
         Assert.Contains(listAction!.GetCustomAttributes<HttpGetAttribute>(), attribute => attribute.Template is null);
-        Assert.Contains(disableAction!.GetCustomAttributes<HttpPostAttribute>(), attribute => attribute.Template == "{id:guid}/disable");
+        Assert.Contains(disableAction!.GetCustomAttributes<HttpPostAttribute>(), attribute => attribute.Template == "{id}/disable");
     }
 
     [Fact]
@@ -45,7 +46,7 @@ public class PersonListContractTests
         Assert.NotNull(optionsAction);
         Assert.NotNull(deleteAction);
         Assert.Contains(optionsAction!.GetCustomAttributes<HttpGetAttribute>(), attribute => attribute.Template == "options");
-        Assert.Contains(deleteAction!.GetCustomAttributes<HttpDeleteAttribute>(), attribute => attribute.Template == "{id:guid}");
+        Assert.Contains(deleteAction!.GetCustomAttributes<HttpDeleteAttribute>(), attribute => attribute.Template == "{id}");
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public class PersonListContractTests
         [
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["EID"] = Guid.Parse("33333333-3333-3333-3333-333333333333").ToString("D"),
+                ["EID"] = "Person_33333333333333333333333333333333",
                 ["PersonNo"] = "P003",
                 ["ENAME"] = "王五",
                 ["CompanyName"] = "ICP研发中心",
@@ -94,14 +95,39 @@ public class PersonListContractTests
     }
 
     [Fact]
+    public async Task PersonsController_GetList_ReturnsStringIdWithoutGuidParsing()
+    {
+        var standardCrudService = new RecordingStandardCrudService(
+        [
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["EID"] = "Person_00000000000000000000000000000001",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["CompanyName"] = "ICP研发中心",
+                ["DepartmentName"] = "人力资源部",
+                ["EmploymentStatus"] = "FullTime",
+                ["IsEnabled"] = true
+            }
+        ]);
+        var controller = BuildController(standardCrudService);
+
+        var response = await controller.GetList(null, null, null, null);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var item = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<PersonListItemDto>>(ok.Value));
+        Assert.Equal("Person_00000000000000000000000000000001", item.Id);
+    }
+
+    [Fact]
     public async Task PersonsController_Get_ParsesEmploymentStatusIgnoringCase()
     {
-        var personId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var personId = "Person_44444444444444444444444444444444";
         var standardCrudService = new RecordingStandardCrudService([], new StandardCrudDetail
         {
             Fields = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["EID"] = personId.ToString("D"),
+                ["EID"] = personId,
                 ["PersonNo"] = "P004",
                 ["ENAME"] = "赵六",
                 ["EmploymentStatus"] = "contractor",
@@ -128,8 +154,8 @@ public class PersonListContractTests
         {
             PersonNo = "P100",
             Name = "标准人员",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             EmploymentStatus = EmploymentStatus.FullTime,
             IsEnabled = true
         });
@@ -137,14 +163,14 @@ public class PersonListContractTests
         Assert.Equal(nameof(IStandardCrudService.CreateAsync), standardCrudService.LastMutation);
         Assert.Equal("P100", standardCrudService.LastMutationValues!["PersonNo"]);
         Assert.Equal("标准人员", standardCrudService.LastMutationValues["ENAME"]);
-        Assert.Equal(CompanyId.ToString("D"), standardCrudService.LastMutationValues["CompanyId"]);
+        Assert.Equal(CompanyId, standardCrudService.LastMutationValues["CompanyId"]);
         Assert.IsType<CreatedAtActionResult>(response.Result);
     }
 
     [Fact]
     public async Task PersonsController_Update_DelegatesToStandardCrudEndpointWithoutPersonNo()
     {
-        var personId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var personId = "Person_55555555555555555555555555555555";
         var standardCrudService = new RecordingStandardCrudService([], MutationDetail(personId));
         var controller = BuildController(standardCrudService);
 
@@ -152,8 +178,8 @@ public class PersonListContractTests
         {
             PersonNo = "SHOULD-NOT-BE-SENT",
             Name = "标准更新",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             EmploymentStatus = EmploymentStatus.FullTime,
             IsEnabled = true
         });
@@ -217,7 +243,7 @@ public class PersonListContractTests
         var standardCrudService = new RecordingStandardCrudService([]);
         var controller = BuildController(standardCrudService);
 
-        var response = await controller.Update(Guid.Parse("55555555-5555-5555-5555-555555555555"), new PersonDto
+        var response = await controller.Update("Person_55555555555555555555555555555555", new PersonDto
         {
             PersonNo = "SHOULD-NOT-BE-SENT",
             Name = "缺失详情",
@@ -234,7 +260,7 @@ public class PersonListContractTests
     public async Task PersonsController_Create_WithDuplicatePersonNo_UsesRealStandardCrudUniqueConstraint()
     {
         var controller = BuildControllerWithRealStandardCrudRows(
-            StandardCrudPersonRow(Guid.Parse("66666666-6666-6666-6666-666666666666"), "P100", "已存在人员"));
+            StandardCrudPersonRow("Person_66666666666666666666666666666666", "P100", "已存在人员"));
 
         var response = await controller.Create(new PersonDto
         {
@@ -252,10 +278,10 @@ public class PersonListContractTests
     [Fact]
     public async Task PersonsController_Update_WhenExistingPersonNoAlreadyConflicts_UsesRealStandardCrudUniqueConstraint()
     {
-        var personId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var personId = "Person_77777777777777777777777777777777";
         var controller = BuildControllerWithRealStandardCrudRows(
             StandardCrudPersonRow(personId, "P100", "待更新人员"),
-            StandardCrudPersonRow(Guid.Parse("88888888-8888-8888-8888-888888888888"), "p100", "冲突人员"));
+            StandardCrudPersonRow("Person_88888888888888888888888888888888", "p100", "冲突人员"));
 
         var response = await controller.Update(personId, new PersonDto
         {
@@ -362,10 +388,10 @@ public class PersonListContractTests
     [Fact]
     public async Task PersonCrudDeleteGuard_WhenPersonHasUserLink_ReturnsConflict()
     {
-        var personId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var personId = "Person_11111111111111111111111111111111";
         var guard = new PersonCrudDeleteGuard(new InMemoryPersonUserLinkRepositoryWithLink(personId));
 
-        var error = await guard.CanDeleteAsync(PersonCrudDescriptorFactory.Create(), personId.ToString("D"));
+        var error = await guard.CanDeleteAsync(PersonCrudDescriptorFactory.Create(), personId);
 
         Assert.NotNull(error);
         Assert.Equal("Organization.Person.DeleteBlockedByUserLink", error!.Code);
@@ -379,8 +405,8 @@ public class PersonListContractTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             EmploymentStatus = EmploymentStatus.FullTime,
             IsEnabled = true
         });
@@ -411,7 +437,8 @@ public class PersonListContractTests
                 new InMemoryCompanyRepository(),
                 new InMemoryDepartmentRepository(),
                 new FakeIdentityUserDirectory(),
-                new FakeAuthorizationSummaryReader()
+                new FakeAuthorizationSummaryReader(),
+                new PlatformObjectIdGenerator()
             })!;
 
     private static PersonsController BuildController(RecordingStandardCrudService standardCrudService) =>
@@ -420,15 +447,15 @@ public class PersonListContractTests
             new FakeIdentityUserDirectory(),
             new StandardCrudEndpoint(standardCrudService));
 
-    private static StandardCrudDetail MutationDetail(Guid? id = null) => new()
+    private static StandardCrudDetail MutationDetail(string? id = null) => new()
     {
         Fields = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["EID"] = (id ?? Guid.Parse("55555555-5555-5555-5555-555555555555")).ToString("D"),
+            ["EID"] = id ?? "Person_55555555555555555555555555555555",
             ["PersonNo"] = "P100",
             ["ENAME"] = "标准人员",
-            ["CompanyId"] = CompanyId.ToString("D"),
-            ["DepartmentId"] = DepartmentId.ToString("D"),
+            ["CompanyId"] = CompanyId,
+            ["DepartmentId"] = DepartmentId,
             ["EmploymentStatus"] = "FullTime",
             ["IsEnabled"] = true,
             ["CreatedAt"] = DateTime.UtcNow
@@ -452,9 +479,9 @@ public class PersonListContractTests
             new StandardCrudEndpoint(standardCrudService));
     }
 
-    private static Dictionary<string, object?> StandardCrudPersonRow(Guid id, string personNo, string name) => new(StringComparer.Ordinal)
+    private static Dictionary<string, object?> StandardCrudPersonRow(string id, string personNo, string name) => new(StringComparer.Ordinal)
     {
-        ["EID"] = id.ToString("D"),
+        ["EID"] = id,
         ["PersonNo"] = personNo,
         ["ENAME"] = name,
         ["CompanyId"] = null,
@@ -607,7 +634,7 @@ public class PersonListContractTests
             CancellationToken cancellationToken = default)
         {
             var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
-            row[descriptor.IdField] = Guid.NewGuid().ToString("D");
+            row[descriptor.IdField] = $"{descriptor.ModelName}_{Guid.NewGuid():N}";
             row["CreatedAt"] = DateTime.UtcNow;
             _rows.Add(row);
             return Task.FromResult(Project(row, descriptor.FieldSet.DetailFields));
@@ -682,13 +709,13 @@ public class PersonListContractTests
     {
         private readonly List<Person> _persons = [];
 
-        public Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
+        public Task<Person?> GetByIdAsync(string personId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_persons.FirstOrDefault(person => person.Id == personId) is { } person ? Clone(person) : null);
 
         public Task<IReadOnlyList<Person>> GetListAsync(
             string? keyword,
-            Guid? companyId,
-            Guid? departmentId,
+            string? companyId,
+            string? departmentId,
             EmploymentStatus? employmentStatus,
             CancellationToken cancellationToken = default)
         {
@@ -701,14 +728,14 @@ public class PersonListContractTests
                     person.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
             }
 
-            if (companyId.HasValue)
+            if (!string.IsNullOrWhiteSpace(companyId))
             {
-                query = query.Where(person => person.CompanyId == companyId.Value);
+                query = query.Where(person => person.CompanyId == companyId);
             }
 
-            if (departmentId.HasValue)
+            if (!string.IsNullOrWhiteSpace(departmentId))
             {
-                query = query.Where(person => person.DepartmentId == departmentId.Value);
+                query = query.Where(person => person.DepartmentId == departmentId);
             }
 
             if (employmentStatus.HasValue)
@@ -720,9 +747,9 @@ public class PersonListContractTests
         }
 
         public Task<bool> ExistsPersonNoAsync(
-            Guid? companyId,
+            string? companyId,
             string personNo,
-            Guid? excludedPersonId = null,
+            string? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(_persons.Any(person =>
                 person.CompanyId == companyId &&
@@ -765,12 +792,12 @@ public class PersonListContractTests
     {
         private readonly List<PersonUserLink> _links = [];
 
-        public Task<PersonUserLink?> GetByPersonIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
+        public Task<PersonUserLink?> GetByPersonIdAsync(string personId, CancellationToken cancellationToken = default) =>
             Task.FromResult<PersonUserLink?>(null);
 
         public Task<bool> ExistsByUserIdAsync(
             string userId,
-            Guid? excludedPersonId = null,
+            string? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 
@@ -783,14 +810,14 @@ public class PersonListContractTests
 
     private sealed class InMemoryPersonUserLinkRepositoryWithLink : IPersonUserLinkRepository
     {
-        private readonly Guid _personId;
+        private readonly string _personId;
 
-        public InMemoryPersonUserLinkRepositoryWithLink(Guid personId)
+        public InMemoryPersonUserLinkRepositoryWithLink(string personId)
         {
             _personId = personId;
         }
 
-        public Task<PersonUserLink?> GetByPersonIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
+        public Task<PersonUserLink?> GetByPersonIdAsync(string personId, CancellationToken cancellationToken = default) =>
             Task.FromResult<PersonUserLink?>(personId == _personId
                 ? new PersonUserLink
                 {
@@ -803,7 +830,7 @@ public class PersonListContractTests
 
         public Task<bool> ExistsByUserIdAsync(
             string userId,
-            Guid? excludedPersonId = null,
+            string? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 
@@ -828,7 +855,7 @@ public class PersonListContractTests
         public Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.Select(Clone).ToList());
 
-        public Task<Company?> GetByIdAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+        public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.FirstOrDefault(company => company.Id == companyId) is { } company ? Clone(company) : null);
 
         public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
@@ -878,17 +905,17 @@ public class PersonListContractTests
             }
         ];
 
-        public Task<List<Department>> GetByCompanyIdAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+        public Task<List<Department>> GetByCompanyIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.Where(department => department.CompanyId == companyId).Select(Clone).ToList());
 
-        public Task<Department?> GetByIdAsync(Guid departmentId, CancellationToken cancellationToken = default) =>
+        public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.FirstOrDefault(department => department.Id == departmentId) is { } department ? Clone(department) : null);
 
         public Task<bool> ExistsSiblingCodeAsync(
-            Guid companyId,
-            Guid? parentDepartmentId,
+            string companyId,
+            string? parentDepartmentId,
             string code,
-            Guid? excludedDepartmentId = null,
+            string? excludedDepartmentId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 

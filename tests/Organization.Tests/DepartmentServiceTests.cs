@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
@@ -8,7 +9,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public class DepartmentServiceTests
 {
-    private static readonly Guid CompanyId = Guid.Parse("1A2F373C-3D57-43D1-87C7-82B24DE4C2E0");
+    private const string CompanyId = "Company_11111111111111111111111111111111";
 
     [Fact]
     public async Task CreateDepartment_WithUniqueSiblingCode_CreatesDepartment()
@@ -17,13 +18,13 @@ public class DepartmentServiceTests
 
         var result = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId.ToString("D"),
+            CompanyId = CompanyId,
             Code = "ROOT",
             Name = "根部门",
             SortOrder = "1"
         });
 
-        Assert.Equal(CompanyId.ToString("D"), result.CompanyId);
+        Assert.Equal(CompanyId, result.CompanyId);
         Assert.Equal("ROOT", result.Code);
         Assert.Equal("根部门", result.Name);
         Assert.Null(result.ParentDepartmentId);
@@ -38,7 +39,7 @@ public class DepartmentServiceTests
 
         await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId.ToString("D"),
+            CompanyId = CompanyId,
             Code = "OPS",
             Name = "运营部"
         });
@@ -46,7 +47,7 @@ public class DepartmentServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CreateAsync(new DepartmentDto
             {
-                CompanyId = CompanyId.ToString("D"),
+                CompanyId = CompanyId,
                 Code = "OPS",
                 Name = "重复运营部"
             }));
@@ -58,15 +59,15 @@ public class DepartmentServiceTests
         var service = BuildService();
         var root = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId.ToString("D"),
+            CompanyId = CompanyId,
             Code = "ROOT",
             Name = "根部门"
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateAsync(Guid.Parse(root.Id), new DepartmentDto
+            service.UpdateAsync(root.Id, new DepartmentDto
             {
-                CompanyId = CompanyId.ToString("D"),
+                CompanyId = CompanyId,
                 ParentDepartmentId = root.Id,
                 Name = "根部门"
             }));
@@ -78,22 +79,22 @@ public class DepartmentServiceTests
         var service = BuildService();
         var root = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId.ToString("D"),
+            CompanyId = CompanyId,
             Code = "ROOT",
             Name = "根部门"
         });
 
         var child = await service.CreateAsync(new DepartmentDto
         {
-            CompanyId = CompanyId.ToString("D"),
+            CompanyId = CompanyId,
             ParentDepartmentId = root.Id,
             Code = "ENG",
             Name = "工程部"
         });
 
-        var updated = await service.UpdateAsync(Guid.Parse(child.Id), new DepartmentDto
+        var updated = await service.UpdateAsync(child.Id, new DepartmentDto
         {
-            CompanyId = CompanyId.ToString("D"),
+            CompanyId = CompanyId,
             ParentDepartmentId = root.Id,
             Name = "平台工程部",
             IsEnabled = false,
@@ -109,23 +110,24 @@ public class DepartmentServiceTests
         Assert.NotNull(updated.UpdatedAt);
     }
 
-    private static IDepartmentService BuildService() => new DepartmentService(new InMemoryDepartmentRepository());
+    private static IDepartmentService BuildService() =>
+        new DepartmentService(new InMemoryDepartmentRepository(), new PlatformObjectIdGenerator());
 
     private sealed class InMemoryDepartmentRepository : IDepartmentRepository
     {
         private readonly List<Department> _departments = [];
 
-        public Task<List<Department>> GetByCompanyIdAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+        public Task<List<Department>> GetByCompanyIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.Where(department => department.CompanyId == companyId).Select(Clone).ToList());
 
-        public Task<Department?> GetByIdAsync(Guid departmentId, CancellationToken cancellationToken = default) =>
+        public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.FirstOrDefault(department => department.Id == departmentId) is { } department ? Clone(department) : null);
 
         public Task<bool> ExistsSiblingCodeAsync(
-            Guid companyId,
-            Guid? parentDepartmentId,
+            string companyId,
+            string? parentDepartmentId,
             string code,
-            Guid? excludedDepartmentId = null,
+            string? excludedDepartmentId = null,
             CancellationToken cancellationToken = default)
         {
             var exists = _departments.Any(department =>

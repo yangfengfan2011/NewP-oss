@@ -14,19 +14,19 @@ public sealed class EfPersonRepository : IPersonRepository
         _dbContext = dbContext;
     }
 
-    public async Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default)
+    public async Task<Person?> GetByIdAsync(string personId, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(person => EF.Property<string>(person, "EID") == personId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(person => EF.Property<string>(person, "EID") == personId, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
 
     public async Task<IReadOnlyList<Person>> GetListAsync(
         string? keyword,
-        Guid? companyId,
-        Guid? departmentId,
+        string? companyId,
+        string? departmentId,
         EmploymentStatus? employmentStatus,
         CancellationToken cancellationToken = default)
     {
@@ -41,14 +41,14 @@ public sealed class EfPersonRepository : IPersonRepository
                 ContainsIgnoreCase(GetString(entity, "ENAME"), keyword));
         }
 
-        if (companyId.HasValue)
+        if (!string.IsNullOrWhiteSpace(companyId))
         {
-            query = query.Where(entity => GetNullableGuid(entity, "CompanyId") == companyId.Value);
+            query = query.Where(entity => string.Equals(GetString(entity, "CompanyId"), companyId, StringComparison.Ordinal));
         }
 
-        if (departmentId.HasValue)
+        if (!string.IsNullOrWhiteSpace(departmentId))
         {
-            query = query.Where(entity => GetNullableGuid(entity, "DepartmentId") == departmentId.Value);
+            query = query.Where(entity => string.Equals(GetString(entity, "DepartmentId"), departmentId, StringComparison.Ordinal));
         }
 
         if (employmentStatus.HasValue)
@@ -60,15 +60,15 @@ public sealed class EfPersonRepository : IPersonRepository
     }
 
     public async Task<bool> ExistsPersonNoAsync(
-        Guid? companyId,
+        string? companyId,
         string personNo,
-        Guid? excludedPersonId = null,
+        string? excludedPersonId = null,
         CancellationToken cancellationToken = default)
     {
         var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
         return entities.Any(entity =>
-            GetNullableGuid(entity, "CompanyId") == companyId &&
-            GetGuid(entity, "EID") != excludedPersonId &&
+            string.Equals(GetString(entity, "CompanyId"), companyId, StringComparison.Ordinal) &&
+            !string.Equals(GetString(entity, "EID"), excludedPersonId, StringComparison.Ordinal) &&
             string.Equals(GetString(entity, "PersonNo"), personNo, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -81,7 +81,7 @@ public sealed class EfPersonRepository : IPersonRepository
     public async Task UpdateAsync(Person person, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == person.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == person.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -96,12 +96,12 @@ public sealed class EfPersonRepository : IPersonRepository
 
     private static Person Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "EID"),
+        Id = GetString(entity, "EID") ?? string.Empty,
         PersonNo = GetString(entity, "PersonNo") ?? string.Empty,
         Name = GetString(entity, "ENAME") ?? string.Empty,
-        CompanyId = GetNullableGuid(entity, "CompanyId"),
-        DepartmentId = GetNullableGuid(entity, "DepartmentId"),
-        PositionId = GetNullableGuid(entity, "PositionId"),
+        CompanyId = GetString(entity, "CompanyId"),
+        DepartmentId = GetString(entity, "DepartmentId"),
+        PositionId = GetString(entity, "PositionId"),
         EmploymentStatus = GetEmploymentStatus(entity, "EmploymentStatus"),
         IsEnabled = GetBool(entity, "IsEnabled"),
         CreatedAt = GetDateTime(entity, "CreatedAt"),
@@ -112,7 +112,7 @@ public sealed class EfPersonRepository : IPersonRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["EID"] = person.Id.ToString()
+            ["EID"] = person.Id
         };
 
         CopyToEntity(person, entity);
@@ -122,12 +122,12 @@ public sealed class EfPersonRepository : IPersonRepository
     private static void CopyToEntity(Person person, IDictionary<string, object?> entity)
     {
         // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
-        entity["EID"] = person.Id.ToString();
+        entity["EID"] = person.Id;
         entity["PersonNo"] = person.PersonNo;
         entity["ENAME"] = person.Name;
-        entity["CompanyId"] = person.CompanyId?.ToString();
-        entity["DepartmentId"] = person.DepartmentId?.ToString();
-        entity["PositionId"] = person.PositionId?.ToString();
+        entity["CompanyId"] = person.CompanyId;
+        entity["DepartmentId"] = person.DepartmentId;
+        entity["PositionId"] = person.PositionId;
         entity["EmploymentStatus"] = person.EmploymentStatus.ToString();
         entity["IsEnabled"] = person.IsEnabled;
         entity["CreatedAt"] = person.CreatedAt;
@@ -143,12 +143,6 @@ public sealed class EfPersonRepository : IPersonRepository
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;
-
-    private static Guid GetGuid(IReadOnlyDictionary<string, object?> entity, string key) =>
-        Guid.TryParse(GetString(entity, key), out var value) ? value : Guid.Empty;
-
-    private static Guid? GetNullableGuid(IReadOnlyDictionary<string, object?> entity, string key) =>
-        Guid.TryParse(GetString(entity, key), out var value) ? value : null;
 
     private static EmploymentStatus GetEmploymentStatus(IReadOnlyDictionary<string, object?> entity, string key) =>
         Enum.TryParse<EmploymentStatus>(GetString(entity, key), true, out var value)

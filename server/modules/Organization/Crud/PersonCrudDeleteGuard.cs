@@ -24,18 +24,18 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard
         string id,
         CancellationToken cancellationToken = default)
     {
-        if (!Guid.TryParse(id, out var personId))
+        if (string.IsNullOrWhiteSpace(id))
         {
             return new StandardCrudError
             {
                 StatusCode = 400,
                 Code = "Organization.Person.InvalidId",
-                Message = "人员标识必须是有效 GUID。",
+                Message = "人员标识不能为空。",
                 ReasonKey = "organization.person.invalidId"
             };
         }
 
-        var link = await _userLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
+        var link = await _userLinkRepository.GetByPersonIdAsync(id, cancellationToken);
         return link is null
             ? null
             : new StandardCrudError

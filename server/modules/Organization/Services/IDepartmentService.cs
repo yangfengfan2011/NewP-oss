@@ -3,8 +3,8 @@ namespace ICP.Platform.Modules.Organization.Services;
 
 public interface IDepartmentService
 {
-    Task<List<DepartmentDto>> GetByCompanyIdAsync(Guid companyId, CancellationToken cancellationToken = default);
-    Task<DepartmentDto?> GetByIdAsync(Guid departmentId, CancellationToken cancellationToken = default);
+    Task<List<DepartmentDto>> GetByCompanyIdAsync(string companyId, CancellationToken cancellationToken = default);
+    Task<DepartmentDto?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default);
     Task<DepartmentDto> CreateAsync(DepartmentDto dto, CancellationToken cancellationToken = default);
-    Task<DepartmentDto> UpdateAsync(Guid departmentId, DepartmentDto dto, CancellationToken cancellationToken = default);
+    Task<DepartmentDto> UpdateAsync(string departmentId, DepartmentDto dto, CancellationToken cancellationToken = default);
 }

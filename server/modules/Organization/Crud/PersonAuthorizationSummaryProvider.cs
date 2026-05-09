@@ -30,7 +30,7 @@ public sealed class PersonAuthorizationSummaryProvider : IStandardCrudSummaryPro
         IReadOnlyDictionary<string, object?> detail,
         CancellationToken cancellationToken = default)
     {
-        var personId = Guid.Parse(detail[descriptor.IdField]!.ToString()!);
+        var personId = detail[descriptor.IdField]?.ToString() ?? string.Empty;
         var link = await _userLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
         if (link is null)
         {

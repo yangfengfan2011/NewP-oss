@@ -2,9 +2,9 @@ namespace ICP.Platform.Modules.Organization.Models;
 
 public sealed class Department
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid CompanyId { get; set; }
-    public Guid? ParentDepartmentId { get; set; }
+    public string Id { get; set; } = string.Empty;
+    public string CompanyId { get; set; } = string.Empty;
+    public string? ParentDepartmentId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;

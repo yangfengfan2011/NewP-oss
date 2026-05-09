@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
@@ -8,10 +9,14 @@ namespace ICP.Platform.Modules.Organization.Services;
 public sealed class CompanyService : ICompanyService
 {
     private readonly ICompanyRepository _companyRepository;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
-    public CompanyService(ICompanyRepository companyRepository)
+    public CompanyService(
+        ICompanyRepository companyRepository,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _companyRepository = companyRepository;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     public async Task<List<CompanyDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -20,7 +25,7 @@ public sealed class CompanyService : ICompanyService
         return companies.Select(MapToDto).ToList();
     }
 
-    public async Task<CompanyDto?> GetByIdAsync(Guid companyId, CancellationToken cancellationToken = default)
+    public async Task<CompanyDto?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default)
     {
         var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
         return company is null ? null : MapToDto(company);
@@ -36,6 +41,7 @@ public sealed class CompanyService : ICompanyService
 
         var company = new Company
         {
+            Id = _objectIdGenerator.NewId(nameof(Company)),
             Code = dto.Code,
             Name = dto.DisplayName,
             SortOrder = ParseSortOrder(dto.SortOrder)
@@ -45,7 +51,7 @@ public sealed class CompanyService : ICompanyService
         return MapToDto(company);
     }
 
-    public async Task<CompanyDto> UpdateAsync(Guid companyId, CompanyDto dto, CancellationToken cancellationToken = default)
+    public async Task<CompanyDto> UpdateAsync(string companyId, CompanyDto dto, CancellationToken cancellationToken = default)
     {
         var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
         if (company is null)
@@ -65,7 +71,7 @@ public sealed class CompanyService : ICompanyService
 
     private static CompanyDto MapToDto(Company company) => new()
     {
-        Id = company.Id.ToString("D"),
+        Id = company.Id,
         Code = company.Code,
         DisplayName = company.Name,
         IsEnabled = company.IsEnabled,

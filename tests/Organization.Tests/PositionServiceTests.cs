@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
@@ -8,19 +9,19 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public class PositionServiceTests
 {
-    private static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid DepartmentId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-    private static readonly Guid DepartmentId2 = Guid.Parse("22222222-2222-2222-2222-333333333333");
+    private const string CompanyId = "Company_11111111111111111111111111111111";
+    private const string DepartmentId = "Department_22222222222222222222222222222222";
+    private const string DepartmentId2 = "Department_33333333333333333333333333333333";
 
     [Fact]
     public async Task CreatePosition_WhenEmploymentStatusOmitted_DefaultsToFullTime()
     {
-        var service = new PositionService(new InMemoryPositionRepository());
+        var service = BuildService();
 
         var created = await service.CreateAsync(new PositionDto
         {
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             Code = "DEV",
             Name = "开发工程师",
             SortOrder = "1"
@@ -32,12 +33,12 @@ public class PositionServiceTests
     [Fact]
     public async Task CreatePosition_WithExplicitEmploymentStatus_UsesRequestedStatus()
     {
-        var service = new PositionService(new InMemoryPositionRepository());
+        var service = BuildService();
 
         var created = await service.CreateAsync(new PositionDto
         {
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             Code = "CONSULTANT",
             Name = "顾问",
             EmploymentStatus = EmploymentStatus.Contractor,
@@ -50,20 +51,20 @@ public class PositionServiceTests
     [Fact]
     public async Task UpdatePosition_ValidRequest_ReturnsUpdatedAt()
     {
-        var service = new PositionService(new InMemoryPositionRepository());
+        var service = BuildService();
         var created = await service.CreateAsync(new PositionDto
         {
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             Code = "DEV",
             Name = "开发工程师",
             EmploymentStatus = EmploymentStatus.FullTime,
             SortOrder = "1"
         });
 
-        var updated = await service.UpdateAsync(Guid.Parse(created.Id), new PositionDto
+        var updated = await service.UpdateAsync(created.Id, new PositionDto
         {
-            DepartmentId = DepartmentId2.ToString("D"),
+            DepartmentId = DepartmentId2,
             Name = "高级开发工程师",
             EmploymentStatus = EmploymentStatus.Contractor,
             IsEnabled = false,
@@ -71,19 +72,22 @@ public class PositionServiceTests
         });
 
         Assert.Equal("高级开发工程师", updated.Name);
-        Assert.Equal(DepartmentId2.ToString("D"), updated.DepartmentId);
+        Assert.Equal(DepartmentId2, updated.DepartmentId);
         Assert.False(updated.IsEnabled);
         Assert.NotNull(updated.UpdatedAt);
     }
+
+    private static PositionService BuildService() =>
+        new(new InMemoryPositionRepository(), new PlatformObjectIdGenerator());
 
     private sealed class InMemoryPositionRepository : IPositionRepository
     {
         private readonly List<Position> _positions = [];
 
-        public Task<List<Position>> GetByDepartmentIdAsync(Guid departmentId, CancellationToken cancellationToken = default) =>
+        public Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_positions.Where(position => position.DepartmentId == departmentId).Select(Clone).ToList());
 
-        public Task<Position?> GetByIdAsync(Guid positionId, CancellationToken cancellationToken = default) =>
+        public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_positions.FirstOrDefault(position => position.Id == positionId) is { } position ? Clone(position) : null);
 
         public Task CreateAsync(Position position, CancellationToken cancellationToken = default)

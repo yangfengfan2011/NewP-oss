@@ -926,7 +926,7 @@ git commit -m "功能：Authorization接入平台对象ID"
 - Modify: `server/modules/Organization/Controllers/*.cs`
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 
-- [ ] **Step 1: 写 Organization ID 协议失败测试**
+- [x] **Step 1: 写 Organization ID 协议失败测试**
 
 Append to `tests/Organization.Tests/CompanyServiceTests.cs`:
 
@@ -991,7 +991,7 @@ private sealed class FixedObjectIdGenerator : IPlatformObjectIdGenerator
 }
 ```
 
-- [ ] **Step 2: 运行 Organization 定向测试确认失败**
+- [x] **Step 2: 运行 Organization 定向测试确认失败**
 
 Run:
 
@@ -1006,7 +1006,7 @@ FAIL
 CS1729: 'CompanyService' does not contain a constructor that takes 2 arguments
 ```
 
-- [ ] **Step 3: 将 Organization 领域模型主键和引用字段改为 string**
+- [x] **Step 3: 将 Organization 领域模型主键和引用字段改为 string**
 
 Apply these model shapes:
 
@@ -1085,7 +1085,7 @@ public sealed class Person
 }
 ```
 
-- [ ] **Step 4: 改 DTO 主键为 string**
+- [x] **Step 4: 改 DTO 主键为 string**
 
 Modify `server/modules/Organization/DTOs/PersonListItemDto.cs`:
 
@@ -1109,7 +1109,7 @@ public required string Id { get; init; }
 public string? ParentDepartmentId { get; init; }
 ```
 
-- [ ] **Step 5: 改 Organization service/repository 接口参数为 string**
+- [x] **Step 5: 改 Organization service/repository 接口参数为 string**
 
 Examples:
 
@@ -1208,7 +1208,7 @@ Task<PersonUserLinkDto> LinkUserAsync(string personId, LinkPersonUserRequest req
 
 Keep `PersonUserLink` internals unchanged in this task; Task 5 owns `PersonUserLink` model, repository, service mapping, summary provider, and delete guard changes.
 
-- [ ] **Step 6: 注入生成器并生成 Organization 对象 ID**
+- [x] **Step 6: 注入生成器并生成 Organization 对象 ID**
 
 For each service constructor, add `IPlatformObjectIdGenerator objectIdGenerator`.
 
@@ -1247,7 +1247,7 @@ _objectIdGenerator.NewId(nameof(Position))
 _objectIdGenerator.NewId(nameof(Person))
 ```
 
-- [ ] **Step 7: 改 EF 仓储为字符串读写**
+- [x] **Step 7: 改 EF 仓储为字符串读写**
 
 Example change in `EfPersonRepository`:
 
@@ -1282,7 +1282,7 @@ entity["PositionId"] = person.PositionId;
 
 Remove helper methods that parse platform object IDs as `Guid` unless they are still needed for non-object values.
 
-- [ ] **Step 8: 改 Controllers 路由约束**
+- [x] **Step 8: 改 Controllers 路由约束**
 
 Replace route attributes:
 
@@ -1334,7 +1334,7 @@ DepartmentId = ReadStringOrNull(detail.Fields, "DepartmentId"),
 PositionId = ReadStringOrNull(detail.Fields, "PositionId"),
 ```
 
-- [ ] **Step 9: 更新 Organization 测试固定 ID**
+- [x] **Step 9: 更新 Organization 测试固定 ID**
 
 Use stable protocol IDs:
 
@@ -1347,7 +1347,7 @@ private const string PersonId = "Person_44444444444444444444444444444444";
 
 Replace `Guid.Parse(created.Id)` in Organization tests with `created.Id`.
 
-- [ ] **Step 10: 运行 Organization 定向测试**
+- [x] **Step 10: 运行 Organization 定向测试**
 
 Run:
 
@@ -1361,7 +1361,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```powershell
 git add .\server\modules\Organization .\tests\Organization.Tests

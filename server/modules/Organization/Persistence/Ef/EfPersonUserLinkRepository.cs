@@ -14,30 +14,30 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
         _dbContext = dbContext;
     }
 
-    public async Task<PersonUserLink?> GetByPersonIdAsync(Guid personId, CancellationToken cancellationToken = default)
+    public async Task<PersonUserLink?> GetByPersonIdAsync(string personId, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(link => EF.Property<string>(link, "PersonId") == personId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(link => EF.Property<string>(link, "PersonId") == personId, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
 
     public async Task<bool> ExistsByUserIdAsync(
         string userId,
-        Guid? excludedPersonId = null,
+        string? excludedPersonId = null,
         CancellationToken cancellationToken = default)
     {
         var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);
         return entities.Any(entity =>
             string.Equals(GetString(entity, "UserId"), userId, StringComparison.OrdinalIgnoreCase) &&
-            GetGuid(entity, "PersonId") != excludedPersonId);
+            !string.Equals(GetString(entity, "PersonId"), excludedPersonId, StringComparison.Ordinal));
     }
 
     public async Task UpsertAsync(PersonUserLink link, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "PersonId") == link.PersonId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "PersonId") == link.PersonId, cancellationToken);
 
         if (entity is null)
         {
@@ -55,7 +55,7 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
 
     private static PersonUserLink Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        PersonId = GetGuid(entity, "PersonId"),
+        PersonId = GetString(entity, "PersonId") ?? string.Empty,
         UserId = GetString(entity, "UserId") ?? string.Empty,
         LinkedAt = GetDateTime(entity, "LinkedAt"),
         LinkedBy = GetString(entity, "LinkedBy") ?? "system"
@@ -66,8 +66,8 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             // PersonUserLink 的业务唯一键仍是 PersonId；实体主键 EID 用同一稳定值承接。
-            ["EID"] = link.PersonId.ToString(),
-            ["PersonId"] = link.PersonId.ToString()
+            ["EID"] = link.PersonId,
+            ["PersonId"] = link.PersonId
         };
 
         CopyToEntity(link, entity);
@@ -76,8 +76,8 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
 
     private static void CopyToEntity(PersonUserLink link, IDictionary<string, object?> entity)
     {
-        entity["EID"] = link.PersonId.ToString();
-        entity["PersonId"] = link.PersonId.ToString();
+        entity["EID"] = link.PersonId;
+        entity["PersonId"] = link.PersonId;
         entity["UserId"] = link.UserId;
         entity["LinkedAt"] = link.LinkedAt;
         entity["LinkedBy"] = link.LinkedBy;
@@ -85,9 +85,6 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
 
     private static string? GetString(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) ? value as string : null;
-
-    private static Guid GetGuid(IReadOnlyDictionary<string, object?> entity, string key) =>
-        Guid.TryParse(GetString(entity, key), out var value) ? value : Guid.Empty;
 
     private static DateTime GetDateTime(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : default;

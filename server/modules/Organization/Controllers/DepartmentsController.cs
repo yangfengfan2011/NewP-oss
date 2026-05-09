@@ -17,15 +17,15 @@ public sealed class DepartmentsController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<List<DepartmentDto>>> GetByCompany(
-        [FromQuery] Guid companyId,
+        [FromQuery] string companyId,
         CancellationToken cancellationToken = default)
     {
         var departments = await _departmentService.GetByCompanyIdAsync(companyId, cancellationToken);
         return Ok(departments);
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<DepartmentDto>> Get(Guid id, CancellationToken cancellationToken = default)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<DepartmentDto>> Get(string id, CancellationToken cancellationToken = default)
     {
         var department = await _departmentService.GetByIdAsync(id, cancellationToken);
         return department is null ? NotFound() : Ok(department);
@@ -47,9 +47,9 @@ public sealed class DepartmentsController : ControllerBase
         }
     }
 
-    [HttpPut("{id:guid}")]
+    [HttpPut("{id}")]
     public async Task<ActionResult<DepartmentDto>> Update(
-        Guid id,
+        string id,
         [FromBody] DepartmentDto dto,
         CancellationToken cancellationToken = default)
     {

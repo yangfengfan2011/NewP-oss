@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
@@ -9,10 +10,10 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public class PersonServiceTests
 {
-    private static readonly Guid CompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid CompanyId2 = Guid.Parse("11111111-1111-1111-1111-222222222222");
-    private static readonly Guid DepartmentId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-    private static readonly Guid PositionId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private const string CompanyId = "Company_11111111111111111111111111111111";
+    private const string CompanyId2 = "Company_22222222222222222222222222222222";
+    private const string DepartmentId = "Department_33333333333333333333333333333333";
+    private const string PositionId = "Position_44444444444444444444444444444444";
 
     [Fact]
     public async Task CreatePerson_WithRequiredFields_CreatesPerson()
@@ -75,15 +76,15 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        var updated = await service.UpdateAsync(Guid.Parse(created.Id), new PersonDto
+        var updated = await service.UpdateAsync(created.Id, new PersonDto
         {
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
-            PositionId = PositionId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
+            PositionId = PositionId,
             Name = "张三（更新）",
             EmploymentStatus = EmploymentStatus.Contractor,
             IsEnabled = false
@@ -93,7 +94,7 @@ public class PersonServiceTests
         Assert.Equal("P001", updated.PersonNo);
         Assert.Equal("张三（更新）", updated.Name);
         Assert.Equal("张三（更新）", updated.DisplayName);
-        Assert.Equal(PositionId.ToString("D"), updated.PositionId);
+        Assert.Equal(PositionId, updated.PositionId);
         Assert.Equal(EmploymentStatus.Contractor, updated.EmploymentStatus);
         Assert.False(updated.IsEnabled);
         Assert.Equal("P001", updated.PersonNo);
@@ -108,8 +109,8 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -117,8 +118,8 @@ public class PersonServiceTests
             {
                 PersonNo = "P001",
                 Name = "李四",
-                CompanyId = CompanyId.ToString("D"),
-                DepartmentId = DepartmentId.ToString("D")
+                CompanyId = CompanyId,
+                DepartmentId = DepartmentId
             }));
     }
 
@@ -130,22 +131,22 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
         var personB = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P001",
             Name = "李四",
-            CompanyId = CompanyId2.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId2,
+            DepartmentId = DepartmentId
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateAsync(Guid.Parse(personB.Id), new PersonDto
+            service.UpdateAsync(personB.Id, new PersonDto
             {
-                CompanyId = CompanyId.ToString("D"),
-                DepartmentId = DepartmentId.ToString("D"),
+                CompanyId = CompanyId,
+                DepartmentId = DepartmentId,
                 PositionId = personB.PositionId,
                 Name = "李四（更新）",
                 EmploymentStatus = personB.EmploymentStatus,
@@ -161,25 +162,25 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
         var personB = await service.CreateAsync(new PersonDto
         {
             PersonNo = "P002",
             Name = "李四",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        await service.LinkUserAsync(Guid.Parse(personA.Id), new LinkPersonUserRequest
+        await service.LinkUserAsync(personA.Id, new LinkPersonUserRequest
         {
             UserId = "user-001",
             LinkedBy = "tester"
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.LinkUserAsync(Guid.Parse(personB.Id), new LinkPersonUserRequest
+            service.LinkUserAsync(personB.Id, new LinkPersonUserRequest
             {
                 UserId = "user-001",
                 LinkedBy = "tester"
@@ -200,11 +201,11 @@ public class PersonServiceTests
         {
             PersonNo = "P001",
             Name = "张三",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        var result = await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
+        var result = await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
         {
             UserId = "user-002",
             LinkedBy = "tester"
@@ -230,12 +231,12 @@ public class PersonServiceTests
         {
             PersonNo = "P004",
             Name = "赵六",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
+            service.LinkUserAsync(person.Id, new LinkPersonUserRequest
             {
                 UserId = "user-null"
             }));
@@ -267,11 +268,11 @@ public class PersonServiceTests
         {
             PersonNo = "P002",
             Name = "未绑定人员",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
         Assert.Equal("notConfigured", (string)detail.UserLinkSummary.Status);
@@ -288,20 +289,20 @@ public class PersonServiceTests
         {
             PersonNo = "P003",
             Name = "王五",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
+        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
         {
             UserId = "user-003",
             LinkedBy = "tester"
         });
 
-        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
-        Assert.Equal(Guid.Parse(person.Id), (Guid)detail.Id);
+        Assert.Equal(person.Id, (string)detail.Id);
         Assert.Equal("ready", (string)detail.UserLinkSummary.Status);
         Assert.NotNull(detail.UserLinkSummary.Data);
     }
@@ -318,17 +319,17 @@ public class PersonServiceTests
         {
             PersonNo = "P100",
             Name = "王五",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
+        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
         {
             UserId = "admin",
             LinkedBy = "tester"
         });
 
-        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
         Assert.Equal("ready", (string)detail.AuthorizationSummary.Status);
@@ -347,17 +348,17 @@ public class PersonServiceTests
         {
             PersonNo = "P101",
             Name = "赵七",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D")
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId
         });
 
-        await service.LinkUserAsync(Guid.Parse(person.Id), new LinkPersonUserRequest
+        await service.LinkUserAsync(person.Id, new LinkPersonUserRequest
         {
             UserId = "ops-user",
             LinkedBy = "tester"
         });
 
-        dynamic detail = await service.GetDetailAsync(Guid.Parse(person.Id));
+        dynamic detail = await service.GetDetailAsync(person.Id);
 
         Assert.NotNull(detail);
         Assert.Equal("dependencyUnavailable", (string)detail.AuthorizationSummary.Status);
@@ -372,12 +373,12 @@ public class PersonServiceTests
         {
             PersonNo = "P102",
             Name = "待停用人员",
-            CompanyId = CompanyId.ToString("D"),
-            DepartmentId = DepartmentId.ToString("D"),
+            CompanyId = CompanyId,
+            DepartmentId = DepartmentId,
             IsEnabled = true
         });
 
-        dynamic detail = await ((dynamic)service).DisableAsync(Guid.Parse(created.Id));
+        dynamic detail = await ((dynamic)service).DisableAsync(created.Id);
 
         Assert.False((bool)detail.IsEnabled);
     }
@@ -398,19 +399,20 @@ public class PersonServiceTests
             personRepository,
             personUserLinkRepository,
             identityUserDirectory,
-            authorizationSummaryReader);
+            authorizationSummaryReader,
+            new PlatformObjectIdGenerator());
 
     private sealed class InMemoryPersonRepository : IPersonRepository
     {
         private readonly List<Person> _persons = [];
 
-        public Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
+        public Task<Person?> GetByIdAsync(string personId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_persons.FirstOrDefault(person => person.Id == personId) is { } person ? Clone(person) : null);
 
         public Task<IReadOnlyList<Person>> GetListAsync(
             string? keyword,
-            Guid? companyId,
-            Guid? departmentId,
+            string? companyId,
+            string? departmentId,
             EmploymentStatus? employmentStatus,
             CancellationToken cancellationToken = default)
         {
@@ -423,14 +425,14 @@ public class PersonServiceTests
                     person.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
             }
 
-            if (companyId.HasValue)
+            if (!string.IsNullOrWhiteSpace(companyId))
             {
-                query = query.Where(person => person.CompanyId == companyId.Value);
+                query = query.Where(person => person.CompanyId == companyId);
             }
 
-            if (departmentId.HasValue)
+            if (!string.IsNullOrWhiteSpace(departmentId))
             {
-                query = query.Where(person => person.DepartmentId == departmentId.Value);
+                query = query.Where(person => person.DepartmentId == departmentId);
             }
 
             if (employmentStatus.HasValue)
@@ -442,9 +444,9 @@ public class PersonServiceTests
         }
 
         public Task<bool> ExistsPersonNoAsync(
-            Guid? companyId,
+            string? companyId,
             string personNo,
-            Guid? excludedPersonId = null,
+            string? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(_persons.Any(person =>
                 person.CompanyId == companyId &&
@@ -493,12 +495,12 @@ public class PersonServiceTests
             _operations = operations;
         }
 
-        public Task<PersonUserLink?> GetByPersonIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
+        public Task<PersonUserLink?> GetByPersonIdAsync(string personId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_links.FirstOrDefault(link => link.PersonId == personId) is { } link ? Clone(link) : null);
 
         public Task<bool> ExistsByUserIdAsync(
             string userId,
-            Guid? excludedPersonId = null,
+            string? excludedPersonId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(_links.Any(link =>
                 string.Equals(link.UserId, userId, StringComparison.OrdinalIgnoreCase) &&

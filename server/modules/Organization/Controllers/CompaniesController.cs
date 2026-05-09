@@ -22,8 +22,8 @@ public sealed class CompaniesController : ControllerBase
         return Ok(companies);
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<CompanyDto>> Get(Guid id, CancellationToken cancellationToken = default)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<CompanyDto>> Get(string id, CancellationToken cancellationToken = default)
     {
         var company = await _companyService.GetByIdAsync(id, cancellationToken);
         return company is null ? NotFound() : Ok(company);
@@ -45,9 +45,9 @@ public sealed class CompaniesController : ControllerBase
         }
     }
 
-    [HttpPut("{id:guid}")]
+    [HttpPut("{id}")]
     public async Task<ActionResult<CompanyDto>> Update(
-        Guid id,
+        string id,
         [FromBody] CompanyDto dto,
         CancellationToken cancellationToken = default)
     {

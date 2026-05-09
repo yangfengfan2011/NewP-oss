@@ -2,9 +2,9 @@ namespace ICP.Platform.Modules.Organization.Models;
 
 public sealed class Position
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid CompanyId { get; set; }
-    public Guid DepartmentId { get; set; }
+    public string Id { get; set; } = string.Empty;
+    public string CompanyId { get; set; } = string.Empty;
+    public string DepartmentId { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public EmploymentStatus EmploymentStatus { get; set; } = EmploymentStatus.FullTime;

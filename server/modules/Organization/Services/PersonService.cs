@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
@@ -13,13 +14,15 @@ public sealed class PersonService : IPersonService
     private readonly IDepartmentRepository? _departmentRepository;
     private readonly IIdentityUserDirectory _identityUserDirectory;
     private readonly IAuthorizationSummaryReader _authorizationSummaryReader;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
     public PersonService(
         IPersonRepository personRepository,
         IPersonUserLinkRepository personUserLinkRepository,
         IIdentityUserDirectory identityUserDirectory,
-        IAuthorizationSummaryReader authorizationSummaryReader)
-        : this(personRepository, personUserLinkRepository, null, null, identityUserDirectory, authorizationSummaryReader)
+        IAuthorizationSummaryReader authorizationSummaryReader,
+        IPlatformObjectIdGenerator objectIdGenerator)
+        : this(personRepository, personUserLinkRepository, null, null, identityUserDirectory, authorizationSummaryReader, objectIdGenerator)
     {
     }
 
@@ -29,7 +32,8 @@ public sealed class PersonService : IPersonService
         ICompanyRepository? companyRepository,
         IDepartmentRepository? departmentRepository,
         IIdentityUserDirectory identityUserDirectory,
-        IAuthorizationSummaryReader authorizationSummaryReader)
+        IAuthorizationSummaryReader authorizationSummaryReader,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _personRepository = personRepository;
         _personUserLinkRepository = personUserLinkRepository;
@@ -37,15 +41,16 @@ public sealed class PersonService : IPersonService
         _departmentRepository = departmentRepository;
         _identityUserDirectory = identityUserDirectory;
         _authorizationSummaryReader = authorizationSummaryReader;
+        _objectIdGenerator = objectIdGenerator;
     }
 
-    public async Task<PersonDto?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default)
+    public async Task<PersonDto?> GetByIdAsync(string personId, CancellationToken cancellationToken = default)
     {
         var person = await _personRepository.GetByIdAsync(personId, cancellationToken);
         return person is null ? null : MapToDto(person);
     }
 
-    public async Task<PersonDetailDto?> GetDetailAsync(Guid personId, CancellationToken cancellationToken = default)
+    public async Task<PersonDetailDto?> GetDetailAsync(string personId, CancellationToken cancellationToken = default)
     {
         var person = await _personRepository.GetByIdAsync(personId, cancellationToken);
         if (person is null)
@@ -89,8 +94,8 @@ public sealed class PersonService : IPersonService
 
     public async Task<IReadOnlyList<PersonListItemDto>> GetListAsync(
         string? keyword,
-        Guid? companyId,
-        Guid? departmentId,
+        string? companyId,
+        string? departmentId,
         EmploymentStatus? employmentStatus,
         CancellationToken cancellationToken = default)
     {
@@ -116,15 +121,16 @@ public sealed class PersonService : IPersonService
 
     public async Task<PersonDto> CreateAsync(PersonDto dto, CancellationToken cancellationToken = default)
     {
-        var companyId = ParseNullableGuid(dto.CompanyId, nameof(dto.CompanyId));
-        var departmentId = ParseNullableGuid(dto.DepartmentId, nameof(dto.DepartmentId));
-        var positionId = ParseNullableGuid(dto.PositionId, nameof(dto.PositionId));
+        var companyId = NormalizeOptionalId(dto.CompanyId);
+        var departmentId = NormalizeOptionalId(dto.DepartmentId);
+        var positionId = NormalizeOptionalId(dto.PositionId);
 
         // 人员工号唯一性按“同一公司”收口，而不是全平台全局唯一。
         await EnsurePersonNoAvailableAsync(companyId, dto.PersonNo, null, cancellationToken);
 
         var person = new Person
         {
+            Id = _objectIdGenerator.NewId(nameof(Person)),
             PersonNo = dto.PersonNo,
             Name = dto.DisplayName,
             CompanyId = companyId,
@@ -138,7 +144,7 @@ public sealed class PersonService : IPersonService
         return MapToDto(person);
     }
 
-    public async Task<PersonDto> UpdateAsync(Guid personId, PersonDto dto, CancellationToken cancellationToken = default)
+    public async Task<PersonDto> UpdateAsync(string personId, PersonDto dto, CancellationToken cancellationToken = default)
     {
         var person = await _personRepository.GetByIdAsync(personId, cancellationToken);
         if (person is null)
@@ -146,9 +152,9 @@ public sealed class PersonService : IPersonService
             throw new InvalidOperationException($"人员 '{personId}' 不存在。");
         }
 
-        var companyId = ParseNullableGuid(dto.CompanyId, nameof(dto.CompanyId));
-        var departmentId = ParseNullableGuid(dto.DepartmentId, nameof(dto.DepartmentId));
-        var positionId = ParseNullableGuid(dto.PositionId, nameof(dto.PositionId));
+        var companyId = NormalizeOptionalId(dto.CompanyId);
+        var departmentId = NormalizeOptionalId(dto.DepartmentId);
+        var positionId = NormalizeOptionalId(dto.PositionId);
 
         await EnsurePersonNoAvailableAsync(companyId, person.PersonNo, personId, cancellationToken);
 
@@ -165,7 +171,7 @@ public sealed class PersonService : IPersonService
         return MapToDto(person);
     }
 
-    public async Task<PersonDetailDto> DisableAsync(Guid personId, CancellationToken cancellationToken = default)
+    public async Task<PersonDetailDto> DisableAsync(string personId, CancellationToken cancellationToken = default)
     {
         var person = await _personRepository.GetByIdAsync(personId, cancellationToken);
         if (person is null)
@@ -183,7 +189,7 @@ public sealed class PersonService : IPersonService
     }
 
     public async Task<PersonUserLinkDto> LinkUserAsync(
-        Guid personId,
+        string personId,
         LinkPersonUserRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -265,16 +271,16 @@ public sealed class PersonService : IPersonService
         }
     }
 
-    private async Task<string> ResolveCompanyNameAsync(Guid? companyId, CancellationToken cancellationToken)
+    private async Task<string> ResolveCompanyNameAsync(string? companyId, CancellationToken cancellationToken)
     {
-        if (_companyRepository is null || !companyId.HasValue)
+        if (_companyRepository is null || string.IsNullOrWhiteSpace(companyId))
         {
             return string.Empty;
         }
 
         try
         {
-            var company = await _companyRepository.GetByIdAsync(companyId.Value, cancellationToken);
+            var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
             return company?.Name ?? string.Empty;
         }
         catch (Exception)
@@ -283,16 +289,16 @@ public sealed class PersonService : IPersonService
         }
     }
 
-    private async Task<string> ResolveDepartmentNameAsync(Guid? departmentId, CancellationToken cancellationToken)
+    private async Task<string> ResolveDepartmentNameAsync(string? departmentId, CancellationToken cancellationToken)
     {
-        if (_departmentRepository is null || !departmentId.HasValue)
+        if (_departmentRepository is null || string.IsNullOrWhiteSpace(departmentId))
         {
             return string.Empty;
         }
 
         try
         {
-            var department = await _departmentRepository.GetByIdAsync(departmentId.Value, cancellationToken);
+            var department = await _departmentRepository.GetByIdAsync(departmentId, cancellationToken);
             return department?.Name ?? string.Empty;
         }
         catch (Exception)
@@ -302,9 +308,9 @@ public sealed class PersonService : IPersonService
     }
 
     private async Task EnsurePersonNoAvailableAsync(
-        Guid? companyId,
+        string? companyId,
         string personNo,
-        Guid? excludedPersonId,
+        string? excludedPersonId,
         CancellationToken cancellationToken)
     {
         if (await _personRepository.ExistsPersonNoAsync(companyId, personNo, excludedPersonId, cancellationToken))
@@ -315,12 +321,12 @@ public sealed class PersonService : IPersonService
 
     private static PersonDto MapToDto(Person person) => new()
     {
-        Id = person.Id.ToString("D"),
+        Id = person.Id,
         DisplayName = person.Name,
         PersonNo = person.PersonNo,
-        CompanyId = person.CompanyId?.ToString("D"),
-        DepartmentId = person.DepartmentId?.ToString("D"),
-        PositionId = person.PositionId?.ToString("D"),
+        CompanyId = person.CompanyId,
+        DepartmentId = person.DepartmentId,
+        PositionId = person.PositionId,
         EmploymentStatus = person.EmploymentStatus,
         IsEnabled = person.IsEnabled,
         CreatedAt = person.CreatedAt,
@@ -329,19 +335,15 @@ public sealed class PersonService : IPersonService
 
     private static PersonUserLinkDto MapToDto(PersonUserLink link) => new()
     {
-        Id = link.PersonId.ToString("D"),
-        PersonId = link.PersonId.ToString("D"),
+        Id = link.PersonId.ToString(),
+        PersonId = link.PersonId.ToString(),
         UserId = link.UserId,
         CreatedAt = link.LinkedAt,
         LinkedAt = link.LinkedAt,
         LinkedBy = link.LinkedBy
     };
 
-    // 生成基础 DTO 不再把组织外键暴露为 Guid；这里是进入领域模型前的唯一解析边界。
-    private static Guid? ParseNullableGuid(string? value, string propertyName) =>
-        string.IsNullOrWhiteSpace(value)
-            ? null
-            : Guid.TryParse(value, out var guid)
-                ? guid
-                : throw new InvalidOperationException($"{propertyName} 必须是有效 GUID。");
+    // 平台对象引用按字符串协议流转；空白值在领域层统一视为未关联。
+    private static string? NormalizeOptionalId(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
 }

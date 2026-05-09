@@ -14,21 +14,21 @@ public sealed class EfPositionRepository : IPositionRepository
         _dbContext = dbContext;
     }
 
-    public async Task<List<Position>> GetByDepartmentIdAsync(Guid departmentId, CancellationToken cancellationToken = default)
+    public async Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default)
     {
         var entities = await Entities
             .AsNoTracking()
-            .Where(position => EF.Property<string>(position, "DepartmentId") == departmentId.ToString())
+            .Where(position => EF.Property<string>(position, "DepartmentId") == departmentId)
             .ToListAsync(cancellationToken);
 
         return entities.Select(Map).ToList();
     }
 
-    public async Task<Position?> GetByIdAsync(Guid positionId, CancellationToken cancellationToken = default)
+    public async Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(position => EF.Property<string>(position, "EID") == positionId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(position => EF.Property<string>(position, "EID") == positionId, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -42,7 +42,7 @@ public sealed class EfPositionRepository : IPositionRepository
     public async Task UpdateAsync(Position position, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == position.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == position.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -57,9 +57,9 @@ public sealed class EfPositionRepository : IPositionRepository
 
     private static Position Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "EID"),
-        CompanyId = GetGuid(entity, "CompanyId"),
-        DepartmentId = GetGuid(entity, "DepartmentId"),
+        Id = GetString(entity, "EID") ?? string.Empty,
+        CompanyId = GetString(entity, "CompanyId") ?? string.Empty,
+        DepartmentId = GetString(entity, "DepartmentId") ?? string.Empty,
         Code = GetString(entity, "ECODE") ?? string.Empty,
         Name = GetString(entity, "ENAME") ?? string.Empty,
         EmploymentStatus = GetEmploymentStatus(entity, "EmploymentStatus"),
@@ -73,7 +73,7 @@ public sealed class EfPositionRepository : IPositionRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["EID"] = position.Id.ToString()
+            ["EID"] = position.Id
         };
 
         CopyToEntity(position, entity);
@@ -83,9 +83,9 @@ public sealed class EfPositionRepository : IPositionRepository
     private static void CopyToEntity(Position position, IDictionary<string, object?> entity)
     {
         // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
-        entity["EID"] = position.Id.ToString();
-        entity["CompanyId"] = position.CompanyId.ToString();
-        entity["DepartmentId"] = position.DepartmentId.ToString();
+        entity["EID"] = position.Id;
+        entity["CompanyId"] = position.CompanyId;
+        entity["DepartmentId"] = position.DepartmentId;
         entity["ECODE"] = position.Code;
         entity["ENAME"] = position.Name;
         entity["EmploymentStatus"] = position.EmploymentStatus.ToString();
@@ -100,9 +100,6 @@ public sealed class EfPositionRepository : IPositionRepository
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;
-
-    private static Guid GetGuid(IReadOnlyDictionary<string, object?> entity, string key) =>
-        Guid.TryParse(GetString(entity, key), out var value) ? value : Guid.Empty;
 
     private static int GetInt(IReadOnlyDictionary<string, object?> entity, string key) =>
         int.TryParse(GetString(entity, key), out var value) ? value : 0;

@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
@@ -46,6 +47,22 @@ public class CompanyServiceTests
     }
 
     [Fact]
+    public async Task CreateCompany_AssignsCompanyPrefixedId()
+    {
+        var service = new CompanyService(
+            new InMemoryCompanyRepository(),
+            new FixedObjectIdGenerator("Company_00000000000000000000000000000001"));
+
+        var created = await service.CreateAsync(new CompanyDto
+        {
+            Code = "ICP",
+            DisplayName = "ICP研发中心"
+        });
+
+        Assert.Equal("Company_00000000000000000000000000000001", created.Id);
+    }
+
+    [Fact]
     public async Task UpdateCompany_ValidRequest_UpdatesCompany()
     {
         var service = BuildService();
@@ -55,7 +72,7 @@ public class CompanyServiceTests
             Name = "研发中心"
         });
 
-        var updated = await service.UpdateAsync(Guid.Parse(company.Id), new CompanyDto
+        var updated = await service.UpdateAsync(company.Id, new CompanyDto
         {
             Name = "研发中心（更新）",
             IsEnabled = false,
@@ -70,7 +87,20 @@ public class CompanyServiceTests
         Assert.NotNull(updated.UpdatedAt);
     }
 
-    private static ICompanyService BuildService() => new CompanyService(new InMemoryCompanyRepository());
+    private static ICompanyService BuildService() =>
+        new CompanyService(new InMemoryCompanyRepository(), new PlatformObjectIdGenerator());
+
+    private sealed class FixedObjectIdGenerator : IPlatformObjectIdGenerator
+    {
+        private readonly string _id;
+
+        public FixedObjectIdGenerator(string id)
+        {
+            _id = id;
+        }
+
+        public string NewId(string objectName) => _id;
+    }
 
     private sealed class InMemoryCompanyRepository : ICompanyRepository
     {
@@ -79,7 +109,7 @@ public class CompanyServiceTests
         public Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.Select(Clone).ToList());
 
-        public Task<Company?> GetByIdAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+        public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.FirstOrDefault(company => company.Id == companyId) is { } company ? Clone(company) : null);
 
         public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>

@@ -26,7 +26,7 @@ public sealed class PersonUserLinkSummaryProvider : IStandardCrudSummaryProvider
         IReadOnlyDictionary<string, object?> detail,
         CancellationToken cancellationToken = default)
     {
-        var personId = Guid.Parse(detail[descriptor.IdField]!.ToString()!);
+        var personId = detail[descriptor.IdField]?.ToString() ?? string.Empty;
         var link = await _repository.GetByPersonIdAsync(personId, cancellationToken);
         if (link is null)
         {
@@ -38,8 +38,8 @@ public sealed class PersonUserLinkSummaryProvider : IStandardCrudSummaryProvider
             Status = "ready",
             Data = new PersonUserLinkDto
             {
-                Id = link.PersonId.ToString("D"),
-                PersonId = link.PersonId.ToString("D"),
+                Id = link.PersonId,
+                PersonId = link.PersonId,
                 UserId = link.UserId,
                 CreatedAt = link.LinkedAt,
                 LinkedAt = link.LinkedAt,

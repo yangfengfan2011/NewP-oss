@@ -30,13 +30,13 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
         IReadOnlyDictionary<string, object?> row,
         CancellationToken cancellationToken = default)
     {
-        var companyId = ReadGuid(row, "CompanyId");
-        var departmentId = ReadGuid(row, "DepartmentId");
-        var positionId = ReadGuid(row, "PositionId");
+        var companyId = ReadStringOrNull(row, "CompanyId");
+        var departmentId = ReadStringOrNull(row, "DepartmentId");
+        var positionId = ReadStringOrNull(row, "PositionId");
 
-        var company = companyId.HasValue ? await _companyRepository.GetByIdAsync(companyId.Value, cancellationToken) : null;
-        var department = departmentId.HasValue ? await _departmentRepository.GetByIdAsync(departmentId.Value, cancellationToken) : null;
-        var position = positionId.HasValue ? await _positionRepository.GetByIdAsync(positionId.Value, cancellationToken) : null;
+        var company = companyId is not null ? await _companyRepository.GetByIdAsync(companyId, cancellationToken) : null;
+        var department = departmentId is not null ? await _departmentRepository.GetByIdAsync(departmentId, cancellationToken) : null;
+        var position = positionId is not null ? await _positionRepository.GetByIdAsync(positionId, cancellationToken) : null;
 
         return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -46,10 +46,8 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
         };
     }
 
-    private static Guid? ReadGuid(IReadOnlyDictionary<string, object?> row, string field)
-    {
-        return row.TryGetValue(field, out var value) && Guid.TryParse(value?.ToString(), out var guid)
-            ? guid
+    private static string? ReadStringOrNull(IReadOnlyDictionary<string, object?> row, string field) =>
+        row.TryGetValue(field, out var value) && !string.IsNullOrWhiteSpace(value?.ToString())
+            ? value.ToString()
             : null;
-    }
 }

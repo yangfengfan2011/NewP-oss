@@ -20,11 +20,11 @@ public sealed class EfCompanyRepository : ICompanyRepository
         return entities.Select(Map).ToList();
     }
 
-    public async Task<Company?> GetByIdAsync(Guid companyId, CancellationToken cancellationToken = default)
+    public async Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
             .AsNoTracking()
-            .FirstOrDefaultAsync(company => EF.Property<string>(company, "EID") == companyId.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(company => EF.Property<string>(company, "EID") == companyId, cancellationToken);
 
         return entity is null ? null : Map(entity);
     }
@@ -47,7 +47,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     public async Task UpdateAsync(Company company, CancellationToken cancellationToken = default)
     {
         var entity = await Entities
-            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == company.Id.ToString(), cancellationToken);
+            .FirstOrDefaultAsync(existing => EF.Property<string>(existing, "EID") == company.Id, cancellationToken);
 
         if (entity is null)
         {
@@ -62,7 +62,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
 
     private static Company Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
-        Id = GetGuid(entity, "EID"),
+        Id = GetString(entity, "EID") ?? string.Empty,
         Code = GetString(entity, "ECODE") ?? string.Empty,
         Name = GetString(entity, "ENAME") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
@@ -75,7 +75,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["EID"] = company.Id.ToString()
+            ["EID"] = company.Id
         };
 
         CopyToEntity(company, entity);
@@ -85,7 +85,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
     private static void CopyToEntity(Company company, IDictionary<string, object?> entity)
     {
         // 领域模型保留 Id，metadata 投影后的实体主键统一写入 EID。
-        entity["EID"] = company.Id.ToString();
+        entity["EID"] = company.Id;
         entity["ECODE"] = company.Code;
         entity["ENAME"] = company.Name;
         entity["IsEnabled"] = company.IsEnabled;
@@ -99,9 +99,6 @@ public sealed class EfCompanyRepository : ICompanyRepository
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;
-
-    private static Guid GetGuid(IReadOnlyDictionary<string, object?> entity, string key) =>
-        Guid.TryParse(GetString(entity, key), out var value) ? value : Guid.Empty;
 
     private static int GetInt(IReadOnlyDictionary<string, object?> entity, string key) =>
         int.TryParse(GetString(entity, key), out var value) ? value : 0;

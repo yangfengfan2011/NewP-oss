@@ -22,6 +22,7 @@ public class EfOrganizationRepositoryTests
 
         var company = new Company
         {
+            Id = "Company_11111111111111111111111111111111",
             Code = "ICP",
             Name = "研发中心",
             SortOrder = 1
@@ -48,8 +49,8 @@ public class EfOrganizationRepositoryTests
     {
         using var dbContext = CreateDbContext();
         var repository = new EfDepartmentRepository(dbContext);
-        var companyId = Guid.NewGuid();
-        var rootId = Guid.NewGuid();
+        var companyId = "Company_11111111111111111111111111111111";
+        var rootId = "Department_22222222222222222222222222222222";
 
         await repository.CreateAsync(new Department
         {
@@ -61,6 +62,7 @@ public class EfOrganizationRepositoryTests
 
         await repository.CreateAsync(new Department
         {
+            Id = "Department_33333333333333333333333333333333",
             CompanyId = companyId,
             ParentDepartmentId = rootId,
             Code = "ENG",
@@ -79,11 +81,12 @@ public class EfOrganizationRepositoryTests
     {
         using var dbContext = CreateDbContext();
         var repository = new EfPositionRepository(dbContext);
-        var departmentId = Guid.NewGuid();
+        var departmentId = "Department_22222222222222222222222222222222";
 
         var position = new Position
         {
-            CompanyId = Guid.NewGuid(),
+            Id = "Position_33333333333333333333333333333333",
+            CompanyId = "Company_11111111111111111111111111111111",
             DepartmentId = departmentId,
             Code = "LEAD",
             Name = "组长",

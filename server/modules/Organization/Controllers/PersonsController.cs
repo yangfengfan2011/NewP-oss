@@ -32,8 +32,8 @@ public sealed class PersonsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<PersonListItemDto>>> GetList(
         [FromQuery] string? keyword,
-        [FromQuery] Guid? companyId,
-        [FromQuery] Guid? departmentId,
+        [FromQuery] string? companyId,
+        [FromQuery] string? departmentId,
         [FromQuery] EmploymentStatus? employmentStatus,
         CancellationToken cancellationToken = default)
     {
@@ -45,8 +45,8 @@ public sealed class PersonsController : ControllerBase
                 Filters: new Dictionary<string, string?>
                 {
                     ["keyword"] = keyword,
-                    ["companyId"] = companyId?.ToString("D"),
-                    ["departmentId"] = departmentId?.ToString("D"),
+                    ["companyId"] = companyId,
+                    ["departmentId"] = departmentId,
                     ["employmentStatus"] = employmentStatus?.ToString()
                 }),
             cancellationToken);
@@ -54,10 +54,10 @@ public sealed class PersonsController : ControllerBase
         return Ok(result.Items.Select(MapListItem).ToList());
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<PersonDetailDto>> Get(Guid id, CancellationToken cancellationToken = default)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<PersonDetailDto>> Get(string id, CancellationToken cancellationToken = default)
     {
-        var detail = await _standardCrudEndpoint.GetDetailAsync(PersonCrudDescriptor, id.ToString("D"), cancellationToken);
+        var detail = await _standardCrudEndpoint.GetDetailAsync(PersonCrudDescriptor, id, cancellationToken);
         return detail is null ? NotFound() : Ok(MapDetail(detail));
     }
 
@@ -76,13 +76,13 @@ public sealed class PersonsController : ControllerBase
         return StatusCode(error.StatusCode, error);
     }
 
-    [HttpPut("{id:guid}")]
+    [HttpPut("{id}")]
     public async Task<ActionResult<PersonDto>> Update(
-        Guid id,
+        string id,
         [FromBody] PersonDto dto,
         CancellationToken cancellationToken = default)
     {
-        var result = await _standardCrudEndpoint.UpdateAsync(PersonCrudDescriptor, id.ToString("D"), MapUpdateValues(dto), cancellationToken);
+        var result = await _standardCrudEndpoint.UpdateAsync(PersonCrudDescriptor, id, MapUpdateValues(dto), cancellationToken);
         if (result.Succeeded && result.Detail is not null)
         {
             return Ok(MapMutationDto(result.Detail));
@@ -92,10 +92,10 @@ public sealed class PersonsController : ControllerBase
         return StatusCode(error.StatusCode, error);
     }
 
-    [HttpPost("{id:guid}/disable")]
-    public async Task<ActionResult<PersonDetailDto>> Disable(Guid id, CancellationToken cancellationToken = default)
+    [HttpPost("{id}/disable")]
+    public async Task<ActionResult<PersonDetailDto>> Disable(string id, CancellationToken cancellationToken = default)
     {
-        var result = await _standardCrudEndpoint.DisableAsync(PersonCrudDescriptor, id.ToString("D"), cancellationToken);
+        var result = await _standardCrudEndpoint.DisableAsync(PersonCrudDescriptor, id, cancellationToken);
         return result.Succeeded && result.Detail is not null
             ? Ok(MapDetail(result.Detail))
             : StatusCode(result.Error!.StatusCode, result.Error);
@@ -112,10 +112,10 @@ public sealed class PersonsController : ControllerBase
         return Ok(options);
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<ActionResult> Delete(Guid id, CancellationToken cancellationToken = default)
+    [HttpDelete("{id}")]
+    public async Task<ActionResult> Delete(string id, CancellationToken cancellationToken = default)
     {
-        var result = await _standardCrudEndpoint.DeleteAsync(PersonCrudDescriptor, id.ToString("D"), cancellationToken);
+        var result = await _standardCrudEndpoint.DeleteAsync(PersonCrudDescriptor, id, cancellationToken);
         return result.Succeeded ? NoContent() : StatusCode(result.Error!.StatusCode, result.Error);
     }
 
@@ -128,9 +128,9 @@ public sealed class PersonsController : ControllerBase
         return Ok(options);
     }
 
-    [HttpPut("{id:guid}/user-link")]
+    [HttpPut("{id}/user-link")]
     public async Task<ActionResult<PersonUserLinkDto>> LinkUser(
-        Guid id,
+        string id,
         [FromBody] LinkPersonUserRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -150,7 +150,7 @@ public sealed class PersonsController : ControllerBase
     /// </summary>
     private static PersonListItemDto MapListItem(IReadOnlyDictionary<string, object?> row) => new()
     {
-        Id = Guid.Parse(ReadString(row, "EID")),
+        Id = ReadString(row, "EID"),
         PersonNo = ReadString(row, "PersonNo"),
         Name = ReadString(row, "ENAME"),
         CompanyName = ReadString(row, "CompanyName"),
@@ -166,12 +166,12 @@ public sealed class PersonsController : ControllerBase
     /// </summary>
     private static PersonDetailDto MapDetail(StandardCrudDetail detail) => new()
     {
-        Id = Guid.Parse(ReadString(detail.Fields, "EID")),
+        Id = ReadString(detail.Fields, "EID"),
         PersonNo = ReadString(detail.Fields, "PersonNo"),
         Name = ReadString(detail.Fields, "ENAME"),
-        CompanyId = ReadGuid(detail.Fields, "CompanyId"),
-        DepartmentId = ReadGuid(detail.Fields, "DepartmentId"),
-        PositionId = ReadGuid(detail.Fields, "PositionId"),
+        CompanyId = ReadStringOrNull(detail.Fields, "CompanyId"),
+        DepartmentId = ReadStringOrNull(detail.Fields, "DepartmentId"),
+        PositionId = ReadStringOrNull(detail.Fields, "PositionId"),
         EmploymentStatus = Enum.TryParse<EmploymentStatus>(ReadString(detail.Fields, "EmploymentStatus"), ignoreCase: true, out var status)
             ? status
             : EmploymentStatus.FullTime,
@@ -186,9 +186,6 @@ public sealed class PersonsController : ControllerBase
 
     private static bool ReadBool(IReadOnlyDictionary<string, object?> row, string key, bool fallback) =>
         row.TryGetValue(key, out var value) && value is bool typed ? typed : fallback;
-
-    private static Guid? ReadGuid(IReadOnlyDictionary<string, object?> row, string key) =>
-        Guid.TryParse(ReadString(row, key), out var guid) ? guid : null;
 
     private static DateTime ReadDateTime(IReadOnlyDictionary<string, object?> row, string key) =>
         row.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : default;

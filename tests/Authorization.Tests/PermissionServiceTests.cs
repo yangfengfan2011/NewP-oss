@@ -1,3 +1,5 @@
+using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.Models;
 using ICP.Platform.Modules.Authorization.Repositories;
 using ICP.Platform.Modules.Authorization.Services;
@@ -7,6 +9,27 @@ namespace ICP.Platform.Modules.Authorization.Tests;
 
 public class PermissionServiceTests
 {
+    [Fact]
+    public async Task SyncPermissionsAsync_AssignsPermissionPrefixedId()
+    {
+        var repository = new PermissionRepository();
+        var service = new PermissionService(repository, new FixedObjectIdGenerator("Permission_00000000000000000000000000000001"));
+
+        await service.SyncPermissionsAsync(
+        [
+            new PermissionDescriptor
+            {
+                Code = "Test.View",
+                DisplayName = "查看",
+                ModuleId = "Test",
+                Group = "测试"
+            }
+        ]);
+
+        var created = Assert.Single(await repository.GetAllAsync());
+        Assert.Equal("Permission_00000000000000000000000000000001", created.Id);
+    }
+
     [Fact]
     public async Task GetAllPermissionsAsync_FillsGeneratedContractFields()
     {
@@ -19,10 +42,22 @@ public class PermissionServiceTests
             ModuleId = "Task6",
             CreatedAt = createdAt
         });
-        var service = new PermissionService(repository);
+        var service = new PermissionService(repository, new PlatformObjectIdGenerator());
 
         var dto = Assert.Single(await service.GetAllPermissionsAsync());
 
         Assert.Equal(createdAt, dto.CreatedAt);
+    }
+
+    private sealed class FixedObjectIdGenerator : IPlatformObjectIdGenerator
+    {
+        private readonly string _id;
+
+        public FixedObjectIdGenerator(string id)
+        {
+            _id = id;
+        }
+
+        public string NewId(string objectName) => _id;
     }
 }

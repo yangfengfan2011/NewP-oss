@@ -593,7 +593,7 @@ git commit -m "功能：ConfigCenter接入平台对象ID"
 - Modify: `tests/Authorization.Tests/PermissionServiceTests.cs`
 - Test: `tests/Authorization.Tests/Authorization.Tests.csproj`
 
-- [ ] **Step 1: 写 Authorization 失败测试**
+- [x] **Step 1: 写 Authorization 失败测试**
 
 Append to `tests/Authorization.Tests/RoleServiceTests.cs`:
 
@@ -689,7 +689,7 @@ private sealed class FixedObjectIdGenerator : IPlatformObjectIdGenerator
 
 Add `using ICP.Platform.Crud.ObjectIds;` and `using ICP.Platform.Sdk;` as needed.
 
-- [ ] **Step 2: 运行 Authorization 定向测试确认失败**
+- [x] **Step 2: 运行 Authorization 定向测试确认失败**
 
 Run:
 
@@ -704,7 +704,7 @@ FAIL
 CS1729: 'RoleService' does not contain a constructor that takes 5 arguments
 ```
 
-- [ ] **Step 3: 移除 Authorization 模型默认裸 GUID**
+- [x] **Step 3: 移除 Authorization 模型默认裸 GUID**
 
 For these files, change the `Id` initializer to `string.Empty`:
 
@@ -719,7 +719,7 @@ Files:
 - `server/modules/Authorization/Models/RolePermission.cs`
 - `server/modules/Authorization/Models/UserRole.cs`
 
-- [ ] **Step 4: 在 RoleService 注入并使用生成器**
+- [x] **Step 4: 在 RoleService 注入并使用生成器**
 
 Modify `server/modules/Authorization/Services/RoleService.cs`:
 
@@ -791,7 +791,7 @@ var userRoles = roleIds.Select(roleId => new UserRole
 }).ToList();
 ```
 
-- [ ] **Step 5: 在 PermissionService 注入并使用生成器**
+- [x] **Step 5: 在 PermissionService 注入并使用生成器**
 
 Modify `server/modules/Authorization/Services/PermissionService.cs`:
 
@@ -832,7 +832,7 @@ var permission = new Permission
 };
 ```
 
-- [ ] **Step 6: 在 Authorization 模块装配点注册对象 ID 生成器**
+- [x] **Step 6: 在 Authorization 模块装配点注册对象 ID 生成器**
 
 Modify `server/modules/Authorization/AuthorizationModule.cs`:
 
@@ -862,7 +862,7 @@ public override void ConfigureServices(IServiceCollection services)
 }
 ```
 
-- [ ] **Step 7: 更新既有 Authorization 测试构造器**
+- [x] **Step 7: 更新既有 Authorization 测试构造器**
 
 Replace:
 
@@ -880,7 +880,7 @@ new PermissionService(repository, new PlatformObjectIdGenerator())
 
 Add `using ICP.Platform.Crud.ObjectIds;` to touched test files.
 
-- [ ] **Step 8: 运行 Authorization 测试**
+- [x] **Step 8: 运行 Authorization 测试**
 
 Run:
 
@@ -894,7 +894,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```powershell
 git add .\server\modules\Authorization\Models .\server\modules\Authorization\AuthorizationModule.cs .\server\modules\Authorization\Services .\tests\Authorization.Tests

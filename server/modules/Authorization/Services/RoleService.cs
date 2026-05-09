@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Models;
 using ICP.Platform.Modules.Authorization.Repositories;
@@ -10,17 +11,20 @@ public class RoleService : IRoleService
     private readonly IPermissionRepository _permissionRepository;
     private readonly IRolePermissionRepository _rolePermissionRepository;
     private readonly IUserRoleRepository _userRoleRepository;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
     public RoleService(
         IRoleRepository roleRepository,
         IPermissionRepository permissionRepository,
         IRolePermissionRepository rolePermissionRepository,
-        IUserRoleRepository userRoleRepository)
+        IUserRoleRepository userRoleRepository,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _roleRepository = roleRepository;
         _permissionRepository = permissionRepository;
         _rolePermissionRepository = rolePermissionRepository;
         _userRoleRepository = userRoleRepository;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     public async Task<List<RoleDto>> GetAllRolesAsync(CancellationToken cancellationToken = default)
@@ -51,6 +55,7 @@ public class RoleService : IRoleService
 
         var role = new Role
         {
+            Id = _objectIdGenerator.NewId(nameof(Role)),
             Code = dto.Code,
             Name = dto.DisplayName,
             Description = dto.Description,
@@ -141,6 +146,7 @@ public class RoleService : IRoleService
         // 添加新权限
         var rolePermissions = permissionIds.Select(permissionId => new RolePermission
         {
+            Id = _objectIdGenerator.NewId(nameof(RolePermission)),
             RoleId = roleId,
             PermissionId = permissionId,
             GrantedBy = grantedBy
@@ -176,6 +182,7 @@ public class RoleService : IRoleService
         // 添加新角色
         var userRoles = roleIds.Select(roleId => new UserRole
         {
+            Id = _objectIdGenerator.NewId(nameof(UserRole)),
             UserId = userId,
             RoleId = roleId,
             AssignedBy = assignedBy

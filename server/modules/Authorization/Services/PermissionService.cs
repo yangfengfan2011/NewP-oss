@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Models;
 using ICP.Platform.Modules.Authorization.Repositories;
@@ -7,10 +8,14 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public class PermissionService : IPermissionService
 {
     private readonly IPermissionRepository _permissionRepository;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
-    public PermissionService(IPermissionRepository permissionRepository)
+    public PermissionService(
+        IPermissionRepository permissionRepository,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _permissionRepository = permissionRepository;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     public async Task<List<PermissionDto>> GetAllPermissionsAsync(CancellationToken cancellationToken = default)
@@ -57,6 +62,7 @@ public class PermissionService : IPermissionService
                 // 创建新权限
                 var permission = new Permission
                 {
+                    Id = _objectIdGenerator.NewId(nameof(Permission)),
                     Code = descriptor.Code,
                     DisplayName = descriptor.DisplayName,
                     Description = descriptor.Description,

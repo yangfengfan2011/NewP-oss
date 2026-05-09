@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Repositories;
@@ -16,6 +17,8 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
 
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddPlatformObjectIdGeneration();
+
         // 注册核心服务
         services.AddScoped<IAuthorizationService, AuthorizationService>();
         services.AddScoped<IRoleService, RoleService>();

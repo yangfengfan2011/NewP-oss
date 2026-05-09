@@ -8,7 +8,7 @@ public class Permission
     /// <summary>
     /// 权限 ID
     /// </summary>
-    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// 权限代码（唯一标识）

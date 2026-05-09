@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Models;
 using ICP.Platform.Modules.Authorization.Repositories;
@@ -25,7 +26,8 @@ public class RoleServiceTests
             _roleRepository,
             _permissionRepository,
             _rolePermissionRepository,
-            _userRoleRepository
+            _userRoleRepository,
+            new PlatformObjectIdGenerator()
         );
     }
 
@@ -47,6 +49,22 @@ public class RoleServiceTests
         Assert.NotNull(result);
         Assert.Equal("TestRole", result.Code);
         Assert.Equal("测试角色", result.Name);
+    }
+
+    [Fact]
+    public async Task CreateRoleAsync_AssignsRolePrefixedId()
+    {
+        var service = BuildRoleService(new SequenceObjectIdGenerator(
+            "Role_00000000000000000000000000000001"));
+
+        var created = await service.CreateRoleAsync(new RoleDto
+        {
+            Code = "ProtocolRole",
+            DisplayName = "协议角色",
+            IsEnabled = true
+        });
+
+        Assert.Equal("Role_00000000000000000000000000000001", created.Id);
     }
 
     [Fact]
@@ -143,6 +161,26 @@ public class RoleServiceTests
     }
 
     [Fact]
+    public async Task AssignRolePermissionsAsync_AssignsRolePermissionPrefixedIds()
+    {
+        var generator = new SequenceObjectIdGenerator(
+            "RolePermission_00000000000000000000000000000001");
+        var roleRepository = new RoleRepository();
+        var permissionRepository = new PermissionRepository();
+        var rolePermissionRepository = new RolePermissionRepository();
+        var service = new RoleService(roleRepository, permissionRepository, rolePermissionRepository, new UserRoleRepository(), generator);
+        var role = new Role { Id = "Role_00000000000000000000000000000001", Code = "Admin", Name = "管理员" };
+        var permission = new Permission { Id = "Permission_00000000000000000000000000000001", Code = "Test.View", DisplayName = "查看", ModuleId = "Test" };
+        await roleRepository.CreateAsync(role);
+        await permissionRepository.CreateAsync(permission);
+
+        await service.AssignRolePermissionsAsync(role.Id, new AssignRolePermissionsRequest { PermissionCodes = ["Test.View"] });
+
+        var links = await rolePermissionRepository.GetByRoleIdAsync(role.Id);
+        Assert.Equal("RolePermission_00000000000000000000000000000001", Assert.Single(links).Id);
+    }
+
+    [Fact]
     public async Task AssignUserRoles_ValidRequest_AssignsRoles()
     {
         // Arrange
@@ -165,5 +203,37 @@ public class RoleServiceTests
         Assert.Equal(2, userRoles.RoleCodes.Count);
         Assert.Contains("Role1", userRoles.RoleCodes);
         Assert.Contains("Role2", userRoles.RoleCodes);
+    }
+
+    [Fact]
+    public async Task AssignUserRolesAsync_AssignsUserRolePrefixedIds()
+    {
+        var generator = new SequenceObjectIdGenerator(
+            "UserRole_00000000000000000000000000000001");
+        var roleRepository = new RoleRepository();
+        var userRoleRepository = new UserRoleRepository();
+        var service = new RoleService(roleRepository, new PermissionRepository(), new RolePermissionRepository(), userRoleRepository, generator);
+        var role = new Role { Id = "Role_00000000000000000000000000000001", Code = "Admin", Name = "管理员" };
+        await roleRepository.CreateAsync(role);
+
+        await service.AssignUserRolesAsync("user-1", new AssignUserRolesRequest { RoleCodes = ["Admin"] });
+
+        var links = await userRoleRepository.GetByUserIdAsync("user-1");
+        Assert.Equal("UserRole_00000000000000000000000000000001", Assert.Single(links).Id);
+    }
+
+    private static RoleService BuildRoleService(IPlatformObjectIdGenerator generator) =>
+        new(new RoleRepository(), new PermissionRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator);
+
+    private sealed class SequenceObjectIdGenerator : IPlatformObjectIdGenerator
+    {
+        private readonly Queue<string> _ids;
+
+        public SequenceObjectIdGenerator(params string[] ids)
+        {
+            _ids = new Queue<string>(ids);
+        }
+
+        public string NewId(string objectName) => _ids.Dequeue();
     }
 }

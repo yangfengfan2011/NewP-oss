@@ -8,7 +8,7 @@ public class RolePermission
     /// <summary>
     /// 关系 ID
     /// </summary>
-    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// 角色 ID

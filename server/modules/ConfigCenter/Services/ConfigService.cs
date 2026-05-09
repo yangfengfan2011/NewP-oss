@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
@@ -7,10 +8,14 @@ namespace ICP.Platform.Modules.ConfigCenter.Services;
 public class ConfigService : IConfigService
 {
     private readonly IConfigRepository _configRepository;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
-    public ConfigService(IConfigRepository configRepository)
+    public ConfigService(
+        IConfigRepository configRepository,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _configRepository = configRepository;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     public async Task<List<ConfigItemDto>> GetAllConfigsAsync(string? environment = null, string? tenantId = null, CancellationToken cancellationToken = default)
@@ -62,6 +67,7 @@ public class ConfigService : IConfigService
     {
         var item = new ConfigItem
         {
+            Id = _objectIdGenerator.NewId(nameof(ConfigItem)),
             Key = dto.Key,
             Value = dto.Value,
             Type = dto.Type,

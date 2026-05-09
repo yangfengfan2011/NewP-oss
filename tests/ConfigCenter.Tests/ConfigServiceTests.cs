@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
@@ -10,11 +11,12 @@ public class ConfigServiceTests
 {
     private readonly IConfigService _configService;
     private readonly IConfigRepository _configRepository;
+    private int _nextConfigItemId;
 
     public ConfigServiceTests()
     {
         _configRepository = new ConfigRepository();
-        _configService = new ConfigService(_configRepository);
+        _configService = new ConfigService(_configRepository, new PlatformObjectIdGenerator());
     }
 
     [Fact]
@@ -35,6 +37,7 @@ public class ConfigServiceTests
         // Arrange
         var item = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "value1",
             Type = "String",
@@ -58,6 +61,7 @@ public class ConfigServiceTests
         // Arrange
         var globalItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "global",
             Type = "String",
@@ -66,6 +70,7 @@ public class ConfigServiceTests
         };
         var envItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "production",
             Type = "String",
@@ -90,6 +95,7 @@ public class ConfigServiceTests
         // Arrange
         var globalItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "global",
             Type = "String",
@@ -98,6 +104,7 @@ public class ConfigServiceTests
         };
         var tenantItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "tenant1",
             Type = "String",
@@ -122,6 +129,7 @@ public class ConfigServiceTests
         // Arrange
         var globalItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "global",
             Type = "String",
@@ -130,6 +138,7 @@ public class ConfigServiceTests
         };
         var envItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "production",
             Type = "String",
@@ -139,6 +148,7 @@ public class ConfigServiceTests
         };
         var tenantEnvItem = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "tenant1-production",
             Type = "String",
@@ -165,6 +175,7 @@ public class ConfigServiceTests
         // Arrange
         var item1 = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "value1",
             Type = "String",
@@ -173,6 +184,7 @@ public class ConfigServiceTests
         };
         var item2 = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting2",
             Value = "value2",
             Type = "String",
@@ -181,6 +193,7 @@ public class ConfigServiceTests
         };
         var item3 = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Other.Setting1",
             Value = "value3",
             Type = "String",
@@ -230,6 +243,7 @@ public class ConfigServiceTests
         // Arrange
         var item = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "oldvalue",
             Type = "String",
@@ -260,6 +274,7 @@ public class ConfigServiceTests
         // Arrange
         var item = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Password",
             Value = "secret123",
             Type = "String",
@@ -283,6 +298,7 @@ public class ConfigServiceTests
         // Arrange
         var item1 = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting1",
             Value = "value1",
             Type = "String",
@@ -292,6 +308,7 @@ public class ConfigServiceTests
         };
         var item2 = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting2",
             Value = "value2",
             Type = "String",
@@ -301,6 +318,7 @@ public class ConfigServiceTests
         };
         var item3 = new ConfigItem
         {
+            Id = NextConfigItemId(),
             Key = "Test.Setting3",
             Value = "value3",
             Type = "String",
@@ -322,4 +340,9 @@ public class ConfigServiceTests
         Assert.Equal(2, group1.Items.Count);
     }
 
+    private string NextConfigItemId()
+    {
+        _nextConfigItemId++;
+        return $"ConfigItem_{_nextConfigItemId:00000000000000000000000000000000}";
+    }
 }

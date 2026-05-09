@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
 
@@ -7,11 +8,16 @@ public class LegacySettingImportService : ILegacySettingImportService
 {
     private readonly ILegacySettingParser _parser;
     private readonly IConfigRepository _repository;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
-    public LegacySettingImportService(ILegacySettingParser parser, IConfigRepository repository)
+    public LegacySettingImportService(
+        ILegacySettingParser parser,
+        IConfigRepository repository,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _parser = parser;
         _repository = repository;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     public async Task<LegacySettingImportResult> ImportAsync(
@@ -40,6 +46,7 @@ public class LegacySettingImportService : ILegacySettingImportService
                     {
                         var newConfig = new ConfigItem
                         {
+                            Id = _objectIdGenerator.NewId(nameof(ConfigItem)),
                             Key = item.Key,
                             Value = item.Value,
                             Type = InferType(item.Value),

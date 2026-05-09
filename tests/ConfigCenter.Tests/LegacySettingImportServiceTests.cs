@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.ConfigCenter.Imports;
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
@@ -110,7 +111,12 @@ public class LegacySettingImportServiceTests
 
         var parser = new FakeParser(parsedItems);
         var repository = new FakeRepository();
-        var service = new LegacySettingImportService(parser, repository);
+        var service = new LegacySettingImportService(
+            parser,
+            repository,
+            new SequenceObjectIdGenerator(
+                "ConfigItem_00000000000000000000000000000001",
+                "ConfigItem_00000000000000000000000000000002"));
 
         // Act
         var result = await service.ImportAsync(request, "testUser");
@@ -124,6 +130,7 @@ public class LegacySettingImportServiceTests
         Assert.Equal(2, repository.CreatedItems.Count);
 
         var item1 = repository.CreatedItems.First(c => c.Key == "TestKey1");
+        Assert.Equal("ConfigItem_00000000000000000000000000000001", item1.Id);
         Assert.Equal("true", item1.Value);
         Assert.Equal("Bool", item1.Type);
         Assert.Equal("TestModule", item1.ModuleId);
@@ -132,6 +139,7 @@ public class LegacySettingImportServiceTests
         Assert.Equal("Test bool config", item1.Description);
 
         var item2 = repository.CreatedItems.First(c => c.Key == "TestKey2");
+        Assert.Equal("ConfigItem_00000000000000000000000000000002", item2.Id);
         Assert.Equal("123", item2.Value);
         Assert.Equal("Int", item2.Type);
         Assert.Equal("TestModule", item2.ModuleId);
@@ -162,7 +170,7 @@ public class LegacySettingImportServiceTests
 
         var existingConfig = new ConfigItem
         {
-            Id = "existing-id",
+            Id = "ConfigItem_00000000000000000000000000000003",
             Key = "ExistingKey",
             Value = "oldValue",
             Type = "String",
@@ -176,7 +184,7 @@ public class LegacySettingImportServiceTests
         var parser = new FakeParser(parsedItems);
         var repository = new FakeRepository();
         repository.AddExisting(existingConfig);
-        var service = new LegacySettingImportService(parser, repository);
+        var service = new LegacySettingImportService(parser, repository, new PlatformObjectIdGenerator());
 
         // Act
         var result = await service.ImportAsync(request, "testUser");
@@ -189,7 +197,7 @@ public class LegacySettingImportServiceTests
 
         var updated = await repository.GetByKeyAsync("ExistingKey");
         Assert.NotNull(updated);
-        Assert.Equal("existing-id", updated.Id);
+        Assert.Equal("ConfigItem_00000000000000000000000000000003", updated.Id);
         Assert.Equal("ExistingKey", updated.Key);
         Assert.Equal("42", updated.Value);
         Assert.Equal("String", updated.Type);
@@ -225,7 +233,7 @@ public class LegacySettingImportServiceTests
 
         var existingConfig = new ConfigItem
         {
-            Id = "existing-id",
+            Id = "ConfigItem_00000000000000000000000000000004",
             Key = "ExistingKey",
             Value = "oldValue",
             Type = "String",
@@ -239,7 +247,7 @@ public class LegacySettingImportServiceTests
         var parser = new FakeParser(parsedItems);
         var repository = new FakeRepository();
         repository.AddExisting(existingConfig);
-        var service = new LegacySettingImportService(parser, repository);
+        var service = new LegacySettingImportService(parser, repository, new PlatformObjectIdGenerator());
 
         // Act
         var result = await service.ImportAsync(request, "testUser");
@@ -252,7 +260,7 @@ public class LegacySettingImportServiceTests
 
         Assert.Single(repository.UpdatedItems);
         var updated = repository.UpdatedItems[0];
-        Assert.Equal("existing-id", updated.Id);
+        Assert.Equal("ConfigItem_00000000000000000000000000000004", updated.Id);
         Assert.Equal("ExistingKey", updated.Key);
         Assert.Equal("newValue", updated.Value);
         Assert.Equal("String", updated.Type);
@@ -261,5 +269,17 @@ public class LegacySettingImportServiceTests
         Assert.Equal("Old Display", updated.DisplayName);
         Assert.Equal("Old description", updated.Description);
         Assert.Equal("testUser", updated.UpdatedBy);
+    }
+
+    private sealed class SequenceObjectIdGenerator : IPlatformObjectIdGenerator
+    {
+        private readonly Queue<string> _ids;
+
+        public SequenceObjectIdGenerator(params string[] ids)
+        {
+            _ids = new Queue<string>(ids);
+        }
+
+        public string NewId(string objectName) => _ids.Dequeue();
     }
 }

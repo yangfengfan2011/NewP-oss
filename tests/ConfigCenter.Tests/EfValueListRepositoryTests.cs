@@ -16,6 +16,7 @@ public class EfValueListRepositoryTests
 
         await repository.CreateAsync(new ValueListItem
         {
+            Id = "ValueListItem_00000000000000000000000000000001",
             Code = "STATUS_ACTIVE",
             Name = "启用",
             Description = "启用状态"
@@ -33,6 +34,7 @@ public class EfValueListRepositoryTests
         var repository = CreateRepository();
         var item = new ValueListItem
         {
+            Id = "ValueListItem_00000000000000000000000000000002",
             Code = "STATUS_ACTIVE",
             Name = "启用"
         };

@@ -8,7 +8,7 @@ public class ConfigItem
     /// <summary>
     /// 配置项 ID
     /// </summary>
-    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// 配置键（唯一标识）

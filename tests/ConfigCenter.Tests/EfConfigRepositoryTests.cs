@@ -16,6 +16,7 @@ public class EfConfigRepositoryTests
 
         await repository.CreateAsync(new ConfigItem
         {
+            Id = "ConfigItem_00000000000000000000000000000001",
             Key = "Test.Key",
             Value = "global",
             Type = "String",
@@ -25,6 +26,7 @@ public class EfConfigRepositoryTests
 
         await repository.CreateAsync(new ConfigItem
         {
+            Id = "ConfigItem_00000000000000000000000000000002",
             Key = "Test.Key",
             Value = "tenant-prod",
             Type = "String",

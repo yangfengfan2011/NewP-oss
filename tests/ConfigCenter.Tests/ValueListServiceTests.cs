@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
 using ICP.Platform.Modules.ConfigCenter.Services;
@@ -14,7 +15,7 @@ public class ValueListServiceTests
     public ValueListServiceTests()
     {
         _repository = new ValueListRepository();
-        _service = new ValueListService(_repository);
+        _service = new ValueListService(_repository, new PlatformObjectIdGenerator());
     }
 
     [Fact]
@@ -32,6 +33,22 @@ public class ValueListServiceTests
 
         var items = await _service.GetAllAsync();
         Assert.Single(items);
+    }
+
+    [Fact]
+    public async Task CreateAsync_AssignsValueListItemPrefixedId()
+    {
+        var service = new ValueListService(
+            new ValueListRepository(),
+            new FixedObjectIdGenerator("ValueListItem_00000000000000000000000000000001"));
+
+        var created = await service.CreateAsync(new ValueListItemDto
+        {
+            Code = "protocol",
+            DisplayName = "协议"
+        });
+
+        Assert.Equal("ValueListItem_00000000000000000000000000000001", created.Id);
     }
 
     [Fact]
@@ -190,5 +207,17 @@ public class ValueListServiceTests
         }
 
         throw new DirectoryNotFoundException("Repository root not found.");
+    }
+
+    private sealed class FixedObjectIdGenerator : IPlatformObjectIdGenerator
+    {
+        private readonly string _id;
+
+        public FixedObjectIdGenerator(string id)
+        {
+            _id = id;
+        }
+
+        public string NewId(string objectName) => _id;
     }
 }

@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.ConfigCenter.Imports;
 using ICP.Platform.Modules.ConfigCenter.Persistence.Ef;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
@@ -17,6 +18,7 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
 
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddPlatformObjectIdGeneration();
         services.AddScoped<IConfigService, ConfigService>();
         services.AddScoped<IConfigRepository, EfConfigRepository>();
         services.AddScoped<IValueListService, ValueListService>();

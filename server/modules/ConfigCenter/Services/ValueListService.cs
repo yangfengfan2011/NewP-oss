@@ -1,3 +1,4 @@
+using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Models;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
@@ -8,10 +9,14 @@ namespace ICP.Platform.Modules.ConfigCenter.Services;
 public class ValueListService : IValueListService
 {
     private readonly IValueListRepository _repository;
+    private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
-    public ValueListService(IValueListRepository repository)
+    public ValueListService(
+        IValueListRepository repository,
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _repository = repository;
+        _objectIdGenerator = objectIdGenerator;
     }
 
     public async Task<List<ValueListItemDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -41,6 +46,7 @@ public class ValueListService : IValueListService
 
         var item = new ValueListItem
         {
+            Id = _objectIdGenerator.NewId(nameof(ValueListItem)),
             Code = code,
             Name = name,
             Description = dto.Description?.Trim(),

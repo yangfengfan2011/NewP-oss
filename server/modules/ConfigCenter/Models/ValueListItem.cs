@@ -2,7 +2,7 @@ namespace ICP.Platform.Modules.ConfigCenter.Models;
 
 public class ValueListItem
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Id { get; set; } = string.Empty;
 
     public required string Code { get; set; }
 

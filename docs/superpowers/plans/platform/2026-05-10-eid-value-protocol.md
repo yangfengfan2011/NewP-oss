@@ -332,7 +332,7 @@ git commit -m "功能：新增平台对象ID生成器"
 - Modify: `tests/ConfigCenter.Tests/ValueListServiceTests.cs`
 - Test: `tests/ConfigCenter.Tests/ConfigCenter.Tests.csproj`
 
-- [ ] **Step 1: 写 ConfigCenter 失败测试**
+- [x] **Step 1: 写 ConfigCenter 失败测试**
 
 Append to `tests/ConfigCenter.Tests/ConfigCenterModuleTests.cs`:
 
@@ -398,7 +398,7 @@ private sealed class FixedObjectIdGenerator : IPlatformObjectIdGenerator
 
 Add `using ICP.Platform.Crud.ObjectIds;`.
 
-- [ ] **Step 2: 运行 ConfigCenter 定向测试确认失败**
+- [x] **Step 2: 运行 ConfigCenter 定向测试确认失败**
 
 Run:
 
@@ -413,7 +413,7 @@ FAIL
 CS1729: 'ConfigService' does not contain a constructor that takes 2 arguments
 ```
 
-- [ ] **Step 3: 移除模型默认裸 GUID**
+- [x] **Step 3: 移除模型默认裸 GUID**
 
 Modify `server/modules/ConfigCenter/Models/ConfigItem.cs`:
 
@@ -427,7 +427,7 @@ Modify `server/modules/ConfigCenter/Models/ValueListItem.cs`:
 public string Id { get; set; } = string.Empty;
 ```
 
-- [ ] **Step 4: 在 ConfigService 注入并使用生成器**
+- [x] **Step 4: 在 ConfigService 注入并使用生成器**
 
 Modify `server/modules/ConfigCenter/Services/ConfigService.cs`:
 
@@ -473,7 +473,7 @@ var item = new ConfigItem
 };
 ```
 
-- [ ] **Step 5: 在 ValueListService 注入并使用生成器**
+- [x] **Step 5: 在 ValueListService 注入并使用生成器**
 
 Modify `server/modules/ConfigCenter/Services/ValueListService.cs`:
 
@@ -513,7 +513,7 @@ var item = new ValueListItem
 };
 ```
 
-- [ ] **Step 6: 在 ConfigCenter 模块装配点注册对象 ID 生成器**
+- [x] **Step 6: 在 ConfigCenter 模块装配点注册对象 ID 生成器**
 
 Modify `server/modules/ConfigCenter/ConfigCenterModule.cs`:
 
@@ -538,7 +538,7 @@ public override void ConfigureServices(IServiceCollection services)
 }
 ```
 
-- [ ] **Step 7: 更新既有测试构造器**
+- [x] **Step 7: 更新既有测试构造器**
 
 Where existing tests use:
 
@@ -556,7 +556,7 @@ new ValueListService(repository, new PlatformObjectIdGenerator())
 
 Add `using ICP.Platform.Crud.ObjectIds;` to touched test files.
 
-- [ ] **Step 8: 运行 ConfigCenter 测试**
+- [x] **Step 8: 运行 ConfigCenter 测试**
 
 Run:
 
@@ -570,7 +570,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```powershell
 git add .\server\modules\ConfigCenter\Models\ConfigItem.cs .\server\modules\ConfigCenter\Models\ValueListItem.cs .\server\modules\ConfigCenter\ConfigCenterModule.cs .\server\modules\ConfigCenter\Services\ConfigService.cs .\server\modules\ConfigCenter\Services\ValueListService.cs .\tests\ConfigCenter.Tests

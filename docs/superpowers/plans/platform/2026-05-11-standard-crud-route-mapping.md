@@ -45,6 +45,8 @@
   增加 `Microsoft.AspNetCore.TestHost` 以验证 Minimal API route mapping。
 - `apps/host-api/Program.cs`  
   调用 `app.MapStandardCrudResources()`。
+- `apps/host-api/HostApi.csproj`  
+  显式引用 `PlatformCrud.csproj`，避免 Host 通过 Organization 的传递引用访问平台路由扩展。
 - `server/modules/Organization/OrganizationModule.cs`  
   注册 Person descriptor，移除人员标准 CRUD service/repository，注册人员账号绑定服务。
 - `frontend/modules/organization/src/services/organizationService.ts`  
@@ -393,6 +395,24 @@ public sealed class StandardCrudEndpointRouteBuilderTests
     }
 
     [Fact]
+    public async Task MapStandardCrudResources_MapsReadOnlyStandardRoutes()
+    {
+        var recording = new RecordingStandardCrudService();
+        await using var app = BuildApp(recording);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        var detailResponse = await client.GetAsync("/api/organization/persons/Person_00000000000000000000000000000001");
+        var optionsResponse = await client.GetAsync("/api/organization/persons/options?pageSize=7&keyword=张");
+
+        detailResponse.EnsureSuccessStatusCode();
+        optionsResponse.EnsureSuccessStatusCode();
+        Assert.Equal("Person_00000000000000000000000000000001", recording.LastDetailId);
+        Assert.Equal(7, recording.LastOptionsQuery!.PageSize);
+        Assert.Equal("张", recording.LastOptionsQuery.Filters!["keyword"]);
+    }
+
+    [Fact]
     public async Task MapStandardCrudResources_CreateReturnsDetail()
     {
         var recording = new RecordingStandardCrudService
@@ -409,6 +429,35 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(nameof(IStandardCrudService.CreateAsync), recording.LastMutation);
         Assert.Equal("P001", recording.LastMutationValues!["PersonNo"]!.ToString());
+    }
+
+    [Fact]
+    public async Task MapStandardCrudResources_MapsUpdateDisableAndDeleteRoutes()
+    {
+        var recording = new RecordingStandardCrudService();
+        await using var app = BuildApp(recording);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        var updateResponse = await client.PutAsJsonAsync(
+            "/api/organization/persons/Person_00000000000000000000000000000001",
+            new Dictionary<string, object?> { ["ENAME"] = "李四" });
+
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+        Assert.Equal(nameof(IStandardCrudService.UpdateAsync), recording.LastMutation);
+        Assert.Equal("李四", recording.LastMutationValues!["ENAME"]!.ToString());
+
+        var disableResponse = await client.PostAsync(
+            "/api/organization/persons/Person_00000000000000000000000000000001/disable",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+        Assert.Equal(nameof(IStandardCrudService.DisableAsync), recording.LastMutation);
+
+        var deleteResponse = await client.DeleteAsync("/api/organization/persons/Person_00000000000000000000000000000001");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.Equal(nameof(IStandardCrudService.DeleteAsync), recording.LastMutation);
     }
 
     [Fact]
@@ -479,6 +528,8 @@ public sealed class StandardCrudEndpointRouteBuilderTests
     private sealed class RecordingStandardCrudService : IStandardCrudService
     {
         public StandardCrudListQuery? LastListQuery { get; private set; }
+        public StandardCrudListQuery? LastOptionsQuery { get; private set; }
+        public string? LastDetailId { get; private set; }
         public string? LastMutation { get; private set; }
         public IReadOnlyDictionary<string, object?>? LastMutationValues { get; private set; }
         public StandardCrudMutationResult MutationResult { get; init; } = StandardCrudMutationResult.Success(Detail("Person_00000000000000000000000000000001"));
@@ -489,11 +540,17 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             return Task.FromResult(new StandardCrudListResult([], 0, query.Page, query.PageSize, query.SortBy, query.SortDirection));
         }
 
-        public Task<StandardCrudDetail?> GetDetailAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default) =>
-            Task.FromResult<StandardCrudDetail?>(Detail(id));
+        public Task<StandardCrudDetail?> GetDetailAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default)
+        {
+            LastDetailId = id;
+            return Task.FromResult<StandardCrudDetail?>(Detail(id));
+        }
 
-        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(StandardCrudDescriptor descriptor, StandardCrudListQuery query, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<StandardCrudOptionItem>>([]);
+        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(StandardCrudDescriptor descriptor, StandardCrudListQuery query, CancellationToken cancellationToken = default)
+        {
+            LastOptionsQuery = query;
+            return Task.FromResult<IReadOnlyList<StandardCrudOptionItem>>([]);
+        }
 
         public Task<StandardCrudMutationResult> CreateAsync(StandardCrudDescriptor descriptor, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
         {
@@ -981,6 +1038,9 @@ namespace ICP.Platform.Modules.Organization.Services;
 
 public interface IPersonUserLinkService
 {
+    /// <summary>
+    /// 将人员绑定到身份账号；人员存在性通过标准 CRUD 资源校验，不依赖旧 Person 仓储。
+    /// </summary>
     Task<PersonUserLinkDto> LinkUserAsync(
         string personId,
         LinkPersonUserRequest request,
@@ -1105,6 +1165,7 @@ git commit -m "功能：拆出人员账号绑定服务"
 - Create: `server/modules/Organization/Controllers/PersonUserLinksController.cs`
 - Modify: `server/modules/Organization/OrganizationModule.cs`
 - Modify: `apps/host-api/Program.cs`
+- Modify: `apps/host-api/HostApi.csproj`
 - Delete: `server/modules/Organization/Controllers/PersonsController.cs`
 - Delete: `server/modules/Organization/Services/IPersonService.cs`
 - Delete: `server/modules/Organization/Services/PersonService.cs`
@@ -1332,6 +1393,14 @@ public override void ConfigureServices(IServiceCollection services)
 
 - [ ] **Step 5: 在 Host 中挂载自动路由**
 
+Modify `apps/host-api/HostApi.csproj`.
+
+Add a direct platform CRUD project reference in the existing `ProjectReference` item group:
+
+```xml
+<ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
+```
+
 Modify `apps/host-api/Program.cs`.
 
 Add using:
@@ -1411,7 +1480,7 @@ Expected: build succeeds with 0 errors.
 - [ ] **Step 11: 提交**
 
 ```powershell
-git add .\apps\host-api\Program.cs .\server\modules\Organization .\tests\Organization.Tests
+git add .\apps\host-api\HostApi.csproj .\apps\host-api\Program.cs .\server\modules\Organization .\tests\Organization.Tests
 git commit -m "重构：人员中心标准CRUD改由平台自动映射"
 ```
 
@@ -1818,6 +1887,6 @@ git commit -m "验证：记录标准CRUD自动映射收口结果"
 
 ## Self-Review
 
-- **Spec coverage:** Task 1 覆盖资源注册表与 descriptor.Route 唯一真源；Task 2 覆盖自动路由映射；Task 3 覆盖人员账号绑定专属服务；Task 4 覆盖 Organization 接入、标准 CRUD Controller/Service/Repository/DTO 删除和专属 Controller 保留；Task 5 覆盖前端标准返回模型迁移；Task 6 覆盖验证记录和残留扫描。
+- **Spec coverage:** Task 1 覆盖资源注册表与 descriptor.Route 唯一真源；Task 2 覆盖自动路由映射全部标准动作；Task 3 覆盖人员账号绑定专属服务；Task 4 覆盖 Host 显式平台引用、Organization 接入、标准 CRUD Controller/Service/Repository/DTO 删除和专属 Controller 保留；Task 5 覆盖前端标准返回模型迁移；Task 6 覆盖验证记录和残留扫描。
 - **占位检查:** 本计划未保留占位语句或无期望结果的命令。
 - **Type consistency:** 平台统一使用 `IStandardCrudResourceRegistry`、`StandardCrudResourceRegistry`、`AddStandardCrudResource`、`MapStandardCrudResources`；人员专属能力统一使用 `IPersonUserLinkService`、`PersonUserLinkService`、`PersonUserLinksController`；前端标准读取模型统一使用 `StandardCrudListResult<TItem>`、`StandardCrudDetail`、`PersonListRow`、`PersonDetailView`。

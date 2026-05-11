@@ -1,12 +1,12 @@
 import { EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
-import type { PersonSummaryBlockDto } from '../services/organizationService';
+import type { StandardCrudSummaryBlock } from '../services/organizationService';
 
 interface AuthorizationSummaryCardProps {
-  summary: PersonSummaryBlockDto<string[]>;
+  summary: StandardCrudSummaryBlock<string[]>;
   title?: string;
 }
 
-function getSummaryStateLabel(status: PersonSummaryBlockDto['status']): string {
+function getSummaryStateLabel(status: StandardCrudSummaryBlock['status']): string {
   if (status === 'ready') {
     return '已加载';
   }

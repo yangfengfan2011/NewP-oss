@@ -259,3 +259,37 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 
 - 新建平台对象 ID 协议已由平台生成器统一承接。
 - 本轮未做历史数据回填；如需导入旧库数据，应单独设计迁移。
+
+## 标准 CRUD 路由自动映射与人员旧样板退场验证
+
+验证日期：2026-05-11
+
+验证目标：
+
+- Person 标准 CRUD 路由由 `StandardCrudDescriptor.Route` 自动映射。
+- `/api/organization/persons` 标准 CRUD 不再依赖 `PersonsController`。
+- 人员账号绑定保留为专属 Controller 能力。
+- 人员标准 CRUD 旧 service/repository/controller/DTO 样板已退场。
+
+验证命令：
+
+```powershell
+dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+pnpm --dir .\frontend --filter @icp-modules/organization build
+rg -n "PersonsController|IPersonService|PersonService|IPersonRepository|EfPersonRepository|PersonListItemDto|PersonDetailDto|PersonSummaryBlockDto" server/modules/Organization tests/Organization.Tests frontend/modules/organization/src
+rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceRegistry|PersonUserLinksController|IPersonUserLinkService" apps/host-api server/platform-crud server/modules/Organization tests
+```
+
+残留扫描结果：
+
+- `server/modules/Organization`、`tests/Organization.Tests` 与 `frontend/modules/organization/src` 中未发现人员旧标准 CRUD 样板名称残留。
+- 前端人员摘要块类型已收口为 `StandardCrudSummaryBlock`，避免继续使用旧 `PersonSummaryBlockDto` 命名形成第二套 DTO 口径。
+- 标准 CRUD 自动映射入口扫描命中 `apps/host-api/Program.cs`、`server/platform-crud` 注册表与路由映射扩展、`server/modules/Organization/OrganizationModule.cs`、`PersonUserLinksController`、`IPersonUserLinkService` 及对应测试，证明 Host 挂载、平台内核、Organization 注册和专属 Controller 边界均有可检索证据。
+
+验证结论：
+
+- 标准 CRUD API 对外继续使用模块语义路由，对内统一由平台 mapper 委托 `StandardCrudEndpoint`。
+- 人员中心只保留账号绑定专属 Controller，不再保留标准 CRUD 空壳 Controller。
+- Person 的运行时真源为 `PersonCrudDescriptorFactory` 与模型 metadata；人员账号绑定关系继续由 Organization 模块专属代码维护。

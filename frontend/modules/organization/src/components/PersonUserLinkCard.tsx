@@ -1,12 +1,12 @@
 import { EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
-import type { PersonSummaryBlockDto, PersonUserLinkSummaryData } from '../services/organizationService';
+import type { StandardCrudSummaryBlock, PersonUserLinkSummaryData } from '../services/organizationService';
 
 interface PersonUserLinkCardProps {
-  summary: PersonSummaryBlockDto<PersonUserLinkSummaryData>;
+  summary: StandardCrudSummaryBlock<PersonUserLinkSummaryData>;
   title?: string;
 }
 
-function getSummaryStateLabel(status: PersonSummaryBlockDto['status']): string {
+function getSummaryStateLabel(status: StandardCrudSummaryBlock['status']): string {
   if (status === 'ready') {
     return '已绑定';
   }

@@ -1784,7 +1784,7 @@ git commit -m "重构：人员中心前端消费标准CRUD模型"
 - Build: `apps/host-api/HostApi.csproj`
 - Build: `frontend`
 
-- [ ] **Step 1: 扫描人员中心旧样板残留**
+- [x] **Step 1: 扫描人员中心旧样板残留**
 
 Run:
 
@@ -1794,7 +1794,7 @@ rg -n "PersonsController|IPersonService|PersonService|IPersonRepository|EfPerson
 
 Expected: no matches. If matches remain in `docs/` they are documentation history and do not block code cleanup.
 
-- [ ] **Step 2: 扫描标准 CRUD 自动映射入口**
+- [x] **Step 2: 扫描标准 CRUD 自动映射入口**
 
 Run:
 
@@ -1804,7 +1804,7 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 
 Expected: output includes `apps/host-api/Program.cs`, `server/platform-crud`, `server/modules/Organization/OrganizationModule.cs`, `PersonUserLinksController`, and new tests.
 
-- [ ] **Step 3: 回填验证记录**
+- [x] **Step 3: 回填验证记录**
 
 Append to `docs/verification/organization-module-verification.md`:
 
@@ -1838,7 +1838,7 @@ rg -n "PersonsController|IPersonService|PersonService|IPersonRepository|EfPerson
 - Person 的运行时真源为 `PersonCrudDescriptorFactory` 与模型 metadata；人员账号绑定关系继续由 Organization 模块专属代码维护。
 ````
 
-- [ ] **Step 4: 运行平台 CRUD 测试**
+- [x] **Step 4: 运行平台 CRUD 测试**
 
 Run:
 
@@ -1848,7 +1848,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 5: 运行 Organization 测试**
+- [x] **Step 5: 运行 Organization 测试**
 
 Run:
 
@@ -1858,7 +1858,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 6: 构建 HostApi**
+- [x] **Step 6: 构建 HostApi**
 
 Run:
 
@@ -1868,7 +1868,7 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 
 Expected: build succeeds with 0 errors.
 
-- [ ] **Step 7: 构建 Organization 前端**
+- [x] **Step 7: 构建 Organization 前端**
 
 Run:
 
@@ -1878,7 +1878,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 
 Expected: build succeeds.
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 git add .\docs\verification\organization-module-verification.md

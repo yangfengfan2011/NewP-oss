@@ -44,7 +44,7 @@ export interface IdentityUserOptionDto {
 
 export type SummaryBlockStatus = 'ready' | 'notConfigured' | 'dependencyUnavailable';
 
-export interface PersonSummaryBlockDto<T = unknown> {
+export interface StandardCrudSummaryBlock<T = unknown> {
   status: SummaryBlockStatus;
   data: T | null;
 }
@@ -67,7 +67,7 @@ export interface StandardCrudListResult<TItem> {
 
 export interface StandardCrudDetail {
   fields: Record<string, unknown>;
-  summaries: Record<string, PersonSummaryBlockDto<unknown> | undefined>;
+  summaries: Record<string, StandardCrudSummaryBlock<unknown> | undefined>;
 }
 
 export interface PersonListRow {
@@ -99,8 +99,8 @@ export interface PersonDetailView {
   companyName?: string | null;
   departmentName?: string | null;
   positionName?: string | null;
-  userLinkSummary: PersonSummaryBlockDto<PersonUserLinkSummaryData>;
-  authorizationSummary: PersonSummaryBlockDto<string[]>;
+  userLinkSummary: StandardCrudSummaryBlock<PersonUserLinkSummaryData>;
+  authorizationSummary: StandardCrudSummaryBlock<string[]>;
 }
 
 export interface PersonUpsertRequest {
@@ -188,7 +188,7 @@ function readDateString(record: Record<string, unknown>, keys: string[], fallbac
 function normalizeSummaryBlock<T>(
   value: unknown,
   mapData?: (data: unknown) => T,
-): PersonSummaryBlockDto<T> {
+): StandardCrudSummaryBlock<T> {
   // 状态化摘要的关键不是“有没有内容”，而是“依赖异常时页面还能否只读降级”。
   if (isRecord(value)) {
     const status = value['status'];

@@ -349,7 +349,7 @@ git commit -m "功能：新增标准CRUD资源注册表"
 - Create: `server/platform-crud/Extensions/StandardCrudEndpointRouteBuilderExtensions.cs`
 - Test: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 
-- [ ] **Step 1: 增加 TestHost 包引用**
+- [x] **Step 1: 增加 TestHost 包引用**
 
 Modify `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj` package references:
 
@@ -357,7 +357,7 @@ Modify `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj` package references:
 <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.1" />
 ```
 
-- [ ] **Step 2: 写自动路由映射失败测试**
+- [x] **Step 2: 写自动路由映射失败测试**
 
 Create `tests/PlatformCrud.Tests/StandardCrudEndpointRouteBuilderTests.cs`:
 
@@ -581,7 +581,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
 }
 ```
 
-- [ ] **Step 3: 运行路由映射测试确认失败**
+- [x] **Step 3: 运行路由映射测试确认失败**
 
 Run:
 
@@ -591,7 +591,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Standa
 
 Expected: FAIL，提示 `MapStandardCrudResources` 不存在。
 
-- [ ] **Step 4: 新增自动路由映射器**
+- [x] **Step 4: 新增自动路由映射器**
 
 Create `server/platform-crud/Extensions/StandardCrudEndpointRouteBuilderExtensions.cs`:
 
@@ -802,7 +802,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
 }
 ```
 
-- [ ] **Step 5: 运行路由映射测试确认通过**
+- [x] **Step 5: 运行路由映射测试确认通过**
 
 Run:
 
@@ -812,7 +812,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Standa
 
 Expected: PASS。
 
-- [ ] **Step 6: 运行平台 CRUD 全量测试**
+- [x] **Step 6: 运行平台 CRUD 全量测试**
 
 Run:
 
@@ -822,7 +822,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj .\tests\PlatformCrud.Tests\StandardCrudEndpointRouteBuilderTests.cs .\server\platform-crud\Extensions\StandardCrudEndpointRouteBuilderExtensions.cs

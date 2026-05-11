@@ -1,0 +1,289 @@
+using System.Text.Json;
+using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.Runtime;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ICP.Platform.Crud.Extensions;
+
+public static class StandardCrudEndpointRouteBuilderExtensions
+{
+    private static readonly HashSet<string> StandardQueryKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "page",
+        "pageSize",
+        "sortBy",
+        "sortDirection"
+    };
+
+    /// <summary>
+    /// 按 descriptor.Route 自动映射标准 CRUD API；特殊业务动作仍应留在模块 Controller。
+    /// </summary>
+    public static IEndpointRouteBuilder MapStandardCrudResources(this IEndpointRouteBuilder endpoints)
+    {
+        var registry = endpoints.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>();
+        var descriptors = registry.GetAll();
+        ValidateStandardRouteConflicts(descriptors);
+
+        foreach (var descriptor in descriptors)
+        {
+            MapResource(endpoints, descriptor);
+        }
+
+        return endpoints;
+    }
+
+    private static void MapResource(IEndpointRouteBuilder endpoints, StandardCrudDescriptor descriptor)
+    {
+        var route = "/" + descriptor.Route.Trim().Trim('/');
+
+        endpoints.MapGet(route, async (
+            HttpContext context,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await endpoint.ListAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
+            return Results.Ok(result);
+        });
+
+        endpoints.MapGet(route + "/options", async (
+            HttpContext context,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await endpoint.OptionsAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
+            return Results.Ok(result);
+        });
+
+        endpoints.MapGet(route + "/{id}", async (
+            string id,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var detail = await endpoint.GetDetailAsync(descriptor, id, cancellationToken);
+            return detail is null ? Results.NotFound() : Results.Ok(detail);
+        });
+
+        endpoints.MapPost(route, async (
+            HttpContext context,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var values = await ReadValuesAsync(context, cancellationToken);
+            var result = await endpoint.CreateAsync(descriptor, values, cancellationToken);
+            return ToMutationResult(result, detail => Results.Created(BuildCreatedLocation(route, descriptor, detail), detail));
+        });
+
+        endpoints.MapPut(route + "/{id}", async (
+            string id,
+            HttpContext context,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var values = await ReadValuesAsync(context, cancellationToken);
+            var result = await endpoint.UpdateAsync(descriptor, id, values, cancellationToken);
+            return ToMutationResult(result, Results.Ok);
+        });
+
+        endpoints.MapPost(route + "/{id}/disable", async (
+            string id,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await endpoint.DisableAsync(descriptor, id, cancellationToken);
+            return ToMutationResult(result, Results.Ok);
+        });
+
+        endpoints.MapDelete(route + "/{id}", async (
+            string id,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await endpoint.DeleteAsync(descriptor, id, cancellationToken);
+            return result.Succeeded
+                ? Results.NoContent()
+                : ToErrorResult(result.Error!);
+        });
+    }
+
+    // 自动映射会从一个 descriptor 派生多个路由；这里在启动期拦截派生路由遮挡，避免运行期出现双真源。
+    private static void ValidateStandardRouteConflicts(IReadOnlyList<StandardCrudDescriptor> descriptors)
+    {
+        var registered = new List<StandardRouteCandidate>();
+
+        foreach (var descriptor in descriptors)
+        {
+            foreach (var candidate in BuildRouteCandidates(descriptor))
+            {
+                var existing = registered.FirstOrDefault(route => !route.BelongsTo(candidate) && route.ExactlyMatches(candidate))
+                    ?? registered.FirstOrDefault(route => !route.BelongsTo(candidate) && route.ConflictsWith(candidate));
+                if (existing is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"标准 CRUD 路由 {candidate.Method} {candidate.Pattern} 被 {existing.ResourceKey} 与 {candidate.ResourceKey} 重复映射。");
+                }
+
+                registered.Add(candidate);
+            }
+        }
+    }
+
+    private static IEnumerable<StandardRouteCandidate> BuildRouteCandidates(StandardCrudDescriptor descriptor)
+    {
+        var route = "/" + descriptor.Route.Trim().Trim('/');
+
+        yield return StandardRouteCandidate.Create("GET", route, descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("GET", route + "/options", descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("GET", route + "/{id}", descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("POST", route, descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("PUT", route + "/{id}", descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("POST", route + "/{id}/disable", descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("DELETE", route + "/{id}", descriptor.ResourceKey);
+    }
+
+    private static StandardCrudListQuery BuildListQuery(IQueryCollection query)
+    {
+        var filters = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var pair in query)
+        {
+            if (!StandardQueryKeys.Contains(pair.Key))
+            {
+                filters[pair.Key] = pair.Value.ToString();
+            }
+        }
+
+        return new StandardCrudListQuery(
+            Page: ReadInt(query, "page", 1),
+            PageSize: ReadInt(query, "pageSize", 20),
+            SortBy: ReadString(query, "sortBy"),
+            SortDirection: ReadString(query, "sortDirection"),
+            Filters: filters);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, object?>> ReadValuesAsync(
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var values = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(
+            context.Request.Body,
+            cancellationToken: cancellationToken);
+
+        return values is null
+            ? new Dictionary<string, object?>(StringComparer.Ordinal)
+            : values.ToDictionary(pair => pair.Key, pair => NormalizeJsonValue(pair.Value), StringComparer.Ordinal);
+    }
+
+    private static object? NormalizeJsonValue(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number when value.TryGetInt64(out var longValue) => longValue,
+            JsonValueKind.Number when value.TryGetDecimal(out var decimalValue) => decimalValue,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            JsonValueKind.Undefined => null,
+            _ => value.GetRawText()
+        };
+    }
+
+    private static IResult ToMutationResult(
+        StandardCrudMutationResult result,
+        Func<StandardCrudDetail, IResult> success)
+    {
+        if (!result.Succeeded)
+        {
+            return ToErrorResult(result.Error!);
+        }
+
+        if (result.Detail is null)
+        {
+            return ToErrorResult(new StandardCrudError
+            {
+                StatusCode = StatusCodes.Status500InternalServerError,
+                Code = "StandardCrud.MutationDetailMissing",
+                Message = "标准 CRUD 写入成功但未返回详情。",
+                ReasonKey = "standardCrud.mutationDetailMissing"
+            });
+        }
+
+        return success(result.Detail);
+    }
+
+    private static IResult ToErrorResult(StandardCrudError error) =>
+        Results.Json(error, statusCode: error.StatusCode);
+
+    private static string BuildCreatedLocation(
+        string route,
+        StandardCrudDescriptor descriptor,
+        StandardCrudDetail detail)
+    {
+        var id = detail.Fields.TryGetValue(descriptor.IdField, out var value)
+            ? value?.ToString()
+            : null;
+
+        return string.IsNullOrWhiteSpace(id) ? route : $"{route}/{id}";
+    }
+
+    private static int ReadInt(IQueryCollection query, string key, int fallback) =>
+        query.TryGetValue(key, out var value) && int.TryParse(value.ToString(), out var parsed)
+            ? parsed
+            : fallback;
+
+    private static string? ReadString(IQueryCollection query, string key) =>
+        query.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value.ToString())
+            ? value.ToString()
+            : null;
+
+    private sealed record StandardRouteCandidate(
+        string Method,
+        string Pattern,
+        string ResourceKey,
+        IReadOnlyList<string> Segments)
+    {
+        public static StandardRouteCandidate Create(string method, string pattern, string resourceKey)
+        {
+            var segments = pattern.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return new StandardRouteCandidate(method, pattern, resourceKey, segments);
+        }
+
+        public bool ConflictsWith(StandardRouteCandidate other)
+        {
+            if (!string.Equals(Method, other.Method, StringComparison.OrdinalIgnoreCase) ||
+                Segments.Count != other.Segments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < Segments.Count; i++)
+            {
+                if (!SegmentsConflict(Segments[i], other.Segments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public bool ExactlyMatches(StandardRouteCandidate other) =>
+            string.Equals(Method, other.Method, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Pattern, other.Pattern, StringComparison.OrdinalIgnoreCase);
+
+        public bool BelongsTo(StandardRouteCandidate other) =>
+            string.Equals(ResourceKey, other.ResourceKey, StringComparison.Ordinal);
+
+        private static bool SegmentsConflict(string left, string right) =>
+            IsRouteParameter(left) ||
+            IsRouteParameter(right) ||
+            string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsRouteParameter(string segment) =>
+            segment.StartsWith('{') && segment.EndsWith('}');
+    }
+}

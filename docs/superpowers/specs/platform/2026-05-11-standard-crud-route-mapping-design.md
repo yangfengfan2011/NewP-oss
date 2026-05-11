@@ -46,6 +46,47 @@
 
 本设计只定义平台路由映射与人员中心迁移边界，不直接修改其他模块的 Controller。
 
+### 4.1 人员中心删除与退场范围
+
+自动路由映射落地后，人员中心不应继续保留标准 CRUD 样板代码。以下代码应在迁移任务中删除、拆分或改名，避免形成“看似有用但实际绕过平台内核”的第二入口。
+
+后端明确删除或拆分：
+
+- 删除 `server/modules/Organization/Controllers/PersonsController.cs` 中的标准 CRUD actions：`GetList / Get / Create / Update / Disable / Delete / Options`。
+- 删除 `PersonsController` 中只服务旧 DTO 兼容的私有映射方法：`MapListItem / MapDetail / MapCreateValues / MapUpdateValues / MapMutationDto / ReadString* / ReadBool / ReadDateTime / MutationDetailMissing`。
+- 将 `SearchUserOptions` 与 `LinkUser` 从 `PersonsController` 拆到人员账号绑定专属 Controller，例如 `PersonUserLinksController`；该 Controller 只承载非标准动作。
+- 删除 `server/modules/Organization/Services/IPersonService.cs` 中的标准 CRUD 方法：`GetByIdAsync / GetDetailAsync / GetListAsync / CreateAsync / UpdateAsync / DisableAsync`。
+- 删除或重命名 `server/modules/Organization/Services/PersonService.cs`。迁移后只保留人员账号绑定服务，例如 `IPersonUserLinkService / PersonUserLinkService`，其职责限于 `LinkUserAsync`。
+- 删除 `server/modules/Organization/Repositories/IPersonRepository.cs` 与 `server/modules/Organization/Persistence/Ef/EfPersonRepository.cs`。人员是否存在应通过标准 CRUD descriptor 对应的读取能力校验，不再维护 Person 专属仓储。
+- 删除 `server/modules/Organization/DTOs/PersonListItemDto.cs`、`server/modules/Organization/DTOs/PersonDetailDto.cs` 和 `server/modules/Organization/DTOs/PersonSummaryBlockDto.cs`，前提是前端已切到 `StandardCrudListResult / StandardCrudDetail / StandardCrudSummaryBlock`。
+- 删除 `server/modules/Organization/Models/Person.cs`，前提是人员账号绑定服务已不再构造或读取 `Person` 领域对象。Person 的运行时结构继续来自 `modules/Organization/metadata/models/Person.model.json` 和 `PersonCrudDescriptorFactory`。
+
+后端保留：
+
+- 保留 `PersonCrudDescriptorFactory`、`PersonCrudQueryCustomizer`、`PersonCrudDisplayValueResolver`、`PersonUserLinkSummaryProvider`、`PersonAuthorizationSummaryProvider`、`PersonCrudValidator`、`PersonCrudDeleteGuard`。
+- 保留 `PersonUserLink` 模型、DTO、仓储和 EF 实现，因为账号绑定是人员中心专属关系，不属于标准 CRUD 主对象。
+- 保留 `IdentityUserOptionDto` 与 `LinkPersonUserRequest`，它们属于人员账号绑定入口。
+- 保留生成目录中的 `Generated/PersonDto.g.cs`，除非后续另有“未使用生成 DTO 清理”设计；它当前属于模型 DTO 生成主线，不在本路由映射设计中删除。
+
+测试明确删除或改名：
+
+- 删除 `PersonListContractTests` 中针对 `PersonsController` 标准 CRUD action 与旧 DTO 形状的测试。
+- 将 descriptor、query customizer、delete guard、summary provider 相关测试迁移到新的 `PersonStandardCrudResourceTests` 或等价测试类。
+- 删除 `PersonServiceTests` 中覆盖人员标准 CRUD service/repository 的测试。
+- 将账号绑定相关测试迁移到 `PersonUserLinkServiceTests`。
+
+前端明确收缩：
+
+- `frontend/modules/organization/src/services/organizationService.ts` 中人员标准 CRUD 客户端应改为直接消费标准返回模型，删除旧数组兼容、旧 DTO 兼容读取和保存后再 `refreshPersonDetail` 的桥接逻辑。
+- `PersonListItemDto / PersonDetailDto / PersonListResultDto` 等前端旧 DTO 类型应改名或替换为标准 CRUD 读取模型适配类型。
+- `PersonCreatePage.tsx / PersonDetailPage.tsx` 是否删除取决于前端页面模式迁移：若人员维护统一收口到标准列表页 drawer/page runtime，则删除这些独立页面；若仍保留详情页体验，则只改其数据源为标准详情模型，不再依赖旧 DTO。
+
+不删除：
+
+- 不删除 `modules/Organization/metadata/models/Person.model.json`、`PersonList.view.json`、`PersonDetail.view.json` 和相关 dic/nav 元数据。
+- 不删除 `PersonUserLink` 相关持久化代码。
+- 不删除 Company / Department / Position 当前 service/controller/repository；它们是否迁移到标准 CRUD 是后续独立设计，不并入人员中心退场任务。
+
 ## 5. 设计约束
 
 - `StandardCrudDescriptor.Route` 是标准 CRUD 业务路由唯一真源。
@@ -172,6 +213,18 @@ mapper 不直接访问数据库，不做字段转换，不知道 `Person` 含义
 3. `PersonsController` 中标准 CRUD 方法退场。
 4. 保留或重命名人员专属 Controller，只承载 `user-options` 与 `{id}/user-link`。
 
+### 8.4 人员中心代码退场流程
+
+人员中心退场按“先替代、再删除”的顺序执行：
+
+1. 平台 mapper 映射 `api/organization/persons` 标准 CRUD 路由，并有测试证明标准请求不经过 `PersonsController`。
+2. 新增人员账号绑定专属 Controller 和 service，覆盖 `user-options` 与 `{id}/user-link`。
+3. `PersonUserLinkService` 通过标准 CRUD 读取能力校验人员存在，不再依赖 `IPersonRepository`。
+4. 删除 `PersonsController` 标准 CRUD actions 和私有 DTO 映射方法。
+5. 删除 `IPersonService / PersonService / IPersonRepository / EfPersonRepository` 中的人员标准 CRUD 主干。
+6. 删除后端旧 DTO 与对应测试，保留 descriptor 与扩展点测试。
+7. 前端切换到标准返回模型后，删除旧兼容 normalizer 和旧 DTO 类型。
+
 ## 9. 接口与集成点
 
 标准映射接口：
@@ -283,14 +336,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 1. 平台先新增 `IStandardCrudResourceRegistry`、descriptor 注册扩展和冲突校验测试。
 2. 新增 `MapStandardCrudResources()`，用测试验证标准路由映射到 `StandardCrudEndpoint`。
 3. Organization 注册 Person descriptor 到资源注册表。
-4. 拆分 `PersonsController`：标准 CRUD 方法退场，专属动作保留在人员专属 Controller。
-5. 人员中心前端迁移到标准返回模型。
-6. 回填验证记录，说明标准 Controller 退场边界与特殊 Controller 保留规则。
+4. 新增人员账号绑定专属 Controller 与 `PersonUserLinkService`，先接住 `user-options` 和 `{id}/user-link`。
+5. 删除 `PersonsController` 标准 CRUD actions、私有 DTO 映射方法和对应 Controller 兼容测试。
+6. 删除 `IPersonService / PersonService / IPersonRepository / EfPersonRepository` 的人员标准 CRUD 主干，保留或新建账号绑定专属服务。
+7. 删除后端旧人员列表/详情/摘要 DTO，迁移测试到标准 CRUD 模型与人员账号绑定模型。
+8. 人员中心前端迁移到标准返回模型，删除旧兼容 normalizer 和旧 DTO 类型。
+9. 回填验证记录，说明删除清单、保留清单、标准 Controller 退场边界与特殊 Controller 保留规则。
 
 ## 15. AI-First 最小检查清单
 
 - 入口在哪里：`server/platform-crud` 的资源注册表、DI 扩展和 `MapStandardCrudResources()`；试点入口是 `PersonCrudDescriptorFactory.Create()` 与 `OrganizationModule.ConfigureServices`。
 - 边界在哪里：平台只映射标准 CRUD；人员账号绑定、用户候选项、组织树、批量导入导出等非标准能力继续属于模块 Controller 或单独平台能力。
 - 如何验证：运行 `PlatformCrud.Tests`、`Organization.Tests`、`HostApi` 构建；涉及前端迁移时运行 `@icp-modules/organization` 构建；设计文档运行 AI-first 校验脚本。
-- 失败信号是什么：标准 CRUD 仍需要手写空壳 Controller；同一路由存在 descriptor 与 Controller 双真源；mapper 出现 Person 特判；前端仍依赖旧 DTO 兼容层无法消费标准模型；route 冲突没有启动失败。
+- 失败信号是什么：标准 CRUD 仍需要手写空壳 Controller；人员标准 CRUD 仍依赖 `PersonService / IPersonRepository / EfPersonRepository`；同一路由存在 descriptor 与 Controller 双真源；mapper 出现 Person 特判；前端仍依赖旧 DTO 兼容层无法消费标准模型；route 冲突没有启动失败。
 - 如何回滚：取消 Person descriptor 注册或移除 `MapStandardCrudResources()` 调用，恢复旧 `PersonsController` 标准方法；专属动作 Controller 独立保留，不随标准路由回滚。

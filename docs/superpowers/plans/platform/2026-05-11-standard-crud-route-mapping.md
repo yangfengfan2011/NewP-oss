@@ -839,7 +839,7 @@ git commit -m "功能：新增标准CRUD自动路由映射"
 - Create: `tests/Organization.Tests/PersonUserLinkServiceTests.cs`
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 
-- [ ] **Step 1: 写人员账号绑定服务失败测试**
+- [x] **Step 1: 写人员账号绑定服务失败测试**
 
 Create `tests/Organization.Tests/PersonUserLinkServiceTests.cs`:
 
@@ -1016,7 +1016,7 @@ public sealed class PersonUserLinkServiceTests
 }
 ```
 
-- [ ] **Step 2: 运行人员账号绑定服务测试确认失败**
+- [x] **Step 2: 运行人员账号绑定服务测试确认失败**
 
 Run:
 
@@ -1026,7 +1026,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter Person
 
 Expected: FAIL，提示 `IPersonUserLinkService` 或 `PersonUserLinkService` 不存在。
 
-- [ ] **Step 3: 新增人员账号绑定服务接口**
+- [x] **Step 3: 新增人员账号绑定服务接口**
 
 Create `server/modules/Organization/Services/IPersonUserLinkService.cs`:
 
@@ -1048,7 +1048,7 @@ public interface IPersonUserLinkService
 }
 ```
 
-- [ ] **Step 4: 新增人员账号绑定服务实现**
+- [x] **Step 4: 新增人员账号绑定服务实现**
 
 Create `server/modules/Organization/Services/PersonUserLinkService.cs`:
 
@@ -1140,7 +1140,7 @@ public sealed class PersonUserLinkService : IPersonUserLinkService
 }
 ```
 
-- [ ] **Step 5: 运行人员账号绑定服务测试确认通过**
+- [x] **Step 5: 运行人员账号绑定服务测试确认通过**
 
 Run:
 
@@ -1150,7 +1150,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter Person
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add .\server\modules\Organization\Services\IPersonUserLinkService.cs .\server\modules\Organization\Services\PersonUserLinkService.cs .\tests\Organization.Tests\PersonUserLinkServiceTests.cs

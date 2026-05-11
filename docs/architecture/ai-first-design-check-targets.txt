@@ -5,3 +5,4 @@
 ../designs/subagents-new-platform-collaboration-design.md
 ai-first-execution-standard.md
 ../superpowers/specs/tooling/2026-05-05-newp-plan-runner-design.md
+../superpowers/specs/platform/2026-05-11-standard-crud-route-mapping-design.md

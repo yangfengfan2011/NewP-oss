@@ -86,7 +86,7 @@
 - Create: `tests/PlatformCrud.Tests/StandardCrudResourceRegistryTests.cs`
 - Test: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 
-- [ ] **Step 1: 写资源注册表失败测试**
+- [x] **Step 1: 写资源注册表失败测试**
 
 Create `tests/PlatformCrud.Tests/StandardCrudResourceRegistryTests.cs`:
 
@@ -159,7 +159,7 @@ public sealed class StandardCrudResourceRegistryTests
 }
 ```
 
-- [ ] **Step 2: 运行注册表测试确认失败**
+- [x] **Step 2: 运行注册表测试确认失败**
 
 Run:
 
@@ -169,7 +169,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Standa
 
 Expected: FAIL，提示 `StandardCrudResourceRegistry` 或 `IStandardCrudResourceRegistry` 类型不存在。
 
-- [ ] **Step 3: 新增资源注册表接口**
+- [x] **Step 3: 新增资源注册表接口**
 
 Create `server/platform-crud/Abstractions/IStandardCrudResourceRegistry.cs`:
 
@@ -197,7 +197,7 @@ public interface IStandardCrudResourceRegistry
 }
 ```
 
-- [ ] **Step 4: 新增资源注册表实现**
+- [x] **Step 4: 新增资源注册表实现**
 
 Create `server/platform-crud/Runtime/StandardCrudResourceRegistry.cs`:
 
@@ -268,7 +268,7 @@ public sealed class StandardCrudResourceRegistry : IStandardCrudResourceRegistry
 }
 ```
 
-- [ ] **Step 5: 增加 DI 注册扩展**
+- [x] **Step 5: 增加 DI 注册扩展**
 
 Modify `server/platform-crud/Extensions/StandardCrudServiceCollectionExtensions.cs`:
 
@@ -322,7 +322,7 @@ public static class StandardCrudServiceCollectionExtensions
 }
 ```
 
-- [ ] **Step 6: 运行注册表测试确认通过**
+- [x] **Step 6: 运行注册表测试确认通过**
 
 Run:
 
@@ -332,7 +332,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Standa
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add .\server\platform-crud\Abstractions\IStandardCrudResourceRegistry.cs .\server\platform-crud\Runtime\StandardCrudResourceRegistry.cs .\server\platform-crud\Extensions\StandardCrudServiceCollectionExtensions.cs .\tests\PlatformCrud.Tests\StandardCrudResourceRegistryTests.cs

@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
@@ -24,9 +25,23 @@ public static class StandardCrudServiceCollectionExtensions
     public static IServiceCollection AddStandardCrudKernel(this IServiceCollection services)
     {
         services.AddPlatformObjectIdGeneration();
+        services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
         services.AddScoped<IStandardCrudRepository, EfStandardCrudRepository>();
         services.AddScoped<IStandardCrudService, StandardCrudService>();
         services.AddScoped<StandardCrudEndpoint>();
+        return services;
+    }
+
+    /// <summary>
+    /// 显式注册一个标准 CRUD 资源；descriptor 是标准路由和字段边界的唯一真源。
+    /// </summary>
+    public static IServiceCollection AddStandardCrudResource(
+        this IServiceCollection services,
+        StandardCrudDescriptor descriptor)
+    {
+        StandardCrudDescriptorValidator.Validate(descriptor);
+        services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
+        services.AddSingleton(descriptor);
         return services;
     }
 }

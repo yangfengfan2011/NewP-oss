@@ -8,14 +8,14 @@ import {
   getPositions,
   type CompanyDto,
   type DepartmentDto,
-  type PersonDetailDto,
+  type PersonDetailView,
   type PersonUpsertRequest,
   type PositionDto,
 } from '../services/organizationService';
 import type { PersonDetailRuntimeSection } from '../runtime/personCenterRuntime.types';
 
 interface PersonEditorFormProps {
-  person: PersonDetailDto;
+  person: PersonDetailView;
   onSave: (person: PersonUpsertRequest) => Promise<void>;
   sections: PersonDetailRuntimeSection[];
   resolveTitle: (titleKey: string, fallback: string) => string;
@@ -34,7 +34,7 @@ interface PersonDraft {
   isEnabled: boolean;
 }
 
-function buildDraft(person: PersonDetailDto): PersonDraft {
+function buildDraft(person: PersonDetailView): PersonDraft {
   return {
     personNo: person.personNo,
     name: person.name,

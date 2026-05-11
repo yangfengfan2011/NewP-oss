@@ -1498,7 +1498,7 @@ git commit -m "重构：人员中心标准CRUD改由平台自动映射"
 - Modify: `frontend/modules/organization/src/components/AuthorizationSummaryCard.tsx`
 - Test: `frontend/modules/organization/package.json`
 
-- [ ] **Step 1: 更新前端标准 CRUD 类型与映射函数**
+- [x] **Step 1: 更新前端标准 CRUD 类型与映射函数**
 
 Modify `frontend/modules/organization/src/services/organizationService.ts`.
 
@@ -1631,7 +1631,7 @@ function normalizePersonListResponse(value: unknown): StandardCrudListResult<Per
 }
 ```
 
-- [ ] **Step 2: 更新人员写入请求为标准字段名**
+- [x] **Step 2: 更新人员写入请求为标准字段名**
 
 Modify `frontend/modules/organization/src/services/organizationService.ts`.
 
@@ -1732,7 +1732,7 @@ export async function getPersons(query: {
 }
 ```
 
-- [ ] **Step 3: 更新前端引用类型名**
+- [x] **Step 3: 更新前端引用类型名**
 
 Run replacements:
 
@@ -1756,7 +1756,7 @@ rg -n "PersonListItemDto|PersonDetailDto|PersonListResultDto|refreshPersonDetail
 
 returns no matches.
 
-- [ ] **Step 4: 运行 Organization 前端构建**
+- [x] **Step 4: 运行 Organization 前端构建**
 
 Run:
 
@@ -1766,7 +1766,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 
 Expected: build succeeds.
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add .\frontend\modules\organization\src

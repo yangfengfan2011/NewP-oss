@@ -56,7 +56,21 @@ export interface PersonUserLinkSummaryData {
   linkedBy: string;
 }
 
-export interface PersonListItemDto {
+export interface StandardCrudListResult<TItem> {
+  items: TItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sortBy?: string | null;
+  sortDirection?: string | null;
+}
+
+export interface StandardCrudDetail {
+  fields: Record<string, unknown>;
+  summaries: Record<string, PersonSummaryBlockDto<unknown> | undefined>;
+}
+
+export interface PersonListRow {
   id: string;
   personNo: string;
   name: string;
@@ -71,12 +85,7 @@ export interface PersonListItemDto {
   isEnabled: boolean;
 }
 
-export interface PersonListResultDto {
-  items: PersonListItemDto[];
-  total: number;
-}
-
-export interface PersonDetailDto {
+export interface PersonDetailView {
   id: string;
   personNo: string;
   name: string;
@@ -209,121 +218,58 @@ function normalizeSummaryBlock<T>(
   };
 }
 
-function normalizePersonListItem(value: unknown): PersonListItemDto {
-  if (!isRecord(value)) {
-    return {
-      id: '',
-      personNo: '',
-      name: '',
-      companyId: '',
-      companyName: '',
-      departmentId: '',
-      departmentName: '',
-      positionId: null,
-      positionName: null,
-      employmentStatus: '',
-      employmentStatusLabel: '',
-      isEnabled: false,
-    };
-  }
+function normalizePersonListItem(value: unknown): PersonListRow {
+  const row = isRecord(value) ? value : {};
+  const employmentStatus = readString(row, ['EmploymentStatus'], 'FullTime');
 
-  const employmentStatus = readString(value, ['employmentStatus', 'EmploymentStatus'], 'FullTime');
   return {
-    id: readString(value, ['id', 'Id']),
-    personNo: readString(value, ['personNo', 'PersonNo']),
-    name: readString(value, ['name', 'Name']),
-    companyId: readString(value, ['companyId', 'CompanyId']),
-    companyName: readString(
-      value,
-      ['companyName', 'CompanyName', 'companyId_DisplayValue', 'CompanyId_DisplayValue'],
-      readString(value, ['companyId', 'CompanyId']),
-    ),
-    departmentId: readString(value, ['departmentId', 'DepartmentId']),
-    departmentName: readString(
-      value,
-      ['departmentName', 'DepartmentName', 'departmentId_DisplayValue', 'DepartmentId_DisplayValue'],
-      readString(value, ['departmentId', 'DepartmentId']),
-    ),
-    positionId: readNullableString(value, ['positionId', 'PositionId']),
-    positionName: readNullableString(
-      value,
-      ['positionName', 'PositionName', 'positionId_DisplayValue', 'PositionId_DisplayValue'],
-    ),
+    id: readString(row, ['EID']),
+    personNo: readString(row, ['PersonNo']),
+    name: readString(row, ['ENAME']),
+    companyId: readString(row, ['CompanyId']),
+    companyName: readString(row, ['CompanyName'], readString(row, ['CompanyId'])),
+    departmentId: readString(row, ['DepartmentId']),
+    departmentName: readString(row, ['DepartmentName'], readString(row, ['DepartmentId'])),
+    positionId: readNullableString(row, ['PositionId']),
+    positionName: readNullableString(row, ['PositionName']),
     employmentStatus,
-    employmentStatusLabel: readString(
-      value,
-      ['employmentStatusLabel', 'EmploymentStatus_DisplayValue', 'employmentStatus_DisplayValue'],
-      getEmploymentStatusLabel(employmentStatus),
-    ),
-    isEnabled: readBoolean(value, ['isEnabled', 'IsEnabled'], true),
+    employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
+    isEnabled: readBoolean(row, ['IsEnabled'], true),
   };
 }
 
-function normalizePersonDetail(value: unknown): PersonDetailDto {
-  if (!isRecord(value)) {
-    return {
-      id: '',
-      personNo: '',
-      name: '',
-      companyId: '',
-      departmentId: '',
-      positionId: null,
-      employmentStatus: 'FullTime',
-      employmentStatusLabel: getEmploymentStatusLabel('FullTime'),
-      isEnabled: false,
-      createdAt: '',
-      companyName: null,
-      departmentName: null,
-      positionName: null,
-      userLinkSummary: { status: 'notConfigured', data: null },
-      authorizationSummary: { status: 'notConfigured', data: null },
-    };
-  }
-
-  const employmentStatus = readString(value, ['employmentStatus', 'EmploymentStatus'], 'FullTime');
-  const rawUserLink = value['userLinkSummary'] ?? value['userLink'];
-  const rawAuthorizationSummary = value['authorizationSummary'];
+function normalizePersonDetail(value: unknown): PersonDetailView {
+  const detail = isRecord(value) ? value : {};
+  const fields = isRecord(detail['fields']) ? detail['fields'] : {};
+  const summaries = isRecord(detail['summaries']) ? detail['summaries'] : {};
+  const employmentStatus = readString(fields, ['EmploymentStatus'], 'FullTime');
 
   return {
-    id: readString(value, ['id', 'Id']),
-    personNo: readString(value, ['personNo', 'PersonNo']),
-    name: readString(value, ['name', 'Name']),
-    companyId: readString(value, ['companyId', 'CompanyId']),
-    departmentId: readString(value, ['departmentId', 'DepartmentId']),
-    positionId: readNullableString(value, ['positionId', 'PositionId']),
+    id: readString(fields, ['EID']),
+    personNo: readString(fields, ['PersonNo']),
+    name: readString(fields, ['ENAME']),
+    companyId: readString(fields, ['CompanyId']),
+    departmentId: readString(fields, ['DepartmentId']),
+    positionId: readNullableString(fields, ['PositionId']),
     employmentStatus,
-    employmentStatusLabel: readString(
-      value,
-      ['employmentStatusLabel', 'EmploymentStatus_DisplayValue', 'employmentStatus_DisplayValue'],
-      getEmploymentStatusLabel(employmentStatus),
-    ),
-    isEnabled: readBoolean(value, ['isEnabled', 'IsEnabled'], true),
-    createdAt: readDateString(value, ['createdAt', 'CreatedAt']),
-    companyName: readNullableString(value, ['companyName', 'CompanyName', 'companyId_DisplayValue', 'CompanyId_DisplayValue']),
-    departmentName: readNullableString(
-      value,
-      ['departmentName', 'DepartmentName', 'departmentId_DisplayValue', 'DepartmentId_DisplayValue'],
-    ),
-    positionName: readNullableString(
-      value,
-      ['positionName', 'PositionName', 'positionId_DisplayValue', 'PositionId_DisplayValue'],
-    ),
-    userLinkSummary: normalizeSummaryBlock(rawUserLink, (data) => {
-      const link = isRecord(data) ? data : null;
+    employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
+    isEnabled: readBoolean(fields, ['IsEnabled'], true),
+    createdAt: readDateString(fields, ['CreatedAt']),
+    companyName: readNullableString(fields, ['CompanyName']),
+    departmentName: readNullableString(fields, ['DepartmentName']),
+    positionName: readNullableString(fields, ['PositionName']),
+    userLinkSummary: normalizeSummaryBlock(summaries['userLink'], (data) => {
+      const link = isRecord(data) ? data : {};
       return {
-        personId: readString(link ?? {}, ['personId', 'PersonId']),
-        userId: readString(link ?? {}, ['userId', 'UserId']),
-        linkedAt: readString(link ?? {}, ['linkedAt', 'LinkedAt']),
-        linkedBy: readString(link ?? {}, ['linkedBy', 'LinkedBy']),
+        personId: readString(link, ['PersonId', 'personId']),
+        userId: readString(link, ['UserId', 'userId']),
+        linkedAt: readString(link, ['LinkedAt', 'linkedAt']),
+        linkedBy: readString(link, ['LinkedBy', 'linkedBy']),
       };
     }),
-    authorizationSummary: normalizeSummaryBlock(rawAuthorizationSummary, (data) => {
+    authorizationSummary: normalizeSummaryBlock(summaries['authorizationSummary'], (data) => {
       if (Array.isArray(data)) {
         return data.filter((item): item is string => typeof item === 'string');
-      }
-
-      if (isRecord(data) && Array.isArray(data.items)) {
-        return data.items.filter((item): item is string => typeof item === 'string');
       }
 
       return [];
@@ -331,35 +277,30 @@ function normalizePersonDetail(value: unknown): PersonDetailDto {
   };
 }
 
-function normalizePersonListResponse(value: unknown): PersonListResultDto {
-  if (Array.isArray(value)) {
-    const items = value.map(normalizePersonListItem);
-    return { items, total: items.length };
-  }
+function normalizePersonListResponse(value: unknown): StandardCrudListResult<PersonListRow> {
+  const result = isRecord(value) ? value : {};
+  const rawItems = Array.isArray(result['items']) ? result['items'] : [];
+  const items = rawItems.map(normalizePersonListItem);
 
-  if (isRecord(value)) {
-    const rawItems = Array.isArray(value['items']) ? value['items'] : [];
-    const items = rawItems.map(normalizePersonListItem);
-    const total = typeof value['total'] === 'number' ? value['total'] : items.length;
-    return { items, total };
-  }
-
-  return { items: [], total: 0 };
-}
-
-async function refreshPersonDetail(personId: string): Promise<PersonDetailDto> {
-  return normalizePersonDetail(
-    await fetchJson<unknown>(`/api/organization/persons/${personId}`, '加载人员详情失败'),
-  );
-}
-
-function normalizePersonUpsertRequest(dto: PersonUpsertRequest): PersonUpsertRequest {
   return {
-    ...dto,
-    companyId: dto.companyId && dto.companyId.trim().length > 0 ? dto.companyId : null,
-    departmentId: dto.departmentId && dto.departmentId.trim().length > 0 ? dto.departmentId : null,
-    positionId: dto.positionId && dto.positionId.trim().length > 0 ? dto.positionId : null,
-    employmentStatus: dto.employmentStatus && dto.employmentStatus.trim().length > 0 ? dto.employmentStatus : null,
+    items,
+    total: typeof result['total'] === 'number' ? result['total'] : items.length,
+    page: typeof result['page'] === 'number' ? result['page'] : 1,
+    pageSize: typeof result['pageSize'] === 'number' ? result['pageSize'] : items.length,
+    sortBy: typeof result['sortBy'] === 'string' ? result['sortBy'] : null,
+    sortDirection: typeof result['sortDirection'] === 'string' ? result['sortDirection'] : null,
+  };
+}
+
+function toStandardPersonValues(dto: PersonUpsertRequest): Record<string, unknown> {
+  return {
+    PersonNo: dto.personNo,
+    ENAME: dto.name,
+    CompanyId: dto.companyId && dto.companyId.trim().length > 0 ? dto.companyId : null,
+    DepartmentId: dto.departmentId && dto.departmentId.trim().length > 0 ? dto.departmentId : null,
+    PositionId: dto.positionId && dto.positionId.trim().length > 0 ? dto.positionId : null,
+    EmploymentStatus: dto.employmentStatus && dto.employmentStatus.trim().length > 0 ? dto.employmentStatus : null,
+    IsEnabled: dto.isEnabled,
   };
 }
 
@@ -386,7 +327,7 @@ export async function getPersons(query: {
   companyId?: string;
   departmentId?: string;
   employmentStatus?: string;
-}): Promise<PersonListResultDto> {
+}): Promise<StandardCrudListResult<PersonListRow>> {
   const search = new URLSearchParams();
 
   if (query.keyword) {
@@ -410,58 +351,52 @@ export async function getPersons(query: {
   return normalizePersonListResponse(await fetchJson<unknown>(path, '加载人员列表失败'));
 }
 
-export async function getPersonDetail(id: string): Promise<PersonDetailDto> {
+export async function getPersonDetail(id: string): Promise<PersonDetailView> {
   return normalizePersonDetail(await fetchJson<unknown>(`/api/organization/persons/${id}`, '加载人员详情失败'));
 }
 
-export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDetailDto> {
-  const created = await requestJson<unknown>(
-    '/api/organization/persons',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDetailView> {
+  return normalizePersonDetail(
+    await requestJson<unknown>(
+      '/api/organization/persons',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(toStandardPersonValues(dto)),
       },
-      body: JSON.stringify(normalizePersonUpsertRequest(dto)),
-    },
-    '新建人员失败',
+      '新建人员失败',
+    ),
   );
-
-  const createdRecord = isRecord(created) ? created : {};
-  const personId = readString(createdRecord, ['id', 'Id']);
-  if (!personId) {
-    throw new Error('新建人员成功，但返回结果缺少人员标识。');
-  }
-
-  return refreshPersonDetail(personId);
 }
 
-export async function updatePerson(personId: string, dto: PersonUpsertRequest): Promise<PersonDetailDto> {
-  await requestJson<unknown>(
-    `/api/organization/persons/${personId}`,
-    {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
+export async function updatePerson(personId: string, dto: PersonUpsertRequest): Promise<PersonDetailView> {
+  return normalizePersonDetail(
+    await requestJson<unknown>(
+      `/api/organization/persons/${personId}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(toStandardPersonValues(dto)),
       },
-      body: JSON.stringify(normalizePersonUpsertRequest(dto)),
-    },
-    '保存人员信息失败',
+      '保存人员信息失败',
+    ),
   );
-
-  return refreshPersonDetail(personId);
 }
 
-export async function disablePerson(personId: string): Promise<PersonDetailDto> {
-  await requestJson<unknown>(
-    `/api/organization/persons/${personId}/disable`,
-    {
-      method: 'POST',
-    },
-    '停用人员失败',
+export async function disablePerson(personId: string): Promise<PersonDetailView> {
+  return normalizePersonDetail(
+    await requestJson<unknown>(
+      `/api/organization/persons/${personId}/disable`,
+      {
+        method: 'POST',
+      },
+      '停用人员失败',
+    ),
   );
-
-  return refreshPersonDetail(personId);
 }
 
 export async function searchIdentityUsers(keyword: string): Promise<IdentityUserOptionDto[]> {

@@ -3,9 +3,9 @@ import { useLocalization } from '@icp-platform/core';
 import { PageHeader } from '@icp-platform/ui';
 import PersonEditorForm from '../components/PersonEditorForm';
 import { getPersonDetailRuntimeSchema } from '../runtime/personCenterRuntime';
-import { createPerson, type PersonDetailDto, type PersonUpsertRequest } from '../services/organizationService';
+import { createPerson, type PersonDetailView, type PersonUpsertRequest } from '../services/organizationService';
 
-function createEmptyPerson(): PersonDetailDto {
+function createEmptyPerson(): PersonDetailView {
   return {
     id: '',
     personNo: '',

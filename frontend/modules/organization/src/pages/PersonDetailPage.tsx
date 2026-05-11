@@ -9,13 +9,13 @@ import {
   disablePerson,
   getPersonDetail,
   updatePerson,
-  type PersonDetailDto,
+  type PersonDetailView,
   type PersonUpsertRequest,
 } from '../services/organizationService';
 
 export default function PersonDetailPage() {
   const { t } = useLocalization();
-  const [detail, setDetail] = useState<PersonDetailDto | null>(null);
+  const [detail, setDetail] = useState<PersonDetailView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

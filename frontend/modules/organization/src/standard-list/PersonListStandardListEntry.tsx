@@ -27,8 +27,8 @@ import {
   updatePerson,
   type CompanyDto,
   type DepartmentDto,
-  type PersonDetailDto,
-  type PersonListItemDto,
+  type PersonDetailView,
+  type PersonListRow,
   type PersonUpsertRequest,
 } from '../services/organizationService';
 
@@ -44,7 +44,7 @@ type PersonDrawerMode = 'create' | 'view' | 'edit';
 interface PersonDrawerState {
   open: boolean;
   mode: PersonDrawerMode;
-  person: PersonDetailDto | null;
+  person: PersonDetailView | null;
   loading: boolean;
   error: string | null;
 }
@@ -56,7 +56,7 @@ const emptyFilters: PersonListFilterDraft = {
   employmentStatus: '',
 };
 
-function buildEmptyPerson(): PersonDetailDto {
+function buildEmptyPerson(): PersonDetailView {
   return {
     id: '',
     personNo: '',
@@ -98,7 +98,7 @@ export default function PersonListStandardListEntry({
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [filters, setFilters] = useState<PersonListFilterDraft>(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState<PersonListFilterDraft>(emptyFilters);
-  const [rows, setRows] = useState<PersonListItemDto[]>([]);
+  const [rows, setRows] = useState<PersonListRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [reloadTick, setReloadTick] = useState(0);
@@ -371,7 +371,7 @@ export default function PersonListStandardListEntry({
           return {
             key: column.key,
             title: resolveListText(column.labelKey, '公司'),
-            render: (item: PersonListItemDto) => item.companyName || item.companyId,
+            render: (item: PersonListRow) => item.companyName || item.companyId,
           };
         }
 
@@ -379,7 +379,7 @@ export default function PersonListStandardListEntry({
           return {
             key: column.key,
             title: resolveListText(column.labelKey, '部门'),
-            render: (item: PersonListItemDto) => item.departmentName || item.departmentId,
+            render: (item: PersonListRow) => item.departmentName || item.departmentId,
           };
         }
 
@@ -387,7 +387,7 @@ export default function PersonListStandardListEntry({
           return {
             key: column.key,
             title: resolveListText(column.labelKey, '在职状态'),
-            render: (item: PersonListItemDto) => (
+            render: (item: PersonListRow) => (
               <StatusBadge variant="info" label={item.employmentStatusLabel || getEmploymentStatusLabel(item.employmentStatus)} />
             ),
           };
@@ -397,7 +397,7 @@ export default function PersonListStandardListEntry({
           return {
             key: column.key,
             title: resolveListText(column.labelKey, '启用状态'),
-            render: (item: PersonListItemDto) => (
+            render: (item: PersonListRow) => (
               <StatusBadge variant={item.isEnabled ? 'success' : 'warning'} label={item.isEnabled ? '启用' : '停用'} />
             ),
           };
@@ -414,7 +414,7 @@ export default function PersonListStandardListEntry({
         {
           key: 'actions',
           title: resolveListText('Column_Actions', '操作'),
-          render: (item: PersonListItemDto) => (
+          render: (item: PersonListRow) => (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {(listSchema.rowActions ?? [])
                 .filter((action) => action.key === 'view' || action.key === 'edit' || action.key === 'disable')
@@ -470,7 +470,7 @@ export default function PersonListStandardListEntry({
     setActionError(null);
   }
 
-  async function handleDisable(person: PersonListItemDto) {
+  async function handleDisable(person: PersonListRow) {
     if (!person.isEnabled) {
       return;
     }

@@ -1,0 +1,137 @@
+# 当前交接台账
+
+最近更新：2026-05-11
+
+## 1. 目的
+
+本文档用于承接“当前现状、上一次做了什么、下一步推荐做什么、还有哪些未解决问题”这类交接信息。
+
+它只维护当前快照，不替代详细设计、实施计划、阶段地图或验证记录。需要判断设计边界、任务步骤和验证细节时，仍应回到对应源文档。
+
+## 2. 使用方式
+
+开始新任务时建议按以下顺序阅读：
+
+1. `AGENTS.md`
+2. `docs/phases/current-handoff.md`
+3. `docs/phases/post-phase-6-stage-map.md`
+4. 当前任务相关的设计、计划、模块说明和验证记录
+
+每次完成一个工作包或一次明确收口后，应回填本文档的：
+
+- 最近完成
+- 当前推荐下一步
+- 未解决问题
+- 验证快照
+- 已知风险与回滚思路
+
+## 3. 当前事实源
+
+- 仓库级规则入口：`AGENTS.md`
+- 当前交接快照：`docs/phases/current-handoff.md`
+- 阶段主线入口：`docs/phases/post-phase-6-stage-map.md`
+- 新增设计与计划入口：`docs/superpowers/README.md`
+- 验证口径入口：`docs/verification/verification-matrix.md`
+- 历史状态归档：`docs/current-status.md`
+
+如果本文档与具体设计、计划或验证记录冲突，以更具体、更新的任务文档为准，并在下一次收口时修正本文档。
+
+## 4. 最近完成
+
+### 4.1 EID 值协议平台化
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-08-eid-value-protocol-design.md`
+- `docs/superpowers/plans/platform/2026-05-10-eid-value-protocol.md`
+- `docs/verification/organization-module-verification.md`
+
+完成内容：
+
+- 新增平台对象 ID 生成器，平台对象新建 `EID` 统一使用 `{ModelName}_{Guid:N}`。
+- `PlatformCrud`、`ConfigCenter`、`Authorization`、`Organization` 的新建路径不再生成裸 GUID `EID`。
+- `Organization` 人员、组织主数据和人员账号关联的主键与引用字段已按字符串 ID 流转。
+- API 路由已移除 `{id:guid}` 约束。
+- `PersonUserLink` 已改为独立 EID，避免继续复用人员或账号 ID 作为关联主键。
+
+最近相关提交：
+
+- `c921d527`：设计：制定EID值协议平台化方案
+- `25f90c7f`：功能：新增平台对象ID生成器
+- `45cfba2c`：功能：ConfigCenter接入平台对象ID
+- `974c4604`：功能：Authorization接入平台对象ID
+- `6e486f84`：功能：Organization收口平台对象ID
+- `3e8faa55`：功能：人员账号关联使用独立EID
+- `72807119`：验证：记录EID值协议平台化结果
+
+## 5. 当前推荐下一步
+
+当前不建议直接扩大功能面。下一轮工作应先选择一个单一目标，并在正式实施前补齐或确认对应设计与计划。
+
+推荐优先级：
+
+1. 若继续平台元数据主线，优先拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
+2. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
+3. 若继续 Organization / 标准 CRUD 主线，先确认是否要处理 EID 历史数据迁移、required field 标准校验或数据库唯一索引，再分别进入独立设计。
+
+## 6. 未解决问题
+
+以下问题已知存在，但当前不应混在同一次改动中顺手处理。
+
+### 6.1 待计划吸收的 review 结论
+
+来源：`docs/designs/platform/review-open-items-tracker.md`
+
+- `.dic` 消费链仍需对齐 authoring 统一规则。
+- `.model` 消费链仍有固定目录或固定文件路径依赖。
+- `.settings` 消费链仍主要依赖单一 `SourcePath`。
+- 组织模块人员中心试点实施计划必须吸收已冻结的首轮边界。
+
+### 6.2 EID 后续风险
+
+来源：`docs/verification/organization-module-verification.md`
+
+- 本轮没有做历史裸 GUID 数据回填；如需导入旧库数据，应单独设计迁移。
+- 当前开发数据库按空库重建处理，不承诺旧裸 GUID 主键数据兼容。
+
+### 6.3 标准 CRUD 后续风险
+
+来源：`docs/verification/organization-module-verification.md`
+
+- `ENAME` 等字段必填校验仍需要后续标准 CRUD required field 或模型必填校验设计承接。
+- `PersonNo` 当前由标准 CRUD 服务层保证全局唯一，但未引入数据库唯一索引；并发强一致性如需支持，应另开设计。
+
+## 7. 验证快照
+
+最近一次后端验证覆盖：
+
+```powershell
+rg -n 'Id \{ get; set; \} = Guid\.NewGuid|Guid\.(Parse|TryParse)\(|\{id:guid\}|Guid\.NewGuid\(\)\.ToString\("D"\)' server/modules/Organization server/platform-crud
+rg -n 'Id \{ get; set; \} = Guid\.NewGuid|Guid\.NewGuid\(\)\.ToString\(\)' server/modules/ConfigCenter server/modules/Authorization
+dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+```
+
+验证结论：
+
+- 平台对象 ID 协议已由平台生成器统一承接。
+- `Organization`、`PlatformCrud`、`ConfigCenter`、`Authorization` 未发现本轮范围内的裸 GUID 平台对象 ID 生成残留。
+- 本轮 EID 收口不涉及前端变更，因此没有新增前端构建结论。
+
+## 8. 已知风险
+
+- 本文档是当前快照，不应把它当作长期 authoring 真源。
+- 如果只更新计划或验证记录而不更新本文档，下一次交接可能读到过期推荐下一步。
+- 历史阶段文档中仍可能出现旧推荐语，应以本文件和对应任务的最新计划、验证记录为准。
+
+## 9. 回滚思路
+
+- 如果交接口径写错，只改本文档，不需要修改原始设计、计划或验证记录。
+- 如果 EID 值协议需要回滚，应按最近相关提交反向 revert，并优先回到对应设计和计划确认影响范围。
+- 如果下一步方向选择变化，先更新本文件第 5 节，再补对应设计或计划，避免多个入口同时表达不同推荐。
+

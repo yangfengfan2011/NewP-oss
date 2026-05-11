@@ -22,6 +22,8 @@
 - [phases/phase-2-minimum-runnable-plan.md](phases/phase-2-minimum-runnable-plan.md)
 - [phases/phase-3-extension-contracts-summary.md](phases/phase-3-extension-contracts-summary.md)
 - [phases/scaffold-summary.md](phases/scaffold-summary.md)
+- [phases/current-handoff.md](phases/current-handoff.md)
+- [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
 
 ## 3. modules
 
@@ -127,6 +129,7 @@
 
 - 仓库入口：[../README.md](../README.md)
 - 仓库规则：[../AGENTS.md](../AGENTS.md)
+- 当前交接台账：[phases/current-handoff.md](phases/current-handoff.md)
 - 当前阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
 - 详细设计入口：[superpowers/README.md](superpowers/README.md)
 - 组件化开发超短版：[developer/componentized-development-quickstart.md](developer/componentized-development-quickstart.md)

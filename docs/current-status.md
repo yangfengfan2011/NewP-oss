@@ -1,7 +1,7 @@
 # 当前项目状态（历史归档）
 
 > 归档说明：本文档曾用于集中维护仓库阶段状态，但当前已不再作为“当前事实源”或新任务入口继续维护。
-> 现阶段请以 `AGENTS.md`、`docs/phases/post-phase-6-stage-map.md`、`docs/superpowers/README.md` 以及任务直接相关的设计、计划、模块说明和验证记录为准。
+> 现阶段请以 `AGENTS.md`、`docs/phases/current-handoff.md`、`docs/phases/post-phase-6-stage-map.md`、`docs/superpowers/README.md` 以及任务直接相关的设计、计划、模块说明和验证记录为准。
 > 下方内容仅作为历史状态流水和旧阶段线索保留，不能单独用来判断当前下一步。
 
 ## 当前文档入口口径

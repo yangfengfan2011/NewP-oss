@@ -26,6 +26,7 @@
 
 - 本文件是仓库级执行规则入口；开始具体任务前，先确认本文件中关于边界、设计先行、验证和输出的要求。
 - `docs/superpowers/README.md` 是新增设计规格与实施计划的入口；新增设计和计划默认遵守其中的分类与脚本约定。
+- `docs/phases/current-handoff.md` 是当前交接台账入口，用于快速确认最近完成、推荐下一步、未解决问题、验证快照和回滚口径。
 - 当前阶段和后续方向默认参考 `docs/phases/post-phase-6-stage-map.md`；具体任务以相关设计、计划、模块说明和验证记录为准。
 - 任务涉及具体能力时，应继续阅读对应的 `docs/superpowers/specs/<category>/`、`docs/superpowers/plans/<category>/`、`docs/modules/`、`docs/developer/` 或 `docs/architecture/` 文档。
 - 任务涉及验证或收口时，应查看 `docs/verification/verification-matrix.md` 和相关验证记录，避免用过期阶段口径判断当前状态。

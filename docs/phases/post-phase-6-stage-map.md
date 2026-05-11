@@ -16,9 +16,10 @@
 
 1. 先阅读 `AGENTS.md`
 2. 再阅读 `docs/architecture/ai-first-execution-standard.md`
-3. 再阅读本文件，确认当前所在阶段和下一阶段
-4. 只执行当前工作包，不顺手扩范围
-5. 由主线程负责最终审查、返修和决定是否进入下一阶段
+3. 再阅读 `docs/phases/current-handoff.md`，确认最近完成、推荐下一步和未解决问题
+4. 再阅读本文件，确认当前所在阶段和下一阶段
+5. 只执行当前工作包，不顺手扩范围
+6. 由主线程负责最终审查、返修和决定是否进入下一阶段
 
 ## 3. 总体原则
 
@@ -102,9 +103,10 @@
 
 1. `AGENTS.md`
 2. `docs/architecture/ai-first-execution-standard.md`
-3. `docs/phases/post-phase-6-stage-map.md`
-4. 当前阶段对应的设计、计划、模块说明和验证记录
+3. `docs/phases/current-handoff.md`
+4. `docs/phases/post-phase-6-stage-map.md`
+5. 当前阶段对应的设计、计划、模块说明和验证记录
 
 当前推荐的后续方向是：
 
-- 真实业务页消费接入或下一批样本扩展
+- 先阅读 `docs/phases/current-handoff.md` 中的“当前推荐下一步”，再按单一目标拆包推进

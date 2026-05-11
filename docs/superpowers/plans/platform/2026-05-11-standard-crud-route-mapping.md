@@ -1182,7 +1182,7 @@ git commit -m "功能：拆出人员账号绑定服务"
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 - Build: `apps/host-api/HostApi.csproj`
 
-- [ ] **Step 1: 写 Organization 注册与专属 Controller 测试**
+- [x] **Step 1: 写 Organization 注册与专属 Controller 测试**
 
 Create `tests/Organization.Tests/PersonStandardCrudResourceTests.cs`:
 
@@ -1298,7 +1298,7 @@ public sealed class PersonUserLinksControllerTests
 }
 ```
 
-- [ ] **Step 2: 运行 Organization 定向测试确认失败**
+- [x] **Step 2: 运行 Organization 定向测试确认失败**
 
 Run:
 
@@ -1308,7 +1308,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "Perso
 
 Expected: FAIL，提示 `PersonUserLinksController` 不存在，或 OrganizationModule 尚未注册 Person descriptor。
 
-- [ ] **Step 3: 新增人员账号绑定专属 Controller**
+- [x] **Step 3: 新增人员账号绑定专属 Controller**
 
 Create `server/modules/Organization/Controllers/PersonUserLinksController.cs`:
 
@@ -1363,7 +1363,7 @@ public sealed class PersonUserLinksController : ControllerBase
 }
 ```
 
-- [ ] **Step 4: 更新 OrganizationModule 注册**
+- [x] **Step 4: 更新 OrganizationModule 注册**
 
 Modify `server/modules/Organization/OrganizationModule.cs` so `ConfigureServices` becomes:
 
@@ -1391,7 +1391,7 @@ public override void ConfigureServices(IServiceCollection services)
 }
 ```
 
-- [ ] **Step 5: 在 Host 中挂载自动路由**
+- [x] **Step 5: 在 Host 中挂载自动路由**
 
 Modify `apps/host-api/HostApi.csproj`.
 
@@ -1419,7 +1419,7 @@ app.MapControllers();
 app.MapStandardCrudResources();
 ```
 
-- [ ] **Step 6: 删除人员中心后端旧样板文件**
+- [x] **Step 6: 删除人员中心后端旧样板文件**
 
 Run:
 
@@ -1437,7 +1437,7 @@ Remove-Item .\tests\Organization.Tests\PersonListContractTests.cs
 Remove-Item .\tests\Organization.Tests\PersonServiceTests.cs
 ```
 
-- [ ] **Step 7: 扫描旧人员标准 CRUD 残留**
+- [x] **Step 7: 扫描旧人员标准 CRUD 残留**
 
 Run:
 
@@ -1447,7 +1447,7 @@ rg -n "IPersonService|PersonService|IPersonRepository|EfPersonRepository|Persons
 
 Expected: no matches for deleted backend standard CRUD types. Matches inside generated `PersonDto.g.cs`, metadata paths, and `PersonCrud*` files are allowed because they are not deleted standard CRUD samples.
 
-- [ ] **Step 8: 运行 Organization 定向测试确认通过**
+- [x] **Step 8: 运行 Organization 定向测试确认通过**
 
 Run:
 
@@ -1457,7 +1457,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "Perso
 
 Expected: PASS。
 
-- [ ] **Step 9: 运行 Organization 全量测试**
+- [x] **Step 9: 运行 Organization 全量测试**
 
 Run:
 
@@ -1467,7 +1467,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 10: 构建 HostApi**
+- [x] **Step 10: 构建 HostApi**
 
 Run:
 
@@ -1477,7 +1477,7 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 
 Expected: build succeeds with 0 errors.
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```powershell
 git add .\apps\host-api\HostApi.csproj .\apps\host-api\Program.cs .\server\modules\Organization .\tests\Organization.Tests

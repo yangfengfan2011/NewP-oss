@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Text.Json.Serialization;
+using ICP.Platform.Crud.Extensions;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.PluginOperations;
@@ -182,6 +183,7 @@ app.UseAuthentication();
 app.UseAuditMiddleware();
 app.UseAuthorization();
 app.MapControllers();
+app.MapStandardCrudResources();
 
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
 var modules = registry.GetAllModules();

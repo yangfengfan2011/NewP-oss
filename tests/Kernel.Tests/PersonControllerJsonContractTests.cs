@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
-using ICP.Platform.Modules.Organization.Models;
-using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,24 +21,25 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
     }
 
     [Fact]
-    public async Task CreatePerson_AcceptsStringEnumEmploymentStatus_FromFrontendPayload()
+    public async Task CreatePerson_AcceptsStringEmploymentStatus_FromStandardCrudPayload()
     {
         using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
 
-        var response = await client.PostAsJsonAsync("/api/organization/persons", new
+        var response = await client.PostAsJsonAsync("/api/organization/persons", new Dictionary<string, object?>
         {
-            personNo = "P" + Guid.NewGuid().ToString("N")[..8],
-            name = "张三",
-            employmentStatus = "FullTime",
-            isEnabled = true
+            ["PersonNo"] = "P" + Guid.NewGuid().ToString("N")[..8],
+            ["ENAME"] = "张三",
+            ["EmploymentStatus"] = "FullTime",
+            ["IsEnabled"] = true
         });
 
         Assert.True(
             response.StatusCode == HttpStatusCode.Created,
             $"Expected Created but got {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+        Assert.Equal("FullTime", _factory.StandardCrudService.LastCreateValues!["EmploymentStatus"]);
     }
 
     public class TestWebApplicationFactory : WebApplicationFactory<Program>, IDisposable
@@ -50,6 +52,8 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             Directory.CreateDirectory(_installRoot);
         }
 
+        public RecordingStandardCrudService StandardCrudService { get; } = new();
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
@@ -59,8 +63,8 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<IPersonRepository>();
-                services.AddSingleton<IPersonRepository, InMemoryPersonRepository>();
+                services.RemoveAll<IStandardCrudService>();
+                services.AddSingleton<IStandardCrudService>(StandardCrudService);
             });
         }
 
@@ -74,55 +78,64 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         }
     }
 
-    private sealed class InMemoryPersonRepository : IPersonRepository
+    public sealed class RecordingStandardCrudService : IStandardCrudService
     {
-        private readonly List<Person> _persons = [];
+        public IReadOnlyDictionary<string, object?>? LastCreateValues { get; private set; }
 
-        public Task<Person?> GetByIdAsync(Guid personId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_persons.FirstOrDefault(person => person.Id == personId));
-
-        public Task<IReadOnlyList<Person>> GetListAsync(
-            string? keyword,
-            Guid? companyId,
-            Guid? departmentId,
-            EmploymentStatus? employmentStatus,
+        public Task<StandardCrudMutationResult> CreateAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyDictionary<string, object?> values,
             CancellationToken cancellationToken = default)
         {
-            IEnumerable<Person> query = _persons;
-
-            if (employmentStatus.HasValue)
+            LastCreateValues = values;
+            return Task.FromResult(StandardCrudMutationResult.Success(new StandardCrudDetail
             {
-                query = query.Where(person => person.EmploymentStatus == employmentStatus.Value);
-            }
-
-            return Task.FromResult<IReadOnlyList<Person>>(query.ToList());
+                Fields = new Dictionary<string, object?>
+                {
+                    [descriptor.IdField] = "Person_00000000000000000000000000000001",
+                    ["PersonNo"] = values["PersonNo"],
+                    ["ENAME"] = values["ENAME"],
+                    ["EmploymentStatus"] = values["EmploymentStatus"],
+                    ["IsEnabled"] = values["IsEnabled"]
+                }
+            }));
         }
 
-        public Task<bool> ExistsPersonNoAsync(
-            Guid? companyId,
-            string personNo,
-            Guid? excludedPersonId = null,
+        public Task<StandardCrudMutationResult> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(_persons.Any(person =>
-                person.CompanyId == companyId &&
-                person.Id != excludedPersonId &&
-                string.Equals(person.PersonNo, personNo, StringComparison.OrdinalIgnoreCase)));
+            throw new NotSupportedException();
 
-        public Task CreateAsync(Person person, CancellationToken cancellationToken = default)
-        {
-            _persons.Add(person);
-            return Task.CompletedTask;
-        }
+        public Task<StandardCrudMutationResult> DisableAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
-        public Task UpdateAsync(Person person, CancellationToken cancellationToken = default)
-        {
-            var index = _persons.FindIndex(existing => existing.Id == person.Id);
-            if (index >= 0)
-            {
-                _persons[index] = person;
-            }
+        public Task<StandardCrudDetail?> GetDetailAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
-            return Task.CompletedTask;
-        }
+        public Task<StandardCrudListResult> ListAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<StandardCrudMutationResult> UpdateAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

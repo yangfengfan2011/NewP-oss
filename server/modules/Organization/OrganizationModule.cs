@@ -21,17 +21,17 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddStandardCrudKernel();
+        services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
         services.AddScoped<ICompanyRepository, EfCompanyRepository>();
         services.AddScoped<IDepartmentRepository, EfDepartmentRepository>();
         services.AddScoped<IPositionRepository, EfPositionRepository>();
-        services.AddScoped<IPersonRepository, EfPersonRepository>();
         services.AddScoped<IPersonUserLinkRepository, EfPersonUserLinkRepository>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IPositionService, PositionService>();
         services.AddScoped<IIdentityUserDirectory, NullIdentityUserDirectory>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
-        services.AddScoped<IPersonService, PersonService>();
+        services.AddScoped<IPersonUserLinkService, PersonUserLinkService>();
         services.AddScoped<IStandardCrudQueryCustomizer, PersonCrudQueryCustomizer>();
         services.AddScoped<IStandardCrudDisplayValueResolver, PersonCrudDisplayValueResolver>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonUserLinkSummaryProvider>();

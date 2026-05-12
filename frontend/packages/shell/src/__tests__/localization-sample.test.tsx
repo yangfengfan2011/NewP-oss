@@ -58,6 +58,7 @@ vi.mock('../pages/Login', () => ({
 
 vi.mock('@icp-platform/sdk', () => ({
   ModuleRegistry: {
+    getAllModules: () => [],
     getRoutes: () => [],
   },
 }));

@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-05-12
+最近更新：2026-05-13
 
 ## 1. 目的
 
@@ -38,7 +38,28 @@
 
 ## 4. 最近完成
 
-### 4.1 标准 CRUD 路由自动映射与人员旧样板退场
+### 4.1 前端标准 CRUD 平台化第一批
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-12-frontend-standard-crud-platformization-design.md`
+- `docs/superpowers/plans/platform/2026-05-12-frontend-standard-crud-platformization.md`
+- `docs/verification/frontend-standard-crud-platformization-phase-1-verification.md`
+
+完成内容：
+
+- SDK 提供标准 CRUD 前端契约和客户端 helper。
+- Shell 提供标准 CRUD schema resolver、registry、列表 Host 和详情 Host。
+- Organization 人员中心接入标准 CRUD 前端资源注册。
+- 人员中心列表/详情主状态机不再留在模块私有页面中。
+
+当前推荐下一步：
+
+- 按设计第 14.2 节继续第二批：字段渲染器、lookup、动作扩展、summary block、权限动作过滤和 i18n key 解析。
+
+### 4.2 标准 CRUD 路由自动映射与人员旧样板退场
 
 状态：已完成并验证。
 
@@ -66,7 +87,7 @@
 - `345efed0`：重构：人员中心前端消费标准CRUD模型
 - `65494edd`：验证：记录标准CRUD自动映射收口结果
 
-### 4.2 EID 值协议平台化
+### 4.3 EID 值协议平台化
 
 状态：已完成并验证。
 
@@ -96,15 +117,16 @@
 
 ## 5. 当前推荐下一步
 
-当前不建议直接扩大功能面。标准 CRUD 自动映射已经收口，下一轮应选择一个单一后续风险或验证目标，并在正式实施前补齐或确认对应设计与计划。
+当前不建议直接扩大功能面。前端标准 CRUD 第一批已经收口，下一轮如果继续本主线，应优先按既有设计第 14.2 节推进第二批，并继续保持单一任务、设计先行和可验证收口。
 
 推荐优先级：
 
-1. 若继续标准 CRUD 主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
-2. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
-3. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
-4. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
-5. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
+1. 若继续前端标准 CRUD 主线，按设计第 14.2 节推进字段渲染器、lookup、动作扩展、summary block、权限动作过滤和 i18n key 解析。
+2. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
+3. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
+4. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
+5. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
+6. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
 
 ## 6. 未解决问题
 
@@ -136,7 +158,25 @@
 
 ## 7. 验证快照
 
-最近一次标准 CRUD 自动映射验证覆盖：
+最近一次前端标准 CRUD 第一批验证覆盖：
+
+```powershell
+pnpm --dir .\frontend --filter @icp-platform/sdk build
+pnpm --dir .\frontend --filter @icp-platform/ui build
+pnpm --dir .\frontend --filter @icp-platform/shell test
+pnpm --dir .\frontend --filter @icp-platform/shell build
+pnpm --dir .\frontend --filter @icp-modules/organization build
+rg -n "StandardCrudListResult|StandardCrudDetail|normalizeSummaryBlock|normalizePersonListResponse|normalizePersonDetail|getPersonListRuntimeSchema|getPersonDetailRuntimeSchema" frontend/modules/organization/src frontend/packages
+rg -n "PersonEditorForm|getCompanies|getDepartments|getPositions|PersonUserLinkCard|AuthorizationSummaryCard" frontend/modules/organization/src
+```
+
+验证结论：
+
+- SDK、UI、Shell 和 Organization 前端构建通过，Shell 测试通过。
+- 标准 CRUD 类型与 helper 已由 SDK 提供，Shell Host 已接管人员中心列表/详情主流程。
+- 第二批暂留项已登记在 `docs/verification/frontend-standard-crud-platformization-phase-1-verification.md`，下一步入口是设计第 14.2 节。
+
+上一轮标准 CRUD 自动映射验证覆盖：
 
 ```powershell
 dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal

@@ -2328,7 +2328,7 @@ git commit -m "重构：人员中心接入前端标准CRUD宿主"
 - Create: `docs/verification/frontend-standard-crud-platformization-phase-1-verification.md`
 - Modify: `docs/phases/current-handoff.md`
 
-- [ ] **Step 1: 创建第一批验证记录**
+- [x] **Step 1: 创建第一批验证记录**
 
 Create `docs/verification/frontend-standard-crud-platformization-phase-1-verification.md`:
 
@@ -2405,7 +2405,7 @@ rg -n "StandardCrudListResult|StandardCrudDetail|normalizeSummaryBlock|normalize
 - 保留本验证记录或在回滚提交中追加说明，避免第二批状态误判为已完成。
 ```
 
-- [ ] **Step 2: 更新当前交接台账**
+- [x] **Step 2: 更新当前交接台账**
 
 Modify `docs/phases/current-handoff.md`:
 
@@ -2434,7 +2434,7 @@ Modify `docs/phases/current-handoff.md`:
 
 Place this under the current "最近完成" or "当前推荐下一步" section without deleting unrelated existing entries.
 
-- [ ] **Step 3: 运行完整前端验证**
+- [x] **Step 3: 运行完整前端验证**
 
 Run:
 
@@ -2448,7 +2448,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 
 Expected: all PASS.
 
-- [ ] **Step 4: 运行残留扫描**
+- [x] **Step 4: 运行残留扫描**
 
 Run:
 
@@ -2462,7 +2462,7 @@ Expected:
 - 第一条扫描中的通用标准 CRUD 类型和 helper 不应在 Organization 私有代码中重新定义。
 - 第二条扫描允许命中，且必须在验证记录第 5 节解释为第二批暂留项。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add .\docs\verification\frontend-standard-crud-platformization-phase-1-verification.md .\docs\phases\current-handoff.md

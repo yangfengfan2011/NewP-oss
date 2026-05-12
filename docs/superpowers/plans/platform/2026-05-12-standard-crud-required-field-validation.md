@@ -434,7 +434,7 @@ git commit -m "功能：校验标准CRUD必填字段声明"
 - Modify: `server/platform-crud/Runtime/StandardCrudService.cs`
 - Test: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 
-- [ ] **Step 1: 写 create/update 运行时失败测试**
+- [x] **Step 1: 写 create/update 运行时失败测试**
 
 Append these tests to `tests/PlatformCrud.Tests/StandardCrudServiceWriteTests.cs`:
 
@@ -597,7 +597,7 @@ private static StandardCrudDescriptor DescriptorWithRequiredAndUniqueConstraint(
 }
 ```
 
-- [ ] **Step 2: 运行运行时校验测试确认失败**
+- [x] **Step 2: 运行运行时校验测试确认失败**
 
 Run:
 
@@ -607,7 +607,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Requi
 
 Expected: FAIL，至少一个测试显示缺失字段没有返回 `StandardCrudError`。
 
-- [ ] **Step 3: 在 create/update 中调用必填校验**
+- [x] **Step 3: 在 create/update 中调用必填校验**
 
 Modify `server/platform-crud/Runtime/StandardCrudService.cs`.
 
@@ -631,7 +631,7 @@ In `UpdateAsync`, after `ApplyUpdateAuditFields(descriptor, allowed);`, insert:
         }
 ```
 
-- [ ] **Step 4: 增加必填校验实现**
+- [x] **Step 4: 增加必填校验实现**
 
 Add these methods to `server/platform-crud/Runtime/StandardCrudService.cs`, before `ValidateUniqueConstraintsAsync`:
 
@@ -689,7 +689,7 @@ Add these methods to `server/platform-crud/Runtime/StandardCrudService.cs`, befo
     };
 ```
 
-- [ ] **Step 5: 运行运行时校验测试确认通过**
+- [x] **Step 5: 运行运行时校验测试确认通过**
 
 Run:
 
@@ -699,7 +699,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Stand
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add .\server\platform-crud\Runtime\StandardCrudService.cs .\tests\PlatformCrud.Tests\StandardCrudServiceWriteTests.cs

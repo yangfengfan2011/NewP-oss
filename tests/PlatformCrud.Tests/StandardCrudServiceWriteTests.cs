@@ -60,6 +60,88 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenRequiredFieldIsMissing_ReturnsBadRequestBeforeUniqueCheck()
+    {
+        var repository = new RecordingExistsStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.CreateAsync(
+            DescriptorWithRequiredAndUniqueConstraint(),
+            new Dictionary<string, object?> { ["ENAME"] = "李四", ["IsEnabled"] = true });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(400, result.Error!.StatusCode);
+        Assert.Equal("Organization.Person.PersonNoRequired", result.Error.Code);
+        Assert.Null(repository.LastExistsValues);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRequiredStringIsBlank_ReturnsBadRequest()
+    {
+        var service = Service();
+
+        var result = await service.CreateAsync(
+            DescriptorWithRequiredFields(),
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "   ", ["IsEnabled"] = true });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("Organization.Person.NameRequired", result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRequiredBooleanIsFalse_Passes()
+    {
+        var service = Service();
+
+        var result = await service.CreateAsync(
+            DescriptorWithRequiredFields(),
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = false });
+
+        Assert.True(result.Succeeded);
+        Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenRequiredFieldIsNotSubmitted_DoesNotBlockExistingEmptyValue()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "", ["IsEnabled"] = true }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            DescriptorWithRequiredFields(),
+            "person-1",
+            new Dictionary<string, object?> { ["IsEnabled"] = false });
+
+        Assert.True(result.Succeeded);
+        Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenRequiredFieldIsSubmittedAsNull_ReturnsBadRequest()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["IsEnabled"] = true }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            DescriptorWithRequiredFields(),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = null });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(400, result.Error!.StatusCode);
+        Assert.Equal("Organization.Person.NameRequired", result.Error.Code);
+    }
+
+    [Fact]
     public async Task DisableAsync_SetsEnabledFieldFalse()
     {
         var repository = new InMemoryStandardCrudRepository(
@@ -288,6 +370,77 @@ public sealed class StandardCrudServiceWriteTests
             }
         ]
     };
+
+    private static StandardCrudDescriptor DescriptorWithRequiredFields() => new()
+    {
+        ResourceKey = "organization.person",
+        ModuleId = "Organization",
+        ModelName = "Person",
+        Route = "api/organization/persons",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        EnabledField = "IsEnabled",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
+            CreateFields: ["PersonNo", "ENAME", "IsEnabled"],
+            UpdateFields: ["ENAME", "IsEnabled"]),
+        RequiredFields =
+        [
+            new StandardCrudRequiredField
+            {
+                Field = "PersonNo",
+                Scope = StandardCrudRequiredFieldScope.CreateOnly,
+                ErrorCode = "Organization.Person.PersonNoRequired",
+                Message = "人员工号不能为空。",
+                ReasonKey = "organization.person.personNoRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "ENAME",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.NameRequired",
+                Message = "人员姓名不能为空。",
+                ReasonKey = "organization.person.nameRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "IsEnabled",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.EnabledRequired",
+                Message = "人员启用状态不能为空。",
+                ReasonKey = "organization.person.enabledRequired"
+            }
+        ]
+    };
+
+    private static StandardCrudDescriptor DescriptorWithRequiredAndUniqueConstraint()
+    {
+        var descriptor = DescriptorWithRequiredFields();
+        return new StandardCrudDescriptor
+        {
+            ResourceKey = descriptor.ResourceKey,
+            ModuleId = descriptor.ModuleId,
+            ModelName = descriptor.ModelName,
+            Route = descriptor.Route,
+            IdField = descriptor.IdField,
+            DisplayField = descriptor.DisplayField,
+            EnabledField = descriptor.EnabledField,
+            FieldSet = descriptor.FieldSet,
+            RequiredFields = descriptor.RequiredFields,
+            UniqueConstraints =
+            [
+                new StandardCrudUniqueConstraint
+                {
+                    Key = "personNo",
+                    Fields = ["PersonNo"],
+                    ErrorCode = "Organization.Person.PersonNoDuplicated",
+                    Message = "人员工号必须唯一。",
+                    ReasonKey = "organization.person.personNoDuplicated"
+                }
+            ]
+        };
+    }
 
     private sealed class BlockingDeleteGuard : IStandardCrudDeleteGuard
     {

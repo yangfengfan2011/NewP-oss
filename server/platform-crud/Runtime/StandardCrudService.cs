@@ -99,6 +99,12 @@ public sealed class StandardCrudService : IStandardCrudService
             FilterFields(values, descriptor.FieldSet.CreateFields),
             StringComparer.Ordinal);
         ApplyCreateAuditFields(descriptor, allowed);
+        var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: true);
+        if (requiredError is not null)
+        {
+            return StandardCrudMutationResult.Failure(requiredError);
+        }
+
         var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, allowed, excludedId: null, cancellationToken);
         if (uniqueError is not null)
         {
@@ -135,6 +141,11 @@ public sealed class StandardCrudService : IStandardCrudService
             FilterFields(values, descriptor.FieldSet.UpdateFields),
             StringComparer.Ordinal);
         ApplyUpdateAuditFields(descriptor, allowed);
+        var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: false);
+        if (requiredError is not null)
+        {
+            return StandardCrudMutationResult.Failure(requiredError);
+        }
 
         var candidate = new Dictionary<string, object?>(existing, StringComparer.Ordinal);
         foreach (var pair in allowed)
@@ -325,6 +336,58 @@ public sealed class StandardCrudService : IStandardCrudService
 
         return filtered;
     }
+
+    // 必填校验属于标准写入前置校验；创建检查缺失，更新只检查本次提交字段是否被清空。
+    private static StandardCrudError? ValidateRequiredFields(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values,
+        bool isCreate)
+    {
+        foreach (var requiredField in descriptor.RequiredFields)
+        {
+            if (!AppliesToMutation(requiredField.Scope, isCreate))
+            {
+                continue;
+            }
+
+            if (isCreate)
+            {
+                if (!values.TryGetValue(requiredField.Field, out var value) || IsMissingRequiredValue(value))
+                {
+                    return RequiredFieldError(requiredField);
+                }
+
+                continue;
+            }
+
+            if (values.TryGetValue(requiredField.Field, out var updateValue) && IsMissingRequiredValue(updateValue))
+            {
+                return RequiredFieldError(requiredField);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool AppliesToMutation(StandardCrudRequiredFieldScope scope, bool isCreate)
+    {
+        return isCreate
+            ? scope is StandardCrudRequiredFieldScope.CreateOnly or StandardCrudRequiredFieldScope.CreateAndUpdate
+            : scope is StandardCrudRequiredFieldScope.UpdateOnly or StandardCrudRequiredFieldScope.CreateAndUpdate;
+    }
+
+    private static bool IsMissingRequiredValue(object? value)
+    {
+        return value is null || value is string text && string.IsNullOrWhiteSpace(text);
+    }
+
+    private static StandardCrudError RequiredFieldError(StandardCrudRequiredField requiredField) => new()
+    {
+        StatusCode = 400,
+        Code = requiredField.ErrorCode,
+        Message = requiredField.Message,
+        ReasonKey = requiredField.ReasonKey
+    };
 
     // 唯一约束属于标准写入前置校验；descriptor 只声明约束，执行顺序由内核统一控制。
     private async Task<StandardCrudError?> ValidateUniqueConstraintsAsync(

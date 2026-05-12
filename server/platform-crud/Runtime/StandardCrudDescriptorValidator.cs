@@ -26,6 +26,7 @@ public static class StandardCrudDescriptorValidator
             throw new InvalidOperationException("标准 CRUD 条件删除资源必须声明 ResourceKey。");
         }
 
+        ValidateRequiredFields(descriptor);
         ValidateUniqueConstraints(descriptor);
     }
 
@@ -35,6 +36,72 @@ public static class StandardCrudDescriptorValidator
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new InvalidOperationException($"标准 CRUD 资源 {resourceKey} 缺少 {name}。");
+        }
+    }
+
+    // 必填声明只做静态边界校验：字段归属和错误契约必须清晰，运行时缺失判断由服务内核统一接管。
+    private static void ValidateRequiredFields(StandardCrudDescriptor descriptor)
+    {
+        var declarations = new HashSet<(string Field, StandardCrudRequiredFieldScope Scope)>();
+        var declaredFields = descriptor.FieldSet.ListFields
+            .Concat(descriptor.FieldSet.DetailFields)
+            .Concat(descriptor.FieldSet.CreateFields)
+            .Concat(descriptor.FieldSet.UpdateFields)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var requiredField in descriptor.RequiredFields)
+        {
+            RequireRequiredFieldValue(requiredField.Field, nameof(requiredField.Field), descriptor.ResourceKey);
+            RequireRequiredFieldValue(requiredField.ErrorCode, nameof(requiredField.ErrorCode), descriptor.ResourceKey, requiredField.Field);
+            RequireRequiredFieldValue(requiredField.Message, nameof(requiredField.Message), descriptor.ResourceKey, requiredField.Field);
+            RequireRequiredFieldValue(requiredField.ReasonKey, nameof(requiredField.ReasonKey), descriptor.ResourceKey, requiredField.Field);
+
+            if (!declarations.Add((requiredField.Field, requiredField.Scope)))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填字段 {requiredField.Field} 在 {requiredField.Scope} 范围内重复声明。");
+            }
+
+            if (!declaredFields.Contains(requiredField.Field))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填字段 {requiredField.Field} 未在字段集合中声明。");
+            }
+
+            if (!descriptor.FieldSet.DetailFields.Contains(requiredField.Field, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填字段 {requiredField.Field} 必须包含在 DetailFields 中。");
+            }
+
+            if (RequiresCreate(requiredField.Scope)
+                && !descriptor.FieldSet.CreateFields.Contains(requiredField.Field, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填字段 {requiredField.Field} 必须包含在 CreateFields 中。");
+            }
+
+            if (RequiresUpdate(requiredField.Scope)
+                && !descriptor.FieldSet.UpdateFields.Contains(requiredField.Field, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填字段 {requiredField.Field} 必须包含在 UpdateFields 中。");
+            }
+        }
+    }
+
+    private static bool RequiresCreate(StandardCrudRequiredFieldScope scope) =>
+        scope is StandardCrudRequiredFieldScope.CreateOnly or StandardCrudRequiredFieldScope.CreateAndUpdate;
+
+    private static bool RequiresUpdate(StandardCrudRequiredFieldScope scope) =>
+        scope is StandardCrudRequiredFieldScope.UpdateOnly or StandardCrudRequiredFieldScope.CreateAndUpdate;
+
+    private static void RequireRequiredFieldValue(string value, string name, string resourceKey, string? field = null)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            var fieldPart = string.IsNullOrWhiteSpace(field) ? string.Empty : $" {field}";
+            throw new InvalidOperationException($"标准 CRUD 资源 {resourceKey} 的必填字段{fieldPart} 缺少 {name}。");
         }
     }
 

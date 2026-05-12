@@ -164,6 +164,115 @@ public sealed class StandardCrudDescriptorTests
         Assert.Equal(StandardCrudRequiredFieldScope.CreateOnly, required.Scope);
     }
 
+    [Fact]
+    public void Validate_WhenRequiredFieldContractMissing_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithRequiredFields(
+            new StandardCrudRequiredField
+            {
+                Field = "ENAME",
+                ErrorCode = "",
+                Message = "姓名不能为空。",
+                ReasonKey = "organization.person.nameRequired"
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 ENAME 缺少 ErrorCode。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenRequiredFieldDuplicatedInSameScope_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithRequiredFields(
+            Required("ENAME", StandardCrudRequiredFieldScope.CreateAndUpdate),
+            Required("ENAME", StandardCrudRequiredFieldScope.CreateAndUpdate));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 ENAME 在 CreateAndUpdate 范围内重复声明。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenRequiredFieldIsNotDeclaredInAnyFieldSet_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithRequiredFields(Required("UnknownField", StandardCrudRequiredFieldScope.CreateOnly));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 UnknownField 未在字段集合中声明。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenRequiredFieldIsNotInDetailFields_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithRequiredFields(Required("PersonNo", StandardCrudRequiredFieldScope.CreateOnly));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 PersonNo 必须包含在 DetailFields 中。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenRequiredCreateFieldIsNotWritable_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithRequiredFields(Required("PositionId", StandardCrudRequiredFieldScope.CreateOnly));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 PositionId 必须包含在 CreateFields 中。", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenRequiredUpdateFieldIsNotWritable_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithRequiredFields(
+            [Required("PersonNo", StandardCrudRequiredFieldScope.UpdateOnly)],
+            includePersonNoInDetail: true);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 PersonNo 必须包含在 UpdateFields 中。", ex.Message);
+    }
+
+    private static StandardCrudRequiredField Required(
+        string field,
+        StandardCrudRequiredFieldScope scope = StandardCrudRequiredFieldScope.CreateAndUpdate) => new()
+    {
+        Field = field,
+        Scope = scope,
+        ErrorCode = $"Organization.Person.{field}Required",
+        Message = $"{field} 不能为空。",
+        ReasonKey = $"organization.person.{field}Required"
+    };
+
+    private static StandardCrudDescriptor DescriptorWithRequiredFields(
+        params StandardCrudRequiredField[] requiredFields) =>
+        DescriptorWithRequiredFields(requiredFields, includePersonNoInDetail: false);
+
+    private static StandardCrudDescriptor DescriptorWithRequiredFields(
+        IReadOnlyList<StandardCrudRequiredField> requiredFields,
+        bool includePersonNoInDetail)
+    {
+        return new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME", "PersonNo", "PositionId"],
+                DetailFields: includePersonNoInDetail
+                    ? ["EID", "ENAME", "PersonNo", "PositionId"]
+                    : ["EID", "ENAME", "PositionId"],
+                CreateFields: ["ENAME", "PersonNo"],
+                UpdateFields: ["ENAME"]),
+            RequiredFields = requiredFields
+        };
+    }
+
     private static StandardCrudDescriptor DescriptorWithUniqueConstraints(params StandardCrudUniqueConstraint[] constraints)
     {
         return new StandardCrudDescriptor

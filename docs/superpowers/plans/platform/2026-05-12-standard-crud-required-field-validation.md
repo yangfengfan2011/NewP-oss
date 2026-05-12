@@ -201,7 +201,7 @@ git commit -m "功能：新增标准CRUD必填字段契约"
 - Modify: `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`
 - Test: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 
-- [ ] **Step 1: 写 required field 静态校验失败测试**
+- [x] **Step 1: 写 required field 静态校验失败测试**
 
 Append these tests and helper to `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`:
 
@@ -316,7 +316,7 @@ private static StandardCrudDescriptor DescriptorWithRequiredFields(
 }
 ```
 
-- [ ] **Step 2: 运行静态校验测试确认失败**
+- [x] **Step 2: 运行静态校验测试确认失败**
 
 Run:
 
@@ -326,7 +326,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Requi
 
 Expected: FAIL，至少一个测试提示没有执行 required field 静态校验。
 
-- [ ] **Step 3: 在 descriptor validator 中挂载 required 校验**
+- [x] **Step 3: 在 descriptor validator 中挂载 required 校验**
 
 Modify `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`.
 
@@ -336,7 +336,7 @@ In `Validate`, insert before `ValidateUniqueConstraints(descriptor);`:
         ValidateRequiredFields(descriptor);
 ```
 
-- [ ] **Step 4: 增加 required field 静态校验实现**
+- [x] **Step 4: 增加 required field 静态校验实现**
 
 Add these methods to `server/platform-crud/Runtime/StandardCrudDescriptorValidator.cs`, before `ValidateUniqueConstraints`:
 
@@ -408,7 +408,7 @@ Add these methods to `server/platform-crud/Runtime/StandardCrudDescriptorValidat
     }
 ```
 
-- [ ] **Step 5: 运行静态校验测试确认通过**
+- [x] **Step 5: 运行静态校验测试确认通过**
 
 Run:
 
@@ -418,7 +418,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Stand
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add .\server\platform-crud\Runtime\StandardCrudDescriptorValidator.cs .\tests\PlatformCrud.Tests\StandardCrudDescriptorTests.cs

@@ -293,3 +293,44 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 标准 CRUD API 对外继续使用模块语义路由，对内统一由平台 mapper 委托 `StandardCrudEndpoint`。
 - 人员中心只保留账号绑定专属 Controller，不再保留标准 CRUD 空壳 Controller。
 - Person 的运行时真源为 `PersonCrudDescriptorFactory` 与模型 metadata；人员账号绑定关系继续由 Organization 模块专属代码维护。
+
+## 标准 CRUD 必填字段校验平台化验证
+
+验证日期：2026-05-12
+
+验证目标：
+
+- 标准 CRUD 资源可通过 descriptor 显式声明写入必填字段。
+- `StandardCrudService` 在唯一约束和模块 validator 之前执行必填校验。
+- Person 试点只声明 `PersonNo`、`ENAME`、`IsEnabled` 必填，不收紧 `CompanyId`、`DepartmentId`、`EmploymentStatus` 的 optional 口径。
+- 必填失败返回稳定 `StandardCrudError`，不依赖数据库异常或模块专属 validator。
+
+验证命令：
+
+```powershell
+dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+rg -n "StandardCrudRequiredField|RequiredFields|ValidateRequiredFields|PersonNoRequired|NameRequired|EnabledRequired" server/platform-crud server/modules/Organization tests
+rg -n "CompanyIdRequired|DepartmentIdRequired|EmploymentStatusRequired" server/modules/Organization tests/Organization.Tests
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-05-12-standard-crud-required-field-validation-design.md
+powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1
+```
+
+验证结论：
+
+- 标准 CRUD 必填字段声明、静态校验和运行时写入校验已由平台内核承接。
+- 创建阶段会拦截缺失、`null` 和空白字符串；更新阶段只拦截本次提交字段被清空，不因历史空值阻塞无关字段更新。
+- `false` 作为布尔值通过必填校验。
+- Person 的 `CompanyId`、`DepartmentId`、`EmploymentStatus` 仍保持 optional，后续如需改为必填应单独设计 metadata、迁移和前端表单口径。
+
+已知风险：
+
+- 本轮只新增 descriptor 级必填校验，不包含数据库 `NOT NULL` 迁移或 `PersonNo` 唯一索引。
+- `CompanyId`、`DepartmentId`、`EmploymentStatus` 继续保持 optional；后续如需收紧，必须单独设计 metadata、迁移和前端表单口径。
+
+回滚思路：
+
+- 如仅需恢复 Person 行为，可清空或回退 `PersonCrudDescriptorFactory` 中的 `RequiredFields`。
+- 如需恢复平台旧行为，可移除 `StandardCrudService` 的 required 校验调用，或整体回退 Task 1-4 相关提交。
+- Task 5 仅为验证记录收口；文档回滚只需回退本验证记录与计划 checkbox 变更，且无数据库迁移需要回滚。

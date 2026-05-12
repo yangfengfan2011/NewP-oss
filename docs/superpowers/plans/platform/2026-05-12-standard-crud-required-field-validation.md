@@ -823,7 +823,7 @@ git commit -m "功能：人员标准CRUD声明必填字段"
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 - Build: `apps/host-api/HostApi.csproj`
 
-- [ ] **Step 1: 运行平台 CRUD 全量测试**
+- [x] **Step 1: 运行平台 CRUD 全量测试**
 
 Run:
 
@@ -833,7 +833,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 2: 运行 Organization 全量测试**
+- [x] **Step 2: 运行 Organization 全量测试**
 
 Run:
 
@@ -843,7 +843,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 3: 构建 HostApi**
+- [x] **Step 3: 构建 HostApi**
 
 Run:
 
@@ -853,7 +853,7 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 
 Expected: build succeeds with 0 errors.
 
-- [ ] **Step 4: 扫描必填字段入口与边界**
+- [x] **Step 4: 扫描必填字段入口与边界**
 
 Run:
 
@@ -871,7 +871,7 @@ rg -n "CompanyIdRequired|DepartmentIdRequired|EmploymentStatusRequired" server/m
 
 Expected: no matches.
 
-- [ ] **Step 5: 运行设计文档 AI-first 校验**
+- [x] **Step 5: 运行设计文档 AI-first 校验**
 
 Run:
 
@@ -882,7 +882,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 
 Expected: both commands pass.
 
-- [ ] **Step 6: 回填验证记录**
+- [x] **Step 6: 回填验证记录**
 
 Append to `docs/verification/organization-module-verification.md`:
 
@@ -919,7 +919,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 - Person 的 `CompanyId`、`DepartmentId`、`EmploymentStatus` 仍保持 optional，后续如需改为必填应单独设计 metadata、迁移和前端表单口径。
 ````
 
-- [ ] **Step 7: 提交验证记录**
+- [x] **Step 7: 提交验证记录**
 
 ```powershell
 git add .\docs\verification\organization-module-verification.md

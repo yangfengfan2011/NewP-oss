@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
@@ -24,9 +24,14 @@ import {
   filterFallbackRoutesByMetadataEntries,
   resolveRouteableMetadataEntries,
 } from './navigation/pageEntryAdapter';
+import {
+  buildStandardCrudDetailRouteEntries,
+  filterFallbackRoutesByStandardCrudRoutes,
+} from './navigation/standardCrudRouteAdapter';
 import { renderPageEntry } from './navigation/pageRouteRenderer';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import StandardCrudDetailPageHost from './pages/StandardCrudDetailPageHost';
 import UiShowcase from './pages/UiShowcase';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -45,19 +50,28 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
   return <AuthorizationProvider userId={auth.user?.id}>{children}</AuthorizationProvider>;
 }
 
+function StandardCrudDetailRoute({ viewKey }: { viewKey: string }) {
+  const params = useParams();
+  return <StandardCrudDetailPageHost viewKey={viewKey} id={params.id ?? null} />;
+}
+
 function AppRoutes() {
   const runtimeMetadata = useRuntimeMetadata();
   // 路由接管语义统一下沉到 adapter，这里只消费结果，避免 App 自己再分叉出权限或冲突规则。
-  const { metadataEntries, fallbackRoutes } = useMemo(() => {
+  const { metadataEntries, standardCrudDetailEntries, fallbackRoutes } = useMemo(() => {
+    const modules = ModuleRegistry.getAllModules();
     const moduleRoutes = ModuleRegistry.getRoutes();
+    const standardCrudRoutes = buildStandardCrudDetailRouteEntries(modules, moduleRoutes);
     const projectedEntries = runtimeMetadata
       ? buildPageEntriesFromNavDocuments(runtimeMetadata.navDocuments)
       : [];
     const routeableMetadataEntries = resolveRouteableMetadataEntries(projectedEntries, moduleRoutes);
+    const metadataFilteredRoutes = filterFallbackRoutesByMetadataEntries(moduleRoutes, routeableMetadataEntries);
 
     return {
       metadataEntries: routeableMetadataEntries,
-      fallbackRoutes: filterFallbackRoutesByMetadataEntries(moduleRoutes, routeableMetadataEntries),
+      standardCrudDetailEntries: standardCrudRoutes,
+      fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(metadataFilteredRoutes, standardCrudRoutes),
     };
   }, [runtimeMetadata]);
 
@@ -84,6 +98,19 @@ function AppRoutes() {
               </PermissionGuard>
             ) : (
               renderPageEntry(entry)
+            )}
+          />
+        ))}
+        {standardCrudDetailEntries.map((entry) => (
+          <Route
+            key={entry.path}
+            path={entry.path}
+            element={entry.permissions && entry.permissions.length > 0 ? (
+              <PermissionGuard permissions={entry.permissions}>
+                <StandardCrudDetailRoute viewKey={entry.viewKey} />
+              </PermissionGuard>
+            ) : (
+              <StandardCrudDetailRoute viewKey={entry.viewKey} />
             )}
           />
         ))}

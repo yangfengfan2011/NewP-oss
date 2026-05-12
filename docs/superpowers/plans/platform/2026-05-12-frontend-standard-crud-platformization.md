@@ -1424,7 +1424,7 @@ git commit -m "功能：新增前端标准CRUD列表宿主"
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-detail-host.test.tsx`
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx`
 
-- [ ] **Step 1: 写详情 Host 失败测试**
+- [x] **Step 1: 写详情 Host 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-detail-host.test.tsx`:
 
@@ -1532,7 +1532,7 @@ describe('StandardCrudDetailPageHost', () => {
 });
 ```
 
-- [ ] **Step 2: 写标准 CRUD 路由 adapter 失败测试**
+- [x] **Step 2: 写标准 CRUD 路由 adapter 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx`:
 
@@ -1592,7 +1592,7 @@ describe('standard CRUD route adapter', () => {
 });
 ```
 
-- [ ] **Step 3: 运行详情与路由测试确认失败**
+- [x] **Step 3: 运行详情与路由测试确认失败**
 
 Run:
 
@@ -1602,7 +1602,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-detail-
 
 Expected: FAIL，提示 `StandardCrudDetailPageHost` 与 `standardCrudRouteAdapter` 不存在。
 
-- [ ] **Step 4: 实现标准 CRUD 详情 Host**
+- [x] **Step 4: 实现标准 CRUD 详情 Host**
 
 Create `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`:
 
@@ -1723,7 +1723,7 @@ function StandardCrudDetailPageContent<TDetail>({
 }
 ```
 
-- [ ] **Step 5: 实现标准 CRUD 详情路由 adapter**
+- [x] **Step 5: 实现标准 CRUD 详情路由 adapter**
 
 Create `frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts`:
 
@@ -1773,7 +1773,7 @@ export function filterFallbackRoutesByStandardCrudRoutes(
 }
 ```
 
-- [ ] **Step 6: 让 AppRoutes 渲染标准 CRUD 详情路由**
+- [x] **Step 6: 让 AppRoutes 渲染标准 CRUD 详情路由**
 
 Modify `frontend/packages/shell/src/App.tsx`:
 
@@ -1822,7 +1822,7 @@ Render `standardCrudDetailEntries` before `fallbackRoutes`:
 ))}
 ```
 
-- [ ] **Step 7: 运行详情与路由测试**
+- [x] **Step 7: 运行详情与路由测试**
 
 Run:
 
@@ -1832,7 +1832,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-detail-
 
 Expected: PASS。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add .\frontend\packages\shell\src\pages\StandardCrudDetailPageHost.tsx .\frontend\packages\shell\src\navigation\standardCrudRouteAdapter.ts .\frontend\packages\shell\src\App.tsx .\frontend\packages\shell\src\__tests__\standard-crud-detail-host.test.tsx .\frontend\packages\shell\src\__tests__\standard-crud-route-adapter.test.tsx

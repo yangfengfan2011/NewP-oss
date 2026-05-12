@@ -48,7 +48,7 @@
 - Modify: `server/platform-crud/Descriptors/StandardCrudDescriptor.cs`
 - Test: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 
-- [ ] **Step 1: 写 descriptor 契约失败测试**
+- [x] **Step 1: 写 descriptor 契约失败测试**
 
 Append this test to `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`:
 
@@ -89,7 +89,7 @@ public void Descriptor_CanDeclareRequiredFields()
 }
 ```
 
-- [ ] **Step 2: 运行契约测试确认失败**
+- [x] **Step 2: 运行契约测试确认失败**
 
 Run:
 
@@ -99,7 +99,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Descri
 
 Expected: FAIL，提示 `StandardCrudRequiredField`、`StandardCrudRequiredFieldScope` 或 `RequiredFields` 不存在。
 
-- [ ] **Step 3: 新增必填范围枚举**
+- [x] **Step 3: 新增必填范围枚举**
 
 Create `server/platform-crud/Descriptors/StandardCrudRequiredFieldScope.cs`:
 
@@ -114,7 +114,7 @@ public enum StandardCrudRequiredFieldScope
 }
 ```
 
-- [ ] **Step 4: 新增必填字段契约模型**
+- [x] **Step 4: 新增必填字段契约模型**
 
 Create `server/platform-crud/Descriptors/StandardCrudRequiredField.cs`:
 
@@ -153,7 +153,7 @@ public sealed class StandardCrudRequiredField
 }
 ```
 
-- [ ] **Step 5: 在 descriptor 上声明 RequiredFields**
+- [x] **Step 5: 在 descriptor 上声明 RequiredFields**
 
 Modify `server/platform-crud/Descriptors/StandardCrudDescriptor.cs`.
 
@@ -175,7 +175,7 @@ Replace the tail of the class with:
 }
 ```
 
-- [ ] **Step 6: 运行契约测试确认通过**
+- [x] **Step 6: 运行契约测试确认通过**
 
 Run:
 
@@ -185,7 +185,7 @@ dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Descri
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add .\server\platform-crud\Descriptors\StandardCrudRequiredFieldScope.cs .\server\platform-crud\Descriptors\StandardCrudRequiredField.cs .\server\platform-crud\Descriptors\StandardCrudDescriptor.cs .\tests\PlatformCrud.Tests\StandardCrudDescriptorTests.cs

@@ -129,6 +129,41 @@ public sealed class StandardCrudDescriptorTests
         Assert.Equal("标准 CRUD 资源 organization.person 的唯一约束 personNo ScopeFields 字段 CompanyId 重复。", ex.Message);
     }
 
+    [Fact]
+    public void Descriptor_CanDeclareRequiredFields()
+    {
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "PersonNo", "ENAME"],
+                DetailFields: ["EID", "PersonNo", "ENAME"],
+                CreateFields: ["PersonNo", "ENAME"],
+                UpdateFields: ["ENAME"]),
+            RequiredFields =
+            [
+                new StandardCrudRequiredField
+                {
+                    Field = "PersonNo",
+                    Scope = StandardCrudRequiredFieldScope.CreateOnly,
+                    ErrorCode = "Organization.Person.PersonNoRequired",
+                    Message = "人员工号不能为空。",
+                    ReasonKey = "organization.person.personNoRequired"
+                }
+            ]
+        };
+
+        var required = Assert.Single(descriptor.RequiredFields);
+
+        Assert.Equal("PersonNo", required.Field);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateOnly, required.Scope);
+    }
+
     private static StandardCrudDescriptor DescriptorWithUniqueConstraints(params StandardCrudUniqueConstraint[] constraints)
     {
         return new StandardCrudDescriptor

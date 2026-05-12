@@ -584,7 +584,7 @@ git commit -m "功能：新增前端标准CRUD契约"
 - Create: `frontend/packages/shell/src/registries/standardCrudRegistry.ts`
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-schema-and-registry.test.ts`
 
-- [ ] **Step 1: 写 schema 与 registry 失败测试**
+- [x] **Step 1: 写 schema 与 registry 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-schema-and-registry.test.ts`:
 
@@ -717,7 +717,7 @@ describe('standard CRUD schema resolver and registry', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -727,7 +727,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-schema-
 
 Expected: FAIL，提示 `standardCrudSchemaResolver`、`standardCrudRegistry` 或 `resolveDetailViewDocument` 不存在。
 
-- [ ] **Step 3: 实现 detail view resolver**
+- [x] **Step 3: 实现 detail view resolver**
 
 Modify `frontend/packages/shell/src/metadata/viewMetadataResolver.ts`:
 
@@ -770,7 +770,7 @@ export function resolveDetailViewDocument(
 }
 ```
 
-- [ ] **Step 4: 实现标准 CRUD schema resolver**
+- [x] **Step 4: 实现标准 CRUD schema resolver**
 
 Create `frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts`:
 
@@ -902,7 +902,7 @@ export function buildStandardCrudDetailSchema(
 }
 ```
 
-- [ ] **Step 5: 实现标准 CRUD registry**
+- [x] **Step 5: 实现标准 CRUD registry**
 
 Create `frontend/packages/shell/src/registries/standardCrudRegistry.ts`:
 
@@ -965,7 +965,7 @@ export function buildStandardCrudRegistry(modules: FrontendModule[]): StandardCr
 }
 ```
 
-- [ ] **Step 6: 运行 schema 与 registry 测试**
+- [x] **Step 6: 运行 schema 与 registry 测试**
 
 Run:
 
@@ -975,7 +975,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-schema-
 
 Expected: PASS。
 
-- [ ] **Step 7: 构建 Shell 类型检查**
+- [x] **Step 7: 构建 Shell 类型检查**
 
 Run:
 
@@ -985,7 +985,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell build
 
 Expected: PASS。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add .\frontend\packages\shell\src\metadata\viewMetadataResolver.ts .\frontend\packages\shell\src\metadata\standardCrudSchemaResolver.ts .\frontend\packages\shell\src\registries\standardCrudRegistry.ts .\frontend\packages\shell\src\__tests__\standard-crud-schema-and-registry.test.ts

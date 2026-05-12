@@ -43,6 +43,24 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public void PersonCrudDescriptor_DeclaresRequiredFieldsWithoutTighteningOptionalOrganizationFields()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        var required = descriptor.RequiredFields.ToDictionary(item => item.Field, StringComparer.Ordinal);
+
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateOnly, required["PersonNo"].Scope);
+        Assert.Equal("Organization.Person.PersonNoRequired", required["PersonNo"].ErrorCode);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["ENAME"].Scope);
+        Assert.Equal("Organization.Person.NameRequired", required["ENAME"].ErrorCode);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["IsEnabled"].Scope);
+        Assert.Equal("Organization.Person.EnabledRequired", required["IsEnabled"].ErrorCode);
+        Assert.DoesNotContain("CompanyId", required.Keys);
+        Assert.DoesNotContain("DepartmentId", required.Keys);
+        Assert.DoesNotContain("EmploymentStatus", required.Keys);
+    }
+
+    [Fact]
     public void LegacyPersonController_IsRemoved()
     {
         var legacyType = typeof(OrganizationModule).Assembly.GetType(

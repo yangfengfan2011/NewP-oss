@@ -25,6 +25,33 @@ public static class PersonCrudDescriptorFactory
         SummaryBlockKeys = ["userLink", "authorizationSummary"],
         DisplayValueFields = ["CompanyName", "DepartmentName", "PositionName"],
         DeletePolicy = StandardCrudDeletePolicy.Conditional,
+        RequiredFields =
+        [
+            new StandardCrudRequiredField
+            {
+                Field = "PersonNo",
+                Scope = StandardCrudRequiredFieldScope.CreateOnly,
+                ErrorCode = "Organization.Person.PersonNoRequired",
+                Message = "人员工号不能为空。",
+                ReasonKey = "organization.person.personNoRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "ENAME",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.NameRequired",
+                Message = "人员姓名不能为空。",
+                ReasonKey = "organization.person.nameRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "IsEnabled",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.EnabledRequired",
+                Message = "人员启用状态不能为空。",
+                ReasonKey = "organization.person.enabledRequired"
+            }
+        ],
         UniqueConstraints =
         [
             new StandardCrudUniqueConstraint

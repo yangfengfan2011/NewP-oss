@@ -715,7 +715,7 @@ git commit -m "功能：标准CRUD写入执行必填校验"
 - Modify: `tests/Organization.Tests/PersonStandardCrudResourceTests.cs`
 - Test: `tests/Organization.Tests/Organization.Tests.csproj`
 
-- [ ] **Step 1: 写 Person descriptor 必填声明失败测试**
+- [x] **Step 1: 写 Person descriptor 必填声明失败测试**
 
 Append this test to `tests/Organization.Tests/PersonStandardCrudResourceTests.cs`:
 
@@ -739,7 +739,7 @@ public void PersonCrudDescriptor_DeclaresRequiredFieldsWithoutTighteningOptional
 }
 ```
 
-- [ ] **Step 2: 运行 Person descriptor 测试确认失败**
+- [x] **Step 2: 运行 Person descriptor 测试确认失败**
 
 Run:
 
@@ -749,7 +749,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter Person
 
 Expected: FAIL，提示 `descriptor.RequiredFields` 为空或缺少对应字段。
 
-- [ ] **Step 3: 在 Person descriptor 中声明必填字段**
+- [x] **Step 3: 在 Person descriptor 中声明必填字段**
 
 Modify `server/modules/Organization/Crud/PersonCrudDescriptorFactory.cs`.
 
@@ -785,7 +785,7 @@ Insert `RequiredFields` before `UniqueConstraints`:
         ],
 ```
 
-- [ ] **Step 4: 运行 Person descriptor 与 metadata optional 测试确认通过**
+- [x] **Step 4: 运行 Person descriptor 与 metadata optional 测试确认通过**
 
 Run:
 
@@ -795,7 +795,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter "Perso
 
 Expected: PASS，且 `Person_OrganizationFields_AreProjectedAsOptional` 继续通过。
 
-- [ ] **Step 5: 运行 Organization 全量测试**
+- [x] **Step 5: 运行 Organization 全量测试**
 
 Run:
 
@@ -805,7 +805,7 @@ dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mi
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add .\server\modules\Organization\Crud\PersonCrudDescriptorFactory.cs .\tests\Organization.Tests\PersonStandardCrudResourceTests.cs

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { ModuleRegistry } from '@icp-platform/sdk';
@@ -12,7 +12,12 @@ import { buildListViewRegistry } from '../registries/listViewRegistry';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const standardListPageMock = vi.hoisted(() =>
-  vi.fn(({ title }: { title: string }) => <div data-testid="standard-list-page">{title}</div>),
+  vi.fn(({ title, content }: { title: string; content?: ReactNode }) => (
+    <div data-testid="standard-list-page">
+      {title}
+      {content}
+    </div>
+  )),
 );
 
 vi.mock('@icp-platform/ui', async (importOriginal) => {
@@ -142,6 +147,58 @@ describe('StandardListPageHost', () => {
       title: '人员中心',
     });
     expect(container.textContent).toContain('人员中心');
+  });
+
+  it('prefers standard CRUD resource registrations over legacy list registrations', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ items: [{ id: 'Person_1', name: '张三' }], total: 1, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
+      {
+        metadata: {
+          moduleId: 'organization',
+          displayName: 'Organization',
+          version: '1.0.0',
+        },
+        standardCrudResources: [
+          {
+            resourceKey: 'organization.person',
+            apiRoute: '/api/organization/persons',
+            listViewKey: 'organization.person.list',
+            detailViewKey: 'organization.person.detail',
+            createEmptyFilters: () => ({ keyword: '' }),
+            buildListQuery: (filters: { keyword: string }) => filters,
+            mapListItem: (value: unknown) => value as { id: string; name: string },
+            getRowId: (row: { id: string }) => row.id,
+            buildColumns: () => [{ key: 'name', title: '姓名' }],
+          },
+        ],
+        standardListViews: [
+          {
+            viewKey: 'organization.person.list',
+            component: () => <div>旧列表</div>,
+          },
+        ],
+      },
+    ]);
+
+    await renderHost([
+      {
+        type: 'view',
+        view: {
+          key: 'organization.person.list',
+          mode: 'list',
+          title: '人员中心',
+        },
+      },
+    ]);
+    await act(async () => undefined);
+
+    expect(container.textContent).toContain('张三');
+    expect(container.textContent).not.toContain('旧列表');
   });
 
   it('rejects list metadata when mode is detail', async () => {

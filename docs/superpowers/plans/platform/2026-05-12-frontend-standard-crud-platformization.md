@@ -1002,7 +1002,7 @@ git commit -m "功能：新增前端标准CRUD注册解析"
 - Modify: `frontend/packages/shell/src/__tests__/standard-list-page-host.test.tsx`
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-list-host.test.tsx`
 
-- [ ] **Step 1: 写列表 Host 失败测试**
+- [x] **Step 1: 写列表 Host 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-list-host.test.tsx`:
 
@@ -1108,7 +1108,7 @@ describe('StandardCrudListPageHost', () => {
 });
 ```
 
-- [ ] **Step 2: 运行列表 Host 测试确认失败**
+- [x] **Step 2: 运行列表 Host 测试确认失败**
 
 Run:
 
@@ -1118,7 +1118,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-list-ho
 
 Expected: FAIL，提示 `StandardCrudListPageHost` 不存在。
 
-- [ ] **Step 3: 实现标准 CRUD 列表 Host**
+- [x] **Step 3: 实现标准 CRUD 列表 Host**
 
 Create `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`:
 
@@ -1284,7 +1284,7 @@ function StandardCrudListPageContent<TFilter, TRow>({
 }
 ```
 
-- [ ] **Step 4: 让原 StandardListPageHost 优先使用标准 CRUD Host**
+- [x] **Step 4: 让原 StandardListPageHost 优先使用标准 CRUD Host**
 
 Modify `frontend/packages/shell/src/pages/StandardListPageHost.tsx`:
 
@@ -1338,7 +1338,7 @@ export default function StandardListPageHost({ viewKey }: StandardListPageHostPr
 }
 ```
 
-- [ ] **Step 5: 更新原 StandardListPageHost 测试**
+- [x] **Step 5: 更新原 StandardListPageHost 测试**
 
 Modify `frontend/packages/shell/src/__tests__/standard-list-page-host.test.tsx` by adding one test:
 
@@ -1396,7 +1396,7 @@ it('prefers standard CRUD resource registrations over legacy list registrations'
 });
 ```
 
-- [ ] **Step 6: 运行列表 Host 测试**
+- [x] **Step 6: 运行列表 Host 测试**
 
 Run:
 
@@ -1406,7 +1406,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-list-ho
 
 Expected: PASS。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add .\frontend\packages\shell\src\pages\StandardCrudListPageHost.tsx .\frontend\packages\shell\src\pages\StandardListPageHost.tsx .\frontend\packages\shell\src\__tests__\standard-crud-list-host.test.tsx .\frontend\packages\shell\src\__tests__\standard-list-page-host.test.tsx

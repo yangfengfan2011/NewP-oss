@@ -120,9 +120,9 @@ function readAdvancedFilter(value: unknown): StandardCrudAdvancedFilterSchema {
   };
 }
 
-export function buildStandardCrudListSchema(
+export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   view: Record<string, unknown>,
-  registration: StandardCrudResourceRegistration,
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
 ): StandardCrudListRuntimeSchema {
   const query = readRecord(view.query);
   const exportConfig = readRecord(view.export);
@@ -157,9 +157,9 @@ export function buildStandardCrudListSchema(
   };
 }
 
-export function buildStandardCrudDetailSchema(
+export function buildStandardCrudDetailSchema<TFilter, TRow, TDetail>(
   view: Record<string, unknown>,
-  registration: StandardCrudResourceRegistration,
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
 ): StandardCrudDetailRuntimeSchema {
   return {
     viewKey: readString(view.key, registration.detailViewKey ?? ''),

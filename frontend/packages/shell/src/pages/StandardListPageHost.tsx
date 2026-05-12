@@ -4,6 +4,8 @@ import { ModuleRegistry } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildListViewRegistry } from '../registries/listViewRegistry';
+import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
+import StandardCrudListPageHost from './StandardCrudListPageHost';
 
 interface StandardListPageHostProps {
   viewKey: string;
@@ -18,8 +20,15 @@ export default function StandardListPageHost({ viewKey }: StandardListPageHostPr
     return <div className="sh-error-state">未找到列表视图元数据</div>;
   }
 
-  // 宿主只负责把 view metadata 和模块注册项装配起来，真正的列表骨架渲染继续交给 StandardListPage。
-  const registration = buildListViewRegistry(ModuleRegistry.getAllModules()).get(viewKey);
+  const modules = ModuleRegistry.getAllModules();
+  const standardCrudRegistration = buildStandardCrudRegistry(modules).findByListViewKey(viewKey);
+
+  if (standardCrudRegistration) {
+    return <StandardCrudListPageHost viewKey={viewKey} />;
+  }
+
+  // 旧 standardListViews 作为兼容机制保留；新标准 CRUD 资源优先通过 standardCrudResources 接入。
+  const registration = buildListViewRegistry(modules).get(viewKey);
 
   if (!registration) {
     return <div className="sh-error-state">未找到列表页注册项</div>;

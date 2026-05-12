@@ -1,4 +1,5 @@
 import { ComponentType, ReactNode } from 'react';
+import type { StandardCrudResourceRegistration } from './standardCrud';
 
 export interface ModuleMetadata {
   moduleId: string;
@@ -73,6 +74,31 @@ export {
   isUserMessageDto,
 } from './userMessage';
 
+export type {
+  StandardCrudClient,
+  StandardCrudDetail,
+  StandardCrudDetailExtensionContext,
+  StandardCrudListExtensionContext,
+  StandardCrudListResult,
+  StandardCrudMutationValues,
+  StandardCrudResourceRegistration,
+  StandardCrudSummaryBlock,
+  StandardCrudSummaryStatus,
+  StandardCrudTableColumn,
+} from './standardCrud';
+
+export {
+  buildStandardCrudPath,
+  createStandardCrudClient,
+  isStandardCrudRecord,
+  normalizeStandardCrudDetail,
+  normalizeStandardCrudListResult,
+  normalizeStandardCrudSummaryBlock,
+  readStandardCrudBoolean,
+  readStandardCrudNullableString,
+  readStandardCrudString,
+} from './standardCrud';
+
 export interface I18nResource {
   locale: string;
   messages: Record<string, string>;
@@ -80,6 +106,7 @@ export interface I18nResource {
 
 export interface FrontendModule {
   metadata: ModuleMetadata;
+  standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
   routes?: RouteConfig[];

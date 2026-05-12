@@ -1,0 +1,90 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildStandardCrudPath,
+  createStandardCrudClient,
+  normalizeStandardCrudListResult,
+  normalizeStandardCrudSummaryBlock,
+  readStandardCrudBoolean,
+  readStandardCrudString,
+} from '@icp-platform/sdk';
+
+describe('standard CRUD SDK helpers', () => {
+  it('normalizes list results with stable paging defaults', () => {
+    const result = normalizeStandardCrudListResult(
+      {
+        items: [{ EID: 'Person_1', ENAME: '张三' }],
+        total: 7,
+        page: 2,
+        pageSize: 20,
+        sortBy: 'ENAME',
+        sortDirection: 'asc',
+      },
+      (item) => ({ id: readStandardCrudString(item, ['EID']), name: readStandardCrudString(item, ['ENAME']) }),
+    );
+
+    expect(result).toEqual({
+      items: [{ id: 'Person_1', name: '张三' }],
+      total: 7,
+      page: 2,
+      pageSize: 20,
+      sortBy: 'ENAME',
+      sortDirection: 'asc',
+    });
+  });
+
+  it('uses item count as list fallback when paging fields are missing', () => {
+    const result = normalizeStandardCrudListResult({ items: [{ EID: 'Person_1' }] }, (item) => item);
+
+    expect(result.total).toBe(1);
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(1);
+  });
+
+  it('normalizes summary blocks and legacy array summaries', () => {
+    expect(normalizeStandardCrudSummaryBlock({ status: 'ready', data: ['A'] })).toEqual({
+      status: 'ready',
+      data: ['A'],
+    });
+    expect(normalizeStandardCrudSummaryBlock([])).toEqual({
+      status: 'notConfigured',
+      data: null,
+    });
+  });
+
+  it('fails closed when summary status is unknown', () => {
+    expect(normalizeStandardCrudSummaryBlock({ status: 'unexpected', data: ['A'] })).toEqual({
+      status: 'dependencyUnavailable',
+      data: null,
+    });
+  });
+
+  it('reads primitive fields from unknown records', () => {
+    const value = { EID: 'Person_1', IsEnabled: true };
+
+    expect(readStandardCrudString(value, ['EID'])).toBe('Person_1');
+    expect(readStandardCrudString(value, ['Missing'], 'fallback')).toBe('fallback');
+    expect(readStandardCrudBoolean(value, ['IsEnabled'], false)).toBe(true);
+    expect(readStandardCrudBoolean(value, ['Missing'], true)).toBe(true);
+  });
+
+  it('builds API paths with query parameters', () => {
+    expect(buildStandardCrudPath('/api/organization/persons', { keyword: 'zhang', empty: '', ignored: null })).toBe(
+      '/api/organization/persons?keyword=zhang',
+    );
+  });
+
+  it('creates a fetch-backed standard CRUD client', async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify({ fields: { EID: 'Person_1' }, summaries: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const client = createStandardCrudClient('/api/organization/persons', fetcher);
+
+    const detail = await client.getDetail('Person_1');
+
+    expect(fetcher).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'GET' });
+    expect(detail.fields).toEqual({ EID: 'Person_1' });
+  });
+});

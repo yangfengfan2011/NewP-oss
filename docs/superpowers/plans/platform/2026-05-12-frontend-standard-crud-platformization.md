@@ -95,7 +95,7 @@
 - Read: `frontend/packages/shell/src/pages/StandardListPageHost.tsx`
 - Read: `frontend/modules/organization/src/index.ts`
 
-- [ ] **Step 1: 确认工作区没有需要切分的冲突**
+- [x] **Step 1: 确认工作区没有需要切分的冲突**
 
 Run:
 
@@ -105,7 +105,7 @@ git status --short
 
 Expected: 允许看到本计划文档、前端标准 CRUD 设计文档或其他用户已有改动；如果存在与本计划同一批前端文件的未提交修改，先阅读对应 diff，不能覆盖用户改动。
 
-- [ ] **Step 2: 阅读设计并确认本计划只覆盖第一批**
+- [x] **Step 2: 阅读设计并确认本计划只覆盖第一批**
 
 Run:
 
@@ -115,7 +115,7 @@ Select-String -Path .\docs\superpowers\specs\platform\2026-05-12-frontend-standa
 
 Expected: 输出包含第一批、第二批和批间防遗忘机制；本次实现只做第 14.1 节，最后通过文档任务登记第 14.2 节。
 
-- [ ] **Step 3: 记录一致性 review 结论**
+- [x] **Step 3: 记录一致性 review 结论**
 
 Create a short local note in the task runner summary, not a repository file:
 
@@ -126,7 +126,7 @@ Create a short local note in the task runner summary, not a repository file:
 - 第二批登记：第一批收口必须更新验证记录和 current-handoff。
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 No commit for Task 0. This task is a pre-flight gate.
 
@@ -140,7 +140,7 @@ No commit for Task 0. This task is a pre-flight gate.
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`
 - Test: `frontend/packages/shell/package.json`
 
-- [ ] **Step 1: 写 SDK helper 失败测试**
+- [x] **Step 1: 写 SDK helper 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`:
 
@@ -230,7 +230,7 @@ describe('standard CRUD SDK helpers', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -240,7 +240,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-sdk.tes
 
 Expected: FAIL，提示 `@icp-platform/sdk` 尚未导出 `buildStandardCrudPath` 或其他标准 CRUD helper。
 
-- [ ] **Step 3: 新增 SDK 标准 CRUD 实现**
+- [x] **Step 3: 新增 SDK 标准 CRUD 实现**
 
 Create `frontend/packages/sdk/src/standardCrud.ts`:
 
@@ -499,7 +499,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
 
 第一批暂不新增 `StandardCrudFieldRenderer`、`StandardCrudActionHandler`、`StandardCrudSummaryBlockRenderer` 等命名 renderer 类型；本计划先用 `StandardCrudResourceRegistration` 上的受控 renderer 回调承接列表、详情和模块专属动作，深层字段渲染、动作协议和 summary block renderer 在第二批固化。
 
-- [ ] **Step 4: 从 SDK 入口导出标准 CRUD 契约**
+- [x] **Step 4: 从 SDK 入口导出标准 CRUD 契约**
 
 Modify `frontend/packages/sdk/src/index.ts`:
 
@@ -547,7 +547,7 @@ export interface FrontendModule {
 }
 ```
 
-- [ ] **Step 5: 运行 SDK helper 测试确认通过**
+- [x] **Step 5: 运行 SDK helper 测试确认通过**
 
 Run:
 
@@ -557,7 +557,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-sdk.tes
 
 Expected: PASS，`standard-crud-sdk.test.ts` 全部通过。
 
-- [ ] **Step 6: 构建 SDK**
+- [x] **Step 6: 构建 SDK**
 
 Run:
 
@@ -567,7 +567,7 @@ pnpm --dir .\frontend --filter @icp-platform/sdk build
 
 Expected: PASS，无 TypeScript 错误。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add .\frontend\packages\sdk\src\standardCrud.ts .\frontend\packages\sdk\src\index.ts .\frontend\packages\shell\src\__tests__\standard-crud-sdk.test.ts

@@ -2,9 +2,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot, Root } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
-import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
+import PersonCreatePage from '../../../../modules/organization/src/pages/PersonCreatePage';
 
 const localizationProps = {
   defaultLanguage: 'zhs',
@@ -18,9 +18,6 @@ const serviceMocks = vi.hoisted(() => ({
   getCompanies: vi.fn(),
   getDepartments: vi.fn(),
   getPositions: vi.fn(),
-  getPersons: vi.fn(),
-  getPersonDetail: vi.fn(),
-  updatePerson: vi.fn(),
   createPerson: vi.fn(),
 }));
 
@@ -31,50 +28,11 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
     getCompanies: serviceMocks.getCompanies,
     getDepartments: serviceMocks.getDepartments,
     getPositions: serviceMocks.getPositions,
-    getPersons: serviceMocks.getPersons,
-    getPersonDetail: serviceMocks.getPersonDetail,
-    updatePerson: serviceMocks.updatePerson,
     createPerson: serviceMocks.createPerson,
   };
 });
 
 vi.mock('../../../../modules/organization/src/runtime/personCenterRuntime', () => ({
-  getPersonListRuntimeSchema: () => ({
-    dicKey: 'PersonListView',
-    titleKey: 'Title',
-    descriptionKey: 'Description',
-    editorMode: 'drawer',
-    detailViewKey: 'organization.person.detail',
-    listColumns: [
-      { key: 'personNo', labelKey: 'Column_PersonNo' },
-      { key: 'name', labelKey: 'Column_Name' },
-    ],
-    queryFields: [
-      { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword' },
-      { key: 'companyId', labelKey: 'Query_Company', source: 'model', field: 'CompanyId' },
-      { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId' },
-      { key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'model', field: 'EmploymentStatus' },
-    ],
-    pageActions: [
-      { key: 'create', labelKey: 'Action_Create' },
-      { key: 'refresh', labelKey: 'Action_Refresh' },
-    ],
-    advancedFilter: {
-      enabled: true,
-      titleKey: 'AdvancedFilter_Title',
-      sections: [
-        {
-          key: 'organization',
-          titleKey: 'AdvancedFilter_Organization',
-          fields: [
-            { key: 'companyId', labelKey: 'Query_Company', source: 'model', field: 'CompanyId' },
-          ],
-        },
-      ],
-    },
-    rowActions: [{ key: 'view', labelKey: 'Action_View' }],
-    exportModes: [],
-  }),
   getPersonDetailRuntimeSchema: () => ({
     dicKey: 'PersonDetailView',
     titleKey: 'Title',
@@ -123,7 +81,7 @@ describe('organization person create flow', () => {
       configurable: true,
       value: {
         ...window.location,
-        pathname: '/organization/persons',
+        pathname: '/organization/persons/new',
         assign: assignMock,
       },
     });
@@ -131,30 +89,15 @@ describe('organization person create flow', () => {
     serviceMocks.getCompanies.mockResolvedValue([
       { id: 'company-1', code: 'C1', name: '一公司', isEnabled: true, sortOrder: 1, createdAt: '2026-04-21T00:00:00Z' },
     ]);
-    serviceMocks.getDepartments.mockResolvedValue([
-      {
-        id: 'department-1',
-        companyId: 'company-1',
-        parentDepartmentId: null,
-        code: 'D1',
-        name: '研发部',
-        isEnabled: true,
-        sortOrder: 1,
-        createdAt: '2026-04-21T00:00:00Z',
-      },
-    ]);
+    serviceMocks.getDepartments.mockResolvedValue([]);
     serviceMocks.getPositions.mockResolvedValue([]);
-    serviceMocks.getPersons.mockResolvedValue({ items: [], total: 0 });
-    serviceMocks.getPersonDetail.mockResolvedValue({
+    serviceMocks.createPerson.mockResolvedValue({
       id: 'person-1',
       personNo: 'P0001',
       name: '张三',
-      companyId: 'company-1',
-      companyName: '一公司',
-      departmentId: 'department-1',
-      departmentName: '研发部',
+      companyId: '',
+      departmentId: '',
       positionId: null,
-      positionName: null,
       employmentStatus: 'FullTime',
       employmentStatusLabel: '正式',
       isEnabled: true,
@@ -176,77 +119,19 @@ describe('organization person create flow', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('opens create drawer on person list page instead of navigating to create route', async () => {
+  it('creates person from the retained Organization create page', async () => {
     await act(async () => {
-      root = renderWithLocalization(<PersonListPage />, container);
+      root = renderWithLocalization(<PersonCreatePage />, container);
     });
     await flushUi();
 
-    // 列表页默认骨架应贴近 demo：页面头部 + 轻筛选条 + 列表区，
-    // 不再把对象化摘要卡片当作默认列表头布局。
-    expect(container.textContent).not.toContain('结果总数');
-    expect(container.textContent).not.toContain('公司筛选');
-    expect(container.textContent).not.toContain('筛选区');
-    expect(container.textContent).not.toContain('用于管理人员档案');
-    expect(container.textContent).not.toContain('这里承接列表主体');
+    expect(container.textContent).toContain('新建人员');
+    expect(container.textContent).toContain('* 必填');
 
-    const createButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.includes('新建'),
-    );
-
-    expect(createButton).toBeDefined();
-    expect(createButton?.hasAttribute('disabled')).toBe(false);
-
-    await act(async () => {
-      createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(assignMock).not.toHaveBeenCalled();
-    expect(document.body.querySelector('[role="dialog"][aria-label="新建人员"]')).not.toBeNull();
-  });
-
-  it('creates person from list drawer and keeps the user on the list page', async () => {
-    serviceMocks.createPerson.mockResolvedValue({
-      id: 'person-1',
-      personNo: 'P0001',
-      name: '张三',
-      companyId: 'company-1',
-      companyName: '一公司',
-      departmentId: 'department-1',
-      departmentName: '研发部',
-      positionId: null,
-      positionName: null,
-      employmentStatus: 'FullTime',
-      employmentStatusLabel: '正式',
-      isEnabled: true,
-      createdAt: '2026-04-21T00:00:00Z',
-      userLinkSummary: { status: 'notConfigured', data: null },
-      authorizationSummary: { status: 'notConfigured', data: null },
-    });
-
-    await act(async () => {
-      root = renderWithLocalization(<PersonListPage />, container);
-    });
-    await flushUi();
-
-    const createButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.includes('新建'),
-    );
-
-    await act(async () => {
-      createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await flushUi();
-
-    const drawer = document.body.querySelector('[role="dialog"][aria-label="新建人员"]');
-    expect(drawer).toBeDefined();
-    expect(drawer?.textContent).toContain('* 必填');
-
-    const inputs = Array.from(drawer?.querySelectorAll('input') ?? []);
-    const selects = Array.from(drawer?.querySelectorAll('select') ?? []);
+    const inputs = Array.from(container.querySelectorAll('input'));
     const personNoInput = inputs.find((input) => input.getAttribute('placeholder')?.includes('工号'));
     const nameInput = inputs.find((input) => input.getAttribute('placeholder')?.includes('姓名'));
-    const requiredFields = Array.from(drawer?.querySelectorAll('[required]') ?? []);
+    const requiredFields = Array.from(container.querySelectorAll('[required]'));
 
     expect(personNoInput).toBeDefined();
     expect(nameInput).toBeDefined();
@@ -258,7 +143,7 @@ describe('organization person create flow', () => {
     });
     await flushUi();
 
-    const form = drawer?.querySelector('form');
+    const form = container.querySelector('form');
     expect(form).toBeDefined();
 
     await act(async () => {
@@ -275,7 +160,6 @@ describe('organization person create flow', () => {
       employmentStatus: 'FullTime',
       isEnabled: true,
     });
-    expect(assignMock).not.toHaveBeenCalled();
-    expect(document.body.querySelector('[role="dialog"][aria-label="新建人员"]')).toBeNull();
+    expect(assignMock).toHaveBeenCalledWith('/organization/persons/person-1');
   });
 });

@@ -1,10 +1,10 @@
-import { FrontendModule } from '@icp-platform/sdk';
+import { FrontendModule, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import PersonCreatePage from './pages/PersonCreatePage';
 import PersonDetailPage from './pages/PersonDetailPage';
 import PersonListPage from './pages/PersonListPage';
 import OrganizationTreePage from './pages/OrganizationTreePage';
 import PositionManagementPage from './pages/PositionManagementPage';
-import PersonListStandardListEntry from './standard-list/PersonListStandardListEntry';
+import { personStandardCrudResource } from './standard-crud/personStandardCrudResource';
 
 export const organizationModule: FrontendModule = {
   metadata: {
@@ -13,11 +13,8 @@ export const organizationModule: FrontendModule = {
     version: '0.1.0',
     description: '组织结构管理模块',
   },
-  standardListViews: [
-    {
-      viewKey: 'organization.person.list',
-      component: PersonListStandardListEntry,
-    },
+  standardCrudResources: [
+    personStandardCrudResource as unknown as StandardCrudResourceRegistration,
   ],
   customPages: [
     {

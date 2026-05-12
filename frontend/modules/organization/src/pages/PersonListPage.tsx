@@ -1,12 +1,7 @@
-import { StandardListPage } from '@icp-platform/ui';
-import PersonListStandardListEntry from '../standard-list/PersonListStandardListEntry';
+import { ErrorState } from '@icp-platform/ui';
 
 export default function PersonListPage() {
-  // Task 4 之后运行时主入口改由 metadata + host/custom registry 承接；
-  // 这里继续保留兼容包装，避免现有直接 import PersonListPage 的测试和回退路径失效。
   return (
-    <PersonListStandardListEntry viewKey="organization.person.list" viewMetadata={{}}>
-      {(definition) => <StandardListPage {...definition} advancedFilterTitle="高级筛选" />}
-    </PersonListStandardListEntry>
+    <ErrorState message="人员中心主列表已由 Shell 标准 CRUD 宿主接管，请通过 /organization/persons 的 metadata 入口访问。" />
   );
 }

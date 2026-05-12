@@ -1,3 +1,16 @@
+import {
+  isStandardCrudRecord,
+  normalizeStandardCrudDetail,
+  normalizeStandardCrudListResult,
+  normalizeStandardCrudSummaryBlock,
+  readStandardCrudBoolean,
+  readStandardCrudNullableString,
+  readStandardCrudString,
+  type StandardCrudDetail,
+  type StandardCrudListResult,
+  type StandardCrudSummaryBlock,
+} from '@icp-platform/sdk';
+
 export interface CompanyDto {
   id: string;
   code: string;
@@ -42,32 +55,11 @@ export interface IdentityUserOptionDto {
   displayName: string;
 }
 
-export type SummaryBlockStatus = 'ready' | 'notConfigured' | 'dependencyUnavailable';
-
-export interface StandardCrudSummaryBlock<T = unknown> {
-  status: SummaryBlockStatus;
-  data: T | null;
-}
-
 export interface PersonUserLinkSummaryData {
   personId: string;
   userId: string;
   linkedAt: string;
   linkedBy: string;
-}
-
-export interface StandardCrudListResult<TItem> {
-  items: TItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  sortBy?: string | null;
-  sortDirection?: string | null;
-}
-
-export interface StandardCrudDetail {
-  fields: Record<string, unknown>;
-  summaries: Record<string, StandardCrudSummaryBlock<unknown> | undefined>;
 }
 
 export interface PersonListRow {
@@ -141,154 +133,66 @@ async function fetchJson<T>(path: string, errorMessage: string): Promise<T> {
   return requestJson<T>(path, { method: 'GET' }, errorMessage);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readString(record: Record<string, unknown>, keys: string[], fallback = ''): string {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value;
-    }
-  }
-
-  return fallback;
-}
-
-function readNullableString(record: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value;
-    }
-    if (value === null) {
-      return null;
-    }
-  }
-
-  return null;
-}
-
-function readBoolean(record: Record<string, unknown>, keys: string[], fallback = false): boolean {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'boolean') {
-      return value;
-    }
-  }
-
-  return fallback;
-}
-
 function readDateString(record: Record<string, unknown>, keys: string[], fallback = ''): string {
-  return readString(record, keys, fallback);
+  return readStandardCrudString(record, keys, fallback);
 }
 
-function normalizeSummaryBlock<T>(
-  value: unknown,
-  mapData?: (data: unknown) => T,
-): StandardCrudSummaryBlock<T> {
-  // 状态化摘要的关键不是“有没有内容”，而是“依赖异常时页面还能否只读降级”。
-  if (isRecord(value)) {
-    const status = value['status'];
-    if (status === 'ready' || status === 'notConfigured' || status === 'dependencyUnavailable') {
-      const rawData = value['data'];
-      return {
-        status: status as SummaryBlockStatus,
-        data: rawData == null ? null : (mapData ? mapData(rawData) : (rawData as T)),
-      };
-    }
-  }
-
-  if (Array.isArray(value)) {
-    return {
-      status: value.length > 0 ? 'ready' : 'notConfigured',
-      data: value.length > 0 ? (mapData ? mapData(value) : (value as T)) : null,
-    };
-  }
-
-  if (value == null) {
-    return { status: 'notConfigured', data: null };
-  }
+export function mapPersonListItem(value: unknown): PersonListRow {
+  const row = isStandardCrudRecord(value) ? value : {};
+  const employmentStatus = readStandardCrudString(row, ['EmploymentStatus'], 'FullTime');
 
   return {
-    status: 'ready',
-    data: mapData ? mapData(value) : (value as T),
+    id: readStandardCrudString(row, ['EID']),
+    personNo: readStandardCrudString(row, ['PersonNo']),
+    name: readStandardCrudString(row, ['ENAME']),
+    companyId: readStandardCrudString(row, ['CompanyId']),
+    companyName: readStandardCrudString(row, ['CompanyName'], readStandardCrudString(row, ['CompanyId'])),
+    departmentId: readStandardCrudString(row, ['DepartmentId']),
+    departmentName: readStandardCrudString(row, ['DepartmentName'], readStandardCrudString(row, ['DepartmentId'])),
+    positionId: readStandardCrudNullableString(row, ['PositionId']),
+    positionName: readStandardCrudNullableString(row, ['PositionName']),
+    employmentStatus,
+    employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
+    isEnabled: readStandardCrudBoolean(row, ['IsEnabled'], true),
   };
 }
 
-function normalizePersonListItem(value: unknown): PersonListRow {
-  const row = isRecord(value) ? value : {};
-  const employmentStatus = readString(row, ['EmploymentStatus'], 'FullTime');
+export function mapPersonDetailView(value: StandardCrudDetail | unknown): PersonDetailView {
+  const detail = normalizeStandardCrudDetail(value);
+  const fields = detail.fields;
+  const summaries = detail.summaries;
+  const employmentStatus = readStandardCrudString(fields, ['EmploymentStatus'], 'FullTime');
 
   return {
-    id: readString(row, ['EID']),
-    personNo: readString(row, ['PersonNo']),
-    name: readString(row, ['ENAME']),
-    companyId: readString(row, ['CompanyId']),
-    companyName: readString(row, ['CompanyName'], readString(row, ['CompanyId'])),
-    departmentId: readString(row, ['DepartmentId']),
-    departmentName: readString(row, ['DepartmentName'], readString(row, ['DepartmentId'])),
-    positionId: readNullableString(row, ['PositionId']),
-    positionName: readNullableString(row, ['PositionName']),
+    id: readStandardCrudString(fields, ['EID']),
+    personNo: readStandardCrudString(fields, ['PersonNo']),
+    name: readStandardCrudString(fields, ['ENAME']),
+    companyId: readStandardCrudString(fields, ['CompanyId']),
+    departmentId: readStandardCrudString(fields, ['DepartmentId']),
+    positionId: readStandardCrudNullableString(fields, ['PositionId']),
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
-    isEnabled: readBoolean(row, ['IsEnabled'], true),
-  };
-}
-
-function normalizePersonDetail(value: unknown): PersonDetailView {
-  const detail = isRecord(value) ? value : {};
-  const fields = isRecord(detail['fields']) ? detail['fields'] : {};
-  const summaries = isRecord(detail['summaries']) ? detail['summaries'] : {};
-  const employmentStatus = readString(fields, ['EmploymentStatus'], 'FullTime');
-
-  return {
-    id: readString(fields, ['EID']),
-    personNo: readString(fields, ['PersonNo']),
-    name: readString(fields, ['ENAME']),
-    companyId: readString(fields, ['CompanyId']),
-    departmentId: readString(fields, ['DepartmentId']),
-    positionId: readNullableString(fields, ['PositionId']),
-    employmentStatus,
-    employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
-    isEnabled: readBoolean(fields, ['IsEnabled'], true),
+    isEnabled: readStandardCrudBoolean(fields, ['IsEnabled'], true),
     createdAt: readDateString(fields, ['CreatedAt']),
-    companyName: readNullableString(fields, ['CompanyName']),
-    departmentName: readNullableString(fields, ['DepartmentName']),
-    positionName: readNullableString(fields, ['PositionName']),
-    userLinkSummary: normalizeSummaryBlock(summaries['userLink'], (data) => {
-      const link = isRecord(data) ? data : {};
+    companyName: readStandardCrudNullableString(fields, ['CompanyName']),
+    departmentName: readStandardCrudNullableString(fields, ['DepartmentName']),
+    positionName: readStandardCrudNullableString(fields, ['PositionName']),
+    userLinkSummary: normalizeStandardCrudSummaryBlock(summaries['userLink'], (data) => {
+      const link = isStandardCrudRecord(data) ? data : {};
       return {
-        personId: readString(link, ['PersonId', 'personId']),
-        userId: readString(link, ['UserId', 'userId']),
-        linkedAt: readString(link, ['LinkedAt', 'linkedAt']),
-        linkedBy: readString(link, ['LinkedBy', 'linkedBy']),
+        personId: readStandardCrudString(link, ['PersonId', 'personId']),
+        userId: readStandardCrudString(link, ['UserId', 'userId']),
+        linkedAt: readStandardCrudString(link, ['LinkedAt', 'linkedAt']),
+        linkedBy: readStandardCrudString(link, ['LinkedBy', 'linkedBy']),
       };
     }),
-    authorizationSummary: normalizeSummaryBlock(summaries['authorizationSummary'], (data) => {
+    authorizationSummary: normalizeStandardCrudSummaryBlock(summaries['authorizationSummary'], (data) => {
       if (Array.isArray(data)) {
         return data.filter((item): item is string => typeof item === 'string');
       }
 
       return [];
     }),
-  };
-}
-
-function normalizePersonListResponse(value: unknown): StandardCrudListResult<PersonListRow> {
-  const result = isRecord(value) ? value : {};
-  const rawItems = Array.isArray(result['items']) ? result['items'] : [];
-  const items = rawItems.map(normalizePersonListItem);
-
-  return {
-    items,
-    total: typeof result['total'] === 'number' ? result['total'] : items.length,
-    page: typeof result['page'] === 'number' ? result['page'] : 1,
-    pageSize: typeof result['pageSize'] === 'number' ? result['pageSize'] : items.length,
-    sortBy: typeof result['sortBy'] === 'string' ? result['sortBy'] : null,
-    sortDirection: typeof result['sortDirection'] === 'string' ? result['sortDirection'] : null,
   };
 }
 
@@ -348,15 +252,15 @@ export async function getPersons(query: {
 
   const suffix = search.toString();
   const path = suffix.length > 0 ? `/api/organization/persons?${suffix}` : '/api/organization/persons';
-  return normalizePersonListResponse(await fetchJson<unknown>(path, '加载人员列表失败'));
+  return normalizeStandardCrudListResult(await fetchJson<unknown>(path, '加载人员列表失败'), mapPersonListItem);
 }
 
 export async function getPersonDetail(id: string): Promise<PersonDetailView> {
-  return normalizePersonDetail(await fetchJson<unknown>(`/api/organization/persons/${id}`, '加载人员详情失败'));
+  return mapPersonDetailView(await fetchJson<unknown>(`/api/organization/persons/${id}`, '加载人员详情失败'));
 }
 
 export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDetailView> {
-  return normalizePersonDetail(
+  return mapPersonDetailView(
     await requestJson<unknown>(
       '/api/organization/persons',
       {
@@ -372,7 +276,7 @@ export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDeta
 }
 
 export async function updatePerson(personId: string, dto: PersonUpsertRequest): Promise<PersonDetailView> {
-  return normalizePersonDetail(
+  return mapPersonDetailView(
     await requestJson<unknown>(
       `/api/organization/persons/${personId}`,
       {
@@ -388,7 +292,7 @@ export async function updatePerson(personId: string, dto: PersonUpsertRequest): 
 }
 
 export async function disablePerson(personId: string): Promise<PersonDetailView> {
-  return normalizePersonDetail(
+  return mapPersonDetailView(
     await requestJson<unknown>(
       `/api/organization/persons/${personId}/disable`,
       {

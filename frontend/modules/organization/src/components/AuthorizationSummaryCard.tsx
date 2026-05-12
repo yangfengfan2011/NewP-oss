@@ -1,5 +1,5 @@
 import { EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
-import type { StandardCrudSummaryBlock } from '../services/organizationService';
+import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 
 interface AuthorizationSummaryCardProps {
   summary: StandardCrudSummaryBlock<string[]>;

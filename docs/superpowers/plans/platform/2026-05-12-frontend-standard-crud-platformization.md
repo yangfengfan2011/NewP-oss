@@ -1857,7 +1857,7 @@ git commit -m "功能：新增前端标准CRUD详情路由"
 - Test: `frontend/packages/shell/src/__tests__/organization-person-center-detail-layout.test.tsx`
 - Test: `frontend/packages/shell/src/__tests__/organization-person-create-flow.test.tsx`
 
-- [ ] **Step 1: 写人员模块注册回归测试**
+- [x] **Step 1: 写人员模块注册回归测试**
 
 Modify `frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx` by asserting that Organization registers a standard CRUD resource:
 
@@ -1878,7 +1878,7 @@ it('registers person center as a standard CRUD frontend resource', () => {
 
 Use the existing relative import style in this test package when importing Organization code; do not add a new workspace dependency from Shell to `@icp-modules/organization`.
 
-- [ ] **Step 2: 运行人员注册测试确认失败**
+- [x] **Step 2: 运行人员注册测试确认失败**
 
 Run:
 
@@ -1888,7 +1888,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- organization-person-c
 
 Expected: FAIL，提示 `standardCrudResources` 未注册或断言找不到 `organization.person`。
 
-- [ ] **Step 3: 把通用标准 CRUD 类型切到 SDK**
+- [x] **Step 3: 把通用标准 CRUD 类型切到 SDK**
 
 Modify `frontend/modules/organization/src/services/organizationService.ts`:
 
@@ -1949,7 +1949,7 @@ rg -n "export interface StandardCrud|type SummaryBlockStatus|function normalizeS
 
 Expected: no matches.
 
-- [ ] **Step 4: 创建人员标准 CRUD 前端资源注册**
+- [x] **Step 4: 创建人员标准 CRUD 前端资源注册**
 
 Create `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`:
 
@@ -2216,7 +2216,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
 };
 ```
 
-- [ ] **Step 5: 注册人员标准 CRUD 资源**
+- [x] **Step 5: 注册人员标准 CRUD 资源**
 
 Modify `frontend/modules/organization/src/index.ts` by adding the import and property below. Do not change the existing `customPages`, `routes`, `menus`, or `permissions` arrays.
 
@@ -2234,7 +2234,7 @@ Insert this property in `organizationModule` immediately after `metadata`:
 
 Remove the existing `standardListViews` property from `organizationModule` so the runtime list entry is owned by `standardCrudResources`.
 
-- [ ] **Step 6: 收缩人员列表兼容入口**
+- [x] **Step 6: 收缩人员列表兼容入口**
 
 Modify `frontend/modules/organization/src/standard-list/PersonListStandardListEntry.tsx`:
 
@@ -2252,7 +2252,7 @@ export default function PersonListStandardListEntry(_props: StandardListViewRend
 
 This file remains only for old direct imports during the migration window. Do not import Shell internals from Organization.
 
-- [ ] **Step 7: 改造人员列表和详情页面包装**
+- [x] **Step 7: 改造人员列表和详情页面包装**
 
 Modify `frontend/modules/organization/src/pages/PersonListPage.tsx`:
 
@@ -2278,7 +2278,7 @@ export default function PersonDetailPage() {
 }
 ```
 
-- [ ] **Step 8: Run Organization build**
+- [x] **Step 8: Run Organization build**
 
 Run:
 
@@ -2288,7 +2288,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 
 Expected: PASS. The final Organization code must not import from `@icp-platform/shell` or `frontend/packages/shell/src/**`.
 
-- [ ] **Step 9: Run person center Shell tests**
+- [x] **Step 9: Run person center Shell tests**
 
 Run:
 
@@ -2298,7 +2298,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- organization-person-c
 
 Expected: PASS. Tests should assert user-visible list/detail behavior and standard CRUD registration, not the internals of `PersonListStandardListEntry`.
 
-- [ ] **Step 10: 扫描第一批残留**
+- [x] **Step 10: 扫描第一批残留**
 
 Run:
 
@@ -2313,7 +2313,7 @@ Expected:
 - `getPersonDetailRuntimeSchema` may remain only for `PersonCreatePage` until second batch.
 - Any hit in Organization must be explainable as second-batch residue.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```powershell
 git add .\frontend\modules\organization\src .\frontend\packages\shell\src\__tests__

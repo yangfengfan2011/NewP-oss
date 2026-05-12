@@ -1,5 +1,6 @@
 import { EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
-import type { StandardCrudSummaryBlock, PersonUserLinkSummaryData } from '../services/organizationService';
+import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
+import type { PersonUserLinkSummaryData } from '../services/organizationService';
 
 interface PersonUserLinkCardProps {
   summary: StandardCrudSummaryBlock<PersonUserLinkSummaryData>;

@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-05-11
+最近更新：2026-05-12
 
 ## 1. 目的
 
@@ -38,7 +38,35 @@
 
 ## 4. 最近完成
 
-### 4.1 EID 值协议平台化
+### 4.1 标准 CRUD 路由自动映射与人员旧样板退场
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-11-standard-crud-route-mapping-design.md`
+- `docs/superpowers/plans/platform/2026-05-11-standard-crud-route-mapping.md`
+- `docs/verification/organization-module-verification.md`
+
+完成内容：
+
+- 平台新增标准 CRUD 资源注册表，`StandardCrudDescriptor.Route` 成为标准 API 路由唯一真源。
+- Host 通过 `MapStandardCrudResources()` 自动挂载标准 CRUD 路由，`/api/organization/persons` 不再依赖人员标准 CRUD Controller。
+- Organization 只注册 Person descriptor；人员账号绑定拆为专属 `PersonUserLinksController` 与 `PersonUserLinkService`。
+- 人员中心后端旧标准 CRUD Controller / Service / Repository / DTO 样板已删除。
+- 人员中心前端已改为消费标准 CRUD list/detail/mutation 返回模型。
+- 验证记录已回填标准 CRUD 自动映射入口、旧样板残留扫描和前后端构建测试结论。
+
+最近相关提交：
+
+- `94eba99f`：功能：新增标准CRUD资源注册表
+- `0943e9ec`：功能：新增标准CRUD自动路由映射
+- `a7ea752d`：功能：拆出人员账号绑定服务
+- `570768c2`：重构：人员中心标准CRUD改由平台自动映射
+- `345efed0`：重构：人员中心前端消费标准CRUD模型
+- `65494edd`：验证：记录标准CRUD自动映射收口结果
+
+### 4.2 EID 值协议平台化
 
 状态：已完成并验证。
 
@@ -68,13 +96,15 @@
 
 ## 5. 当前推荐下一步
 
-当前不建议直接扩大功能面。下一轮工作应先选择一个单一目标，并在正式实施前补齐或确认对应设计与计划。
+当前不建议直接扩大功能面。标准 CRUD 自动映射已经收口，下一轮应选择一个单一后续风险或验证目标，并在正式实施前补齐或确认对应设计与计划。
 
 推荐优先级：
 
-1. 若继续平台元数据主线，优先拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
-2. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
-3. 若继续 Organization / 标准 CRUD 主线，先确认是否要处理 EID 历史数据迁移、required field 标准校验或数据库唯一索引，再分别进入独立设计。
+1. 若继续标准 CRUD 主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
+2. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
+3. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
+4. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
+5. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
 
 ## 6. 未解决问题
 
@@ -102,26 +132,27 @@
 
 - `ENAME` 等字段必填校验仍需要后续标准 CRUD required field 或模型必填校验设计承接。
 - `PersonNo` 当前由标准 CRUD 服务层保证全局唯一，但未引入数据库唯一索引；并发强一致性如需支持，应另开设计。
+- 标准 CRUD 自动路由映射当前已由 Person 试点验证；下一批资源接入前仍应逐个确认 descriptor 路由、字段边界和模块专属能力是否拆分清楚。
 
 ## 7. 验证快照
 
-最近一次后端验证覆盖：
+最近一次标准 CRUD 自动映射验证覆盖：
 
 ```powershell
-rg -n 'Id \{ get; set; \} = Guid\.NewGuid|Guid\.(Parse|TryParse)\(|\{id:guid\}|Guid\.NewGuid\(\)\.ToString\("D"\)' server/modules/Organization server/platform-crud
-rg -n 'Id \{ get; set; \} = Guid\.NewGuid|Guid\.NewGuid\(\)\.ToString\(\)' server/modules/ConfigCenter server/modules/Authorization
 dotnet test .\tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
-dotnet test .\tests\ConfigCenter.Tests\ConfigCenter.Tests.csproj -nr:false -v minimal
-dotnet test .\tests\Authorization.Tests\Authorization.Tests.csproj -nr:false -v minimal
 dotnet test .\tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
 dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
+pnpm --dir .\frontend --filter @icp-modules/organization build
+rg -n "PersonsController|IPersonService|PersonService|IPersonRepository|EfPersonRepository|PersonListItemDto|PersonDetailDto|PersonSummaryBlockDto" server/modules/Organization tests/Organization.Tests frontend/modules/organization/src
+rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceRegistry|PersonUserLinksController|IPersonUserLinkService" apps/host-api server/platform-crud server/modules/Organization tests
 ```
 
 验证结论：
 
-- 平台对象 ID 协议已由平台生成器统一承接。
-- `Organization`、`PlatformCrud`、`ConfigCenter`、`Authorization` 未发现本轮范围内的裸 GUID 平台对象 ID 生成残留。
-- 本轮 EID 收口不涉及前端变更，因此没有新增前端构建结论。
+- Person 标准 CRUD 路由由 `StandardCrudDescriptor.Route` 自动映射，对外仍保持 `/api/organization/persons` 模块语义路由。
+- 人员中心只保留账号绑定专属 Controller，不再保留标准 CRUD 空壳 Controller。
+- `server/modules/Organization`、`tests/Organization.Tests` 与 `frontend/modules/organization/src` 中未发现人员旧标准 CRUD 样板名称残留。
+- 平台 CRUD 测试、Organization 测试、HostApi 构建与 Organization 前端构建均已通过；详细结果见 `docs/verification/organization-module-verification.md`。
 
 ## 8. 已知风险
 
@@ -132,6 +163,6 @@ dotnet build .\apps\host-api\HostApi.csproj -nr:false -v minimal
 ## 9. 回滚思路
 
 - 如果交接口径写错，只改本文档，不需要修改原始设计、计划或验证记录。
+- 如果标准 CRUD 自动映射需要回滚，应按本轮最近相关提交反向 revert，并优先恢复 `PersonsController` 等旧样板前确认对应设计、计划和验证记录中的边界变化。
 - 如果 EID 值协议需要回滚，应按最近相关提交反向 revert，并优先回到对应设计和计划确认影响范围。
 - 如果下一步方向选择变化，先更新本文件第 5 节，再补对应设计或计划，避免多个入口同时表达不同推荐。
-

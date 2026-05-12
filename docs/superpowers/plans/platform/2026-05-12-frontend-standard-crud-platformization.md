@@ -497,6 +497,8 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
 }
 ```
 
+第一批暂不新增 `StandardCrudFieldRenderer`、`StandardCrudActionHandler`、`StandardCrudSummaryBlockRenderer` 等命名 renderer 类型；本计划先用 `StandardCrudResourceRegistration` 上的受控 renderer 回调承接列表、详情和模块专属动作，深层字段渲染、动作协议和 summary block renderer 在第二批固化。
+
 - [ ] **Step 4: 从 SDK 入口导出标准 CRUD 契约**
 
 Modify `frontend/packages/sdk/src/index.ts`:
@@ -1091,7 +1093,7 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await act(async () => undefined);
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?keyword=', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons', { method: 'GET' });
     expect(container.textContent).toContain('张三');
     expect(container.textContent).toContain('共 1 条');
   });
@@ -1860,7 +1862,7 @@ git commit -m "功能：新增前端标准CRUD详情路由"
 Modify `frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx` by asserting that Organization registers a standard CRUD resource:
 
 ```tsx
-import organizationModule from '@icp-modules/organization';
+import organizationModule from '../../../../modules/organization/src/index';
 
 it('registers person center as a standard CRUD frontend resource', () => {
   const resource = organizationModule.standardCrudResources?.find((item) => item.resourceKey === 'organization.person');

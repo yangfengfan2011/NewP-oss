@@ -2473,7 +2473,7 @@ git commit -m "验证：记录前端标准CRUD第一批平台化"
 
 ## 最终验证
 
-- [ ] **Step 1: 运行设计目标校验**
+- [x] **Step 1: 运行设计目标校验**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-05-12-frontend-standard-crud-platformization-design.md
@@ -2482,7 +2482,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 
 Expected: PASS。
 
-- [ ] **Step 2: 运行全量前端验证**
+- [x] **Step 2: 运行全量前端验证**
 
 ```powershell
 pnpm --dir .\frontend --filter @icp-platform/sdk build
@@ -2494,7 +2494,7 @@ pnpm --dir .\frontend --filter @icp-modules/organization build
 
 Expected: PASS。
 
-- [ ] **Step 3: 确认第二批登记存在**
+- [x] **Step 3: 确认第二批登记存在**
 
 ```powershell
 Select-String -Path .\docs\verification\frontend-standard-crud-platformization-phase-1-verification.md -Pattern "第二批固定交付清单|PersonEditorForm|getCompanies|getDepartments|getPositions|summary block"

@@ -811,7 +811,7 @@ git commit -m "功能：新增标准CRUD通用字段与表单骨架"
 - Create: `frontend/packages/shell/src/standard-crud/standardCrudLookupRuntime.ts`
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-lookup-runtime.test.tsx`
 
-- [ ] **Step 1: 写 lookup runtime 失败测试**
+- [x] **Step 1: 写 lookup runtime 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-lookup-runtime.test.tsx`:
 
@@ -893,7 +893,7 @@ describe('standard CRUD lookup runtime', () => {
 });
 ```
 
-- [ ] **Step 2: 运行 lookup 测试确认失败**
+- [x] **Step 2: 运行 lookup 测试确认失败**
 
 Run:
 
@@ -903,7 +903,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-lookup-
 
 Expected: FAIL，提示 `standardCrudLookupRuntime` 模块不存在。
 
-- [ ] **Step 3: 实现 lookup 运行时**
+- [x] **Step 3: 实现 lookup 运行时**
 
 Create `frontend/packages/shell/src/standard-crud/standardCrudLookupRuntime.ts`:
 
@@ -978,7 +978,7 @@ export async function loadStandardCrudLookupOptions({
 }
 ```
 
-- [ ] **Step 4: 运行 lookup 测试**
+- [x] **Step 4: 运行 lookup 测试**
 
 Run:
 
@@ -988,7 +988,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-lookup-
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add frontend/packages/shell/src/standard-crud/standardCrudLookupRuntime.ts frontend/packages/shell/src/__tests__/standard-crud-lookup-runtime.test.tsx

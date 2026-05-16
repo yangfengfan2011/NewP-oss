@@ -6,6 +6,7 @@ import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
+import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 
 interface StandardCrudListPageHostProps {
   viewKey: string;
@@ -111,18 +112,36 @@ function StandardCrudListPageContent<TFilter, TRow>({
     </>
   );
 
-  const columns = registration.renderRowActions
+  const rowActionDefinitions = registration.listActions?.filter((action) => action.key !== 'create' && action.key !== 'refresh') ?? [];
+  const shouldRenderActionColumn = registration.renderRowActions || (registration.actionHandlers && registration.listActions);
+  const columns = shouldRenderActionColumn
     ? [
       ...registration.buildColumns(context),
       {
         key: 'actions',
         title: '操作',
-        render: (row: TRow) => registration.renderRowActions?.(row, context),
+        render: (row: TRow) => registration.renderRowActions
+          ? registration.renderRowActions(row, context)
+          : (
+            <StandardCrudActions
+              actions={rowActionDefinitions}
+              grantedPermissions={registration.permissions}
+              handlers={registration.actionHandlers}
+              context={{ row, refresh: context.refresh }}
+            />
+          ),
       },
     ]
     : registration.buildColumns(context);
 
-  const headerActions = registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
+  const headerActions = registration.listActions ? (
+    <StandardCrudActions
+      actions={registration.listActions}
+      grantedPermissions={registration.permissions}
+      handlers={registration.actionHandlers}
+      context={{ refresh: context.refresh }}
+    />
+  ) : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
 
   const content = (
     <Panel

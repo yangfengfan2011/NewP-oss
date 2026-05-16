@@ -11,6 +11,7 @@ import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
+import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 
 interface StandardCrudDetailPageHostProps {
   viewKey: string;
@@ -94,6 +95,20 @@ function StandardCrudDetailPageContent<TDetail>({
   const refresh = () => setReloadTick((current) => current + 1);
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
+  const detailHeaderActions = !showLoading && currentDetail
+    ? registration.renderDetailHeaderActions
+      ? registration.renderDetailHeaderActions({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
+      : registration.detailActions
+        ? (
+          <StandardCrudActions
+            actions={registration.detailActions}
+            grantedPermissions={registration.permissions}
+            handlers={registration.actionHandlers}
+            context={{ id, detail: currentDetail as TDetail, refresh }}
+          />
+        )
+        : undefined
+    : undefined;
 
   return (
     <div className="sh-page">
@@ -101,9 +116,7 @@ function StandardCrudDetailPageContent<TDetail>({
         eyebrow={schema.resourceKey}
         title={schema.titleKey}
         description={schema.descriptionKey}
-        actions={!showLoading && currentDetail && registration.renderDetailHeaderActions
-          ? registration.renderDetailHeaderActions({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
-          : undefined}
+        actions={detailHeaderActions}
       />
 
       {showLoading ? (

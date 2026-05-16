@@ -1005,7 +1005,7 @@ git commit -m "功能：新增标准CRUD lookup运行时"
 - Modify: `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
 - Modify: `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`
 
-- [ ] **Step 1: 写动作运行时失败测试**
+- [x] **Step 1: 写动作运行时失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-action-runtime.test.tsx`:
 
@@ -1087,7 +1087,7 @@ describe('standard CRUD action runtime', () => {
 });
 ```
 
-- [ ] **Step 2: 运行动作测试确认失败**
+- [x] **Step 2: 运行动作测试确认失败**
 
 Run:
 
@@ -1097,7 +1097,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-action-
 
 Expected: FAIL，提示 `standardCrudActionRuntime` 模块不存在。
 
-- [ ] **Step 3: 实现动作运行时组件**
+- [x] **Step 3: 实现动作运行时组件**
 
 Create `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`:
 
@@ -1169,7 +1169,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
 }
 ```
 
-- [ ] **Step 4: 接入 Host 动作入口**
+- [x] **Step 4: 接入 Host 动作入口**
 
 Modify `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx` and `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx` to prefer `registration.listActions/detailActions` plus `registration.actionHandlers`. Keep existing `renderHeaderActions` and `renderRowActions` as compatibility fallback for modules not migrated yet.
 
@@ -1224,7 +1224,7 @@ const detailActions = currentDetail && registration.detailActions ? (
 
 Use `detailActions` when `renderDetailHeaderActions` is absent.
 
-- [ ] **Step 5: 运行动作测试**
+- [x] **Step 5: 运行动作测试**
 
 Run:
 
@@ -1234,7 +1234,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-action-
 
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx frontend/packages/shell/src/__tests__/standard-crud-action-runtime.test.tsx frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx

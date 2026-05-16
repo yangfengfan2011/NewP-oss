@@ -1454,7 +1454,7 @@ git commit -m "功能：新增标准CRUD摘要状态运行时"
 - Modify: `frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts`
 - Create or modify: `frontend/packages/shell/src/__tests__/standard-crud-detail-editor.test.tsx`
 
-- [ ] **Step 1: 写详情编辑失败测试**
+- [x] **Step 1: 写详情编辑失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-detail-editor.test.tsx`:
 
@@ -1556,7 +1556,7 @@ describe('StandardCrudDetailPageHost editor', () => {
 });
 ```
 
-- [ ] **Step 2: 运行详情编辑测试确认失败**
+- [x] **Step 2: 运行详情编辑测试确认失败**
 
 Run:
 
@@ -1566,7 +1566,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-detail-
 
 Expected: FAIL，详情 Host 还不会根据 `fields/formSections` 渲染标准表单。
 
-- [ ] **Step 3: 扩展 detail schema sections**
+- [x] **Step 3: 扩展 detail schema sections**
 
 Modify `frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts`:
 
@@ -1582,7 +1582,7 @@ Change `StandardCrudDetailRuntimeSchema.sections` from `string[]` to `StandardCr
 
 When `view.sections` contains strings, map each string to `{ key, titleKey: key, fields: [] }`. When it contains records, read `key/titleKey/fields`. This keeps first-batch metadata compatible.
 
-- [ ] **Step 4: 实现详情 Host 标准表单分支**
+- [x] **Step 4: 实现详情 Host 标准表单分支**
 
 Modify `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`:
 
@@ -1650,7 +1650,7 @@ Render `StandardCrudForm` when `registration.fields` exists and `registration.re
 />
 ```
 
-- [ ] **Step 5: 运行详情编辑测试**
+- [x] **Step 5: 运行详情编辑测试**
 
 Run:
 
@@ -1660,7 +1660,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-detail-
 
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts frontend/packages/shell/src/__tests__/standard-crud-detail-editor.test.tsx

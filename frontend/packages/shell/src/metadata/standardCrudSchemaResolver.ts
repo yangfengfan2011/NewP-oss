@@ -32,6 +32,12 @@ export interface StandardCrudAdvancedFilterSchema {
   sections: StandardCrudAdvancedFilterSectionSchema[];
 }
 
+export interface StandardCrudDetailSectionSchema {
+  key: string;
+  titleKey: string;
+  fields: string[];
+}
+
 export interface StandardCrudListRuntimeSchema {
   viewKey: string;
   resourceKey: string;
@@ -56,7 +62,7 @@ export interface StandardCrudDetailRuntimeSchema {
   dicKey: string;
   titleKey: string;
   descriptionKey: string;
-  sections: string[];
+  sections: StandardCrudDetailSectionSchema[];
   summaryBlocks: string[];
   pageActions: StandardCrudRuntimeActionSchema[];
 }
@@ -120,6 +126,25 @@ function readAdvancedFilter(value: unknown): StandardCrudAdvancedFilterSchema {
   };
 }
 
+// 详情 section 兼容旧字符串声明；对象声明只保留静态归属，不承载表单保存流程。
+function readDetailSection(value: unknown): StandardCrudDetailSectionSchema | null {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return { key: value, titleKey: value, fields: [] };
+  }
+
+  const record = readRecord(value);
+  const key = readString(record.key, '');
+  if (key.length === 0) {
+    return null;
+  }
+
+  return {
+    key,
+    titleKey: readString(record.titleKey, key),
+    fields: readArray<unknown>(record.fields).filter((field): field is string => typeof field === 'string' && field.length > 0),
+  };
+}
+
 export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   view: Record<string, unknown>,
   registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
@@ -168,7 +193,9 @@ export function buildStandardCrudDetailSchema<TFilter, TRow, TDetail>(
     dicKey: readString(view.dicKey, registration.resourceKey),
     titleKey: readString(view.titleKey, 'Title'),
     descriptionKey: readString(view.descriptionKey, 'Description'),
-    sections: readArray<unknown>(view.sections).filter((section): section is string => typeof section === 'string'),
+    sections: readArray<unknown>(view.sections)
+      .map(readDetailSection)
+      .filter((section): section is StandardCrudDetailSectionSchema => section !== null),
     summaryBlocks: readArray<unknown>(view.summaryBlocks).filter((block): block is string => typeof block === 'string'),
     pageActions: readRecordArray(view.pageActions)
       .map(readAction)

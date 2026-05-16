@@ -144,7 +144,7 @@ describe('standard CRUD schema resolver and registry', () => {
         titleKey: 'Title',
         descriptionKey: 'Description',
         mode: 'detail',
-        sections: ['basic', 'organization'],
+        sections: ['basic', { key: 'organization', titleKey: '组织信息', fields: ['departmentId'] }],
         summaryBlocks: ['userLink'],
         pageActions: [{ key: 'disable', labelKey: 'Action_Disable' }],
       },
@@ -158,7 +158,10 @@ describe('standard CRUD schema resolver and registry', () => {
       dicKey: 'PersonDetailView',
       titleKey: 'Title',
     });
-    expect(schema.sections).toEqual(['basic', 'organization']);
+    expect(schema.sections).toEqual([
+      { key: 'basic', titleKey: 'basic', fields: [] },
+      { key: 'organization', titleKey: '组织信息', fields: ['departmentId'] },
+    ]);
     expect(schema.summaryBlocks).toEqual(['userLink']);
   });
 

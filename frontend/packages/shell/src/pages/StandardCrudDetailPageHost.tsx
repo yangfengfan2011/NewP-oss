@@ -3,10 +3,13 @@ import {
   ModuleRegistry,
   createStandardCrudClient,
   normalizeStandardCrudDetail,
+  normalizeStandardCrudSubmitValues,
+  readStandardCrudFieldValue,
   type StandardCrudDetail,
+  type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui';
+import { ErrorState, LoadingState, PageHeader, StandardCrudForm } from '@icp-platform/ui';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
@@ -57,6 +60,9 @@ function StandardCrudDetailPageContent<TDetail>({
   const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration), [view, registration]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
   const [loadedDetail, setLoadedDetail] = useState<LoadedDetail<TDetail> | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, unknown>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -71,9 +77,12 @@ function StandardCrudDetailPageContent<TDetail>({
         const rawDetail = await client.getDetail(id);
         const normalized = normalizeStandardCrudDetail(rawDetail);
         const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
+        const values = buildDetailFormValues(normalized.fields, registration.fields ?? []);
 
         if (!cancelled) {
           setLoadedDetail({ id, normalized, value: mapped });
+          setFormValues(values);
+          setSaveError(null);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -95,9 +104,28 @@ function StandardCrudDetailPageContent<TDetail>({
   }, [client, id, registration, reloadTick]);
 
   const refresh = () => setReloadTick((current) => current + 1);
+  const handleFormChange = (fieldKey: string, value: unknown) => {
+    setFormValues((current) => ({ ...current, [fieldKey]: value }));
+  };
+  const handleSave = async (fields: StandardCrudFieldDefinition[]) => {
+    try {
+      setSaving(true);
+      setSaveError(null);
+      const values = registration.buildMutationValues
+        ? registration.buildMutationValues(formValues)
+        : normalizeStandardCrudSubmitValues(fields, formValues);
+      await client.update(id, values);
+      refresh();
+    } catch (saveFailure) {
+      setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
+    } finally {
+      setSaving(false);
+    }
+  };
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
+  const editFields = registration.fields ?? [];
   const nonReadySummaryBlocks = currentNormalizedDetail
     ? schema.summaryBlocks.filter((blockKey) => currentNormalizedDetail.summaries[blockKey]?.status !== 'ready')
     : [];
@@ -138,6 +166,27 @@ function StandardCrudDetailPageContent<TDetail>({
           />
           {registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })}
         </div>
+      ) : currentNormalizedDetail && editFields.length > 0 ? (
+        <div className="sh-page-stack">
+          <StandardCrudSummaryBlocks
+            blocks={schema.summaryBlocks}
+            summaries={currentNormalizedDetail.summaries}
+            renderers={registration.summaryRenderers}
+            titleForBlock={(key) => key}
+          />
+          <StandardCrudForm
+            formId={`${schema.resourceKey}-detail-form`}
+            mode="edit"
+            fields={editFields}
+            sections={registration.formSections ?? []}
+            values={formValues}
+            onChange={handleFormChange}
+            onSubmit={() => handleSave(editFields)}
+            saving={saving}
+            error={saveError}
+            titleForSection={(titleKey) => titleKey}
+          />
+        </div>
       ) : currentNormalizedDetail ? (
         <div className="sh-page-stack">
           <StandardCrudSummaryBlocks
@@ -153,4 +202,18 @@ function StandardCrudDetailPageContent<TDetail>({
       )}
     </div>
   );
+}
+
+function buildDetailFormValues(
+  detailFields: Record<string, unknown>,
+  fields: StandardCrudFieldDefinition[],
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+
+  // 表单状态只使用字段 key，后端字段名读取和提交转换统一收口在 SDK helper。
+  for (const field of fields) {
+    values[field.key] = readStandardCrudFieldValue(detailFields, field);
+  }
+
+  return values;
 }

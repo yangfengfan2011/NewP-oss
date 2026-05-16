@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildStandardCrudI18nLabel,
+  clearStandardCrudDependentLookupValues,
+  loadStandardCrudLookupOptions,
   normalizeStandardCrudSubmitValues,
   preserveStandardCrudCurrentOption,
   readStandardCrudFieldValue,
@@ -71,5 +73,74 @@ describe('standard CRUD phase 2 SDK helpers', () => {
   it('resolves standard summary status messages', () => {
     expect(resolveStandardCrudSummaryMessage({ status: 'notConfigured', data: null })).toBe('暂未配置');
     expect(resolveStandardCrudSummaryMessage({ status: 'dependencyUnavailable', data: null })).toBe('依赖不可用');
+  });
+
+  it('loads lookup options through the shared standard CRUD helper', async () => {
+    const load = vi.fn(async () => [{ value: 'Dept_2', label: '二部' }]);
+    const field: StandardCrudFieldDefinition = {
+      key: 'departmentId',
+      labelKey: '所属部门',
+      modelField: 'DepartmentId',
+      kind: 'lookup',
+      lookup: { providerKey: 'departments', dependsOn: ['companyId'], currentValueLabelField: 'DepartmentName' },
+    };
+
+    await expect(
+      loadStandardCrudLookupOptions({
+        field,
+        providers: [{ key: 'departments', load }],
+        values: { companyId: '', departmentId: 'Dept_1' },
+        detailFields: { DepartmentName: '一部' },
+      }),
+    ).resolves.toEqual({ options: [], error: null });
+    expect(load).not.toHaveBeenCalled();
+
+    await expect(
+      loadStandardCrudLookupOptions({
+        field,
+        providers: [{ key: 'departments', load }],
+        values: { companyId: 'Company_1', departmentId: 'Dept_1' },
+        detailFields: { DepartmentName: '一部' },
+      }),
+    ).resolves.toEqual({
+      options: [
+        { value: 'Dept_1', label: '一部' },
+        { value: 'Dept_2', label: '二部' },
+      ],
+      error: null,
+    });
+    expect(load).toHaveBeenCalledWith({
+      fieldKey: 'departmentId',
+      values: { companyId: 'Company_1', departmentId: 'Dept_1' },
+      dependencyValues: { companyId: 'Company_1' },
+    });
+  });
+
+  it('clears lookup descendants from dependsOn declarations', () => {
+    const fields: StandardCrudFieldDefinition[] = [
+      { key: 'companyId', labelKey: '公司', modelField: 'CompanyId', kind: 'lookup', lookup: { providerKey: 'companies' } },
+      {
+        key: 'departmentId',
+        labelKey: '部门',
+        modelField: 'DepartmentId',
+        kind: 'lookup',
+        lookup: { providerKey: 'departments', dependsOn: ['companyId'] },
+      },
+      {
+        key: 'positionId',
+        labelKey: '岗位',
+        modelField: 'PositionId',
+        kind: 'lookup',
+        lookup: { providerKey: 'positions', dependsOn: ['departmentId'] },
+      },
+    ];
+
+    expect(
+      clearStandardCrudDependentLookupValues(
+        { companyId: 'Company_2', departmentId: 'Dept_1', positionId: 'Position_1', name: '张三' },
+        'companyId',
+        fields,
+      ),
+    ).toEqual({ companyId: 'Company_2', departmentId: '', positionId: '', name: '张三' });
   });
 });

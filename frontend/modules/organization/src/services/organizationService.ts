@@ -8,6 +8,7 @@ import {
   readStandardCrudString,
   type StandardCrudDetail,
   type StandardCrudListResult,
+  type StandardCrudMutationValues,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
 
@@ -93,16 +94,6 @@ export interface PersonDetailView {
   positionName?: string | null;
   userLinkSummary: StandardCrudSummaryBlock<PersonUserLinkSummaryData>;
   authorizationSummary: StandardCrudSummaryBlock<string[]>;
-}
-
-export interface PersonUpsertRequest {
-  personNo: string;
-  name: string;
-  companyId: string | null;
-  departmentId: string | null;
-  positionId?: string | null;
-  employmentStatus?: string | null;
-  isEnabled: boolean;
 }
 
 export const employmentStatusOptions = [
@@ -196,18 +187,6 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
   };
 }
 
-function toStandardPersonValues(dto: PersonUpsertRequest): Record<string, unknown> {
-  return {
-    PersonNo: dto.personNo,
-    ENAME: dto.name,
-    CompanyId: dto.companyId && dto.companyId.trim().length > 0 ? dto.companyId : null,
-    DepartmentId: dto.departmentId && dto.departmentId.trim().length > 0 ? dto.departmentId : null,
-    PositionId: dto.positionId && dto.positionId.trim().length > 0 ? dto.positionId : null,
-    EmploymentStatus: dto.employmentStatus && dto.employmentStatus.trim().length > 0 ? dto.employmentStatus : null,
-    IsEnabled: dto.isEnabled,
-  };
-}
-
 export async function getCompanies(): Promise<CompanyDto[]> {
   return fetchJson<CompanyDto[]>('/api/organization/companies', '加载公司列表失败');
 }
@@ -259,7 +238,7 @@ export async function getPersonDetail(id: string): Promise<PersonDetailView> {
   return mapPersonDetailView(await fetchJson<unknown>(`/api/organization/persons/${id}`, '加载人员详情失败'));
 }
 
-export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDetailView> {
+export async function createPerson(values: StandardCrudMutationValues): Promise<PersonDetailView> {
   return mapPersonDetailView(
     await requestJson<unknown>(
       '/api/organization/persons',
@@ -268,14 +247,14 @@ export async function createPerson(dto: PersonUpsertRequest): Promise<PersonDeta
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(toStandardPersonValues(dto)),
+        body: JSON.stringify(values),
       },
       '新建人员失败',
     ),
   );
 }
 
-export async function updatePerson(personId: string, dto: PersonUpsertRequest): Promise<PersonDetailView> {
+export async function updatePerson(personId: string, values: StandardCrudMutationValues): Promise<PersonDetailView> {
   return mapPersonDetailView(
     await requestJson<unknown>(
       `/api/organization/persons/${personId}`,
@@ -284,7 +263,7 @@ export async function updatePerson(personId: string, dto: PersonUpsertRequest): 
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(toStandardPersonValues(dto)),
+        body: JSON.stringify(values),
       },
       '保存人员信息失败',
     ),

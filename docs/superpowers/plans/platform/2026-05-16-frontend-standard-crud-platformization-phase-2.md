@@ -1678,7 +1678,7 @@ git commit -m "功能：标准CRUD详情接入通用表单"
 - Modify: `frontend/modules/organization/src/services/organizationService.ts`
 - Create or modify: `frontend/packages/shell/src/__tests__/organization-person-phase2-shrink.test.tsx`
 
-- [ ] **Step 1: 写人员收缩失败测试**
+- [x] **Step 1: 写人员收缩失败测试**
 
 Create `frontend/packages/shell/src/__tests__/organization-person-phase2-shrink.test.tsx`:
 
@@ -1730,7 +1730,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
 });
 ```
 
-- [ ] **Step 2: 运行人员收缩测试确认失败**
+- [x] **Step 2: 运行人员收缩测试确认失败**
 
 Run:
 
@@ -1740,7 +1740,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- organization-person-p
 
 Expected: FAIL，人员资源尚未声明第二批字段、lookup providers 或 summary renderers。
 
-- [ ] **Step 3: 在人员资源注册中声明字段与 sections**
+- [x] **Step 3: 在人员资源注册中声明字段与 sections**
 
 Modify `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`:
 
@@ -1805,7 +1805,7 @@ Use SDK helper:
 buildMutationValues: (values) => normalizeStandardCrudSubmitValues(personFields, values),
 ```
 
-- [ ] **Step 4: 声明组织 lookup providers**
+- [x] **Step 4: 声明组织 lookup providers**
 
 In the same file:
 
@@ -1840,7 +1840,7 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
 ];
 ```
 
-- [ ] **Step 5: 声明 summary renderers 与专属动作**
+- [x] **Step 5: 声明 summary renderers 与专属动作**
 
 In the same file:
 
@@ -1871,7 +1871,7 @@ actionHandlers: {
 
 Keep `renderRowActions` only if row-level navigation still needs a link; otherwise move view/edit/create into action definitions.
 
-- [ ] **Step 6: 收缩 `PersonEditorForm`**
+- [x] **Step 6: 收缩 `PersonEditorForm`**
 
 If detail and create flows both use `StandardCrudForm`, delete `PersonEditorForm.tsx`. If create flow needs a compatibility wrapper for this task, replace the file with a thin wrapper that imports `StandardCrudForm` and passes `personFields/personFormSections`. The wrapper must not call `getCompanies/getDepartments/getPositions` directly.
 
@@ -1885,7 +1885,7 @@ export default function PersonEditorForm() {
 
 Expected: no lookup loading `useEffect` remains in `PersonEditorForm.tsx`.
 
-- [ ] **Step 7: 收缩 `PersonCreatePage`**
+- [x] **Step 7: 收缩 `PersonCreatePage`**
 
 Modify `frontend/modules/organization/src/pages/PersonCreatePage.tsx` to use `StandardCrudForm` with `personStandardCrudResource.fields` and `personStandardCrudResource.formSections`. On submit call `createPerson` with values mapped from `personStandardCrudResource.buildMutationValues`, then navigate to `/organization/persons/{created.id}`.
 
@@ -1898,7 +1898,7 @@ Expected create page responsibilities:
 
 It must not load company/department/position options directly; lookup must come through the standard CRUD lookup runtime.
 
-- [ ] **Step 8: Remove service-level generic form mapping**
+- [x] **Step 8: Remove service-level generic form mapping**
 
 Modify `frontend/modules/organization/src/services/organizationService.ts`:
 
@@ -1907,7 +1907,7 @@ Modify `frontend/modules/organization/src/services/organizationService.ts`:
 - Remove `toStandardPersonValues` if all call sites now use `personStandardCrudResource.buildMutationValues`.
 - Keep `employmentStatusOptions` only as enum option data referenced by field definitions.
 
-- [ ] **Step 9: 运行人员收缩测试**
+- [x] **Step 9: 运行人员收缩测试**
 
 Run:
 
@@ -1917,7 +1917,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- organization-person-p
 
 Expected: PASS。
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```powershell
 git add frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/modules/organization/src/components/PersonEditorForm.tsx frontend/modules/organization/src/pages/PersonCreatePage.tsx frontend/modules/organization/src/services/organizationService.ts frontend/packages/shell/src/__tests__/organization-person-phase2-shrink.test.tsx

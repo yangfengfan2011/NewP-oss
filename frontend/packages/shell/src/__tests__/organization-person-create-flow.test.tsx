@@ -129,8 +129,8 @@ describe('organization person create flow', () => {
     expect(container.textContent).toContain('* 必填');
 
     const inputs = Array.from(container.querySelectorAll('input'));
-    const personNoInput = inputs.find((input) => input.getAttribute('placeholder')?.includes('工号'));
-    const nameInput = inputs.find((input) => input.getAttribute('placeholder')?.includes('姓名'));
+    const personNoInput = inputs[0];
+    const nameInput = inputs[1];
     const requiredFields = Array.from(container.querySelectorAll('[required]'));
 
     expect(personNoInput).toBeDefined();
@@ -151,14 +151,18 @@ describe('organization person create flow', () => {
     });
     await flushUi();
 
+    expect(serviceMocks.getCompanies).toHaveBeenCalled();
+    expect(container.textContent).toContain('一公司');
+    expect(serviceMocks.getDepartments).not.toHaveBeenCalled();
+    expect(serviceMocks.getPositions).not.toHaveBeenCalled();
     expect(serviceMocks.createPerson).toHaveBeenCalledWith({
-      personNo: 'P0001',
-      name: '张三',
-      companyId: null,
-      departmentId: null,
-      positionId: null,
-      employmentStatus: 'FullTime',
-      isEnabled: true,
+      PersonNo: 'P0001',
+      ENAME: '张三',
+      CompanyId: null,
+      DepartmentId: null,
+      PositionId: null,
+      EmploymentStatus: 'FullTime',
+      IsEnabled: true,
     });
     expect(assignMock).toHaveBeenCalledWith('/organization/persons/person-1');
   });

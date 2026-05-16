@@ -145,4 +145,95 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       body: JSON.stringify({ ENAME: '张三' }),
     });
   });
+
+  it('clears dependent lookup values when parent lookup changes', async () => {
+    const fields: StandardCrudFieldDefinition[] = [
+      {
+        key: 'companyId',
+        labelKey: '所属公司',
+        modelField: 'CompanyId',
+        kind: 'lookup',
+        emptyAsNull: true,
+        lookup: { providerKey: 'companies', currentValueLabelField: 'CompanyName' },
+      },
+      {
+        key: 'departmentId',
+        labelKey: '所属部门',
+        modelField: 'DepartmentId',
+        kind: 'lookup',
+        emptyAsNull: true,
+        lookup: { providerKey: 'departments', dependsOn: ['companyId'], currentValueLabelField: 'DepartmentName' },
+      },
+      {
+        key: 'positionId',
+        labelKey: '岗位',
+        modelField: 'PositionId',
+        kind: 'lookup',
+        emptyAsNull: true,
+        lookup: { providerKey: 'positions', dependsOn: ['departmentId'], currentValueLabelField: 'PositionName' },
+      },
+    ];
+
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
+      {
+        metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
+        standardCrudResources: [
+          {
+            resourceKey: 'organization.person',
+            apiRoute: '/api/organization/persons',
+            listViewKey: 'organization.person.list',
+            detailViewKey: 'organization.person.detail',
+            fields,
+            formSections: [{ key: 'organization', titleKey: '组织信息', fields: ['companyId', 'departmentId', 'positionId'] }],
+            lookupProviders: [
+              { key: 'companies', load: vi.fn(async () => [{ value: 'Company_2', label: '二号公司' }]) },
+              { key: 'departments', load: vi.fn(async () => [{ value: 'Dept_1', label: '一部' }]) },
+              { key: 'positions', load: vi.fn(async () => [{ value: 'Position_1', label: '主管' }]) },
+            ],
+            createEmptyFilters: () => ({}),
+            buildListQuery: () => ({}),
+            mapListItem: (value: unknown) => value,
+            getRowId: () => 'row-1',
+            buildColumns: () => [],
+          },
+        ],
+      },
+    ]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          fields: {
+            EID: 'Person_1',
+            CompanyId: 'Company_1',
+            CompanyName: '一号公司',
+            DepartmentId: 'Dept_1',
+            DepartmentName: '一部',
+            PositionId: 'Position_1',
+            PositionName: '主管',
+          },
+          summaries: {},
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await renderHost();
+    await act(async () => undefined);
+
+    const companySelect = container.querySelector('select') as HTMLSelectElement;
+    await act(async () => {
+      companySelect.value = 'Company_2';
+      companySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ CompanyId: 'Company_2', DepartmentId: null, PositionId: null }),
+    });
+  });
 });

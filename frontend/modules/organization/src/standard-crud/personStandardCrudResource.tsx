@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import {
+  normalizeStandardCrudSubmitValues,
+  type StandardCrudFieldDefinition,
+  type StandardCrudFormSection,
+  type StandardCrudLookupProvider,
+  type StandardCrudResourceRegistration,
+  type StandardCrudSummaryBlock,
+} from '@icp-platform/sdk';
 import { Button, ErrorState, Input, Select, StatusBadge } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
-import PersonEditorForm from '../components/PersonEditorForm';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
   disablePerson,
@@ -10,14 +16,14 @@ import {
   getCompanies,
   getDepartments,
   getEmploymentStatusLabel,
+  getPositions,
   mapPersonDetailView,
   mapPersonListItem,
-  updatePerson,
   type CompanyDto,
   type DepartmentDto,
   type PersonDetailView,
   type PersonListRow,
-  type PersonUpsertRequest,
+  type PersonUserLinkSummaryData,
 } from '../services/organizationService';
 
 interface PersonListFilters {
@@ -27,11 +33,6 @@ interface PersonListFilters {
   departmentId: string;
   employmentStatus: string;
 }
-
-const detailSections = [
-  { key: 'basic', titleKey: '基础信息', fields: ['PersonNo', 'ENAME'] },
-  { key: 'organization', titleKey: '组织信息', fields: ['CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus'] },
-];
 
 function createEmptyFilters(): PersonListFilters {
   return {
@@ -153,97 +154,113 @@ function PersonListFiltersPanel({
   );
 }
 
-function PersonRowActions({ row, refresh }: { row: PersonListRow; refresh: () => void }) {
-  const [disabling, setDisabling] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  async function handleDisable() {
-    if (!row.isEnabled) {
-      return;
-    }
-
-    if (!window.confirm(`确认停用人员“${row.name}”吗？`)) {
-      return;
-    }
-
-    try {
-      setDisabling(true);
-      setActionError(null);
-      await disablePerson(row.id);
-      refresh();
-    } catch (disableError) {
-      setActionError(disableError instanceof Error ? disableError.message : '停用人员失败');
-    } finally {
-      setDisabling(false);
-    }
-  }
-
+function PersonRowActions({ row }: { row: PersonListRow }) {
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Button size="sm" onClick={() => window.location.assign(`/organization/persons/${row.id}`)}>查看</Button>
-        <Button size="sm" onClick={() => window.location.assign(`/organization/persons/${row.id}`)}>编辑</Button>
-        <Button size="sm" variant="danger" disabled={!row.isEnabled || disabling} onClick={() => void handleDisable()}>
-          {disabling ? '停用中...' : '停用'}
-        </Button>
-      </div>
-      {actionError ? <span style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>{actionError}</span> : null}
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <Button size="sm" onClick={() => window.location.assign(`/organization/persons/${row.id}`)}>查看</Button>
+      <Button size="sm" onClick={() => window.location.assign(`/organization/persons/${row.id}`)}>编辑</Button>
     </div>
   );
 }
 
-function PersonDetailContent({ detail, refresh }: { detail: PersonDetailView; refresh: () => void }) {
-  async function handleSave(payload: PersonUpsertRequest) {
-    await updatePerson(detail.id, payload);
-    refresh();
-  }
+const personFields = [
+  { key: 'personNo', labelKey: '工号', modelField: 'PersonNo', kind: 'text', required: true, trim: true, readOnly: true },
+  { key: 'name', labelKey: '姓名', modelField: 'ENAME', fallbackFields: ['Name'], kind: 'text', required: true, trim: true },
+  {
+    key: 'companyId',
+    labelKey: '所属公司',
+    modelField: 'CompanyId',
+    kind: 'lookup',
+    emptyAsNull: true,
+    lookup: { providerKey: 'organization.companies', placeholder: '请选择公司', currentValueLabelField: 'CompanyName' },
+  },
+  {
+    key: 'departmentId',
+    labelKey: '所属部门',
+    modelField: 'DepartmentId',
+    kind: 'lookup',
+    emptyAsNull: true,
+    lookup: {
+      providerKey: 'organization.departments',
+      dependsOn: ['companyId'],
+      placeholder: '请先选择公司',
+      currentValueLabelField: 'DepartmentName',
+    },
+  },
+  {
+    key: 'positionId',
+    labelKey: '岗位',
+    modelField: 'PositionId',
+    kind: 'lookup',
+    emptyAsNull: true,
+    lookup: {
+      providerKey: 'organization.positions',
+      dependsOn: ['departmentId'],
+      placeholder: '可先保持空白',
+      currentValueLabelField: 'PositionName',
+    },
+  },
+  {
+    key: 'employmentStatus',
+    labelKey: '用工状态',
+    modelField: 'EmploymentStatus',
+    kind: 'enum',
+    emptyAsNull: true,
+    options: employmentStatusOptions,
+  },
+  { key: 'isEnabled', labelKey: '启用状态', modelField: 'IsEnabled', kind: 'boolean', defaultValue: true },
+] satisfies StandardCrudFieldDefinition[];
 
-  return (
-    <div className="sh-page-stack">
-      <PersonEditorForm
-        person={detail}
-        onSave={handleSave}
-        sections={detailSections}
-        resolveTitle={(titleKey, fallback) => titleKey || fallback}
-      />
-      <PersonUserLinkCard summary={detail.userLinkSummary} title="账号绑定" />
-      <AuthorizationSummaryCard summary={detail.authorizationSummary} title="授权摘要" />
-    </div>
-  );
+const personFormSections = [
+  { key: 'basic', titleKey: '基础信息', fields: ['personNo', 'name'] },
+  { key: 'organization', titleKey: '组织信息', fields: ['companyId', 'departmentId', 'positionId', 'employmentStatus', 'isEnabled'] },
+] satisfies StandardCrudFormSection[];
+
+function buildPersonMutationValues(values: Record<string, unknown>) {
+  // 详情页工号保持只读；提交映射需要显式包含创建态输入的工号，避免把 UI 编辑边界泄漏成后端请求缺字段。
+  const mutationFields = personFields.map((field) => (field.key === 'personNo' ? { ...field, readOnly: false } : field));
+  return normalizeStandardCrudSubmitValues(mutationFields, values);
 }
 
-function PersonDetailHeaderActions({ detail, refresh }: { detail: PersonDetailView; refresh: () => void }) {
-  const [disabling, setDisabling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const organizationLookupProviders: StandardCrudLookupProvider[] = [
+  {
+    key: 'organization.companies',
+    load: async () => (await getCompanies()).map((company) => ({ value: company.id, label: company.name })),
+  },
+  {
+    key: 'organization.departments',
+    load: async ({ dependencyValues }) => {
+      const companyId = dependencyValues.companyId;
+      if (typeof companyId !== 'string' || companyId.length === 0) {
+        return [];
+      }
 
-  async function handleDisable() {
-    try {
-      setDisabling(true);
-      setError(null);
-      await disablePerson(detail.id);
-      refresh();
-    } catch (disableError) {
-      setError(disableError instanceof Error ? disableError.message : '停用人员失败');
-    } finally {
-      setDisabling(false);
-    }
-  }
+      return (await getDepartments(companyId)).map((department) => ({ value: department.id, label: department.name }));
+    },
+  },
+  {
+    key: 'organization.positions',
+    load: async ({ dependencyValues }) => {
+      const departmentId = dependencyValues.departmentId;
+      if (typeof departmentId !== 'string' || departmentId.length === 0) {
+        return [];
+      }
 
-  return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      {error ? <span style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>{error}</span> : null}
-      {detail.isEnabled ? (
-        <Button variant="danger" onClick={() => void handleDisable()} disabled={disabling}>
-          {disabling ? '停用中...' : '停用'}
-        </Button>
-      ) : (
-        <Button disabled>已停用</Button>
-      )}
-    </div>
-  );
-}
+      return (await getPositions(departmentId)).map((position) => ({ value: position.id, label: position.name }));
+    },
+  },
+];
 
-// 该注册只声明人员资源如何接入平台 Host；人员表单、lookup 和摘要专属展示保留在模块内，等待第二批收缩。
+const personSummaryRenderers = {
+  userLink: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
+    <PersonUserLinkCard summary={block as StandardCrudSummaryBlock<PersonUserLinkSummaryData>} title={title} />
+  ),
+  authorizationSummary: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
+    <AuthorizationSummaryCard summary={block as StandardCrudSummaryBlock<string[]>} title={title} />
+  ),
+};
+
+// 该注册只声明人员资源如何接入平台 Host；表单字段、lookup、动作和摘要 renderer 均通过标准 CRUD 扩展点暴露。
 export const personStandardCrudResource: StandardCrudResourceRegistration<PersonListFilters, PersonListRow, PersonDetailView> = {
   resourceKey: 'organization.person',
   apiRoute: '/api/organization/persons',
@@ -251,6 +268,35 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   detailViewKey: 'organization.person.detail',
   detailRoutePath: '/organization/persons/:id',
   permissions: ['Organization.Person.View'],
+  fields: personFields,
+  formSections: personFormSections,
+  lookupProviders: organizationLookupProviders,
+  summaryRenderers: personSummaryRenderers,
+  detailActions: [
+    { key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用当前人员吗？' },
+  ],
+  listActions: [
+    { key: 'create', labelKey: '新建', variant: 'default', standardAction: 'create' },
+    { key: 'refresh', labelKey: '刷新', variant: 'primary', standardAction: 'refresh' },
+    { key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用当前人员吗？' },
+  ],
+  actionHandlers: {
+    create: () => {
+      window.location.assign('/organization/persons/new');
+    },
+    refresh: ({ refresh }) => {
+      refresh();
+    },
+    disable: async ({ id, refresh }) => {
+      if (!id) {
+        throw new Error('缺少人员标识，无法停用。');
+      }
+
+      await disablePerson(id);
+      refresh();
+    },
+  },
+  buildMutationValues: buildPersonMutationValues,
   createEmptyFilters,
   buildListQuery,
   mapListItem: mapPersonListItem,
@@ -272,16 +318,6 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     },
   ],
   renderFilters: (context) => <PersonListFiltersPanel filters={context.filters} setFilters={context.setFilters} />,
-  renderHeaderActions: (context) => (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-      <Button size="sm" onClick={() => window.location.assign('/organization/persons/new')}>新建</Button>
-      <Button size="sm" variant="primary" onClick={context.refresh} disabled={context.loading}>
-        {context.loading ? '刷新中...' : '刷新'}
-      </Button>
-    </div>
-  ),
-  renderRowActions: (row, context) => <PersonRowActions row={row} refresh={context.refresh} />,
+  renderRowActions: (row) => <PersonRowActions row={row} />,
   mapDetail: mapPersonDetailView,
-  renderDetail: ({ detail, refresh }) => <PersonDetailContent detail={detail} refresh={refresh} />,
-  renderDetailHeaderActions: ({ detail, refresh }) => <PersonDetailHeaderActions detail={detail} refresh={refresh} />,
 };

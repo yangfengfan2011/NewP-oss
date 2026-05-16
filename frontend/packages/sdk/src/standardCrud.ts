@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 
 /** 标准摘要块状态；平台只解释状态语义，专属展示内容仍由模块扩展承接。 */
 export type StandardCrudSummaryStatus = 'ready' | 'notConfigured' | 'dependencyUnavailable';
@@ -51,6 +51,33 @@ export interface StandardCrudLookupProvider {
   key: string;
   load: (request: StandardCrudLookupRequest) => Promise<StandardCrudOption[]>;
 }
+
+export interface LoadStandardCrudLookupOptionsInput {
+  field: StandardCrudFieldDefinition;
+  providers: StandardCrudLookupProvider[];
+  values: Record<string, unknown>;
+  detailFields?: Record<string, unknown>;
+}
+
+export interface LoadStandardCrudLookupOptionsResult {
+  options: StandardCrudOption[];
+  error: string | null;
+}
+
+export interface UseStandardCrudLookupRuntimeInput {
+  fields: StandardCrudFieldDefinition[];
+  providers?: StandardCrudLookupProvider[];
+  values: Record<string, unknown>;
+  detailFields?: Record<string, unknown>;
+}
+
+export interface StandardCrudLookupRuntimeState {
+  lookupOptions: Record<string, StandardCrudOption[]>;
+  lookupLoading: Record<string, boolean>;
+  lookupErrors: Record<string, string | null>;
+}
+
+const EMPTY_STANDARD_CRUD_LOOKUP_DETAIL_FIELDS: Record<string, unknown> = {};
 
 /** lookup 字段声明；第二批只声明能力，触发时机和依赖刷新由 Shell 运行时负责。 */
 export interface StandardCrudLookupConfig {
@@ -311,6 +338,178 @@ export function preserveStandardCrudCurrentOption(
   }
 
   return [current, ...options];
+}
+
+function isEmptyStandardCrudLookupDependency(value: unknown): boolean {
+  return value == null || (typeof value === 'string' && value.trim().length === 0);
+}
+
+/** 读取 lookup 当前值；只从表单快照生成显示选项，避免 provider 分页丢失编辑态旧值。 */
+function readStandardCrudCurrentLookupOption(
+  field: StandardCrudFieldDefinition,
+  values: Record<string, unknown>,
+  detailFields: Record<string, unknown>,
+): StandardCrudOption | null {
+  const value = values[field.key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  const labelField = field.lookup?.currentValueLabelField;
+  const label = labelField && typeof detailFields[labelField] === 'string' ? detailFields[labelField] : value;
+
+  return { value, label };
+}
+
+/**
+ * 加载标准 CRUD lookup 选项。
+ *
+ * 该入口收口 provider 选择、依赖缺失短路、错误降级和当前值保留；
+ * 模块与 Host 只声明 fields/providers，避免把加载流程散落到业务页面。
+ */
+export async function loadStandardCrudLookupOptions(
+  input: LoadStandardCrudLookupOptionsInput,
+): Promise<LoadStandardCrudLookupOptionsResult> {
+  const { field, providers, values, detailFields = {} } = input;
+
+  if (field.kind !== 'lookup') {
+    return { options: field.options ?? [], error: null };
+  }
+
+  const current = readStandardCrudCurrentLookupOption(field, values, detailFields);
+  const providerKey = field.lookup?.providerKey ?? '';
+  const provider = providers.find((candidate) => candidate.key === providerKey);
+  if (!provider) {
+    return {
+      options: preserveStandardCrudCurrentOption([], current),
+      error: `未找到 lookup provider：${providerKey}`,
+    };
+  }
+
+  const dependencyValues: Record<string, unknown> = {};
+  for (const dependency of field.lookup?.dependsOn ?? []) {
+    const dependencyValue = values[dependency];
+    if (isEmptyStandardCrudLookupDependency(dependencyValue)) {
+      return { options: [], error: null };
+    }
+
+    dependencyValues[dependency] = dependencyValue;
+  }
+
+  try {
+    const options = await provider.load({
+      fieldKey: field.key,
+      values,
+      dependencyValues,
+    });
+
+    return {
+      options: preserveStandardCrudCurrentOption(options, current),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      options: preserveStandardCrudCurrentOption([], current),
+      error: error instanceof Error && error.message.length > 0 ? error.message : '加载选项失败',
+    };
+  }
+}
+
+/**
+ * 根据 lookup dependsOn 声明清空所有后代字段。
+ *
+ * 级联关系来自标准字段契约，不依赖字段复制顺序或人员模块私有字段名。
+ */
+export function clearStandardCrudDependentLookupValues(
+  values: Record<string, unknown>,
+  changedFieldKey: string,
+  fields: StandardCrudFieldDefinition[],
+): Record<string, unknown> {
+  const nextValues = { ...values };
+  const pending = [changedFieldKey];
+
+  while (pending.length > 0) {
+    const parentKey = pending.shift();
+    for (const field of fields) {
+      if (!parentKey || !(field.lookup?.dependsOn ?? []).includes(parentKey)) {
+        continue;
+      }
+
+      if (nextValues[field.key] !== '') {
+        nextValues[field.key] = '';
+      }
+      pending.push(field.key);
+    }
+  }
+
+  return nextValues;
+}
+
+/** 应用单个字段变更并同步执行 lookup 级联清空。 */
+export function applyStandardCrudLookupValueChange(
+  values: Record<string, unknown>,
+  changedFieldKey: string,
+  value: unknown,
+  fields: StandardCrudFieldDefinition[],
+): Record<string, unknown> {
+  return clearStandardCrudDependentLookupValues({ ...values, [changedFieldKey]: value }, changedFieldKey, fields);
+}
+
+/**
+ * 标准 CRUD lookup React 运行时。
+ *
+ * Host 与兼容创建页共享这一入口维护 loading/error/options，业务页面只做受控表单 wiring。
+ */
+export function useStandardCrudLookupRuntime({
+  fields,
+  providers = [],
+  values,
+  detailFields: inputDetailFields,
+}: UseStandardCrudLookupRuntimeInput): StandardCrudLookupRuntimeState {
+  const [lookupOptions, setLookupOptions] = useState<Record<string, StandardCrudOption[]>>({});
+  const [lookupLoading, setLookupLoading] = useState<Record<string, boolean>>({});
+  const [lookupErrors, setLookupErrors] = useState<Record<string, string | null>>({});
+  const detailFields = inputDetailFields ?? EMPTY_STANDARD_CRUD_LOOKUP_DETAIL_FIELDS;
+
+  useEffect(() => {
+    let cancelled = false;
+    const lookupFields = fields.filter((field) => field.kind === 'lookup');
+    if (lookupFields.length === 0 || providers.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadLookups() {
+      for (const field of lookupFields) {
+        try {
+          setLookupLoading((current) => ({ ...current, [field.key]: true }));
+          const result = await loadStandardCrudLookupOptions({
+            field,
+            providers,
+            values,
+            detailFields,
+          });
+          if (!cancelled) {
+            setLookupOptions((current) => ({ ...current, [field.key]: result.options }));
+            setLookupErrors((current) => ({ ...current, [field.key]: result.error }));
+          }
+        } finally {
+          if (!cancelled) {
+            setLookupLoading((current) => ({ ...current, [field.key]: false }));
+          }
+        }
+      }
+    }
+
+    void loadLookups();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailFields, fields, providers, values]);
+
+  return { lookupOptions, lookupLoading, lookupErrors };
 }
 
 /** 将标准摘要状态映射为 Shell 可直接展示的默认提示，模块仍可用 renderer 覆盖具体内容。 */

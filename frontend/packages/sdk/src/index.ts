@@ -87,9 +87,12 @@ export type {
   StandardCrudFormSection,
   StandardCrudListExtensionContext,
   StandardCrudListResult,
+  LoadStandardCrudLookupOptionsInput,
+  LoadStandardCrudLookupOptionsResult,
   StandardCrudLookupConfig,
   StandardCrudLookupProvider,
   StandardCrudLookupRequest,
+  StandardCrudLookupRuntimeState,
   StandardCrudMutationValues,
   StandardCrudOption,
   StandardCrudResourceRegistration,
@@ -98,13 +101,17 @@ export type {
   StandardCrudSummaryRendererContext,
   StandardCrudSummaryStatus,
   StandardCrudTableColumn,
+  UseStandardCrudLookupRuntimeInput,
 } from './standardCrud';
 
 export {
+  applyStandardCrudLookupValueChange,
   buildStandardCrudI18nLabel,
   buildStandardCrudPath,
+  clearStandardCrudDependentLookupValues,
   createStandardCrudClient,
   isStandardCrudRecord,
+  loadStandardCrudLookupOptions,
   normalizeStandardCrudSubmitValues,
   normalizeStandardCrudDetail,
   normalizeStandardCrudListResult,
@@ -115,6 +122,7 @@ export {
   readStandardCrudNullableString,
   readStandardCrudString,
   resolveStandardCrudSummaryMessage,
+  useStandardCrudLookupRuntime,
 } from './standardCrud';
 
 export interface I18nResource {

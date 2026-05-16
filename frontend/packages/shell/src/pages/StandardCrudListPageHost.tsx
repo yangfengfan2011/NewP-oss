@@ -112,7 +112,12 @@ function StandardCrudListPageContent<TFilter, TRow>({
     </>
   );
 
-  const rowActionDefinitions = registration.listActions?.filter((action) => action.key !== 'create' && action.key !== 'refresh') ?? [];
+  const headerActionDefinitions = registration.listActions?.filter((action) => (
+    action.standardAction === 'create' || action.standardAction === 'refresh'
+  )) ?? [];
+  const rowActionDefinitions = registration.listActions?.filter((action) => (
+    action.standardAction !== 'create' && action.standardAction !== 'refresh'
+  )) ?? [];
   const shouldRenderActionColumn = registration.renderRowActions || (registration.actionHandlers && registration.listActions);
   const columns = shouldRenderActionColumn
     ? [
@@ -120,23 +125,26 @@ function StandardCrudListPageContent<TFilter, TRow>({
       {
         key: 'actions',
         title: '操作',
-        render: (row: TRow) => registration.renderRowActions
-          ? registration.renderRowActions(row, context)
-          : (
-            <StandardCrudActions
-              actions={rowActionDefinitions}
-              grantedPermissions={registration.permissions}
-              handlers={registration.actionHandlers}
-              context={{ row, refresh: context.refresh }}
-            />
-          ),
+        render: (row: TRow) => (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {registration.renderRowActions ? registration.renderRowActions(row, context) : null}
+            {rowActionDefinitions.length > 0 ? (
+              <StandardCrudActions
+                actions={rowActionDefinitions}
+                grantedPermissions={registration.permissions}
+                handlers={registration.actionHandlers}
+                context={{ id: registration.getRowId(row), row, refresh: context.refresh }}
+              />
+            ) : null}
+          </div>
+        ),
       },
     ]
     : registration.buildColumns(context);
 
-  const headerActions = registration.listActions ? (
+  const headerActions = headerActionDefinitions.length > 0 ? (
     <StandardCrudActions
-      actions={registration.listActions}
+      actions={headerActionDefinitions}
       grantedPermissions={registration.permissions}
       handlers={registration.actionHandlers}
       context={{ refresh: context.refresh }}

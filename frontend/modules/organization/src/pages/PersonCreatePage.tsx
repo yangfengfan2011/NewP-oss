@@ -1,52 +1,59 @@
-import { useMemo } from 'react';
-import { useLocalization } from '@icp-platform/core';
-import { PageHeader } from '@icp-platform/ui';
-import PersonEditorForm from '../components/PersonEditorForm';
-import { getPersonDetailRuntimeSchema } from '../runtime/personCenterRuntime';
-import { createPerson, type PersonDetailView, type PersonUpsertRequest } from '../services/organizationService';
+import { useMemo, useState } from 'react';
+import { applyStandardCrudLookupValueChange, useStandardCrudLookupRuntime } from '@icp-platform/sdk';
+import { PageHeader, StandardCrudForm } from '@icp-platform/ui';
+import { createPerson } from '../services/organizationService';
+import { personStandardCrudResource } from '../standard-crud/personStandardCrudResource';
 
-function createEmptyPerson(): PersonDetailView {
+function createInitialValues(): Record<string, unknown> {
   return {
-    id: '',
     personNo: '',
     name: '',
     companyId: '',
     departmentId: '',
-    positionId: null,
+    positionId: '',
     employmentStatus: 'FullTime',
-    employmentStatusLabel: '正式',
     isEnabled: true,
-    createdAt: '',
-    companyName: '',
-    departmentName: '',
-    positionName: '',
-    userLinkSummary: {
-      status: 'notConfigured',
-      data: null,
-    },
-    authorizationSummary: {
-      status: 'notConfigured',
-      data: null,
-    },
   };
 }
 
-export default function PersonCreatePage() {
-  const { t } = useLocalization();
-  const schema = useMemo(() => getPersonDetailRuntimeSchema(), []);
-  const emptyPerson = useMemo(() => createEmptyPerson(), []);
+function resolveCreateFields() {
+  // 资源注册中的工号在详情编辑态只读；创建页需要保留同一字段契约但开放初次录入。
+  return (personStandardCrudResource.fields ?? []).map((field) =>
+    field.key === 'personNo' ? { ...field, readOnly: false } : field,
+  );
+}
 
-  function resolveText(localKey: string, fallback: string): string {
-    const resolvedKey = localKey.startsWith(`${schema.dicKey}.`)
-      ? localKey
-      : `${schema.dicKey}.${localKey}`;
-    return t(resolvedKey, fallback);
+export default function PersonCreatePage() {
+  const fields = useMemo(() => resolveCreateFields(), []);
+  const formSections = personStandardCrudResource.formSections ?? [];
+  const [values, setValues] = useState<Record<string, unknown>>(() => createInitialValues());
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+    fields,
+    providers: personStandardCrudResource.lookupProviders,
+    values,
+  });
+
+  function handleChange(fieldKey: string, value: unknown) {
+    setValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
   }
 
-  async function handleCreate(payload: PersonUpsertRequest) {
-    const created = await createPerson(payload);
-    // 新建成功后立即切到详情页，避免在同一页继续维护“新建态”和“详情态”两套状态机。
-    window.location.assign(`/organization/persons/${created.id}`);
+  async function handleCreate() {
+    try {
+      setSaving(true);
+      setSaveError(null);
+      const mutationValues = personStandardCrudResource.buildMutationValues
+        ? personStandardCrudResource.buildMutationValues(values)
+        : values;
+      const created = await createPerson(mutationValues);
+      // 新建页只负责兼容路由入口；创建成功后交还标准详情页维护后续编辑状态。
+      window.location.assign(`/organization/persons/${created.id}`);
+    } catch (submitError) {
+      setSaveError(submitError instanceof Error ? submitError.message : '新建人员失败');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -54,17 +61,28 @@ export default function PersonCreatePage() {
       <PageHeader
         eyebrow="组织结构"
         title="新建人员"
-        description="新建页沿用人员详情的字段分组约束，字段 section 仍由 metadata runtime 决定。"
+        description="新建页使用标准 CRUD 字段定义提交，lookup 加载由标准运行时接管。"
       />
 
-      <PersonEditorForm
-        person={emptyPerson}
-        onSave={handleCreate}
-        sections={schema.sections}
-        resolveTitle={resolveText}
+      <div style={{ marginBottom: 12, color: '#b45309', fontSize: 12, fontWeight: 600 }}>
+        * 必填
+      </div>
+
+      <StandardCrudForm
+        formId="organization-person-create-form"
         mode="create"
+        fields={fields}
+        sections={formSections}
+        values={values}
+        lookupOptions={lookupOptions}
+        lookupLoading={lookupLoading}
+        lookupErrors={lookupErrors}
+        onChange={handleChange}
+        onSubmit={handleCreate}
+        saving={saving}
+        error={saveError}
         saveLabel="保存并进入详情"
-        hideSummaryCards
+        titleForSection={(titleKey) => titleKey}
       />
     </div>
   );

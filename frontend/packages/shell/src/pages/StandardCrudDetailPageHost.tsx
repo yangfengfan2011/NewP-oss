@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   ModuleRegistry,
+  applyStandardCrudLookupValueChange,
   createStandardCrudClient,
   normalizeStandardCrudDetail,
   normalizeStandardCrudSubmitValues,
   readStandardCrudFieldValue,
+  useStandardCrudLookupRuntime,
   type StandardCrudDetail,
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
@@ -21,6 +23,8 @@ interface StandardCrudDetailPageHostProps {
   viewKey: string;
   id: string | null;
 }
+
+const EMPTY_DETAIL_FIELDS: Record<string, unknown> = {};
 
 type LoadedDetail<TDetail> = {
   id: string;
@@ -103,9 +107,19 @@ function StandardCrudDetailPageContent<TDetail>({
     };
   }, [client, id, registration, reloadTick]);
 
+  const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
+  const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
+  const editFields = registration.fields ?? [];
+  const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+    fields: editFields,
+    providers: currentNormalizedDetail ? registration.lookupProviders : [],
+    values: formValues,
+    detailFields: currentNormalizedDetail?.fields ?? EMPTY_DETAIL_FIELDS,
+  });
+
   const refresh = () => setReloadTick((current) => current + 1);
   const handleFormChange = (fieldKey: string, value: unknown) => {
-    setFormValues((current) => ({ ...current, [fieldKey]: value }));
+    setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, editFields));
   };
   const handleSave = async (fields: StandardCrudFieldDefinition[]) => {
     try {
@@ -122,10 +136,7 @@ function StandardCrudDetailPageContent<TDetail>({
       setSaving(false);
     }
   };
-  const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
-  const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
-  const editFields = registration.fields ?? [];
   const nonReadySummaryBlocks = currentNormalizedDetail
     ? schema.summaryBlocks.filter((blockKey) => currentNormalizedDetail.summaries[blockKey]?.status !== 'ready')
     : [];
@@ -180,6 +191,9 @@ function StandardCrudDetailPageContent<TDetail>({
             fields={editFields}
             sections={registration.formSections ?? []}
             values={formValues}
+            lookupOptions={lookupOptions}
+            lookupLoading={lookupLoading}
+            lookupErrors={lookupErrors}
             onChange={handleFormChange}
             onSubmit={() => handleSave(editFields)}
             saving={saving}

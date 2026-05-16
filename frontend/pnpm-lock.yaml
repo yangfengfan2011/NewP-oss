@@ -274,6 +274,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       react:
         specifier: ^18.2.0
         version: 18.3.1

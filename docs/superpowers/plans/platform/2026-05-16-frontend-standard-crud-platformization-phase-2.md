@@ -459,7 +459,7 @@ git commit -m "功能：扩展标准CRUD前端第二批契约"
 - Modify: `frontend/packages/ui/src/index.ts`
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-field-form.test.tsx`
 
-- [ ] **Step 1: 写 UI 字段与表单失败测试**
+- [x] **Step 1: 写 UI 字段与表单失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-field-form.test.tsx`:
 
@@ -555,7 +555,7 @@ describe('Standard CRUD UI field and form', () => {
 });
 ```
 
-- [ ] **Step 2: 运行 UI 测试确认失败**
+- [x] **Step 2: 运行 UI 测试确认失败**
 
 Run:
 
@@ -565,7 +565,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-field-f
 
 Expected: FAIL，提示 `StandardCrudField` 或 `StandardCrudForm` 尚未从 `@icp-platform/ui` 导出。
 
-- [ ] **Step 3: 实现 `StandardCrudField`**
+- [x] **Step 3: 实现 `StandardCrudField`**
 
 Create `frontend/packages/ui/src/patterns/StandardCrudField.tsx`:
 
@@ -661,7 +661,7 @@ export function StandardCrudField({
 }
 ```
 
-- [ ] **Step 4: 实现 `StandardCrudForm`**
+- [x] **Step 4: 实现 `StandardCrudForm`**
 
 Create `frontend/packages/ui/src/patterns/StandardCrudForm.tsx`:
 
@@ -764,7 +764,7 @@ export function StandardCrudForm({
 }
 ```
 
-- [ ] **Step 5: 导出 UI 组件**
+- [x] **Step 5: 导出 UI 组件**
 
 Modify `frontend/packages/ui/src/index.ts`:
 
@@ -776,7 +776,7 @@ export { StandardCrudForm } from './patterns/StandardCrudForm';
 export type { StandardCrudFormProps } from './patterns/StandardCrudForm';
 ```
 
-- [ ] **Step 6: 运行 UI 测试**
+- [x] **Step 6: 运行 UI 测试**
 
 Run:
 
@@ -786,7 +786,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-field-f
 
 Expected: PASS。
 
-- [ ] **Step 7: 运行 UI 构建**
+- [x] **Step 7: 运行 UI 构建**
 
 Run:
 
@@ -796,7 +796,7 @@ pnpm --dir .\frontend --filter @icp-platform/ui build
 
 Expected: PASS。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add frontend/packages/ui/src/patterns/StandardCrudField.tsx frontend/packages/ui/src/patterns/StandardCrudForm.tsx frontend/packages/ui/src/index.ts frontend/packages/shell/src/__tests__/standard-crud-field-form.test.tsx

@@ -57,6 +57,12 @@ export type { FormInlineProps } from './patterns/FormInline';
 export { StandardListPage } from './patterns/StandardListPage';
 export type { StandardListPageProps } from './patterns/StandardListPage.types';
 
+export { StandardCrudField } from './patterns/StandardCrudField';
+export type { StandardCrudFieldProps } from './patterns/StandardCrudField';
+
+export { StandardCrudForm } from './patterns/StandardCrudForm';
+export type { StandardCrudFormProps } from './patterns/StandardCrudForm';
+
 export { Pagination } from './components/Pagination';
 export type { PaginationProps } from './components/Pagination';
 

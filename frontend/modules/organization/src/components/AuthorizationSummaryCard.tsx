@@ -1,4 +1,4 @@
-import { EmptyState, Panel, StatusBadge } from '@icp-platform/ui';
+import { Panel, StatusBadge } from '@icp-platform/ui';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 
 interface AuthorizationSummaryCardProps {
@@ -6,21 +6,12 @@ interface AuthorizationSummaryCardProps {
   title?: string;
 }
 
-function getSummaryStateLabel(status: StandardCrudSummaryBlock['status']): string {
-  if (status === 'ready') {
-    return '已加载';
-  }
-
-  if (status === 'dependencyUnavailable') {
-    return '依赖不可用';
-  }
-
-  return '未配置';
-}
-
 export default function AuthorizationSummaryCard({ summary, title = '授权摘要' }: AuthorizationSummaryCardProps) {
-  const items = summary.status === 'ready' && Array.isArray(summary.data) ? summary.data : [];
-  const hasItems = items.length > 0;
+  if (summary.status !== 'ready' || !summary.data) {
+    return null;
+  }
+
+  const items = Array.isArray(summary.data) ? summary.data : [];
 
   return (
     <Panel
@@ -30,19 +21,15 @@ export default function AuthorizationSummaryCard({ summary, title = '授权摘�
       <div style={{ display: 'grid', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <StatusBadge
-            variant={summary.status === 'ready' ? 'success' : summary.status === 'dependencyUnavailable' ? 'warning' : 'neutral'}
-            label={getSummaryStateLabel(summary.status)}
+            variant="success"
+            label="已加载"
           />
           <span style={{ color: '#64748b', fontSize: 12 }}>
-            {summary.status === 'ready'
-              ? '授权摘要可以只读展示。'
-              : summary.status === 'dependencyUnavailable'
-                ? '授权摘要依赖暂不可用，当前页面只保留降级结果。'
-                : '授权摘要块位已保留，但当前尚未形成可读数据。'}
+            授权摘要可以只读展示。
           </span>
         </div>
 
-        {hasItems ? (
+        {items.length > 0 ? (
           <div
             style={{
               display: 'flex',
@@ -54,15 +41,7 @@ export default function AuthorizationSummaryCard({ summary, title = '授权摘�
               <StatusBadge key={item} variant="info" label={item} />
             ))}
           </div>
-        ) : (
-          <EmptyState
-            message={
-              summary.status === 'dependencyUnavailable'
-                ? '授权摘要依赖暂不可用，当前仅保留只读降级块位。'
-                : '暂无授权摘要，或摘要依赖尚未就绪。'
-            }
-          />
-        )}
+        ) : null}
       </div>
     </Panel>
   );

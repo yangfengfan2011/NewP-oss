@@ -1252,7 +1252,7 @@ git commit -m "功能：新增标准CRUD动作运行时"
 - Modify: `frontend/modules/organization/src/components/AuthorizationSummaryCard.tsx`
 - Modify: `frontend/modules/organization/src/components/PersonUserLinkCard.tsx`
 
-- [ ] **Step 1: 写 summary runtime 失败测试**
+- [x] **Step 1: 写 summary runtime 失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-summary-runtime.test.tsx`:
 
@@ -1315,7 +1315,7 @@ describe('standard CRUD summary runtime', () => {
 });
 ```
 
-- [ ] **Step 2: 运行 summary 测试确认失败**
+- [x] **Step 2: 运行 summary 测试确认失败**
 
 Run:
 
@@ -1325,7 +1325,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-summary
 
 Expected: FAIL，提示 `standardCrudSummaryRuntime` 模块不存在。
 
-- [ ] **Step 3: 实现 summary runtime**
+- [x] **Step 3: 实现 summary runtime**
 
 Create `frontend/packages/shell/src/standard-crud/standardCrudSummaryRuntime.tsx`:
 
@@ -1380,7 +1380,7 @@ export function StandardCrudSummaryBlocks({
 }
 ```
 
-- [ ] **Step 4: 接入 Detail Host summary runtime**
+- [x] **Step 4: 接入 Detail Host summary runtime**
 
 Modify `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx` so the default detail rendering path can show summary blocks before module detail content. If `registration.renderDetail` exists, keep compatibility and let Organization migrate in Task 7.
 
@@ -1414,7 +1414,7 @@ Default detail branch:
 )
 ```
 
-- [ ] **Step 5: 收缩专属 summary card 的状态责任**
+- [x] **Step 5: 收缩专属 summary card 的状态责任**
 
 Modify `AuthorizationSummaryCard.tsx` and `PersonUserLinkCard.tsx` so they assume `summary.status === 'ready'` and only render `summary.data` content. Platform status messages must come from `StandardCrudSummaryBlocks`.
 
@@ -1428,7 +1428,7 @@ if (summary.status !== 'ready' || !summary.data) {
 
 Keep their labels, data formatting and module-specific wording unchanged.
 
-- [ ] **Step 6: 运行 summary 测试**
+- [x] **Step 6: 运行 summary 测试**
 
 Run:
 
@@ -1438,7 +1438,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-summary
 
 Expected: PASS。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add frontend/packages/shell/src/standard-crud/standardCrudSummaryRuntime.tsx frontend/packages/shell/src/__tests__/standard-crud-summary-runtime.test.tsx frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx frontend/modules/organization/src/components/AuthorizationSummaryCard.tsx frontend/modules/organization/src/components/PersonUserLinkCard.tsx

@@ -12,6 +12,7 @@ import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaRes
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 interface StandardCrudDetailPageHostProps {
   viewKey: string;
@@ -20,6 +21,7 @@ interface StandardCrudDetailPageHostProps {
 
 type LoadedDetail<TDetail> = {
   id: string;
+  normalized: StandardCrudDetail;
   value: TDetail | StandardCrudDetail;
 };
 
@@ -71,7 +73,7 @@ function StandardCrudDetailPageContent<TDetail>({
         const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
 
         if (!cancelled) {
-          setLoadedDetail({ id, value: mapped });
+          setLoadedDetail({ id, normalized, value: mapped });
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -94,7 +96,11 @@ function StandardCrudDetailPageContent<TDetail>({
 
   const refresh = () => setReloadTick((current) => current + 1);
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
+  const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
+  const nonReadySummaryBlocks = currentNormalizedDetail
+    ? schema.summaryBlocks.filter((blockKey) => currentNormalizedDetail.summaries[blockKey]?.status !== 'ready')
+    : [];
   const detailHeaderActions = !showLoading && currentDetail
     ? registration.renderDetailHeaderActions
       ? registration.renderDetailHeaderActions({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
@@ -124,9 +130,24 @@ function StandardCrudDetailPageContent<TDetail>({
       ) : error ? (
         <ErrorState message={error} />
       ) : currentDetail && registration.renderDetail ? (
-        registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
-      ) : currentDetail ? (
-        <pre>{JSON.stringify(currentDetail, null, 2)}</pre>
+        <div className="sh-page-stack">
+          <StandardCrudSummaryBlocks
+            blocks={nonReadySummaryBlocks}
+            summaries={currentNormalizedDetail?.summaries ?? {}}
+            titleForBlock={(key) => key}
+          />
+          {registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })}
+        </div>
+      ) : currentNormalizedDetail ? (
+        <div className="sh-page-stack">
+          <StandardCrudSummaryBlocks
+            blocks={schema.summaryBlocks}
+            summaries={currentNormalizedDetail.summaries}
+            renderers={registration.summaryRenderers}
+            titleForBlock={(key) => key}
+          />
+          <pre>{JSON.stringify(currentNormalizedDetail.fields, null, 2)}</pre>
+        </div>
       ) : (
         <ErrorState message="未找到详情。" />
       )}

@@ -103,6 +103,42 @@ describe('StandardCrudDetailPageHost', () => {
     expect(container.textContent).toContain('当前地址中没有有效的资源标识');
   });
 
+  it('renders summary blocks before default field dump when module detail renderer is absent', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
+      {
+        metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
+        standardCrudResources: [
+          {
+            resourceKey: 'organization.person',
+            apiRoute: '/api/organization/persons',
+            listViewKey: 'organization.person.list',
+            detailViewKey: 'organization.person.detail',
+            detailRoutePath: '/organization/persons/:id',
+            createEmptyFilters: () => ({}),
+            buildListQuery: () => ({}),
+            mapListItem: (value: unknown) => value,
+            getRowId: () => 'row-1',
+            buildColumns: () => [],
+          },
+        ],
+      },
+    ]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: '张三' }, summaries: { userLink: { status: 'notConfigured', data: null } } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost('Person_1');
+    await act(async () => undefined);
+
+    const text = container.textContent ?? '';
+    expect(text).toContain('暂未配置');
+    expect(text).toContain('"ENAME": "张三"');
+    expect(text.indexOf('暂未配置')).toBeLessThan(text.indexOf('"ENAME": "张三"'));
+  });
+
   it('does not expose stale header actions after the route id changes', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {

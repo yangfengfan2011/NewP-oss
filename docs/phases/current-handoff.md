@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-05-13
+最近更新：2026-05-17
 
 ## 1. 目的
 
@@ -38,7 +38,28 @@
 
 ## 4. 最近完成
 
-### 4.1 前端标准 CRUD 平台化第一批
+### 4.1 前端标准 CRUD 平台化第二批
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-12-frontend-standard-crud-platformization-design.md` 第 14.2 节
+- `docs/superpowers/plans/platform/2026-05-16-frontend-standard-crud-platformization-phase-2.md`
+- `docs/verification/frontend-standard-crud-platformization-phase-2-verification.md`
+
+完成内容：
+
+- SDK 提供字段、表单、lookup、动作、summary 和 i18n 第二批契约与 helper。
+- UI 提供无业务语义的标准 CRUD 字段和表单骨架。
+- Shell 接管 lookup 加载、动作状态、权限动作过滤、summary 状态协议和详情编辑流程。
+- Organization 人员中心接入第二批平台能力，通用字段渲染、级联 lookup 状态机和 summary 状态协议不再散落在人员组件中。
+
+当前推荐下一步：
+
+- 选择下一批标准 CRUD 资源试点，或继续拆解后端 required field / 数据一致性主线。
+
+### 4.2 前端标准 CRUD 平台化第一批
 
 状态：已完成并验证。
 
@@ -57,9 +78,9 @@
 
 当前推荐下一步：
 
-- 按设计第 14.2 节继续第二批：字段渲染器、lookup、动作扩展、summary block、权限动作过滤和 i18n key 解析。
+- 第一批列表/详情 Host 已稳定接管；第二批可独立回滚，不影响第一批列表/详情 Host。
 
-### 4.2 标准 CRUD 路由自动映射与人员旧样板退场
+### 4.3 标准 CRUD 路由自动映射与人员旧样板退场
 
 状态：已完成并验证。
 
@@ -87,7 +108,7 @@
 - `345efed0`：重构：人员中心前端消费标准CRUD模型
 - `65494edd`：验证：记录标准CRUD自动映射收口结果
 
-### 4.3 EID 值协议平台化
+### 4.4 EID 值协议平台化
 
 状态：已完成并验证。
 
@@ -117,11 +138,11 @@
 
 ## 5. 当前推荐下一步
 
-当前不建议直接扩大功能面。前端标准 CRUD 第一批已经收口，下一轮如果继续本主线，应优先按既有设计第 14.2 节推进第二批，并继续保持单一任务、设计先行和可验证收口。
+当前不建议直接扩大功能面。前端标准 CRUD 第二批已经收口，下一轮如果继续本主线，应优先选择下一批标准 CRUD 资源试点；如果转向后端主线，应继续拆解 required field / 数据一致性问题，并继续保持单一任务、设计先行和可验证收口。
 
 推荐优先级：
 
-1. 若继续前端标准 CRUD 主线，按设计第 14.2 节推进字段渲染器、lookup、动作扩展、summary block、权限动作过滤和 i18n key 解析。
+1. 若继续前端标准 CRUD 主线，选择下一批标准 CRUD 资源试点，逐个确认字段、lookup、动作、summary 和模块专属能力边界。
 2. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
 3. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
 4. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
@@ -158,7 +179,31 @@
 
 ## 7. 验证快照
 
-最近一次前端标准 CRUD 第一批验证覆盖：
+最近一次前端标准 CRUD 第二批验证覆盖：
+
+```powershell
+pnpm --dir .\frontend --filter @icp-platform/sdk build
+pnpm --dir .\frontend --filter @icp-platform/ui build
+pnpm --dir .\frontend --filter @icp-platform/shell test
+pnpm --dir .\frontend --filter @icp-platform/shell build
+pnpm --dir .\frontend --filter @icp-modules/organization build
+rg -n "PersonEditorForm|getCompanies|getDepartments|getPositions|employmentStatusOptions|resolveListText|resolveDetailText|AuthorizationSummaryCard|PersonUserLinkCard" frontend/modules/organization/src frontend/packages
+```
+
+验证结论：
+
+- `@icp-platform/sdk` 构建通过。
+- `@icp-platform/ui` 构建通过。
+- `@icp-platform/shell` 测试通过，38 files / 131 tests。
+- `@icp-platform/shell` 构建通过。
+- `@icp-modules/organization` 构建通过。
+- 残留扫描中，`getCompanies/getDepartments/getPositions` 保留在 Organization service、人员资源 lookup providers、组织树和岗位管理页面中；人员表单 lookup 已通过标准 provider/runtime 消费，不再在 `PersonEditorForm` 或创建页散落通用状态机。
+- `employmentStatusOptions` 保留为人员资源 enum option 数据和旧标签 helper 数据源。
+- `PersonUserLinkCard`、`AuthorizationSummaryCard` 保留为 Organization 专属 summary renderer 内容组件，平台只处理状态协议。
+- `PersonEditorForm` 只剩兼容包装，显示“人员编辑表单已由标准 CRUD 表单接管。”
+- `resolveListText/resolveDetailText` 无命中。
+
+前端标准 CRUD 第一批验证覆盖：
 
 ```powershell
 pnpm --dir .\frontend --filter @icp-platform/sdk build
@@ -174,7 +219,7 @@ rg -n "PersonEditorForm|getCompanies|getDepartments|getPositions|PersonUserLinkC
 
 - SDK、UI、Shell 和 Organization 前端构建通过，Shell 测试通过。
 - 标准 CRUD 类型与 helper 已由 SDK 提供，Shell Host 已接管人员中心列表/详情主流程。
-- 第二批暂留项已登记在 `docs/verification/frontend-standard-crud-platformization-phase-1-verification.md`，下一步入口是设计第 14.2 节。
+- 第二批暂留项已在 `docs/verification/frontend-standard-crud-platformization-phase-2-verification.md` 中完成收缩解释。
 
 上一轮标准 CRUD 自动映射验证覆盖：
 
@@ -199,10 +244,12 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 本文档是当前快照，不应把它当作长期 authoring 真源。
 - 如果只更新计划或验证记录而不更新本文档，下一次交接可能读到过期推荐下一步。
 - 历史阶段文档中仍可能出现旧推荐语，应以本文件和对应任务的最新计划、验证记录为准。
+- 前端标准 CRUD 第二批仍以 Person 资源为试点，下一批资源接入前需要重新确认字段、lookup、动作、summary 和模块专属能力边界。
 
 ## 9. 回滚思路
 
 - 如果交接口径写错，只改本文档，不需要修改原始设计、计划或验证记录。
+- 如果前端标准 CRUD 第二批需要回滚，可反向回滚第二批 SDK/UI/Shell 运行时和 Organization 接入提交；第二批可独立回滚，不影响第一批列表/详情 Host。
 - 如果标准 CRUD 自动映射需要回滚，应按本轮最近相关提交反向 revert，并优先恢复 `PersonsController` 等旧样板前确认对应设计、计划和验证记录中的边界变化。
 - 如果 EID 值协议需要回滚，应按最近相关提交反向 revert，并优先回到对应设计和计划确认影响范围。
 - 如果下一步方向选择变化，先更新本文件第 5 节，再补对应设计或计划，避免多个入口同时表达不同推荐。

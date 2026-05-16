@@ -1932,7 +1932,7 @@ git commit -m "重构：人员中心接入标准CRUD第二批能力"
 - Create: `docs/verification/frontend-standard-crud-platformization-phase-2-verification.md`
 - Modify: `docs/phases/current-handoff.md`
 
-- [ ] **Step 1: 执行第二批验证命令**
+- [x] **Step 1: 执行第二批验证命令**
 
 Run:
 
@@ -1950,7 +1950,7 @@ Expected:
 - SDK、UI、Shell 测试、Shell 构建和 Organization 构建通过。
 - 残留扫描命中项必须能解释为专属语义、lookup provider 或兼容包装；不能再出现通用表单字段渲染和 lookup 加载状态机散落在人员组件中。
 
-- [ ] **Step 2: 创建第二批验证记录**
+- [x] **Step 2: 创建第二批验证记录**
 
 Create `docs/verification/frontend-standard-crud-platformization-phase-2-verification.md`:
 
@@ -2011,7 +2011,7 @@ rg -n "PersonEditorForm|getCompanies|getDepartments|getPositions|employmentStatu
 - 保留第一批列表/详情 Host 接管结果不变。
 ```
 
-- [ ] **Step 3: 回填 current handoff**
+- [x] **Step 3: 回填 current handoff**
 
 Modify `docs/phases/current-handoff.md`:
 
@@ -2022,7 +2022,7 @@ Modify `docs/phases/current-handoff.md`:
 - 验证快照追加第二批执行命令和残留扫描结论。
 - 回滚思路追加“第二批可独立回滚，不影响第一批列表/详情 Host”。
 
-- [ ] **Step 4: 自检文档无空洞标记**
+- [x] **Step 4: 自检文档无空洞标记**
 
 Run:
 
@@ -2032,7 +2032,7 @@ rg -n "T[B]D|T[O]DO|待[补]|占[位]|稍[后]" docs/verification/frontend-stand
 
 Expected: no output。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add docs/verification/frontend-standard-crud-platformization-phase-2-verification.md docs/phases/current-handoff.md

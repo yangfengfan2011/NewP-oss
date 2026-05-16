@@ -76,27 +76,45 @@ export {
 
 export type {
   StandardCrudClient,
+  StandardCrudActionContext,
+  StandardCrudActionDefinition,
+  StandardCrudActionHandler,
   StandardCrudDetail,
   StandardCrudDetailExtensionContext,
+  StandardCrudFieldDefinition,
+  StandardCrudFieldKind,
+  StandardCrudFormMode,
+  StandardCrudFormSection,
   StandardCrudListExtensionContext,
   StandardCrudListResult,
+  StandardCrudLookupConfig,
+  StandardCrudLookupProvider,
+  StandardCrudLookupRequest,
   StandardCrudMutationValues,
+  StandardCrudOption,
   StandardCrudResourceRegistration,
   StandardCrudSummaryBlock,
+  StandardCrudSummaryRenderer,
+  StandardCrudSummaryRendererContext,
   StandardCrudSummaryStatus,
   StandardCrudTableColumn,
 } from './standardCrud';
 
 export {
+  buildStandardCrudI18nLabel,
   buildStandardCrudPath,
   createStandardCrudClient,
   isStandardCrudRecord,
+  normalizeStandardCrudSubmitValues,
   normalizeStandardCrudDetail,
   normalizeStandardCrudListResult,
   normalizeStandardCrudSummaryBlock,
+  preserveStandardCrudCurrentOption,
+  readStandardCrudFieldValue,
   readStandardCrudBoolean,
   readStandardCrudNullableString,
   readStandardCrudString,
+  resolveStandardCrudSummaryMessage,
 } from './standardCrud';
 
 export interface I18nResource {

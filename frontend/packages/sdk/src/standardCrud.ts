@@ -28,6 +28,97 @@ export interface StandardCrudDetail {
 /** 标准 create/update 请求体外形，字段含义由模块资源注册和后端 descriptor 共同约束。 */
 export type StandardCrudMutationValues = Record<string, unknown>;
 
+/** 标准 CRUD 字段类型只描述渲染意图，具体控件流程由 Shell 运行时按资源注册装配。 */
+export type StandardCrudFieldKind = 'text' | 'boolean' | 'enum' | 'lookup' | 'date' | 'readonly';
+
+/** 标准 CRUD 选项外形；SDK 不解释业务枚举，只提供 lookup 和 enum 的稳定值/标签契约。 */
+export interface StandardCrudOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+/** lookup 请求上下文；依赖字段值由 Shell 收集，Provider 只接收可序列化输入。 */
+export interface StandardCrudLookupRequest {
+  fieldKey: string;
+  keyword?: string;
+  values: Record<string, unknown>;
+  dependencyValues: Record<string, unknown>;
+}
+
+/** lookup Provider 只返回候选项，不拥有当前值保留、加载状态或错误展示流程。 */
+export interface StandardCrudLookupProvider {
+  key: string;
+  load: (request: StandardCrudLookupRequest) => Promise<StandardCrudOption[]>;
+}
+
+/** lookup 字段声明；第二批只声明能力，触发时机和依赖刷新由 Shell 运行时负责。 */
+export interface StandardCrudLookupConfig {
+  providerKey: string;
+  dependsOn?: string[];
+  placeholder?: string;
+  currentValueLabelField?: string;
+}
+
+/** 表单字段声明；元数据只表达字段是什么和允许什么，不承载提交流程。 */
+export interface StandardCrudFieldDefinition {
+  key: string;
+  labelKey: string;
+  modelField: string;
+  kind: StandardCrudFieldKind;
+  fallbackFields?: string[];
+  required?: boolean;
+  readOnly?: boolean;
+  trim?: boolean;
+  emptyAsNull?: boolean;
+  defaultValue?: unknown;
+  options?: StandardCrudOption[];
+  lookup?: StandardCrudLookupConfig;
+}
+
+/** 表单分区声明；字段布局归属可静态校验，真实渲染和模式切换仍由 Shell 管理。 */
+export interface StandardCrudFormSection {
+  key: string;
+  titleKey: string;
+  fields: string[];
+}
+
+/** 标准 CRUD 表单模式；模块用它声明动作边界，Shell 用它选择运行时流程。 */
+export type StandardCrudFormMode = 'create' | 'edit' | 'view';
+
+/** 标准动作声明；这里只描述入口和权限，不描述执行顺序、回滚或弹窗流程。 */
+export interface StandardCrudActionDefinition {
+  key: string;
+  labelKey: string;
+  variant?: 'default' | 'primary' | 'danger';
+  standardAction?: 'create' | 'edit' | 'refresh' | 'disable' | 'submit';
+  confirmMessage?: string;
+  requiredPermissions?: string[];
+}
+
+/** 标准动作上下文；Shell 提供当前资源和数据快照，模块处理器不得依赖 Shell 内部状态。 */
+export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> {
+  id?: string;
+  detail?: TDetail;
+  row?: TRow;
+  refresh: () => void;
+}
+
+/** 标准动作处理器；执行流程、错误边界和刷新策略由 Shell 运行时收口。 */
+export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = (
+  context: StandardCrudActionContext<TDetail, TRow>,
+) => void | Promise<void>;
+
+/** 摘要渲染上下文；模块只接收规范化摘要块和详情数据，不读取 Host 私有状态。 */
+export interface StandardCrudSummaryRendererContext<TData = unknown> {
+  blockKey: string;
+  block: StandardCrudSummaryBlock<TData>;
+  title: string;
+}
+
+/** 摘要渲染器声明；空态、异常态和装载流程由 Shell 统一处理后再调用模块渲染。 */
+export type StandardCrudSummaryRenderer<TData = unknown> = (context: StandardCrudSummaryRendererContext<TData>) => ReactNode;
+
 /** 标准列表列声明；复杂单元格可通过受控 render 回调保留在模块边界内。 */
 export interface StandardCrudTableColumn<TRow> {
   key: string;
@@ -58,8 +149,8 @@ export interface StandardCrudDetailExtensionContext<TDetail> {
 /**
  * 模块向 Shell 注册标准 CRUD 资源的公共契约。
  *
- * 第一批仅承接列表/详情主流程和受控扩展回调；字段渲染协议、动作协议、lookup
- * 和 summary block renderer 不在这里展开，避免把第二批能力提前固化成过宽元数据。
+ * 第一批承接列表/详情主流程；第二批继续声明字段、表单、lookup、动作和 summary
+ * renderer 的稳定扩展点。具体加载、执行、状态切换和回滚仍由 Shell 运行时收口。
  */
 export interface StandardCrudResourceRegistration<
   TFilter = Record<string, string>,
@@ -72,6 +163,16 @@ export interface StandardCrudResourceRegistration<
   detailViewKey?: string;
   detailRoutePath?: string;
   permissions?: string[];
+  // 第二批扩展只声明资源允许的平台化能力；lookup 加载、动作状态、summary 状态和提交流程仍由 Shell 运行时执行。
+  fields?: StandardCrudFieldDefinition[];
+  formSections?: StandardCrudFormSection[];
+  lookupProviders?: StandardCrudLookupProvider[];
+  listActions?: StandardCrudActionDefinition[];
+  detailActions?: StandardCrudActionDefinition[];
+  actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
+  summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
+  buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
+  validateMutationValues?: (values: Record<string, unknown>, mode: StandardCrudFormMode) => string | null;
   createEmptyFilters: () => TFilter;
   buildListQuery: (filters: TFilter) => Record<string, string | number | boolean | null | undefined>;
   mapListItem: (value: unknown) => TRow;
@@ -139,6 +240,89 @@ export function readStandardCrudBoolean(value: unknown, keys: string[], fallback
   }
 
   return fallback;
+}
+
+/** 构建标准 CRUD i18n key；空字典或空局部 key 不拼接多余分隔符，便于模块渐进迁移。 */
+export function buildStandardCrudI18nLabel(dicKey: string, localKey: string): string {
+  if (dicKey.length === 0) {
+    return localKey;
+  }
+  if (localKey.length === 0) {
+    return dicKey;
+  }
+
+  return `${dicKey}.${localKey}`;
+}
+
+/** 按 modelField 读取字段值；字段存在即保留 null 语义，只有缺失时才继续查 fallbackFields。 */
+export function readStandardCrudFieldValue(
+  record: Record<string, unknown>,
+  field: StandardCrudFieldDefinition,
+): unknown {
+  const keys = [field.modelField, ...(field.fallbackFields ?? [])];
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      return record[key] ?? null;
+    }
+  }
+
+  return null;
+}
+
+/** 规范化表单提交值；只处理纯数据转换，校验、保存和回滚流程留给 Shell 运行时。 */
+export function normalizeStandardCrudSubmitValues(
+  fields: StandardCrudFieldDefinition[],
+  values: Record<string, unknown>,
+): StandardCrudMutationValues {
+  const result: StandardCrudMutationValues = {};
+
+  for (const field of fields) {
+    if (field.readOnly) {
+      continue;
+    }
+
+    const hasValue = Object.prototype.hasOwnProperty.call(values, field.key);
+    let nextValue = hasValue ? values[field.key] : field.defaultValue ?? null;
+    if (field.trim && typeof nextValue === 'string') {
+      nextValue = nextValue.trim();
+    }
+    if (field.emptyAsNull && nextValue === '') {
+      nextValue = null;
+    }
+
+    result[field.modelField] = nextValue;
+  }
+
+  return result;
+}
+
+/** provider 未返回当前值时把当前选项放到首位，避免编辑表单因枚举分页丢失已有显示。 */
+export function preserveStandardCrudCurrentOption(
+  options: StandardCrudOption[],
+  current?: StandardCrudOption | null,
+): StandardCrudOption[] {
+  if (!current?.value) {
+    return options;
+  }
+
+  if (options.some((option) => option.value === current.value)) {
+    return options;
+  }
+
+  return [current, ...options];
+}
+
+/** 将标准摘要状态映射为 Shell 可直接展示的默认提示，模块仍可用 renderer 覆盖具体内容。 */
+export function resolveStandardCrudSummaryMessage(block: StandardCrudSummaryBlock): string {
+  if (block.status === 'notConfigured') {
+    return '暂未配置';
+  }
+  if (block.status === 'dependencyUnavailable') {
+    return '依赖不可用';
+  }
+
+  return '';
 }
 
 /** 兼容第一批前的数组摘要，同时把平台标准状态收敛成稳定 summary block。 */

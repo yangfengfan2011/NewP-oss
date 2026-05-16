@@ -92,7 +92,7 @@
 - Read: `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
 - Read: `frontend/modules/organization/src/components/PersonEditorForm.tsx`
 
-- [ ] **Step 1: 确认工作区没有需要切分的冲突**
+- [x] **Step 1: 确认工作区没有需要切分的冲突**
 
 Run:
 
@@ -102,7 +102,7 @@ git status --short
 
 Expected: 允许看到本计划文档或用户已有文档改动；如果同一批前端文件已有未提交改动，先阅读对应 diff，不能覆盖用户改动。
 
-- [ ] **Step 2: 确认第二批入口与边界**
+- [x] **Step 2: 确认第二批入口与边界**
 
 Run:
 
@@ -112,7 +112,7 @@ Select-String -Path .\docs\superpowers\specs\platform\2026-05-12-frontend-standa
 
 Expected: 输出包含第二批固定交付清单、验收条件、回滚和验证建议。
 
-- [ ] **Step 3: 扫描第一批暂留项**
+- [x] **Step 3: 扫描第一批暂留项**
 
 Run:
 
@@ -122,7 +122,7 @@ rg -n "PersonEditorForm|getCompanies|getDepartments|getPositions|resolveListText
 
 Expected: 命中 `PersonEditorForm`、组织归属 lookup、人员专属 summary card 和状态选项；这些命中是第二批收缩输入，不是立即删除目标。
 
-- [ ] **Step 4: 记录一致性 review 结论**
+- [x] **Step 4: 记录一致性 review 结论**
 
 在 task runner summary 中记录以下结论，不创建额外仓库文件：
 
@@ -135,7 +135,7 @@ Expected: 命中 `PersonEditorForm`、组织归属 lookup、人员专属 summary
 - Organization 只声明人员资源配置、组织归属 lookup provider、人员账号绑定与授权摘要专属 renderer、必要业务校验。
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 No commit for Task 0. This task is a pre-flight gate.
 
@@ -148,7 +148,7 @@ No commit for Task 0. This task is a pre-flight gate.
 - Modify: `frontend/packages/sdk/src/index.ts`
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-phase2-sdk.test.ts`
 
-- [ ] **Step 1: 写 SDK 第二批失败测试**
+- [x] **Step 1: 写 SDK 第二批失败测试**
 
 Create `frontend/packages/shell/src/__tests__/standard-crud-phase2-sdk.test.ts`:
 
@@ -217,7 +217,7 @@ describe('standard CRUD phase 2 SDK helpers', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -227,7 +227,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-phase2-
 
 Expected: FAIL，提示 `buildStandardCrudI18nLabel`、`StandardCrudFieldDefinition` 或其他第二批导出尚不存在。
 
-- [ ] **Step 3: 新增 SDK 第二批类型**
+- [x] **Step 3: 新增 SDK 第二批类型**
 
 Append these exports to `frontend/packages/sdk/src/standardCrud.ts` after the first-batch registration types:
 
@@ -331,7 +331,7 @@ Add a Chinese comment before the optional fields:
   // 第二批扩展只声明资源允许的平台化能力；lookup 加载、动作状态、summary 状态和提交流程仍由 Shell 运行时执行。
 ```
 
-- [ ] **Step 4: 新增 SDK helper 实现**
+- [x] **Step 4: 新增 SDK helper 实现**
 
 Add these functions to `frontend/packages/sdk/src/standardCrud.ts`:
 
@@ -412,7 +412,7 @@ export function resolveStandardCrudSummaryMessage(block: StandardCrudSummaryBloc
 }
 ```
 
-- [ ] **Step 5: 从 SDK 入口导出第二批能力**
+- [x] **Step 5: 从 SDK 入口导出第二批能力**
 
 Confirm `frontend/packages/sdk/src/index.ts` uses the existing star export or add:
 
@@ -422,7 +422,7 @@ export * from './standardCrud';
 
 Expected: `@icp-platform/sdk` consumers can import every new type/helper from package root.
 
-- [ ] **Step 6: 运行 SDK 第二批测试**
+- [x] **Step 6: 运行 SDK 第二批测试**
 
 Run:
 
@@ -432,7 +432,7 @@ pnpm --dir .\frontend --filter @icp-platform/shell test -- standard-crud-phase2-
 
 Expected: PASS。
 
-- [ ] **Step 7: 运行 SDK 构建**
+- [x] **Step 7: 运行 SDK 构建**
 
 Run:
 
@@ -442,7 +442,7 @@ pnpm --dir .\frontend --filter @icp-platform/sdk build
 
 Expected: PASS。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add frontend/packages/sdk/src/standardCrud.ts frontend/packages/sdk/src/index.ts frontend/packages/shell/src/__tests__/standard-crud-phase2-sdk.test.ts

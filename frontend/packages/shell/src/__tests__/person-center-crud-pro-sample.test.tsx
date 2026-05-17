@@ -12,6 +12,12 @@ import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+}
+
 const organizationServiceMocks = vi.hoisted(() => ({
   getCompanies: vi.fn(async () => []),
   getDepartments: vi.fn(async () => []),
@@ -42,6 +48,39 @@ function findAntdButtonByText(container: ParentNode, text: string): HTMLElement 
   return Array.from(container.querySelectorAll<HTMLElement>('button.ant-btn, a.ant-btn')).find(
     (button) => button.textContent?.includes(text),
   );
+}
+
+function findAntdButtonsByText(container: ParentNode, text: string): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>('button.ant-btn, a.ant-btn')).filter(
+    (button) => button.textContent?.includes(text),
+  );
+}
+
+function findInputByLabel(container: ParentNode, labelText: string): HTMLInputElement | null {
+  const label = Array.from(container.querySelectorAll('label')).find((candidate) => candidate.textContent?.includes(labelText));
+  if (!label) {
+    return null;
+  }
+
+  const fieldId = label.getAttribute('for');
+  if (!fieldId) {
+    return null;
+  }
+
+  const ownerDocument = container instanceof Document ? container : container.ownerDocument;
+  const field = ownerDocument?.getElementById(fieldId);
+  return field instanceof HTMLInputElement ? field : null;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve'];
+  let reject!: Deferred<T>['reject'];
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, resolve, reject };
 }
 
 function renderHost(container: HTMLElement, initialEntries = ['/organization/persons']) {
@@ -216,5 +255,135 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
 
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
+  });
+
+  it('乱序详情响应不会回写当前编辑抽屉的数据', async () => {
+    const person1Detail = createDeferred<Response>();
+    const person2Detail = createDeferred<Response>();
+
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/person-1')) {
+        return person1Detail.promise;
+      }
+      if (url.includes('/person-2')) {
+        return person2Detail.promise;
+      }
+
+      return new Response(JSON.stringify({
+        items: [
+          { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true },
+          { EID: 'person-2', PersonNo: 'P0002', ENAME: '李四', IsEnabled: true },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const editButtons = findAntdButtonsByText(container, '编辑');
+    expect(editButtons).toHaveLength(2);
+
+    await act(async () => {
+      editButtons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      editButtons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    person2Detail.resolve(new Response(JSON.stringify({
+      fields: {
+        EID: 'person-2',
+        PersonNo: 'P0002',
+        ENAME: '李四',
+        IsEnabled: true,
+      },
+      summaries: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await flushAsync();
+
+    expect(findInputByLabel(document.body, '姓名')?.value).toBe('李四');
+
+    person1Detail.resolve(new Response(JSON.stringify({
+      fields: {
+        EID: 'person-1',
+        PersonNo: 'P0001',
+        ENAME: '张三',
+        IsEnabled: true,
+      },
+      summaries: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await flushAsync();
+
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('编辑人员');
+    expect(findInputByLabel(document.body, '姓名')?.value).toBe('李四');
+  });
+
+  it('编辑详情加载失败时保留详情抽屉错误而不是打开空编辑表单', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/person-1')) {
+        throw new Error('详情加载失败，请稍后重试');
+      }
+
+      return new Response(JSON.stringify({
+        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const editButton = findAntdButtonByText(container, '编辑');
+    await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+    expect(document.body.textContent).toContain('详情加载失败，请稍后重试');
+    expect(document.body.textContent).not.toContain('保存修改');
+    expect(findInputByLabel(document.body, '姓名')).toBeNull();
+  });
+
+  it('新建抽屉中的工号字段可编辑', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const createButton = findAntdButtonByText(container, '新建人员');
+    await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    const personNoInput = findInputByLabel(document.body, '工号');
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
+    expect(personNoInput).not.toBeNull();
+    expect(personNoInput?.readOnly).toBe(false);
   });
 });

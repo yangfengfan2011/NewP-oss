@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useMemo, useRef, useState, type ReactElement } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
@@ -8,7 +8,7 @@ import {
   normalizeStandardCrudSubmitValues,
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
-import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { Button as AntdButton } from 'antd';
 import {
   CrudDetailDrawer,
@@ -47,6 +47,27 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
   mode: 'closed',
   source: 'user-action',
 };
+
+function resolveCreateFormFields(fields: StandardCrudFieldDefinition[]): StandardCrudFieldDefinition[] {
+  return fields.map((field) => {
+    // SDK 目前没有 create-only readOnly 契约；这里仅放开“创建时必填且非 readonly-kind”的字段，
+    // 避免首次录入被 UI 锁死，同时不把详情页只读约束整体打穿到创建态。
+    if (field.readOnly === true && field.kind !== 'readonly' && field.required === true) {
+      return { ...field, readOnly: false };
+    }
+
+    return field;
+  });
+}
+
+function resolveDrawerTitle(actionLabel: string | undefined, fallbackAction: '新建' | '编辑', resourceTitle: string): string {
+  const normalizedActionLabel = actionLabel?.trim();
+  if (normalizedActionLabel) {
+    return normalizedActionLabel;
+  }
+
+  return `${fallbackAction}${resourceTitle}`;
+}
 
 export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
@@ -92,6 +113,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const detailRequestIdRef = useRef(0);
 
   const context = {
     filters,
@@ -107,42 +129,81 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     rows,
     total,
   };
+  const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
   const editFields = registration.fields ?? [];
+  const createFields = useMemo(() => resolveCreateFormFields(editFields), [editFields]);
+  const activeFormFields = drawerState.mode === 'create' ? createFields : drawerState.mode === 'edit' ? editFields : [];
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
-    fields: editFields,
+    fields: activeFormFields,
     providers: registration.lookupProviders ?? [],
     values: formValues,
     detailFields,
   });
 
+  const invalidateDetailRequests = () => {
+    detailRequestIdRef.current += 1;
+  };
+
+  const closeDrawer = () => {
+    invalidateDetailRequests();
+    setDetailLoading(false);
+    setDrawerState(CLOSED_DRAWER_STATE);
+  };
+
   const openCreateDrawer = (source: CrudDrawerState['source'] = 'user-action') => {
-    const initialValues = Object.fromEntries(editFields.map((field) => [field.key, field.defaultValue ?? '']));
+    invalidateDetailRequests();
+    const initialValues = Object.fromEntries(createFields.map((field) => [field.key, field.defaultValue ?? '']));
     setDetailFields({});
+    setDetailLoading(false);
     setFormValues(initialValues);
     setDetailError(null);
     setSaveError(null);
     setDrawerState({ mode: 'create', source });
   };
 
-  const openViewDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action') => {
+  const openViewDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action'): Promise<boolean> => {
+    const requestId = detailRequestIdRef.current + 1;
+    detailRequestIdRef.current = requestId;
     setDrawerState({ mode: 'view', id, source });
     setDetailLoading(true);
     setDetailError(null);
     setSaveError(null);
     try {
       const detail = await client.getDetail(id);
+      if (detailRequestIdRef.current !== requestId) {
+        return false;
+      }
+
       setDetailFields(detail.fields);
       setFormValues(buildStandardCrudDetailFormValues(detail.fields, editFields));
+      return true;
     } catch (loadError) {
+      if (detailRequestIdRef.current !== requestId) {
+        return false;
+      }
+
+      setDetailFields({});
+      setFormValues({});
       setDetailError(loadError instanceof Error ? loadError.message : '加载详情失败');
+      return false;
     } finally {
-      setDetailLoading(false);
+      if (detailRequestIdRef.current === requestId) {
+        setDetailLoading(false);
+      }
     }
   };
 
   const openEditDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action') => {
-    await openViewDrawer(id, source);
-    setDrawerState({ mode: 'edit', id, source });
+    const loaded = await openViewDrawer(id, source);
+    if (!loaded) {
+      return;
+    }
+
+    setDrawerState((current) => (
+      current.mode === 'view' && current.id === id
+        ? { mode: 'edit', id, source }
+        : current
+    ));
   };
 
   const handleDrawerSave = async () => {
@@ -160,7 +221,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }
 
       context.refresh();
-      setDrawerState(CLOSED_DRAWER_STATE);
+      closeDrawer();
     } catch (saveFailure) {
       setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
     } finally {
@@ -169,7 +230,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const handleFormChange = (fieldKey: string, value: unknown) => {
-    setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, editFields));
+    const fields = drawerState.mode === 'create' ? createFields : editFields;
+    setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
   };
 
   const tableRequest = useMemo(
@@ -217,6 +279,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   ) : undefined;
 
   const createAction = registration.listActions?.find((action) => action.standardAction === 'create');
+  const editAction = registration.listActions?.find((action) => action.standardAction === 'edit');
   const refreshAction = registration.listActions?.find((action) => action.standardAction === 'refresh');
   const rowActionDefinitions = registration.listActions?.filter((action) => (
     !['create', 'refresh', 'view', 'edit'].includes(action.standardAction ?? '')
@@ -274,11 +337,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     context.refresh();
   };
 
-  const listPanelTitle = decoratedRegistration.listPanelTitle ?? `${t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}列表`;
+  const listPanelTitle = decoratedRegistration.listPanelTitle ?? `${pageTitle}列表`;
   const pageCount = Math.max(1, Math.ceil(total / Math.max(1, pageInfo.pageSize)));
   const tablePageSummary = total > 0 ? (
     <span className="np-list-card-page-summary">{`第 ${pageInfo.page} / ${pageCount} 页`}</span>
   ) : null;
+  const createDrawerTitle = resolveDrawerTitle(createAction?.labelKey, '新建', pageTitle);
+  const editDrawerTitle = resolveDrawerTitle(editAction?.labelKey, '编辑', pageTitle);
 
   const content = (
     <div className="np-standard-crud-table">
@@ -299,7 +364,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       <CrudWorkspacePage
-        title={t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}
+        title={pageTitle}
         description={t(`${schema.dicKey}.${schema.descriptionKey}`, schema.descriptionKey)}
         primaryActions={headerActions}
         filterBar={filterBar}
@@ -308,26 +373,26 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       </CrudWorkspacePage>
       <CrudDetailDrawer
         open={drawerState.mode === 'view'}
-        title={t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}
+        title={pageTitle}
         dataSource={buildStandardCrudDetailPreviewData(detailFields, editFields)}
         columns={buildStandardCrudDetailColumns(detailFields, editFields)}
         loading={detailLoading}
         error={detailError}
         actions={<AntdButton type="primary" onClick={() => drawerState.id && void openEditDrawer(drawerState.id)}>编辑</AntdButton>}
-        onClose={() => setDrawerState(CLOSED_DRAWER_STATE)}
+        onClose={closeDrawer}
       />
       <CrudFormDrawer
         open={drawerState.mode === 'create' || drawerState.mode === 'edit'}
-        title={drawerState.mode === 'create' ? '新建人员' : '编辑人员'}
+        title={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
         saving={saving}
         error={saveError}
         onSubmit={() => void handleDrawerSave()}
-        onClose={() => setDrawerState(CLOSED_DRAWER_STATE)}
+        onClose={closeDrawer}
       >
         <StandardCrudForm
           formId={`${schema.resourceKey}-drawer-form`}
           mode={drawerState.mode === 'create' ? 'create' : 'edit'}
-          fields={editFields}
+          fields={drawerState.mode === 'create' ? createFields : editFields}
           sections={registration.formSections ?? []}
           values={formValues}
           lookupOptions={lookupOptions}

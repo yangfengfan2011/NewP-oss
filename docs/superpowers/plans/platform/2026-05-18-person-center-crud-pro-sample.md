@@ -958,7 +958,7 @@ import { Button, ErrorState, StatusTag } from '@icp-platform/ui';
 
 - [ ] **Step 4：行操作不再拥有页面跳转**
 
-移除 `PersonRowActions` 里的查看/编辑 `window.location.assign`。让 Shell 统一渲染 `view/edit`。
+删除 `PersonRowActions`，并移除资源注册中的 `renderRowActions`。让 Shell 统一渲染 `view/edit/disable`，避免模块私有行操作和标准动作同时渲染导致“停用”重复出现。
 
 资源动作声明改为：
 
@@ -1133,23 +1133,43 @@ actionHandlers: {
 
 - [ ] **Step 4：实现声明式删除渲染**
 
-在 `StandardCrudListPageHost.tsx` 的行级动作映射中，对 `delete` 使用：
+在 `StandardCrudListPageHost.tsx` 中增加删除动作状态：
+
+```tsx
+const [deleteActionError, setDeleteActionError] = useState<string | null>(null);
+const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
+```
+
+在行级动作映射中，对 `delete` 使用：
 
 ```tsx
 {action.standardAction === 'delete' ? (
   <CrudDangerAction
     key={action.key}
     confirmMessage={action.confirmMessage ?? `确认${action.labelKey}吗？`}
+    loading={deletingActionKey === `${action.key}:${registration.getRowId(row)}`}
+    disabled={deletingActionKey !== null}
     onConfirm={async () => {
       const id = registration.getRowId(row);
-      if (registration.actionHandlers?.[action.key]) {
-        await registration.actionHandlers[action.key]({ id, row, refresh: context.refresh });
-      } else {
-        await client.delete(id);
-        context.refresh();
-      }
-      if (drawerState.id === id) {
-        setDrawerState(CLOSED_DRAWER_STATE);
+      const pendingKey = `${action.key}:${id}`;
+
+      try {
+        setDeletingActionKey(pendingKey);
+        setDeleteActionError(null);
+
+        if (registration.actionHandlers?.[action.key]) {
+          await registration.actionHandlers[action.key]({ id, row, refresh: context.refresh });
+        } else {
+          await client.delete(id);
+          context.refresh();
+        }
+        if (drawerState.id === id) {
+          setDrawerState(CLOSED_DRAWER_STATE);
+        }
+      } catch (deleteError) {
+        setDeleteActionError(deleteError instanceof Error ? deleteError.message : '删除人员失败');
+      } finally {
+        setDeletingActionKey(null);
       }
     }}
   >
@@ -1158,7 +1178,17 @@ actionHandlers: {
 ) : null}
 ```
 
-不要在资源未声明时合成删除按钮。
+在操作列附近渲染错误：
+
+```tsx
+{deleteActionError ? (
+  <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
+    {deleteActionError}
+  </span>
+) : null}
+```
+
+不要在资源未声明时合成删除按钮；删除失败必须留在可见的危险动作区域，不刷新列表，也不关闭当前抽屉。
 
 - [ ] **Step 5：增加刷新不重置筛选的测试**
 
@@ -1492,7 +1522,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
   - `pnpm --dir frontend --filter @icp-platform/ui build`
   - `pnpm --dir frontend --filter @icp-platform/shell build`
   - `pnpm --dir frontend --filter @icp-modules/organization build`
-- 已知风险：人员中心若后端暂无删除接口，则删除仅作为平台协议能力保留，不展示人员删除入口。
+- 已知风险：人员删除本轮先沿用资源级权限边界；独立删除权限后续需要另起设计细化。已绑定账号等业务冲突由 `PersonCrudDeleteGuard` 拒绝，并应在危险动作区域可见展示。
 - 回滚：回退 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为回滚入口。
 ```
 

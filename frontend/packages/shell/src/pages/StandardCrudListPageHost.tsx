@@ -11,6 +11,7 @@ import {
 import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { Button as AntdButton } from 'antd';
 import {
+  CrudDangerAction,
   CrudDetailDrawer,
   CrudFormDrawer,
   CrudSearchBar,
@@ -98,6 +99,10 @@ function resolveDrawerTitle(
   return `${fallbackAction}${resourceTitle}`;
 }
 
+function hasActionPermission(action: { requiredPermissions?: string[] }, grantedPermissions: string[] = []): boolean {
+  return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
+}
+
 export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveListViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
@@ -142,6 +147,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteActionError, setDeleteActionError] = useState<string | null>(null);
+  const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
   const detailRequestIdRef = useRef(0);
 
   const context = {
@@ -310,31 +317,86 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const createAction = registration.listActions?.find((action) => action.standardAction === 'create');
   const editAction = registration.listActions?.find((action) => action.standardAction === 'edit');
   const refreshAction = registration.listActions?.find((action) => action.standardAction === 'refresh');
+  const deleteActionDefinitions = registration.listActions?.filter((action) => action.standardAction === 'delete') ?? [];
   const rowActionDefinitions = registration.listActions?.filter((action) => (
-    !['create', 'refresh', 'view', 'edit'].includes(action.standardAction ?? '')
+    !['create', 'refresh', 'view', 'edit', 'delete'].includes(action.standardAction ?? '')
   )) ?? [];
-  const shouldRenderActionColumn = Boolean(registration.renderRowActions || rowActionDefinitions.length > 0 || registration.getRowId);
+  const shouldRenderActionColumn = Boolean(
+    registration.renderRowActions
+    || deleteActionDefinitions.length > 0
+    || rowActionDefinitions.length > 0
+    || registration.getRowId,
+  );
   const standardColumns = shouldRenderActionColumn
     ? [
       ...registration.buildColumns(context),
       {
         key: 'actions',
         title: '操作',
-        render: (row: TRow) => (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <AntdButton type="link" onClick={() => void openViewDrawer(registration.getRowId(row))}>查看</AntdButton>
-            <AntdButton type="link" onClick={() => void openEditDrawer(registration.getRowId(row))}>编辑</AntdButton>
-            {registration.renderRowActions ? registration.renderRowActions(row, context) : null}
-            {rowActionDefinitions.length > 0 ? (
-              <StandardCrudActions
-                actions={rowActionDefinitions}
-                grantedPermissions={registration.permissions}
-                handlers={registration.actionHandlers}
-                context={{ id: registration.getRowId(row), row, refresh: context.refresh }}
-              />
-            ) : null}
-          </div>
-        ),
+        render: (row: TRow) => {
+          const rowId = registration.getRowId(row);
+
+          return (
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <AntdButton type="link" onClick={() => void openViewDrawer(rowId)}>查看</AntdButton>
+                <AntdButton type="link" onClick={() => void openEditDrawer(rowId)}>编辑</AntdButton>
+                {deleteActionDefinitions
+                  .filter((action) => hasActionPermission(action, registration.permissions))
+                  .map((action) => {
+                    const pendingKey = `${action.key}:${rowId}`;
+
+                    return (
+                      <CrudDangerAction
+                        key={action.key}
+                        confirmMessage={action.confirmMessage ?? `确认${action.labelKey}吗？`}
+                        loading={deletingActionKey === pendingKey}
+                        disabled={deletingActionKey !== null}
+                        onConfirm={async () => {
+                          try {
+                            setDeletingActionKey(pendingKey);
+                            setDeleteActionError(null);
+
+                            const handler = registration.actionHandlers?.[action.key];
+                            if (handler) {
+                              await handler({ id: rowId, row, refresh: context.refresh });
+                            } else {
+                              await client.delete(rowId);
+                              context.refresh();
+                            }
+
+                            if (drawerState.id === rowId) {
+                              closeDrawer();
+                            }
+                          } catch (deleteError) {
+                            setDeleteActionError(deleteError instanceof Error ? deleteError.message : '删除标准资源失败');
+                          } finally {
+                            setDeletingActionKey(null);
+                          }
+                        }}
+                      >
+                        {action.labelKey}
+                      </CrudDangerAction>
+                    );
+                  })}
+                {registration.renderRowActions ? registration.renderRowActions(row, context) : null}
+                {rowActionDefinitions.length > 0 ? (
+                  <StandardCrudActions
+                    actions={rowActionDefinitions}
+                    grantedPermissions={registration.permissions}
+                    handlers={registration.actionHandlers}
+                    context={{ id: rowId, row, refresh: context.refresh }}
+                  />
+                ) : null}
+              </div>
+              {deleteActionError ? (
+                <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
+                  {deleteActionError}
+                </span>
+              ) : null}
+            </div>
+          );
+        },
       },
     ]
     : registration.buildColumns(context);

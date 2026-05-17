@@ -12,6 +12,7 @@ import { ErrorState, StatusTag } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
+  deletePerson,
   disablePerson,
   employmentStatusOptions,
   getCompanies,
@@ -280,10 +281,19 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     { key: 'refresh', labelKey: '刷新', variant: 'default', standardAction: 'refresh' },
     { key: 'view', labelKey: '查看', standardAction: 'view' },
     { key: 'edit', labelKey: '编辑', standardAction: 'edit' },
+    { key: 'delete', labelKey: '删除', variant: 'danger', standardAction: 'delete', confirmMessage: '确认删除该人员吗？' },
     { key: 'disable', labelKey: '停用', variant: 'danger', standardAction: 'disable', confirmMessage: '确认停用该人员？' },
   ],
   actionHandlers: {
     refresh: ({ refresh }) => {
+      refresh();
+    },
+    delete: async ({ id, refresh }) => {
+      if (!id) {
+        throw new Error('缺少人员标识，无法删除。');
+      }
+
+      await deletePerson(id);
       refresh();
     },
     disable: async ({ id, refresh }) => {

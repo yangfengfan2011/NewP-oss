@@ -45,14 +45,14 @@ async function flushAsync() {
 }
 
 function findAntdButtonByText(container: ParentNode, text: string): HTMLElement | undefined {
-  return Array.from(container.querySelectorAll<HTMLElement>('button.ant-btn, a.ant-btn')).find(
-    (button) => button.textContent?.includes(text),
+  return Array.from(container.querySelectorAll<HTMLElement>('button, a, [role="button"]')).find(
+    (button) => button.textContent?.replace(/\s+/g, '').includes(text.replace(/\s+/g, '')),
   );
 }
 
 function findAntdButtonsByText(container: ParentNode, text: string): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>('button.ant-btn, a.ant-btn')).filter(
-    (button) => button.textContent?.includes(text),
+  return Array.from(container.querySelectorAll<HTMLElement>('button, a, [role="button"]')).filter(
+    (button) => button.textContent?.replace(/\s+/g, '').includes(text.replace(/\s+/g, '')),
   );
 }
 
@@ -81,6 +81,13 @@ function createDeferred<T>(): Deferred<T> {
   });
 
   return { promise, resolve, reject };
+}
+
+function setReactInputValue(input: HTMLInputElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function renderHost(container: HTMLElement, initialEntries = ['/organization/persons']) {
@@ -385,5 +392,104 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
     expect(personNoInput).not.toBeNull();
     expect(personNoInput?.readOnly).toBe(false);
+  });
+
+  it('人员中心声明删除时按危险确认动作渲染', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const deleteButton = findAntdButtonByText(container, '删除');
+    expect(deleteButton).toBeDefined();
+
+    await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(document.body.textContent).toContain('确认删除该人员吗？');
+  });
+
+  it('资源未声明删除时不展示删除入口', async () => {
+    const resource = organizationModule.standardCrudResources?.[0];
+    if (!resource) {
+      throw new Error('未找到人员标准 CRUD 资源。');
+    }
+
+    const sampleModule = {
+      ...organizationModule,
+      standardCrudResources: [{
+        ...resource,
+        listActions: resource.listActions?.filter((action) => action.standardAction !== 'delete'),
+        actionHandlers: Object.fromEntries(
+          Object.entries(resource.actionHandlers ?? {}).filter(([key]) => key !== 'delete'),
+        ),
+      }],
+    };
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    expect(container.textContent).not.toContain('删除');
+    expect(container.textContent).toContain('停用');
+  });
+
+  it('刷新当前查询时不重置筛选条件', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const keyword = container.querySelector('input[placeholder="按工号 / 姓名搜索"]');
+    expect(keyword).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      setReactInputValue(keyword as HTMLInputElement, 'P0001');
+    });
+
+    const searchButton = findAntdButtonByText(document.body, '搜索');
+    expect(searchButton).toBeDefined();
+    await act(async () => searchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    const refreshButton = findAntdButtonByText(document.body, '刷新');
+    expect(refreshButton).toBeDefined();
+    await act(async () => refreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(String(fetcher.mock.calls.at(-1)?.[0] ?? '')).toContain('keyword=P0001');
   });
 });

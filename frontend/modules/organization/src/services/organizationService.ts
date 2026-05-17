@@ -270,6 +270,14 @@ export async function updatePerson(personId: string, values: StandardCrudMutatio
   );
 }
 
+export async function deletePerson(personId: string): Promise<void> {
+  await requestJson<void>(
+    `/api/organization/persons/${personId}`,
+    { method: 'DELETE' },
+    '删除人员失败',
+  );
+}
+
 export async function disablePerson(personId: string): Promise<PersonDetailView> {
   return mapPersonDetailView(
     await requestJson<unknown>(

@@ -1015,7 +1015,7 @@ git commit -m "重构：人员中心筛选与动作接入平台样板"
 - 修改：`frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
 - 修改：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
-- [ ] **Step 1：增加删除协议失败测试**
+- [x] **Step 1：增加删除协议失败测试**
 
 在 `person-center-crud-pro-sample.test.tsx` 追加：
 
@@ -1080,13 +1080,13 @@ it('资源未声明删除时不展示删除入口', async () => {
 });
 ```
 
-- [ ] **Step 2：运行失败测试**
+- [x] **Step 2：运行失败测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
 预期：失败，直到人员资源显式声明 `delete`，且 `delete` 只在资源声明时出现，并通过 `CrudDangerAction` 渲染。
 
-- [ ] **Step 3：为人员中心声明删除动作**
+- [x] **Step 3：为人员中心声明删除动作**
 
 在 `frontend/modules/organization/src/services/organizationService.ts` 增加：
 
@@ -1131,7 +1131,7 @@ actionHandlers: {
 
 后端已有 `DELETE /api/organization/persons/{id}` 和 `PersonCrudDeleteGuard`；本任务不新增后端 API，只接入现有标准 CRUD 删除能力。
 
-- [ ] **Step 4：实现声明式删除渲染**
+- [x] **Step 4：实现声明式删除渲染**
 
 在 `StandardCrudListPageHost.tsx` 中增加删除动作状态：
 
@@ -1190,7 +1190,7 @@ const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
 
 不要在资源未声明时合成删除按钮；删除失败必须留在可见的危险动作区域，不刷新列表，也不关闭当前抽屉。
 
-- [ ] **Step 5：增加刷新不重置筛选的测试**
+- [x] **Step 5：增加刷新不重置筛选的测试**
 
 在 `person-center-crud-pro-sample.test.tsx` 增加：
 
@@ -1230,13 +1230,13 @@ it('刷新当前查询时不重置筛选条件', async () => {
 });
 ```
 
-- [ ] **Step 6：运行删除与刷新测试**
+- [x] **Step 6：运行删除与刷新测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
 预期：通过。
 
-- [ ] **Step 7：提交**
+- [x] **Step 7：提交**
 
 ```powershell
 git add frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/modules/organization/src/services/organizationService.ts frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx

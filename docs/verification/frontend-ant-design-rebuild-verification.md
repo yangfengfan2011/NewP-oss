@@ -24,7 +24,7 @@
   - File center pages.
   - Plugin operations pages.
   - Metadata configuration center pages.
-- Recommended next rebuild order: Config management, Authorization center, File center, Plugin operations, Metadata configuration center.
+- Current next-step guidance: choose the next CRUD Pro sample or page-family rebuild through a separate design/plan; Config management is only one candidate page family, not the default next step.
 - Known risks:
   - Ant Design / Pro Components emit jsdom warnings such as `findDOMNode`, `contentStyle` deprecation, and React Router future-flag notices during tests. Assertions pass; these warnings are not current failure signals.
   - Shell bundle still has a large main chunk after Ant Design and Pro Components introduction. Code splitting or manual chunks should be a separate design.

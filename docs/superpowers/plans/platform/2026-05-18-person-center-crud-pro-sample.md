@@ -371,7 +371,7 @@ git commit -m "功能：新增CRUD Pro页面组件"
 - 修改：`frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`
 - 测试：`frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`
 
-- [ ] **Step 1：先写失败测试**
+- [x] **Step 1：先写失败测试**
 
 在 `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts` 增加：
 
@@ -388,13 +388,13 @@ it('通过标准客户端删除标准 CRUD 资源', async () => {
 });
 ```
 
-- [ ] **Step 2：运行失败测试**
+- [x] **Step 2：运行失败测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk`
 
 预期：失败，原因是 `StandardCrudClient` 还没有 `delete`。
 
-- [ ] **Step 3：扩展 SDK 类型和客户端**
+- [x] **Step 3：扩展 SDK 类型和客户端**
 
 在 `frontend/packages/sdk/src/standardCrud.ts` 中，将 `StandardCrudActionDefinition.standardAction` 改为：
 
@@ -427,7 +427,7 @@ delete: (id) =>
   ),
 ```
 
-- [ ] **Step 4：更新动作运行时危险动作确认**
+- [x] **Step 4：更新动作运行时危险动作确认**
 
 在 `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx` 中，从 `@icp-platform/ui` 引入 `CrudDangerAction`，并移除既有 `window.confirm` 分支。危险动作统一通过 AntD `Popconfirm` 风格的 `CrudDangerAction` 呈现，避免浏览器原生确认框破坏后台页面体验。
 
@@ -461,13 +461,13 @@ if (isDangerAction && action.confirmMessage) {
 
 不要从平台侧推断 `disable`，只有资源显式声明时才展示；`delete` 也只代表平台具备协议和默认危险动作渲染能力，不代表所有资源都必须出现删除入口。
 
-- [ ] **Step 5：再次运行测试**
+- [x] **Step 5：再次运行测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk`
 
 预期：通过。
 
-- [ ] **Step 6：提交**
+- [x] **Step 6：提交**
 
 ```powershell
 git add frontend/packages/sdk/src/standardCrud.ts frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts

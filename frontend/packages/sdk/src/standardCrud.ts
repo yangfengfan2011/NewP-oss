@@ -118,7 +118,7 @@ export interface StandardCrudActionDefinition {
   key: string;
   labelKey: string;
   variant?: 'default' | 'primary' | 'danger';
-  standardAction?: 'create' | 'edit' | 'refresh' | 'disable' | 'submit';
+  standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'submit';
   confirmMessage?: string;
   requiredPermissions?: string[];
 }
@@ -220,6 +220,7 @@ export interface StandardCrudClient {
   getDetail: (id: string) => Promise<StandardCrudDetail>;
   create: (values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   update: (id: string, values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
+  delete: (id: string) => Promise<void>;
   disable: (id: string) => Promise<StandardCrudDetail>;
 }
 
@@ -664,6 +665,13 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
           },
           '保存标准资源失败',
         ),
+      ),
+    delete: (id) =>
+      requestJson<void>(
+        fetcher,
+        `${apiRoute}/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        '删除标准资源失败',
       ),
     disable: async (id) =>
       normalizeStandardCrudDetail(

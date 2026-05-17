@@ -87,4 +87,13 @@ describe('standard CRUD SDK helpers', () => {
     expect(fetcher).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'GET' });
     expect(detail.fields).toEqual({ EID: 'Person_1' });
   });
+
+  it('通过标准客户端删除标准 CRUD 资源', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const client = createStandardCrudClient('/api/sample-items', fetcher as unknown as typeof fetch);
+
+    await client.delete('item-1');
+
+    expect(fetcher).toHaveBeenCalledWith('/api/sample-items/item-1', { method: 'DELETE' });
+  });
 });

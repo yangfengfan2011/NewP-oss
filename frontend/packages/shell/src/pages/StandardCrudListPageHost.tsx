@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
@@ -131,6 +132,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<TFilter, TRow>;
 }): ReactElement {
+  const location = useLocation();
   const { t } = useLocalization();
   const decoratedRegistration = registration as StandardCrudResourceRegistration<TFilter, TRow> & {
     listPanelTitle?: string;
@@ -155,6 +157,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [deleteActionError, setDeleteActionError] = useState<DeleteActionErrorState | null>(null);
   const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
   const detailRequestIdRef = useRef(0);
+  const handledRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
   drawerStateRef.current = drawerState;
 
@@ -284,6 +287,28 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const fields = drawerState.mode === 'create' ? createFields : editFields;
     setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
   };
+
+  useEffect(() => {
+    if (handledRouteSearchRef.current === location.search) {
+      return;
+    }
+
+    handledRouteSearchRef.current = location.search;
+    const params = new URLSearchParams(location.search);
+    const drawer = params.get('drawer');
+    const id = params.get('id') ?? undefined;
+
+    // 旧入口只负责把 URL 查询参数投影成当前抽屉态；实际详情加载和错误边界仍由 Host 统一处理。
+    if (drawer === 'create') {
+      openCreateDrawer('route-compatibility');
+    }
+    if (drawer === 'view' && id) {
+      void openViewDrawer(id, 'route-compatibility');
+    }
+    if (drawer === 'edit' && id) {
+      void openEditDrawer(id, 'route-compatibility');
+    }
+  }, [location.search]);
 
   const tableRequest = useMemo(
     () =>

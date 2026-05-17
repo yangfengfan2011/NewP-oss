@@ -187,6 +187,7 @@ export interface StandardCrudResourceRegistration<
   resourceKey: string;
   apiRoute: string;
   listViewKey: string;
+  listRoutePath?: string;
   detailViewKey?: string;
   detailRoutePath?: string;
   listPanelTitle?: string;

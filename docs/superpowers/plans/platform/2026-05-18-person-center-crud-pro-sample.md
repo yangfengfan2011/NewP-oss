@@ -1254,7 +1254,7 @@ git commit -m "功能：收口CRUD删除与刷新协议"
 - 修改：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 - 修改：`frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx`
 
-- [ ] **Step 1：增加查询参数打开抽屉的失败测试**
+- [x] **Step 1：增加查询参数打开抽屉的失败测试**
 
 在 `person-center-crud-pro-sample.test.tsx` 追加：
 
@@ -1281,13 +1281,13 @@ it('通过路由兼容查询参数打开新建抽屉', async () => {
 });
 ```
 
-- [ ] **Step 2：运行失败测试**
+- [x] **Step 2：运行失败测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
 预期：失败，因为列表 Host 尚未读取 `drawer` 查询参数。
 
-- [ ] **Step 3：列表 Host 读取抽屉查询参数**
+- [x] **Step 3：列表 Host 读取抽屉查询参数**
 
 在 `StandardCrudListPageHost.tsx` 中引入 `useLocation`，并增加：
 
@@ -1313,7 +1313,7 @@ useEffect(() => {
 
 将 `openCreateDrawer/openViewDrawer/openEditDrawer` 的 `source` 参数默认值设为 `'user-action'`。
 
-- [ ] **Step 4：给既有列表 Host 测试补 Router**
+- [x] **Step 4：给既有列表 Host 测试补 Router**
 
 因为 `StandardCrudListPageHost` 开始读取 `useLocation`，所有直接渲染该 Host 的测试都必须包在 Router 内。在 `frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx` 中引入：
 
@@ -1357,7 +1357,7 @@ function renderStandardCrudListHost() {
 }
 ```
 
-- [ ] **Step 5：App 消费抽屉路由兼容声明**
+- [x] **Step 5：App 消费抽屉路由兼容声明**
 
 在 `App.tsx` 中从 `standardCrudRouteAdapter` 引入 `buildStandardCrudDrawerRouteRedirects`，让 Shell 只消费平台 route adapter 结果，不写 `/organization/persons/new` 这类人员中心特例：
 
@@ -1400,7 +1400,7 @@ const { metadataEntries, standardCrudDetailEntries, standardCrudDrawerRedirects,
 ))}
 ```
 
-- [ ] **Step 6：增加 route adapter 测试和实现**
+- [x] **Step 6：增加 route adapter 测试和实现**
 
 在 `standard-crud-route-adapter.test.tsx` 中引入新 helper：
 
@@ -1467,13 +1467,13 @@ export function buildStandardCrudDrawerRouteRedirects(modules: FrontendModule[])
 }
 ```
 
-- [ ] **Step 7：运行路由兼容测试**
+- [x] **Step 7：运行路由兼容测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample standard-crud-route-adapter`
 
 预期：通过。
 
-- [ ] **Step 8：提交**
+- [x] **Step 8：提交**
 
 ```powershell
 git add frontend/packages/sdk/src/standardCrud.ts frontend/packages/shell/src/App.tsx frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx

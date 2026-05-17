@@ -419,6 +419,27 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(personNoInput?.readOnly).toBe(false);
   });
 
+  it('通过路由兼容查询参数打开新建抽屉', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container, ['/organization/persons?drawer=create']);
+    });
+    await flushAsync();
+
+    expect(document.body.textContent).toContain('新建人员');
+    expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
+  });
+
   it('人员中心声明删除时按危险确认动作渲染', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({

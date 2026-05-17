@@ -28,6 +28,7 @@ import {
 } from './navigation/pageEntryAdapter';
 import {
   buildStandardCrudDetailRouteEntries,
+  buildStandardCrudDrawerRouteRedirects,
   filterFallbackRoutesByStandardCrudRoutes,
 } from './navigation/standardCrudRouteAdapter';
 import { renderPageEntry } from './navigation/pageRouteRenderer';
@@ -60,10 +61,11 @@ function StandardCrudDetailRoute({ viewKey }: { viewKey: string }) {
 function AppRoutes() {
   const runtimeMetadata = useRuntimeMetadata();
   // 路由接管语义统一下沉到 adapter，这里只消费结果，避免 App 自己再分叉出权限或冲突规则。
-  const { metadataEntries, standardCrudDetailEntries, fallbackRoutes } = useMemo(() => {
+  const { metadataEntries, standardCrudDetailEntries, standardCrudDrawerRedirects, fallbackRoutes } = useMemo(() => {
     const modules = ModuleRegistry.getAllModules();
     const moduleRoutes = ModuleRegistry.getRoutes();
     const standardCrudRoutes = buildStandardCrudDetailRouteEntries(modules, moduleRoutes);
+    const standardCrudDrawerRedirects = buildStandardCrudDrawerRouteRedirects(modules);
     const projectedEntries = runtimeMetadata
       ? buildPageEntriesFromNavDocuments(runtimeMetadata.navDocuments)
       : [];
@@ -73,6 +75,7 @@ function AppRoutes() {
     return {
       metadataEntries: routeableMetadataEntries,
       standardCrudDetailEntries: standardCrudRoutes,
+      standardCrudDrawerRedirects,
       fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(metadataFilteredRoutes, standardCrudRoutes),
     };
   }, [runtimeMetadata]);
@@ -102,6 +105,9 @@ function AppRoutes() {
               renderPageEntry(entry)
             )}
           />
+        ))}
+        {standardCrudDrawerRedirects.map((entry) => (
+          <Route key={entry.from} path={entry.from} element={<Navigate to={entry.to} replace />} />
         ))}
         {standardCrudDetailEntries.map((entry) => (
           <Route

@@ -6,6 +6,11 @@ export interface StandardCrudDetailRouteEntry {
   permissions?: string[];
 }
 
+export interface StandardCrudDrawerRouteRedirect {
+  from: string;
+  to: string;
+}
+
 export function buildStandardCrudDetailRouteEntries(
   modules: FrontendModule[],
   moduleRoutes: RouteConfig[],
@@ -46,6 +51,21 @@ export function buildStandardCrudDetailRouteEntries(
   }
 
   return resolvedEntries;
+}
+
+export function buildStandardCrudDrawerRouteRedirects(modules: FrontendModule[]): StandardCrudDrawerRouteRedirect[] {
+  return modules.flatMap((module) =>
+    (module.standardCrudResources ?? []).flatMap((resource) => {
+      if (!resource.listRoutePath) {
+        return [];
+      }
+
+      return [{
+        from: `${resource.listRoutePath}/new`,
+        to: `${resource.listRoutePath}?drawer=create`,
+      }];
+    }),
+  );
 }
 
 export function filterFallbackRoutesByStandardCrudRoutes(

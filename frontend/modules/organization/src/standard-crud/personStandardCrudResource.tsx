@@ -265,6 +265,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   resourceKey: 'organization.person',
   apiRoute: '/api/organization/persons',
   listViewKey: 'organization.person.list',
+  listRoutePath: '/organization/persons',
   detailViewKey: 'organization.person.detail',
   detailRoutePath: '/organization/persons/:id',
   listPanelTitle: '人员列表',

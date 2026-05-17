@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FrontendModule, RouteConfig } from '@icp-platform/sdk';
 import {
   buildStandardCrudDetailRouteEntries,
+  buildStandardCrudDrawerRouteRedirects,
   filterFallbackRoutesByStandardCrudRoutes,
 } from '../navigation/standardCrudRouteAdapter';
 
@@ -13,6 +14,7 @@ const modules: FrontendModule[] = [
         resourceKey: 'organization.person',
         apiRoute: '/api/organization/persons',
         listViewKey: 'organization.person.list',
+        listRoutePath: '/organization/persons',
         detailViewKey: 'organization.person.detail',
         detailRoutePath: '/organization/persons/:id',
         createEmptyFilters: () => ({}),
@@ -48,6 +50,15 @@ describe('standard CRUD route adapter', () => {
 
     expect(filterFallbackRoutesByStandardCrudRoutes(fallbackRoutes, entries).map((route) => route.path)).toEqual([
       '/organization/persons',
+    ]);
+  });
+
+  it('为抽屉入口兼容构建旧新建路由重定向', () => {
+    expect(buildStandardCrudDrawerRouteRedirects(modules)).toEqual([
+      {
+        from: '/organization/persons/new',
+        to: '/organization/persons?drawer=create',
+      },
     ]);
   });
 

@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -29,40 +30,42 @@ describe('StandardCrudListPageHost', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <LocalizationProvider
-          defaultLanguage="zhs"
-          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{
-            zhs: {
-              'PersonListView.Title': '人员中心',
-              'PersonListView.Description': '维护组织模块中的人员基础信息。',
-            },
-          }}
-        >
-          <RuntimeMetadataProvider
-            value={{
-              manifest: { modules: [] },
-              navDocuments: [],
-              modelDocuments: [],
-              viewDocuments: [
-                {
-                  type: 'view',
-                  view: {
-                    key: 'organization.person.list',
-                    dicKey: 'PersonListView',
-                    titleKey: 'Title',
-                    descriptionKey: 'Description',
-                    mode: 'list',
-                    columns: [{ key: 'name', labelKey: 'Column_Name' }],
-                    pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh' }],
-                  },
-                },
-              ],
+        <MemoryRouter initialEntries={['/organization/persons']}>
+          <LocalizationProvider
+            defaultLanguage="zhs"
+            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+            catalogs={{
+              zhs: {
+                'PersonListView.Title': '人员中心',
+                'PersonListView.Description': '维护组织模块中的人员基础信息。',
+              },
             }}
           >
-            <StandardCrudListPageHost viewKey="organization.person.list" />
-          </RuntimeMetadataProvider>
-        </LocalizationProvider>,
+            <RuntimeMetadataProvider
+              value={{
+                manifest: { modules: [] },
+                navDocuments: [],
+                modelDocuments: [],
+                viewDocuments: [
+                  {
+                    type: 'view',
+                    view: {
+                      key: 'organization.person.list',
+                      dicKey: 'PersonListView',
+                      titleKey: 'Title',
+                      descriptionKey: 'Description',
+                      mode: 'list',
+                      columns: [{ key: 'name', labelKey: 'Column_Name' }],
+                      pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh' }],
+                    },
+                  },
+                ],
+              }}
+            >
+              <StandardCrudListPageHost viewKey="organization.person.list" />
+            </RuntimeMetadataProvider>
+          </LocalizationProvider>
+        </MemoryRouter>,
       );
     });
   }

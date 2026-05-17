@@ -29,6 +29,7 @@ const modules: FrontendModule[] = [
 
 const fallbackRoutes: RouteConfig[] = [
   { path: '/organization/persons', component: () => null, permissions: ['Organization.Person.View'] },
+  { path: '/organization/persons/new', component: () => null, permissions: ['Organization.Person.View'] },
   { path: '/organization/persons/:id', component: () => null, permissions: ['Organization.Person.View'] },
 ];
 
@@ -45,10 +46,13 @@ describe('standard CRUD route adapter', () => {
     ]);
   });
 
-  it('removes module fallback routes owned by standard CRUD detail routes', () => {
-    const entries = buildStandardCrudDetailRouteEntries(modules, fallbackRoutes);
+  it('removes module fallback routes owned by standard CRUD detail routes and drawer redirects', () => {
+    const detailEntries = buildStandardCrudDetailRouteEntries(modules, fallbackRoutes);
+    const drawerRedirects = buildStandardCrudDrawerRouteRedirects(modules);
 
-    expect(filterFallbackRoutesByStandardCrudRoutes(fallbackRoutes, entries).map((route) => route.path)).toEqual([
+    expect(
+      filterFallbackRoutesByStandardCrudRoutes(fallbackRoutes, detailEntries, drawerRedirects).map((route) => route.path),
+    ).toEqual([
       '/organization/persons',
     ]);
   });

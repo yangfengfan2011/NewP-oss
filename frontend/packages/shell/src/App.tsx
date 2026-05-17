@@ -76,7 +76,11 @@ function AppRoutes() {
       metadataEntries: routeableMetadataEntries,
       standardCrudDetailEntries: standardCrudRoutes,
       standardCrudDrawerRedirects,
-      fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(metadataFilteredRoutes, standardCrudRoutes),
+      fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(
+        metadataFilteredRoutes,
+        standardCrudRoutes,
+        standardCrudDrawerRedirects,
+      ),
     };
   }, [runtimeMetadata]);
 

@@ -71,7 +71,14 @@ export function buildStandardCrudDrawerRouteRedirects(modules: FrontendModule[])
 export function filterFallbackRoutesByStandardCrudRoutes(
   moduleRoutes: RouteConfig[],
   standardCrudRoutes: StandardCrudDetailRouteEntry[],
+  drawerRouteRedirects: StandardCrudDrawerRouteRedirect[] = [],
 ): RouteConfig[] {
-  const standardCrudPaths = new Set(standardCrudRoutes.map((entry) => entry.path));
-  return moduleRoutes.filter((route) => !standardCrudPaths.has(route.path));
+  // 标准 CRUD 一旦声明详情路由或旧入口抽屉重定向，即表示这些路径所有权已经被宿主接管；
+  // fallback route 必须整体让出，避免同一路径被重复渲染成页面与重定向。
+  const standardCrudOwnedPaths = new Set([
+    ...standardCrudRoutes.map((entry) => entry.path),
+    ...drawerRouteRedirects.map((entry) => entry.from),
+  ]);
+
+  return moduleRoutes.filter((route) => !standardCrudOwnedPaths.has(route.path));
 }

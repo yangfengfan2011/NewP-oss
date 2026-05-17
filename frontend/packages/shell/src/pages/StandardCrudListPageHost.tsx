@@ -60,10 +60,39 @@ function resolveCreateFormFields(fields: StandardCrudFieldDefinition[]): Standar
   });
 }
 
-function resolveDrawerTitle(actionLabel: string | undefined, fallbackAction: '新建' | '编辑', resourceTitle: string): string {
+function inferDrawerTitleFromCreateAction(
+  actionLabel: string,
+  fallbackAction: '新建' | '编辑',
+  createActionLabel: string | undefined,
+): string | null {
+  if (actionLabel !== fallbackAction) {
+    return null;
+  }
+
+  const normalizedCreateActionLabel = createActionLabel?.trim();
+  if (!normalizedCreateActionLabel?.startsWith('新建')) {
+    return null;
+  }
+
+  const inferredResourceSuffix = normalizedCreateActionLabel.slice('新建'.length).trim();
+  if (inferredResourceSuffix.length === 0) {
+    return null;
+  }
+
+  // 当动作标签只剩“编辑”这类短动词时，优先复用同资源“新建…”标签中的对象后缀，
+  // 保持抽屉标题语义完整，同时不把具体资源词汇硬编码进 Shell。
+  return `${fallbackAction}${inferredResourceSuffix}`;
+}
+
+function resolveDrawerTitle(
+  actionLabel: string | undefined,
+  fallbackAction: '新建' | '编辑',
+  resourceTitle: string,
+  createActionLabel?: string,
+): string {
   const normalizedActionLabel = actionLabel?.trim();
   if (normalizedActionLabel) {
-    return normalizedActionLabel;
+    return inferDrawerTitleFromCreateAction(normalizedActionLabel, fallbackAction, createActionLabel) ?? normalizedActionLabel;
   }
 
   return `${fallbackAction}${resourceTitle}`;
@@ -342,8 +371,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const tablePageSummary = total > 0 ? (
     <span className="np-list-card-page-summary">{`第 ${pageInfo.page} / ${pageCount} 页`}</span>
   ) : null;
-  const createDrawerTitle = resolveDrawerTitle(createAction?.labelKey, '新建', pageTitle);
-  const editDrawerTitle = resolveDrawerTitle(editAction?.labelKey, '编辑', pageTitle);
+  const createDrawerTitle = resolveDrawerTitle(createAction?.labelKey, '新建', pageTitle, createAction?.labelKey);
+  const editDrawerTitle = resolveDrawerTitle(editAction?.labelKey, '编辑', pageTitle, createAction?.labelKey);
 
   const content = (
     <div className="np-standard-crud-table">

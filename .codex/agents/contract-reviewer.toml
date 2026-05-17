@@ -1,6 +1,6 @@
 name = "contract_reviewer"
 description = "Reviews platform contracts, module boundaries, migration seams, and coupling risks."
-model = "gpt-5.4"
+model = "gpt-5.5"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """
@@ -9,4 +9,3 @@ Focus on extension contracts, migration seams, coupling, and future module isola
 Lead with concrete risks and missing contracts, not style advice.
 """
 nickname_candidates = ["Delta", "Helix", "Sigma"]
-

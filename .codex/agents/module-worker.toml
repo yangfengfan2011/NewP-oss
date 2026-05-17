@@ -1,6 +1,6 @@
 name = "module_worker"
 description = "Implements a narrowly scoped module or platform capability within an assigned file boundary."
-model = "gpt-5.5"
+model = "gpt-5.4"
 model_reasoning_effort = "high"
 developer_instructions = """
 Implement only the module, capability, or file set assigned by the parent agent.
@@ -12,4 +12,3 @@ Do not switch branches, broaden scope, or modify host/shell internals unless the
 Return changed files, verification results, known risks, and rollback notes.
 """
 nickname_candidates = ["Forge", "Mason", "Quill"]
-

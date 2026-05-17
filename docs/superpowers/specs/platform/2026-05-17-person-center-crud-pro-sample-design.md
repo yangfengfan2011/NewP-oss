@@ -63,7 +63,7 @@
 - Pro Components 只能通过平台 adapter 使用，不能反向决定平台契约。
 - 右侧抽屉是默认新增/编辑承载方式；弹窗只用于短小确认类表单；独立页面只用于复杂流程、深链接或回滚。
 - `disable` 是可选标准动作，不是平台 CRUD 必备动作。
-- 删除是平台必须提供的危险动作协议能力，但具体资源只有显式声明 `delete` 且具备稳定后端能力和独立权限时才展示删除入口。
+- 删除是平台必须提供的危险动作协议能力，但具体资源只有显式声明 `delete`、具备稳定后端能力并明确权限边界时才展示删除入口；人员中心本轮先继承资源权限，独立删除权限后续另起设计。
 
 ## 6. 总体方案
 
@@ -131,7 +131,7 @@ type OptionalCrudAction = 'disable' | 'enable' | 'export' | 'import' | 'bind' | 
 - `create` 放在页面标题区右侧。
 - `refresh` 放在表格卡片右上角，与密度和列设置同层。
 - `view / edit` 是行级普通操作。
-- `delete` 是平台内建危险动作协议；只有资源显式声明并具备后端能力和权限时才展示，展示后必须确认。
+- `delete` 是平台内建危险动作协议；只有资源显式声明并具备后端能力和明确权限边界时才展示，展示后必须确认。
 - `disable` 是可选标准动作；资源声明后才显示，且可选择是否按危险动作处理。
 
 ### 7.3 抽屉状态模型
@@ -235,7 +235,7 @@ interface CrudDrawerState {
 - `personStandardCrudResource.tsx`
   - 继续声明人员字段、筛选、columns、lookup、summary、actions、handlers、mapListItem、mapDetail 和 mutation 映射。
   - `disable` 保留为人员资源可选动作。
-  - `delete` 只有在后端和权限明确后才展示。
+  - 人员中心本轮显式声明 `delete`；后端已有标准 CRUD DELETE 端点，且 `PersonCrudDeleteGuard` 会在人员已绑定账号时稳定拒绝删除。
 
 ## 10. 数据与状态
 
@@ -279,13 +279,13 @@ interface CrudDrawerState {
 - 抽象过重：若第一版组件试图覆盖所有后台页面，会增加维护成本。
 - 路由和抽屉状态分叉：旧 URL、查询参数和内部状态如果没有统一规则，会让后续 Codex 难以理解。
 - 人员语义污染平台：`disable`、账号绑定、授权摘要等人员专属能力不能变成平台必备。
-- 删除接口缺失：如果后端没有稳定删除能力，前端不应展示假删除按钮。
+- 删除入口误开：只有确认后端 DELETE 端点、删除 guard 和权限边界存在时，资源才允许声明删除；人员中心本轮已具备标准 CRUD DELETE 与条件删除 guard。
 
 ### 11.3 风险控制
 
 - 第一版只服务 standard CRUD 样板，不扩展到复杂配置、树表、插件生命周期页面。
 - `disable` 明确为可选动作。
-- `delete` 先作为协议能力，人员中心是否启用按后端能力决定。
+- `delete` 先作为协议能力；人员中心本轮因后端标准 CRUD DELETE 和条件删除 guard 已存在，显式启用删除入口。
 - 独立详情页保留为回滚和深链接出口。
 - 每个状态机入口都补测试，尤其是旧路由自动打开抽屉。
 
@@ -310,12 +310,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 - 详情抽屉可进入编辑抽屉。
 - `/organization/persons/new` 回到列表并自动打开新建抽屉。
 - 刷新不重置筛选条件。
-- 资源声明 `delete` 后删除动作必须确认；若人员中心后端未支持删除，则按钮不展示。
+- 人员中心声明 `delete` 后删除动作必须确认；已绑定账号时后端 guard 应拒绝删除并在危险动作区域显示错误。
 - `disable` 作为人员资源可选动作展示，不影响其他 CRUD 资源。
 
 ## 13. 未决问题
 
-- 人员中心是否已有稳定删除后端接口和独立删除权限；若没有，第一版只落平台删除协议，不展示人员删除按钮。
+- 人员中心删除入口权限是否需要从现有 `Organization.Person.View` 拆为独立删除权限；本轮先依赖资源声明和后端条件删除 guard，后续权限细化另起设计。
 - 保存成功后表单抽屉默认关闭，还是切回详情抽屉；建议在实施计划中以测试明确。
 - 详情抽屉 URL 是否使用查询参数作为真源，还是仅由旧路由适配写入内部状态；建议优先使用查询参数，便于调试和回放。
 
@@ -326,9 +326,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 2. 升级 Shell standard CRUD Host。
    - 最小交付：列表、查看抽屉、新建抽屉、编辑抽屉、刷新状态机跑通。
 3. 接入人员中心。
-   - 最小交付：人员筛选改用 AntD 控件，查看/新增/编辑默认抽屉化，`disable` 作为可选动作保留。
+   - 最小交付：人员筛选改用 AntD 控件，查看/新增/编辑默认抽屉化，`disable` 作为可选动作保留，`delete` 显式声明并走标准危险动作确认。
 4. 增加删除协议。
-   - 最小交付：平台动作 runtime 支持 `delete` 确认、权限、loading、错误和刷新；人员中心按后端能力决定是否展示。
+   - 最小交付：平台动作 runtime 支持 `delete` 确认、权限、loading、错误和刷新；人员中心调用标准 CRUD DELETE，失败时展示后端 guard 错误。
 5. 增加旧路由兼容。
    - 最小交付：路由适配器生成 `/organization/persons/new` 到列表抽屉入口的兼容声明，并由 Shell 通用消费。
 6. 验证和文档收口。

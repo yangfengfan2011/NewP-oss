@@ -41,7 +41,9 @@
 - 修改 `frontend/packages/shell/src/App.tsx`
   - 消费 `standardCrudRouteAdapter` 生成的抽屉兼容重定向，不写人员中心专属路由特例。
 - 修改 `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
-  - 将原生筛选控件替换为 AntD 控件；移除行操作里的直接页面跳转；通过标准动作声明接入平台样板。
+  - 将原生筛选控件替换为 AntD 控件；移除行操作里的直接页面跳转；声明 `disable/delete` 动作并通过标准动作协议接入平台样板。
+- 修改 `frontend/modules/organization/src/services/organizationService.ts`
+  - 增加人员删除服务方法，调用既有标准 CRUD DELETE 端点。
 - 新建 `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
   - 覆盖新建/查看/编辑抽屉、刷新、删除协议、可选停用动作和路由兼容。
 - 修改既有测试：
@@ -739,7 +741,7 @@ function formatStandardCrudDetailValue(value: unknown): string {
 <AntdButton type="link" onClick={() => void openEditDrawer(registration.getRowId(row))}>编辑</AntdButton>
 ```
 
-过滤 `rowActionDefinitions` 时排除 `create`、`refresh`、`view`、`edit`、`delete`，只保留资源显式声明的可选动作，例如 `disable`。
+过滤 `rowActionDefinitions` 时只排除平台直接渲染的 `create`、`refresh`、`view`、`edit`；保留资源显式声明的 `delete` 和可选动作，例如 `disable`。`delete` 必须留给后续危险动作协议处理，不能在这里提前过滤掉。
 
 - [ ] **Step 7：渲染详情抽屉和表单抽屉**
 
@@ -970,7 +972,7 @@ listActions: [
 ],
 ```
 
-不要给人员资源增加 `delete`，除非后端删除接口和独立权限已经稳定存在。
+`delete` 在 Task 5 中接入；人员中心后端已有标准 CRUD DELETE 与条件删除 guard，本计划会在 Task 5 显式声明删除入口。
 
 - [ ] **Step 5：收口 action handler 边界**
 
@@ -1009,6 +1011,8 @@ git commit -m "重构：人员中心筛选与动作接入平台样板"
 
 **文件：**
 - 修改：`frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
+- 修改：`frontend/modules/organization/src/services/organizationService.ts`
+- 修改：`frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
 - 修改：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
 - [ ] **Step 1：增加删除协议失败测试**
@@ -1016,44 +1020,8 @@ git commit -m "重构：人员中心筛选与动作接入平台样板"
 在 `person-center-crud-pro-sample.test.tsx` 追加：
 
 ```tsx
-it('人员中心未声明删除时不展示删除入口', async () => {
+it('人员中心声明删除时按危险确认动作渲染', async () => {
   vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
-    items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
-    total: 1,
-    page: 1,
-    pageSize: 20,
-  }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-
-  container = document.createElement('div');
-  document.body.appendChild(container);
-
-  await act(async () => {
-    root = renderHost(container);
-  });
-  await flushAsync();
-
-  expect(container.textContent).not.toContain('删除');
-  expect(container.textContent).toContain('停用');
-});
-```
-
-再增加一个临时资源显式声明 `delete` 的测试：
-
-```tsx
-it('资源声明删除时按危险确认动作渲染', async () => {
-  const deleteHandler = vi.fn();
-  const sampleModule = {
-    ...organizationModule,
-    standardCrudResources: [{
-      ...organizationModule.standardCrudResources![0],
-      listActions: [
-        { key: 'delete', labelKey: '删除', standardAction: 'delete', confirmMessage: '确认删除该人员吗？' },
-      ],
-      actionHandlers: { delete: deleteHandler },
-    }],
-  };
-  vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
     items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
     total: 1,
@@ -1077,13 +1045,93 @@ it('资源声明删除时按危险确认动作渲染', async () => {
 });
 ```
 
+再增加一个临时资源移除 `delete` 声明的测试，确保平台不会自己合成删除入口：
+
+```tsx
+it('资源未声明删除时不展示删除入口', async () => {
+  const sampleModule = {
+    ...organizationModule,
+    standardCrudResources: [{
+      ...organizationModule.standardCrudResources![0],
+      listActions: organizationModule.standardCrudResources![0].listActions?.filter((action) => action.standardAction !== 'delete'),
+      actionHandlers: Object.fromEntries(
+        Object.entries(organizationModule.standardCrudResources![0].actionHandlers ?? {}).filter(([key]) => key !== 'delete'),
+      ),
+    }],
+  };
+  vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+    total: 1,
+    page: 1,
+    pageSize: 20,
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+  container = document.createElement('div');
+  document.body.appendChild(container);
+
+  await act(async () => {
+    root = renderHost(container);
+  });
+  await flushAsync();
+
+  expect(container.textContent).not.toContain('删除');
+  expect(container.textContent).toContain('停用');
+});
+```
+
 - [ ] **Step 2：运行失败测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
-预期：失败，直到 `delete` 只在资源声明时出现，并通过 `CrudDangerAction` 渲染。
+预期：失败，直到人员资源显式声明 `delete`，且 `delete` 只在资源声明时出现，并通过 `CrudDangerAction` 渲染。
 
-- [ ] **Step 3：实现声明式删除渲染**
+- [ ] **Step 3：为人员中心声明删除动作**
+
+在 `frontend/modules/organization/src/services/organizationService.ts` 增加：
+
+```ts
+export async function deletePerson(personId: string): Promise<void> {
+  await requestJson<void>(
+    `/api/organization/persons/${personId}`,
+    { method: 'DELETE' },
+    '删除人员失败',
+  );
+}
+```
+
+在 `personStandardCrudResource.tsx` 中引入并注册：
+
+```tsx
+import {
+  deletePerson,
+  disablePerson,
+  // ...保留既有导入
+} from '../services/organizationService';
+```
+
+```tsx
+listActions: [
+  { key: 'create', labelKey: '新建人员', variant: 'default', standardAction: 'create' },
+  { key: 'refresh', labelKey: '刷新', variant: 'primary', standardAction: 'refresh' },
+  { key: 'delete', labelKey: '删除', variant: 'danger', standardAction: 'delete', confirmMessage: '确认删除该人员吗？' },
+],
+actionHandlers: {
+  // 保留 create / refresh / disable
+  delete: async ({ id, refresh }) => {
+    if (!id) {
+      throw new Error('缺少人员标识，无法删除。');
+    }
+
+    await deletePerson(id);
+    refresh();
+  },
+},
+```
+
+后端已有 `DELETE /api/organization/persons/{id}` 和 `PersonCrudDeleteGuard`；本任务不新增后端 API，只接入现有标准 CRUD 删除能力。
+
+- [ ] **Step 4：实现声明式删除渲染**
 
 在 `StandardCrudListPageHost.tsx` 的行级动作映射中，对 `delete` 使用：
 
@@ -1112,7 +1160,7 @@ it('资源声明删除时按危险确认动作渲染', async () => {
 
 不要在资源未声明时合成删除按钮。
 
-- [ ] **Step 4：增加刷新不重置筛选的测试**
+- [ ] **Step 5：增加刷新不重置筛选的测试**
 
 在 `person-center-crud-pro-sample.test.tsx` 增加：
 
@@ -1152,16 +1200,16 @@ it('刷新当前查询时不重置筛选条件', async () => {
 });
 ```
 
-- [ ] **Step 5：运行删除与刷新测试**
+- [ ] **Step 6：运行删除与刷新测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
 预期：通过。
 
-- [ ] **Step 6：提交**
+- [ ] **Step 7：提交**
 
 ```powershell
-git add frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx
+git add frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/modules/organization/src/services/organizationService.ts frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx
 git commit -m "功能：收口CRUD删除与刷新协议"
 ```
 
@@ -1243,16 +1291,40 @@ useEffect(() => {
 import { MemoryRouter } from 'react-router-dom';
 ```
 
-将该文件内直接渲染 `StandardCrudListPageHost` 的测试包裹为：
+在该文件内抽一个测试 helper，复用现有 runtime metadata fixture，并替换两处直接渲染 `StandardCrudListPageHost` 的代码：
 
 ```tsx
-<MemoryRouter initialEntries={['/organization/persons']}>
-  <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}>
-    <RuntimeMetadataProvider value={runtimeMetadata}>
-      <StandardCrudListPageHost viewKey="organization.person.list" />
-    </RuntimeMetadataProvider>
-  </LocalizationProvider>
-</MemoryRouter>
+function renderStandardCrudListHost() {
+  root = createRoot(container);
+  root.render(
+    <MemoryRouter initialEntries={['/organization/persons']}>
+      <LocalizationProvider
+        defaultLanguage="zhs"
+        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+        catalogs={{ zhs: {} }}
+      >
+        <RuntimeMetadataProvider
+          value={{
+            manifest: { modules: [] },
+            navDocuments: [],
+            viewDocuments: [{
+              type: 'view',
+              view: {
+                key: 'organization.person.list',
+                mode: 'list',
+                titleKey: '人员中心',
+                descriptionKey: '人员列表维护',
+              },
+            }],
+            modelDocuments: [],
+          }}
+        >
+          <StandardCrudListPageHost viewKey="organization.person.list" />
+        </RuntimeMetadataProvider>
+      </LocalizationProvider>
+    </MemoryRouter>,
+  );
+}
 ```
 
 - [ ] **Step 5：App 消费抽屉路由兼容声明**
@@ -1272,14 +1344,20 @@ import {
 ```tsx
 const { metadataEntries, standardCrudDetailEntries, standardCrudDrawerRedirects, fallbackRoutes } = useMemo(() => {
   const modules = ModuleRegistry.getAllModules();
-  const standardCrudDetailEntries = buildStandardCrudDetailRouteEntries(modules);
+  const moduleRoutes = ModuleRegistry.getRoutes();
+  const standardCrudDetailEntries = buildStandardCrudDetailRouteEntries(modules, moduleRoutes);
   const standardCrudDrawerRedirects = buildStandardCrudDrawerRouteRedirects(modules);
+  const projectedEntries = runtimeMetadata
+    ? buildPageEntriesFromNavDocuments(runtimeMetadata.navDocuments)
+    : [];
+  const routeableMetadataEntries = resolveRouteableMetadataEntries(projectedEntries, moduleRoutes);
+  const metadataFilteredRoutes = filterFallbackRoutesByMetadataEntries(moduleRoutes, routeableMetadataEntries);
 
   return {
-    metadataEntries: buildMetadataRouteEntries(modules, runtimeMetadata),
+    metadataEntries: routeableMetadataEntries,
     standardCrudDetailEntries,
     standardCrudDrawerRedirects,
-    fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(buildFallbackRoutes(modules), standardCrudDetailEntries),
+    fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(metadataFilteredRoutes, standardCrudDetailEntries),
   };
 }, [runtimeMetadata]);
 ```
@@ -1408,7 +1486,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
 ## 人员中心后台 CRUD Pro 样板固化验证
 
 - 范围：标准 CRUD 列表工作台、详情抽屉、表单抽屉、刷新、删除协议、可选停用动作、旧新建路由兼容。
-- 结果：人员中心新增/查看/编辑默认使用右侧抽屉；独立详情页保留为深链接和回滚出口；`disable` 作为人员资源可选动作保留；`delete` 仅在资源显式声明时展示并走确认协议。
+- 结果：人员中心新增/查看/编辑默认使用右侧抽屉；独立详情页保留为深链接和回滚出口；`disable` 作为人员资源可选动作保留；人员中心显式声明 `delete`，删除走确认协议并调用既有标准 CRUD DELETE 端点。
 - 验证命令：
   - `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample organization-person-center-list-layout organization-person-center-detail-layout standard-crud-sdk`
   - `pnpm --dir frontend --filter @icp-platform/ui build`
@@ -1432,7 +1510,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
 - 人员中心作为平台第一版完整后台 CRUD 样板，覆盖列表、详情抽屉和表单抽屉。
 - 新增、查看、编辑默认在右侧抽屉完成，独立详情页保留为深链接和回滚出口。
 - 标准动作集收敛为 `create / refresh / view / edit`；平台提供 `delete` 危险动作协议能力，但只有资源显式声明并具备后端能力时才展示；`disable` 明确为可选标准动作。
-- 人员中心未强制展示删除入口；只有资源显式声明并具备后端能力时才展示删除。
+- 人员中心本轮显式展示删除入口；删除调用既有标准 CRUD DELETE，已绑定账号时由后端条件删除 guard 拒绝。
 ```
 
 同步调整“当前推荐下一步”，不要再默认把配置管理作为下一步。

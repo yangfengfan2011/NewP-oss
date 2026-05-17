@@ -1,67 +1,68 @@
-# Person Center CRUD Pro Sample Implementation Plan
+# 人员中心后台 CRUD Pro 样板固化实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **给执行代理的要求：** 实施本计划时必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，并按任务逐项执行。步骤使用复选框 `- [ ]` 记录进度。
 
-**Goal:** Build a reusable Ant Design Pro-style standard CRUD workspace and make Person Center the first complete list/detail/form drawer sample.
+**目标：** 建立可复用的 Ant Design Pro 风格标准 CRUD 工作台，并让人员中心成为第一套完整的列表、详情抽屉、表单抽屉样板。
 
-**Architecture:** Keep platform contracts as the source of truth. `frontend/packages/ui` owns business-free CRUD visual adapters, `frontend/packages/shell` orchestrates standard CRUD state, routing, permissions, actions, requests, drawers, and errors, and `frontend/modules/organization` only declares the person resource fields, filters, columns, lookup providers, summaries, and handlers.
+**架构：** 平台契约继续作为事实源。`frontend/packages/ui` 只提供无业务语义的 CRUD 视觉 adapter；`frontend/packages/shell` 负责编排 standard CRUD 状态、路由、权限、动作、请求、抽屉和错误；`frontend/modules/organization` 只声明人员资源字段、筛选、列、lookup、summary 和业务 handler。
 
-**Tech Stack:** React 18, TypeScript, Vite, Vitest, Ant Design v5, Ant Design Pro Components, pnpm workspace.
+**技术栈：** React 18、TypeScript、Vite、Vitest、Ant Design v5、Ant Design Pro Components、pnpm workspace。
 
 ---
 
-## File Structure
+## 文件结构
 
-- Create `frontend/packages/ui/src/pro-adapters/CrudWorkspacePage.tsx`
-  - Business-free page frame for title, description, primary actions, filter region, and content.
-- Create `frontend/packages/ui/src/pro-adapters/CrudSearchBar.tsx`
-  - Business-free AntD search bar layout with search/reset/more slots.
-- Create `frontend/packages/ui/src/pro-adapters/CrudTableSection.tsx`
-  - Business-free wrapper around `SearchTablePage` with list title, total, refresh toolbar, and table content.
-- Create `frontend/packages/ui/src/pro-adapters/CrudDetailDrawer.tsx`
-  - Business-free right-side detail drawer using `DetailPage`, summary slot, error/loading states, and action area.
-- Create `frontend/packages/ui/src/pro-adapters/CrudFormDrawer.tsx`
-  - Business-free right-side form drawer using `FormPage` and a sticky footer slot.
-- Create `frontend/packages/ui/src/pro-adapters/CrudDangerAction.tsx`
-  - Business-free danger action wrapper using AntD `Popconfirm`, loading, and error rendering.
-- Modify `frontend/packages/ui/src/index.ts`
-  - Export the new CRUD Pro adapters.
-- Modify `frontend/packages/sdk/src/standardCrud.ts`
-  - Add `delete` to standard action definitions and `delete` to `StandardCrudClient`.
-- Modify `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
-  - Convert the current list host into the CRUD workspace orchestrator with drawer state, detail loading, form loading, refresh, create, view, edit, delete, and optional actions.
-- Modify `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`
-  - Keep independent detail page as a compatibility/deep-link entry while reusing the same detail/form rendering helpers introduced for drawers.
-- Modify `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`
-  - Treat `delete` as a standard danger action and keep `disable` optional.
-- Modify `frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts`
-  - Add route compatibility metadata for old create/edit URLs.
-- Modify `frontend/packages/shell/src/App.tsx`
-  - Redirect `/organization/persons/new` to the list route with drawer query state.
-- Modify `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
-  - Replace native filter controls with AntD controls, remove direct row navigation, and declare standard actions instead of private row layout.
-- Create `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
-  - Cover drawer-based create/view/edit, refresh, delete protocol, optional disable, and route compatibility.
-- Modify existing tests:
+- 新建 `frontend/packages/ui/src/pro-adapters/CrudWorkspacePage.tsx`
+  - 无业务语义的 CRUD 页面框架，承载标题、描述、主操作、筛选区和内容区。
+- 新建 `frontend/packages/ui/src/pro-adapters/CrudSearchBar.tsx`
+  - 无业务语义的 AntD 筛选条，承载字段区、搜索、重置和更多筛选入口。
+- 新建 `frontend/packages/ui/src/pro-adapters/CrudTableSection.tsx`
+  - 包装 `SearchTablePage`，统一列表标题、总数、刷新工具栏和表格内容。
+- 新建 `frontend/packages/ui/src/pro-adapters/CrudDetailDrawer.tsx`
+  - 右侧详情抽屉，使用 `DetailPage`、summary 插槽、加载/错误状态和动作区。
+- 新建 `frontend/packages/ui/src/pro-adapters/CrudFormDrawer.tsx`
+  - 右侧表单抽屉，使用 `StandardCrudForm` 调用方内容和固定底部保存/取消操作。
+- 新建 `frontend/packages/ui/src/pro-adapters/CrudDangerAction.tsx`
+  - 危险动作确认组件，使用 AntD `Popconfirm`，统一 loading 和错误边界入口。
+- 修改 `frontend/packages/ui/src/index.ts`
+  - 导出新增 CRUD Pro adapter。
+- 修改 `frontend/packages/sdk/src/standardCrud.ts`
+  - 标准动作增加 `view/delete`，`StandardCrudClient` 增加 `delete`，资源注册增加可选 `listRoutePath`。
+- 修改 `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
+  - 从列表 Host 升级为 CRUD 工作台编排器，承接抽屉状态、详情加载、表单保存、刷新、新建、查看、编辑、删除和可选动作。
+- 修改 `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`
+  - 保留独立详情页作为深链接和回滚入口，并与抽屉详情共享字段、summary 和动作投影思路。
+- 修改 `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`
+  - 将 `delete` 作为标准危险动作处理，`disable` 保持可选动作。
+- 修改 `frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts`
+  - 增加旧新建/编辑 URL 到列表抽屉入口的兼容信息。
+- 修改 `frontend/packages/shell/src/App.tsx`
+  - 将 `/organization/persons/new` 重定向到 `/organization/persons?drawer=create`。
+- 修改 `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
+  - 将原生筛选控件替换为 AntD 控件；移除行操作里的直接页面跳转；通过标准动作声明接入平台样板。
+- 新建 `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
+  - 覆盖新建/查看/编辑抽屉、刷新、删除协议、可选停用动作和路由兼容。
+- 修改既有测试：
   - `frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx`
   - `frontend/packages/shell/src/__tests__/organization-person-center-detail-layout.test.tsx`
-  - `frontend/packages/shell/src/__tests__/standard-crud-detail-host.test.tsx`
+  - `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`
+  - `frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx`
 
-## Task 1: UI CRUD Pro Adapter Components
+## Task 1：新增 UI CRUD Pro Adapter 组件
 
-**Files:**
-- Create: `frontend/packages/ui/src/pro-adapters/CrudWorkspacePage.tsx`
-- Create: `frontend/packages/ui/src/pro-adapters/CrudSearchBar.tsx`
-- Create: `frontend/packages/ui/src/pro-adapters/CrudTableSection.tsx`
-- Create: `frontend/packages/ui/src/pro-adapters/CrudDetailDrawer.tsx`
-- Create: `frontend/packages/ui/src/pro-adapters/CrudFormDrawer.tsx`
-- Create: `frontend/packages/ui/src/pro-adapters/CrudDangerAction.tsx`
-- Modify: `frontend/packages/ui/src/index.ts`
-- Test: `pnpm --dir frontend --filter @icp-platform/ui build`
+**文件：**
+- 新建：`frontend/packages/ui/src/pro-adapters/CrudWorkspacePage.tsx`
+- 新建：`frontend/packages/ui/src/pro-adapters/CrudSearchBar.tsx`
+- 新建：`frontend/packages/ui/src/pro-adapters/CrudTableSection.tsx`
+- 新建：`frontend/packages/ui/src/pro-adapters/CrudDetailDrawer.tsx`
+- 新建：`frontend/packages/ui/src/pro-adapters/CrudFormDrawer.tsx`
+- 新建：`frontend/packages/ui/src/pro-adapters/CrudDangerAction.tsx`
+- 修改：`frontend/packages/ui/src/index.ts`
+- 验证：`pnpm --dir frontend --filter @icp-platform/ui build`
 
-- [ ] **Step 1: Create `CrudWorkspacePage.tsx`**
+- [ ] **Step 1：新建 `CrudWorkspacePage.tsx`**
 
-Add this file:
+写入：
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -100,9 +101,9 @@ export function CrudWorkspacePage({
 }
 ```
 
-- [ ] **Step 2: Create `CrudSearchBar.tsx`**
+- [ ] **Step 2：新建 `CrudSearchBar.tsx`**
 
-Add this file:
+写入：
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -134,9 +135,9 @@ export function CrudSearchBar({ fields, loading = false, onSearch, onReset, more
 }
 ```
 
-- [ ] **Step 3: Create `CrudTableSection.tsx`**
+- [ ] **Step 3：新建 `CrudTableSection.tsx`**
 
-Add this file:
+写入：
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -184,9 +185,9 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
 }
 ```
 
-- [ ] **Step 4: Create `CrudDetailDrawer.tsx`**
+- [ ] **Step 4：新建 `CrudDetailDrawer.tsx`**
 
-Add this file:
+写入：
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -241,9 +242,9 @@ export function CrudDetailDrawer<TRecord extends Record<string, unknown>>({
 }
 ```
 
-- [ ] **Step 5: Create `CrudFormDrawer.tsx`**
+- [ ] **Step 5：新建 `CrudFormDrawer.tsx`**
 
-Add this file:
+写入：
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -294,9 +295,9 @@ export function CrudFormDrawer({
 }
 ```
 
-- [ ] **Step 6: Create `CrudDangerAction.tsx`**
+- [ ] **Step 6：新建 `CrudDangerAction.tsx`**
 
-Add this file:
+写入：
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -333,9 +334,9 @@ export function CrudDangerAction({
 }
 ```
 
-- [ ] **Step 7: Export the new adapters**
+- [ ] **Step 7：导出新 adapter**
 
-Append to `frontend/packages/ui/src/index.ts`:
+在 `frontend/packages/ui/src/index.ts` 追加：
 
 ```ts
 export * from './pro-adapters/CrudWorkspacePage';
@@ -346,34 +347,34 @@ export * from './pro-adapters/CrudFormDrawer';
 export * from './pro-adapters/CrudDangerAction';
 ```
 
-- [ ] **Step 8: Build UI package**
+- [ ] **Step 8：构建 UI 包**
 
-Run: `pnpm --dir frontend --filter @icp-platform/ui build`
+运行：`pnpm --dir frontend --filter @icp-platform/ui build`
 
-Expected: PASS. If TypeScript fails because AntD `Drawer` prop names differ, adjust only the affected prop names in the adapter files.
+预期：通过。如果 AntD `Drawer` 类型有版本差异，只调整受影响 prop，不扩大改动范围。
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9：提交**
 
 ```powershell
 git add frontend/packages/ui/src/pro-adapters frontend/packages/ui/src/index.ts
 git commit -m "功能：新增CRUD Pro页面组件"
 ```
 
-## Task 2: Standard CRUD Delete Action Contract
+## Task 2：扩展标准 CRUD 删除动作协议
 
-**Files:**
-- Modify: `frontend/packages/sdk/src/standardCrud.ts`
-- Modify: `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`
-- Test: `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`
+**文件：**
+- 修改：`frontend/packages/sdk/src/standardCrud.ts`
+- 修改：`frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`
+- 测试：`frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`
 
-- [ ] **Step 1: Write the failing SDK test**
+- [ ] **Step 1：先写失败测试**
 
-Modify `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts` by adding:
+在 `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts` 增加：
 
 ```ts
 import { createStandardCrudClient } from '@icp-platform/sdk';
 
-it('deletes a standard CRUD resource through the standard client', async () => {
+it('通过标准客户端删除标准 CRUD 资源', async () => {
   const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
   const client = createStandardCrudClient('/api/sample-items', fetcher as unknown as typeof fetch);
 
@@ -383,21 +384,21 @@ it('deletes a standard CRUD resource through the standard client', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing SDK test**
+- [ ] **Step 2：运行失败测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk`
 
-Expected: FAIL with TypeScript or runtime error because `StandardCrudClient` does not expose `delete`.
+预期：失败，原因是 `StandardCrudClient` 还没有 `delete`。
 
-- [ ] **Step 3: Extend the SDK standard action and client types**
+- [ ] **Step 3：扩展 SDK 类型和客户端**
 
-In `frontend/packages/sdk/src/standardCrud.ts`, update `StandardCrudActionDefinition.standardAction`:
+在 `frontend/packages/sdk/src/standardCrud.ts` 中，将 `StandardCrudActionDefinition.standardAction` 改为：
 
 ```ts
 standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'submit';
 ```
 
-Update `StandardCrudClient`:
+将 `StandardCrudClient` 改为：
 
 ```ts
 export interface StandardCrudClient {
@@ -410,7 +411,7 @@ export interface StandardCrudClient {
 }
 ```
 
-Add this method inside `createStandardCrudClient`:
+在 `createStandardCrudClient` 中增加：
 
 ```ts
 delete: (id) =>
@@ -422,39 +423,39 @@ delete: (id) =>
   ),
 ```
 
-- [ ] **Step 4: Update standard action runtime danger handling**
+- [ ] **Step 4：更新动作运行时危险动作判断**
 
-In `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx`, ensure actions with `standardAction === 'delete'` are rendered as danger actions even when `variant` is omitted:
+在 `frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx` 中，确保 `delete` 即使没有显式 `variant: 'danger'` 也按危险动作渲染：
 
 ```tsx
 const isDangerAction = action.variant === 'danger' || action.standardAction === 'delete';
 ```
 
-Use `isDangerAction` for the AntD/Button danger style and confirmation branch. Keep `disable` optional: do not infer `disable` unless the resource explicitly declares it.
+使用 `isDangerAction` 驱动按钮危险样式和确认分支。不要从平台侧推断 `disable`，只有资源显式声明时才展示。
 
-- [ ] **Step 5: Run SDK test again**
+- [ ] **Step 5：再次运行测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk`
 
-Expected: PASS.
+预期：通过。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6：提交**
 
 ```powershell
 git add frontend/packages/sdk/src/standardCrud.ts frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts
 git commit -m "功能：扩展标准CRUD删除动作协议"
 ```
 
-## Task 3: Shell CRUD Workspace Host State Machine
+## Task 3：实现 Shell CRUD 工作台抽屉状态机
 
-**Files:**
-- Modify: `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
-- Modify: `frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`
-- Test: `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
+**文件：**
+- 修改：`frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
+- 修改：`frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`
+- 新建：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
-- [ ] **Step 1: Create failing drawer behavior test**
+- [ ] **Step 1：新增失败测试**
 
-Create `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx` with this initial test:
+新建 `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`，先覆盖新建、查看、编辑都通过右侧抽屉打开：
 
 ```tsx
 // @vitest-environment jsdom
@@ -506,7 +507,7 @@ function renderHost(container: HTMLElement) {
   return root;
 }
 
-describe('person center CRUD Pro sample', () => {
+describe('人员中心 CRUD Pro 样板', () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
@@ -518,7 +519,7 @@ describe('person center CRUD Pro sample', () => {
     container?.remove();
   });
 
-  it('opens create, view, and edit flows in right-side drawers', async () => {
+  it('新建、查看、编辑都在右侧抽屉中打开', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -533,6 +534,7 @@ describe('person center CRUD Pro sample', () => {
           summaries: {},
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
+
       return new Response(JSON.stringify({
         items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
         total: 1,
@@ -569,15 +571,15 @@ describe('person center CRUD Pro sample', () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing drawer test**
+- [ ] **Step 2：运行失败测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
-Expected: FAIL because `StandardCrudListPageHost` still navigates/uses module row actions instead of drawer state.
+预期：失败，因为列表 Host 还没有抽屉状态机。
 
-- [ ] **Step 3: Add drawer state types and helpers**
+- [ ] **Step 3：在列表 Host 增加抽屉状态**
 
-In `StandardCrudListPageHost.tsx`, add:
+在 `StandardCrudListPageHost.tsx` 增加类型和初始状态：
 
 ```tsx
 type CrudDrawerMode = 'closed' | 'create' | 'view' | 'edit';
@@ -594,7 +596,7 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
 };
 ```
 
-Add state in `StandardCrudListPageContent`:
+在 `StandardCrudListPageContent` 中增加状态：
 
 ```tsx
 const [drawerState, setDrawerState] = useState<CrudDrawerState>(CLOSED_DRAWER_STATE);
@@ -606,30 +608,30 @@ const [saveError, setSaveError] = useState<string | null>(null);
 const [saving, setSaving] = useState(false);
 ```
 
-- [ ] **Step 4: Replace header create action with drawer open**
+- [ ] **Step 4：新建动作改为打开抽屉**
 
-In `StandardCrudListPageHost.tsx`, replace the create button handler with:
+在 `StandardCrudListPageHost.tsx` 增加：
 
 ```tsx
-const openCreateDrawer = () => {
+const openCreateDrawer = (source: CrudDrawerState['source'] = 'user-action') => {
   const initialValues = Object.fromEntries(
     (registration.fields ?? []).map((field) => [field.key, field.defaultValue ?? '']),
   );
   setFormValues(initialValues);
   setSaveError(null);
-  setDrawerState({ mode: 'create', source: 'user-action' });
+  setDrawerState({ mode: 'create', source });
 };
 ```
 
-Use `openCreateDrawer` for the `create` button instead of `registration.actionHandlers.create`.
+页面标题区的“新建人员”按钮使用 `openCreateDrawer()`，不再默认执行人员模块里的 `window.location.assign`。
 
-- [ ] **Step 5: Add view/edit drawer loaders**
+- [ ] **Step 5：增加查看/编辑抽屉加载函数**
 
-Add:
+增加：
 
 ```tsx
-const openViewDrawer = async (id: string) => {
-  setDrawerState({ mode: 'view', id, source: 'user-action' });
+const openViewDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action') => {
+  setDrawerState({ mode: 'view', id, source });
   setDetailLoading(true);
   setDetailError(null);
   try {
@@ -643,13 +645,13 @@ const openViewDrawer = async (id: string) => {
   }
 };
 
-const openEditDrawer = async (id: string) => {
-  await openViewDrawer(id);
-  setDrawerState({ mode: 'edit', id, source: 'user-action' });
+const openEditDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action') => {
+  await openViewDrawer(id, source);
+  setDrawerState({ mode: 'edit', id, source });
 };
 ```
 
-Add helper at file bottom:
+在文件底部增加：
 
 ```tsx
 function buildListHostFormValues(
@@ -660,22 +662,22 @@ function buildListHostFormValues(
 }
 ```
 
-Import `readStandardCrudFieldValue` and `type StandardCrudFieldDefinition` from `@icp-platform/sdk`.
+从 `@icp-platform/sdk` 引入 `readStandardCrudFieldValue` 和 `type StandardCrudFieldDefinition`。
 
-- [ ] **Step 6: Render row actions through platform actions**
+- [ ] **Step 6：行操作改由平台渲染查看/编辑**
 
-In the action column render, prefer platform actions:
+在操作列中渲染：
 
 ```tsx
 <AntdButton type="link" onClick={() => void openViewDrawer(registration.getRowId(row))}>查看</AntdButton>
 <AntdButton type="link" onClick={() => void openEditDrawer(registration.getRowId(row))}>编辑</AntdButton>
 ```
 
-Keep optional module actions by filtering out `create`, `refresh`, `view`, `edit`, and `delete` from `rowActionDefinitions`. This preserves `disable` only when the resource declares it.
+过滤 `rowActionDefinitions` 时排除 `create`、`refresh`、`view`、`edit`、`delete`，只保留资源显式声明的可选动作，例如 `disable`。
 
-- [ ] **Step 7: Render `CrudDetailDrawer` and `CrudFormDrawer`**
+- [ ] **Step 7：渲染详情抽屉和表单抽屉**
 
-Import:
+从 `@icp-platform/ui` 引入：
 
 ```tsx
 import {
@@ -688,7 +690,26 @@ import {
 } from '@icp-platform/ui';
 ```
 
-Render below the workspace content:
+在 Host 中接入 lookup runtime：
+
+```tsx
+const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+  fields: registration.fields ?? [],
+  providers: registration.lookupProviders ?? [],
+  values: formValues,
+  detailFields,
+});
+```
+
+从 `@icp-platform/sdk` 引入 `useStandardCrudLookupRuntime` 和 `applyStandardCrudLookupValueChange`，表单 `onChange` 使用：
+
+```tsx
+onChange={(fieldKey, value) => {
+  setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, registration.fields ?? []));
+}}
+```
+
+在工作台内容后渲染：
 
 ```tsx
 <CrudDetailDrawer
@@ -715,10 +736,12 @@ Render below the workspace content:
     fields={registration.fields ?? []}
     sections={registration.formSections ?? []}
     values={formValues}
-  lookupOptions={lookupOptions}
-  lookupLoading={lookupLoading}
-  lookupErrors={lookupErrors}
-    onChange={(fieldKey, value) => setFormValues((current) => ({ ...current, [fieldKey]: value }))}
+    lookupOptions={lookupOptions}
+    lookupLoading={lookupLoading}
+    lookupErrors={lookupErrors}
+    onChange={(fieldKey, value) => {
+      setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, registration.fields ?? []));
+    }}
     onSubmit={() => void handleDrawerSave()}
     saving={saving}
     error={saveError}
@@ -727,28 +750,9 @@ Render below the workspace content:
 </CrudFormDrawer>
 ```
 
-Before rendering the drawers, wire lookup runtime in `StandardCrudListPageHost.tsx`:
+- [ ] **Step 8：实现抽屉保存**
 
-```tsx
-const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
-  fields: registration.fields ?? [],
-  providers: registration.lookupProviders ?? [],
-  values: formValues,
-  detailFields,
-});
-```
-
-Import `useStandardCrudLookupRuntime` and `applyStandardCrudLookupValueChange` from `@icp-platform/sdk`, then replace the form `onChange` handler:
-
-```tsx
-onChange={(fieldKey, value) => {
-  setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, registration.fields ?? []));
-}}
-```
-
-- [ ] **Step 8: Implement `handleDrawerSave`**
-
-Add:
+增加：
 
 ```tsx
 const handleDrawerSave = async () => {
@@ -776,30 +780,30 @@ const handleDrawerSave = async () => {
 };
 ```
 
-Import `normalizeStandardCrudSubmitValues`.
+从 SDK 引入 `normalizeStandardCrudSubmitValues`。
 
-- [ ] **Step 9: Run drawer test**
+- [ ] **Step 9：运行抽屉测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
-Expected: PASS.
+预期：通过。
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 10：提交**
 
 ```powershell
 git add frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx
 git commit -m "功能：人员中心接入CRUD抽屉样板"
 ```
 
-## Task 4: Person Resource AntD Filters and Optional Actions
+## Task 4：人员资源接入 AntD 筛选和可选动作
 
-**Files:**
-- Modify: `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
-- Modify: `frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx`
+**文件：**
+- 修改：`frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
+- 修改：`frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx`
 
-- [ ] **Step 1: Update list layout test expectations**
+- [ ] **Step 1：更新列表布局测试期望**
 
-In `organization-person-center-list-layout.test.tsx`, replace assertions that look for native inputs with AntD control assertions:
+在 `organization-person-center-list-layout.test.tsx` 中，将原生控件断言改为 AntD 控件断言：
 
 ```ts
 expect(container.querySelector('.ant-input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
@@ -808,28 +812,28 @@ expect(container.textContent).toContain('更多筛选');
 expect(container.textContent).toContain('停用');
 ```
 
-Add assertion that direct navigation is gone from row actions:
+增加行操作不再直接跳转的断言：
 
 ```ts
 expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
 ```
 
-- [ ] **Step 2: Run failing person layout test**
+- [ ] **Step 2：运行失败测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout`
 
-Expected: FAIL because filters still use native controls and row actions still own direct navigation.
+预期：失败，因为筛选仍是原生控件，行操作仍由模块私有导航控制。
 
-- [ ] **Step 3: Replace native filter controls with AntD**
+- [ ] **Step 3：将筛选控件替换为 AntD**
 
-In `personStandardCrudResource.tsx`, change imports:
+在 `personStandardCrudResource.tsx` 中调整 import：
 
 ```tsx
 import { Input, Select } from 'antd';
 import { Button, ErrorState, StatusTag } from '@icp-platform/ui';
 ```
 
-Replace `<input>` with:
+将关键字 `<input>` 替换为：
 
 ```tsx
 <Input
@@ -841,7 +845,7 @@ Replace `<input>` with:
 />
 ```
 
-Replace company `<select>` with:
+将公司 `<select>` 替换为：
 
 ```tsx
 <Select
@@ -855,7 +859,7 @@ Replace company `<select>` with:
 />
 ```
 
-Replace department `<select>` with:
+将部门 `<select>` 替换为：
 
 ```tsx
 <Select
@@ -870,7 +874,7 @@ Replace department `<select>` with:
 />
 ```
 
-Replace employment status `<select>` with:
+将在职状态 `<select>` 替换为：
 
 ```tsx
 <Select
@@ -884,11 +888,11 @@ Replace employment status `<select>` with:
 />
 ```
 
-- [ ] **Step 4: Stop row actions from owning navigation**
+- [ ] **Step 4：行操作不再拥有页面跳转**
 
-Remove the `PersonRowActions` direct `window.location.assign` view/edit buttons. Keep only optional `disable` if the resource declares it, or remove `renderRowActions` entirely and let Shell render `view/edit` as platform standard actions.
+移除 `PersonRowActions` 里的查看/编辑 `window.location.assign`。让 Shell 统一渲染 `view/edit`。
 
-Use this resource action declaration:
+资源动作声明改为：
 
 ```ts
 listActions: [
@@ -900,11 +904,11 @@ listActions: [
 ],
 ```
 
-Do not add `delete` to person resource unless a stable backend delete endpoint and permission exist.
+不要给人员资源增加 `delete`，除非后端删除接口和独立权限已经稳定存在。
 
-- [ ] **Step 5: Update action handler boundaries**
+- [ ] **Step 5：收口 action handler 边界**
 
-Keep `create` and `refresh` handlers for compatibility only if Shell still calls them as fallbacks. Remove direct browser navigation from `create`:
+移除 `create` 的直接浏览器跳转。保留：
 
 ```ts
 actionHandlers: {
@@ -922,31 +926,31 @@ actionHandlers: {
 },
 ```
 
-- [ ] **Step 6: Run person layout test**
+- [ ] **Step 6：运行人员列表测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout`
 
-Expected: PASS.
+预期：通过。
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7：提交**
 
 ```powershell
 git add frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx
 git commit -m "重构：人员中心筛选与动作接入平台样板"
 ```
 
-## Task 5: Delete Protocol and Refresh Behavior
+## Task 5：收口删除协议和刷新行为
 
-**Files:**
-- Modify: `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
-- Modify: `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
+**文件：**
+- 修改：`frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
+- 修改：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
-- [ ] **Step 1: Add failing delete protocol test**
+- [ ] **Step 1：增加删除协议失败测试**
 
-Append to `person-center-crud-pro-sample.test.tsx`:
+在 `person-center-crud-pro-sample.test.tsx` 追加：
 
 ```tsx
-it('keeps delete hidden for person center until the resource declares it', async () => {
+it('人员中心未声明删除时不展示删除入口', async () => {
   vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
     items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
@@ -968,10 +972,10 @@ it('keeps delete hidden for person center until the resource declares it', async
 });
 ```
 
-Add another test using a local sample module that declares `delete`, and assert `Popconfirm` appears:
+再增加一个临时资源显式声明 `delete` 的测试：
 
 ```tsx
-it('renders declared delete as a confirmed danger action', async () => {
+it('资源声明删除时按危险确认动作渲染', async () => {
   const deleteHandler = vi.fn();
   const sampleModule = {
     ...organizationModule,
@@ -1007,15 +1011,15 @@ it('renders declared delete as a confirmed danger action', async () => {
 });
 ```
 
-- [ ] **Step 2: Run failing delete protocol tests**
+- [ ] **Step 2：运行失败测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
-Expected: FAIL until `delete` is rendered only when declared and as `CrudDangerAction`.
+预期：失败，直到 `delete` 只在资源声明时出现，并通过 `CrudDangerAction` 渲染。
 
-- [ ] **Step 3: Implement declared delete rendering**
+- [ ] **Step 3：实现声明式删除渲染**
 
-In `StandardCrudListPageHost.tsx`, when mapping row action definitions, render `delete` via `CrudDangerAction`:
+在 `StandardCrudListPageHost.tsx` 的行级动作映射中，对 `delete` 使用：
 
 ```tsx
 {action.standardAction === 'delete' ? (
@@ -1040,14 +1044,14 @@ In `StandardCrudListPageHost.tsx`, when mapping row action definitions, render `
 ) : null}
 ```
 
-Do not synthesize a delete action when the resource did not declare it.
+不要在资源未声明时合成删除按钮。
 
-- [ ] **Step 4: Ensure refresh does not reset filters**
+- [ ] **Step 4：增加刷新不重置筛选的测试**
 
-Add a test in `person-center-crud-pro-sample.test.tsx`:
+在 `person-center-crud-pro-sample.test.tsx` 增加：
 
 ```tsx
-it('refreshes the current query without resetting filters', async () => {
+it('刷新当前查询时不重置筛选条件', async () => {
   vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
   const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
     items: [],
@@ -1082,34 +1086,35 @@ it('refreshes the current query without resetting filters', async () => {
 });
 ```
 
-- [ ] **Step 5: Run delete and refresh tests**
+- [ ] **Step 5：运行删除与刷新测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
-Expected: PASS.
+预期：通过。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6：提交**
 
 ```powershell
 git add frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx
 git commit -m "功能：收口CRUD删除与刷新协议"
 ```
 
-## Task 6: Legacy Route Compatibility
+## Task 6：兼容旧路由入口
 
-**Files:**
-- Modify: `frontend/packages/shell/src/App.tsx`
-- Modify: `frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts`
-- Modify: `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
-- Modify: `frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx`
-- Modify: `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
+**文件：**
+- 修改：`frontend/packages/sdk/src/standardCrud.ts`
+- 修改：`frontend/packages/shell/src/App.tsx`
+- 修改：`frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts`
+- 修改：`frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
+- 修改：`frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx`
+- 修改：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
-- [ ] **Step 1: Add failing route compatibility test**
+- [ ] **Step 1：增加查询参数打开抽屉的失败测试**
 
-Append to `person-center-crud-pro-sample.test.tsx`:
+在 `person-center-crud-pro-sample.test.tsx` 追加：
 
 ```tsx
-it('opens create drawer from route compatibility query state', async () => {
+it('通过路由兼容查询参数打开新建抽屉', async () => {
   window.history.pushState({}, '', '/organization/persons?drawer=create');
   vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
@@ -1132,15 +1137,15 @@ it('opens create drawer from route compatibility query state', async () => {
 });
 ```
 
-- [ ] **Step 2: Run failing route test**
+- [ ] **Step 2：运行失败测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
-Expected: FAIL because `StandardCrudListPageHost` does not read query drawer state yet.
+预期：失败，因为列表 Host 尚未读取 `drawer` 查询参数。
 
-- [ ] **Step 3: Read drawer query state in list host**
+- [ ] **Step 3：列表 Host 读取抽屉查询参数**
 
-In `StandardCrudListPageHost.tsx`, import `useLocation` and add:
+在 `StandardCrudListPageHost.tsx` 中引入 `useLocation`，并增加：
 
 ```tsx
 const location = useLocation();
@@ -1162,11 +1167,11 @@ useEffect(() => {
 }, [location.search]);
 ```
 
-Change open helpers to accept `source: CrudDrawerState['source'] = 'user-action'`.
+将 `openCreateDrawer/openViewDrawer/openEditDrawer` 的 `source` 参数默认值设为 `'user-action'`。
 
-- [ ] **Step 4: Redirect legacy new route**
+- [ ] **Step 4：旧新建路由重定向到抽屉状态**
 
-In `App.tsx`, add a route for `/organization/persons/new` that redirects to the list query state:
+在 `App.tsx` 中增加：
 
 ```tsx
 function RedirectToPersonCreateDrawer() {
@@ -1174,15 +1179,15 @@ function RedirectToPersonCreateDrawer() {
 }
 ```
 
-Register it before the dynamic detail route:
+在动态详情路由前注册：
 
 ```tsx
 <Route path="/organization/persons/new" element={<RedirectToPersonCreateDrawer />} />
 ```
 
-- [ ] **Step 5: Add route adapter test**
+- [ ] **Step 5：增加 route adapter 测试和实现**
 
-In `standard-crud-route-adapter.test.tsx`, import the new helper:
+在 `standard-crud-route-adapter.test.tsx` 中引入新 helper：
 
 ```ts
 import {
@@ -1192,10 +1197,10 @@ import {
 } from '../navigation/standardCrudRouteAdapter';
 ```
 
-Add this test:
+增加测试：
 
 ```ts
-it('builds legacy create route redirects for drawer entry compatibility', () => {
+it('为抽屉入口兼容构建旧新建路由重定向', () => {
   expect(buildStandardCrudDrawerRouteRedirects(modules)).toEqual([
     {
       from: '/organization/persons/new',
@@ -1205,25 +1210,25 @@ it('builds legacy create route redirects for drawer entry compatibility', () => 
 });
 ```
 
-Update the local `modules` fixture resource with a list route path:
+给测试 fixture 中的资源增加：
 
 ```ts
 listRoutePath: '/organization/persons',
 ```
 
-In `frontend/packages/sdk/src/standardCrud.ts`, add the optional resource property used by the route adapter:
+在 `frontend/packages/sdk/src/standardCrud.ts` 的 `StandardCrudResourceRegistration` 中增加：
 
 ```ts
 listRoutePath?: string;
 ```
 
-In `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`, add the concrete list route to the person resource registration:
+在 `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx` 的人员资源注册中增加：
 
 ```ts
 listRoutePath: '/organization/persons',
 ```
 
-In `standardCrudRouteAdapter.ts`, add:
+在 `standardCrudRouteAdapter.ts` 中增加：
 
 ```ts
 export interface StandardCrudDrawerRouteRedirect {
@@ -1247,38 +1252,38 @@ export function buildStandardCrudDrawerRouteRedirects(modules: FrontendModule[])
 }
 ```
 
-- [ ] **Step 6: Run route tests**
+- [ ] **Step 6：运行路由兼容测试**
 
-Run: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample standard-crud-route-adapter`
+运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample standard-crud-route-adapter`
 
-Expected: PASS.
+预期：通过。
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7：提交**
 
 ```powershell
 git add frontend/packages/sdk/src/standardCrud.ts frontend/packages/shell/src/App.tsx frontend/packages/shell/src/navigation/standardCrudRouteAdapter.ts frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/packages/shell/src/__tests__/standard-crud-route-adapter.test.tsx frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx
 git commit -m "功能：兼容人员中心抽屉路由入口"
 ```
 
-## Task 7: Final Verification and Documentation Update
+## Task 7：最终验证与文档收口
 
-**Files:**
-- Modify: `docs/verification/frontend-ant-design-rebuild-verification.md`
-- Modify: `docs/phases/current-handoff.md`
+**文件：**
+- 修改：`docs/verification/frontend-ant-design-rebuild-verification.md`
+- 修改：`docs/phases/current-handoff.md`
 
-- [ ] **Step 1: Run focused tests**
+- [ ] **Step 1：运行定向测试**
 
-Run:
+运行：
 
 ```powershell
 pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample organization-person-center-list-layout organization-person-center-detail-layout standard-crud-sdk
 ```
 
-Expected: PASS.
+预期：通过。
 
-- [ ] **Step 2: Run package builds**
+- [ ] **Step 2：运行构建**
 
-Run:
+运行：
 
 ```powershell
 pnpm --dir frontend --filter @icp-platform/ui build
@@ -1286,11 +1291,11 @@ pnpm --dir frontend --filter @icp-platform/shell build
 pnpm --dir frontend --filter @icp-modules/organization build
 ```
 
-Expected: PASS. Vite chunk-size warnings are acceptable if build exits successfully.
+预期：通过。Vite chunk size warning 可以接受，只要命令退出码为 0。
 
-- [ ] **Step 3: Update verification record**
+- [ ] **Step 3：更新验证记录**
 
-Append this section to `docs/verification/frontend-ant-design-rebuild-verification.md`:
+在 `docs/verification/frontend-ant-design-rebuild-verification.md` 追加：
 
 ```md
 ## 人员中心后台 CRUD Pro 样板固化验证
@@ -1306,11 +1311,9 @@ Append this section to `docs/verification/frontend-ant-design-rebuild-verificati
 - 回滚：回退 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为回滚入口。
 ```
 
-- [ ] **Step 4: Update handoff**
+- [ ] **Step 4：更新交接台账**
 
-In `docs/phases/current-handoff.md`, add a “人员中心后台 CRUD Pro 样板固化” item under recent completion and update the current recommendation so the next step is no longer “配置管理” by default.
-
-Use this wording:
+在 `docs/phases/current-handoff.md` 最近完成中新增：
 
 ```md
 ### 4.x 人员中心后台 CRUD Pro 样板固化
@@ -1325,25 +1328,27 @@ Use this wording:
 - 人员中心未强制展示删除入口；只有资源显式声明并具备后端能力时才展示删除。
 ```
 
-- [ ] **Step 5: Run final status check**
+同步调整“当前推荐下一步”，不要再默认把配置管理作为下一步。
 
-Run:
+- [ ] **Step 5：检查工作区**
+
+运行：
 
 ```powershell
 git status --short
 ```
 
-Expected: only intended verification/handoff docs are modified.
+预期：只看到验证记录和交接台账的预期修改。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6：提交**
 
 ```powershell
 git add docs/verification/frontend-ant-design-rebuild-verification.md docs/phases/current-handoff.md
 git commit -m "验证：记录人员中心CRUD样板固化结果"
 ```
 
-## Plan Self-Review
+## 计划自检
 
-- Spec coverage: Tasks cover UI adapters, Shell Host orchestration, Organization resource cleanup, `create / refresh / view / edit / delete`, optional `disable`, right-side drawers, independent detail fallback, route compatibility, verification records, and handoff.
-- Placeholder scan: No `TBD`, `TODO`, or “implement later” placeholders should remain. The only conditional behavior is explicit: person delete is hidden unless the resource declares it and backend support exists.
-- Type consistency: `CrudDrawerState`, required/optional actions, `StandardCrudClient.delete`, and UI adapter names are consistent across tasks.
+- 规格覆盖：任务覆盖 UI adapter、Shell Host 编排、Organization 资源收缩、`create / refresh / view / edit / delete`、可选 `disable`、右侧抽屉、独立详情页回退、旧路由兼容、验证记录和交接台账。
+- 占位扫描：无 `TBD`、`TODO` 或 “implement later” 这类占位；人员删除入口的条件是明确规则：只有资源声明且后端能力存在时才展示。
+- 类型一致性：`CrudDrawerState`、必备/可选动作、`StandardCrudClient.delete`、`listRoutePath` 和 UI adapter 命名在各任务中保持一致。

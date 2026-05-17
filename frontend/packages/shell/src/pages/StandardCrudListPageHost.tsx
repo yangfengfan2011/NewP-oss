@@ -44,6 +44,11 @@ interface CrudDrawerState {
   source: 'user-action' | 'route-compatibility';
 }
 
+interface DeleteActionErrorState {
+  key: string;
+  message: string;
+}
+
 const CLOSED_DRAWER_STATE: CrudDrawerState = {
   mode: 'closed',
   source: 'user-action',
@@ -147,9 +152,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deleteActionError, setDeleteActionError] = useState<string | null>(null);
+  const [deleteActionError, setDeleteActionError] = useState<DeleteActionErrorState | null>(null);
   const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
   const detailRequestIdRef = useRef(0);
+  const drawerStateRef = useRef(drawerState);
+  drawerStateRef.current = drawerState;
 
   const context = {
     filters,
@@ -184,6 +191,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     invalidateDetailRequests();
     setDetailLoading(false);
     setDrawerState(CLOSED_DRAWER_STATE);
+  };
+
+  const closeDrawerForRow = (rowId: string) => {
+    if (drawerStateRef.current.id !== rowId) {
+      return;
+    }
+
+    closeDrawer();
   };
 
   const openCreateDrawer = (source: CrudDrawerState['source'] = 'user-action') => {
@@ -335,6 +350,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         title: '操作',
         render: (row: TRow) => {
           const rowId = registration.getRowId(row);
+          const shouldRenderDeleteError = deleteActionDefinitions.some((action) => deleteActionError?.key === `${action.key}:${rowId}`);
 
           return (
             <div style={{ display: 'grid', gap: 6 }}>
@@ -359,17 +375,19 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
                             const handler = registration.actionHandlers?.[action.key];
                             if (handler) {
-                              await handler({ id: rowId, row, refresh: context.refresh });
+                              // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
+                              await handler({ id: rowId, row, refresh: () => undefined });
                             } else {
                               await client.delete(rowId);
-                              context.refresh();
                             }
 
-                            if (drawerState.id === rowId) {
-                              closeDrawer();
-                            }
+                            context.refresh();
+                            closeDrawerForRow(rowId);
                           } catch (deleteError) {
-                            setDeleteActionError(deleteError instanceof Error ? deleteError.message : '删除标准资源失败');
+                            setDeleteActionError({
+                              key: pendingKey,
+                              message: deleteError instanceof Error ? deleteError.message : '删除标准资源失败',
+                            });
                           } finally {
                             setDeletingActionKey(null);
                           }
@@ -389,9 +407,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   />
                 ) : null}
               </div>
-              {deleteActionError ? (
+              {shouldRenderDeleteError ? (
                 <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-                  {deleteActionError}
+                  {deleteActionError.message}
                 </span>
               ) : null}
             </div>

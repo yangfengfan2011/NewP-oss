@@ -56,6 +56,31 @@ function findAntdButtonsByText(container: ParentNode, text: string): HTMLElement
   );
 }
 
+function findTableRowByText(container: ParentNode, text: string): HTMLTableRowElement | null {
+  return Array.from(container.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes(text)) ?? null;
+}
+
+function findRowActionButton(container: ParentNode, rowText: string, buttonText: string): HTMLElement | undefined {
+  const row = findTableRowByText(container, rowText);
+  if (!row) {
+    return undefined;
+  }
+
+  return findAntdButtonByText(row, buttonText);
+}
+
+async function clickPopconfirmButton(label: '确认' | '取消') {
+  const button = Array.from(document.body.querySelectorAll<HTMLElement>('button')).find(
+    (item) => item.textContent?.replace(/\s+/g, '') === label,
+  );
+
+  expect(button).toBeDefined();
+
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
 function findInputByLabel(container: ParentNode, labelText: string): HTMLInputElement | null {
   const label = Array.from(container.querySelectorAll('label')).find((candidate) => candidate.textContent?.includes(labelText));
   if (!label) {
@@ -454,6 +479,224 @@ describe('人员中心 CRUD Pro 样板', () => {
 
     expect(container.textContent).not.toContain('删除');
     expect(container.textContent).toContain('停用');
+  });
+
+  it('delete handler 即使不主动 refresh，确认删除成功后 Host 也会刷新一次列表', async () => {
+    const resource = organizationModule.standardCrudResources?.[0];
+    if (!resource) {
+      throw new Error('未找到人员标准 CRUD 资源。');
+    }
+
+    const deleteHandler = vi.fn(async () => {});
+    const sampleModule = {
+      ...organizationModule,
+      standardCrudResources: [{
+        ...resource,
+        actionHandlers: {
+          ...(resource.actionHandlers ?? {}),
+          delete: deleteHandler,
+        },
+      }],
+    };
+    let listRequestCount = 0;
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      listRequestCount += 1;
+      return new Response(JSON.stringify({
+        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const deleteButton = findRowActionButton(container, '张三', '删除');
+    expect(deleteButton).toBeDefined();
+
+    await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    await clickPopconfirmButton('确认');
+    await flushAsync();
+
+    expect(deleteHandler).toHaveBeenCalledTimes(1);
+    expect(listRequestCount).toBe(2);
+  });
+
+  it('删除失败只在对应行展示错误，不刷新列表，且保留当前行详情抽屉', async () => {
+    const resource = organizationModule.standardCrudResources?.[0];
+    if (!resource) {
+      throw new Error('未找到人员标准 CRUD 资源。');
+    }
+
+    const deleteHandler = vi.fn(async () => {
+      throw new Error('删除张三失败');
+    });
+    const sampleModule = {
+      ...organizationModule,
+      standardCrudResources: [{
+        ...resource,
+        actionHandlers: {
+          ...(resource.actionHandlers ?? {}),
+          delete: deleteHandler,
+        },
+      }],
+    };
+    let listRequestCount = 0;
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/person-1')) {
+        return new Response(JSON.stringify({
+          fields: {
+            EID: 'person-1',
+            PersonNo: 'P0001',
+            ENAME: '张三',
+            IsEnabled: true,
+          },
+          summaries: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      listRequestCount += 1;
+      return new Response(JSON.stringify({
+        items: [
+          { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true },
+          { EID: 'person-2', PersonNo: 'P0002', ENAME: '李四', IsEnabled: true },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const viewButton = findRowActionButton(container, '张三', '查看');
+    expect(viewButton).toBeDefined();
+    await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+
+    const deleteButton = findRowActionButton(container, '张三', '删除');
+    expect(deleteButton).toBeDefined();
+    await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    await clickPopconfirmButton('确认');
+    await flushAsync();
+
+    const firstRow = findTableRowByText(container, '张三');
+    const secondRow = findTableRowByText(container, '李四');
+    expect(firstRow?.textContent).toContain('删除张三失败');
+    expect(secondRow?.textContent).not.toContain('删除张三失败');
+    expect(Array.from(container.querySelectorAll('[role="alert"]')).filter((item) => item.textContent?.includes('删除张三失败'))).toHaveLength(1);
+    expect(listRequestCount).toBe(1);
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+    expect(document.body.textContent).toContain('详情信息');
+  });
+
+  it('删除等待期间打开其他记录详情后，成功回调不会误关新抽屉', async () => {
+    const resource = organizationModule.standardCrudResources?.[0];
+    if (!resource) {
+      throw new Error('未找到人员标准 CRUD 资源。');
+    }
+
+    const deferredDelete = createDeferred<void>();
+    const deleteHandler = vi.fn(() => deferredDelete.promise);
+    const sampleModule = {
+      ...organizationModule,
+      standardCrudResources: [{
+        ...resource,
+        actionHandlers: {
+          ...(resource.actionHandlers ?? {}),
+          delete: deleteHandler,
+        },
+      }],
+    };
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/person-1')) {
+        return new Response(JSON.stringify({
+          fields: {
+            EID: 'person-1',
+            PersonNo: 'P0001',
+            ENAME: '张三',
+            IsEnabled: true,
+          },
+          summaries: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url.includes('/person-2')) {
+        return new Response(JSON.stringify({
+          fields: {
+            EID: 'person-2',
+            PersonNo: 'P0002',
+            ENAME: '李四',
+            IsEnabled: true,
+          },
+          summaries: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      return new Response(JSON.stringify({
+        items: [
+          { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true },
+          { EID: 'person-2', PersonNo: 'P0002', ENAME: '李四', IsEnabled: true },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const firstViewButton = findRowActionButton(container, '张三', '查看');
+    expect(firstViewButton).toBeDefined();
+    await act(async () => firstViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    expect(document.body.textContent).toContain('张三');
+
+    const deleteButton = findRowActionButton(container, '张三', '删除');
+    expect(deleteButton).toBeDefined();
+    await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    await clickPopconfirmButton('确认');
+    await flushAsync();
+
+    const secondViewButton = findRowActionButton(container, '李四', '查看');
+    expect(secondViewButton).toBeDefined();
+    await act(async () => secondViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    expect(document.body.textContent).toContain('李四');
+
+    deferredDelete.resolve();
+    await flushAsync();
+
+    expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
+    expect(document.body.textContent).toContain('李四');
   });
 
   it('刷新当前查询时不重置筛选条件', async () => {

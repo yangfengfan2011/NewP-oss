@@ -64,7 +64,7 @@
 - 修改：`frontend/packages/ui/src/index.ts`
 - 验证：`pnpm --dir frontend --filter @icp-platform/ui build`
 
-- [ ] **Step 1：新建 `CrudWorkspacePage.tsx`**
+- [x] **Step 1：新建 `CrudWorkspacePage.tsx`**
 
 写入：
 
@@ -105,7 +105,7 @@ export function CrudWorkspacePage({
 }
 ```
 
-- [ ] **Step 2：新建 `CrudSearchBar.tsx`**
+- [x] **Step 2：新建 `CrudSearchBar.tsx`**
 
 写入：
 
@@ -139,7 +139,7 @@ export function CrudSearchBar({ fields, loading = false, onSearch, onReset, more
 }
 ```
 
-- [ ] **Step 3：新建 `CrudTableSection.tsx`**
+- [x] **Step 3：新建 `CrudTableSection.tsx`**
 
 写入：
 
@@ -189,7 +189,7 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
 }
 ```
 
-- [ ] **Step 4：新建 `CrudDetailDrawer.tsx`**
+- [x] **Step 4：新建 `CrudDetailDrawer.tsx`**
 
 写入：
 
@@ -246,7 +246,7 @@ export function CrudDetailDrawer<TRecord extends Record<string, unknown>>({
 }
 ```
 
-- [ ] **Step 5：新建 `CrudFormDrawer.tsx`**
+- [x] **Step 5：新建 `CrudFormDrawer.tsx`**
 
 写入：
 
@@ -299,7 +299,7 @@ export function CrudFormDrawer({
 }
 ```
 
-- [ ] **Step 6：新建 `CrudDangerAction.tsx`**
+- [x] **Step 6：新建 `CrudDangerAction.tsx`**
 
 写入：
 
@@ -338,7 +338,7 @@ export function CrudDangerAction({
 }
 ```
 
-- [ ] **Step 7：导出新 adapter**
+- [x] **Step 7：导出新 adapter**
 
 在 `frontend/packages/ui/src/index.ts` 追加：
 
@@ -351,13 +351,13 @@ export * from './pro-adapters/CrudFormDrawer';
 export * from './pro-adapters/CrudDangerAction';
 ```
 
-- [ ] **Step 8：构建 UI 包**
+- [x] **Step 8：构建 UI 包**
 
 运行：`pnpm --dir frontend --filter @icp-platform/ui build`
 
 预期：通过。如果 AntD `Drawer` 类型有版本差异，只调整受影响 prop，不扩大改动范围。
 
-- [ ] **Step 9：提交**
+- [x] **Step 9：提交**
 
 ```powershell
 git add frontend/packages/ui/src/pro-adapters frontend/packages/ui/src/index.ts

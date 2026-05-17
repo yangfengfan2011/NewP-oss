@@ -16,7 +16,7 @@
 - 新增/编辑默认使用右侧抽屉，不再把跳转到独立页面作为日常维护默认体验。
 - 查看默认使用右侧详情抽屉，同时保留独立详情页作为深链接、复杂关联信息和回滚出口。
 - 旧新建/编辑路由兼容到列表页，并自动打开对应抽屉。
-- 将 `create / refresh / view / edit / delete` 定义为平台 CRUD 必备标准动作；将 `disable` 明确为可选标准动作。
+- 将 `create / refresh / view / edit` 定义为平台 CRUD 必备标准动作；将 `delete` 定义为平台必须提供的危险动作协议能力；将 `disable` 明确为可选标准动作。
 
 ## 3. 非目标
 
@@ -63,7 +63,7 @@
 - Pro Components 只能通过平台 adapter 使用，不能反向决定平台契约。
 - 右侧抽屉是默认新增/编辑承载方式；弹窗只用于短小确认类表单；独立页面只用于复杂流程、深链接或回滚。
 - `disable` 是可选标准动作，不是平台 CRUD 必备动作。
-- 删除是必备标准动作的协议能力，但人员中心是否立即展示删除按钮取决于是否存在稳定后端删除接口和独立删除权限。
+- 删除是平台必须提供的危险动作协议能力，但具体资源只有显式声明 `delete` 且具备稳定后端能力和独立权限时才展示删除入口。
 
 ## 6. 总体方案
 
@@ -121,7 +121,8 @@ interface CrudPageOwnership {
 ### 7.2 标准动作模型
 
 ```ts
-type RequiredCrudAction = 'create' | 'refresh' | 'view' | 'edit' | 'delete';
+type RequiredCrudAction = 'create' | 'refresh' | 'view' | 'edit';
+type PlatformCrudProtocolAction = 'delete';
 type OptionalCrudAction = 'disable' | 'enable' | 'export' | 'import' | 'bind' | 'unbind';
 ```
 
@@ -130,7 +131,7 @@ type OptionalCrudAction = 'disable' | 'enable' | 'export' | 'import' | 'bind' | 
 - `create` 放在页面标题区右侧。
 - `refresh` 放在表格卡片右上角，与密度和列设置同层。
 - `view / edit` 是行级普通操作。
-- `delete` 是行级危险操作，必须确认。
+- `delete` 是平台内建危险动作协议；只有资源显式声明并具备后端能力和权限时才展示，展示后必须确认。
 - `disable` 是可选标准动作；资源声明后才显示，且可选择是否按危险动作处理。
 
 ### 7.3 抽屉状态模型
@@ -183,7 +184,7 @@ interface CrudDrawerState {
 
 ### 8.4 删除流程
 
-1. 用户点击行内或详情抽屉内“删除”。
+1. 资源显式声明 `delete` 后，用户点击行内或详情抽屉内“删除”。
 2. `CrudDangerAction` 显示确认文案。
 3. 确认后调用资源声明的 delete handler 或 standard CRUD delete client。
 4. 成功后刷新列表。
@@ -200,6 +201,7 @@ interface CrudDrawerState {
 
 ### 8.6 旧路由兼容流程
 
+- 旧路由兼容由标准 CRUD 路由适配器根据资源 `listRoutePath` 生成，Shell 只消费适配结果，不写人员中心专属路由特例。
 - 访问 `/organization/persons/new`：回到 `/organization/persons?drawer=create`，并打开新建抽屉。
 - 访问 `/organization/persons/:id`：仍可进入独立详情页。
 - 列表内点击“查看”：默认使用 `/organization/persons?drawer=view&id=<id>` 或等价内部状态打开详情抽屉。
@@ -308,7 +310,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 - 详情抽屉可进入编辑抽屉。
 - `/organization/persons/new` 回到列表并自动打开新建抽屉。
 - 刷新不重置筛选条件。
-- 删除动作必须确认；若人员中心后端未支持删除，则按钮不展示。
+- 资源声明 `delete` 后删除动作必须确认；若人员中心后端未支持删除，则按钮不展示。
 - `disable` 作为人员资源可选动作展示，不影响其他 CRUD 资源。
 
 ## 13. 未决问题
@@ -328,7 +330,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 4. 增加删除协议。
    - 最小交付：平台动作 runtime 支持 `delete` 确认、权限、loading、错误和刷新；人员中心按后端能力决定是否展示。
 5. 增加旧路由兼容。
-   - 最小交付：`/organization/persons/new` 自动回到列表并打开新建抽屉。
+   - 最小交付：路由适配器生成 `/organization/persons/new` 到列表抽屉入口的兼容声明，并由 Shell 通用消费。
 6. 验证和文档收口。
    - 最小交付：定向测试、构建、AI-first 文档校验通过，并记录风险与回滚路径。
 
@@ -337,5 +339,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 - 入口在哪里：实现入口从 `frontend/packages/ui/src/pro-adapters/` 的 CRUD Pro 组件、`frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`、`frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx`、`frontend/packages/shell/src/standard-crud/standardCrudActionRuntime.tsx` 和 `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx` 开始。
 - 边界在哪里：允许修改 UI adapter、Shell standard CRUD Host、standard CRUD action runtime、路由兼容 adapter、人员资源注册和相关测试；禁止修改后端 API、认证权限、runtime metadata authoring、ModuleRegistry 事实源和 standard CRUD SDK 的破坏性契约。
 - 如何验证：运行 `@icp-platform/ui build`、Shell standard CRUD 与人员中心定向测试、`@icp-platform/shell build`、`@icp-modules/organization build`，并执行 `validate-ai-first-design.ps1` 与 `check-ai-first-design-targets.ps1`。
-- 失败信号是什么：出现双标题、双分页、主操作重复、列表点击仍默认跳转新建/编辑页、旧新建路由不能自动打开抽屉、删除无确认、`disable` 被平台强制要求、保存/删除/停用后列表未刷新、详情或表单错误导致列表白屏，均说明实现未按设计落地。
+- 失败信号是什么：出现双标题、双分页、主操作重复、列表点击仍默认跳转新建/编辑页、旧新建路由不能自动打开抽屉、资源声明删除后无确认、未声明删除时仍出现删除入口、`disable` 被平台强制要求、保存/删除/停用后列表未刷新、详情或表单错误导致列表白屏，均说明实现未按设计落地。
 - 如何回滚：按三层回退。UI 层回退新增 CRUD Pro adapter；Shell 层回退 `StandardCrudListPageHost`、`StandardCrudDetailPageHost`、action runtime 和路由兼容；Organization 层回退人员资源注册中的抽屉化动作声明。独立详情页保留作为回滚出口，后端接口和数据层无需联动回滚。

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { Input, Select } from 'antd';
 import {
   normalizeStandardCrudSubmitValues,
   type StandardCrudFieldDefinition,
@@ -7,7 +8,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
-import { Button, ErrorState, StatusTag } from '@icp-platform/ui';
+import { ErrorState, StatusTag } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
@@ -121,109 +122,42 @@ function PersonListFiltersPanel({
     <div className="np-person-filter-shell">
       {error ? <ErrorState message={error} /> : null}
       <div className="np-person-filter-grid">
-        <input
+        <Input
           aria-label="按工号 / 姓名搜索"
           className="np-filter-control np-filter-control-keyword"
           value={filters.keyword}
           onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
           placeholder="按工号 / 姓名搜索"
         />
-        <select
+        <Select
           aria-label="公司"
           className="np-filter-control"
-          value={filters.companyId}
-          onChange={(event) => setFilters((current) => ({ ...current, companyId: event.target.value, departmentId: '' }))}
-        >
-          <option value="">全部公司</option>
-          {companyOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
+          value={filters.companyId || undefined}
+          onChange={(value) => setFilters((current) => ({ ...current, companyId: value ?? '', departmentId: '' }))}
+          placeholder="全部公司"
+          allowClear
+          options={companyOptions}
+        />
+        <Select
           aria-label="部门"
           className="np-filter-control"
-          value={filters.departmentId}
-          onChange={(event) => setFilters((current) => ({ ...current, departmentId: event.target.value }))}
+          value={filters.departmentId || undefined}
+          onChange={(value) => setFilters((current) => ({ ...current, departmentId: value ?? '' }))}
+          placeholder="请选择部门"
+          allowClear
           disabled={!filters.companyId}
-        >
-          <option value="">请选择部门</option>
-          {departmentOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
+          options={departmentOptions}
+        />
+        <Select
           aria-label="在职状态"
           className="np-filter-control"
-          value={filters.employmentStatus}
-          onChange={(event) => setFilters((current) => ({ ...current, employmentStatus: event.target.value }))}
-        >
-          <option value="">全部状态</option>
-          {employmentStatusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          value={filters.employmentStatus || undefined}
+          onChange={(value) => setFilters((current) => ({ ...current, employmentStatus: value ?? '' }))}
+          placeholder="全部状态"
+          allowClear
+          options={employmentStatusOptions}
+        />
       </div>
-    </div>
-  );
-}
-
-function PersonRowActions({ row, refresh }: { row: PersonListRow; refresh: () => void }) {
-  const [disabling, setDisabling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleDisable() {
-    if (!window.confirm('确认停用该人员？')) {
-      return;
-    }
-
-    try {
-      setDisabling(true);
-      setError(null);
-      await disablePerson(row.id);
-      refresh();
-    } catch (disableError) {
-      setError(disableError instanceof Error ? disableError.message : '停用人员失败');
-    } finally {
-      setDisabling(false);
-    }
-  }
-
-  return (
-    <div className="np-person-row-actions-wrap">
-      <div className="np-person-row-actions">
-        <Button
-          type="button"
-          size="sm"
-          className="np-person-action-link"
-          onClick={() => window.location.assign(`/organization/persons/${row.id}`)}
-        >
-          查看
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="np-person-action-link"
-          onClick={() => window.location.assign(`/organization/persons/${row.id}`)}
-        >
-          编辑
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="np-person-action-link np-person-action-link-danger"
-          disabled={disabling}
-          onClick={() => void handleDisable()}
-        >
-          {disabling ? '停用中' : '停用'}
-        </Button>
-      </div>
-      {error ? <span className="np-person-action-error" role="alert">{error}</span> : null}
     </div>
   );
 }
@@ -342,13 +276,13 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     { key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用当前人员吗？' },
   ],
   listActions: [
-    { key: 'create', labelKey: '新建人员', variant: 'default', standardAction: 'create' },
-    { key: 'refresh', labelKey: '刷新', variant: 'primary', standardAction: 'refresh' },
+    { key: 'create', labelKey: '新建人员', variant: 'primary', standardAction: 'create' },
+    { key: 'refresh', labelKey: '刷新', variant: 'default', standardAction: 'refresh' },
+    { key: 'view', labelKey: '查看', standardAction: 'view' },
+    { key: 'edit', labelKey: '编辑', standardAction: 'edit' },
+    { key: 'disable', labelKey: '停用', variant: 'danger', standardAction: 'disable', confirmMessage: '确认停用该人员？' },
   ],
   actionHandlers: {
-    create: () => {
-      window.location.assign('/organization/persons/new');
-    },
     refresh: ({ refresh }) => {
       refresh();
     },
@@ -391,6 +325,5 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     },
   ],
   renderFilters: (context) => <PersonListFiltersPanel filters={context.filters} setFilters={context.setFilters} />,
-  renderRowActions: (row, context) => <PersonRowActions row={row} refresh={context.refresh} />,
   mapDetail: mapPersonDetailView,
 };

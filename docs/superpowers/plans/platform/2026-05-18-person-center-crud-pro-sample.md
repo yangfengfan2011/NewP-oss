@@ -869,7 +869,7 @@ git commit -m "功能：人员中心接入CRUD抽屉样板"
 - 修改：`frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
 - 修改：`frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx`
 
-- [ ] **Step 1：更新列表布局测试期望**
+- [x] **Step 1：更新列表布局测试期望**
 
 在 `organization-person-center-list-layout.test.tsx` 中，将原生控件断言改为 AntD 控件断言：
 
@@ -886,13 +886,13 @@ expect(container.textContent).toContain('停用');
 expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
 ```
 
-- [ ] **Step 2：运行失败测试**
+- [x] **Step 2：运行失败测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout`
 
 预期：失败，因为筛选仍是原生控件，行操作仍由模块私有导航控制。
 
-- [ ] **Step 3：将筛选控件替换为 AntD**
+- [x] **Step 3：将筛选控件替换为 AntD**
 
 在 `personStandardCrudResource.tsx` 中调整 import：
 
@@ -956,7 +956,7 @@ import { Button, ErrorState, StatusTag } from '@icp-platform/ui';
 />
 ```
 
-- [ ] **Step 4：行操作不再拥有页面跳转**
+- [x] **Step 4：行操作不再拥有页面跳转**
 
 删除 `PersonRowActions`，并移除资源注册中的 `renderRowActions`。让 Shell 统一渲染 `view/edit/disable`，避免模块私有行操作和标准动作同时渲染导致“停用”重复出现。
 
@@ -974,7 +974,7 @@ listActions: [
 
 `delete` 在 Task 5 中接入；人员中心后端已有标准 CRUD DELETE 与条件删除 guard，本计划会在 Task 5 显式声明删除入口。
 
-- [ ] **Step 5：收口 action handler 边界**
+- [x] **Step 5：收口 action handler 边界**
 
 移除 `create` 的直接浏览器跳转。保留：
 
@@ -994,13 +994,13 @@ actionHandlers: {
 },
 ```
 
-- [ ] **Step 6：运行人员列表测试**
+- [x] **Step 6：运行人员列表测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout`
 
 预期：通过。
 
-- [ ] **Step 7：提交**
+- [x] **Step 7：提交**
 
 ```powershell
 git add frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx

@@ -155,9 +155,11 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.ant-tag')).not.toBeNull();
     expect(container.textContent).toContain('人员中心');
-    expect(container.querySelector('input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
+    expect(container.querySelector('.ant-input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
+    expect(container.querySelector('.ant-select')).not.toBeNull();
     expect(container.textContent).toContain('新建人员');
     expect(container.textContent).toContain('刷新');
+    expect(container.textContent).toContain('更多筛选');
     expect(container.textContent).toContain('人员列表');
     expect(container.textContent).toContain('工号');
     expect(container.textContent).toContain('姓名');
@@ -165,6 +167,7 @@ describe('organization person center list layout', () => {
     expect(container.textContent).toContain('查看');
     expect(container.textContent).toContain('编辑');
     expect(container.textContent).toContain('停用');
+    expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
     expect(container.textContent).toContain('共 1 条');
     expect(countTextOccurrences(container.textContent ?? '', '人员中心')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
@@ -216,7 +219,6 @@ describe('organization person center list layout', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     );
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     serviceMocks.disablePerson.mockRejectedValue(new Error('停用人员失败'));
 
     container = document.createElement('div');
@@ -259,6 +261,12 @@ describe('organization person center list layout', () => {
 
     await act(async () => {
       disableButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const confirmButton = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent?.replace(/\s+/g, '') === '确认',
+    );
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(serviceMocks.disablePerson).toHaveBeenCalledWith('person-1');

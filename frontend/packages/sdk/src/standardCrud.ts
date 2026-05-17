@@ -189,6 +189,7 @@ export interface StandardCrudResourceRegistration<
   listViewKey: string;
   detailViewKey?: string;
   detailRoutePath?: string;
+  listPanelTitle?: string;
   permissions?: string[];
   // 第二批扩展只声明资源允许的平台化能力；lookup 加载、动作状态、summary 状态和提交流程仍由 Shell 运行时执行。
   fields?: StandardCrudFieldDefinition[];

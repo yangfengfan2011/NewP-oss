@@ -45,26 +45,28 @@ export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
       collapsible
       collapsed={collapsed}
       trigger={null}
-      width={240}
+      width={216}
+      collapsedWidth={72}
       className="np-app-sider"
     >
-      <div className="np-sider-brand">
-        <span className="np-sider-logo">ICP</span>
-        {!collapsed ? <span className="np-sider-title">ICP Platform</span> : null}
+      <div className="np-sider-toolbar">
+        {!collapsed ? <span className="np-sider-toolbar-label">导航</span> : <span />}
+        <Button
+          type="text"
+          aria-label="折叠菜单"
+          icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          onClick={() => onCollapse(!collapsed)}
+          className="np-sider-collapse"
+        />
       </div>
-      <Button
-        type="text"
-        aria-label="折叠菜单"
-        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-        onClick={() => onCollapse(!collapsed)}
-        className="np-sider-collapse"
-      />
       <Menu
-        theme="dark"
+        theme="light"
         mode="inline"
         items={menuItems}
         selectedKeys={chrome.selectedKeys}
         defaultOpenKeys={defaultOpenKeys}
+        inlineCollapsed={collapsed}
+        className="np-sidebar-menu"
       />
     </Sider>
   );

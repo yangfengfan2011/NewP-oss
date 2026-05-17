@@ -36,14 +36,18 @@ export interface SearchTablePageProps<TRow> {
   rowKey: string | ((row: TRow) => string);
   columns: ProColumns<TRow>[];
   request: (params: Record<string, unknown>) => Promise<{ data: TRow[]; total: number; success: boolean }>;
+  headerTitle?: ReactNode;
   toolbar?: ReactNode;
+  className?: string;
 }
 
 export function SearchTablePage<TRow extends Record<string, unknown>>({
   rowKey,
   columns,
   request,
+  headerTitle,
   toolbar,
+  className,
 }: SearchTablePageProps<TRow>) {
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -84,11 +88,14 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
 
   return (
     <ProTable<TRow>
+      className={className}
       rowKey={rowKey}
       columns={columns}
       dataSource={data}
       loading={loading}
+      headerTitle={headerTitle}
       search={false}
+      cardBordered={false}
       options={{ density: true, fullScreen: false, reload: false, setting: true }}
       toolBarRender={toolbar ? () => [toolbar] : false}
       pagination={{
@@ -96,6 +103,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         pageSize,
         total,
         showSizeChanger: true,
+        position: ['bottomRight'],
+        showTotal: (value) => `共 ${value} 条`,
         onChange: (nextCurrent, nextPageSize) => {
           setCurrent(nextCurrent);
           setPageSize(nextPageSize);

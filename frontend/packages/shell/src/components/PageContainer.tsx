@@ -19,6 +19,8 @@ export function PageContainer({
   actions,
   children,
 }: PageContainerProps) {
+  const shouldRenderHeader = Boolean(title || subtitle || actions);
+
   return (
     <section className="np-page-container">
       {breadcrumbItems.length > 0 ? (
@@ -29,13 +31,15 @@ export function PageContainer({
           }))}
         />
       ) : null}
-      <div className="np-page-header">
-        <div>
-          {title ? <Title level={3} className="np-page-title">{title}</Title> : null}
-          {subtitle ? <Paragraph className="np-page-subtitle">{subtitle}</Paragraph> : null}
+      {shouldRenderHeader ? (
+        <div className="np-page-header">
+          <div>
+            {title ? <Title level={3} className="np-page-title">{title}</Title> : null}
+            {subtitle ? <Paragraph className="np-page-subtitle">{subtitle}</Paragraph> : null}
+          </div>
+          {actions ? <div className="np-page-actions">{actions}</div> : null}
         </div>
-        {actions ? <div className="np-page-actions">{actions}</div> : null}
-      </div>
+      ) : null}
       <div className="np-page-content">{children}</div>
     </section>
   );

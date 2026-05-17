@@ -9,3 +9,4 @@ ai-first-execution-standard.md
 ../superpowers/specs/platform/2026-05-12-standard-crud-required-field-validation-design.md
 ../superpowers/specs/platform/2026-05-12-frontend-standard-crud-platformization-design.md
 ../superpowers/specs/platform/2026-05-17-frontend-ant-design-rebuild-design.md
+../superpowers/specs/platform/2026-05-17-person-center-frontend-pro-layout-design.md

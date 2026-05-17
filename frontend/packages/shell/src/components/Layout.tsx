@@ -35,7 +35,7 @@ export default function Layout() {
       <AntdLayout>
         <Header />
         <Content className="np-app-content">
-          <PageContainer title={chrome.title} breadcrumbItems={chrome.breadcrumbItems}>
+          <PageContainer breadcrumbItems={chrome.breadcrumbItems}>
             {/* Shell 只提供统一页面 chrome；模块页面继续通过受控路由和标准 CRUD Host 承载业务内容。 */}
             <ErrorBoundary>
               <Outlet />

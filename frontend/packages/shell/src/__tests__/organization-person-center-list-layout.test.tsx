@@ -12,6 +12,10 @@ import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+function countTextOccurrences(text: string, keyword: string): number {
+  return text.split(keyword).length - 1;
+}
+
 async function flushProTableRequest(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -151,9 +155,10 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.ant-tag')).not.toBeNull();
     expect(container.textContent).toContain('人员中心');
-    expect(container.textContent).toContain('关键字');
-    expect(container.textContent).toContain('新建');
+    expect(container.querySelector('input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
+    expect(container.textContent).toContain('新建人员');
     expect(container.textContent).toContain('刷新');
+    expect(container.textContent).toContain('人员列表');
     expect(container.textContent).toContain('工号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('张三');
@@ -161,6 +166,8 @@ describe('organization person center list layout', () => {
     expect(container.textContent).toContain('编辑');
     expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('共 1 条');
+    expect(countTextOccurrences(container.textContent ?? '', '人员中心')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
   });
 
   it('registers person center as a standard CRUD frontend resource', () => {

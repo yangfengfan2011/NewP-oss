@@ -64,10 +64,11 @@ describe('Ant Design shell layout', () => {
       );
     });
 
-    expect(container.textContent).toContain('ICP Platform');
+    expect(container.textContent).toContain('导航');
     expect(container.textContent).toContain('组织用户');
     expect(container.textContent).toContain('人员中心');
     expect(container.querySelector('[aria-label="折叠菜单"]')).not.toBeNull();
+    expect(container.querySelector('.np-sidebar-menu')).not.toBeNull();
   });
 
   it('renders title, breadcrumb and content in PageContainer', async () => {

@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactElement } from 'react';
+import { ReloadOutlined } from '@ant-design/icons';
 import { useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudClient, normalizeStandardCrudListResult } from '@icp-platform/sdk';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button, ErrorState, SearchTablePage, StandardListPage, createSearchTableRequest } from '@icp-platform/ui';
+import { Button as AntdButton } from 'antd';
+import { ErrorState, SearchTablePage, StandardListPage, createSearchTableRequest } from '@icp-platform/ui';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
@@ -37,14 +39,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   registration: StandardCrudResourceRegistration<TFilter, TRow>;
 }): ReactElement {
   const { t } = useLocalization();
+  const decoratedRegistration = registration as StandardCrudResourceRegistration<TFilter, TRow> & {
+    listPanelTitle?: string;
+  };
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration), [view, registration]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
   const [filters, setFilters] = useState<TFilter>(() => registration.createEmptyFilters());
   const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => registration.createEmptyFilters());
   const [rows, setRows] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -77,8 +80,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
             setRows(result.items);
             setTotal(result.total);
-            setPage(result.page);
-            setPageSize(result.pageSize);
 
             return {
               items: result.items,
@@ -87,8 +88,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           } catch (loadError) {
             setRows([]);
             setTotal(0);
-            setPage(1);
-            setPageSize(1);
             setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
             throw loadError;
           } finally {
@@ -100,25 +99,27 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [client, registration, appliedFilters, reloadTick],
   );
 
-  const filterBar = (
-    <>
-      {registration.renderFilters ? registration.renderFilters(context) : null}
-      <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={context.resetFilters}>重置</Button>
-        <Button size="sm" variant="primary" onClick={context.applyFilters} disabled={loading}>
-          {loading ? '搜索中...' : '搜索'}
-        </Button>
+  const filterBar = registration.renderFilters ? (
+    <div className="np-page-filter-bar">
+      <div className="np-page-filter-fields">
+        {registration.renderFilters(context)}
       </div>
-    </>
-  );
+      <div className="np-page-filter-actions">
+        <AntdButton type="primary" size="middle" onClick={context.applyFilters} disabled={loading}>
+          {loading ? '搜索中' : '搜索'}
+        </AntdButton>
+        <AntdButton size="middle" onClick={context.resetFilters}>重置</AntdButton>
+        <AntdButton type="text" size="middle">更多筛选</AntdButton>
+      </div>
+    </div>
+  ) : undefined;
 
-  const headerActionDefinitions = registration.listActions?.filter((action) => (
-    action.standardAction === 'create' || action.standardAction === 'refresh'
-  )) ?? [];
+  const createAction = registration.listActions?.find((action) => action.standardAction === 'create');
+  const refreshAction = registration.listActions?.find((action) => action.standardAction === 'refresh');
   const rowActionDefinitions = registration.listActions?.filter((action) => (
     action.standardAction !== 'create' && action.standardAction !== 'refresh'
   )) ?? [];
-  const shouldRenderActionColumn = registration.renderRowActions || (registration.actionHandlers && registration.listActions);
+  const shouldRenderActionColumn = Boolean(registration.renderRowActions || rowActionDefinitions.length > 0);
   const standardColumns = shouldRenderActionColumn
     ? [
       ...registration.buildColumns(context),
@@ -148,15 +149,45 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     render: (_: unknown, row: TRow) => (column.render ? column.render(row) : readTableCell(row, column.key)),
   }));
 
-  const headerActions = headerActionDefinitions.length > 0 ? (
-    <StandardCrudActions
-      actions={headerActionDefinitions}
-      grantedPermissions={registration.permissions}
-      handlers={registration.actionHandlers}
-      context={{ refresh: context.refresh }}
-    />
-  ) : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
-  const tableToolbar = headerActionDefinitions.length > 0 ? headerActions : undefined;
+  const headerActions = createAction && registration.actionHandlers?.[createAction.key]
+    ? (
+      <AntdButton
+        type="primary"
+        size="middle"
+        onClick={() => void registration.actionHandlers?.[createAction.key]?.({ refresh: context.refresh })}
+      >
+        {createAction.labelKey}
+      </AntdButton>
+    )
+    : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
+
+  const handleRefresh = async () => {
+    if (refreshAction && registration.actionHandlers?.[refreshAction.key]) {
+      await registration.actionHandlers[refreshAction.key]({ refresh: context.refresh });
+      return;
+    }
+
+    context.refresh();
+  };
+
+  const tableToolbar = (
+    <AntdButton
+      size="small"
+      icon={<ReloadOutlined />}
+      onClick={() => void handleRefresh()}
+      disabled={loading}
+    >
+      {loading ? '刷新中' : '刷新'}
+    </AntdButton>
+  );
+
+  const listPanelTitle = decoratedRegistration.listPanelTitle ?? `${t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}列表`;
+  const listPanelHeader = (
+    <div className="np-list-card-title-wrap">
+      <span className="np-list-card-title">{listPanelTitle}</span>
+      <span className="np-list-card-count">{`共 ${total} 条`}</span>
+    </div>
+  );
 
   const content = (
     <div className="np-standard-crud-table">
@@ -165,23 +196,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         rowKey={registration.getRowId}
         columns={columns}
         request={tableRequest}
-        toolbar={tableToolbar ?? (
-          <Button size="sm" variant="primary" onClick={context.refresh} disabled={loading}>
-            {loading ? '刷新中...' : '刷新'}
-          </Button>
-        )}
+        headerTitle={listPanelHeader}
+        toolbar={tableToolbar}
       />
     </div>
-  );
-
-  const totalPages = Math.max(1, Math.ceil(total / Math.max(pageSize, 1)));
-  const footerRight = (
-    <>
-      <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>{`共 ${total} 条`}</span>
-      <Button size="sm" disabled>上一页</Button>
-      <span style={{ color: 'var(--sh-color-text-secondary, #64748b)', fontSize: 14 }}>{`第 ${page} / ${totalPages} 页`}</span>
-      <Button size="sm" disabled>下一页</Button>
-    </>
   );
 
   return (
@@ -191,7 +209,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       headerActions={headerActions}
       filterBar={filterBar}
       content={content}
-      footerRight={footerRight}
     />
   );
 }

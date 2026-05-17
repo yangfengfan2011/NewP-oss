@@ -258,4 +258,4 @@ export interface PlatformContext {
   showDialog: (content: ReactNode, options?: { title?: string; width?: number }) => Promise<boolean>;
 }
 
-export { ComponentType, ReactNode };
+export type { ComponentType, ReactNode };

@@ -5,6 +5,7 @@ export type StatusTagTone = 'default' | 'success' | 'processing' | 'warning' | '
 
 export interface StatusTagProps {
   tone?: StatusTagTone;
+  className?: string;
   children: ReactNode;
 }
 
@@ -16,6 +17,6 @@ const statusColors: Record<StatusTagTone, string | undefined> = {
   error: 'error',
 };
 
-export function StatusTag({ tone = 'default', children }: StatusTagProps) {
-  return <Tag color={statusColors[tone]}>{children}</Tag>;
+export function StatusTag({ tone = 'default', className, children }: StatusTagProps) {
+  return <Tag color={statusColors[tone]} className={className}>{children}</Tag>;
 }

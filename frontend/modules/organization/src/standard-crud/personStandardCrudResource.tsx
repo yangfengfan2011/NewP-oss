@@ -7,7 +7,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
-import { Button, ErrorState, Input, Select, StatusTag } from '@icp-platform/ui';
+import { Button, ErrorState, StatusTag } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
@@ -118,47 +118,112 @@ function PersonListFiltersPanel({
   );
 
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
+    <div className="np-person-filter-shell">
       {error ? <ErrorState message={error} /> : null}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
-        <Input
-          label="关键字"
+      <div className="np-person-filter-grid">
+        <input
+          aria-label="按工号 / 姓名搜索"
+          className="np-filter-control np-filter-control-keyword"
           value={filters.keyword}
           onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
           placeholder="按工号 / 姓名搜索"
         />
-        <Select
-          label="公司"
+        <select
+          aria-label="公司"
+          className="np-filter-control"
           value={filters.companyId}
           onChange={(event) => setFilters((current) => ({ ...current, companyId: event.target.value, departmentId: '' }))}
-          options={companyOptions}
-          placeholder="全部公司"
-        />
-        <Select
-          label="部门"
+        >
+          <option value="">全部公司</option>
+          {companyOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="部门"
+          className="np-filter-control"
           value={filters.departmentId}
           onChange={(event) => setFilters((current) => ({ ...current, departmentId: event.target.value }))}
-          options={departmentOptions}
-          placeholder={filters.companyId ? '全部部门' : '请先选择公司'}
           disabled={!filters.companyId}
-        />
-        <Select
-          label="在职状态"
+        >
+          <option value="">请选择部门</option>
+          {departmentOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="在职状态"
+          className="np-filter-control"
           value={filters.employmentStatus}
           onChange={(event) => setFilters((current) => ({ ...current, employmentStatus: event.target.value }))}
-          options={employmentStatusOptions}
-          placeholder="全部状态"
-        />
+        >
+          <option value="">全部状态</option>
+          {employmentStatusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );
 }
 
-function PersonRowActions({ row }: { row: PersonListRow }) {
+function PersonRowActions({ row, refresh }: { row: PersonListRow; refresh: () => void }) {
+  const [disabling, setDisabling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDisable() {
+    if (!window.confirm('确认停用该人员？')) {
+      return;
+    }
+
+    try {
+      setDisabling(true);
+      setError(null);
+      await disablePerson(row.id);
+      refresh();
+    } catch (disableError) {
+      setError(disableError instanceof Error ? disableError.message : '停用人员失败');
+    } finally {
+      setDisabling(false);
+    }
+  }
+
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      <Button size="sm" onClick={() => window.location.assign(`/organization/persons/${row.id}`)}>查看</Button>
-      <Button size="sm" onClick={() => window.location.assign(`/organization/persons/${row.id}`)}>编辑</Button>
+    <div className="np-person-row-actions-wrap">
+      <div className="np-person-row-actions">
+        <Button
+          type="button"
+          size="sm"
+          className="np-person-action-link"
+          onClick={() => window.location.assign(`/organization/persons/${row.id}`)}
+        >
+          查看
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="np-person-action-link"
+          onClick={() => window.location.assign(`/organization/persons/${row.id}`)}
+        >
+          编辑
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="np-person-action-link np-person-action-link-danger"
+          disabled={disabling}
+          onClick={() => void handleDisable()}
+        >
+          {disabling ? '停用中' : '停用'}
+        </Button>
+      </div>
+      {error ? <span className="np-person-action-error" role="alert">{error}</span> : null}
     </div>
   );
 }
@@ -267,6 +332,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   listViewKey: 'organization.person.list',
   detailViewKey: 'organization.person.detail',
   detailRoutePath: '/organization/persons/:id',
+  listPanelTitle: '人员列表',
   permissions: ['Organization.Person.View'],
   fields: personFields,
   formSections: personFormSections,
@@ -276,9 +342,8 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     { key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用当前人员吗？' },
   ],
   listActions: [
-    { key: 'create', labelKey: '新建', variant: 'default', standardAction: 'create' },
+    { key: 'create', labelKey: '新建人员', variant: 'default', standardAction: 'create' },
     { key: 'refresh', labelKey: '刷新', variant: 'primary', standardAction: 'refresh' },
-    { key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用当前人员吗？' },
   ],
   actionHandlers: {
     create: () => {
@@ -310,7 +375,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       key: 'employmentStatus',
       title: '在职状态',
       render: (item) => (
-        <StatusTag tone="processing">
+        <StatusTag tone="processing" className="np-status-tag-blue">
           {item.employmentStatusLabel || getEmploymentStatusLabel(item.employmentStatus)}
         </StatusTag>
       ),
@@ -319,13 +384,13 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       key: 'isEnabled',
       title: '启用状态',
       render: (item) => (
-        <StatusTag tone={item.isEnabled ? 'success' : 'warning'}>
+        <StatusTag tone={item.isEnabled ? 'success' : 'warning'} className="np-status-tag-green">
           {item.isEnabled ? '启用' : '停用'}
         </StatusTag>
       ),
     },
   ],
   renderFilters: (context) => <PersonListFiltersPanel filters={context.filters} setFilters={context.setFilters} />,
-  renderRowActions: (row) => <PersonRowActions row={row} />,
+  renderRowActions: (row, context) => <PersonRowActions row={row} refresh={context.refresh} />,
   mapDetail: mapPersonDetailView,
 };

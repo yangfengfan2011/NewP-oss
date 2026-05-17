@@ -38,6 +38,21 @@
 
 ## 4. 最近完成
 
+### 4.0 人员中心 metadata runtime 入口修复
+
+状态：已完成并验证。
+
+完成内容：
+
+- Host 现在会把内建模块 metadata 投影到 `plugins/runtime/modules`，并暴露 `/plugins/metadata-runtime-manifest.json` 与 `/plugins/runtime/modules/.../metadata/...`。
+- Host 项目输出不再只复制 `.model` 元数据，已覆盖 `modules/*/metadata/**/*.json`，保证 Organization 的 navigation/view/model 都能进入运行时视图。
+- Vite 开发态和构建态会生成同口径的内建 metadata runtime manifest、localization manifest 与静态 metadata 文件，避免开发态 `/organization/persons` 因 metadata 404 落回旧占位页，同时避免 metadata 菜单接管后退化成文案 key。
+- `MapStandardCrudResources()` 改为只在标准 CRUD 注册表存在时挂载，避免纯外部插件装载视图缺少标准 CRUD 服务时打断 Host 启动。
+
+当前推荐下一步：
+
+- 人员中心若再次出现“请通过 metadata 入口访问”的占位提示，优先检查 `/plugins/metadata-runtime-manifest.json`、`/plugins/runtime/modules/Organization/metadata/navigation/Organization.nav.json` 和 `views/PersonList.view.json` 是否可访问。
+
 ### 4.1 前端标准 CRUD 平台化第二批
 
 状态：已完成并验证。
@@ -179,6 +194,25 @@
 
 ## 7. 验证快照
 
+人员中心 metadata runtime 入口修复验证覆盖：
+
+```powershell
+dotnet test tests\Kernel.Tests\Kernel.Tests.csproj --filter "FullyQualifiedName~HostApiPluginManifestRouteTests"
+pnpm --dir frontend --filter @icp-platform/shell test -- vite-config runtime-metadata-loader page-entry-routing standard-list-page-host
+pnpm --dir frontend --filter @icp-platform/shell build
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:3000/plugins/localization-manifest.json
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:3000/plugins/runtime/modules/Organization/metadata/navigation/Organization.nav.json
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:3000/plugins/runtime/modules/Organization/metadata/views/PersonList.view.json
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:5000/api/organization/persons
+```
+
+验证结论：
+
+- Host API manifest 路由测试通过，覆盖无插件状态下的内建 Organization metadata 投影，以及启用插件包时的 metadata manifest / nav 文件访问。
+- Shell metadata、page entry、standard list host 与 Vite metadata/localization runtime 相关定向测试通过，16 tests。
+- `@icp-platform/shell` 构建通过，产物中包含 `plugins/metadata-runtime-manifest.json`、`plugins/localization-manifest.json`、Organization nav/view/model metadata。
+- 本地 `http://localhost:3000` 已能访问 Organization nav、PersonList view metadata 与含“人员中心”的 localization manifest，`http://localhost:5000/api/organization/persons` 返回标准 CRUD 列表数据。
+
 最近一次前端标准 CRUD 第二批验证覆盖：
 
 ```powershell
@@ -244,11 +278,13 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 本文档是当前快照，不应把它当作长期 authoring 真源。
 - 如果只更新计划或验证记录而不更新本文档，下一次交接可能读到过期推荐下一步。
 - 历史阶段文档中仍可能出现旧推荐语，应以本文件和对应任务的最新计划、验证记录为准。
+- Vite 开发态现在直接投影内建 metadata 和 localization；如果未来 runtime 资源改由 Host 统一代理，需要同步收敛 Vite 插件，避免两套投影规则漂移。
 - 前端标准 CRUD 第二批仍以 Person 资源为试点，下一批资源接入前需要重新确认字段、lookup、动作、summary 和模块专属能力边界。
 
 ## 9. 回滚思路
 
 - 如果交接口径写错，只改本文档，不需要修改原始设计、计划或验证记录。
+- 如果本次人员中心 metadata runtime 修复需要回滚，应反向恢复 `apps/host-api/Program.cs`、`apps/host-api/HostApi.csproj`、`frontend/packages/shell/vite.config.ts` 及对应测试；回滚后开发态会重新依赖旧 fallback route，人员中心可能再次显示占位错误。
 - 如果前端标准 CRUD 第二批需要回滚，可反向回滚第二批 SDK/UI/Shell 运行时和 Organization 接入提交；第二批可独立回滚，不影响第一批列表/详情 Host。
 - 如果标准 CRUD 自动映射需要回滚，应按本轮最近相关提交反向 revert，并优先恢复 `PersonsController` 等旧样板前确认对应设计、计划和验证记录中的边界变化。
 - 如果 EID 值协议需要回滚，应按最近相关提交反向 revert，并优先回到对应设计和计划确认影响范围。

@@ -1,7 +1,7 @@
 name = "docs_researcher"
 description = "Checks official docs and version-specific framework behavior."
-model = "gpt-5.4-mini"
-model_reasoning_effort = "medium"
+model = "gpt-5.5"
+model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """
 Verify version-specific behavior and configuration from official docs.

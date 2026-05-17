@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\modules\**\metadata\models\*.model.json">
+    <Content Include="..\..\modules\**\metadata\**\*.json">
       <Link>modules\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -1,7 +1,7 @@
 name = "module_worker"
 description = "Implements a narrowly scoped module or platform capability within an assigned file boundary."
 model = "gpt-5.5"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 developer_instructions = """
 Implement only the module, capability, or file set assigned by the parent agent.
 Use the current workspace by default; use a worktree only when the parent agent explicitly asks for isolation.

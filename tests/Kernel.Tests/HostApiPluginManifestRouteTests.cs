@@ -92,6 +92,113 @@ public class HostApiPluginManifestRouteTests : IDisposable
         Assert.True(document.RootElement.TryGetProperty("catalogs", out _));
     }
 
+    [Fact]
+    public async Task MetadataRuntimeManifestRoute_IncludesBuiltInModuleMetadata_WhenPluginStateIsMissing()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await HostApiProcess.StartAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var manifestResponse = await client.GetAsync("/plugins/metadata-runtime-manifest.json");
+        var manifestBody = await manifestResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            manifestResponse.IsSuccessStatusCode,
+            $"Status: {manifestResponse.StatusCode}\nBody: {manifestBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var manifestDocument = JsonDocument.Parse(manifestBody);
+        var modules = manifestDocument.RootElement.GetProperty("modules").EnumerateArray().ToArray();
+        Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
+
+        var navResponse = await client.GetAsync("/plugins/runtime/modules/Organization/metadata/navigation/Organization.nav.json");
+        var navBody = await navResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            navResponse.IsSuccessStatusCode,
+            $"Status: {navResponse.StatusCode}\nBody: {navBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Contains("organization.personCenter", navBody);
+
+        var localizationResponse = await client.GetAsync("/plugins/localization-manifest.json");
+        var localizationBody = await localizationResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            localizationResponse.IsSuccessStatusCode,
+            $"Status: {localizationResponse.StatusCode}\nBody: {localizationBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        using var localizationDocument = JsonDocument.Parse(localizationBody);
+        Assert.Equal(
+            "人员中心",
+            localizationDocument.RootElement
+                .GetProperty("catalogs")
+                .GetProperty("zhs")
+                .GetProperty("Navigation.PersonCenter")
+                .GetString());
+    }
+
+    [Fact]
+    public async Task MetadataRuntimeManifestRoute_ReturnsJson_AndServesModuleMetadata()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Organization");
+        var packageMetadataRoot = Path.Combine(packageRoot, "modules", "Organization", "metadata");
+        Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "navigation"));
+        File.WriteAllText(
+            Path.Combine(packageMetadataRoot, "navigation", "Organization.nav.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "nav",
+              "navigation": {
+                "items": [
+                  {
+                    "key": "organization.personCenter",
+                    "path": "/organization/persons",
+                    "entryType": "standard-list",
+                    "targetKey": "organization.person.list"
+                  }
+                ]
+              }
+            }
+            """);
+        EnableInstalledPackage(packageRoot, installRoot, "Organization");
+
+        await using var host = await HostApiProcess.StartAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var manifestResponse = await client.GetAsync("/plugins/metadata-runtime-manifest.json");
+        var manifestBody = await manifestResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            manifestResponse.IsSuccessStatusCode,
+            $"Status: {manifestResponse.StatusCode}\nBody: {manifestBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Equal("application/json", manifestResponse.Content.Headers.ContentType?.MediaType);
+
+        using var manifestDocument = JsonDocument.Parse(manifestBody);
+        var organizationModule = manifestDocument.RootElement
+            .GetProperty("modules")
+            .EnumerateArray()
+            .Single(module => module.GetProperty("moduleId").GetString() == "Organization");
+        Assert.Equal("navigation/Organization.nav.json", organizationModule.GetProperty("navFiles")[0].GetString());
+
+        var navResponse = await client.GetAsync("/plugins/runtime/modules/Organization/metadata/navigation/Organization.nav.json");
+        var navBody = await navResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            navResponse.IsSuccessStatusCode,
+            $"Status: {navResponse.StatusCode}\nBody: {navBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+        Assert.Contains("organization.personCenter", navBody);
+    }
+
     public void Dispose()
     {
         _testData.Dispose();

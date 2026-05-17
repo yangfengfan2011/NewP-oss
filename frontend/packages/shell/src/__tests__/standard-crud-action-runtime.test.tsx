@@ -19,6 +19,7 @@ describe('standard CRUD action runtime', () => {
       root = null;
     }
     container?.remove();
+    document.body.innerHTML = '';
   });
 
   async function renderActions({
@@ -46,6 +47,30 @@ describe('standard CRUD action runtime', () => {
     });
   }
 
+  async function clickActionButton(label: string) {
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (item) => item.textContent?.trim() === label,
+    );
+
+    expect(button).toBeDefined();
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  }
+
+  async function clickPopconfirmButton(label: '确认' | '取消') {
+    const button = Array.from(document.body.querySelectorAll('button')).find(
+      (item) => item.textContent?.replace(/\s+/g, '') === label,
+    );
+
+    expect(button).toBeDefined();
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  }
+
   it('filters actions by required permissions', async () => {
     await renderActions({
       actions: [
@@ -63,21 +88,63 @@ describe('standard CRUD action runtime', () => {
     expect(container.textContent).not.toContain('停用');
   });
 
-  it('runs handler after confirm', async () => {
+  it('opens Popconfirm for danger action and only runs handler after confirm', async () => {
     const handler = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     await renderActions({
       actions: [{ key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用？' }],
       handlers: { disable: handler },
     });
 
-    await act(async () => {
-      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await clickActionButton('停用');
+
+    expect(document.body.textContent).toContain('确认停用？');
+    expect(handler).not.toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    await clickPopconfirmButton('确认');
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({ id: 'Person_1', refresh: expect.any(Function) });
+  });
+
+  it('uses Popconfirm for delete standard action even without danger variant', async () => {
+    const handler = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    await renderActions({
+      actions: [{ key: 'delete', labelKey: '删除', standardAction: 'delete', confirmMessage: '确认删除？' }],
+      handlers: { delete: handler },
     });
 
-    expect(window.confirm).toHaveBeenCalledWith('确认停用？');
+    await clickActionButton('删除');
+
+    expect(document.body.textContent).toContain('确认删除？');
+    expect(handler).not.toHaveBeenCalled();
+
+    await clickPopconfirmButton('确认');
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith({ id: 'Person_1', refresh: expect.any(Function) });
+  });
+
+  it('does not run danger handler when Popconfirm is canceled', async () => {
+    const handler = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    await renderActions({
+      actions: [{ key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用？' }],
+      handlers: { disable: handler },
+    });
+
+    await clickActionButton('停用');
+    await clickPopconfirmButton('取消');
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('shows pending text and disables buttons while handler is running', async () => {
@@ -113,11 +180,11 @@ describe('standard CRUD action runtime', () => {
     });
   });
 
-  it('renders handler errors without throwing', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('renders handler errors without throwing after Popconfirm confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     await renderActions({
-      actions: [{ key: 'disable', labelKey: '停用', confirmMessage: '确认停用？' }],
+      actions: [{ key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用？' }],
       handlers: {
         disable: vi.fn(async () => {
           throw new Error('停用失败');
@@ -125,10 +192,10 @@ describe('standard CRUD action runtime', () => {
       },
     });
 
-    await act(async () => {
-      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await clickActionButton('停用');
+    await clickPopconfirmButton('确认');
 
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(container.textContent).toContain('停用失败');
   });
 

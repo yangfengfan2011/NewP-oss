@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, type StandardCrudFieldDefinition, type StandardCrudFormSection } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
@@ -32,27 +33,33 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <RuntimeMetadataProvider
-          value={{
-            manifest: { modules: [] },
-            navDocuments: [],
-            modelDocuments: [],
-            viewDocuments: [
-              {
-                type: 'view',
-                view: {
-                  key: 'organization.person.detail',
-                  dicKey: 'PersonDetailView',
-                  titleKey: 'Title',
-                  descriptionKey: 'Description',
-                  mode: 'detail',
-                },
-              },
-            ],
-          }}
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: {} }}
         >
-          <StandardCrudDetailPageHost viewKey="organization.person.detail" id="Person_1" />
-        </RuntimeMetadataProvider>,
+          <RuntimeMetadataProvider
+            value={{
+              manifest: { modules: [] },
+              navDocuments: [],
+              modelDocuments: [],
+              viewDocuments: [
+                {
+                  type: 'view',
+                  view: {
+                    key: 'organization.person.detail',
+                    dicKey: 'PersonDetailView',
+                    titleKey: 'Title',
+                    descriptionKey: 'Description',
+                    mode: 'detail',
+                  },
+                },
+              ],
+            }}
+          >
+            <StandardCrudDetailPageHost viewKey="organization.person.detail" id="Person_1" />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>,
       );
     });
   }

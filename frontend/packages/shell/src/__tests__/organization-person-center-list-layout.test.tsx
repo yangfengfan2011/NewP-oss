@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
@@ -76,24 +77,30 @@ describe('organization person center list layout', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <RuntimeMetadataProvider
-          value={{
-            manifest: { modules: [] },
-            navDocuments: [],
-            viewDocuments: [{
-              type: 'view',
-              view: {
-                key: 'organization.person.list',
-                mode: 'list',
-                titleKey: '人员中心',
-                descriptionKey: '人员列表维护',
-              },
-            }],
-            modelDocuments: [],
-          }}
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: {} }}
         >
-          <StandardCrudListPageHost viewKey="organization.person.list" />
-        </RuntimeMetadataProvider>,
+          <RuntimeMetadataProvider
+            value={{
+              manifest: { modules: [] },
+              navDocuments: [],
+              viewDocuments: [{
+                type: 'view',
+                view: {
+                  key: 'organization.person.list',
+                  mode: 'list',
+                  titleKey: '人员中心',
+                  descriptionKey: '人员列表维护',
+                },
+              }],
+              modelDocuments: [],
+            }}
+          >
+            <StandardCrudListPageHost viewKey="organization.person.list" />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>,
       );
     });
     await act(async () => undefined);
@@ -167,24 +174,30 @@ describe('organization person center list layout', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <RuntimeMetadataProvider
-          value={{
-            manifest: { modules: [] },
-            navDocuments: [],
-            viewDocuments: [{
-              type: 'view',
-              view: {
-                key: 'organization.person.list',
-                mode: 'list',
-                titleKey: '人员中心',
-                descriptionKey: '人员列表维护',
-              },
-            }],
-            modelDocuments: [],
-          }}
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: {} }}
         >
-          <StandardCrudListPageHost viewKey="organization.person.list" />
-        </RuntimeMetadataProvider>,
+          <RuntimeMetadataProvider
+            value={{
+              manifest: { modules: [] },
+              navDocuments: [],
+              viewDocuments: [{
+                type: 'view',
+                view: {
+                  key: 'organization.person.list',
+                  mode: 'list',
+                  titleKey: '人员中心',
+                  descriptionKey: '人员列表维护',
+                },
+              }],
+              modelDocuments: [],
+            }}
+          >
+            <StandardCrudListPageHost viewKey="organization.person.list" />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>,
       );
     });
     await act(async () => undefined);

@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import StandardListPageHost from '../pages/StandardListPageHost';
@@ -56,16 +57,22 @@ describe('StandardListPageHost', () => {
     return act(async () => {
       root = createRoot(container);
       root.render(
-        <RuntimeMetadataProvider
-          value={{
-            manifest: { modules: [] },
-            navDocuments: [],
-            viewDocuments,
-            modelDocuments: [],
-          }}
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: {} }}
         >
-          <StandardListPageHost viewKey="organization.person.list" />
-        </RuntimeMetadataProvider>,
+          <RuntimeMetadataProvider
+            value={{
+              manifest: { modules: [] },
+              navDocuments: [],
+              viewDocuments,
+              modelDocuments: [],
+            }}
+          >
+            <StandardListPageHost viewKey="organization.person.list" />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>,
       );
     });
   }

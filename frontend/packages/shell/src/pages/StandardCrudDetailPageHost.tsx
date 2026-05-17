@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -61,6 +62,7 @@ function StandardCrudDetailPageContent<TDetail>({
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>, TDetail>;
 }): ReactElement {
+  const { t } = useLocalization();
   const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration), [view, registration]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
   const [loadedDetail, setLoadedDetail] = useState<LoadedDetail<TDetail> | null>(null);
@@ -159,8 +161,8 @@ function StandardCrudDetailPageContent<TDetail>({
     <div className="sh-page">
       <PageHeader
         eyebrow={schema.resourceKey}
-        title={schema.titleKey}
-        description={schema.descriptionKey}
+        title={t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}
+        description={t(`${schema.dicKey}.${schema.descriptionKey}`, schema.descriptionKey)}
         actions={detailHeaderActions}
       />
 

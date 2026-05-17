@@ -141,6 +141,44 @@ public class HostApiPluginManifestRouteTests : IDisposable
     }
 
     [Fact]
+    public async Task LocalizationManifestRoute_RefreshesBuiltInRuntimeMetadata_WhenStaleProjectionAlreadyExists()
+    {
+        var installRoot = CreateTempRoot();
+        var stalePlatformMetadataPath = Path.Combine(installRoot, "runtime", "modules", "Platform", "metadata");
+        Directory.CreateDirectory(stalePlatformMetadataPath);
+        File.WriteAllText(
+            Path.Combine(stalePlatformMetadataPath, "stale.txt"),
+            "stale runtime metadata");
+
+        await using var host = await HostApiProcess.StartAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var localizationResponse = await client.GetAsync("/plugins/localization-manifest.json");
+        var localizationBody = await localizationResponse.Content.ReadAsStringAsync();
+
+        Assert.True(
+            localizationResponse.IsSuccessStatusCode,
+            $"Status: {localizationResponse.StatusCode}\nBody: {localizationBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var localizationDocument = JsonDocument.Parse(localizationBody);
+        Assert.Equal(
+            "插件运维",
+            localizationDocument.RootElement
+                .GetProperty("catalogs")
+                .GetProperty("zhs")
+                .GetProperty("Navigation.PluginOps")
+                .GetString());
+
+        Assert.False(File.Exists(Path.Combine(stalePlatformMetadataPath, "stale.txt")));
+        Assert.True(File.Exists(Path.Combine(stalePlatformMetadataPath, "dictionaries", "Navigation.dic.json")));
+    }
+
+    [Fact]
     public async Task MetadataRuntimeManifestRoute_ReturnsJson_AndServesModuleMetadata()
     {
         var installRoot = CreateTempRoot();

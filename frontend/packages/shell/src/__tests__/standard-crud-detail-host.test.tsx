@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
@@ -35,29 +36,40 @@ describe('StandardCrudDetailPageHost', () => {
 
   function renderHostWithId(id: string | null) {
     root.render(
-      <RuntimeMetadataProvider
-        value={{
-          manifest: { modules: [] },
-          navDocuments: [],
-          modelDocuments: [],
-          viewDocuments: [
-            {
-              type: 'view',
-              view: {
-                key: 'organization.person.detail',
-                dicKey: 'PersonDetailView',
-                titleKey: 'Title',
-                descriptionKey: 'Description',
-                mode: 'detail',
-                sections: ['basic'],
-                summaryBlocks: ['userLink'],
-              },
-            },
-          ],
+      <LocalizationProvider
+        defaultLanguage="zhs"
+        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+        catalogs={{
+          zhs: {
+            'PersonDetailView.Title': '人员详情',
+            'PersonDetailView.Description': '查看和维护人员详情信息。',
+          },
         }}
       >
-        <StandardCrudDetailPageHost viewKey="organization.person.detail" id={id} />
-      </RuntimeMetadataProvider>,
+        <RuntimeMetadataProvider
+          value={{
+            manifest: { modules: [] },
+            navDocuments: [],
+            modelDocuments: [],
+            viewDocuments: [
+              {
+                type: 'view',
+                view: {
+                  key: 'organization.person.detail',
+                  dicKey: 'PersonDetailView',
+                  titleKey: 'Title',
+                  descriptionKey: 'Description',
+                  mode: 'detail',
+                  sections: ['basic'],
+                  summaryBlocks: ['userLink'],
+                },
+              },
+            ],
+          }}
+        >
+          <StandardCrudDetailPageHost viewKey="organization.person.detail" id={id} />
+        </RuntimeMetadataProvider>
+      </LocalizationProvider>,
     );
   }
 
@@ -95,6 +107,43 @@ describe('StandardCrudDetailPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'GET' });
     expect(container.textContent).toContain('张三');
+  });
+
+  it('resolves detail title and description from the runtime dictionary', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
+      {
+        metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
+        standardCrudResources: [
+          {
+            resourceKey: 'organization.person',
+            apiRoute: '/api/organization/persons',
+            listViewKey: 'organization.person.list',
+            detailViewKey: 'organization.person.detail',
+            detailRoutePath: '/organization/persons/:id',
+            createEmptyFilters: () => ({}),
+            buildListQuery: () => ({}),
+            mapListItem: (value: unknown) => value,
+            getRowId: () => 'row-1',
+            buildColumns: () => [],
+            renderDetail: () => <div>详情内容</div>,
+          },
+        ],
+      },
+    ]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: '张三' }, summaries: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost('Person_1');
+    await act(async () => undefined);
+
+    expect(container.textContent).toContain('人员详情');
+    expect(container.textContent).toContain('查看和维护人员详情信息。');
+    expect(container.textContent).not.toContain('Title');
+    expect(container.textContent).not.toContain('Description');
   });
 
   it('renders a stable error when id is missing', async () => {

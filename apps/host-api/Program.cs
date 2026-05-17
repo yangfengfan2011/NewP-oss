@@ -290,9 +290,11 @@ static void ProjectBuiltInModuleMetadata(string runtimeRootPath, string modulesR
         }
 
         var targetMetadataPath = Path.Combine(runtimeModulesPath, moduleId, "metadata");
+        // 内建模块的 runtime metadata 需要每次启动都与仓库源目录重新对齐，
+        // 否则 runtime 目录里一旦残留旧投影，就会继续漏掉后来新增的词典或视图定义。
         if (Directory.Exists(targetMetadataPath))
         {
-            continue;
+            Directory.Delete(targetMetadataPath, recursive: true);
         }
 
         // 内建模块只作为无插件接管时的 metadata runtime 回退；插件已接管的模块不会被这里覆盖。

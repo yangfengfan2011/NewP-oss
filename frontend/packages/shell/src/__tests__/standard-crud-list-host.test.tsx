@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
@@ -28,29 +29,40 @@ describe('StandardCrudListPageHost', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <RuntimeMetadataProvider
-          value={{
-            manifest: { modules: [] },
-            navDocuments: [],
-            modelDocuments: [],
-            viewDocuments: [
-              {
-                type: 'view',
-                view: {
-                  key: 'organization.person.list',
-                  dicKey: 'PersonListView',
-                  titleKey: 'Title',
-                  descriptionKey: 'Description',
-                  mode: 'list',
-                  columns: [{ key: 'name', labelKey: 'Column_Name' }],
-                  pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh' }],
-                },
-              },
-            ],
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{
+            zhs: {
+              'PersonListView.Title': '人员中心',
+              'PersonListView.Description': '维护组织模块中的人员基础信息。',
+            },
           }}
         >
-          <StandardCrudListPageHost viewKey="organization.person.list" />
-        </RuntimeMetadataProvider>,
+          <RuntimeMetadataProvider
+            value={{
+              manifest: { modules: [] },
+              navDocuments: [],
+              modelDocuments: [],
+              viewDocuments: [
+                {
+                  type: 'view',
+                  view: {
+                    key: 'organization.person.list',
+                    dicKey: 'PersonListView',
+                    titleKey: 'Title',
+                    descriptionKey: 'Description',
+                    mode: 'list',
+                    columns: [{ key: 'name', labelKey: 'Column_Name' }],
+                    pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh' }],
+                  },
+                },
+              ],
+            }}
+          >
+            <StandardCrudListPageHost viewKey="organization.person.list" />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>,
       );
     });
   }
@@ -94,6 +106,24 @@ describe('StandardCrudListPageHost', () => {
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons', { method: 'GET' });
     expect(container.textContent).toContain('张三');
     expect(container.textContent).toContain('共 1 条');
+  });
+
+  it('resolves view title and description from the runtime dictionary', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost();
+    await act(async () => undefined);
+
+    expect(container.textContent).toContain('人员中心');
+    expect(container.textContent).toContain('维护组织模块中的人员基础信息。');
+    expect(container.textContent).not.toContain('Title');
+    expect(container.textContent).not.toContain('Description');
   });
 
   it('renders custom header actions only in the page header', async () => {

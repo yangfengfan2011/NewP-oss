@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudClient, normalizeStandardCrudListResult } from '@icp-platform/sdk';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { Button, EmptyState, ErrorState, LoadingState, Panel, StandardListPage, TableWrap } from '@icp-platform/ui';
@@ -35,6 +36,7 @@ function StandardCrudListPageContent<TFilter, TRow>({
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<TFilter, TRow>;
 }): ReactElement {
+  const { t } = useLocalization();
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration), [view, registration]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
   const [filters, setFilters] = useState<TFilter>(() => registration.createEmptyFilters());
@@ -185,8 +187,8 @@ function StandardCrudListPageContent<TFilter, TRow>({
 
   return (
     <StandardListPage
-      title={schema.titleKey}
-      description={schema.descriptionKey}
+      title={t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}
+      description={t(`${schema.dicKey}.${schema.descriptionKey}`, schema.descriptionKey)}
       headerActions={headerActions}
       filterBar={filterBar}
       content={content}

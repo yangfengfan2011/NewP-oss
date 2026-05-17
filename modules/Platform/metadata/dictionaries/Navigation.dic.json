@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "Authorization": {
+      "zhs": "权限授权",
+      "en": "Authorization"
+    },
+    "AuthorizationRoles": {
+      "zhs": "角色管理",
+      "en": "Roles"
+    },
+    "AuthorizationPermissions": {
+      "zhs": "权限列表",
+      "en": "Permissions"
+    },
+    "Audit": {
+      "zhs": "审计日志",
+      "en": "Audit"
+    },
+    "AuditOperationLogs": {
+      "zhs": "操作日志",
+      "en": "Operation Logs"
+    },
+    "AuditAccessLogs": {
+      "zhs": "访问日志",
+      "en": "Access Logs"
+    },
+    "MetadataConfigCenter": {
+      "zhs": "元数据配置",
+      "en": "Metadata Config"
+    },
+    "MetadataConfigModules": {
+      "zhs": "模块元数据",
+      "en": "Module Metadata"
+    },
+    "PluginOps": {
+      "zhs": "插件运维",
+      "en": "Plugin Ops"
+    },
+    "PluginOpsHome": {
+      "zhs": "运维中心",
+      "en": "Ops Center"
+    },
+    "Files": {
+      "zhs": "文件管理",
+      "en": "Files"
+    },
+    "FilesHome": {
+      "zhs": "文件首页",
+      "en": "Files Home"
+    },
+    "Demo": {
+      "zhs": "演示模块",
+      "en": "Demo"
+    },
+    "DemoHome": {
+      "zhs": "演示首页",
+      "en": "Demo Home"
+    },
+    "DemoList": {
+      "zhs": "演示列表",
+      "en": "Demo List"
+    },
+    "ModuleTemplateSample": {
+      "zhs": "模块模板示例",
+      "en": "Module Template Sample"
+    },
+    "ModuleTemplateSampleHome": {
+      "zhs": "模板示例首页",
+      "en": "Template Sample Home"
+    }
+  }
+}

@@ -36,7 +36,13 @@ describe('vite config', () => {
     const manifest = createBuiltinRuntimeLocalizationManifest();
 
     expect(manifest.defaultLanguage).toBe('zhs');
+    expect(manifest.catalogs.zhs['Navigation.PluginOps']).toBe('插件运维');
+    expect(manifest.catalogs.zhs['Navigation.FilesHome']).toBe('文件首页');
+    expect(manifest.catalogs.zhs['Navigation.DemoList']).toBe('演示列表');
+    expect(manifest.catalogs.zhs['Navigation.ModuleTemplateSampleHome']).toBe('模板示例首页');
     expect(manifest.catalogs.zhs['Navigation.PersonCenter']).toBe('人员中心');
+    expect(manifest.catalogs.zhs['Navigation.OrganizationTree']).toBe('组织树');
+    expect(manifest.catalogs.zhs['Navigation.PositionManagement']).toBe('岗位管理');
     expect(manifest.catalogs.zhs['PersonListView.Title']).toBe('人员中心');
   });
 });

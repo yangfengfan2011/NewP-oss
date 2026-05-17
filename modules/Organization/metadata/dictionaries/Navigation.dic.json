@@ -9,6 +9,14 @@
     "PersonCenter": {
       "zhs": "人员中心",
       "en": "Person Center"
+    },
+    "OrganizationTree": {
+      "zhs": "组织树",
+      "en": "Organization Tree"
+    },
+    "PositionManagement": {
+      "zhs": "岗位管理",
+      "en": "Position Management"
     }
   }
 }

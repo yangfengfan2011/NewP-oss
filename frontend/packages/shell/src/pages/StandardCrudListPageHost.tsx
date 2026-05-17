@@ -375,7 +375,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         title: '操作',
         render: (row: TRow) => {
           const rowId = registration.getRowId(row);
-          const shouldRenderDeleteError = deleteActionDefinitions.some((action) => deleteActionError?.key === `${action.key}:${rowId}`);
+          const rowDeleteActionError = deleteActionDefinitions.some((action) => deleteActionError?.key === `${action.key}:${rowId}`)
+            ? deleteActionError
+            : null;
 
           return (
             <div style={{ display: 'grid', gap: 6 }}>
@@ -432,9 +434,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   />
                 ) : null}
               </div>
-              {shouldRenderDeleteError ? (
+              {rowDeleteActionError ? (
                 <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-                  {deleteActionError.message}
+                  {rowDeleteActionError.message}
                 </span>
               ) : null}
             </div>

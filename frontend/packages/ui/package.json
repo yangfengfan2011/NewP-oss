@@ -21,7 +21,10 @@
     "react-dom": "^18.2.0"
   },
   "dependencies": {
-    "@icp-platform/sdk": "workspace:*"
+    "@ant-design/icons": "^6.2.3",
+    "@ant-design/pro-components": "^2.8.10",
+    "@icp-platform/sdk": "workspace:*",
+    "antd": "^5.29.3"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

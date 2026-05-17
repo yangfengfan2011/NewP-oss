@@ -110,7 +110,7 @@
 - Read: `frontend/packages/shell/src/components/Sidebar.tsx`
 - Read: `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
 
-- [ ] **Step 1: 检查工作区状态**
+- [x] **Step 1: 检查工作区状态**
 
 Run:
 
@@ -120,7 +120,7 @@ git status --short
 
 Expected: 允许看到本设计和计划文档；若前端源码已有未提交改动，先阅读对应 diff，不覆盖用户改动。
 
-- [ ] **Step 2: 确认 Pro Components 决策**
+- [x] **Step 2: 确认 Pro Components 决策**
 
 Run:
 
@@ -130,7 +130,7 @@ rg -n "平台内核不 Pro Components 化|adapter|ProTable|ProForm|ProDescriptio
 
 Expected: 输出显示平台内核不 Pro Components 化，UI 层通过 adapter 使用 Pro Components。
 
-- [ ] **Step 3: 确认 Phase 1 不触碰平台内核**
+- [x] **Step 3: 确认 Phase 1 不触碰平台内核**
 
 Run:
 
@@ -150,7 +150,7 @@ Expected: 输出显示 Phase 1 禁止修改 runtime metadata、ModuleRegistry、
 - Read: `frontend/packages/shell/src/components/Sidebar.tsx`
 - Read: `frontend/packages/shell/src/components/Header.tsx`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `frontend/packages/shell/src/__tests__/antd-shell-layout.test.tsx`:
 
@@ -256,7 +256,7 @@ describe('Ant Design shell layout', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -274,7 +274,7 @@ Expected: FAIL，因为 `PageContainer` 尚不存在，且 `Sidebar` 尚未支�
 - Modify: `frontend/packages/shell/package.json`
 - Modify: `frontend/pnpm-lock.yaml`
 
-- [ ] **Step 1: 安装 Phase 1 依赖**
+- [x] **Step 1: 安装 Phase 1 依赖**
 
 Run:
 
@@ -284,7 +284,7 @@ pnpm --dir frontend --filter @icp-platform/shell add antd @ant-design/icons
 
 Expected: `frontend/packages/shell/package.json` 增加 `antd` 和 `@ant-design/icons`；`frontend/pnpm-lock.yaml` 更新。
 
-- [ ] **Step 2: 确认未引入 Pro Components**
+- [x] **Step 2: 确认未引入 Pro Components**
 
 Run:
 
@@ -303,7 +303,7 @@ Expected: 无输出。Phase 1 不引入 Pro Components。
 - Create: `frontend/packages/shell/src/navigation/menuProjection.tsx`
 - Create: `frontend/packages/shell/src/navigation/pageChrome.ts`
 
-- [ ] **Step 1: 创建 Ant Design theme**
+- [x] **Step 1: 创建 Ant Design theme**
 
 Create `frontend/packages/shell/src/config/antdTheme.ts`:
 
@@ -341,7 +341,7 @@ export const shellAntdTheme: ThemeConfig = {
 };
 ```
 
-- [ ] **Step 2: 创建菜单投影 adapter**
+- [x] **Step 2: 创建菜单投影 adapter**
 
 Create `frontend/packages/shell/src/navigation/menuProjection.tsx`:
 
@@ -395,7 +395,7 @@ export function collectMenuPaths(menus: MenuConfig[]): Array<{ id: string; label
 }
 ```
 
-- [ ] **Step 3: 创建页面 chrome 推导工具**
+- [x] **Step 3: 创建页面 chrome 推导工具**
 
 Create `frontend/packages/shell/src/navigation/pageChrome.ts`:
 
@@ -442,7 +442,7 @@ function findTrail(menus: MenuConfig[], pathname: string): MenuConfig[] | null {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认仍失败**
+- [x] **Step 4: 运行测试确认仍失败**
 
 Run:
 
@@ -464,7 +464,7 @@ Expected: 仍 FAIL，因为 Layout、Sidebar、PageContainer 尚未接入。
 - Create: `frontend/packages/shell/src/components/PageContainer.tsx`
 - Modify: `frontend/packages/shell/src/index.css`
 
-- [ ] **Step 1: 在 App 注入 ConfigProvider**
+- [x] **Step 1: 在 App 注入 ConfigProvider**
 
 Modify `frontend/packages/shell/src/App.tsx`:
 
@@ -483,7 +483,7 @@ Wrap the existing providers inside:
 </ConfigProvider>
 ```
 
-- [ ] **Step 2: 新建 PageContainer**
+- [x] **Step 2: 新建 PageContainer**
 
 Create `frontend/packages/shell/src/components/PageContainer.tsx`:
 
@@ -532,7 +532,7 @@ export function PageContainer({
 }
 ```
 
-- [ ] **Step 3: 改造 Header**
+- [x] **Step 3: 改造 Header**
 
 Modify `frontend/packages/shell/src/components/Header.tsx` to render Ant Design `Space`, `Button`, `Segmented`, `Dropdown` or `Avatar`, while preserving:
 
@@ -547,7 +547,7 @@ Acceptance:
 - 用户名仍显示。
 - 退出登录仍调用 `auth.logout()`。
 
-- [ ] **Step 4: 改造 Sidebar**
+- [x] **Step 4: 改造 Sidebar**
 
 Modify `frontend/packages/shell/src/components/Sidebar.tsx`:
 
@@ -566,7 +566,7 @@ interface SidebarProps {
 - Keep `uiShowcaseMenu` fallback only until demo/showcase phase decides removal.
 - Use `projectMenusToAntdItems` and `resolvePageChrome`.
 
-- [ ] **Step 5: 更新既有 Sidebar 测试调用**
+- [x] **Step 5: 更新既有 Sidebar 测试调用**
 
 Modify `frontend/packages/shell/src/__tests__/metadata-navigation.test.tsx` and `frontend/packages/shell/src/__tests__/ui-showcase-navigation.test.tsx` so every direct `<Sidebar menus={...} />` call becomes:
 
@@ -582,7 +582,7 @@ For the UI Showcase empty menu test, use:
 
 Expected: Existing metadata navigation and UI Showcase fallback assertions still verify the same behavior; only the controlled collapse props are added.
 
-- [ ] **Step 6: 改造 Layout**
+- [x] **Step 6: 改造 Layout**
 
 Modify `frontend/packages/shell/src/components/Layout.tsx`:
 
@@ -606,7 +606,7 @@ Modify `frontend/packages/shell/src/components/Layout.tsx`:
 </AntdLayout>
 ```
 
-- [ ] **Step 7: 调整 Shell CSS**
+- [x] **Step 7: 调整 Shell CSS**
 
 Modify `frontend/packages/shell/src/index.css`:
 
@@ -615,7 +615,7 @@ Modify `frontend/packages/shell/src/index.css`:
 - Ensure body background is `#f5f5f5`.
 - Avoid large gradients and excessive shadows.
 
-- [ ] **Step 8: 运行 Phase 1 测试**
+- [x] **Step 8: 运行 Phase 1 测试**
 
 Run:
 
@@ -634,7 +634,7 @@ Expected: PASS.
 - Modify: `docs/verification/frontend-ant-design-rebuild-verification.md`
 - Modify: `docs/phases/current-handoff.md`
 
-- [ ] **Step 1: 运行 Shell 测试**
+- [x] **Step 1: 运行 Shell 测试**
 
 Run:
 
@@ -644,7 +644,7 @@ pnpm --dir frontend --filter @icp-platform/shell test
 
 Expected: PASS. If tests fail, fix Phase 1 regressions before proceeding.
 
-- [ ] **Step 2: 运行 Shell build**
+- [x] **Step 2: 运行 Shell build**
 
 Run:
 
@@ -654,7 +654,7 @@ pnpm --dir frontend --filter @icp-platform/shell build
 
 Expected: PASS.
 
-- [ ] **Step 3: 记录验证**
+- [x] **Step 3: 记录验证**
 
 Create or update `docs/verification/frontend-ant-design-rebuild-verification.md`:
 
@@ -672,7 +672,7 @@ Create or update `docs/verification/frontend-ant-design-rebuild-verification.md`
 - Rollback: 回退 `frontend/packages/shell` 的 Ant Design 依赖、theme、Layout、Header、Sidebar、PageContainer 和 `index.css`。
 ```
 
-- [ ] **Step 4: 更新交接台账**
+- [x] **Step 4: 更新交接台账**
 
 Update `docs/phases/current-handoff.md` with:
 
@@ -689,7 +689,7 @@ Update `docs/phases/current-handoff.md` with:
 - Create: `frontend/packages/shell/src/__tests__/pro-components-adapter-contract.test.tsx`
 - Read: `docs/superpowers/specs/platform/2026-05-17-frontend-ant-design-rebuild-design.md`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `frontend/packages/shell/src/__tests__/pro-components-adapter-contract.test.tsx`:
 
@@ -719,7 +719,7 @@ describe('Pro Components adapter contract', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -743,7 +743,7 @@ Expected: FAIL，因为 `createSearchTableRequest` 尚未实现。
 - Create: `frontend/packages/ui/src/pro-adapters/StatusTag.tsx`
 - Modify: `frontend/packages/ui/src/index.ts`
 
-- [ ] **Step 1: 安装 Pro Components**
+- [x] **Step 1: 安装 Pro Components**
 
 Run:
 
@@ -753,7 +753,7 @@ pnpm --dir frontend --filter @icp-platform/ui add antd @ant-design/icons @ant-de
 
 Expected: `frontend/packages/ui/package.json` 增加 `antd`、`@ant-design/icons` 和 `@ant-design/pro-components`；Shell 继续通过 Phase 1 的 `antd` 依赖承载全局布局。
 
-- [ ] **Step 2: 创建 SearchTable request adapter**
+- [x] **Step 2: 创建 SearchTable request adapter**
 
 Create `frontend/packages/ui/src/pro-adapters/SearchTablePage.tsx`:
 
@@ -819,7 +819,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
 }
 ```
 
-- [ ] **Step 3: 导出 adapter**
+- [x] **Step 3: 导出 adapter**
 
 Modify `frontend/packages/ui/src/index.ts`:
 
@@ -831,7 +831,7 @@ export * from './pro-adapters/ActionButtons';
 export * from './pro-adapters/StatusTag';
 ```
 
-- [ ] **Step 4: 实现 FormPage / DetailPage / ActionButtons / StatusTag 最小骨架**
+- [x] **Step 4: 实现 FormPage / DetailPage / ActionButtons / StatusTag 最小骨架**
 
 Implement minimal wrappers using `ProForm`, `ProDescriptions`, `Button`, `Dropdown`, `Popconfirm`, and `Tag`.
 
@@ -841,7 +841,7 @@ Expected:
 - Wrappers accept platform props.
 - Wrappers do not read runtime metadata directly.
 
-- [ ] **Step 5: 运行 adapter 测试**
+- [x] **Step 5: 运行 adapter 测试**
 
 Run:
 
@@ -863,7 +863,7 @@ Expected: PASS.
 - Test: `frontend/packages/shell/src/__tests__/organization-person-center-detail-layout.test.tsx`
 - Test: `frontend/packages/shell/src/__tests__/organization-person-create-flow.test.tsx`
 
-- [ ] **Step 1: 写或更新人员中心列表布局测试**
+- [x] **Step 1: 写或更新人员中心列表布局测试**
 
 Run existing tests first:
 
@@ -873,7 +873,7 @@ pnpm --dir frontend --filter @icp-platform/shell test -- src/__tests__/organizat
 
 Expected: Existing behavior baseline. If tests pass immediately, update assertions to require Ant Design / Pro Components table affordances such as query form labels, operation column, status tags, and pagination.
 
-- [ ] **Step 2: 改造 StandardCrudListPageHost**
+- [x] **Step 2: 改造 StandardCrudListPageHost**
 
 Use `SearchTablePage` adapter for standard CRUD list rendering.
 
@@ -889,7 +889,7 @@ Must preserve:
 - `registration.actionHandlers`
 - permissions
 
-- [ ] **Step 3: 改造 StandardCrudDetailPageHost**
+- [x] **Step 3: 改造 StandardCrudDetailPageHost**
 
 Use `DetailPage` and `FormPage` adapter for details and edit/create behavior.
 
@@ -901,7 +901,7 @@ Must preserve:
 - required field validation.
 - save and disable action behavior.
 
-- [ ] **Step 4: 运行人员中心测试**
+- [x] **Step 4: 运行人员中心测试**
 
 Run:
 
@@ -920,7 +920,7 @@ Expected: PASS.
 - Modify: `frontend/modules/audit/src/pages/AccessLogs.tsx`
 - Test: `frontend/packages/shell/src/__tests__/audit-pages-ant-design.test.tsx`
 
-- [ ] **Step 1: 写日志页 AntD 测试**
+- [x] **Step 1: 写日志页 AntD 测试**
 
 Create `frontend/packages/shell/src/__tests__/audit-pages-ant-design.test.tsx` to verify:
 
@@ -929,7 +929,7 @@ Create `frontend/packages/shell/src/__tests__/audit-pages-ant-design.test.tsx` t
 - loading、empty、error 状态由 Ant Design / Pro Components 组件承载。
 - API 路径仍为 `/api/audit/operation-logs` 和 `/api/audit/access-logs`。
 
-- [ ] **Step 2: 重做 OperationLogs**
+- [x] **Step 2: 重做 OperationLogs**
 
 Use `SearchTablePage` adapter and preserve:
 
@@ -939,7 +939,7 @@ Use `SearchTablePage` adapter and preserve:
 - `/api/audit/operation-logs`
 - result status mapping
 
-- [ ] **Step 3: 重做 AccessLogs**
+- [x] **Step 3: 重做 AccessLogs**
 
 Use `SearchTablePage` adapter and preserve:
 
@@ -950,7 +950,7 @@ Use `SearchTablePage` adapter and preserve:
 - statusCode mapping
 - responseTime display
 
-- [ ] **Step 4: 运行日志页测试**
+- [x] **Step 4: 运行日志页测试**
 
 Run:
 
@@ -969,7 +969,7 @@ Expected: PASS.
 - Modify: `docs/phases/current-handoff.md`
 - Optionally Modify: `docs/superpowers/plans/platform/2026-05-17-frontend-ant-design-rebuild.md`
 
-- [ ] **Step 1: 运行 Shell 测试**
+- [x] **Step 1: 运行 Shell 测试**
 
 Run:
 
@@ -979,7 +979,7 @@ pnpm --dir frontend --filter @icp-platform/shell test
 
 Expected: PASS.
 
-- [ ] **Step 2: 运行 Shell build**
+- [x] **Step 2: 运行 Shell build**
 
 Run:
 
@@ -989,7 +989,7 @@ pnpm --dir frontend --filter @icp-platform/shell build
 
 Expected: PASS.
 
-- [ ] **Step 3: 涉及 UI 包时运行 UI build**
+- [x] **Step 3: 涉及 UI 包时运行 UI build**
 
 Run:
 
@@ -999,7 +999,7 @@ pnpm --dir frontend --filter @icp-platform/ui build
 
 Expected: PASS.
 
-- [ ] **Step 4: 记录验证和下一步**
+- [x] **Step 4: 记录验证和下一步**
 
 Update `docs/verification/frontend-ant-design-rebuild-verification.md` and `docs/phases/current-handoff.md`.
 

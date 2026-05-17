@@ -1,49 +1,44 @@
+import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { Avatar, Button, Layout as AntdLayout, Segmented, Space, Typography } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlatform } from '../contexts/PlatformContext';
+
+const { Header: AntdHeader } = AntdLayout;
+const { Text, Title } = Typography;
 
 export function Header() {
   const auth = useAuth();
   const { shellView, setShellView, canSwitchShellView } = usePlatform();
 
-  const renderShellViewButton = (view: 'business' | 'platform', label: string) => {
-    const isActive = shellView === view;
-
-    return (
-      <button
-        type="button"
-        onClick={() => setShellView(view)}
-        disabled={isActive}
-        className={`sh-view-switch-btn ${isActive ? 'active' : ''}`}
-      >
-        {label}
-      </button>
-    );
-  };
-
   return (
-    <header className="sh-header">
-      <div className="sh-header-brand">
+    <AntdHeader className="np-app-header">
+      <div className="np-header-brand">
         <div>
-          <div className="sh-header-meta">统一业务与平台工作台</div>
-          <h1 className="sh-header-title">ICP Platform</h1>
+          <Text type="secondary" className="np-header-meta">统一业务与平台工作台</Text>
+          <Title level={4} className="np-header-title">ICP Platform</Title>
         </div>
       </div>
-      <div className="sh-header-actions">
+      <Space size={16} className="np-header-actions">
         {canSwitchShellView && (
-          <div className="sh-view-switch">
-            {renderShellViewButton('business', '业务视图')}
-            {renderShellViewButton('platform', '平台视图')}
-          </div>
+          <Segmented
+            value={shellView}
+            onChange={(value) => setShellView(value as 'business' | 'platform')}
+            options={[
+              { label: '业务视图', value: 'business' },
+              { label: '平台视图', value: 'platform' },
+            ]}
+          />
         )}
         {auth.isAuthenticated && auth.user && (
-          <div className="sh-header-user">
-            <span className="sh-header-meta">欢迎，{auth.user.displayName}</span>
-            <button onClick={() => auth.logout()} className="sh-btn">
+          <Space size={12}>
+            <Avatar size="small" icon={<UserOutlined />} />
+            <Text type="secondary">欢迎，{auth.user.displayName}</Text>
+            <Button type="text" icon={<LogoutOutlined />} onClick={() => auth.logout()}>
               退出登录
-            </button>
-          </div>
+            </Button>
+          </Space>
         )}
-      </div>
-    </header>
+      </Space>
+    </AntdHeader>
   );
 }

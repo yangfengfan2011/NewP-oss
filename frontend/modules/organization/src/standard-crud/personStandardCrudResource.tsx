@@ -7,7 +7,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
-import { Button, ErrorState, Input, Select, StatusBadge } from '@icp-platform/ui';
+import { Button, ErrorState, Input, Select, StatusTag } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
@@ -309,12 +309,20 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     {
       key: 'employmentStatus',
       title: '在职状态',
-      render: (item) => <StatusBadge variant="info" label={item.employmentStatusLabel || getEmploymentStatusLabel(item.employmentStatus)} />,
+      render: (item) => (
+        <StatusTag tone="processing">
+          {item.employmentStatusLabel || getEmploymentStatusLabel(item.employmentStatus)}
+        </StatusTag>
+      ),
     },
     {
       key: 'isEnabled',
       title: '启用状态',
-      render: (item) => <StatusBadge variant={item.isEnabled ? 'success' : 'warning'} label={item.isEnabled ? '启用' : '停用'} />,
+      render: (item) => (
+        <StatusTag tone={item.isEnabled ? 'success' : 'warning'}>
+          {item.isEnabled ? '启用' : '停用'}
+        </StatusTag>
+      ),
     },
   ],
   renderFilters: (context) => <PersonListFiltersPanel filters={context.filters} setFilters={context.setFilters} />,

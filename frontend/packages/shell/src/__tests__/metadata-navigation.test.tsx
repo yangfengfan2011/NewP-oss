@@ -56,7 +56,7 @@ describe('metadata navigation', () => {
       root = createRoot(container);
       root.render(
         <MemoryRouter>
-          <Sidebar menus={menus} />
+          <Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} />
         </MemoryRouter>,
       );
     });
@@ -95,7 +95,7 @@ describe('metadata navigation', () => {
       root = createRoot(container);
       root.render(
         <MemoryRouter>
-          <Sidebar menus={menus} />
+          <Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} />
         </MemoryRouter>,
       );
     });
@@ -128,4 +128,3 @@ describe('metadata navigation', () => {
     expect(navItems.map((item) => item.entryType)).toEqual(['standard-list', 'custom']);
   });
 });
-

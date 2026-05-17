@@ -103,7 +103,7 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await act(async () => undefined);
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.textContent).toContain('张三');
     expect(container.textContent).toContain('共 1 条');
   });

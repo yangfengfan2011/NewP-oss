@@ -12,7 +12,7 @@ import {
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { ErrorState, LoadingState, PageHeader, StandardCrudForm } from '@icp-platform/ui';
+import { DetailPage, ErrorState, FormPage, LoadingState, PageHeader, StandardCrudForm } from '@icp-platform/ui';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
@@ -112,6 +112,14 @@ function StandardCrudDetailPageContent<TDetail>({
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
   const editFields = registration.fields ?? [];
+  const detailPreviewData = useMemo(
+    () => (currentNormalizedDetail ? buildDetailPreviewData(currentNormalizedDetail.fields, editFields) : {}),
+    [currentNormalizedDetail, editFields],
+  );
+  const detailColumns = useMemo(
+    () => (currentNormalizedDetail ? buildDetailColumns(currentNormalizedDetail.fields, editFields) : []),
+    [currentNormalizedDetail, editFields],
+  );
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
     fields: editFields,
     providers: currentNormalizedDetail ? registration.lookupProviders : [],
@@ -172,6 +180,11 @@ function StandardCrudDetailPageContent<TDetail>({
         <ErrorState message={error} />
       ) : currentDetail && registration.renderDetail ? (
         <div className="sh-page-stack">
+          <DetailPage
+            title="详情信息"
+            dataSource={detailPreviewData}
+            columns={detailColumns}
+          />
           <StandardCrudSummaryBlocks
             blocks={nonReadySummaryBlocks}
             summaries={currentNormalizedDetail?.summaries ?? {}}
@@ -187,21 +200,33 @@ function StandardCrudDetailPageContent<TDetail>({
             renderers={registration.summaryRenderers}
             titleForBlock={(key) => key}
           />
-          <StandardCrudForm
-            formId={`${schema.resourceKey}-detail-form`}
-            mode="edit"
-            fields={editFields}
-            sections={registration.formSections ?? []}
-            values={formValues}
-            lookupOptions={lookupOptions}
-            lookupLoading={lookupLoading}
-            lookupErrors={lookupErrors}
-            onChange={handleFormChange}
-            onSubmit={() => handleSave(editFields)}
-            saving={saving}
-            error={saveError}
-            titleForSection={(titleKey) => titleKey}
+          <DetailPage
+            title="详情信息"
+            dataSource={detailPreviewData}
+            columns={detailColumns}
           />
+          <FormPage<Record<string, unknown>>
+            component="div"
+            submitter={false}
+            initialValues={formValues}
+            onFinish={() => handleSave(editFields)}
+          >
+            <StandardCrudForm
+              formId={`${schema.resourceKey}-detail-form`}
+              mode="edit"
+              fields={editFields}
+              sections={registration.formSections ?? []}
+              values={formValues}
+              lookupOptions={lookupOptions}
+              lookupLoading={lookupLoading}
+              lookupErrors={lookupErrors}
+              onChange={handleFormChange}
+              onSubmit={() => handleSave(editFields)}
+              saving={saving}
+              error={saveError}
+              titleForSection={(titleKey) => titleKey}
+            />
+          </FormPage>
         </div>
       ) : currentNormalizedDetail ? (
         <div className="sh-page-stack">
@@ -211,7 +236,11 @@ function StandardCrudDetailPageContent<TDetail>({
             renderers={registration.summaryRenderers}
             titleForBlock={(key) => key}
           />
-          <pre>{JSON.stringify(currentNormalizedDetail.fields, null, 2)}</pre>
+          <DetailPage
+            title="详情信息"
+            dataSource={detailPreviewData}
+            columns={detailColumns}
+          />
         </div>
       ) : (
         <ErrorState message="未找到详情。" />
@@ -232,4 +261,40 @@ function buildDetailFormValues(
   }
 
   return values;
+}
+
+function buildDetailPreviewData(
+  detailFields: Record<string, unknown>,
+  fields: StandardCrudFieldDefinition[],
+): Record<string, string> {
+  if (fields.length === 0) {
+    return Object.fromEntries(Object.entries(detailFields).map(([key, value]) => [key, formatDetailValue(value)]));
+  }
+
+  return Object.fromEntries(
+    fields.map((field) => [field.key, formatDetailValue(readStandardCrudFieldValue(detailFields, field))]),
+  );
+}
+
+function buildDetailColumns(
+  detailFields: Record<string, unknown>,
+  fields: StandardCrudFieldDefinition[],
+): Array<{ key: string; title: string; dataIndex: string }> {
+  if (fields.length === 0) {
+    return Object.keys(detailFields).map((key) => ({ key, title: key, dataIndex: key }));
+  }
+
+  return fields.map((field) => ({ key: field.key, title: field.labelKey, dataIndex: field.key }));
+}
+
+function formatDetailValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否';
+  }
+
+  return String(value);
 }

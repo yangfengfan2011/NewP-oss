@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
@@ -11,6 +11,15 @@ import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+async function flushProTableRequest(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
 
 const serviceMocks = vi.hoisted(() => ({
   disablePerson: vi.fn(),
@@ -31,6 +40,37 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
 describe('organization person center list layout', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  beforeEach(() => {
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    Object.defineProperty(window, 'getComputedStyle', {
+      writable: true,
+      value: (element: Element, pseudoElement?: string | null) => {
+        if (pseudoElement) {
+          return {
+            getPropertyValue: () => '',
+            width: '0px',
+            height: '0px',
+          };
+        }
+
+        return getComputedStyle(element);
+      },
+    });
+  });
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -103,9 +143,13 @@ describe('organization person center list layout', () => {
         </LocalizationProvider>,
       );
     });
-    await act(async () => undefined);
+    await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(container.querySelector('.ant-pro-table')).not.toBeNull();
+    expect(container.querySelector('.ant-table')).not.toBeNull();
+    expect(container.querySelector('.ant-pagination')).not.toBeNull();
+    expect(container.querySelector('.ant-tag')).not.toBeNull();
     expect(container.textContent).toContain('人员中心');
     expect(container.textContent).toContain('关键字');
     expect(container.textContent).toContain('新建');
@@ -200,7 +244,7 @@ describe('organization person center list layout', () => {
         </LocalizationProvider>,
       );
     });
-    await act(async () => undefined);
+    await flushProTableRequest();
 
     const disableButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('停用'),

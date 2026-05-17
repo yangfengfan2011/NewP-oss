@@ -184,8 +184,9 @@ describe('StandardCrudDetailPageHost', () => {
 
     const text = container.textContent ?? '';
     expect(text).toContain('暂未配置');
-    expect(text).toContain('"ENAME": "张三"');
-    expect(text.indexOf('暂未配置')).toBeLessThan(text.indexOf('"ENAME": "张三"'));
+    expect(text).toContain('ENAME');
+    expect(text).toContain('张三');
+    expect(text.indexOf('暂未配置')).toBeLessThan(text.indexOf('ENAME'));
   });
 
   it('does not expose stale header actions after the route id changes', async () => {

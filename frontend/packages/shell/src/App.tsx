@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { ConfigProvider } from 'antd';
 import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
 import Layout from './components/Layout';
+import { shellAntdTheme } from './config/antdTheme';
 import { shellUiConfig } from './config/uiConfig';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlatformProvider } from './contexts/PlatformContext';
@@ -233,28 +235,30 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <LocalizationProvider
-        defaultLanguage={localizationManifest.defaultLanguage}
-        supportedLanguages={localizationManifest.supportedLanguages}
-        catalogs={localizationManifest.catalogs}
-      >
-        <AuthProvider>
-          <PlatformProvider
-            uiConfig={shellUiConfig}
-            shellView={shellView}
-            setShellView={setShellView}
-            canSwitchShellView={canSwitchShellView}
-          >
-            <RuntimeMetadataProvider value={runtimeMetadata}>
-              <AuthorizationGate>
-                <AppRoutes />
-              </AuthorizationGate>
-            </RuntimeMetadataProvider>
-          </PlatformProvider>
-        </AuthProvider>
-      </LocalizationProvider>
-    </BrowserRouter>
+    <ConfigProvider theme={shellAntdTheme}>
+      <BrowserRouter>
+        <LocalizationProvider
+          defaultLanguage={localizationManifest.defaultLanguage}
+          supportedLanguages={localizationManifest.supportedLanguages}
+          catalogs={localizationManifest.catalogs}
+        >
+          <AuthProvider>
+            <PlatformProvider
+              uiConfig={shellUiConfig}
+              shellView={shellView}
+              setShellView={setShellView}
+              canSwitchShellView={canSwitchShellView}
+            >
+              <RuntimeMetadataProvider value={runtimeMetadata}>
+                <AuthorizationGate>
+                  <AppRoutes />
+                </AuthorizationGate>
+              </RuntimeMetadataProvider>
+            </PlatformProvider>
+          </AuthProvider>
+        </LocalizationProvider>
+      </BrowserRouter>
+    </ConfigProvider>
   );
 }
 

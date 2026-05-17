@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
@@ -30,6 +30,37 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
 describe('organization person center detail layout', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  beforeEach(() => {
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    Object.defineProperty(window, 'getComputedStyle', {
+      writable: true,
+      value: (element: Element, pseudoElement?: string | null) => {
+        if (pseudoElement) {
+          return {
+            getPropertyValue: () => '',
+            width: '0px',
+            height: '0px',
+          };
+        }
+
+        return getComputedStyle(element);
+      },
+    });
+  });
 
   async function renderStandardDetailHost() {
     container = document.createElement('div');
@@ -119,6 +150,8 @@ describe('organization person center detail layout', () => {
     await renderStandardDetailHost();
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/person-1', { method: 'GET' });
+    expect(container.querySelector('.ant-descriptions')).not.toBeNull();
+    expect(container.querySelector('.ant-form')).not.toBeNull();
     expect(container.textContent).toContain('人员详情');
     expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('基础信息');

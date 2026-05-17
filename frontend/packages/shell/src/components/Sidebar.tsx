@@ -1,11 +1,17 @@
-import { Link, useLocation } from 'react-router-dom';
+import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { Button, Layout as AntdLayout, Menu } from 'antd';
+import { useLocation } from 'react-router-dom';
 import type { MenuConfig } from '@icp-platform/sdk';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlatform } from '../contexts/PlatformContext';
 import { filterMenusByShellView } from '../config/uiConfig';
+import { projectMenusToAntdItems } from '../navigation/menuProjection';
+import { resolvePageChrome } from '../navigation/pageChrome';
 
 interface SidebarProps {
   menus: MenuConfig[];
+  collapsed: boolean;
+  onCollapse: (collapsed: boolean) => void;
 }
 
 const uiShowcaseMenu: MenuConfig = {
@@ -14,53 +20,62 @@ const uiShowcaseMenu: MenuConfig = {
   path: '/ui-showcase',
 };
 
-function MenuItem({ menu }: { menu: MenuConfig }) {
+const { Sider } = AntdLayout;
+
+export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
   const location = useLocation();
   const auth = useAuth();
-
-  if (menu.permissions && menu.permissions.length > 0) {
-    if (!auth.hasAnyPermission(menu.permissions)) {
-      return null;
-    }
-  }
-
-  const isActive = menu.path === location.pathname;
-
-  return (
-    <li className="sh-nav-item">
-      {menu.path ? (
-        <Link to={menu.path} className={`sh-nav-link ${isActive ? 'active' : ''}`}>
-          {menu.icon && <span className="sh-nav-icon">{menu.icon}</span>}
-          {menu.label}
-        </Link>
-      ) : (
-        <div className="sh-nav-group">{menu.label}</div>
-      )}
-      {menu.children && menu.children.length > 0 && (
-        <ul className="sh-nav-list sh-nav-children">
-          {menu.children.map(child => (
-            <MenuItem key={child.id} menu={child} />
-          ))}
-        </ul>
-      )}
-    </li>
-  );
-}
-
-export function Sidebar({ menus }: SidebarProps) {
   const { shellView } = usePlatform();
   const visibleMenus = filterMenusByShellView(menus, shellView);
   const navigationMenus = visibleMenus.some(menu => menu.path === uiShowcaseMenu.path)
     ? visibleMenus
     : [...visibleMenus, uiShowcaseMenu];
+  const chrome = resolvePageChrome(navigationMenus, location.pathname);
+  const defaultOpenKeys = Array.from(new Set([...collectExpandableKeys(navigationMenus), ...chrome.openKeys]));
+  const menuItems = projectMenusToAntdItems(navigationMenus, (menu) => {
+    if (!menu.permissions || menu.permissions.length === 0) {
+      return true;
+    }
+
+    return auth.hasAnyPermission(menu.permissions);
+  });
 
   return (
-    <nav className="sh-sidebar">
-      <ul className="sh-nav-list">
-        {navigationMenus.map(menu => (
-          <MenuItem key={menu.id} menu={menu} />
-        ))}
-      </ul>
-    </nav>
+    <Sider
+      collapsible
+      collapsed={collapsed}
+      trigger={null}
+      width={240}
+      className="np-app-sider"
+    >
+      <div className="np-sider-brand">
+        <span className="np-sider-logo">ICP</span>
+        {!collapsed ? <span className="np-sider-title">ICP Platform</span> : null}
+      </div>
+      <Button
+        type="text"
+        aria-label="折叠菜单"
+        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+        onClick={() => onCollapse(!collapsed)}
+        className="np-sider-collapse"
+      />
+      <Menu
+        theme="dark"
+        mode="inline"
+        items={menuItems}
+        selectedKeys={chrome.selectedKeys}
+        defaultOpenKeys={defaultOpenKeys}
+      />
+    </Sider>
   );
+}
+
+function collectExpandableKeys(menus: MenuConfig[]): string[] {
+  return menus.flatMap((menu) => {
+    const childKeys = menu.children ? collectExpandableKeys(menu.children) : [];
+
+    return menu.children && menu.children.length > 0
+      ? [menu.path ?? menu.id, ...childKeys]
+      : childKeys;
+  });
 }

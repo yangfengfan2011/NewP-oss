@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
-import { PageHeader, SummaryCard, Panel, Badge, Pagination, LoadingState, TableWrap } from '@icp-platform/ui';
-import type { TableColumn } from '@icp-platform/ui';
+import { useMemo, useState } from 'react';
+import {
+  AlertState,
+  LoadingBlock,
+  PageHeader,
+  SearchTablePage,
+  StatusTag,
+  SummaryCard,
+  createSearchTableRequest,
+  type SearchTablePageProps,
+} from '@icp-platform/ui';
 
 interface AccessLog {
   id: number;
@@ -15,36 +23,62 @@ interface AccessLog {
   userAgent?: string;
 }
 
+interface AuditListResponse<TItem> {
+  items?: TItem[];
+  total?: number;
+}
+
 export default function AccessLogs() {
   const [logs, setLogs] = useState<AccessLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [pageIndex, setPageIndex] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(20);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void fetchLogs();
-  }, [pageIndex]);
+  const request = useMemo(
+    () =>
+      createSearchTableRequest<Record<string, unknown>, AccessLog, AccessLog>({
+        buildQuery: () => ({}),
+        load: async (query) => {
+          try {
+            setLoading(true);
+            setError(null);
+            const nextPageIndex = Number(query.pageIndex ?? 1);
+            const nextPageSize = Number(query.pageSize ?? 20);
+            const response = await fetch(buildAuditPath('/api/audit/access-logs', {
+              pageIndex: nextPageIndex,
+              pageSize: nextPageSize,
+            }));
 
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `/api/audit/access-logs?pageIndex=${pageIndex}&pageSize=${pageSize}`,
-      );
-      const data = await response.json();
-      setLogs(data.items);
-      setTotal(data.total);
-    } catch (error) {
-      console.error('Failed to fetch access logs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+            if (!response.ok) {
+              throw new Error('访问日志加载失败');
+            }
 
-  if (loading) {
-    return <LoadingState message="访问日志加载中..." />;
-  }
+            const data = await response.json() as AuditListResponse<AccessLog>;
+            const items = Array.isArray(data.items) ? data.items : [];
+            const nextTotal = typeof data.total === 'number' ? data.total : items.length;
+
+            setLogs(items);
+            setTotal(nextTotal);
+            setPageIndex(nextPageIndex);
+            setPageSize(nextPageSize);
+
+            return { items, total: nextTotal };
+          } catch (loadError) {
+            const message = loadError instanceof Error ? loadError.message : '访问日志加载失败';
+            setLogs([]);
+            setTotal(0);
+            setError(message);
+            return { items: [], total: 0 };
+          } finally {
+            setLoading(false);
+          }
+        },
+        mapRow: (row) => row,
+      }),
+    [],
+  );
 
   const successCount = logs.filter((log) => log.statusCode < 400).length;
   const errorCount = logs.length - successCount;
@@ -53,22 +87,23 @@ export default function AccessLogs() {
       ? Math.round(logs.reduce((sum, log) => sum + log.responseTime, 0) / logs.length)
       : 0;
 
-  const accessLogColumns: TableColumn<AccessLog>[] = [
-    { key: 'accessTime', title: '时间', render: (log) => new Date(log.accessTime).toLocaleString() },
-    { key: 'userName', title: '用户', render: (log) => log.userName || '-' },
-    { key: 'httpMethod', title: '方法', render: (log) => <span className="sh-code">{log.httpMethod}</span> },
-    { key: 'requestPath', title: '路径', render: (log) => <span className="sh-code">{log.requestPath}</span> },
+  const accessLogColumns: SearchTablePageProps<AccessLog>['columns'] = [
+    { key: 'accessTime', title: '时间', dataIndex: 'accessTime', render: (_, log) => new Date(log.accessTime).toLocaleString() },
+    { key: 'userName', title: '用户', dataIndex: 'userName', render: (_, log) => log.userName || '-' },
+    { key: 'httpMethod', title: '方法', dataIndex: 'httpMethod', render: (_, log) => <span className="sh-code">{log.httpMethod}</span> },
+    { key: 'requestPath', title: '路径', dataIndex: 'requestPath', render: (_, log) => <span className="sh-code">{log.requestPath}</span> },
     {
       key: 'statusCode',
       title: '状态码',
-      render: (log) => (
-        <Badge variant={log.statusCode < 400 ? 'success' : 'danger'}>
+      dataIndex: 'statusCode',
+      render: (_, log) => (
+        <StatusTag tone={log.statusCode < 400 ? 'success' : 'error'}>
           {log.statusCode}
-        </Badge>
+        </StatusTag>
       ),
     },
-    { key: 'responseTime', title: '响应时间', render: (log) => `${log.responseTime}ms` },
-    { key: 'clientIp', title: 'IP', render: (log) => log.clientIp || '-' },
+    { key: 'responseTime', title: '响应时间', dataIndex: 'responseTime', render: (_, log) => `${log.responseTime}ms` },
+    { key: 'clientIp', title: 'IP', dataIndex: 'clientIp', render: (_, log) => log.clientIp || '-' },
   ];
 
   return (
@@ -76,11 +111,11 @@ export default function AccessLogs() {
       <PageHeader
         eyebrow="审计日志"
         title="访问日志"
-        description="查看系统级 API 请求与访问记录，保留原有分页与数据加载逻辑，并统一为第二阶段的中层页面结构。"
+        description="查看系统级 API 请求与访问记录，保留原有分页与数据加载逻辑，并统一为查询表格结构。"
       />
 
       <div className="sh-section-grid">
-        <SummaryCard label="总记录数" value={total} meta={`当前页 ${logs.length} 条`} />
+        <SummaryCard label="总记录数" value={total} meta={`第 ${pageIndex} 页 / 每页 ${pageSize} 条`} />
 
         <div className="sh-meta-block">
           <div className="sh-meta-row">
@@ -98,24 +133,28 @@ export default function AccessLogs() {
         </div>
       </div>
 
-      <div className="sh-helper-block">
-        <h3 className="sh-helper-block-title">查看说明</h3>
-        <p>第二阶段优先统一审计页面的信息密度与状态表达，筛选器与高级检索能力在后续按真实需求继续补充。</p>
-      </div>
-
-      <Panel title="访问记录" meta={`第 ${pageIndex} 页`}>
-        <TableWrap<AccessLog>
-          columns={accessLogColumns}
-          data={logs}
-          rowKey={(log) => String(log.id)}
-        />
-        <Pagination
-          current={pageIndex}
-          total={total}
-          pageSize={pageSize}
-          onPageChange={setPageIndex}
-        />
-      </Panel>
+      {loading ? <LoadingBlock message="访问日志加载中..." /> : null}
+      {error ? <AlertState message={error} /> : null}
+      <SearchTablePage<AccessLog>
+        rowKey={(log) => String(log.id)}
+        columns={accessLogColumns}
+        request={request}
+      />
     </div>
   );
+}
+
+function buildAuditPath(apiRoute: string, query: Record<string, string | number | boolean | null | undefined>): string {
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === null || value === undefined || value === '') {
+      continue;
+    }
+
+    search.set(key, String(value));
+  }
+
+  const suffix = search.toString();
+  return suffix ? `${apiRoute}?${suffix}` : apiRoute;
 }

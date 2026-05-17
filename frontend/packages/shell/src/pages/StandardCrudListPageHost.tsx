@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudClient, normalizeStandardCrudListResult } from '@icp-platform/sdk';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button, EmptyState, ErrorState, LoadingState, Panel, StandardListPage, TableWrap } from '@icp-platform/ui';
+import { Button, ErrorState, SearchTablePage, StandardListPage, createSearchTableRequest } from '@icp-platform/ui';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
@@ -29,7 +29,7 @@ export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPa
   return <StandardCrudListPageContent view={viewDocument.view as Record<string, unknown>} registration={registration} />;
 }
 
-function StandardCrudListPageContent<TFilter, TRow>({
+function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TRow extends Record<string, unknown>>({
   view,
   registration,
 }: {
@@ -64,43 +64,41 @@ function StandardCrudListPageContent<TFilter, TRow>({
     total,
   };
 
-  useEffect(() => {
-    let cancelled = false;
+  const tableRequest = useMemo(
+    () =>
+      createSearchTableRequest<Record<string, unknown>, TRow, TRow>({
+        buildQuery: () => registration.buildListQuery(appliedFilters) as Record<string, unknown>,
+        load: async (query) => {
+          try {
+            setLoading(true);
+            setError(null);
+            const rawResult = await client.list(query as Record<string, string | number | boolean | null | undefined>);
+            const result = normalizeStandardCrudListResult(rawResult, registration.mapListItem);
 
-    async function loadRows() {
-      try {
-        setLoading(true);
-        setError(null);
-        const rawResult = await client.list(registration.buildListQuery(appliedFilters));
-        const result = normalizeStandardCrudListResult(rawResult, registration.mapListItem);
+            setRows(result.items);
+            setTotal(result.total);
+            setPage(result.page);
+            setPageSize(result.pageSize);
 
-        if (!cancelled) {
-          setRows(result.items);
-          setTotal(result.total);
-          setPage(result.page);
-          setPageSize(result.pageSize);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setRows([]);
-          setTotal(0);
-          setPage(1);
-          setPageSize(1);
-          setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadRows();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [client, registration, appliedFilters, reloadTick]);
+            return {
+              items: result.items,
+              total: result.total,
+            };
+          } catch (loadError) {
+            setRows([]);
+            setTotal(0);
+            setPage(1);
+            setPageSize(1);
+            setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
+            throw loadError;
+          } finally {
+            setLoading(false);
+          }
+        },
+        mapRow: (row) => row,
+      }),
+    [client, registration, appliedFilters, reloadTick],
+  );
 
   const filterBar = (
     <>
@@ -121,7 +119,7 @@ function StandardCrudListPageContent<TFilter, TRow>({
     action.standardAction !== 'create' && action.standardAction !== 'refresh'
   )) ?? [];
   const shouldRenderActionColumn = registration.renderRowActions || (registration.actionHandlers && registration.listActions);
-  const columns = shouldRenderActionColumn
+  const standardColumns = shouldRenderActionColumn
     ? [
       ...registration.buildColumns(context),
       {
@@ -143,6 +141,12 @@ function StandardCrudListPageContent<TFilter, TRow>({
       },
     ]
     : registration.buildColumns(context);
+  const columns = standardColumns.map((column) => ({
+    key: column.key,
+    dataIndex: column.key,
+    title: column.title,
+    render: (_: unknown, row: TRow) => (column.render ? column.render(row) : readTableCell(row, column.key)),
+  }));
 
   const headerActions = headerActionDefinitions.length > 0 ? (
     <StandardCrudActions
@@ -152,27 +156,22 @@ function StandardCrudListPageContent<TFilter, TRow>({
       context={{ refresh: context.refresh }}
     />
   ) : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
+  const tableToolbar = headerActionDefinitions.length > 0 ? headerActions : undefined;
 
   const content = (
-    <Panel
-      title="列表"
-      compact
-      actions={headerActions ? undefined : (
-        <Button size="sm" variant="primary" onClick={context.refresh} disabled={loading}>
-          {loading ? '刷新中...' : '刷新'}
-        </Button>
-      )}
-    >
-      {error ? (
-        <ErrorState message={error} />
-      ) : loading ? (
-        <LoadingState message="正在加载列表..." />
-      ) : rows.length === 0 ? (
-        <EmptyState message="暂无符合筛选条件的数据。" />
-      ) : (
-        <TableWrap columns={columns} data={rows} rowKey={registration.getRowId} />
-      )}
-    </Panel>
+    <div className="np-standard-crud-table">
+      {error ? <ErrorState message={error} /> : null}
+      <SearchTablePage<TRow>
+        rowKey={registration.getRowId}
+        columns={columns}
+        request={tableRequest}
+        toolbar={tableToolbar ?? (
+          <Button size="sm" variant="primary" onClick={context.refresh} disabled={loading}>
+            {loading ? '刷新中...' : '刷新'}
+          </Button>
+        )}
+      />
+    </div>
   );
 
   const totalPages = Math.max(1, Math.ceil(total / Math.max(pageSize, 1)));
@@ -195,4 +194,9 @@ function StandardCrudListPageContent<TFilter, TRow>({
       footerRight={footerRight}
     />
   );
+}
+
+function readTableCell<TRow extends Record<string, unknown>>(row: TRow, key: string): string {
+  const value = row[key];
+  return value == null ? '' : String(value);
 }

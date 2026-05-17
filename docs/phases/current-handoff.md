@@ -38,6 +38,30 @@
 
 ## 4. 最近完成
 
+### 4.0 前端 Ant Design 重建阶段收口
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-17-frontend-ant-design-rebuild-design.md`
+- `docs/superpowers/plans/platform/2026-05-17-frontend-ant-design-rebuild.md`
+- `docs/verification/frontend-ant-design-rebuild-verification.md`
+
+完成内容：
+
+- Shell 已引入 Ant Design 外壳，`App.tsx` 注入 `ConfigProvider` 和企业级主题 token。
+- Shell Layout、Header、Sidebar 与 PageContainer 已改造为 Ant Design 结构，仍保留 runtime metadata / ModuleRegistry 菜单来源、权限过滤、路由承载、`Outlet` 和 `ErrorBoundary`。
+- `frontend/packages/ui` 已新增 Pro Components adapter：`SearchTablePage`、`FormPage`、`DetailPage`、`ActionButtons`、`StatusTag`、`AlertState`、`LoadingBlock`；Pro Components 继续被平台 adapter 包住，不替代平台契约。
+- 人员中心标准 CRUD 列表和详情已接入 table/detail/form adapter，保留 `buildListQuery`、`mapListItem`、`getRowId`、lookup、summary、权限动作和保存/停用行为。
+- 日志审计的操作日志、访问日志已作为低风险页面改造成查询表格样板，保留 `/api/audit/operation-logs` 与 `/api/audit/access-logs` 分页接口语义。
+- Shell 测试增加 AntD jsdom setup，避免后续每个老测试重复维护 `matchMedia` / pseudo `getComputedStyle` 补丁。
+
+当前推荐下一步：
+
+- 按计划后续页面重做顺序继续拆包：配置管理、权限中心、文件中心、插件运维、元数据配置中心。
+- 若继续本主线，下一包应先补对应页面级设计/计划，不要把剩余页面一起混入本次已收口阶段。
+
 ### 4.0 人员中心 metadata runtime 入口修复
 
 状态：已完成并验证。
@@ -153,16 +177,18 @@
 
 ## 5. 当前推荐下一步
 
-当前不建议直接扩大功能面。前端标准 CRUD 第二批已经收口，下一轮如果继续本主线，应优先选择下一批标准 CRUD 资源试点；如果转向后端主线，应继续拆解 required field / 数据一致性问题，并继续保持单一任务、设计先行和可验证收口。
+前端 Ant Design 重建计划本轮已完成 Shell、UI adapter、人员中心样板和日志审计低风险页面收口。下一步应按页面族继续拆包，不建议在同一任务中继续扩大范围；若暂停本主线，再回到前端标准 CRUD 试点或后端 required field / 数据一致性主线。
 
 推荐优先级：
 
-1. 若继续前端标准 CRUD 主线，选择下一批标准 CRUD 资源试点，逐个确认字段、lookup、动作、summary 和模块专属能力边界。
-2. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
-3. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
-4. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
-5. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
-6. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
+1. 继续 Ant Design 页面重做下一包：配置管理。
+2. 之后按顺序拆包权限中心、文件中心、插件运维、元数据配置中心。
+3. 若暂停 Ant Design 主线，再选择下一批标准 CRUD 资源试点，逐个确认字段、lookup、动作、summary 和模块专属能力边界。
+4. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
+5. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
+6. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
+7. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
+8. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
 
 ## 6. 未解决问题
 
@@ -193,6 +219,23 @@
 - 标准 CRUD 自动路由映射当前已由 Person 试点验证；下一批资源接入前仍应逐个确认 descriptor 路由、字段边界和模块专属能力是否拆分清楚。
 
 ## 7. 验证快照
+
+前端 Ant Design 重建阶段收口验证覆盖：
+
+```powershell
+pnpm --dir frontend --filter @icp-platform/shell test
+pnpm --dir frontend --filter @icp-platform/ui build
+pnpm --dir frontend --filter @icp-platform/shell build
+```
+
+验证结论：
+
+- `@icp-platform/shell` 测试通过，41 files / 141 tests。
+- `@icp-platform/ui` 构建通过，`tsc` 成功。
+- `@icp-platform/shell` 构建通过，`tsc && vite build` 成功。
+- Vite 构建仍输出 Ant Design / Pro Components 引入后的 chunk size warning；该警告不影响本轮构建结果，后续如需优化应单独设计 code splitting 或 manual chunks。
+- jsdom 测试中 Ant Design / Pro Components 会输出 `findDOMNode`、`contentStyle` deprecation、React Router future flag 等警告；断言通过，未作为本轮失败信号。
+- 尚未覆盖页面：配置管理、权限中心、文件中心、插件运维、元数据配置中心。
 
 人员中心 metadata runtime 入口修复验证覆盖：
 
@@ -276,6 +319,8 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 ## 8. 已知风险
 
 - 本文档是当前快照，不应把它当作长期 authoring 真源。
+- Ant Design Phase 1 仅完成 Shell chrome，模块页面内部旧 `sh-*` UI 仍会短期并存；后续应通过 Phase 2/3/4 逐步收敛，而不是在 Shell 层直接重写业务页面。
+- Ant Design 引入后 shell bundle 出现 chunk size warning；若需要控制首屏体积，应单独拆分动态 import 或 Vite manual chunks，不应混入当前 UI 改造任务。
 - 如果只更新计划或验证记录而不更新本文档，下一次交接可能读到过期推荐下一步。
 - 历史阶段文档中仍可能出现旧推荐语，应以本文件和对应任务的最新计划、验证记录为准。
 - Vite 开发态现在直接投影内建 metadata 和 localization；如果未来 runtime 资源改由 Host 统一代理，需要同步收敛 Vite 插件，避免两套投影规则漂移。
@@ -284,6 +329,7 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 ## 9. 回滚思路
 
 - 如果交接口径写错，只改本文档，不需要修改原始设计、计划或验证记录。
+- 如果 Ant Design Phase 1 需要回滚，应移除 `frontend/packages/shell` 中的 `antd` / `@ant-design/icons` 依赖，回退 `App.tsx`、`components/Layout.tsx`、`components/Header.tsx`、`components/Sidebar.tsx`、`components/PageContainer.tsx`、`config/antdTheme.ts`、`navigation/menuProjection.tsx`、`navigation/pageChrome.ts`、`index.css` 和对应测试更新。
 - 如果本次人员中心 metadata runtime 修复需要回滚，应反向恢复 `apps/host-api/Program.cs`、`apps/host-api/HostApi.csproj`、`frontend/packages/shell/vite.config.ts` 及对应测试；回滚后开发态会重新依赖旧 fallback route，人员中心可能再次显示占位错误。
 - 如果前端标准 CRUD 第二批需要回滚，可反向回滚第二批 SDK/UI/Shell 运行时和 Organization 接入提交；第二批可独立回滚，不影响第一批列表/详情 Host。
 - 如果标准 CRUD 自动映射需要回滚，应按本轮最近相关提交反向 revert，并优先恢复 `PersonsController` 等旧样板前确认对应设计、计划和验证记录中的边界变化。

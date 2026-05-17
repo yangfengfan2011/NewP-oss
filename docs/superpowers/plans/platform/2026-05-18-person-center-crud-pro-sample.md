@@ -1486,7 +1486,7 @@ git commit -m "功能：兼容人员中心抽屉路由入口"
 - 修改：`docs/verification/frontend-ant-design-rebuild-verification.md`
 - 修改：`docs/phases/current-handoff.md`
 
-- [ ] **Step 1：运行定向测试**
+- [x] **Step 1：运行定向测试**
 
 运行：
 
@@ -1496,7 +1496,7 @@ pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-
 
 预期：通过。
 
-- [ ] **Step 2：运行构建**
+- [x] **Step 2：运行构建**
 
 运行：
 
@@ -1508,7 +1508,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
 
 预期：通过。Vite chunk size warning 可以接受，只要命令退出码为 0。
 
-- [ ] **Step 3：更新验证记录**
+- [x] **Step 3：更新验证记录**
 
 在 `docs/verification/frontend-ant-design-rebuild-verification.md` 追加：
 
@@ -1526,7 +1526,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
 - 回滚：回退 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为回滚入口。
 ```
 
-- [ ] **Step 4：更新交接台账**
+- [x] **Step 4：更新交接台账**
 
 在 `docs/phases/current-handoff.md` 最近完成中新增：
 
@@ -1545,7 +1545,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
 
 同步调整“当前推荐下一步”，不要再默认把配置管理作为下一步。
 
-- [ ] **Step 5：检查工作区**
+- [x] **Step 5：检查工作区**
 
 运行：
 
@@ -1555,7 +1555,7 @@ git status --short
 
 预期：只看到验证记录和交接台账的预期修改。
 
-- [ ] **Step 6：提交**
+- [x] **Step 6：提交**
 
 ```powershell
 git add docs/verification/frontend-ant-design-rebuild-verification.md docs/phases/current-handoff.md

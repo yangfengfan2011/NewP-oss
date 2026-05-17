@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-05-17
+最近更新：2026-05-18
 
 ## 1. 目的
 
@@ -37,6 +37,28 @@
 如果本文档与具体设计、计划或验证记录冲突，以更具体、更新的任务文档为准，并在下一次收口时修正本文档。
 
 ## 4. 最近完成
+
+### 4.5 人员中心后台 CRUD Pro 样板固化
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-17-person-center-crud-pro-sample-design.md`
+- `docs/superpowers/plans/platform/2026-05-18-person-center-crud-pro-sample.md`
+- `docs/verification/frontend-ant-design-rebuild-verification.md`
+
+完成内容：
+
+- 人员中心作为平台第一版完整后台 CRUD 样板，覆盖列表、详情抽屉和表单抽屉。
+- 新增、查看、编辑默认在右侧抽屉完成，独立详情页保留为深链接和回滚出口。
+- 标准动作集收敛为 `create / refresh / view / edit`；平台提供 `delete` 危险动作协议能力，但只有资源显式声明并具备后端能力时才展示；`disable` 明确为可选标准动作。
+- 人员中心本轮显式展示删除入口；删除调用既有标准 CRUD DELETE，已绑定账号时由后端条件删除 guard 拒绝。
+
+当前推荐下一步：
+
+- 围绕人员中心 CRUD Pro 样板选择下一批可复制试点，或先拆包补齐删除权限细化、业务冲突提示等边界设计。
+- 如果继续 Ant Design 页面重做主线，应先补对应页面族设计/计划后再选择配置管理、权限中心、文件中心等页面，不再把配置管理作为无条件默认下一步。
 
 ### 4.0 前端 Ant Design 重建阶段收口
 
@@ -177,13 +199,13 @@
 
 ## 5. 当前推荐下一步
 
-前端 Ant Design 重建计划本轮已完成 Shell、UI adapter、人员中心样板和日志审计低风险页面收口。下一步应按页面族继续拆包，不建议在同一任务中继续扩大范围；若暂停本主线，再回到前端标准 CRUD 试点或后端 required field / 数据一致性主线。
+人员中心后台 CRUD Pro 样板已完成固化，当前下一步不再默认指向配置管理页面重做。应先选择继续复制 CRUD Pro 样板、补齐样板边界，或切回 Ant Design 页面族重做主线，并为所选方向单独补设计和计划。
 
 推荐优先级：
 
-1. 继续 Ant Design 页面重做下一包：配置管理。
-2. 之后按顺序拆包权限中心、文件中心、插件运维、元数据配置中心。
-3. 若暂停 Ant Design 主线，再选择下一批标准 CRUD 资源试点，逐个确认字段、lookup、动作、summary 和模块专属能力边界。
+1. 选择下一批标准 CRUD 资源试点，复用人员中心 CRUD Pro 样板，并逐个确认字段、lookup、动作、summary 和模块专属能力边界。
+2. 单独设计人员删除独立权限、业务冲突提示和后端 guard 失败展示细化，不混入样板固化提交。
+3. 若继续 Ant Design 页面重做主线，再按页面族拆包选择配置管理、权限中心、文件中心、插件运维或元数据配置中心。
 4. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
 5. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
 6. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
@@ -236,6 +258,22 @@ pnpm --dir frontend --filter @icp-platform/shell build
 - Vite 构建仍输出 Ant Design / Pro Components 引入后的 chunk size warning；该警告不影响本轮构建结果，后续如需优化应单独设计 code splitting 或 manual chunks。
 - jsdom 测试中 Ant Design / Pro Components 会输出 `findDOMNode`、`contentStyle` deprecation、React Router future flag 等警告；断言通过，未作为本轮失败信号。
 - 尚未覆盖页面：配置管理、权限中心、文件中心、插件运维、元数据配置中心。
+
+人员中心后台 CRUD Pro 样板固化验证覆盖：
+
+```powershell
+pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample organization-person-center-list-layout organization-person-center-detail-layout standard-crud-sdk
+pnpm --dir frontend --filter @icp-platform/sdk build
+pnpm --dir frontend --filter @icp-platform/ui build
+pnpm --dir frontend --filter @icp-platform/shell build
+pnpm --dir frontend --filter @icp-modules/organization build
+```
+
+验证结论：
+
+- `@icp-platform/shell` 定向测试通过，4 files / 27 tests。
+- `@icp-platform/sdk`、`@icp-platform/ui`、`@icp-platform/shell`、`@icp-modules/organization` 构建通过。
+- Shell 构建仍输出既有 Vite chunk size warning；jsdom 测试仍输出 AntD / Pro Components 与 React Router 的既有警告，未作为本轮失败信号。
 
 人员中心 metadata runtime 入口修复验证覆盖：
 
@@ -325,6 +363,7 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 历史阶段文档中仍可能出现旧推荐语，应以本文件和对应任务的最新计划、验证记录为准。
 - Vite 开发态现在直接投影内建 metadata 和 localization；如果未来 runtime 资源改由 Host 统一代理，需要同步收敛 Vite 插件，避免两套投影规则漂移。
 - 前端标准 CRUD 第二批仍以 Person 资源为试点，下一批资源接入前需要重新确认字段、lookup、动作、summary 和模块专属能力边界。
+- 人员中心删除本轮仍沿用资源级权限边界；如需独立删除权限或更细业务冲突展示，应另起设计和计划。
 
 ## 9. 回滚思路
 
@@ -335,3 +374,4 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 如果标准 CRUD 自动映射需要回滚，应按本轮最近相关提交反向 revert，并优先恢复 `PersonsController` 等旧样板前确认对应设计、计划和验证记录中的边界变化。
 - 如果 EID 值协议需要回滚，应按最近相关提交反向 revert，并优先回到对应设计和计划确认影响范围。
 - 如果下一步方向选择变化，先更新本文件第 5 节，再补对应设计或计划，避免多个入口同时表达不同推荐。
+- 如果人员中心 CRUD Pro 样板需要回滚，应反向回退本轮 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为深链接和回滚入口。

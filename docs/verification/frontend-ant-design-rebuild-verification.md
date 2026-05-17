@@ -34,6 +34,23 @@
   - Phase 3 rollback: revert Standard CRUD host/personnel resource/test changes.
   - Phase 4 rollback: revert only audit log pages and their tests.
 
+## 人员中心后台 CRUD Pro 样板固化验证
+
+- 范围：标准 CRUD 列表工作台、详情抽屉、表单抽屉、刷新、删除协议、可选停用动作、旧新建路由兼容。
+- 结果：人员中心新增/查看/编辑默认使用右侧抽屉；独立详情页保留为深链接和回滚出口；`disable` 作为人员资源可选动作保留；人员中心显式声明 `delete`，删除走确认协议并调用既有标准 CRUD DELETE 端点。
+- 验证命令：
+  - `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample organization-person-center-list-layout organization-person-center-detail-layout standard-crud-sdk`
+  - `pnpm --dir frontend --filter @icp-platform/sdk build`
+  - `pnpm --dir frontend --filter @icp-platform/ui build`
+  - `pnpm --dir frontend --filter @icp-platform/shell build`
+  - `pnpm --dir frontend --filter @icp-modules/organization build`
+- 验证结果：
+  - PASS：Shell 定向测试通过，4 files / 27 tests。
+  - PASS：SDK、UI、Shell、Organization 构建通过。
+  - Note：Shell 构建仍输出既有 Vite chunk size warning；测试仍输出 AntD / Pro Components 的 `findDOMNode`、`contentStyle` deprecation 和 React Router future flag 警告，均未导致失败。
+- 已知风险：人员删除本轮先沿用资源级权限边界；独立删除权限后续需要另起设计细化。已绑定账号等业务冲突由 `PersonCrudDeleteGuard` 拒绝，并应在危险动作区域可见展示。
+- 回滚：回退 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为回滚入口。
+
 ## Phase 1
 
 - Scope: Shell Layout / Header / Sidebar / PageContainer / Ant Design theme.

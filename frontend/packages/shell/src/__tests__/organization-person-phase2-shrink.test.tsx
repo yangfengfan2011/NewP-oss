@@ -25,6 +25,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'refresh',
       'view',
       'edit',
+      'delete',
       'disable',
     ]);
     expect(personStandardCrudResource.detailActions?.map((action) => action.key)).toEqual(['disable']);

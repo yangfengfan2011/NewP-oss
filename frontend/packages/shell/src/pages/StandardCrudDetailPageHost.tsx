@@ -6,7 +6,6 @@ import {
   createStandardCrudClient,
   normalizeStandardCrudDetail,
   normalizeStandardCrudSubmitValues,
-  readStandardCrudFieldValue,
   useStandardCrudLookupRuntime,
   type StandardCrudDetail,
   type StandardCrudFieldDefinition,
@@ -18,6 +17,11 @@ import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaRes
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import {
+  buildStandardCrudDetailColumns,
+  buildStandardCrudDetailFormValues,
+  buildStandardCrudDetailPreviewData,
+} from '../standard-crud/standardCrudDetailView';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 interface StandardCrudDetailPageHostProps {
@@ -83,7 +87,7 @@ function StandardCrudDetailPageContent<TDetail>({
         const rawDetail = await client.getDetail(id);
         const normalized = normalizeStandardCrudDetail(rawDetail);
         const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
-        const values = buildDetailFormValues(normalized.fields, registration.fields ?? []);
+        const values = buildStandardCrudDetailFormValues(normalized.fields, registration.fields ?? []);
 
         if (!cancelled) {
           setLoadedDetail({ id, normalized, value: mapped });
@@ -113,11 +117,11 @@ function StandardCrudDetailPageContent<TDetail>({
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
   const editFields = registration.fields ?? [];
   const detailPreviewData = useMemo(
-    () => (currentNormalizedDetail ? buildDetailPreviewData(currentNormalizedDetail.fields, editFields) : {}),
+    () => (currentNormalizedDetail ? buildStandardCrudDetailPreviewData(currentNormalizedDetail.fields, editFields) : {}),
     [currentNormalizedDetail, editFields],
   );
   const detailColumns = useMemo(
-    () => (currentNormalizedDetail ? buildDetailColumns(currentNormalizedDetail.fields, editFields) : []),
+    () => (currentNormalizedDetail ? buildStandardCrudDetailColumns(currentNormalizedDetail.fields, editFields) : []),
     [currentNormalizedDetail, editFields],
   );
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
@@ -247,54 +251,4 @@ function StandardCrudDetailPageContent<TDetail>({
       )}
     </div>
   );
-}
-
-function buildDetailFormValues(
-  detailFields: Record<string, unknown>,
-  fields: StandardCrudFieldDefinition[],
-): Record<string, unknown> {
-  const values: Record<string, unknown> = {};
-
-  // 表单状态只使用字段 key，后端字段名读取和提交转换统一收口在 SDK helper。
-  for (const field of fields) {
-    values[field.key] = readStandardCrudFieldValue(detailFields, field);
-  }
-
-  return values;
-}
-
-function buildDetailPreviewData(
-  detailFields: Record<string, unknown>,
-  fields: StandardCrudFieldDefinition[],
-): Record<string, string> {
-  if (fields.length === 0) {
-    return Object.fromEntries(Object.entries(detailFields).map(([key, value]) => [key, formatDetailValue(value)]));
-  }
-
-  return Object.fromEntries(
-    fields.map((field) => [field.key, formatDetailValue(readStandardCrudFieldValue(detailFields, field))]),
-  );
-}
-
-function buildDetailColumns(
-  detailFields: Record<string, unknown>,
-  fields: StandardCrudFieldDefinition[],
-): Array<{ key: string; title: string; dataIndex: string }> {
-  if (fields.length === 0) {
-    return Object.keys(detailFields).map((key) => ({ key, title: key, dataIndex: key }));
-  }
-
-  return fields.map((field) => ({ key: field.key, title: field.labelKey, dataIndex: field.key }));
-}
-
-function formatDetailValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') {
-    return '-';
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? '是' : '否';
-  }
-
-  return String(value);
 }

@@ -482,7 +482,7 @@ git commit -m "功能：扩展标准CRUD删除动作协议"
 - 新建：`frontend/packages/shell/src/standard-crud/standardCrudDetailView.ts`
 - 新建：`frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
-- [ ] **Step 1：新增失败测试**
+- [x] **Step 1：新增失败测试**
 
 新建 `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`，先覆盖新建、查看、编辑都通过右侧抽屉打开：
 
@@ -603,13 +603,13 @@ describe('人员中心 CRUD Pro 样板', () => {
 });
 ```
 
-- [ ] **Step 2：运行失败测试**
+- [x] **Step 2：运行失败测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
 预期：失败，因为列表 Host 还没有抽屉状态机。
 
-- [ ] **Step 3：在列表 Host 增加抽屉状态**
+- [x] **Step 3：在列表 Host 增加抽屉状态**
 
 在 `StandardCrudListPageHost.tsx` 增加类型和初始状态：
 
@@ -640,7 +640,7 @@ const [saveError, setSaveError] = useState<string | null>(null);
 const [saving, setSaving] = useState(false);
 ```
 
-- [ ] **Step 4：新建动作改为打开抽屉**
+- [x] **Step 4：新建动作改为打开抽屉**
 
 在 `StandardCrudListPageHost.tsx` 增加：
 
@@ -657,7 +657,7 @@ const openCreateDrawer = (source: CrudDrawerState['source'] = 'user-action') => 
 
 页面标题区的“新建人员”按钮使用 `openCreateDrawer()`，不再默认执行人员模块里的 `window.location.assign`。
 
-- [ ] **Step 5：增加查看/编辑抽屉加载函数**
+- [x] **Step 5：增加查看/编辑抽屉加载函数**
 
 增加：
 
@@ -732,7 +732,7 @@ function formatStandardCrudDetailValue(value: unknown): string {
 
 在 `StandardCrudListPageHost.tsx` 与 `StandardCrudDetailPageHost.tsx` 都从该文件引入共享工具，并删除 `StandardCrudDetailPageHost.tsx` 中重复的私有 helper，避免计划引用不存在的跨文件函数。
 
-- [ ] **Step 6：行操作改由平台渲染查看/编辑**
+- [x] **Step 6：行操作改由平台渲染查看/编辑**
 
 在操作列中渲染：
 
@@ -743,7 +743,7 @@ function formatStandardCrudDetailValue(value: unknown): string {
 
 过滤 `rowActionDefinitions` 时只排除平台直接渲染的 `create`、`refresh`、`view`、`edit`；保留资源显式声明的 `delete` 和可选动作，例如 `disable`。`delete` 必须留给后续危险动作协议处理，不能在这里提前过滤掉。
 
-- [ ] **Step 7：渲染详情抽屉和表单抽屉**
+- [x] **Step 7：渲染详情抽屉和表单抽屉**
 
 从 `@icp-platform/ui` 引入：
 
@@ -818,7 +818,7 @@ onChange={(fieldKey, value) => {
 </CrudFormDrawer>
 ```
 
-- [ ] **Step 8：实现抽屉保存**
+- [x] **Step 8：实现抽屉保存**
 
 增加：
 
@@ -850,13 +850,13 @@ const handleDrawerSave = async () => {
 
 从 SDK 引入 `normalizeStandardCrudSubmitValues`。
 
-- [ ] **Step 9：运行抽屉测试**
+- [x] **Step 9：运行抽屉测试**
 
 运行：`pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
 
 预期：通过。
 
-- [ ] **Step 10：提交**
+- [x] **Step 10：提交**
 
 ```powershell
 git add frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/packages/shell/src/pages/StandardCrudDetailPageHost.tsx frontend/packages/shell/src/standard-crud/standardCrudDetailView.ts frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx

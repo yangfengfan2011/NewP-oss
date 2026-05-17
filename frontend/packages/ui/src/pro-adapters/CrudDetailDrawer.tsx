@@ -8,7 +8,7 @@ import { LoadingBlock } from './LoadingBlock';
 export interface CrudDetailDrawerProps<TRecord extends Record<string, unknown>> {
   open: boolean;
   title: ReactNode;
-  dataSource: TRecord;
+  dataSource?: TRecord;
   columns: ProDescriptionsItemProps<TRecord>[];
   loading?: boolean;
   error?: string | null;
@@ -39,7 +39,7 @@ export function CrudDetailDrawer<TRecord extends Record<string, unknown>>({
     >
       {loading ? <LoadingBlock message="正在加载详情..." /> : null}
       {!loading && error ? <AlertState type="error" message={error} /> : null}
-      {!loading && !error ? (
+      {!loading && !error && dataSource ? (
         <div className="np-crud-detail-drawer-body">
           {summary}
           <DetailPage title="详情信息" dataSource={dataSource} columns={columns} />

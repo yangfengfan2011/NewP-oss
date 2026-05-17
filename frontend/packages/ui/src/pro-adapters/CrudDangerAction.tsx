@@ -22,7 +22,7 @@ export function CrudDangerAction({
       okText="确认"
       cancelText="取消"
       okButtonProps={{ danger: true, loading }}
-      onConfirm={() => void onConfirm()}
+      onConfirm={onConfirm}
     >
       <Button type="link" danger loading={loading} disabled={disabled}>
         {children}

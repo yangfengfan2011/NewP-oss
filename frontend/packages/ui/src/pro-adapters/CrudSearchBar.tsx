@@ -20,7 +20,7 @@ export function CrudSearchBar({ fields, loading = false, onSearch, onReset, more
         <Button onClick={onReset} disabled={loading}>
           重置
         </Button>
-        {more ?? <Button type="text">更多筛选</Button>}
+        {more}
       </Space>
     </div>
   );

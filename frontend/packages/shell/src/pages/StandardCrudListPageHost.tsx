@@ -134,16 +134,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 }): ReactElement {
   const location = useLocation();
   const { t } = useLocalization();
-  const decoratedRegistration = registration as StandardCrudResourceRegistration<TFilter, TRow> & {
-    listPanelTitle?: string;
-  };
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration), [view, registration]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
   const [filters, setFilters] = useState<TFilter>(() => registration.createEmptyFilters());
   const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => registration.createEmptyFilters());
   const [rows, setRows] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [pageInfo, setPageInfo] = useState({ page: 1, pageSize: 20 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -323,7 +319,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
             setRows(result.items);
             setTotal(result.total);
-            setPageInfo({ page: result.page, pageSize: result.pageSize });
 
             return {
               items: result.items,
@@ -332,7 +327,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           } catch (loadError) {
             setRows([]);
             setTotal(0);
-            setPageInfo({ page: 1, pageSize: 20 });
             setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
             throw loadError;
           } finally {
@@ -473,11 +467,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     context.refresh();
   };
 
-  const listPanelTitle = decoratedRegistration.listPanelTitle ?? `${pageTitle}列表`;
-  const pageCount = Math.max(1, Math.ceil(total / Math.max(1, pageInfo.pageSize)));
-  const tablePageSummary = total > 0 ? (
-    <span className="np-list-card-page-summary">{`第 ${pageInfo.page} / ${pageCount} 页`}</span>
-  ) : null;
   const createDrawerTitle = resolveDrawerTitle(createAction?.labelKey, '新建', pageTitle, createAction?.labelKey);
   const editDrawerTitle = resolveDrawerTitle(editAction?.labelKey, '编辑', pageTitle, createAction?.labelKey);
 
@@ -488,11 +477,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         rowKey={registration.getRowId}
         columns={columns}
         request={tableRequest}
-        title={listPanelTitle}
-        total={total}
         loading={loading}
         onRefresh={() => void handleRefresh()}
-        toolbar={tablePageSummary}
       />
     </div>
   );
@@ -500,8 +486,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       <CrudWorkspacePage
-        title={pageTitle}
-        description={t(`${schema.dicKey}.${schema.descriptionKey}`, schema.descriptionKey)}
         primaryActions={headerActions}
         filterBar={filterBar}
       >

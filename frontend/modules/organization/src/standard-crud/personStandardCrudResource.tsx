@@ -132,7 +132,7 @@ function PersonListFiltersPanel({
         />
         <Select
           aria-label="公司"
-          className="np-filter-control"
+          className="np-filter-select"
           value={filters.companyId || undefined}
           onChange={(value) => setFilters((current) => ({ ...current, companyId: value ?? '', departmentId: '' }))}
           placeholder="全部公司"
@@ -141,7 +141,7 @@ function PersonListFiltersPanel({
         />
         <Select
           aria-label="部门"
-          className="np-filter-control"
+          className="np-filter-select"
           value={filters.departmentId || undefined}
           onChange={(value) => setFilters((current) => ({ ...current, departmentId: value ?? '' }))}
           placeholder="请选择部门"
@@ -151,7 +151,7 @@ function PersonListFiltersPanel({
         />
         <Select
           aria-label="在职状态"
-          className="np-filter-control"
+          className="np-filter-select"
           value={filters.employmentStatus || undefined}
           onChange={(value) => setFilters((current) => ({ ...current, employmentStatus: value ?? '' }))}
           placeholder="全部状态"

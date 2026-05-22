@@ -158,16 +158,22 @@ describe('organization person center list layout', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
+    expect(container.querySelector('.np-crud-table-section-fill')).not.toBeNull();
     expect(container.querySelector('.ant-table')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.ant-tag')).not.toBeNull();
-    expect(container.textContent).toContain('人员中心');
+    expect(container.textContent).not.toContain('人员中心');
+    expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.ant-input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
     expect(container.querySelector('.ant-select')).not.toBeNull();
+    const filterSelect = container.querySelector('.ant-select');
+    expect(filterSelect?.classList.contains('np-filter-select')).toBe(true);
+    expect(filterSelect?.classList.contains('np-filter-control')).toBe(false);
     expect(container.textContent).toContain('新建人员');
     expect(container.textContent).toContain('刷新');
     expect(container.textContent).toContain('更多筛选');
-    expect(container.textContent).toContain('人员列表');
+    expect(container.textContent).not.toContain('人员列表');
     expect(container.textContent).toContain('工号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('张三');
@@ -175,8 +181,7 @@ describe('organization person center list layout', () => {
     expect(container.textContent).toContain('编辑');
     expect(container.textContent).toContain('停用');
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
-    expect(container.textContent).toContain('共 1 条');
-    expect(countTextOccurrences(container.textContent ?? '', '人员中心')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
   });
 

@@ -11,6 +11,10 @@ import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+function countTextOccurrences(text: string, keyword: string): number {
+  return text.split(keyword).length - 1;
+}
+
 describe('StandardCrudListPageHost', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -108,10 +112,10 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.textContent).toContain('张三');
-    expect(container.textContent).toContain('共 1 条');
+    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
   });
 
-  it('resolves view title and description from the runtime dictionary', async () => {
+  it('keeps runtime title and description out of the single-list workspace chrome', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
@@ -123,8 +127,10 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await act(async () => undefined);
 
-    expect(container.textContent).toContain('人员中心');
-    expect(container.textContent).toContain('维护组织模块中的人员基础信息。');
+    expect(container.querySelector('.np-crud-workspace-title')).toBeNull();
+    expect(container.textContent).not.toContain('人员中心');
+    expect(container.textContent).not.toContain('维护组织模块中的人员基础信息。');
+    expect(container.textContent).not.toContain('人员中心列表');
     expect(container.textContent).not.toContain('Title');
     expect(container.textContent).not.toContain('Description');
   });
@@ -157,7 +163,7 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).not.toContain('暂无符合筛选条件的数据。');
   });
 
-  it('uses normalized paging metadata in the footer', async () => {
+  it('uses normalized paging metadata in the footer without a duplicate top summary', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ items: [{ id: 'Person_21', name: '李四' }], total: 41, page: 2, pageSize: 20 }), {
@@ -170,7 +176,8 @@ describe('StandardCrudListPageHost', () => {
     await act(async () => undefined);
 
     expect(container.textContent).toContain('共 41 条');
-    expect(container.textContent).toContain('第 2 / 3 页');
+    expect(container.textContent).not.toContain('第 2 / 3 页');
+    expect(container.textContent).toContain('3');
   });
 
   it('renders a clear error when registration is missing', async () => {

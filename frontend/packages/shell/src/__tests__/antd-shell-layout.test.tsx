@@ -4,18 +4,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { PageContainer } from '../components/PageContainer';
 
 vi.mock('../contexts/PlatformContext', () => ({
   usePlatform: () => ({
     shellView: 'business',
+    setShellView: vi.fn(),
+    canSwitchShellView: true,
   }),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
+    isAuthenticated: true,
+    user: { displayName: 'Local Administrator' },
     hasAnyPermission: () => true,
+    logout: vi.fn(),
   }),
 }));
 
@@ -69,6 +75,24 @@ describe('Ant Design shell layout', () => {
     expect(container.textContent).toContain('人员中心');
     expect(container.querySelector('[aria-label="折叠菜单"]')).not.toBeNull();
     expect(container.querySelector('.np-sidebar-menu')).not.toBeNull();
+  });
+
+  it('renders a minimal full-width platform header chrome', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Header />);
+    });
+
+    expect(container.querySelector('.np-header-logo')?.textContent).toBe('ICP');
+    expect(container.textContent).not.toContain('ICP Platform');
+    expect(container.textContent).not.toContain('统一业务与平台工作台');
+    expect(container.textContent).not.toContain('业务视图');
+    expect(container.textContent).not.toContain('平台视图');
+    expect(container.textContent).toContain('Local Administrator');
+    expect(container.textContent).toContain('退出登录');
   });
 
   it('renders title, breadcrumb and content in PageContainer', async () => {

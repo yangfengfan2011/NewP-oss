@@ -31,9 +31,9 @@ export default function Layout() {
 
   return (
     <AntdLayout className="np-app-layout">
-      <Sidebar menus={menus} collapsed={collapsed} onCollapse={setCollapsed} />
-      <AntdLayout>
-        <Header />
+      <Header />
+      <AntdLayout className="np-app-body">
+        <Sidebar menus={menus} collapsed={collapsed} onCollapse={setCollapsed} />
         <Content className="np-app-content">
           <PageContainer breadcrumbItems={chrome.breadcrumbItems}>
             {/* Shell 只提供统一页面 chrome；模块页面继续通过受控路由和标准 CRUD Host 承载业务内容。 */}

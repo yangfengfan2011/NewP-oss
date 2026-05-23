@@ -1,4 +1,4 @@
-import type { FormEvent, ReactElement } from 'react';
+import { useMemo, useState, type FormEvent, type ReactElement } from 'react';
 import type {
   StandardCrudFieldDefinition,
   StandardCrudFormMode,
@@ -24,6 +24,7 @@ export interface StandardCrudFormProps {
   saving: boolean;
   error?: string | null;
   saveLabel?: string;
+  showSubmitAction?: boolean;
   titleForSection: (titleKey: string) => string;
 }
 
@@ -59,6 +60,10 @@ function resolveSubmitText(mode: StandardCrudFormMode, saving?: boolean): string
   return mode === 'create' ? '保存并关闭' : '保存修改';
 }
 
+function isEmptyRequiredValue(value: unknown): boolean {
+  return value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+}
+
 export function StandardCrudForm({
   formId,
   mode,
@@ -73,9 +78,11 @@ export function StandardCrudForm({
   saving,
   error = null,
   saveLabel,
+  showSubmitAction = true,
   titleForSection,
 }: StandardCrudFormProps): ReactElement {
-  const resolvedSections = resolveSections(fields, sections);
+  const resolvedSections = useMemo(() => resolveSections(fields, sections), [fields, sections]);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,16 +90,47 @@ export function StandardCrudForm({
       return;
     }
 
+    const nextErrors = fields.reduce<Record<string, string>>((current, field) => {
+      if (field.required && field.kind !== 'readonly' && field.readOnly !== true && isEmptyRequiredValue(values[field.key])) {
+        current[field.key] = '请填写此字段';
+      }
+
+      return current;
+    }, {});
+
+    setValidationErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
     await onSubmit();
   }
 
+  function handleFieldChange(fieldKey: string, value: unknown) {
+    setValidationErrors((current) => {
+      if (!current[fieldKey]) {
+        return current;
+      }
+
+      const { [fieldKey]: _removed, ...rest } = current;
+      return rest;
+    });
+    onChange(fieldKey, value);
+  }
+
   return (
-    <form id={formId} onSubmit={(event) => void handleSubmit(event)} style={{ marginTop: 8 }}>
+    <form
+      id={formId}
+      className={`np-standard-crud-form np-standard-crud-form-${mode}`}
+      noValidate
+      onSubmit={(event) => void handleSubmit(event)}
+    >
       {error ? <ErrorState message={error} /> : null}
 
       {resolvedSections.map((section, index) => {
         const title = titleForSection(section.titleKey);
-        const actions = index === 0 && mode !== 'view'
+        const actions = showSubmitAction && index === 0 && mode !== 'view'
           ? (
             <Button size="sm" type="submit" form={formId} variant="primary" disabled={saving}>
               {saving ? '保存中...' : (saveLabel ?? resolveSubmitText(mode, false))}
@@ -111,8 +149,8 @@ export function StandardCrudForm({
                   mode={mode}
                   options={lookupOptions[field.key]}
                   loading={lookupLoading[field.key]}
-                  error={lookupErrors[field.key]}
-                  onChange={onChange}
+                  error={validationErrors[field.key] ?? lookupErrors[field.key]}
+                  onChange={handleFieldChange}
                 />
               ))}
             </div>

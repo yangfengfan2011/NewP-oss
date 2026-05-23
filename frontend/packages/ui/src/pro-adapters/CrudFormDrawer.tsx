@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button, Drawer, Space } from 'antd';
 import { AlertState } from './AlertState';
+import { LoadingBlock } from './LoadingBlock';
 
 export interface CrudFormDrawerProps {
   open: boolean;
@@ -9,7 +10,11 @@ export interface CrudFormDrawerProps {
   saving?: boolean;
   error?: string | null;
   children: ReactNode;
-  onSubmit: () => void;
+  submitFormId?: string;
+  primaryLabel?: ReactNode;
+  primaryAction?: () => void;
+  hidePrimary?: boolean;
+  onSubmit?: () => void;
   onClose: () => void;
 }
 
@@ -20,9 +25,26 @@ export function CrudFormDrawer({
   saving = false,
   error = null,
   children,
+  submitFormId,
+  primaryLabel = '保存',
+  primaryAction,
+  hidePrimary = false,
   onSubmit,
   onClose,
 }: CrudFormDrawerProps) {
+  const primaryButton = hidePrimary ? null : (
+    <Button
+      type="primary"
+      htmlType={submitFormId ? 'submit' : 'button'}
+      form={submitFormId}
+      onClick={submitFormId ? undefined : (primaryAction ?? onSubmit)}
+      loading={saving}
+      disabled={loading}
+    >
+      {primaryLabel}
+    </Button>
+  );
+
   return (
     <Drawer
       open={open}
@@ -35,14 +57,13 @@ export function CrudFormDrawer({
           <Button onClick={onClose} disabled={saving}>
             取消
           </Button>
-          <Button type="primary" onClick={onSubmit} loading={saving} disabled={loading}>
-            保存
-          </Button>
+          {primaryButton}
         </Space>
       }
     >
+      {loading ? <LoadingBlock message="正在加载详情..." /> : null}
       {error ? <AlertState type="error" message={error} /> : null}
-      {children}
+      {!loading ? children : null}
     </Drawer>
   );
 }

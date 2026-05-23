@@ -13,7 +13,6 @@ import {
 import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { Button as AntdButton, Popconfirm, Popover } from 'antd';
 import {
-  CrudDetailDrawer,
   CrudFormDrawer,
   CrudSearchBar,
   CrudTableSection,
@@ -27,9 +26,7 @@ import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResol
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import {
-  buildStandardCrudDetailColumns,
   buildStandardCrudDetailFormValues,
-  buildStandardCrudDetailPreviewData,
 } from '../standard-crud/standardCrudDetailView';
 
 interface StandardCrudListPageHostProps {
@@ -138,7 +135,7 @@ function resolveCreateFormFields(fields: StandardCrudFieldDefinition[]): Standar
 
 function inferDrawerTitleFromCreateAction(
   actionLabel: string,
-  fallbackAction: '新建' | '编辑',
+  fallbackAction: '新建' | '编辑' | '查看',
   createActionLabel: string | undefined,
 ): string | null {
   if (actionLabel !== fallbackAction) {
@@ -162,13 +159,18 @@ function inferDrawerTitleFromCreateAction(
 
 function resolveDrawerTitle(
   actionLabel: string | undefined,
-  fallbackAction: '新建' | '编辑',
+  fallbackAction: '新建' | '编辑' | '查看',
   resourceTitle: string,
   createActionLabel?: string,
 ): string {
   const normalizedActionLabel = actionLabel?.trim();
   if (normalizedActionLabel) {
     return inferDrawerTitleFromCreateAction(normalizedActionLabel, fallbackAction, createActionLabel) ?? normalizedActionLabel;
+  }
+
+  const inferredTitle = inferDrawerTitleFromCreateAction(fallbackAction, fallbackAction, createActionLabel);
+  if (inferredTitle) {
+    return inferredTitle;
   }
 
   return `${fallbackAction}${resourceTitle}`;
@@ -581,6 +583,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const createDrawerTitle = resolveDrawerTitle(createAction?.labelKey, '新建', pageTitle, createAction?.labelKey);
   const editDrawerTitle = resolveDrawerTitle(editAction?.labelKey, '编辑', pageTitle, createAction?.labelKey);
+  const viewDrawerTitle = resolveDrawerTitle(undefined, '查看', pageTitle, createAction?.labelKey);
+  const drawerFormId = `${schema.resourceKey}-drawer-form`;
 
   const content = (
     <div className="np-standard-crud-table">
@@ -606,26 +610,48 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       >
         {content}
       </CrudWorkspacePage>
-      <CrudDetailDrawer
+      <CrudFormDrawer
         open={drawerState.mode === 'view'}
-        title={pageTitle}
-        dataSource={buildStandardCrudDetailPreviewData(detailFields, editFields)}
-        columns={buildStandardCrudDetailColumns(detailFields, editFields)}
+        title={viewDrawerTitle}
         loading={detailLoading}
         error={detailError}
-        actions={<AntdButton type="primary" onClick={() => drawerState.id && void openEditDrawer(drawerState.id)}>编辑</AntdButton>}
+        primaryLabel="编辑"
+        primaryAction={() => {
+          if (drawerState.id) {
+            void openEditDrawer(drawerState.id);
+          }
+        }}
         onClose={closeDrawer}
-      />
+      >
+        {!detailError ? (
+          <StandardCrudForm
+            formId={`${drawerFormId}-view`}
+            mode="view"
+            fields={editFields}
+            sections={registration.formSections ?? []}
+            values={formValues}
+            lookupOptions={lookupOptions}
+            lookupLoading={lookupLoading}
+            lookupErrors={lookupErrors}
+            onChange={handleFormChange}
+            onSubmit={() => undefined}
+            saving={false}
+            showSubmitAction={false}
+            titleForSection={(titleKey) => titleKey}
+          />
+        ) : null}
+      </CrudFormDrawer>
       <CrudFormDrawer
         open={drawerState.mode === 'create' || drawerState.mode === 'edit'}
         title={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
         saving={saving}
         error={saveError}
-        onSubmit={() => void handleDrawerSave()}
+        submitFormId={drawerFormId}
+        primaryLabel={drawerState.mode === 'create' ? '保存并关闭' : '保存修改'}
         onClose={closeDrawer}
       >
         <StandardCrudForm
-          formId={`${schema.resourceKey}-drawer-form`}
+          formId={drawerFormId}
           mode={drawerState.mode === 'create' ? 'create' : 'edit'}
           fields={drawerState.mode === 'create' ? createFields : editFields}
           sections={registration.formSections ?? []}
@@ -637,6 +663,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           onSubmit={() => void handleDrawerSave()}
           saving={saving}
           error={saveError}
+          showSubmitAction={false}
           titleForSection={(titleKey) => titleKey}
         />
       </CrudFormDrawer>

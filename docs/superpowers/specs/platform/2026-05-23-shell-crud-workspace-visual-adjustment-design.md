@@ -185,6 +185,29 @@ pnpm --dir frontend --filter @icp-platform/shell build
 pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout antd-shell-layout
 ```
 
+## 14.2 抽屉表单控件一致性补充
+
+基于人员中心新建抽屉浏览器 review，本设计追加一个小范围控件修正包：
+
+- 标准 CRUD 表单的 `enum` 与 `lookup` 字段统一渲染为 Ant Design `Select`，不再在 Ant Design 抽屉内混用原生 `select` 外观。
+- 标准 CRUD 表单的 `boolean` 字段统一渲染为 Ant Design `Switch`，继续保留右侧 `启用 / 停用` 状态文案。
+- 布尔字段的 label 与开关控件保持和其他字段一致的上下结构，避免 label 与启停用控件挤在同一行。
+- 字段 label、必填标记、字段级校验、lookup 加载和禁用态仍由 `StandardCrudField` 收口，不下沉到人员中心私有实现。
+
+边界：
+
+- 不修改 Organization 资源字段声明、lookup provider、后端接口或保存载荷。
+- 不调整输入框、表单分区、抽屉 footer 和标准 CRUD 数据流。
+- 不引入人员中心私有样式；控件一致性落在通用 `StandardCrudField`。
+
+验证补充：
+
+```powershell
+pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-field-form
+pnpm --dir frontend --filter @icp-platform/ui build
+pnpm --dir frontend --filter @icp-platform/shell build
+```
+
 ## 15. AI-First 最小检查清单
 
 - 入口在哪里：`frontend/packages/shell/src/components/Layout.tsx`、`Header.tsx`、`Sidebar.tsx`、`StandardCrudListPageHost.tsx` 和 `frontend/packages/ui/src/pro-adapters/`。

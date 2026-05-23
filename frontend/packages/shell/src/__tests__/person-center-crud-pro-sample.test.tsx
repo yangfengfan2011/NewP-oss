@@ -69,6 +69,26 @@ function findRowActionButton(container: ParentNode, rowText: string, buttonText:
   return findAntdButtonByText(row, buttonText);
 }
 
+async function findOverflowRowActionButton(container: ParentNode, rowText: string, buttonText: string): Promise<HTMLElement | undefined> {
+  const directButton = findRowActionButton(container, rowText, buttonText);
+  if (directButton) {
+    return directButton;
+  }
+
+  const row = findTableRowByText(container, rowText);
+  const moreButton = row ? findAntdButtonByText(row, '更多') : undefined;
+  if (!moreButton) {
+    return undefined;
+  }
+
+  await act(async () => {
+    moreButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await flushAsync();
+
+  return findAntdButtonByText(document.body, buttonText);
+}
+
 async function clickPopconfirmButton(label: '确认' | '取消') {
   const button = Array.from(document.body.querySelectorAll<HTMLElement>('button')).find(
     (item) => item.textContent?.replace(/\s+/g, '') === label,
@@ -238,10 +258,11 @@ describe('人员中心 CRUD Pro 样板', () => {
     const viewButton = findAntdButtonByText(container, '查看');
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
-    expect(document.body.textContent).toContain('详情信息');
-    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+    expect(document.body.textContent).toContain('查看人员');
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
+    expect(findInputByLabel(document.body, '姓名')?.disabled).toBe(true);
 
-    const editButton = document.body.querySelector('.ant-drawer-extra button.ant-btn') as HTMLButtonElement | null;
+    const editButton = findAntdButtonByText(document.body, '编辑');
     expect(editButton?.textContent?.replace(/\s+/g, '')).toContain('编辑');
     await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -457,7 +478,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const deleteButton = findAntdButtonByText(container, '删除');
+    const deleteButton = await findOverflowRowActionButton(container, '张三', '删除');
     expect(deleteButton).toBeDefined();
 
     await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -539,7 +560,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const deleteButton = findRowActionButton(container, '张三', '删除');
+    const deleteButton = await findOverflowRowActionButton(container, '张三', '删除');
     expect(deleteButton).toBeDefined();
 
     await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -613,7 +634,7 @@ describe('人员中心 CRUD Pro 样板', () => {
 
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
 
-    const deleteButton = findRowActionButton(container, '张三', '删除');
+    const deleteButton = await findOverflowRowActionButton(container, '张三', '删除');
     expect(deleteButton).toBeDefined();
     await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -627,7 +648,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(Array.from(container.querySelectorAll('[role="alert"]')).filter((item) => item.textContent?.includes('删除张三失败'))).toHaveLength(1);
     expect(listRequestCount).toBe(1);
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
-    expect(document.body.textContent).toContain('详情信息');
+    expect(document.body.textContent).toContain('查看人员');
   });
 
   it('删除等待期间打开其他记录详情后，成功回调不会误关新抽屉', async () => {
@@ -700,7 +721,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
     expect(document.body.textContent).toContain('张三');
 
-    const deleteButton = findRowActionButton(container, '张三', '删除');
+    const deleteButton = await findOverflowRowActionButton(container, '张三', '删除');
     expect(deleteButton).toBeDefined();
     await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();

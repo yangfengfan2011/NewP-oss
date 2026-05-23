@@ -61,12 +61,15 @@ describe('StandardCrudField and StandardCrudForm', () => {
       </>,
     );
 
-    expect(container.textContent).toContain('name-value');
-    expect(container.textContent).toContain('birthday-value');
-    expect(container.textContent).toContain('lockedCode-value');
-    expect(container.textContent).toContain('是');
-    expect(container.textContent).toContain('有效');
-    expect(container.querySelectorAll('input')).toHaveLength(0);
+    expect(container.querySelector('input[value="name-value"]')).not.toBeNull();
+    expect(container.querySelector('input[value="birthday-value"]')).not.toBeNull();
+    expect(container.querySelector('input[value="lockedCode-value"]')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-field-boolean .np-standard-crud-field-label')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-field-boolean .np-standard-crud-switch-row')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-switch.ant-switch')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-select.ant-select')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-select[data-value="active"]')).not.toBeNull();
+    expect(container.querySelectorAll('[disabled]')).toHaveLength(5);
   });
 
   it('renders sections, editable controls and edit submit action', async () => {
@@ -104,18 +107,14 @@ describe('StandardCrudField and StandardCrudForm', () => {
     );
 
     expect(container.textContent).toContain('基本信息');
+    expect(container.querySelector('.np-standard-crud-form')).not.toBeNull();
+    expect(container.querySelector('.np-required-mark')?.textContent).toBe('*');
     expect(container.querySelector('input[value="张三"]')).not.toBeNull();
-    const select = container.querySelector('select');
+    const select = container.querySelector('.np-standard-crud-select.ant-select');
     expect(select).not.toBeNull();
-    expect(select?.required).toBe(true);
-    expect(container.querySelector('option[value="disabled"]')?.hasAttribute('disabled')).toBe(true);
+    expect(select?.getAttribute('aria-required')).toBe('true');
+    expect(container.querySelector('.np-standard-crud-select[data-value="active"]')).not.toBeNull();
     expect(container.textContent).toContain('状态选项加载失败');
-
-    await act(async () => {
-      select?.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-
-    expect(onChange).toHaveBeenCalledWith('status', 'active');
 
     const submitButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === '保存修改',
@@ -127,6 +126,62 @@ describe('StandardCrudField and StandardCrudForm', () => {
     });
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the first enum option visible when an optional enum has no placeholder', async () => {
+    const field: StandardCrudFieldDefinition = {
+      key: 'employmentStatus',
+      labelKey: '用工状态',
+      modelField: 'EmploymentStatus',
+      kind: 'enum',
+      options: [
+        { value: 'FullTime', label: '正式' },
+        { value: 'PartTime', label: '兼职' },
+      ],
+    };
+
+    await render(
+      <StandardCrudField
+        field={field}
+        value=""
+        mode="create"
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('.np-standard-crud-select[data-value="FullTime"]')).not.toBeNull();
+    expect(container.textContent).toContain('正式');
+  });
+
+  it('shows field-level required validation below empty fields', async () => {
+    const onSubmit = vi.fn();
+    const fields: StandardCrudFieldDefinition[] = [
+      { key: 'personNo', labelKey: '工号', modelField: 'PersonNo', kind: 'text', required: true },
+      { key: 'name', labelKey: '姓名', modelField: 'ENAME', kind: 'text', required: true },
+    ];
+
+    await render(
+      <StandardCrudForm
+        formId="person-create-form"
+        mode="create"
+        fields={fields}
+        sections={[{ key: 'basic', titleKey: '基础信息', fields: ['personNo', 'name'] }]}
+        values={{ personNo: '', name: '' }}
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+        saving={false}
+        titleForSection={(titleKey) => titleKey}
+      />,
+    );
+
+    const submitButton = container.querySelector('button[type="submit"]');
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('.np-standard-crud-field-error')).toHaveLength(2);
+    expect(container.textContent).toContain('请填写此字段');
   });
 
   it('uses create submit text and hides submit action in view mode', async () => {

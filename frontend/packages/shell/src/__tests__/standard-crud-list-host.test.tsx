@@ -15,6 +15,149 @@ function countTextOccurrences(text: string, keyword: string): number {
   return text.split(keyword).length - 1;
 }
 
+async function flushProTableRequest(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+const personModelDocument = {
+  type: 'model' as const,
+  Person: {
+    fields: [
+      {
+        name: 'PersonNo',
+        storage: { type: 'string' },
+        uiType: 'text',
+        form: {
+          create: { mode: 'editable', required: true },
+          edit: { mode: 'readonly' },
+        },
+      },
+      {
+        name: 'ENAME',
+        storage: { type: 'string' },
+        uiType: 'text',
+        form: {
+          create: { mode: 'editable', required: true },
+          edit: { mode: 'editable', required: true },
+        },
+      },
+      {
+        name: 'DepartmentId',
+        storage: { type: 'guid', nullable: true },
+        uiType: 'lookup',
+        dataSource: { type: 'provider', key: 'organization.departments' },
+        form: {
+          create: { mode: 'editable' },
+          edit: { mode: 'editable' },
+        },
+      },
+      {
+        name: 'EmploymentStatus',
+        storage: { type: 'string', nullable: true },
+        uiType: 'select',
+        contract: { valueType: 'enum', clrType: 'EmploymentStatus' },
+        dataSource: { type: 'enum', key: 'EmploymentStatus' },
+        form: {
+          create: { mode: 'editable', defaultValue: 'FullTime' },
+          edit: { mode: 'editable' },
+        },
+      },
+      {
+        name: 'IsEnabled',
+        storage: { type: 'bool' },
+        uiType: 'switch',
+        form: {
+          create: { mode: 'editable', defaultValue: true },
+          edit: { mode: 'editable' },
+        },
+      },
+    ],
+    sections: [
+      { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
+      { key: 'organization', titleKey: 'Section_Organization', fields: ['DepartmentId', 'EmploymentStatus', 'IsEnabled'] },
+    ],
+  },
+};
+
+const personListViewDocument = {
+  type: 'view' as const,
+  view: {
+    key: 'organization.person.list',
+    dicKey: 'PersonListView',
+    titleKey: 'Title',
+    descriptionKey: 'Description',
+    mode: 'list',
+    model: 'Person',
+    query: {
+      fields: [
+        { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword' },
+        { key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'model', field: 'EmploymentStatus' },
+      ],
+      advancedFilter: {
+        enabled: true,
+        titleKey: 'AdvancedFilter_More',
+        sections: [{
+          key: 'organization',
+          titleKey: 'Section_Organization',
+          fields: [
+            { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId' },
+            { key: 'isEnabled', labelKey: 'Query_IsEnabled', source: 'model', field: 'IsEnabled' },
+          ],
+        }],
+      },
+      defaults: [{ field: 'isEnabled', value: true }],
+    },
+    columns: [
+      { key: 'personNo', labelKey: 'Column_PersonNo', source: 'model', field: 'PersonNo' },
+      { key: 'name', labelKey: 'Column_Name', source: 'model', field: 'ENAME' },
+      { key: 'departmentName', labelKey: 'Column_DepartmentName', source: 'projection', field: 'DepartmentName' },
+    ],
+    pageActions: [
+      { key: 'create', labelKey: 'Action_Create', standardAction: 'create', variant: 'primary' },
+      { key: 'refresh', labelKey: 'Action_Refresh', standardAction: 'refresh' },
+    ],
+    rowActions: [
+      {
+        key: 'disable',
+        labelKey: 'Action_Disable',
+        standardAction: 'disable',
+        variant: 'danger',
+        handlerKey: 'disablePerson',
+        confirmMessageKey: 'Action_Disable_Confirm',
+      },
+    ],
+  },
+};
+
+const personListCatalog = {
+  'PersonListView.Title': '人员中心',
+  'PersonListView.Description': '维护组织模块中的人员基础信息。',
+  'PersonListView.Query_Keyword': '关键字',
+  'PersonListView.Query_EmploymentStatus': '在职状态',
+  'PersonListView.Query_Department': '部门',
+  'PersonListView.Query_IsEnabled': '启用状态',
+  'PersonListView.AdvancedFilter_More': '更多筛选',
+  'PersonListView.Section_Basic': '基础信息',
+  'PersonListView.Section_Organization': '组织信息',
+  'PersonListView.Column_PersonNo': '人员编号',
+  'PersonListView.Column_Name': '姓名',
+  'PersonListView.Column_DepartmentName': '部门',
+  'PersonListView.Action_Create': '新建人员',
+  'PersonListView.Action_Refresh': '刷新',
+  'PersonListView.Action_Disable': '停用',
+  'PersonListView.Action_Disable_Confirm': '确认停用该人员？',
+  'PersonListView.Field_PersonNo': '人员编号',
+  'PersonListView.Field_ENAME': '姓名',
+  'PersonListView.Field_DepartmentId': '部门',
+  'PersonListView.Field_EmploymentStatus': '在职状态',
+  'PersonListView.Field_IsEnabled': '启用状态',
+};
+
 describe('StandardCrudListPageHost', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -27,7 +170,7 @@ describe('StandardCrudListPageHost', () => {
     container?.remove();
   });
 
-  async function renderHost() {
+  async function renderHost(catalogOverrides: Record<string, string> = {}) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -40,8 +183,8 @@ describe('StandardCrudListPageHost', () => {
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
             catalogs={{
               zhs: {
-                'PersonListView.Title': '人员中心',
-                'PersonListView.Description': '维护组织模块中的人员基础信息。',
+                ...personListCatalog,
+                ...catalogOverrides,
               },
             }}
           >
@@ -49,21 +192,8 @@ describe('StandardCrudListPageHost', () => {
               value={{
                 manifest: { modules: [] },
                 navDocuments: [],
-                modelDocuments: [],
-                viewDocuments: [
-                  {
-                    type: 'view',
-                    view: {
-                      key: 'organization.person.list',
-                      dicKey: 'PersonListView',
-                      titleKey: 'Title',
-                      descriptionKey: 'Description',
-                      mode: 'list',
-                      columns: [{ key: 'name', labelKey: 'Column_Name' }],
-                      pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh' }],
-                    },
-                  },
-                ],
+                modelDocuments: [personModelDocument],
+                viewDocuments: [personListViewDocument],
               }}
             >
               <StandardCrudListPageHost viewKey="organization.person.list" />
@@ -86,11 +216,24 @@ describe('StandardCrudListPageHost', () => {
             apiRoute: '/api/organization/persons',
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({ keyword: '' }),
-            buildListQuery: (filters: { keyword: string }) => filters,
+            createEmptyFilters: () => ({ legacyKeyword: 'legacy' }),
+            buildListQuery: () => ({ legacyKeyword: 'legacy', legacyUsed: 'true' }),
             mapListItem: (value: unknown) => value as { id: string; name: string },
             getRowId: (row: { id: string }) => row.id,
-            buildColumns: () => [{ key: 'name', title: '姓名' }],
+            enumOptions: {
+              EmploymentStatus: [
+                { value: 'FullTime', label: '正式' },
+                { value: 'PartTime', label: '兼职' },
+              ],
+            },
+            lookupProviders: [{
+              key: 'organization.departments',
+              load: async () => [],
+            }],
+            actionHandlers: {
+              refresh: vi.fn(),
+              disablePerson: vi.fn(),
+            },
             ...overrides,
           },
         ],
@@ -101,16 +244,21 @@ describe('StandardCrudListPageHost', () => {
   it('loads rows through standard CRUD registration', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ items: [{ id: 'Person_1', name: '张三' }], total: 1, page: 1, pageSize: 20 }), {
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
     );
 
     await renderHost();
-    await act(async () => undefined);
+    await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.textContent).toContain('张三');
     expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
   });
@@ -125,7 +273,7 @@ describe('StandardCrudListPageHost', () => {
     );
 
     await renderHost();
-    await act(async () => undefined);
+    await flushProTableRequest();
 
     expect(container.querySelector('.np-crud-workspace-title')).toBeNull();
     expect(container.textContent).not.toContain('人员中心');
@@ -135,21 +283,28 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).not.toContain('Description');
   });
 
-  it('renders custom header actions only in the page header', async () => {
+  it('prefers metadata page actions over custom header actions', async () => {
     mockStandardCrudModule({
       renderHeaderActions: () => <button type="button">自定义操作</button>,
     });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ items: [{ id: 'Person_1', name: '张三' }], total: 1, page: 1, pageSize: 20 }), {
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
     );
 
     await renderHost();
-    await act(async () => undefined);
+    await flushProTableRequest();
 
-    expect(container.textContent?.match(/自定义操作/g)).toHaveLength(1);
+    expect(container.textContent).not.toContain('自定义操作');
+    expect(container.textContent).toContain('新建人员');
+    expect(container.textContent).toContain('刷新');
   });
 
   it('renders error state without an empty state after load failure', async () => {
@@ -157,7 +312,7 @@ describe('StandardCrudListPageHost', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('列表接口不可用'));
 
     await renderHost();
-    await act(async () => undefined);
+    await flushProTableRequest();
 
     expect(container.textContent).toContain('列表接口不可用');
     expect(container.textContent).not.toContain('暂无符合筛选条件的数据。');
@@ -173,11 +328,64 @@ describe('StandardCrudListPageHost', () => {
     );
 
     await renderHost();
-    await act(async () => undefined);
+    await flushProTableRequest();
 
     expect(container.textContent).toContain('共 41 条');
     expect(container.textContent).not.toContain('第 2 / 3 页');
     expect(container.textContent).toContain('3');
+  });
+
+  it('renders metadata columns actions filters and form fields without legacy registration declarations', async () => {
+    const disablePerson = vi.fn();
+    mockStandardCrudModule({
+      actionHandlers: {
+        refresh: vi.fn(),
+        disablePerson,
+      },
+      buildColumns: undefined,
+      renderFilters: undefined,
+      listActions: undefined,
+      fields: undefined,
+      formSections: undefined,
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部', EmploymentStatus: 'FullTime' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost();
+    await flushProTableRequest();
+
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(container.textContent).toContain('关键字');
+    expect(container.textContent).toContain('在职状态');
+    expect(container.textContent).toContain('更多筛选');
+    expect(container.textContent).toContain('新建人员');
+    expect(container.textContent).toContain('刷新');
+    expect(container.textContent).toContain('人员编号');
+    expect(container.textContent).toContain('姓名');
+    expect(container.textContent).toContain('部门');
+    expect(container.textContent).toContain('停用');
+    expect(container.textContent).not.toContain('公司');
+    expect(container.querySelector('.np-person-filter-grid .ant-select')).not.toBeNull();
+
+    await act(async () => {
+      const createButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '新建人员');
+      createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain('基础信息');
+    expect(document.body.textContent).toContain('组织信息');
+    expect(document.body.textContent).toContain('人员编号');
+    expect(document.body.textContent).toContain('姓名');
   });
 
   it('renders a clear error when registration is missing', async () => {

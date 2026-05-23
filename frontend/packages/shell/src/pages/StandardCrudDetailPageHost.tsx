@@ -17,12 +17,15 @@ import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaRes
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import {
   buildStandardCrudDetailColumns,
   buildStandardCrudDetailFormValues,
   buildStandardCrudDetailPreviewData,
 } from '../standard-crud/standardCrudDetailView';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
+
+type MetadataRecord = Record<string, unknown>;
 
 interface StandardCrudDetailPageHostProps {
   viewKey: string;
@@ -36,6 +39,35 @@ type LoadedDetail<TDetail> = {
   normalized: StandardCrudDetail;
   value: TDetail | StandardCrudDetail;
 };
+
+function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
+  if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
+    return { fields: [] };
+  }
+
+  const document = modelDocuments.find((item) => item?.type === 'model' && Object.prototype.hasOwnProperty.call(item, modelKey));
+  const model = document?.[modelKey];
+  return typeof model === 'object' && model !== null && !Array.isArray(model) ? (model as MetadataRecord) : { fields: [] };
+}
+
+function localizeStandardCrudFields(
+  fields: StandardCrudFieldDefinition[],
+  dicKey: string,
+  t: (key: string, fallback?: string) => string,
+): StandardCrudFieldDefinition[] {
+  return fields.map((field) => ({
+    ...field,
+    labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
+  }));
+}
+
+function toDictionaryBlockKey(blockKey: string): string {
+  if (blockKey.length === 0) {
+    return blockKey;
+  }
+
+  return `Block_${blockKey.charAt(0).toUpperCase()}${blockKey.slice(1)}`;
+}
 
 export default function StandardCrudDetailPageHost({ viewKey, id }: StandardCrudDetailPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
@@ -54,21 +86,42 @@ export default function StandardCrudDetailPageHost({ viewKey, id }: StandardCrud
     return <div className="sh-error-state">未找到标准 CRUD 前端资源注册项</div>;
   }
 
-  return <StandardCrudDetailPageContent id={id} view={viewDocument.view as Record<string, unknown>} registration={registration} />;
+  return (
+    <StandardCrudDetailPageContent
+      id={id}
+      view={viewDocument.view as Record<string, unknown>}
+      registration={registration}
+      modelDocuments={runtimeMetadata?.modelDocuments ?? []}
+    />
+  );
 }
 
 function StandardCrudDetailPageContent<TDetail>({
   id,
   view,
   registration,
+  modelDocuments,
 }: {
   id: string;
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>, TDetail>;
+  modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
-  const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration), [view, registration]);
+  const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration, {
+    modelDocuments,
+  }), [view, registration, modelDocuments]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
+  const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
+  const formSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
+    mode: 'edit',
+    enumOptions: registration.enumOptions ?? {},
+    lookupProviders: registration.lookupProviders ?? [],
+  }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
+  const editFields = useMemo(
+    () => localizeStandardCrudFields(formSchema.fields, schema.dicKey, t),
+    [formSchema.fields, schema.dicKey, t],
+  );
   const [loadedDetail, setLoadedDetail] = useState<LoadedDetail<TDetail> | null>(null);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -87,7 +140,7 @@ function StandardCrudDetailPageContent<TDetail>({
         const rawDetail = await client.getDetail(id);
         const normalized = normalizeStandardCrudDetail(rawDetail);
         const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
-        const values = buildStandardCrudDetailFormValues(normalized.fields, registration.fields ?? []);
+        const values = buildStandardCrudDetailFormValues(normalized.fields, editFields);
 
         if (!cancelled) {
           setLoadedDetail({ id, normalized, value: mapped });
@@ -111,11 +164,10 @@ function StandardCrudDetailPageContent<TDetail>({
     return () => {
       cancelled = true;
     };
-  }, [client, id, registration, reloadTick]);
+  }, [client, editFields, id, registration, reloadTick]);
 
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
-  const editFields = registration.fields ?? [];
   const detailPreviewData = useMemo(
     () => (currentNormalizedDetail ? buildStandardCrudDetailPreviewData(currentNormalizedDetail.fields, editFields) : {}),
     [currentNormalizedDetail, editFields],
@@ -157,10 +209,16 @@ function StandardCrudDetailPageContent<TDetail>({
   const detailHeaderActions = !showLoading && currentDetail
     ? registration.renderDetailHeaderActions
       ? registration.renderDetailHeaderActions({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
-      : registration.detailActions
+      : schema.pageActions.length > 0
         ? (
           <StandardCrudActions
-            actions={registration.detailActions}
+            actions={schema.pageActions.map((action) => ({
+              ...action,
+              labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+              confirmMessage: action.confirmMessageKey
+                ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+                : undefined,
+            }))}
             grantedPermissions={registration.permissions}
             handlers={registration.actionHandlers}
             context={{ id, detail: currentDetail as TDetail, refresh }}
@@ -192,7 +250,7 @@ function StandardCrudDetailPageContent<TDetail>({
           <StandardCrudSummaryBlocks
             blocks={nonReadySummaryBlocks}
             summaries={currentNormalizedDetail?.summaries ?? {}}
-            titleForBlock={(key) => key}
+            titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           {registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })}
         </div>
@@ -202,10 +260,10 @@ function StandardCrudDetailPageContent<TDetail>({
             blocks={schema.summaryBlocks}
             summaries={currentNormalizedDetail.summaries}
             renderers={registration.summaryRenderers}
-            titleForBlock={(key) => key}
+            titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           <DetailPage
-            title="详情信息"
+            title={t(`${schema.dicKey}.Detail_Title`, '详情信息')}
             dataSource={detailPreviewData}
             columns={detailColumns}
           />
@@ -219,7 +277,7 @@ function StandardCrudDetailPageContent<TDetail>({
               formId={`${schema.resourceKey}-detail-form`}
               mode="edit"
               fields={editFields}
-              sections={registration.formSections ?? []}
+              sections={formSchema.sections}
               values={formValues}
               lookupOptions={lookupOptions}
               lookupLoading={lookupLoading}
@@ -228,7 +286,7 @@ function StandardCrudDetailPageContent<TDetail>({
               onSubmit={() => handleSave(editFields)}
               saving={saving}
               error={saveError}
-              titleForSection={(titleKey) => titleKey}
+              titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
             />
           </FormPage>
         </div>
@@ -238,10 +296,10 @@ function StandardCrudDetailPageContent<TDetail>({
             blocks={schema.summaryBlocks}
             summaries={currentNormalizedDetail.summaries}
             renderers={registration.summaryRenderers}
-            titleForBlock={(key) => key}
+            titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           <DetailPage
-            title="详情信息"
+            title={t(`${schema.dicKey}.Detail_Title`, '详情信息')}
             dataSource={detailPreviewData}
             columns={detailColumns}
           />

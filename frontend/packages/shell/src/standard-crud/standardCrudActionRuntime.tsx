@@ -13,6 +13,13 @@ function hasPermission(action: StandardCrudActionDefinition, grantedPermissions:
   return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
 }
 
+function resolveActionHandler<TDetail = unknown, TRow = unknown>(
+  action: StandardCrudActionDefinition,
+  handlers: Record<string, StandardCrudActionHandler<TDetail, TRow>>,
+): StandardCrudActionHandler<TDetail, TRow> | undefined {
+  return handlers[action.handlerKey ?? action.key];
+}
+
 /** 标准 CRUD 动作运行时只收口权限、确认、pending 和错误展示；具体业务副作用由模块 handler 承担。 */
 export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actions,
@@ -25,7 +32,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   const visibleActions = actions.filter((action) => hasPermission(action, grantedPermissions));
 
   async function runAction(action: StandardCrudActionDefinition) {
-    const handler = handlers[action.key];
+    const handler = resolveActionHandler(action, handlers);
     if (!handler) {
       return;
     }
@@ -49,15 +56,15 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
 
           if (isDangerAction && action.confirmMessage) {
             return (
-              <CrudDangerAction
-                key={action.key}
-                confirmMessage={action.confirmMessage}
-                loading={pendingKey === action.key}
-                disabled={pendingKey !== null || !handlers[action.key]}
-                onConfirm={() => runAction(action)}
-              >
-                {pendingKey === action.key ? '处理中...' : action.labelKey}
-              </CrudDangerAction>
+            <CrudDangerAction
+              key={action.key}
+              confirmMessage={action.confirmMessage}
+              loading={pendingKey === action.key}
+              disabled={pendingKey !== null || !resolveActionHandler(action, handlers)}
+              onConfirm={() => runAction(action)}
+            >
+              {pendingKey === action.key ? '处理中...' : action.labelKey}
+            </CrudDangerAction>
             );
           }
 
@@ -66,7 +73,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
               key={action.key}
               size="sm"
               variant={action.variant}
-              disabled={pendingKey !== null || !handlers[action.key]}
+              disabled={pendingKey !== null || !resolveActionHandler(action, handlers)}
               onClick={() => void runAction(action)}
             >
               {pendingKey === action.key ? '处理中...' : action.labelKey}

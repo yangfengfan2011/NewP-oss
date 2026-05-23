@@ -11,7 +11,7 @@ import {
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button as AntdButton, Popconfirm, Popover } from 'antd';
+import { Button as AntdButton, Popconfirm, Popover, Select } from 'antd';
 import {
   CrudFormDrawer,
   CrudSearchBar,
@@ -25,9 +25,13 @@ import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
+import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
+import { buildStandardCrudDefaultFilters, buildStandardCrudListQuery } from '../standard-crud/standardCrudMetadataQuery';
 import {
   buildStandardCrudDetailFormValues,
 } from '../standard-crud/standardCrudDetailView';
+
+type MetadataRecord = Record<string, unknown>;
 
 interface StandardCrudListPageHostProps {
   viewKey: string;
@@ -62,6 +66,116 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
 };
 
 const MAX_ROW_ACTION_BUTTONS = 3;
+
+function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
+  if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
+    return { fields: [] };
+  }
+
+  const document = modelDocuments.find((item) => item?.type === 'model' && Object.prototype.hasOwnProperty.call(item, modelKey));
+  const model = document?.[modelKey];
+  return typeof model === 'object' && model !== null && !Array.isArray(model) ? (model as MetadataRecord) : { fields: [] };
+}
+
+function findStandardCrudModelField(model: MetadataRecord, fieldName: string | undefined): MetadataRecord {
+  if (!fieldName) {
+    return {};
+  }
+
+  const fields = Array.isArray(model.fields) ? model.fields : [];
+  return fields.find((field) => (
+    typeof field === 'object'
+    && field !== null
+    && !Array.isArray(field)
+    && (field as Record<string, unknown>).name === fieldName
+  )) as MetadataRecord ?? {};
+}
+
+function localizeStandardCrudFields(
+  fields: StandardCrudFieldDefinition[],
+  dicKey: string,
+  t: (key: string, fallback?: string) => string,
+): StandardCrudFieldDefinition[] {
+  return fields.map((field) => ({
+    ...field,
+    labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
+  }));
+}
+
+function renderMetadataFilterField(
+  field: {
+    key: string;
+    labelKey: string;
+    dataSourceKey?: string;
+    field?: string;
+  },
+  modelDocument: MetadataRecord,
+  registration: StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
+  value: unknown,
+  onChange: (key: string, value: unknown) => void,
+  labelFor: (labelKey: string) => string,
+): ReactElement {
+  const fieldLabel = labelFor(field.labelKey);
+  const enumOptions = field.dataSourceKey ? registration.enumOptions?.[field.dataSourceKey] : undefined;
+  if (enumOptions) {
+    return (
+      <label key={field.key} className="np-filter-control">
+        <span className="sh-form-label">{fieldLabel}</span>
+        <Select
+          className="np-filter-select"
+          value={typeof value === 'string' && value.length > 0 ? value : undefined}
+          allowClear
+          options={enumOptions}
+          onChange={(nextValue) => onChange(field.key, nextValue ?? '')}
+        />
+      </label>
+    );
+  }
+
+  const modelField = findStandardCrudModelField(modelDocument, field.field);
+  const storageType = typeof modelField.storage === 'object' && modelField.storage !== null
+    ? (modelField.storage as Record<string, unknown>).type
+    : undefined;
+  if (storageType === 'bool') {
+    const selectedValue = typeof value === 'boolean' ? String(value) : undefined;
+    return (
+      <label key={field.key} className="np-filter-control">
+        <span className="sh-form-label">{fieldLabel}</span>
+        <Select
+          className="np-filter-select"
+          value={selectedValue}
+          allowClear
+          options={[
+            { value: 'true', label: '是' },
+            { value: 'false', label: '否' },
+          ]}
+          onChange={(nextValue) => {
+            if (nextValue === 'true') {
+              onChange(field.key, true);
+              return;
+            }
+            if (nextValue === 'false') {
+              onChange(field.key, false);
+              return;
+            }
+            onChange(field.key, '');
+          }}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <label key={field.key} className="np-filter-control">
+      <span className="sh-form-label">{fieldLabel}</span>
+      <input
+        className="sh-form-input"
+        value={value == null ? '' : String(value)}
+        onChange={(event) => onChange(field.key, event.target.value)}
+      />
+    </label>
+  );
+}
 
 function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
   const hasOverflow = actions.length > MAX_ROW_ACTION_BUTTONS;
@@ -193,22 +307,55 @@ export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPa
     return <div className="sh-error-state">未找到标准 CRUD 前端资源注册项</div>;
   }
 
-  return <StandardCrudListPageContent view={viewDocument.view as Record<string, unknown>} registration={registration} />;
+  return (
+    <StandardCrudListPageContent
+      view={viewDocument.view as Record<string, unknown>}
+      registration={registration}
+      modelDocuments={runtimeMetadata?.modelDocuments ?? []}
+    />
+  );
 }
 
 function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TRow extends Record<string, unknown>>({
   view,
   registration,
+  modelDocuments,
 }: {
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<TFilter, TRow>;
+  modelDocuments: MetadataRecord[];
 }): ReactElement {
   const location = useLocation();
   const { t } = useLocalization();
-  const schema = useMemo(() => buildStandardCrudListSchema(view, registration), [view, registration]);
+  const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
+    modelDocuments,
+  }), [view, registration, modelDocuments]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
-  const [filters, setFilters] = useState<TFilter>(() => registration.createEmptyFilters());
-  const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => registration.createEmptyFilters());
+  const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
+  const createFormSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
+    mode: 'create',
+    enumOptions: registration.enumOptions ?? {},
+    lookupProviders: registration.lookupProviders ?? [],
+  }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
+  const editFormSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
+    mode: 'edit',
+    enumOptions: registration.enumOptions ?? {},
+    lookupProviders: registration.lookupProviders ?? [],
+  }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
+  const createFields = useMemo(
+    () => localizeStandardCrudFields(resolveCreateFormFields(createFormSchema.fields), schema.dicKey, t),
+    [createFormSchema.fields, schema.dicKey, t],
+  );
+  const editFields = useMemo(
+    () => localizeStandardCrudFields(editFormSchema.fields, schema.dicKey, t),
+    [editFormSchema.fields, schema.dicKey, t],
+  );
+  const initialFilters = useMemo(
+    () => buildStandardCrudDefaultFilters(schema.query, schema.advancedFilter),
+    [schema.query, schema.advancedFilter],
+  );
+  const [filters, setFilters] = useState<TFilter>(() => initialFilters as TFilter);
+  const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialFilters as TFilter);
   const [rows, setRows] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -225,6 +372,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
   const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
   const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
@@ -235,9 +383,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setFilters,
     applyFilters: () => setAppliedFilters(filters),
     resetFilters: () => {
-      const empty = registration.createEmptyFilters();
-      setFilters(empty);
-      setAppliedFilters(empty);
+      setFilters(initialFilters as TFilter);
+      setAppliedFilters(initialFilters as TFilter);
     },
     refresh: () => setReloadTick((current) => current + 1),
     loading,
@@ -245,8 +392,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     total,
   };
   const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
-  const editFields = registration.fields ?? [];
-  const createFields = useMemo(() => resolveCreateFormFields(editFields), [editFields]);
   const activeFormFields = drawerState.mode === 'create' ? createFields : drawerState.mode === 'edit' ? editFields : [];
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
     fields: activeFormFields,
@@ -264,6 +409,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setDetailLoading(false);
     setDrawerState(CLOSED_DRAWER_STATE);
   };
+
+  useEffect(() => {
+    setFilters(initialFilters as TFilter);
+    setAppliedFilters(initialFilters as TFilter);
+  }, [initialFilters]);
 
   const closeDrawerForRow = (rowId: string) => {
     if (drawerStateRef.current.id !== rowId) {
@@ -333,9 +483,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     try {
       setSaving(true);
       setSaveError(null);
+      const mutationFields = drawerState.mode === 'create' ? createFields : editFields;
       const values = registration.buildMutationValues
         ? registration.buildMutationValues(formValues)
-        : normalizeStandardCrudSubmitValues(editFields, formValues);
+        : normalizeStandardCrudSubmitValues(mutationFields, formValues);
 
       if (drawerState.mode === 'create') {
         await client.create(values);
@@ -382,7 +533,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const tableRequest = useMemo(
     () =>
       createSearchTableRequest<Record<string, unknown>, TRow, TRow>({
-        buildQuery: () => registration.buildListQuery(appliedFilters) as Record<string, unknown>,
+        buildQuery: () => buildStandardCrudListQuery(
+          schema.query,
+          appliedFilters as Record<string, unknown>,
+          schema.advancedFilter,
+        ),
         load: async (query) => {
           try {
             setLoading(true);
@@ -408,16 +563,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         },
         mapRow: (row) => row,
       }),
-    [client, registration, appliedFilters, reloadTick],
+    [client, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter],
   );
 
-  const createAction = registration.listActions?.find((action) => action.standardAction === 'create');
-  const editAction = registration.listActions?.find((action) => action.standardAction === 'edit');
-  const refreshAction = registration.listActions?.find((action) => action.standardAction === 'refresh');
-  const deleteActionDefinitions = registration.listActions?.filter((action) => action.standardAction === 'delete') ?? [];
-  const rowActionDefinitions = registration.listActions?.filter((action) => (
-    !['create', 'refresh', 'view', 'edit', 'delete'].includes(action.standardAction ?? '')
-  )) ?? [];
+  const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
+  const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
+  const refreshAction = schema.pageActions.find((action) => action.standardAction === 'refresh');
+  const deleteActionDefinitions = schema.rowActions.filter((action) => action.standardAction === 'delete');
+  const rowActionDefinitions = schema.rowActions.filter((action) => action.standardAction !== 'delete');
   const shouldRenderActionColumn = Boolean(
     registration.renderRowActions
     || deleteActionDefinitions.length > 0
@@ -425,9 +578,22 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     || registration.getRowId,
   );
   const registeredColumns = registration.buildColumns?.(context) ?? [];
+  const registeredColumnByKey = new Map(registeredColumns.map((column) => [column.key, column]));
+  const metadataColumns = schema.columns.map((column) => {
+    const registeredColumn = registeredColumnByKey.get(column.key);
+    return {
+      key: column.field,
+      dataIndex: column.field,
+      title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
+      width: column.width,
+      sorter: column.sortable === true,
+      render: registeredColumn?.render,
+      metadataField: column.field,
+    };
+  });
   const standardColumns = shouldRenderActionColumn
     ? [
-      ...registeredColumns,
+      ...metadataColumns,
       {
         key: 'actions',
         title: '操作',
@@ -461,9 +627,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
                 return {
                   key: action.key,
-                  label: action.labelKey,
+                  label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
                   danger: true,
-                  confirmMessage: action.confirmMessage ?? `确认${action.labelKey}吗？`,
+                  confirmMessage: action.confirmMessageKey
+                    ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+                    : undefined,
                   loading: deletingActionKey === pendingKey,
                   disabled: deletingActionKey !== null,
                   onClick: async () => {
@@ -471,7 +639,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                       setDeletingActionKey(pendingKey);
                       setDeleteActionError(null);
 
-                      const handler = registration.actionHandlers?.[action.key];
+                      const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
                       if (handler) {
                         // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
                         await handler({ id: rowId, row, refresh: () => undefined });
@@ -496,13 +664,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               .filter((action) => hasActionPermission(action, registration.permissions))
               .map((action): RowActionItem => {
                 const pendingKey = `${action.key}:${rowId}`;
-                const handler = registration.actionHandlers?.[action.key];
+                const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
 
                 return {
                   key: action.key,
-                  label: action.labelKey,
+                  label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
                   danger: action.variant === 'danger',
-                  confirmMessage: action.confirmMessage,
+                  confirmMessage: action.confirmMessageKey
+                    ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+                    : undefined,
                   loading: rowActionPendingKey === pendingKey,
                   disabled: rowActionPendingKey !== null || !handler,
                   onClick: async () => {
@@ -543,48 +713,111 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         },
       },
     ]
-    : registeredColumns;
+    : metadataColumns;
   const columns = standardColumns.map((column) => ({
     key: column.key,
-    dataIndex: column.key,
+    dataIndex: column.dataIndex,
     title: column.title,
-    render: (_: unknown, row: TRow) => (column.render ? column.render(row) : readTableCell(row, column.key)),
+    width: column.width,
+    sorter: column.sorter,
+    render: (_: unknown, row: TRow) => (column.render ? column.render(row) : readTableCell(row, column.dataIndex ?? column.key)),
   }));
 
-  const headerActions = createAction
+  const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, registration.permissions));
+  const headerActions = visiblePageActions.length > 0
     ? (
-      <AntdButton
-        type="primary"
-        size="middle"
-        onClick={() => openCreateDrawer()}
-      >
-        {createAction.labelKey}
-      </AntdButton>
+      <>
+        {visiblePageActions.map((action) => {
+          if (action.standardAction === 'create') {
+            return (
+              <AntdButton
+                key={action.key}
+                type={action.variant === 'primary' ? 'primary' : 'default'}
+                size="middle"
+                onClick={() => openCreateDrawer()}
+              >
+                {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
+              </AntdButton>
+            );
+          }
+
+          if (action.standardAction === 'refresh') {
+            return (
+              <AntdButton
+                key={action.key}
+                size="middle"
+                onClick={() => void handleRefresh()}
+              >
+                {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
+              </AntdButton>
+            );
+          }
+
+          return null;
+        })}
+      </>
     )
     : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
 
-  const filterBar = registration.renderFilters ? (
+  const filterBar = (
     <CrudSearchBar
-      fields={registration.renderFilters(context)}
+      fields={(
+        <div className="np-person-filter-grid">
+          {schema.query.fields.map((field) => renderMetadataFilterField(
+            field,
+            modelDocument,
+            registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
+            filters[field.key],
+            (key, value) => setFilters((current) => ({ ...current, [key]: value })),
+            (labelKey) => t(`${schema.dicKey}.${labelKey}`, labelKey),
+          ))}
+        </div>
+      )}
       loading={loading}
       onSearch={context.applyFilters}
       onReset={context.resetFilters}
-      more={<AntdButton type="text" size="middle">更多筛选</AntdButton>}
+      more={schema.advancedFilter.enabled ? (
+        <Popover
+          placement="bottomRight"
+          trigger="click"
+          open={advancedFilterOpen}
+          onOpenChange={setAdvancedFilterOpen}
+          content={(
+            <div className="np-person-filter-grid">
+              {schema.advancedFilter.sections.flatMap((section) => section.fields).map((field) => renderMetadataFilterField(
+                field,
+                modelDocument,
+                registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
+                filters[field.key],
+                (key, value) => setFilters((current) => ({ ...current, [key]: value })),
+                (labelKey) => t(`${schema.dicKey}.${labelKey}`, labelKey),
+              ))}
+            </div>
+          )}
+        >
+          <AntdButton type="text" size="middle">
+            {t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
+          </AntdButton>
+        </Popover>
+      ) : undefined}
     />
-  ) : undefined;
+  );
 
   const handleRefresh = async () => {
-    if (refreshAction && registration.actionHandlers?.[refreshAction.key]) {
-      await registration.actionHandlers[refreshAction.key]({ refresh: context.refresh });
+    const handler = refreshAction ? registration.actionHandlers?.[refreshAction.handlerKey ?? refreshAction.key] : undefined;
+    if (refreshAction && handler) {
+      await handler({ refresh: context.refresh });
       return;
     }
 
     context.refresh();
   };
 
-  const createDrawerTitle = resolveDrawerTitle(createAction?.labelKey, '新建', pageTitle, createAction?.labelKey);
-  const editDrawerTitle = resolveDrawerTitle(editAction?.labelKey, '编辑', pageTitle, createAction?.labelKey);
-  const viewDrawerTitle = resolveDrawerTitle(undefined, '查看', pageTitle, createAction?.labelKey);
+  const createActionLabel = createAction ? t(`${schema.dicKey}.${createAction.labelKey}`, createAction.labelKey) : undefined;
+  const editActionLabel = editAction ? t(`${schema.dicKey}.${editAction.labelKey}`, editAction.labelKey) : undefined;
+  const createDrawerTitle = resolveDrawerTitle(createActionLabel, '新建', pageTitle, createActionLabel);
+  const editDrawerTitle = resolveDrawerTitle(editActionLabel, '编辑', pageTitle, createActionLabel);
+  const viewDrawerTitle = resolveDrawerTitle(undefined, '查看', pageTitle, createActionLabel);
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
 
   const content = (
@@ -629,7 +862,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             formId={`${drawerFormId}-view`}
             mode="view"
             fields={editFields}
-            sections={registration.formSections ?? []}
+            sections={editFormSchema.sections}
             values={formValues}
             lookupOptions={lookupOptions}
             lookupLoading={lookupLoading}
@@ -638,7 +871,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             onSubmit={() => undefined}
             saving={false}
             showSubmitAction={false}
-            titleForSection={(titleKey) => titleKey}
+            titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
           />
         ) : null}
       </CrudFormDrawer>
@@ -655,7 +888,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           formId={drawerFormId}
           mode={drawerState.mode === 'create' ? 'create' : 'edit'}
           fields={drawerState.mode === 'create' ? createFields : editFields}
-          sections={registration.formSections ?? []}
+          sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
           values={formValues}
           lookupOptions={lookupOptions}
           lookupLoading={lookupLoading}
@@ -665,7 +898,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           saving={saving}
           error={saveError}
           showSubmitAction={false}
-          titleForSection={(titleKey) => titleKey}
+          titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
         />
       </CrudFormDrawer>
     </>

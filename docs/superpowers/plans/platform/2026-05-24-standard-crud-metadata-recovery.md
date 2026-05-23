@@ -1572,7 +1572,7 @@ git commit -m "配置：补齐人员中心标准CRUD元数据"
 - Modify: `frontend/packages/shell/src/__tests__/standard-crud-detail-host.test.tsx`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-list-host standard-crud-detail-host`
 
-- [ ] **Step 1: 扩展 List Host 测试**
+- [x] **Step 1: 扩展 List Host 测试**
 
 在 `standard-crud-list-host.test.tsx` 中把 localization catalog 补齐：
 
@@ -1617,7 +1617,7 @@ it('renders columns and actions from metadata when registration no longer declar
 });
 ```
 
-- [ ] **Step 2: 在 List Host 传入 resolver context**
+- [x] **Step 2: 在 List Host 传入 resolver context**
 
 在 `StandardCrudListPageHost.tsx` 中取得本地化函数：
 
@@ -1633,7 +1633,7 @@ const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
 }), [view, registration, runtimeMetadata?.modelDocuments]);
 ```
 
-- [ ] **Step 3: 用 metadata query 初始化筛选状态**
+- [x] **Step 3: 用 metadata query 初始化筛选状态**
 
 把初始状态从 `registration.createEmptyFilters()` 改为：
 
@@ -1656,7 +1656,7 @@ setAppliedFilters(initialFilters as TFilter);
 buildQuery: () => buildStandardCrudListQuery(schema.query, appliedFilters, schema.advancedFilter),
 ```
 
-- [ ] **Step 4: 用 metadata 渲染轻筛选**
+- [x] **Step 4: 用 metadata 渲染轻筛选**
 
 新增本地函数：
 
@@ -1726,7 +1726,7 @@ const filterBar = (
 
 同时补一个高级筛选面板或抽屉，字段来自 `schema.advancedFilter.sections[].fields`，复用 `renderMetadataFilterField` 和相同 filters 状态；部门、岗位、启用状态必须能从高级筛选写入 `filters.departmentId / filters.positionId / filters.isEnabled`，并被 `buildStandardCrudListQuery` 提交。若现有 Host 暂无高级筛选容器，本任务先使用受控弹层实现，不把高级筛选字段塞回轻筛选条。
 
-- [ ] **Step 5: 用 metadata 渲染 columns/actions**
+- [x] **Step 5: 用 metadata 渲染 columns/actions**
 
 构建特殊列 renderer map：
 
@@ -1766,7 +1766,7 @@ handler 查找优先 `handlerKey`：
 const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
 ```
 
-- [ ] **Step 6: 用 metadata form schema 替代 registration fields**
+- [x] **Step 6: 用 metadata form schema 替代 registration fields**
 
 在 List Host 中从 model 构建：
 
@@ -1784,7 +1784,7 @@ const editFields = editFormSchema.fields;
 const createFields = createFormSchema.fields;
 ```
 
-- [ ] **Step 7: 改造 Detail Host**
+- [x] **Step 7: 改造 Detail Host**
 
 在 `StandardCrudDetailPageHost.tsx` 中同样用 `buildStandardCrudDetailSchema(view, registration, { modelDocuments })` 和 `buildStandardCrudFormSchemaFromModel`：
 
@@ -1818,7 +1818,7 @@ titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
 />
 ```
 
-- [ ] **Step 8: 运行 Host 测试**
+- [x] **Step 8: 运行 Host 测试**
 
 Run:
 
@@ -1832,7 +1832,7 @@ Expected:
 Test Files 2 passed
 ```
 
-- [ ] **Step 9: 提交 Host 改造**
+- [x] **Step 9: 提交 Host 改造**
 
 Run:
 

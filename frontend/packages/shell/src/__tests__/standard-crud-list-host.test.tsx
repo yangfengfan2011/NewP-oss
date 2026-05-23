@@ -122,6 +122,16 @@ const personListViewDocument = {
       { key: 'refresh', labelKey: 'Action_Refresh', standardAction: 'refresh' },
     ],
     rowActions: [
+      { key: 'view', labelKey: 'Action_View', standardAction: 'view' },
+      { key: 'edit', labelKey: 'Action_Edit', standardAction: 'edit' },
+      {
+        key: 'delete',
+        labelKey: 'Action_Delete',
+        standardAction: 'delete',
+        variant: 'danger',
+        handlerKey: 'deletePerson',
+        confirmMessageKey: 'Action_Delete_Confirm',
+      },
       {
         key: 'disable',
         labelKey: 'Action_Disable',
@@ -149,6 +159,10 @@ const personListCatalog = {
   'PersonListView.Column_DepartmentName': '部门',
   'PersonListView.Action_Create': '新建人员',
   'PersonListView.Action_Refresh': '刷新',
+  'PersonListView.Action_View': '查看',
+  'PersonListView.Action_Edit': '编辑',
+  'PersonListView.Action_Delete': '删除',
+  'PersonListView.Action_Delete_Confirm': '确认删除该人员吗？',
   'PersonListView.Action_Disable': '停用',
   'PersonListView.Action_Disable_Confirm': '确认停用该人员？',
   'PersonListView.Field_PersonNo': '人员编号',
@@ -232,6 +246,7 @@ describe('StandardCrudListPageHost', () => {
             }],
             actionHandlers: {
               refresh: vi.fn(),
+              deletePerson: vi.fn(),
               disablePerson: vi.fn(),
             },
             ...overrides,
@@ -340,6 +355,7 @@ describe('StandardCrudListPageHost', () => {
     mockStandardCrudModule({
       actionHandlers: {
         refresh: vi.fn(),
+        deletePerson: vi.fn(),
         disablePerson,
       },
       buildColumns: undefined,
@@ -372,7 +388,15 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
-    expect(container.textContent).toContain('停用');
+    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '编辑')).toBe(1);
+    await act(async () => {
+      const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '更多');
+      moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain('删除');
+    expect(document.body.textContent).toContain('停用');
     expect(container.textContent).not.toContain('公司');
     expect(container.querySelector('.np-person-filter-grid .ant-select')).not.toBeNull();
 

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useLocalization } from '@icp-platform/core';
+import { useAuthorization, useLocalization } from '@icp-platform/core';
 import { UserOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
@@ -58,6 +58,26 @@ interface RowActionItem {
   loading?: boolean;
   confirmMessage?: string;
   onClick: () => void | Promise<void>;
+}
+
+class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; message: string }, { error: string | null }> {
+  state: { error: string | null } = { error: null };
+
+  static getDerivedStateFromError(error: unknown): { error: string } {
+    return { error: error instanceof Error ? error.message : '标准 CRUD 元数据解析失败' };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(this.props.message, error, info);
+  }
+
+  render(): ReactNode {
+    if (this.state.error) {
+      return <ErrorState message={`${this.props.message}：${this.state.error}`} />;
+    }
+
+    return this.props.children;
+  }
 }
 
 const CLOSED_DRAWER_STATE: CrudDrawerState = {
@@ -290,6 +310,14 @@ function resolveDrawerTitle(
   return `${fallbackAction}${resourceTitle}`;
 }
 
+function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): string[] {
+  try {
+    return useAuthorization().permissions;
+  } catch {
+    return fallbackPermissions;
+  }
+}
+
 function hasActionPermission(action: { requiredPermissions?: string[] }, grantedPermissions: string[] = []): boolean {
   return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
 }
@@ -308,11 +336,13 @@ export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPa
   }
 
   return (
+    <StandardCrudHostErrorBoundary message={`标准 CRUD 列表元数据解析失败（${viewKey}）`}>
     <StandardCrudListPageContent
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
     />
+    </StandardCrudHostErrorBoundary>
   );
 }
 
@@ -327,6 +357,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 }): ReactElement {
   const location = useLocation();
   const { t } = useLocalization();
+  const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
@@ -569,11 +600,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
   const refreshAction = schema.pageActions.find((action) => action.standardAction === 'refresh');
-  const deleteActionDefinitions = schema.rowActions.filter((action) => action.standardAction === 'delete');
-  const rowActionDefinitions = schema.rowActions.filter((action) => action.standardAction !== 'delete');
+  const rowActionDefinitions = schema.rowActions;
   const shouldRenderActionColumn = Boolean(
     registration.renderRowActions
-    || deleteActionDefinitions.length > 0
     || rowActionDefinitions.length > 0
     || registration.getRowId,
   );
@@ -582,7 +611,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const metadataColumns = schema.columns.map((column) => {
     const registeredColumn = registeredColumnByKey.get(column.key);
     return {
-      key: column.field,
+      key: column.key,
       dataIndex: column.field,
       title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
       width: column.width,
@@ -596,42 +625,51 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ...metadataColumns,
       {
         key: 'actions',
+        dataIndex: 'actions',
         title: '操作',
+        width: undefined,
+        sorter: false,
         render: (row: TRow) => {
           const rowId = registration.getRowId(row);
-          const rowDeleteActionError = deleteActionDefinitions.some((action) => deleteActionError?.key === `${action.key}:${rowId}`)
+          const rowDeleteActionError = rowActionDefinitions.some((action) => action.standardAction === 'delete' && deleteActionError?.key === `${action.key}:${rowId}`)
             ? deleteActionError
             : null;
-          const rowExtraActionError = rowActionDefinitions.some((action) => rowActionError?.key === `${action.key}:${rowId}`)
+          const rowExtraActionError = rowActionDefinitions.some((action) => action.standardAction !== 'delete' && rowActionError?.key === `${action.key}:${rowId}`)
             ? rowActionError
             : null;
-          const rowActions: RowActionItem[] = [
-            {
-              key: 'view',
-              label: '查看',
-              onClick: () => {
-                void openViewDrawer(rowId);
-              },
-            },
-            {
-              key: 'edit',
-              label: '编辑',
-              onClick: () => {
-                void openEditDrawer(rowId);
-              },
-            },
-            ...deleteActionDefinitions
-              .filter((action) => hasActionPermission(action, registration.permissions))
-              .map((action): RowActionItem => {
-                const pendingKey = `${action.key}:${rowId}`;
+          const rowActions: RowActionItem[] = rowActionDefinitions
+            .filter((action) => hasActionPermission(action, grantedPermissions))
+            .map((action): RowActionItem => {
+              const pendingKey = `${action.key}:${rowId}`;
+              const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
+              const confirmMessage = action.confirmMessageKey
+                ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+                : undefined;
 
+              if (action.standardAction === 'view') {
                 return {
                   key: action.key,
-                  label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+                  label,
+                  onClick: () => {
+                    void openViewDrawer(rowId);
+                  },
+                };
+              }
+              if (action.standardAction === 'edit') {
+                return {
+                  key: action.key,
+                  label,
+                  onClick: () => {
+                    void openEditDrawer(rowId);
+                  },
+                };
+              }
+              if (action.standardAction === 'delete') {
+                return {
+                  key: action.key,
+                  label,
                   danger: true,
-                  confirmMessage: action.confirmMessageKey
-                    ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
-                    : undefined,
+                  confirmMessage,
                   loading: deletingActionKey === pendingKey,
                   disabled: deletingActionKey !== null,
                   onClick: async () => {
@@ -659,43 +697,37 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                     }
                   },
                 };
-              }),
-            ...rowActionDefinitions
-              .filter((action) => hasActionPermission(action, registration.permissions))
-              .map((action): RowActionItem => {
-                const pendingKey = `${action.key}:${rowId}`;
-                const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+              }
 
-                return {
-                  key: action.key,
-                  label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-                  danger: action.variant === 'danger',
-                  confirmMessage: action.confirmMessageKey
-                    ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
-                    : undefined,
-                  loading: rowActionPendingKey === pendingKey,
-                  disabled: rowActionPendingKey !== null || !handler,
-                  onClick: async () => {
-                    if (!handler) {
-                      return;
-                    }
+              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
 
-                    try {
-                      setRowActionPendingKey(pendingKey);
-                      setRowActionError(null);
-                      await handler({ id: rowId, row, refresh: context.refresh });
-                    } catch (actionError) {
-                      setRowActionError({
-                        key: pendingKey,
-                        message: actionError instanceof Error ? actionError.message : '执行操作失败',
-                      });
-                    } finally {
-                      setRowActionPendingKey(null);
-                    }
-                  },
-                };
-              }),
-          ];
+              return {
+                key: action.key,
+                label,
+                danger: action.variant === 'danger',
+                confirmMessage,
+                loading: rowActionPendingKey === pendingKey,
+                disabled: rowActionPendingKey !== null || !handler,
+                onClick: async () => {
+                  if (!handler) {
+                    return;
+                  }
+
+                  try {
+                    setRowActionPendingKey(pendingKey);
+                    setRowActionError(null);
+                    await handler({ id: rowId, row, refresh: context.refresh });
+                  } catch (actionError) {
+                    setRowActionError({
+                      key: pendingKey,
+                      message: actionError instanceof Error ? actionError.message : '执行操作失败',
+                    });
+                  } finally {
+                    setRowActionPendingKey(null);
+                  }
+                },
+              };
+            });
 
           return (
             <div style={{ display: 'grid', gap: 6 }}>
@@ -723,7 +755,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     render: (_: unknown, row: TRow) => (column.render ? column.render(row) : readTableCell(row, column.dataIndex ?? column.key)),
   }));
 
-  const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, registration.permissions));
+  const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, grantedPermissions));
   const headerActions = visiblePageActions.length > 0
     ? (
       <>

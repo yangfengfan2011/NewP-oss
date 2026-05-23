@@ -92,9 +92,8 @@
           "visible": true
         },
         "dataSource": {
-          "type": "model",
-          "key": "Company",
-          "model": "Company"
+          "type": "provider",
+          "key": "organization.companies"
         }
       },
       {

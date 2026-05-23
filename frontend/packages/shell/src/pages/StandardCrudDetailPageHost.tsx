@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
-import { useLocalization } from '@icp-platform/core';
+import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -33,6 +33,26 @@ interface StandardCrudDetailPageHostProps {
 }
 
 const EMPTY_DETAIL_FIELDS: Record<string, unknown> = {};
+
+class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; message: string }, { error: string | null }> {
+  state: { error: string | null } = { error: null };
+
+  static getDerivedStateFromError(error: unknown): { error: string } {
+    return { error: error instanceof Error ? error.message : '标准 CRUD 元数据解析失败' };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(this.props.message, error, info);
+  }
+
+  render(): ReactNode {
+    if (this.state.error) {
+      return <ErrorState message={`${this.props.message}：${this.state.error}`} />;
+    }
+
+    return this.props.children;
+  }
+}
 
 type LoadedDetail<TDetail> = {
   id: string;
@@ -69,6 +89,14 @@ function toDictionaryBlockKey(blockKey: string): string {
   return `Block_${blockKey.charAt(0).toUpperCase()}${blockKey.slice(1)}`;
 }
 
+function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): string[] {
+  try {
+    return useAuthorization().permissions;
+  } catch {
+    return fallbackPermissions;
+  }
+}
+
 export default function StandardCrudDetailPageHost({ viewKey, id }: StandardCrudDetailPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveDetailViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
@@ -87,12 +115,14 @@ export default function StandardCrudDetailPageHost({ viewKey, id }: StandardCrud
   }
 
   return (
+    <StandardCrudHostErrorBoundary message={`标准 CRUD 详情元数据解析失败（${viewKey}）`}>
     <StandardCrudDetailPageContent
       id={id}
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
     />
+    </StandardCrudHostErrorBoundary>
   );
 }
 
@@ -108,6 +138,7 @@ function StandardCrudDetailPageContent<TDetail>({
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
+  const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
@@ -184,6 +215,10 @@ function StandardCrudDetailPageContent<TDetail>({
   });
 
   const refresh = () => setReloadTick((current) => current + 1);
+  const detailActionHandlers = useMemo(() => ({
+    ...registration.actionHandlers,
+    edit: () => undefined,
+  }), [registration.actionHandlers]);
   const handleFormChange = (fieldKey: string, value: unknown) => {
     setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, editFields));
   };
@@ -219,8 +254,8 @@ function StandardCrudDetailPageContent<TDetail>({
                 ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
                 : undefined,
             }))}
-            grantedPermissions={registration.permissions}
-            handlers={registration.actionHandlers}
+            grantedPermissions={grantedPermissions}
+            handlers={detailActionHandlers}
             context={{ id, detail: currentDetail as TDetail, refresh }}
           />
         )

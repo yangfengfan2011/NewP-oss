@@ -66,6 +66,11 @@ const personDetailViewDocument = {
     summaryBlocks: ['userLink'],
     pageActions: [
       {
+        key: 'edit',
+        labelKey: 'Action_Edit',
+        standardAction: 'edit',
+      },
+      {
         key: 'disable',
         labelKey: 'Action_Disable',
         standardAction: 'disable',
@@ -81,6 +86,7 @@ const personDetailCatalog = {
   'PersonDetailView.Description': '查看和维护人员详情信息。',
   'PersonDetailView.Section_Basic': '基础信息',
   'PersonDetailView.Section_Organization': '组织信息',
+  'PersonDetailView.Action_Edit': '编辑',
   'PersonDetailView.Action_Disable': '停用人员',
   'PersonDetailView.Field_PersonNo': '人员编号',
   'PersonDetailView.Field_ENAME': '姓名',
@@ -385,6 +391,7 @@ describe('StandardCrudDetailPageHost', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
+    expect(container.textContent).toContain('编辑');
     expect(container.textContent).toContain('停用人员');
 
     await act(async () => {

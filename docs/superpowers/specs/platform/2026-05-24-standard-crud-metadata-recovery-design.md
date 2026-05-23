@@ -329,9 +329,13 @@ Shell 可以根据字段语义推导默认控件：
 
 - `source = model` 表示列绑定模型字段。
 - `source = projection` 表示列来自列表 DTO/projection，例如 `companyName`、`departmentName`。
+- `source = projection` 必须显式声明 `field`，该字段名对应前端标准化后的列表行属性；这里不引入 `mapsTo / alias / apiField` 等通用字段映射。
 - 列标题始终由 `labelKey` 提供，不从模型字段 label 自动继承。
 - 特殊单元格渲染，如状态标签颜色，允许通过代码 renderer registry 按列 key 或字段语义覆盖。
 - `departmentName` 这类 projection 字段需要显式声明来源，但不进入 model metadata。
+- projection 字段运行时值为 `null / undefined` 时，列表单元格按当前容错策略显示为空，不把单行数据缺值升级为整页错误。
+- 已声明 projection 字段的稳定返回由后端/前端契约测试保障；人员中心这类样板资源必须测试列表 DTO 包含 `departmentName / positionName` 等已声明 projection 字段。
+- 若某个显示列需要“显示名缺失时退回 ID”等体验兜底，应由模块 mapper 或受控 renderer 实现，不新增通用 fallback metadata，避免字段映射机制扩散。
 
 ### 7.5 actions
 
@@ -533,7 +537,7 @@ resolver 负责校验：
 - `dataSource.type = enum` 但 enum key 不存在。
 - 人员中心列表 metadata 重新声明公司筛选或公司列。
 - 标准 CRUD V1 metadata 声明 `treeSelect / cascader / tree view` 等尚未纳入主线的树形能力。
-- `source = projection` 列运行时数据缺失且没有 fallback。
+- `source = projection` 列未声明 `field`，或契约测试发现样板资源声明的 projection 字段未被列表 DTO 稳定返回。
 - `query.defaults.field` 没有出现在任何查询声明中。
 - `list.export` 与 `pageActions` 重复表达导出。
 
@@ -577,11 +581,12 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 
 - 打开 `/organization/persons`。
 - 确认轻筛选、默认查询、列表列、创建/编辑/查看抽屉、删除/停用动作仍可用。
+- 确认部门、岗位等 projection 列有值时正常展示，个别行缺值时不导致整页错误。
 - 确认字段文案、按钮文案和确认文案来自 dic，而不是 TSX 硬编码。
 
 ## 13. 未决问题
 
-- projection 列缺失时是显示空值、显示错误，还是仅测试环境强失败，需要结合现有列表容错策略决定。
+暂无。
 
 已收口问题：
 
@@ -589,6 +594,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 - `model dataSource` V1 不自动调用后端标准 option endpoint；它只表达模型引用语义，实际候选项加载仍通过 Shell/模块 provider registry 承接。若找不到 provider，应明确失败。
 - 人员中心 V1 不按多公司能力设计；列表继续不展示公司筛选和公司列。
 - 部门树结构不进入标准 CRUD 元数据回收 V1。组织树页继续作为 Organization 模块专属页面存在；人员表单部门选择先使用扁平 lookup，路径展示由 provider label 承接。
+- projection 列缺失采用分层处理：schema 未声明 `field` 或契约测试发现字段未稳定返回时强失败；生产运行时单行值为空时按当前列表容错显示为空；显示名退回 ID 等体验兜底留在模块 mapper/renderer，不新增通用 fallback metadata。
 
 ## 14. 实施拆分建议
 

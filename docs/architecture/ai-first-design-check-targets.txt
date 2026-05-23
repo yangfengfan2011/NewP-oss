@@ -12,3 +12,4 @@ ai-first-execution-standard.md
 ../superpowers/specs/platform/2026-05-17-person-center-frontend-pro-layout-design.md
 ../superpowers/specs/platform/2026-05-17-person-center-crud-pro-sample-design.md
 ../superpowers/specs/platform/2026-05-23-shell-crud-workspace-visual-adjustment-design.md
+../superpowers/specs/platform/2026-05-24-standard-crud-metadata-recovery-design.md

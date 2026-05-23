@@ -763,7 +763,7 @@ git commit -m "功能：扩展标准CRUD字段控件契约"
 - Modify: `frontend/packages/shell/src/__tests__/standard-crud-schema-and-registry.test.ts`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry standard-crud-metadata-form standard-crud-metadata-query`
 
-- [ ] **Step 1: 实现 metadata form helper**
+- [x] **Step 1: 实现 metadata form helper**
 
 创建 `frontend/packages/shell/src/standard-crud/standardCrudMetadataForm.ts`：
 
@@ -895,7 +895,7 @@ export function buildStandardCrudFormSchemaFromModel(
 }
 ```
 
-- [ ] **Step 2: 实现 metadata query helper**
+- [x] **Step 2: 实现 metadata query helper**
 
 创建 `frontend/packages/shell/src/standard-crud/standardCrudMetadataQuery.ts`：
 
@@ -972,7 +972,7 @@ export function buildStandardCrudListQuery(
 }
 ```
 
-- [ ] **Step 3: 扩展 resolver 输入和 schema 类型**
+- [x] **Step 3: 扩展 resolver 输入和 schema 类型**
 
 在 `frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts` 中新增类型：
 
@@ -1020,7 +1020,7 @@ handlerKey?: string;
 requiredPermissions?: string[];
 ```
 
-- [ ] **Step 4: 在 resolver 中增加校验函数**
+- [x] **Step 4: 在 resolver 中增加校验函数**
 
 在同文件加入：
 
@@ -1154,7 +1154,7 @@ assertQuery(schema.query, schema.advancedFilter);
 
 `buildStandardCrudDetailSchema` 和 `buildStandardCrudFormSchemaFromModel` 所在调用链必须复用 `assertStandardCrudModelDataSources`；不要只在 list schema 中校验 provider/model dataSource，否则用户直达详情或编辑抽屉时会绕过 provider 注册失败信号。
 
-- [ ] **Step 5: 跑 Task 1 测试并修正类型错误**
+- [x] **Step 5: 跑 Task 1 测试并修正类型错误**
 
 Run:
 
@@ -1168,7 +1168,7 @@ Expected:
 Test Files 3 passed
 ```
 
-- [ ] **Step 6: 提交 resolver 实现**
+- [x] **Step 6: 提交 resolver 实现**
 
 Run:
 

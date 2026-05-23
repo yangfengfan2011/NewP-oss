@@ -2,6 +2,7 @@ import type {
   StandardCrudFieldDefinition,
   StandardCrudFormMode,
   StandardCrudFormSection,
+  StandardCrudLookupProvider,
   StandardCrudOption,
 } from '@icp-platform/sdk';
 
@@ -10,6 +11,7 @@ type MetadataRecord = Record<string, unknown>;
 export interface BuildStandardCrudFormSchemaInput {
   mode: StandardCrudFormMode;
   enumOptions: Record<string, StandardCrudOption[]>;
+  lookupProviders?: StandardCrudLookupProvider[];
 }
 
 export interface StandardCrudMetadataFormSchema {
@@ -143,8 +145,16 @@ function buildField(
   }
 
   if (kind === 'lookup') {
+    const providerKey = buildLookupProviderKey(dataSource);
+    if (providerKey.length === 0) {
+      throw new Error(`lookup field "${modelField}" must declare dataSource provider`);
+    }
+    if (input.lookupProviders && !input.lookupProviders.some((provider) => provider.key === providerKey)) {
+      throw new Error(`dataSource provider "${providerKey}" for field "${modelField}" is not registered`);
+    }
+
     result.lookup = {
-      providerKey: buildLookupProviderKey(dataSource),
+      providerKey,
       // metadata field 名就是平台协议字段名，这里不再做任何 alias 友好化映射。
       dependsOn: readArray<string>(dataSource.dependsOn).map(normalizeStandardCrudFieldKey),
       currentValueLabelField: `${modelField.replace(/Id$/, '')}Name`,

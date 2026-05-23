@@ -1,5 +1,11 @@
 export interface StandardCrudQueryFieldSchema {
   key: string;
+  labelKey?: string;
+  source?: 'preset' | 'model';
+  field?: string;
+  preset?: string;
+  operator?: string;
+  dataSourceKey?: string;
   hidden?: boolean;
 }
 

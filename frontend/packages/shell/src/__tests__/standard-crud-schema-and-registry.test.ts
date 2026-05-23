@@ -66,7 +66,7 @@ describe('standard CRUD schema resolver and registry', () => {
             },
           ],
         },
-        columns: [{ key: 'name', labelKey: 'Column_Name' }],
+        columns: [{ key: 'name', labelKey: 'Column_Name', source: 'projection', field: 'name' }],
         pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh' }],
         rowActions: [{ key: 'view', labelKey: 'Action_View' }],
         export: { modes: ['current'] },
@@ -103,7 +103,7 @@ describe('standard CRUD schema resolver and registry', () => {
         },
       ],
     });
-    expect(schema.columns).toEqual([{ key: 'name', labelKey: 'Column_Name' }]);
+    expect(schema.columns).toEqual([{ key: 'name', labelKey: 'Column_Name', source: 'projection', field: 'name' }]);
     expect(schema.exportModes).toEqual(['current']);
   });
 
@@ -135,6 +135,7 @@ describe('standard CRUD schema resolver and registry', () => {
           enabled: true,
           sections: [{
             key: 'organization',
+            titleKey: 'AdvancedFilter_Organization',
             fields: [
               { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId', operator: '=' },
               { key: 'positionId', labelKey: 'Query_Position', source: 'model', field: 'PositionId', operator: '=' },
@@ -198,6 +199,7 @@ describe('standard CRUD schema resolver and registry', () => {
           'PersonListView.Query_Department': '部门',
           'PersonListView.Query_Position': '岗位',
           'PersonListView.Query_IsEnabled': '启用状态',
+          'PersonListView.AdvancedFilter_Organization': '组织信息',
           'PersonListView.Column_PersonNo': '人员编号',
           'PersonListView.Column_DepartmentName': '部门',
           'PersonListView.Action_Create': '新建',
@@ -242,6 +244,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Column_DepartmentName': '部门',
         },
       },
@@ -263,6 +266,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
         },
       },
     )).toThrow('missing dictionary key "PersonListView.Action_Create"');
@@ -286,6 +290,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Query_Keyword': '关键字',
         },
       },
@@ -306,6 +311,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
         },
       },
     )).toThrow('view "organization.person.list" references unknown model "MissingPerson"');
@@ -328,6 +334,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Query_Quick': '快速搜索',
         },
       },
@@ -349,6 +356,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Action_Archive': '归档',
         },
       },
@@ -370,6 +378,7 @@ describe('standard CRUD schema resolver and registry', () => {
         modelDocuments: [{ type: 'model', Person: { fields: [] } }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Action_Disable': '停用',
         },
       },
@@ -398,6 +407,7 @@ describe('standard CRUD schema resolver and registry', () => {
         }],
         defaultLanguageCatalog: {
           'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Query_Department': '部门',
         },
       },
@@ -420,7 +430,7 @@ describe('standard CRUD schema resolver and registry', () => {
             },
           ],
         },
-        columns: [undefined, { key: 'name', labelKey: 'Column_Name' }],
+        columns: [undefined, { key: 'name', labelKey: 'Column_Name', source: 'projection', field: 'name' }],
         pageActions: [null, { key: 'refresh', labelKey: 'Action_Refresh' }],
         rowActions: [false, { key: 'view', labelKey: 'Action_View' }],
       },
@@ -435,9 +445,54 @@ describe('standard CRUD schema resolver and registry', () => {
         fields: [{ key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'preset' }],
       },
     ]);
-    expect(schema.columns).toEqual([{ key: 'name', labelKey: 'Column_Name' }]);
+    expect(schema.columns).toEqual([{ key: 'name', labelKey: 'Column_Name', source: 'projection', field: 'name' }]);
     expect(schema.pageActions).toEqual([{ key: 'refresh', labelKey: 'Action_Refresh' }]);
     expect(schema.rowActions).toEqual([{ key: 'view', labelKey: 'Action_View' }]);
+  });
+
+  it('fails when duplicate model documents declare the same model key', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+      },
+      personRegistration,
+      {
+        modelDocuments: [
+          { type: 'model', Person: { fields: [] } },
+          { type: 'model', Person: { fields: [] } },
+        ],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
+        },
+      },
+    )).toThrow('model "Person" is declared by multiple metadata documents');
+  });
+
+  it('fails when an action uses an unsupported variant', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        pageActions: [{ key: 'create', labelKey: 'Action_Create', standardAction: 'create', variant: 'quiet' }],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
+          'PersonListView.Action_Create': '新建',
+        },
+      },
+    )).toThrow('unsupported action variant "quiet"');
   });
 
   it('builds a detail schema from runtime view metadata and registration', () => {

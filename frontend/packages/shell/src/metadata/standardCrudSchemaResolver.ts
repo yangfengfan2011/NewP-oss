@@ -31,8 +31,8 @@ export interface StandardCrudRuntimeActionSchema {
 export interface StandardCrudRuntimeColumnSchema {
   key: string;
   labelKey: string;
-  source?: 'model' | 'projection';
-  field?: string;
+  source: 'model' | 'projection';
+  field: string;
   width?: number;
   sortable?: boolean;
 }
@@ -95,6 +95,7 @@ export interface StandardCrudDetailRuntimeSchema {
 
 const builtinModelFields = ['EID', 'ENAME', 'ECODE'];
 const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'submit']);
+const supportedActionVariants = new Set(['default', 'primary', 'danger']);
 const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
 const supportedQueryPresets = new Set(['keyword']);
 
@@ -223,8 +224,8 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
   return {
     key: readString(value.key),
     labelKey: readString(value.labelKey),
-    ...(source === 'model' || source === 'projection' ? { source: source as StandardCrudRuntimeColumnSchema['source'] } : {}),
-    ...(field.length > 0 ? { field } : {}),
+    source: source === 'projection' ? 'projection' : 'model',
+    field,
     ...(width !== undefined ? { width } : {}),
     ...(sortable !== undefined ? { sortable } : {}),
   };
@@ -274,6 +275,12 @@ function readDetailSection(value: unknown): StandardCrudDetailSectionSchema | nu
   };
 }
 
+function assertRequiredMetadataKey(kind: string, key: string, localKey: string): void {
+  if (localKey.length === 0) {
+    throw new Error(`${kind} "${key}" must declare labelKey`);
+  }
+}
+
 function assertDictionaryKey(dicKey: string, localKey: string, catalog: Record<string, string> | undefined): void {
   if (!catalog || localKey.length === 0) {
     return;
@@ -286,7 +293,11 @@ function assertDictionaryKey(dicKey: string, localKey: string, catalog: Record<s
 }
 
 function findModelDocument(modelDocuments: MetadataRecord[], modelKey: string): MetadataRecord {
-  const document = modelDocuments.find((item) => item?.type === 'model' && Object.prototype.hasOwnProperty.call(item, modelKey));
+  const matches = modelDocuments.filter((item) => item?.type === 'model' && Object.prototype.hasOwnProperty.call(item, modelKey));
+  if (matches.length > 1) {
+    throw new Error(`model "${modelKey}" is declared by multiple metadata documents`);
+  }
+  const document = matches[0];
   return readRecord(document?.[modelKey]);
 }
 
@@ -387,6 +398,9 @@ function assertAction<TFilter, TRow, TDetail>(
   if (action.standardAction && !supportedStandardActions.has(action.standardAction)) {
     throw new Error(`unsupported standard action "${action.standardAction}"`);
   }
+  if (action.variant && !supportedActionVariants.has(action.variant)) {
+    throw new Error(`unsupported action variant "${action.variant}"`);
+  }
 
   if (action.handlerKey && !registration.actionHandlers?.[action.handlerKey]) {
     throw new Error(`action handler "${action.handlerKey}" is not registered on resource "${registration.resourceKey}"`);
@@ -429,6 +443,7 @@ function assertLocalizedFieldLabels(
   catalog: Record<string, string> | undefined,
 ): void {
   for (const field of fields) {
+    assertRequiredMetadataKey('query field', field.key, field.labelKey);
     assertDictionaryKey(dicKey, field.labelKey, catalog);
   }
 }
@@ -439,6 +454,7 @@ function assertLocalizedActions(
   catalog: Record<string, string> | undefined,
 ): void {
   for (const action of actions) {
+    assertRequiredMetadataKey('action', action.key, action.labelKey);
     assertDictionaryKey(dicKey, action.labelKey, catalog);
     assertDictionaryKey(dicKey, action.confirmMessageKey ?? '', catalog);
   }
@@ -456,7 +472,6 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   const dicKey = readString(view.dicKey, registration.resourceKey);
   const titleKey = readString(view.titleKey, 'Title');
   const descriptionKey = readString(view.descriptionKey, 'Description');
-  const explicitDescriptionKey = readString(view.descriptionKey);
   const modelKey = readString(view.model);
   const model = modelKey.length > 0 ? requireModelDocument(viewKey, context?.modelDocuments, modelKey) : {};
   const modelFields = collectModelFields(model);
@@ -489,15 +504,23 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   };
 
   assertDictionaryKey(dicKey, titleKey, context?.defaultLanguageCatalog);
-  assertDictionaryKey(dicKey, explicitDescriptionKey, context?.defaultLanguageCatalog);
+  assertDictionaryKey(dicKey, descriptionKey, context?.defaultLanguageCatalog);
   assertLocalizedFieldLabels(dicKey, schema.query.fields, context?.defaultLanguageCatalog);
   assertDictionaryKey(dicKey, schema.advancedFilter.titleKey, context?.defaultLanguageCatalog);
   for (const section of schema.advancedFilter.sections) {
+    assertRequiredMetadataKey('advanced filter section', section.key, section.titleKey);
     assertDictionaryKey(dicKey, section.titleKey, context?.defaultLanguageCatalog);
     assertLocalizedFieldLabels(dicKey, section.fields, context?.defaultLanguageCatalog);
   }
   for (const column of schema.columns) {
+    assertRequiredMetadataKey('column', column.key, column.labelKey);
     assertDictionaryKey(dicKey, column.labelKey, context?.defaultLanguageCatalog);
+    if (column.source === 'projection' && column.field.length === 0) {
+      throw new Error(`projection column "${column.key}" must declare field`);
+    }
+    if (column.source === 'model' && column.field.length === 0) {
+      throw new Error(`model column "${column.key}" must declare field`);
+    }
   }
   assertLocalizedActions(dicKey, [...schema.pageActions, ...schema.rowActions], context?.defaultLanguageCatalog);
 
@@ -512,9 +535,6 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
       }
     }
     for (const column of schema.columns) {
-      if (column.source === 'projection' && !column.field) {
-        throw new Error(`projection column "${column.key}" must declare field`);
-      }
       if (column.source === 'model') {
         assertModelFieldReference(
           column.field,
@@ -543,7 +563,6 @@ export function buildStandardCrudDetailSchema<TFilter, TRow, TDetail>(
   const dicKey = readString(view.dicKey, registration.resourceKey);
   const titleKey = readString(view.titleKey, 'Title');
   const descriptionKey = readString(view.descriptionKey, 'Description');
-  const explicitDescriptionKey = readString(view.descriptionKey);
   const modelKey = readString(view.model);
   const model = modelKey.length > 0 ? requireModelDocument(viewKey, context?.modelDocuments, modelKey) : {};
   const modelFields = collectModelFields(model);
@@ -555,8 +574,9 @@ export function buildStandardCrudDetailSchema<TFilter, TRow, TDetail>(
     .filter((action) => action.key.length > 0);
 
   assertDictionaryKey(dicKey, titleKey, context?.defaultLanguageCatalog);
-  assertDictionaryKey(dicKey, explicitDescriptionKey, context?.defaultLanguageCatalog);
+  assertDictionaryKey(dicKey, descriptionKey, context?.defaultLanguageCatalog);
   for (const section of sections) {
+    assertRequiredMetadataKey('detail section', section.key, section.titleKey);
     assertDictionaryKey(dicKey, section.titleKey, context?.defaultLanguageCatalog);
     for (const fieldName of section.fields) {
       assertModelFieldReference(

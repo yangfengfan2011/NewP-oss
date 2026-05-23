@@ -78,4 +78,17 @@ describe('standard CRUD metadata form schema', () => {
       { mode: 'create', enumOptions: {} },
     )).toThrow('unsupported uiType "treeSelect"');
   });
+
+  it('rejects lookup providers that are not registered when providers are supplied', () => {
+    expect(() => buildStandardCrudFormSchemaFromModel(
+      {
+        fields: [{
+          name: 'DepartmentId',
+          uiType: 'lookup',
+          dataSource: { type: 'provider', key: 'organization.departments' },
+        }],
+      },
+      { mode: 'create', enumOptions: {}, lookupProviders: [] },
+    )).toThrow('dataSource provider "organization.departments" for field "DepartmentId" is not registered');
+  });
 });

@@ -85,6 +85,7 @@
 - `enum metadata` 负责枚举候选项；字段只通过 `dataSource.type = enum` 引用。
 - `EID / ENAME / ECODE` 是平台协议字段，业务 metadata 不允许自行声明 alias/mapping。
 - lookup provider、特殊 renderer、特殊 action handler 仍由模块代码注册，Shell 只通过受控 key 查找。
+- 人员中心 V1 不按多公司能力设计；列表页不展示公司筛选和公司列。若当前组织模型仍保留 `CompanyId`，它只作为既有表单归属/组织根字段参与过渡，不作为下一批标准 CRUD 样板默认复制的筛选或列表列。
 - V1 不支持 metadata 表达式显隐、动态联动脚本、按行动态按钮能力预计算。
 - 任何 schema 扩展都必须有校验失败信号，不能静默忽略未知 `uiType`、未知 dataSource、未知 action 或不存在字段。
 
@@ -207,24 +208,24 @@ Shell 可以根据字段语义推导默认控件：
 ```json
 {
   "type": "model",
-  "key": "Company",
-  "model": "Company"
+  "key": "Department",
+  "model": "Department"
 }
 ```
 
-只声明“这是对另一个模型的受控引用”。V1 默认使用平台协议字段 `EID` 作为候选值、`ENAME` 作为候选标签；若目标模型不符合该协议，首轮应改用 `provider`，不在 metadata 中新增字段映射。实际查询 API、权限、分页、搜索和缓存由代码 provider 或后端标准 option endpoint 承接。
+只声明“这是对另一个模型的受控引用”。V1 默认使用平台协议字段 `EID` 作为候选值、`ENAME` 作为候选标签；若目标模型不符合该协议，首轮应改用 `provider`，不在 metadata 中新增字段映射。实际查询 API、权限、分页、搜索和缓存由代码 provider 承接，后端标准 option endpoint 暂不作为 V1 默认路径。
 
 `provider`：
 
 ```json
 {
   "type": "provider",
-  "key": "organization.departments",
-  "dependsOn": ["CompanyId"]
+  "key": "organization.positions",
+  "dependsOn": ["DepartmentId"]
 }
 ```
 
-用于公司、部门、岗位这类需要模块代码参与的 lookup。metadata 只声明 provider key 和依赖字段，加载逻辑由模块注册。
+用于部门、岗位这类需要模块代码参与的 lookup。metadata 只声明 provider key 和依赖字段，加载逻辑由模块注册。人员中心列表不因 provider 存在而恢复公司筛选或公司列。
 
 `static`：
 
@@ -440,10 +441,10 @@ section 内字段顺序、字段模式和控件类型继续来自 `Person.model.
 3. Standard CRUD registry 按 `listViewKey` 找到人员资源注册。
 4. Schema resolver 读取 view query、columns、actions、export。
 5. Schema resolver 读取 `Person.model.json`，为 `source = model` 的字段补齐 `uiType`、数据源、表单模式和静态校验语义。
-6. Shell 根据 query schema 渲染轻筛选条和高级筛选。
+6. Shell 根据 query schema 渲染轻筛选条和高级筛选；人员中心 V1 不渲染公司筛选。
 7. 首次进入页面时应用 `query.defaults / defaultSort / defaultPageSize`。
 8. 标准 CRUD client 按 query key 发起列表请求。
-9. 表格按 columns schema 渲染，特殊列 renderer 由代码 registry 覆盖。
+9. 表格按 columns schema 渲染，特殊列 renderer 由代码 registry 覆盖；人员中心 V1 不渲染公司列。
 10. 页面动作和行动作按 metadata 声明渲染，执行流程由 Shell action runtime 处理。
 
 ### 8.2 创建/编辑抽屉装配
@@ -451,7 +452,7 @@ section 内字段顺序、字段模式和控件类型继续来自 `Person.model.
 1. 用户点击 `create` 或 `edit` 标准动作。
 2. Shell 读取 detail view 使用的 sections。
 3. Shell 根据 model sections 和字段 `form.create/edit` 模式合成表单 schema。
-4. lookup 字段根据 dataSource 装配 enum/model/provider/static 候选项。
+4. lookup 字段根据 dataSource 装配 enum/model/provider/static 候选项；`model` 数据源首轮解析为 provider registry 中的受控 provider，后端标准 option endpoint 暂不自动接管。
 5. 用户保存时，Shell 按字段 schema 标准化提交值。
 6. 标准 CRUD client 调用 create/update。
 7. 后端 required/unique/delete guard 等内核校验失败时，Shell 显示稳定错误。
@@ -467,7 +468,7 @@ section 内字段顺序、字段模式和控件类型继续来自 `Person.model.
 
 ### 9.1 metadata authoring
 
-当前 `server/platform/metadata/file-type-mappings.json` 尚未声明 `view` adapter，但运行时投影已经包含 view 文件。后续若要在元数据配置中心编辑 `*.view.json`，应补齐 `view` authoring adapter 和校验链路。
+当前 `server/platform/metadata/file-type-mappings.json` 尚未声明 `view` adapter，但运行时投影已经包含 view 文件。由于元数据配置中心正式暂停开发，本轮不新增 `view` mapping，也不补 `ViewAuthoringAdapter`。未来若恢复元数据配置中心并要求编辑 `*.view.json`，再单独补齐 `view` authoring adapter 和校验链路。
 
 本设计不要求新增 action/control metadata 类型。若补 adapter，语义类型仍是 `view`。
 
@@ -525,7 +526,9 @@ resolver 负责校验：
 - query/column/default/action 引用不存在字段、未知 preset、未知 `uiType` 或未知 dataSource。
 - `handlerKey` 未注册但 action 不是 Shell 可内建执行的标准动作。
 - `dataSource.type = provider` 但 provider key 未注册。
+- `dataSource.type = model` 无法解析到受控 provider，或尝试隐式调用尚未设计的后端通用 model option endpoint。
 - `dataSource.type = enum` 但 enum key 不存在。
+- 人员中心列表 metadata 重新声明公司筛选或公司列。
 - `source = projection` 列运行时数据缺失且没有 fallback。
 - `query.defaults.field` 没有出现在任何查询声明中。
 - `list.export` 与 `pageActions` 重复表达导出。
@@ -574,9 +577,13 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 
 ## 13. 未决问题
 
-- `view` 是否需要进入 `server/platform/metadata/file-type-mappings.json` 的 authoring adapter，本设计建议后续补齐，但不阻塞人员中心运行时回收。
-- `model dataSource` 是否由后端标准 option endpoint 自动承接，还是首轮仍统一通过前端 provider registry 承接，需要在实施计划中按现有 API 成熟度拆分。
 - projection 列缺失时是显示空值、显示错误，还是仅测试环境强失败，需要结合现有列表容错策略决定。
+
+已收口问题：
+
+- 元数据配置中心正式暂停开发，因此本轮不新增 `view` 到 `server/platform/metadata/file-type-mappings.json`，也不补 `ViewAuthoringAdapter`。
+- `model dataSource` V1 不自动调用后端标准 option endpoint；它只表达模型引用语义，实际候选项加载仍通过 Shell/模块 provider registry 承接。若找不到 provider，应明确失败。
+- 人员中心 V1 不按多公司能力设计；列表继续不展示公司筛选和公司列。
 
 ## 14. 实施拆分建议
 

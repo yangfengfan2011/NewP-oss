@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-05-23
+最近更新：2026-05-24
 
 ## 1. 目的
 
@@ -37,6 +37,34 @@
 如果本文档与具体设计、计划或验证记录冲突，以更具体、更新的任务文档为准，并在下一次收口时修正本文档。
 
 ## 4. 最近完成
+
+### 4.7 标准 CRUD 元数据回收
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-24-standard-crud-metadata-recovery-design.md`
+- `docs/superpowers/plans/platform/2026-05-24-standard-crud-metadata-recovery.md`
+- `docs/verification/records/2026-05-24-standard-crud-metadata-recovery.md`
+
+完成内容：
+
+- 标准 CRUD 元数据回收实施完成：人员中心查询、默认查询、列表列、页面动作、行动作、详情 sections、summaryBlocks 和表单字段已优先从 `PersonList.view.json / PersonDetail.view.json / Person.model.json` 合成；Organization 前端注册仅保留 provider、renderer、handler、mapper。
+- Shell 标准 CRUD schema resolver 补齐 metadata column/action/query/form 校验，并由 List Host / Detail Host 统一消费 metadata schema、metadata form 和 metadata query。
+- 人员中心资源注册删除长期字段数组、表单分组、列表列、筛选组件、标准动作数组和私有 mutation mapper；私有 `personCenterRuntime` fallback 已退场。
+- 人员中心旧新建页改为兼容提示，实际新建入口由标准 CRUD 列表抽屉承接。
+- 后端 Person descriptor 和标准 CRUD 读取测试补齐 `DepartmentName / PositionName` projection 字段契约，确保已声明 projection 字段稳定返回。
+
+验证结论：
+
+- AI-first 设计校验、metadata target 检查、dic localization 校验通过。
+- Shell 标准 CRUD 定向测试与 shell build 通过；Organization / PlatformCrud 后端定向测试通过。
+- Shell build 仍输出既有 Vite chunk size warning；jsdom 测试仍输出既有 AntD / React Router 警告，未作为本轮失败信号。
+
+当前推荐下一步：
+
+- 基于人员中心样板评估第二个标准 CRUD 资源，但在复制前先确认是否需要树形 lookup 或通用 model option endpoint。
 
 ### 4.6 人员中心界面二次微调
 
@@ -224,12 +252,12 @@
 
 ## 5. 当前推荐下一步
 
-人员中心后台 CRUD Pro 样板已完成固化，但已确认当前实现和“元数据驱动标准功能”的早期原则存在偏差：查询块、列表列和表单字段仍主要由前端 `standardCrudResources` 注册代码驱动，而不是由可提交 metadata 声明驱动。当前下一步不再默认指向配置管理页面重做。应先选择标准 CRUD 元数据回收、继续复制 CRUD Pro 样板、补齐样板边界，或切回 Ant Design 页面族重做主线，并为所选方向单独补设计和计划。
+人员中心标准 CRUD 元数据回收已完成，当前下一步不再指向“先设计元数据回收”。应基于人员中心样板评估第二个标准 CRUD 资源，或继续拆包补齐样板边界、Ant Design 页面族重做、required field / 数据一致性等主线，并为所选方向单独补设计和计划。
 
 推荐优先级：
 
-1. 先设计标准 CRUD 元数据回收：把查询字段、列表列、表单字段/分组、标准动作声明等可声明结构从人员中心 TSX 注册代码迁回 metadata；代码注册只保留 API/lookup provider/特殊 renderer/特殊 action handler 等执行内核和业务扩展。
-2. 选择下一批标准 CRUD 资源试点时，不应直接复制当前人员中心代码驱动形态；应先明确哪些能力必须由 metadata 声明，哪些能力允许留在 SDK/模块代码中。
+1. 基于人员中心样板评估第二个标准 CRUD 资源，但在复制前先确认是否需要树形 lookup 或通用 model option endpoint。
+2. 选择下一批标准 CRUD 资源试点时，应沿用 metadata 声明标准查询、列、字段、动作的形态；代码注册只保留 provider、renderer、handler、mapper 等执行扩展。
 3. 单独设计人员删除独立权限、业务冲突提示和后端 guard 失败展示细化，不混入样板固化提交。
 4. 若继续 Ant Design 页面重做主线，再按页面族拆包选择配置管理、权限中心、文件中心、插件运维或元数据配置中心。
 5. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
@@ -266,16 +294,27 @@
 - `PersonNo` 当前由标准 CRUD 服务层保证全局唯一，但未引入数据库唯一索引；并发强一致性如需支持，应另开设计。
 - 标准 CRUD 自动路由映射当前已由 Person 试点验证；下一批资源接入前仍应逐个确认 descriptor 路由、字段边界和模块专属能力是否拆分清楚。
 
-### 6.4 标准 CRUD 元数据驱动偏差
-
-来源：2026-05-23 人员中心页面设计复盘。
-
-- 当前人员中心是标准 CRUD Host 的可运行样板，但查询块、列表展示列、表单字段和表单分组仍主要由 `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx` 中的前端注册代码驱动。
-- 这与早期“元数据声明标准功能、代码内核负责执行和校验”的原则不完全一致；如果长期保持，会导致新增标准 CRUD 资源时仍需复制和修改较多 TSX 注册代码，不利于 AI 在小上下文内理解、修改、验证和回滚。
-- 后续应单独设计“标准 CRUD 元数据回收”工作包：metadata 默认表达查询字段、列表列、表单字段/分组、只读/必填/default/控件类型、标准动作声明；代码注册只保留 API client、lookup provider、特殊 renderer、summary、业务动作 handler 和失败展示细化。
-- 在完成该回收前，人员中心 CRUD Pro 样板只能称为“标准 Host + 模块代码注册驱动”的中间态，不应作为纯 metadata CRUD 生成器对外承诺。
-
 ## 7. 验证快照
+
+标准 CRUD 元数据回收验证覆盖：
+
+```powershell
+./scripts/validate-ai-first-design.ps1 -Path docs/superpowers/specs/platform/2026-05-24-standard-crud-metadata-recovery-design.md
+./scripts/check-ai-first-design-targets.ps1
+./scripts/validate-dic-localization.ps1
+pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry standard-crud-metadata-form standard-crud-metadata-query standard-crud-list-host standard-crud-detail-host person-center-crud-pro-sample organization-person-phase2-shrink
+pnpm --dir frontend --filter @icp-platform/shell build
+dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal
+```
+
+验证结论：
+
+- AI-first 设计校验、metadata target 检查和 dic localization 校验通过。
+- `@icp-platform/shell` 标准 CRUD 定向测试通过，7 files / 54 tests。
+- `@icp-platform/shell` 构建通过，`tsc && vite build` 成功。
+- Organization 后端测试通过，43 tests；PlatformCrud 后端测试通过，58 tests。
+- Shell 构建仍输出既有 Vite chunk size warning；jsdom 测试仍输出既有 AntD / React Router 警告，未作为本轮失败信号。
 
 人员中心界面二次微调验证覆盖：
 
@@ -418,7 +457,7 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - Vite 开发态现在直接投影内建 metadata 和 localization；如果未来 runtime 资源改由 Host 统一代理，需要同步收敛 Vite 插件，避免两套投影规则漂移。
 - 前端标准 CRUD 第二批仍以 Person 资源为试点，下一批资源接入前需要重新确认字段、lookup、动作、summary 和模块专属能力边界。
 - 人员中心删除本轮仍沿用资源级权限边界；如需独立删除权限或更细业务冲突展示，应另起设计和计划。
-- 人员中心当前仍存在标准 CRUD UI 结构代码驱动偏差；在元数据回收前，查询块、列表列和表单字段变更不能假设只改 metadata 即可完成。
+- 人员中心当前已完成第一轮 metadata 回收；下一批资源仍需先确认 lookup 类型、option endpoint、动作权限和 projection 字段契约，不应无设计直接复制。
 
 ## 9. 回滚思路
 
@@ -430,3 +469,4 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 如果 EID 值协议需要回滚，应按最近相关提交反向 revert，并优先回到对应设计和计划确认影响范围。
 - 如果下一步方向选择变化，先更新本文件第 5 节，再补对应设计或计划，避免多个入口同时表达不同推荐。
 - 如果人员中心 CRUD Pro 样板需要回滚，应反向回退本轮 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为深链接和回滚入口。
+- 如果标准 CRUD 元数据回收需要回滚，应反向回退 Shell metadata resolver/Host 改动，恢复 `personStandardCrudResource.tsx` 中字段、列、查询、动作声明，并反向回退 `modules/Organization/metadata/**` 中本轮 schema 调整。

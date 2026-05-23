@@ -2105,7 +2105,7 @@ git commit -m "测试：补齐人员中心投影字段契约"
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry standard-crud-metadata-form standard-crud-metadata-query standard-crud-list-host standard-crud-detail-host person-center-crud-pro-sample organization-person-phase2-shrink`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell build`
 
-- [ ] **Step 1: 更新当前交接台账**
+- [x] **Step 1: 更新当前交接台账**
 
 在 `docs/phases/current-handoff.md` 增加本轮完成项：
 
@@ -2119,7 +2119,7 @@ git commit -m "测试：补齐人员中心投影字段契约"
 - 基于人员中心样板评估第二个标准 CRUD 资源，但在复制前先确认是否需要树形 lookup 或通用 model option endpoint。
 ```
 
-- [ ] **Step 2: 更新验证记录**
+- [x] **Step 2: 更新验证记录**
 
 新建 `docs/verification/records/2026-05-24-standard-crud-metadata-recovery.md`：
 
@@ -2157,7 +2157,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v mini
 
 本任务要求执行记录中的命令；执行失败时先修复并重跑，环境阻断时在 `结果` 中写明阻断原因和未覆盖风险。
 
-- [ ] **Step 3: 跑最终验证**
+- [x] **Step 3: 跑最终验证**
 
 Run:
 
@@ -2178,7 +2178,7 @@ Test Files ... passed
 vite build ... built
 ```
 
-- [ ] **Step 4: 提交文档收口**
+- [x] **Step 4: 提交文档收口**
 
 Run:
 
@@ -2189,14 +2189,14 @@ git commit -m "文档：记录标准CRUD元数据回收验证"
 
 ## 最终验收清单
 
-- [ ] 人员中心列表不展示公司筛选和公司列。
-- [ ] 人员中心部门仍作为普通 lookup 渲染，不出现 `treeSelect/cascader/tree view`。
-- [ ] `PersonList.view.json` 控制查询项、默认查询、列表列、页面动作、行动作。
-- [ ] `PersonDetail.view.json` 控制详情 sections、summaryBlocks、详情动作。
-- [ ] `Person.model.json` 控制表单字段、字段控件、字段模式、数据源、默认值。
-- [ ] `personStandardCrudResource.tsx` 不再声明标准字段数组、标准列数组、标准筛选 React 组件或标准动作数组。
-- [ ] 多语言文案来自 dic，切换 `zhs/en` 后标题、列名、查询项、动作、确认提示和枚举标签可解析。
-- [ ] projection 字段缺值不导致整页失败；后端/前端契约测试能发现已声明 projection 字段未稳定返回。
-- [ ] `file-type-mappings.json` 未新增 `view` mapping，元数据配置中心仍暂停。
-- [ ] 未新增 action/control/i18n metadata 类型。
-- [ ] 所有最终验证命令有记录，失败项有原因和回滚口径。
+- [x] 人员中心列表不展示公司筛选和公司列。
+- [x] 人员中心部门仍作为普通 lookup 渲染，不出现 `treeSelect/cascader/tree view`。
+- [x] `PersonList.view.json` 控制查询项、默认查询、列表列、页面动作、行动作。
+- [x] `PersonDetail.view.json` 控制详情 sections、summaryBlocks、详情动作。
+- [x] `Person.model.json` 控制表单字段、字段控件、字段模式、数据源、默认值。
+- [x] `personStandardCrudResource.tsx` 不再声明标准字段数组、标准列数组、标准筛选 React 组件或标准动作数组。
+- [x] 多语言文案来自 dic，切换 `zhs/en` 后标题、列名、查询项、动作、确认提示和枚举标签可解析。
+- [x] projection 字段缺值不导致整页失败；后端/前端契约测试能发现已声明 projection 字段未稳定返回。
+- [x] `file-type-mappings.json` 未新增 `view` mapping，元数据配置中心仍暂停。
+- [x] 未新增 action/control/i18n metadata 类型。
+- [x] 所有最终验证命令有记录，失败项有原因和回滚口径。

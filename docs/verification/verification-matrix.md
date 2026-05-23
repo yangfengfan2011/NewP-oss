@@ -169,6 +169,20 @@
 
 - [enumeration-consumer-ui-integration-verification.md](enumeration-consumer-ui-integration-verification.md)
 
+### Standard CRUD Metadata Recovery
+
+- `.\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-05-24-standard-crud-metadata-recovery-design.md`
+- `.\scripts\check-ai-first-design-targets.ps1`
+- `.\scripts\validate-dic-localization.ps1`
+- `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry standard-crud-metadata-form standard-crud-metadata-query standard-crud-list-host standard-crud-detail-host person-center-crud-pro-sample organization-person-phase2-shrink`
+- `pnpm --dir frontend --filter @icp-platform/shell build`
+- `dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal`
+- `dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal`
+
+参考：
+
+- [records/2026-05-24-standard-crud-metadata-recovery.md](records/2026-05-24-standard-crud-metadata-recovery.md)
+
 ## 模块级验证
 
 ### Kernel

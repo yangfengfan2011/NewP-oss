@@ -190,6 +190,63 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('2026-01-01');
   });
 
+  it('keeps empty number fields empty instead of coercing them to zero', async () => {
+    const onChange = vi.fn();
+    const field: StandardCrudFieldDefinition = {
+      key: 'sortOrder',
+      labelKey: '排序',
+      modelField: 'SortOrder',
+      kind: 'number',
+    };
+
+    await render(
+      <StandardCrudField
+        field={field}
+        value={3}
+        mode="edit"
+        onChange={onChange}
+      />,
+    );
+
+    const input = container.querySelector('input[type="number"]') as HTMLInputElement;
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalledWith('sortOrder', undefined);
+  });
+
+  it('requires both dates for required dateRange fields', async () => {
+    const onSubmit = vi.fn();
+    const fields: StandardCrudFieldDefinition[] = [
+      { key: 'entryRange', labelKey: '入职范围', modelField: 'EntryRange', kind: 'dateRange', required: true },
+    ];
+
+    await render(
+      <StandardCrudForm
+        formId="date-range-form"
+        mode="edit"
+        fields={fields}
+        sections={[]}
+        values={{ entryRange: ['2026-01-01', ''] }}
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+        saving={false}
+        titleForSection={(titleKey) => titleKey}
+      />,
+    );
+
+    const submitButton = container.querySelector('button[type="submit"]');
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(container.querySelector('.np-standard-crud-field-error')?.textContent).toBe('请填写此字段');
+  });
+
   it('shows field-level required validation below empty fields', async () => {
     const onSubmit = vi.fn();
     const fields: StandardCrudFieldDefinition[] = [

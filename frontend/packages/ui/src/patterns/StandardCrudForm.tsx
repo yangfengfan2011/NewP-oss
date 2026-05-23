@@ -60,7 +60,16 @@ function resolveSubmitText(mode: StandardCrudFormMode, saving?: boolean): string
   return mode === 'create' ? '保存并关闭' : '保存修改';
 }
 
-function isEmptyRequiredValue(value: unknown): boolean {
+function isEmptyRequiredValue(field: StandardCrudFieldDefinition, value: unknown): boolean {
+  if (field.kind === 'dateRange') {
+    if (!Array.isArray(value)) {
+      return true;
+    }
+
+    const [start, end] = value;
+    return typeof start !== 'string' || start.trim() === '' || typeof end !== 'string' || end.trim() === '';
+  }
+
   return value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 }
 
@@ -91,7 +100,7 @@ export function StandardCrudForm({
     }
 
     const nextErrors = fields.reduce<Record<string, string>>((current, field) => {
-      if (field.required && field.kind !== 'readonly' && field.readOnly !== true && isEmptyRequiredValue(values[field.key])) {
+      if (field.required && field.kind !== 'readonly' && field.readOnly !== true && isEmptyRequiredValue(field, values[field.key])) {
         current[field.key] = '请填写此字段';
       }
 

@@ -424,9 +424,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     || rowActionDefinitions.length > 0
     || registration.getRowId,
   );
+  const registeredColumns = registration.buildColumns?.(context) ?? [];
   const standardColumns = shouldRenderActionColumn
     ? [
-      ...registration.buildColumns(context),
+      ...registeredColumns,
       {
         key: 'actions',
         title: '操作',
@@ -542,7 +543,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         },
       },
     ]
-    : registration.buildColumns(context);
+    : registeredColumns;
   const columns = standardColumns.map((column) => ({
     key: column.key,
     dataIndex: column.key,

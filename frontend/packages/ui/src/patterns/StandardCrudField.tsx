@@ -203,7 +203,15 @@ export function StandardCrudField({
         value={String(inputValue)}
         required={!readOnly && field.required}
         disabled={readOnly}
-        onChange={(event) => onChange(field.key, field.kind === 'number' ? Number(event.target.value) : event.target.value)}
+        onChange={(event) => {
+          if (field.kind === 'number') {
+            const nextValue = event.target.value;
+            onChange(field.key, nextValue === '' ? undefined : Number(nextValue));
+            return;
+          }
+
+          onChange(field.key, event.target.value);
+        }}
       />
       {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
     </div>

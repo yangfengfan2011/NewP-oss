@@ -745,7 +745,7 @@ Expected:
 Test Files ... passed
 ```
 
-- [ ] **Step 5: 提交 SDK/UI 契约扩展**
+- [x] **Step 5: 提交 SDK/UI 契约扩展**
 
 Run:
 

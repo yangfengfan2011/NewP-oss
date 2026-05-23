@@ -28,6 +28,7 @@
 - 明确人员中心标准 CRUD 哪些能力应迁回 metadata，哪些能力必须继续留在代码内核。
 - 固化 `nav / view / model / dic / enum` 在标准 CRUD V1 中的职责边界。
 - 定义字段控件类型、字段数据源、表单模式、查询默认值、列表列和标准动作的 V1 metadata 结构，并尽量复用当前 `uiType / form / view / dataSource` 模型字段协议。
+- 明确多语言文案继续由 `dic metadata + runtime localization manifest` 承接，标准 CRUD metadata 只引用文案 key，不内联显示文本。
 - 明确 `EID / ENAME / ECODE` 平台协议字段继续沿用当前内核固定映射，不新增业务 metadata 字段映射机制。
 - 让人员中心成为“标准 CRUD metadata 样板”的第一批回收对象，而不是继续扩散 TSX 注册代码样板。
 - 为后续实施计划提供入口、边界、验证方式、失败信号和回滚思路。
@@ -40,6 +41,7 @@
 - 不实现完整低代码页面解释器、表达式引擎、脚本化显隐或页面生命周期 DSL。
 - 不把 lookup 加载、动作执行、保存流程、抽屉状态机、回滚流程下沉到 metadata。
 - 不重做后端标准 CRUD 内核、持久化投影或 EID 值协议。
+- 不新增标准 CRUD 专属 i18n、翻译表或前端文案覆盖层。
 - 不要求本轮同时改造 ConfigCenter、Authorization、Audit 等其他模块。
 - 不处理对象级权限、按行动态按钮状态、复杂规则中心或审批流页面。
 
@@ -82,6 +84,7 @@
 - `view metadata` 负责页面内部结构：查询、默认值、列表列、动作、summary block、使用哪些 section。
 - `nav metadata` 只负责菜单入口、路径、层级、图标、入口权限和 entry target。
 - `dic metadata` 负责显示文案，不允许 TSX 注册代码继续硬编码标准字段、列、查询和按钮中文。
+- `languages.json` 是支持语言集合真源；标准 CRUD 不单独声明语言列表。
 - `enum metadata` 负责枚举候选项；字段只通过 `dataSource.type = enum` 引用。
 - `EID / ENAME / ECODE` 是平台协议字段，业务 metadata 不允许自行声明 alias/mapping。
 - lookup provider、特殊 renderer、特殊 action handler 仍由模块代码注册，Shell 只通过受控 key 查找。
@@ -120,6 +123,16 @@ V1 只在 model field 上声明 `uiType`，Shell 通过固定控件 registry 渲
 `EID / ENAME / ECODE` 已经由后端平台内核固定投影，并由 DTO 生成器固定转换为 `Id / DisplayName / Code`。这属于平台协议，不属于业务 metadata。
 
 V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使用协议字段名和模型字段名，友好命名转换由平台代码固定处理。
+
+### 6.5 多语言边界
+
+多语言沿用当前平台机制：`modules/Platform/metadata/languages.json` 声明默认语言和支持语言；各模块 `metadata/dictionaries/*.dic.json` 声明文案；运行时 localization manifest 将字典投影为扁平 catalog key，例如 `PersonListView.Column_Name`。
+
+标准 CRUD V1 不新增 `label`、`labelZhs`、`translations` 或页面内联文案。`view / model` 中的 `labelKey / titleKey / descriptionKey / confirmMessageKey / placeholderKey` 都只是字典 entry key。Shell 解析时用当前 view 的 `dicKey` 组合完整 key：`${dicKey}.${labelKey}`。
+
+字典 entry 必须覆盖 `languages.json` 中所有支持语言，继续由 `scripts/validate-dic-localization.ps1` 校验。运行时 `t()` 可以按“当前语言 -> 默认语言 -> fallback -> key”回退，但该回退只保证页面可用，不作为缺翻译的长期接受标准。
+
+枚举文案仍归 enum/dic 现有链路，不在 view 的查询项或列声明中重复翻译。provider/model lookup 返回的业务数据标签，例如部门路径、岗位名称、人员姓名，是业务数据展示，不要求进入 dic；只有静态 UI 文案和 static option label 使用 `labelKey`。
 
 ## 7. 关键模型
 
@@ -294,6 +307,7 @@ Shell 可以根据字段语义推导默认控件：
 
 规则：
 
+- `labelKey` 指向当前 view `dicKey` 下的字典 entry，例如 `PersonListView.Query_Keyword`。
 - `source = model` 时，`field` 必须引用 `Person.model.json` 中存在的字段或内核固定字段。
 - `source = preset` 时，`preset` 首轮只允许 `keyword`。
 - `defaults.field` 引用查询项的 `key`，不是模型字段名；该 key 必须存在于 `query.fields` 或 `advancedFilter.sections.fields` 中。若默认值不显示在筛选区，需要用 `hidden: true` 显式声明隐藏查询项，而不是隐式塞入。
@@ -327,6 +341,7 @@ Shell 可以根据字段语义推导默认控件：
 
 规则：
 
+- `labelKey` 指向当前 view `dicKey` 下的字典 entry，例如 `PersonListView.Column_DepartmentName`。
 - `source = model` 表示列绑定模型字段。
 - `source = projection` 表示列来自列表 DTO/projection，例如 `companyName`、`departmentName`。
 - `source = projection` 必须显式声明 `field`，该字段名对应前端标准化后的列表行属性；这里不引入 `mapsTo / alias / apiField` 等通用字段映射。
@@ -389,7 +404,7 @@ Shell 可以根据字段语义推导默认控件：
 
 - `standardAction` 首轮允许 `create / refresh / view / edit / delete / disable / submit`。
 - `variant` 首轮允许 `default / primary / danger`。
-- `confirmMessageKey` 指向 dic，不允许直接硬编码确认文案。
+- `labelKey` 和 `confirmMessageKey` 指向当前 view `dicKey` 下的字典 entry，不允许直接硬编码确认文案。
 - `permissions` 只声明按钮显示所需权限，权限判断由 Shell/Auth 运行时执行；字段命名与 nav metadata 保持一致，统一使用数组。
 - `handlerKey` 只绑定模块注册的受控 handler，不描述执行步骤。
 - 导出能力继续使用 `export` 区块，不进入 `pageActions`。
@@ -495,6 +510,7 @@ resolver 负责校验：
 - action `handlerKey` 是否能在资源注册中找到。
 - dataSource type 是否受支持。
 - `uiType` 是否受支持。
+- 标准 CRUD view/model 引用的 `labelKey / titleKey / descriptionKey / confirmMessageKey` 是否能在默认语言字典中解析。
 
 ### 9.3 模块资源注册
 
@@ -535,6 +551,7 @@ resolver 负责校验：
 - `dataSource.type = provider` 但 provider key 未注册。
 - `dataSource.type = model` 无法解析到受控 provider，或尝试隐式调用尚未设计的后端通用 model option endpoint。
 - `dataSource.type = enum` 但 enum key 不存在。
+- 标准 CRUD metadata 引用的字典 key 在默认语言中不存在，或 dic entry 未覆盖 `languages.json` 声明的支持语言。
 - 人员中心列表 metadata 重新声明公司筛选或公司列。
 - 标准 CRUD V1 metadata 声明 `treeSelect / cascader / tree view` 等尚未纳入主线的树形能力。
 - `source = projection` 列未声明 `field`，或契约测试发现样板资源声明的 projection 字段未被列表 DTO 稳定返回。
@@ -561,6 +578,7 @@ resolver 负责校验：
 ```powershell
 ./scripts/validate-ai-first-design.ps1 -Path docs/superpowers/specs/platform/2026-05-24-standard-crud-metadata-recovery-design.md
 ./scripts/check-ai-first-design-targets.ps1
+./scripts/validate-dic-localization.ps1
 ```
 
 后续实施最小验证：
@@ -583,6 +601,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 - 确认轻筛选、默认查询、列表列、创建/编辑/查看抽屉、删除/停用动作仍可用。
 - 确认部门、岗位等 projection 列有值时正常展示，个别行缺值时不导致整页错误。
 - 确认字段文案、按钮文案和确认文案来自 dic，而不是 TSX 硬编码。
+- 切换到 `zhs / en` 时，标准 CRUD 标题、列名、查询项、动作、确认提示和枚举标签均来自 runtime localization manifest。
 
 ## 13. 未决问题
 
@@ -595,6 +614,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 - 人员中心 V1 不按多公司能力设计；列表继续不展示公司筛选和公司列。
 - 部门树结构不进入标准 CRUD 元数据回收 V1。组织树页继续作为 Organization 模块专属页面存在；人员表单部门选择先使用扁平 lookup，路径展示由 provider label 承接。
 - projection 列缺失采用分层处理：schema 未声明 `field` 或契约测试发现字段未稳定返回时强失败；生产运行时单行值为空时按当前列表容错显示为空；显示名退回 ID 等体验兜底留在模块 mapper/renderer，不新增通用 fallback metadata。
+- 多语言沿用现有 `languages.json + dic metadata + runtime localization manifest`，标准 CRUD 只引用 key，不内联翻译，也不新增专属 i18n 类型。
 
 ## 14. 实施拆分建议
 
@@ -617,6 +637,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 5. 补齐文档和验证记录
    - 更新当前交接台账和 verification 记录。
    - 明确人员中心已从“代码注册驱动”收敛为“metadata 声明 + 代码内核执行”。
+   - 补跑 dic localization 校验，确认新增/调整的 CRUD 文案覆盖所有支持语言。
 
 ## 15. AI-First 最小检查清单
 

@@ -86,6 +86,7 @@
 - `EID / ENAME / ECODE` 是平台协议字段，业务 metadata 不允许自行声明 alias/mapping。
 - lookup provider、特殊 renderer、特殊 action handler 仍由模块代码注册，Shell 只通过受控 key 查找。
 - 人员中心 V1 不按多公司能力设计；列表页不展示公司筛选和公司列。若当前组织模型仍保留 `CompanyId`，它只作为既有表单归属/组织根字段参与过渡，不作为下一批标准 CRUD 样板默认复制的筛选或列表列。
+- 部门本身是树形结构，但标准 CRUD 元数据回收 V1 不引入 `tree view`、`treeSelect`、`cascader` 或层级 option schema。人员表单里的部门选择先由 provider 返回扁平候选项，必要时用完整路径 label 降低歧义；组织树维护继续留在 Organization 模块专属页面。
 - V1 不支持 metadata 表达式显隐、动态联动脚本、按行动态按钮能力预计算。
 - 任何 schema 扩展都必须有校验失败信号，不能静默忽略未知 `uiType`、未知 dataSource、未知 action 或不存在字段。
 
@@ -176,6 +177,8 @@ V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使�
 - `dateRange`
 - `readonly`
 
+V1 明确不提供 `treeSelect`、`cascader`、`organizationTreeSelect` 等树形控件类型。树形选择只有在形成跨模块稳定复用能力后，才单独设计为受控 `uiType` 子类型。
+
 Shell 可以根据字段语义推导默认控件：
 
 - `contract.valueType = enum` 默认 `select`
@@ -225,7 +228,7 @@ Shell 可以根据字段语义推导默认控件：
 }
 ```
 
-用于部门、岗位这类需要模块代码参与的 lookup。metadata 只声明 provider key 和依赖字段，加载逻辑由模块注册。人员中心列表不因 provider 存在而恢复公司筛选或公司列。
+用于部门、岗位这类需要模块代码参与的 lookup。metadata 只声明 provider key 和依赖字段，加载逻辑由模块注册。人员中心列表不因 provider 存在而恢复公司筛选或公司列。部门虽然具有树形父子关系，但 V1 provider 仍返回扁平 option 列表；如果同名部门可能造成歧义，provider 应把路径拼入 label，例如 `集团 / 研发中心 / 平台组`。
 
 `static`：
 
@@ -452,7 +455,7 @@ section 内字段顺序、字段模式和控件类型继续来自 `Person.model.
 1. 用户点击 `create` 或 `edit` 标准动作。
 2. Shell 读取 detail view 使用的 sections。
 3. Shell 根据 model sections 和字段 `form.create/edit` 模式合成表单 schema。
-4. lookup 字段根据 dataSource 装配 enum/model/provider/static 候选项；`model` 数据源首轮解析为 provider registry 中的受控 provider，后端标准 option endpoint 暂不自动接管。
+4. lookup 字段根据 dataSource 装配 enum/model/provider/static 候选项；`model` 数据源首轮解析为 provider registry 中的受控 provider，后端标准 option endpoint 暂不自动接管。部门字段首轮仍按普通 lookup 渲染，不升级为树形选择器。
 5. 用户保存时，Shell 按字段 schema 标准化提交值。
 6. 标准 CRUD client 调用 create/update。
 7. 后端 required/unique/delete guard 等内核校验失败时，Shell 显示稳定错误。
@@ -529,6 +532,7 @@ resolver 负责校验：
 - `dataSource.type = model` 无法解析到受控 provider，或尝试隐式调用尚未设计的后端通用 model option endpoint。
 - `dataSource.type = enum` 但 enum key 不存在。
 - 人员中心列表 metadata 重新声明公司筛选或公司列。
+- 标准 CRUD V1 metadata 声明 `treeSelect / cascader / tree view` 等尚未纳入主线的树形能力。
 - `source = projection` 列运行时数据缺失且没有 fallback。
 - `query.defaults.field` 没有出现在任何查询声明中。
 - `list.export` 与 `pageActions` 重复表达导出。
@@ -584,6 +588,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 - 元数据配置中心正式暂停开发，因此本轮不新增 `view` 到 `server/platform/metadata/file-type-mappings.json`，也不补 `ViewAuthoringAdapter`。
 - `model dataSource` V1 不自动调用后端标准 option endpoint；它只表达模型引用语义，实际候选项加载仍通过 Shell/模块 provider registry 承接。若找不到 provider，应明确失败。
 - 人员中心 V1 不按多公司能力设计；列表继续不展示公司筛选和公司列。
+- 部门树结构不进入标准 CRUD 元数据回收 V1。组织树页继续作为 Organization 模块专属页面存在；人员表单部门选择先使用扁平 lookup，路径展示由 provider label 承接。
 
 ## 14. 实施拆分建议
 

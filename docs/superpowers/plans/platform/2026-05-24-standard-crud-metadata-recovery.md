@@ -2029,7 +2029,7 @@ git commit -m "重构：收缩人员中心标准CRUD资源注册"
 - Verify: `dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj -nr:false -v minimal`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell build`
 
-- [ ] **Step 1: 后端人员 descriptor 测试补 projection 字段**
+- [x] **Step 1: 后端人员 descriptor 测试补 projection 字段**
 
 在 `PersonStandardCrudResourceTests.cs` 中确认或补充：
 
@@ -2044,7 +2044,7 @@ public void Descriptor_ShouldExposePersonDisplayValueProjectionFields()
 }
 ```
 
-- [ ] **Step 2: 标准 CRUD 读取测试补 projection 返回**
+- [x] **Step 2: 标准 CRUD 读取测试补 projection 返回**
 
 在 `StandardCrudServiceReadTests.cs` 中补充人员或已有标准资源 projection 断言：
 
@@ -2055,7 +2055,7 @@ Assert.True(item.Fields.ContainsKey("PositionName"));
 
 岗位可以为空值，但列表 DTO 必须包含 `PositionName` key。
 
-- [ ] **Step 3: 运行后端定向测试**
+- [x] **Step 3: 运行后端定向测试**
 
 Run:
 
@@ -2070,7 +2070,7 @@ Expected:
 Passed!
 ```
 
-- [ ] **Step 4: 运行前端构建**
+- [x] **Step 4: 运行前端构建**
 
 Run:
 
@@ -2084,7 +2084,7 @@ Expected:
 vite build ... built
 ```
 
-- [ ] **Step 5: 提交契约测试与构建修正**
+- [x] **Step 5: 提交契约测试与构建修正**
 
 Run:
 

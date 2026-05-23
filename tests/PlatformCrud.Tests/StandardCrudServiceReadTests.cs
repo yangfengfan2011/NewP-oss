@@ -14,13 +14,13 @@ public sealed class StandardCrudServiceReadTests
     {
         var repository = new InMemoryStandardCrudRepository(
         [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["CompanyId"] = "company-1" },
-            new Dictionary<string, object?> { ["EID"] = "person-2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["CompanyId"] = "company-2" }
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["CompanyId"] = "company-1", ["DepartmentId"] = "department-1" },
+            new Dictionary<string, object?> { ["EID"] = "person-2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["CompanyId"] = "company-2", ["DepartmentId"] = "department-2" }
         ]);
         var service = new StandardCrudService(
             repository,
             [new KeywordQueryCustomizer()],
-            [new CompanyDisplayResolver()],
+            [new PersonDisplayResolver()],
             [],
             [],
             [],
@@ -30,6 +30,10 @@ public sealed class StandardCrudServiceReadTests
 
         var row = Assert.Single(result.Items);
         Assert.Equal("公司一", row["CompanyName"]);
+        Assert.True(row.ContainsKey("DepartmentName"));
+        Assert.True(row.ContainsKey("PositionName"));
+        Assert.Equal("部门一", row["DepartmentName"]);
+        Assert.Null(row["PositionName"]);
     }
 
     [Fact]
@@ -72,11 +76,12 @@ public sealed class StandardCrudServiceReadTests
         IdField = "EID",
         DisplayField = "ENAME",
         FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId"],
-            CreateFields: ["PersonNo", "ENAME", "CompanyId"],
-            UpdateFields: ["ENAME", "CompanyId"]),
+            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId"],
+            CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId"],
+            UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId"]),
         OptionLabelFields = ["PersonNo", "ENAME"],
+        DisplayValueFields = ["CompanyName", "DepartmentName", "PositionName"],
         SummaryBlockKeys = summaryKeys ?? []
     };
 
@@ -92,7 +97,7 @@ public sealed class StandardCrudServiceReadTests
         }
     }
 
-    private sealed class CompanyDisplayResolver : IStandardCrudDisplayValueResolver
+    private sealed class PersonDisplayResolver : IStandardCrudDisplayValueResolver
     {
         public string ResourceKey => "organization.person";
 
@@ -103,7 +108,9 @@ public sealed class StandardCrudServiceReadTests
         {
             return Task.FromResult<IReadOnlyDictionary<string, object?>>(new Dictionary<string, object?>
             {
-                ["CompanyName"] = row.TryGetValue("CompanyId", out var value) && Equals(value, "company-1") ? "公司一" : string.Empty
+                ["CompanyName"] = row.TryGetValue("CompanyId", out var companyId) && Equals(companyId, "company-1") ? "公司一" : string.Empty,
+                ["DepartmentName"] = row.TryGetValue("DepartmentId", out var departmentId) && Equals(departmentId, "department-1") ? "部门一" : string.Empty,
+                ["PositionName"] = row.TryGetValue("PositionId", out var positionId) ? positionId : null
             });
         }
     }

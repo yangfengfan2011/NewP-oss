@@ -43,6 +43,15 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public void Descriptor_ShouldExposePersonDisplayValueProjectionFields()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        Assert.Contains("DepartmentName", descriptor.DisplayValueFields);
+        Assert.Contains("PositionName", descriptor.DisplayValueFields);
+    }
+
+    [Fact]
     public void PersonCrudDescriptor_DeclaresRequiredFieldsWithoutTighteningOptionalOrganizationFields()
     {
         var descriptor = PersonCrudDescriptorFactory.Create();

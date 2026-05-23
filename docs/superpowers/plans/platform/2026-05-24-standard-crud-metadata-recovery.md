@@ -1553,7 +1553,7 @@ dic localization validation passed
 Test Files ... passed
 ```
 
-- [ ] **Step 7: 提交 metadata**
+- [x] **Step 7: 提交 metadata**
 
 Run:
 

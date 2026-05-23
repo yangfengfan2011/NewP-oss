@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type Key, type MouseEvent, type ReactNode, type ThHTMLAttributes } from 'react';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { Pagination } from 'antd';
 
 export interface SearchTableResult<TRow> {
   items: TRow[];
@@ -38,7 +39,123 @@ export interface SearchTablePageProps<TRow> {
   request: (params: Record<string, unknown>) => Promise<{ data: TRow[]; total: number; success: boolean }>;
   headerTitle?: ReactNode;
   toolbar?: ReactNode;
+  footerFill?: ReactNode;
+  selectableRows?: boolean;
+  showRowNumber?: boolean;
+  rowIcon?: ReactNode | ((row: TRow) => ReactNode);
   className?: string;
+}
+
+const DEFAULT_COLUMN_WIDTH = 160;
+const MIN_COLUMN_WIDTH = 96;
+const CHROME_COLUMN_WIDTH = 40;
+const FIXED_CHROME_COLUMN_KEYS = new Set(['__rowNumber', '__rowIcon']);
+
+interface ResizableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {
+  columnKey?: string;
+  onColumnResize?: (columnKey: string, width: number) => void;
+  resizable?: boolean;
+  width?: number;
+}
+
+function ResizableHeaderCell({
+  children,
+  columnKey,
+  onColumnResize,
+  resizable = true,
+  width,
+  style,
+  ...restProps
+}: ResizableHeaderCellProps) {
+  const canResize = resizable && Boolean(columnKey && onColumnResize);
+
+  const handleMouseDown = (event: MouseEvent<HTMLSpanElement>) => {
+    if (!canResize || !columnKey || !onColumnResize) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    const startWidth = width ?? event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? DEFAULT_COLUMN_WIDTH;
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      onColumnResize(columnKey, Math.max(MIN_COLUMN_WIDTH, startWidth + moveEvent.clientX - startX));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  return (
+    <th {...restProps} style={{ ...style, width, minWidth: canResize ? MIN_COLUMN_WIDTH : width }}>
+      <div className="np-table-column-header">
+        <span className="np-table-column-header-content">{children}</span>
+        {canResize ? (
+          <span
+            aria-hidden="true"
+            className="np-table-column-resize-handle"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onMouseDown={handleMouseDown}
+          />
+        ) : null}
+      </div>
+    </th>
+  );
+}
+
+function resolveColumnKey<TRow>(column: ProColumns<TRow>): string {
+  if (typeof column.key === 'string') {
+    return column.key;
+  }
+
+  if (typeof column.dataIndex === 'string') {
+    return column.dataIndex;
+  }
+
+  return String(column.title ?? 'column');
+}
+
+function normalizeColumnWidth(width: ProColumns<Record<string, unknown>>['width']): number | undefined {
+  if (typeof width === 'number') {
+    return width;
+  }
+
+  if (typeof width === 'string') {
+    const parsed = Number.parseInt(width, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function compareSortValue(left: unknown, right: unknown): number {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left == null) {
+    return -1;
+  }
+
+  if (right == null) {
+    return 1;
+  }
+
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right;
+  }
+
+  return String(left).localeCompare(String(right), 'zh-Hans-CN', { numeric: true });
 }
 
 export function SearchTablePage<TRow extends Record<string, unknown>>({
@@ -47,6 +164,10 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   request,
   headerTitle,
   toolbar,
+  footerFill,
+  selectableRows = false,
+  showRowNumber = false,
+  rowIcon,
   className,
 }: SearchTablePageProps<TRow>) {
   const [data, setData] = useState<TRow[]>([]);
@@ -54,6 +175,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   const [current, setCurrent] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,30 +209,107 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
     };
   }, [request, current, pageSize]);
 
+  const tableColumns = useMemo(() => {
+    const chromeColumns: ProColumns<TRow>[] = [];
+
+    if (showRowNumber) {
+      chromeColumns.push({
+        key: '__rowNumber',
+        dataIndex: '__rowNumber',
+        title: '',
+        width: CHROME_COLUMN_WIDTH,
+        align: 'center',
+        className: 'np-table-chrome-cell np-table-row-number-cell',
+        sorter: false,
+        render: (_: ReactNode, __: TRow, index: number) => (current - 1) * pageSize + index + 1,
+      });
+    }
+
+    if (rowIcon) {
+      chromeColumns.push({
+        key: '__rowIcon',
+        dataIndex: '__rowIcon',
+        title: '',
+        width: CHROME_COLUMN_WIDTH,
+        align: 'center',
+        className: 'np-table-chrome-cell np-table-row-icon-cell',
+        sorter: false,
+        render: (_: ReactNode, row: TRow) => (
+          <span className="np-table-row-icon">
+            {typeof rowIcon === 'function' ? rowIcon(row) : rowIcon}
+          </span>
+        ),
+      });
+    }
+
+    return [...chromeColumns, ...columns].map((column) => {
+      const columnKey = resolveColumnKey(column);
+      const baseWidth = normalizeColumnWidth(column.width) ?? (columnKey === 'actions' ? 220 : DEFAULT_COLUMN_WIDTH);
+      const width = columnWidths[columnKey] ?? baseWidth;
+      const fixedChromeColumn = FIXED_CHROME_COLUMN_KEYS.has(columnKey);
+      const existingOnHeaderCell = column.onHeaderCell as ((nextColumn: unknown) => Record<string, unknown>) | undefined;
+
+      return {
+        ...column,
+        width,
+        sorter: ['actions', '__rowNumber', '__rowIcon'].includes(columnKey)
+          ? false
+          : column.sorter ?? ((left: TRow, right: TRow) => compareSortValue(left[columnKey], right[columnKey])),
+        onHeaderCell: (nextColumn: unknown) => ({
+          ...(existingOnHeaderCell ? existingOnHeaderCell(nextColumn) : {}),
+          columnKey,
+          resizable: !fixedChromeColumn,
+          width,
+          onColumnResize: fixedChromeColumn
+            ? undefined
+            : (targetColumnKey: string, nextWidth: number) => {
+                setColumnWidths((currentWidths) => ({ ...currentWidths, [targetColumnKey]: nextWidth }));
+              },
+        }),
+      } as ProColumns<TRow>;
+    });
+  }, [columnWidths, columns, current, pageSize, rowIcon, showRowNumber]);
+
   return (
-    <ProTable<TRow>
-      className={className}
-      rowKey={rowKey}
-      columns={columns}
-      dataSource={data}
-      loading={loading}
-      headerTitle={headerTitle}
-      search={false}
-      cardBordered={false}
-      options={{ density: true, fullScreen: false, reload: false, setting: true }}
-      toolBarRender={toolbar ? () => [toolbar] : false}
-      pagination={{
-        current,
-        pageSize,
-        total,
-        showSizeChanger: true,
-        position: ['bottomRight'],
-        showTotal: (value) => `共 ${value} 条`,
-        onChange: (nextCurrent, nextPageSize) => {
-          setCurrent(nextCurrent);
-          setPageSize(nextPageSize);
-        },
-      }}
-    />
+    <div className="np-search-table-page">
+      <ProTable<TRow>
+        className={className}
+        rowKey={rowKey}
+        columns={tableColumns}
+        dataSource={data}
+        loading={loading}
+        headerTitle={headerTitle}
+        search={false}
+        cardBordered={false}
+        components={{ header: { cell: ResizableHeaderCell } }}
+        options={{ density: true, fullScreen: false, reload: false, setting: true }}
+        toolBarRender={toolbar ? () => [toolbar] : false}
+        rowSelection={selectableRows ? {
+          selectedRowKeys,
+          onChange: (nextSelectedRowKeys) => setSelectedRowKeys(nextSelectedRowKeys),
+        } : undefined}
+        rowClassName={(_, index) => (index % 2 === 0 ? 'np-table-row-odd' : 'np-table-row-even')}
+        tableAlertRender={false}
+        tableAlertOptionRender={false}
+        tableLayout="fixed"
+        pagination={false}
+      />
+      {footerFill}
+      <div className="np-search-table-footer">
+        <Pagination
+          current={current}
+          pageSize={pageSize}
+          total={total}
+          showSizeChanger
+          pageSizeOptions={[20, 50, 100, 200]}
+          showTotal={(value) => `共 ${value} 条`}
+          locale={{ items_per_page: '条/页' }}
+          onChange={(nextCurrent, nextPageSize) => {
+            setCurrent(nextCurrent);
+            setPageSize(nextPageSize);
+          }}
+        />
+      </div>
+    </div>
   );
 }

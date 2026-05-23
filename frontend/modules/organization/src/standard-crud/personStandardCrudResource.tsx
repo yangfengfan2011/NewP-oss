@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { Input, Select } from 'antd';
 import {
   normalizeStandardCrudSubmitValues,
@@ -8,7 +8,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
-import { ErrorState, StatusTag } from '@icp-platform/ui';
+import { StatusTag } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
@@ -21,8 +21,6 @@ import {
   getPositions,
   mapPersonDetailView,
   mapPersonListItem,
-  type CompanyDto,
-  type DepartmentDto,
   type PersonDetailView,
   type PersonListRow,
   type PersonUserLinkSummaryData,
@@ -31,16 +29,12 @@ import {
 interface PersonListFilters {
   [key: string]: string;
   keyword: string;
-  companyId: string;
-  departmentId: string;
   employmentStatus: string;
 }
 
 function createEmptyFilters(): PersonListFilters {
   return {
     keyword: '',
-    companyId: '',
-    departmentId: '',
     employmentStatus: '',
   };
 }
@@ -48,8 +42,6 @@ function createEmptyFilters(): PersonListFilters {
 function buildListQuery(filters: PersonListFilters): Record<string, string | null> {
   return {
     keyword: filters.keyword,
-    companyId: filters.companyId,
-    departmentId: filters.departmentId,
     employmentStatus: filters.employmentStatus,
   };
 }
@@ -61,67 +53,8 @@ function PersonListFiltersPanel({
   filters: PersonListFilters;
   setFilters: Dispatch<SetStateAction<PersonListFilters>>;
 }) {
-  const [companies, setCompanies] = useState<CompanyDto[]>([]);
-  const [departments, setDepartments] = useState<DepartmentDto[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void getCompanies()
-      .then((items) => {
-        if (!cancelled) {
-          setCompanies(items);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError('公司选项加载失败，当前仅保留关键字和状态筛选。');
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!filters.companyId) {
-      setDepartments([]);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void getDepartments(filters.companyId)
-      .then((items) => {
-        if (!cancelled) {
-          setDepartments(items);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDepartments([]);
-          setError('部门选项加载失败，当前仅保留关键字、公司和状态筛选。');
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filters.companyId]);
-
-  const companyOptions = useMemo(() => companies.map((company) => ({ value: company.id, label: company.name })), [companies]);
-  const departmentOptions = useMemo(
-    () => departments.map((department) => ({ value: department.id, label: department.name })),
-    [departments],
-  );
-
   return (
     <div className="np-person-filter-shell">
-      {error ? <ErrorState message={error} /> : null}
       <div className="np-person-filter-grid">
         <Input
           aria-label="按工号 / 姓名搜索"
@@ -129,25 +62,6 @@ function PersonListFiltersPanel({
           value={filters.keyword}
           onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
           placeholder="按工号 / 姓名搜索"
-        />
-        <Select
-          aria-label="公司"
-          className="np-filter-select"
-          value={filters.companyId || undefined}
-          onChange={(value) => setFilters((current) => ({ ...current, companyId: value ?? '', departmentId: '' }))}
-          placeholder="全部公司"
-          allowClear
-          options={companyOptions}
-        />
-        <Select
-          aria-label="部门"
-          className="np-filter-select"
-          value={filters.departmentId || undefined}
-          onChange={(value) => setFilters((current) => ({ ...current, departmentId: value ?? '' }))}
-          placeholder="请选择部门"
-          allowClear
-          disabled={!filters.companyId}
-          options={departmentOptions}
         />
         <Select
           aria-label="在职状态"
@@ -314,7 +228,6 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   buildColumns: () => [
     { key: 'personNo', title: '工号' },
     { key: 'name', title: '姓名' },
-    { key: 'companyName', title: '公司', render: (item) => item.companyName || item.companyId },
     { key: 'departmentName', title: '部门', render: (item) => item.departmentName || item.departmentId },
     {
       key: 'employmentStatus',

@@ -6,11 +6,13 @@
       {
         "key": "organization",
         "titleKey": "Navigation.Organization",
+        "icon": "organization",
         "order": 100
       },
       {
         "key": "organization.personCenter",
         "titleKey": "Navigation.PersonCenter",
+        "icon": "persons",
         "parentKey": "organization",
         "path": "/organization/persons",
         "order": 110,
@@ -21,6 +23,7 @@
       {
         "key": "organization.tree",
         "titleKey": "Navigation.OrganizationTree",
+        "icon": "tree",
         "parentKey": "organization",
         "path": "/organization/tree",
         "order": 120,
@@ -31,6 +34,7 @@
       {
         "key": "organization.positions",
         "titleKey": "Navigation.PositionManagement",
+        "icon": "position",
         "parentKey": "organization",
         "path": "/organization/positions",
         "order": 130,

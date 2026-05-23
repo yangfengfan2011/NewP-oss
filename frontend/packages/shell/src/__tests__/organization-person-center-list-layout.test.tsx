@@ -139,8 +139,18 @@ describe('organization person center list layout', () => {
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
+          }, {
+            EID: 'person-2',
+            PersonNo: 'P0002',
+            ENAME: '李四',
+            CompanyId: 'company-1',
+            CompanyName: '总部',
+            DepartmentId: 'department-2',
+            DepartmentName: '研发部',
+            EmploymentStatus: 'PartTime',
+            IsEnabled: true,
           }],
-          total: 1,
+          total: 2,
           page: 1,
           pageSize: 20,
         }),
@@ -159,17 +169,36 @@ describe('organization person center list layout', () => {
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
+    expect(container.querySelector('.np-crud-workspace-header .ant-btn-primary')?.textContent).toContain('新建人员');
+    expect(container.querySelector('.np-crud-workspace-filter .ant-btn-primary')?.textContent?.replace(/\s+/g, '')).toContain('搜索');
     expect(container.querySelector('.np-crud-table-section-fill')).not.toBeNull();
     expect(container.querySelector('.ant-table')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
+    expect(container.querySelector('.np-search-table-footer')).not.toBeNull();
+    expect(container.querySelector('.ant-table-selection-column')).not.toBeNull();
+    expect(container.querySelector('.ant-table-column-sorters')).not.toBeNull();
+    expect(container.querySelector('.np-table-column-resize-handle')).not.toBeNull();
+    expect(container.querySelector('.np-table-row-icon')).not.toBeNull();
+    const tableHeaderTexts = Array.from(container.querySelectorAll('.ant-table-thead th')).map((node) =>
+      node.textContent?.replace(/\s+/g, ''),
+    );
+    expect(tableHeaderTexts).not.toContain('序号');
+    expect(tableHeaderTexts).not.toContain('图标');
+    const tableColumnWidths = Array.from(container.querySelectorAll('col')).map(
+      (node) => (node as HTMLTableColElement).style.width,
+    );
+    expect(tableColumnWidths).toEqual(expect.arrayContaining(['40px', '40px']));
     expect(container.querySelector('.ant-tag')).not.toBeNull();
     expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.ant-input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
     expect(container.querySelector('.ant-select')).not.toBeNull();
-    const filterSelect = container.querySelector('.ant-select');
-    expect(filterSelect?.classList.contains('np-filter-select')).toBe(true);
-    expect(filterSelect?.classList.contains('np-filter-control')).toBe(false);
+    expect(container.textContent).not.toContain('全部公司');
+    expect(container.textContent).not.toContain('公司');
+    const filterSelects = Array.from(container.querySelectorAll('.np-person-filter-grid .ant-select'));
+    expect(filterSelects).toHaveLength(1);
+    expect(filterSelects[0]?.classList.contains('np-filter-select')).toBe(true);
+    expect(filterSelects[0]?.classList.contains('np-filter-control')).toBe(false);
     expect(container.textContent).toContain('新建人员');
     expect(container.textContent).toContain('刷新');
     expect(container.textContent).toContain('更多筛选');
@@ -177,11 +206,25 @@ describe('organization person center list layout', () => {
     expect(container.textContent).toContain('工号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('张三');
-    expect(container.textContent).toContain('查看');
-    expect(container.textContent).toContain('编辑');
-    expect(container.textContent).toContain('停用');
+    expect(container.textContent).toContain('李四');
+    const bodyRows = Array.from(container.querySelectorAll('.ant-table-tbody > tr'));
+    expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(true);
+    expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(true);
+    const firstActionCell = bodyRows[0]?.querySelector('td:last-child');
+    expect(firstActionCell?.textContent).toContain('查看');
+    expect(firstActionCell?.textContent).toContain('编辑');
+    expect(firstActionCell?.textContent).toContain('更多');
+    expect(firstActionCell?.textContent).not.toContain('删除');
+    expect(firstActionCell?.textContent).not.toContain('停用');
+    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(2);
+    expect(firstActionCell?.querySelector('.np-row-actions-more')).not.toBeNull();
+    await act(async () => {
+      firstActionCell?.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain('删除');
+    expect(document.body.textContent).toContain('停用');
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
-    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
   });
 
@@ -241,12 +284,14 @@ describe('organization person center list layout', () => {
     });
     await flushProTableRequest();
 
-    const disableButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.includes('停用'),
-    );
-
     await act(async () => {
-      disableButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      container.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const disableMenuItem = Array.from(document.body.querySelectorAll('.np-row-action-menu-button')).find(
+      (item) => item.textContent?.includes('停用'),
+    );
+    await act(async () => {
+      disableMenuItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     const confirmButton = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent?.replace(/\s+/g, '') === '确认',

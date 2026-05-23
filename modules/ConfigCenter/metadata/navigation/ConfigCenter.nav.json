@@ -6,11 +6,13 @@
       {
         "key": "config-center",
         "titleKey": "Navigation.ConfigCenter",
+        "icon": "settings",
         "order": 20
       },
       {
         "key": "config-center.items",
         "titleKey": "Navigation.ConfigItems",
+        "icon": "cog",
         "parentKey": "config-center",
         "path": "/config/items",
         "order": 1,
@@ -21,6 +23,7 @@
       {
         "key": "config-center.value-lists",
         "titleKey": "Navigation.ValueLists",
+        "icon": "list",
         "parentKey": "config-center",
         "path": "/config/value-lists",
         "order": 2,

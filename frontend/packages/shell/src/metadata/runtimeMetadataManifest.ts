@@ -21,6 +21,7 @@ export interface RuntimeNavItemDocument {
 export interface RuntimeNavItem {
   key: string;
   titleKey?: string;
+  icon?: string;
   path?: string;
   parentKey?: string;
   order?: number;

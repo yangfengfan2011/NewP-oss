@@ -54,11 +54,13 @@ describe('Ant Design shell layout', () => {
               {
                 id: 'organization',
                 label: '组织用户',
+                icon: 'organization',
                 children: [
                   {
                     id: 'organization-persons',
                     label: '人员中心',
                     path: '/organization/persons',
+                    icon: 'person',
                   },
                 ],
               },
@@ -75,6 +77,7 @@ describe('Ant Design shell layout', () => {
     expect(container.textContent).toContain('人员中心');
     expect(container.querySelector('[aria-label="折叠菜单"]')).not.toBeNull();
     expect(container.querySelector('.np-sidebar-menu')).not.toBeNull();
+    expect(container.querySelectorAll('.np-sidebar-menu-icon').length).toBeGreaterThanOrEqual(2);
   });
 
   it('renders a minimal full-width platform header chrome', async () => {

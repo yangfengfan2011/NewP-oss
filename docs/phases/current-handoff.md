@@ -38,6 +38,31 @@
 
 ## 4. 最近完成
 
+### 4.6 人员中心界面二次微调
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-23-shell-crud-workspace-visual-adjustment-design.md` 第 14.1 节
+
+完成内容：
+
+- 人员中心列表去掉公司筛选和公司列，保留创建、详情、编辑表单里的公司字段与组织级联模型。
+- 标准 CRUD 单列表页在无标题/描述时把主动作并入筛选行，避免单独一整行只放“新建人员”。
+- 二次反馈后，主动作区已回到筛选区上方命令条，承接最多 5 个常驻功能按钮；筛选区不再拉长关键字搜索。
+- Sidebar 菜单投影开始渲染 `icon` 元数据，并为内建 navigation metadata 补齐轻量图标声明。
+- 标准 CRUD 表格分页移动到工作面底部，页大小下拉保留右侧安全间距，并固定提供 `20 / 50 / 100 / 200`。
+- 标准 CRUD 表格默认提供前端排序入口和表头列宽拖拽手柄。
+- 人员中心列表补充多选框、序号列和人员图标列；序号/图标辅助列不显示列名并使用紧凑宽度，多选只保留 UI 选中状态，暂未绑定批量动作。
+- 标准 CRUD 表格已输出奇偶行 class，Shell 侧提供轻量隔行底色，hover 底色优先覆盖隔行底色。
+- 标准 CRUD 行操作最多显示 3 个按钮，`更多` 计入 3 个按钮名额；人员中心当前展示为 `查看 / 编辑 / 更多`，`删除 / 停用` 收进更多中并保留确认流程。
+
+验证结论：
+
+- 定向测试、UI/Shell/Organization 前端构建、设计校验和浏览器 smoke 均已通过。
+- Shell 构建仍输出既有 Vite chunk size warning；jsdom 测试仍输出既有 AntD / React Router 警告，未作为本轮失败信号。
+
 ### 4.5 人员中心后台 CRUD Pro 样板固化
 
 状态：已完成并验证。
@@ -251,6 +276,25 @@
 - 在完成该回收前，人员中心 CRUD Pro 样板只能称为“标准 Host + 模块代码注册驱动”的中间态，不应作为纯 metadata CRUD 生成器对外承诺。
 
 ## 7. 验证快照
+
+人员中心界面二次微调验证覆盖：
+
+```powershell
+pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-center-list-layout antd-shell-layout
+pnpm --dir frontend --filter @icp-platform/ui build
+pnpm --dir frontend --filter @icp-modules/organization build
+pnpm --dir frontend --filter @icp-platform/shell build
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-05-23-shell-crud-workspace-visual-adjustment-design.md
+powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1
+```
+
+验证结论：
+
+- `@icp-platform/shell` 定向测试通过，2 files / 7 tests。
+- `@icp-platform/ui`、`@icp-modules/organization`、`@icp-platform/shell` 构建通过。
+- AI-first 设计校验通过。
+- 浏览器 smoke 确认 `/organization/persons` 已移除公司筛选/公司列、菜单图标可见、主动作位于筛选区上方、搜索输入未被拉长、表头排序入口可见、多选框/紧凑序号列/紧凑人员图标列可见且辅助列表头为空、标准表格奇偶行 class 可见、行操作显示 `查看 / 编辑 / 更多` 且 `删除 / 停用` 收进更多、分页位于工作面底部且页大小下拉包含 `20 / 50 / 100 / 200`。
+- Shell 构建仍输出既有 Vite chunk size warning；jsdom 测试仍输出既有 AntD / React Router 警告，未作为本轮失败信号。
 
 前端 Ant Design 重建阶段收口验证覆盖：
 

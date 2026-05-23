@@ -18,6 +18,7 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
     <div className="np-crud-table-section">
       <SearchTablePage<TRow>
         {...tableProps}
+        footerFill={<div className="np-crud-table-section-fill" aria-hidden="true" />}
         toolbar={
           <>
             <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh} loading={loading}>
@@ -27,7 +28,6 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
           </>
         }
       />
-      <div className="np-crud-table-section-fill" aria-hidden="true" />
     </div>
   );
 }

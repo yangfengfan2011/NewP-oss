@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useLocalization } from '@icp-platform/core';
+import { UserOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -10,9 +11,8 @@ import {
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button as AntdButton } from 'antd';
+import { Button as AntdButton, Popconfirm, Popover } from 'antd';
 import {
-  CrudDangerAction,
   CrudDetailDrawer,
   CrudFormDrawer,
   CrudSearchBar,
@@ -26,7 +26,6 @@ import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
-import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import {
   buildStandardCrudDetailColumns,
   buildStandardCrudDetailFormValues,
@@ -50,10 +49,80 @@ interface DeleteActionErrorState {
   message: string;
 }
 
+interface RowActionItem {
+  key: string;
+  label: ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+  confirmMessage?: string;
+  onClick: () => void | Promise<void>;
+}
+
 const CLOSED_DRAWER_STATE: CrudDrawerState = {
   mode: 'closed',
   source: 'user-action',
 };
+
+const MAX_ROW_ACTION_BUTTONS = 3;
+
+function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
+  const hasOverflow = actions.length > MAX_ROW_ACTION_BUTTONS;
+  const inlineLimit = hasOverflow ? MAX_ROW_ACTION_BUTTONS - 1 : MAX_ROW_ACTION_BUTTONS;
+  const inlineActions = actions.slice(0, inlineLimit);
+  const overflowActions = actions.slice(inlineLimit);
+  const renderActionButton = (action: RowActionItem, className: string) => {
+    const button = (
+      <AntdButton
+        key={action.key}
+        className={className}
+        type="link"
+        danger={action.danger}
+        loading={action.loading}
+        disabled={action.disabled}
+        onClick={action.confirmMessage ? undefined : () => {
+          void action.onClick();
+        }}
+      >
+        {action.loading ? '处理中...' : action.label}
+      </AntdButton>
+    );
+
+    return action.confirmMessage ? (
+      <Popconfirm
+        key={action.key}
+        title={action.confirmMessage}
+        okText="确认"
+        cancelText="取消"
+        okButtonProps={{ danger: action.danger, loading: action.loading }}
+        onConfirm={action.onClick}
+      >
+        {button}
+      </Popconfirm>
+    ) : button;
+  };
+
+  return (
+    <div className="np-row-actions">
+      {inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
+      {overflowActions.length > 0 ? (
+        <Popover
+          placement="bottomRight"
+          trigger="click"
+          content={(
+            <div className="np-row-actions-overflow-menu">
+              {overflowActions.map((action) => renderActionButton(action, 'np-row-action-menu-button'))}
+            </div>
+          )}
+        >
+          <AntdButton className="np-row-actions-more" type="link">
+            更多
+          </AntdButton>
+        </Popover>
+      ) : null}
+    </div>
+  );
+}
 
 function resolveCreateFormFields(fields: StandardCrudFieldDefinition[]): StandardCrudFieldDefinition[] {
   return fields.map((field) => {
@@ -152,6 +221,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [saving, setSaving] = useState(false);
   const [deleteActionError, setDeleteActionError] = useState<DeleteActionErrorState | null>(null);
   const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
+  const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
+  const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
@@ -338,16 +409,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [client, registration, appliedFilters, reloadTick],
   );
 
-  const filterBar = registration.renderFilters ? (
-    <CrudSearchBar
-      fields={registration.renderFilters(context)}
-      loading={loading}
-      onSearch={context.applyFilters}
-      onReset={context.resetFilters}
-      more={<AntdButton type="text" size="middle">更多筛选</AntdButton>}
-    />
-  ) : undefined;
-
   const createAction = registration.listActions?.find((action) => action.standardAction === 'create');
   const editAction = registration.listActions?.find((action) => action.standardAction === 'edit');
   const refreshAction = registration.listActions?.find((action) => action.standardAction === 'refresh');
@@ -372,65 +433,106 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           const rowDeleteActionError = deleteActionDefinitions.some((action) => deleteActionError?.key === `${action.key}:${rowId}`)
             ? deleteActionError
             : null;
+          const rowExtraActionError = rowActionDefinitions.some((action) => rowActionError?.key === `${action.key}:${rowId}`)
+            ? rowActionError
+            : null;
+          const rowActions: RowActionItem[] = [
+            {
+              key: 'view',
+              label: '查看',
+              onClick: () => {
+                void openViewDrawer(rowId);
+              },
+            },
+            {
+              key: 'edit',
+              label: '编辑',
+              onClick: () => {
+                void openEditDrawer(rowId);
+              },
+            },
+            ...deleteActionDefinitions
+              .filter((action) => hasActionPermission(action, registration.permissions))
+              .map((action): RowActionItem => {
+                const pendingKey = `${action.key}:${rowId}`;
+
+                return {
+                  key: action.key,
+                  label: action.labelKey,
+                  danger: true,
+                  confirmMessage: action.confirmMessage ?? `确认${action.labelKey}吗？`,
+                  loading: deletingActionKey === pendingKey,
+                  disabled: deletingActionKey !== null,
+                  onClick: async () => {
+                    try {
+                      setDeletingActionKey(pendingKey);
+                      setDeleteActionError(null);
+
+                      const handler = registration.actionHandlers?.[action.key];
+                      if (handler) {
+                        // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
+                        await handler({ id: rowId, row, refresh: () => undefined });
+                      } else {
+                        await client.delete(rowId);
+                      }
+
+                      context.refresh();
+                      closeDrawerForRow(rowId);
+                    } catch (deleteError) {
+                      setDeleteActionError({
+                        key: pendingKey,
+                        message: deleteError instanceof Error ? deleteError.message : '删除标准资源失败',
+                      });
+                    } finally {
+                      setDeletingActionKey(null);
+                    }
+                  },
+                };
+              }),
+            ...rowActionDefinitions
+              .filter((action) => hasActionPermission(action, registration.permissions))
+              .map((action): RowActionItem => {
+                const pendingKey = `${action.key}:${rowId}`;
+                const handler = registration.actionHandlers?.[action.key];
+
+                return {
+                  key: action.key,
+                  label: action.labelKey,
+                  danger: action.variant === 'danger',
+                  confirmMessage: action.confirmMessage,
+                  loading: rowActionPendingKey === pendingKey,
+                  disabled: rowActionPendingKey !== null || !handler,
+                  onClick: async () => {
+                    if (!handler) {
+                      return;
+                    }
+
+                    try {
+                      setRowActionPendingKey(pendingKey);
+                      setRowActionError(null);
+                      await handler({ id: rowId, row, refresh: context.refresh });
+                    } catch (actionError) {
+                      setRowActionError({
+                        key: pendingKey,
+                        message: actionError instanceof Error ? actionError.message : '执行操作失败',
+                      });
+                    } finally {
+                      setRowActionPendingKey(null);
+                    }
+                  },
+                };
+              }),
+          ];
 
           return (
             <div style={{ display: 'grid', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <AntdButton type="link" onClick={() => void openViewDrawer(rowId)}>查看</AntdButton>
-                <AntdButton type="link" onClick={() => void openEditDrawer(rowId)}>编辑</AntdButton>
-                {deleteActionDefinitions
-                  .filter((action) => hasActionPermission(action, registration.permissions))
-                  .map((action) => {
-                    const pendingKey = `${action.key}:${rowId}`;
-
-                    return (
-                      <CrudDangerAction
-                        key={action.key}
-                        confirmMessage={action.confirmMessage ?? `确认${action.labelKey}吗？`}
-                        loading={deletingActionKey === pendingKey}
-                        disabled={deletingActionKey !== null}
-                        onConfirm={async () => {
-                          try {
-                            setDeletingActionKey(pendingKey);
-                            setDeleteActionError(null);
-
-                            const handler = registration.actionHandlers?.[action.key];
-                            if (handler) {
-                              // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
-                              await handler({ id: rowId, row, refresh: () => undefined });
-                            } else {
-                              await client.delete(rowId);
-                            }
-
-                            context.refresh();
-                            closeDrawerForRow(rowId);
-                          } catch (deleteError) {
-                            setDeleteActionError({
-                              key: pendingKey,
-                              message: deleteError instanceof Error ? deleteError.message : '删除标准资源失败',
-                            });
-                          } finally {
-                            setDeletingActionKey(null);
-                          }
-                        }}
-                      >
-                        {action.labelKey}
-                      </CrudDangerAction>
-                    );
-                  })}
+                <RowActionButtonGroup actions={rowActions} />
                 {registration.renderRowActions ? registration.renderRowActions(row, context) : null}
-                {rowActionDefinitions.length > 0 ? (
-                  <StandardCrudActions
-                    actions={rowActionDefinitions}
-                    grantedPermissions={registration.permissions}
-                    handlers={registration.actionHandlers}
-                    context={{ id: rowId, row, refresh: context.refresh }}
-                  />
-                ) : null}
               </div>
-              {rowDeleteActionError ? (
+              {rowDeleteActionError || rowExtraActionError ? (
                 <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-                  {rowDeleteActionError.message}
+                  {(rowDeleteActionError ?? rowExtraActionError)?.message}
                 </span>
               ) : null}
             </div>
@@ -458,6 +560,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     )
     : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
 
+  const filterBar = registration.renderFilters ? (
+    <CrudSearchBar
+      fields={registration.renderFilters(context)}
+      loading={loading}
+      onSearch={context.applyFilters}
+      onReset={context.resetFilters}
+      more={<AntdButton type="text" size="middle">更多筛选</AntdButton>}
+    />
+  ) : undefined;
+
   const handleRefresh = async () => {
     if (refreshAction && registration.actionHandlers?.[refreshAction.key]) {
       await registration.actionHandlers[refreshAction.key]({ refresh: context.refresh });
@@ -478,6 +590,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         columns={columns}
         request={tableRequest}
         loading={loading}
+        selectableRows
+        showRowNumber
+        rowIcon={<UserOutlined />}
         onRefresh={() => void handleRefresh()}
       />
     </div>

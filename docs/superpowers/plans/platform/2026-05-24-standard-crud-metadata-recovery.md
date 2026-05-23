@@ -534,7 +534,7 @@ git commit -m "测试：锁定标准CRUD元数据schema回收行为"
 - Verify: `pnpm --dir frontend --filter @icp-platform/ui build`
 - Verify: `pnpm --dir frontend --filter @icp-platform/sdk build`
 
-- [ ] **Step 1: 先扩字段控件测试**
+- [x] **Step 1: 先扩字段控件测试**
 
 在 `frontend/packages/shell/src/__tests__/standard-crud-field-form.test.tsx` 增加：
 
@@ -574,7 +574,7 @@ it('renders textarea number checkbox dateRange and readonly field kinds', async 
 });
 ```
 
-- [ ] **Step 2: 扩 SDK 类型**
+- [x] **Step 2: 扩 SDK 类型**
 
 在 `frontend/packages/sdk/src/standardCrud.ts` 中替换字段类型：
 
@@ -622,7 +622,7 @@ buildColumns?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => Sta
 renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
 ```
 
-- [ ] **Step 3: 更新 `StandardCrudField` 控件渲染**
+- [x] **Step 3: 更新 `StandardCrudField` 控件渲染**
 
 在 `frontend/packages/ui/src/patterns/StandardCrudField.tsx` 中保持 `boolean` 兼容，同时新增 `switch/checkbox/select/textarea/number/dateRange` 分支：
 
@@ -729,7 +729,7 @@ type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'tex
 onChange={(event) => onChange(field.key, field.kind === 'number' ? Number(event.target.value) : event.target.value)}
 ```
 
-- [ ] **Step 4: 运行字段测试和构建**
+- [x] **Step 4: 运行字段测试和构建**
 
 Run:
 

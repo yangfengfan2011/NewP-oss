@@ -29,7 +29,19 @@ export interface StandardCrudDetail {
 export type StandardCrudMutationValues = Record<string, unknown>;
 
 /** 标准 CRUD 字段类型只描述渲染意图，具体控件流程由 Shell 运行时按资源注册装配。 */
-export type StandardCrudFieldKind = 'text' | 'boolean' | 'enum' | 'lookup' | 'date' | 'readonly';
+export type StandardCrudFieldKind =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'boolean'
+  | 'switch'
+  | 'checkbox'
+  | 'enum'
+  | 'select'
+  | 'lookup'
+  | 'date'
+  | 'dateRange'
+  | 'readonly';
 
 /** 标准 CRUD 选项外形；SDK 不解释业务枚举，只提供 lookup 和 enum 的稳定值/标签契约。 */
 export interface StandardCrudOption {
@@ -120,7 +132,9 @@ export interface StandardCrudActionDefinition {
   variant?: 'default' | 'primary' | 'danger';
   standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'submit';
   confirmMessage?: string;
+  confirmMessageKey?: string;
   requiredPermissions?: string[];
+  handlerKey?: string;
 }
 
 /** 标准动作上下文；Shell 提供当前资源和数据快照，模块处理器不得依赖 Shell 内部状态。 */
@@ -196,6 +210,7 @@ export interface StandardCrudResourceRegistration<
   fields?: StandardCrudFieldDefinition[];
   formSections?: StandardCrudFormSection[];
   lookupProviders?: StandardCrudLookupProvider[];
+  enumOptions?: Record<string, StandardCrudOption[]>;
   listActions?: StandardCrudActionDefinition[];
   detailActions?: StandardCrudActionDefinition[];
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
@@ -206,7 +221,7 @@ export interface StandardCrudResourceRegistration<
   buildListQuery: (filters: TFilter) => Record<string, string | number | boolean | null | undefined>;
   mapListItem: (value: unknown) => TRow;
   getRowId: (row: TRow) => string;
-  buildColumns: (context: StandardCrudListExtensionContext<TFilter, TRow>) => StandardCrudTableColumn<TRow>[];
+  buildColumns?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => StandardCrudTableColumn<TRow>[];
   renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderRowActions?: (row: TRow, context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;

@@ -63,13 +63,13 @@ describe('StandardCrudField and StandardCrudForm', () => {
 
     expect(container.querySelector('input[value="name-value"]')).not.toBeNull();
     expect(container.querySelector('input[value="birthday-value"]')).not.toBeNull();
-    expect(container.querySelector('input[value="lockedCode-value"]')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-readonly-value')?.textContent).toBe('lockedCode-value');
     expect(container.querySelector('.np-standard-crud-field-boolean .np-standard-crud-field-label')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-field-boolean .np-standard-crud-switch-row')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-switch.ant-switch')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-select.ant-select')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-select[data-value="active"]')).not.toBeNull();
-    expect(container.querySelectorAll('[disabled]')).toHaveLength(5);
+    expect(container.querySelectorAll('[disabled]')).toHaveLength(4);
   });
 
   it('renders sections, editable controls and edit submit action', async () => {
@@ -151,6 +151,43 @@ describe('StandardCrudField and StandardCrudForm', () => {
 
     expect(container.querySelector('.np-standard-crud-select[data-value="FullTime"]')).not.toBeNull();
     expect(container.textContent).toContain('正式');
+  });
+
+  it('renders textarea number checkbox dateRange and readonly field kinds', async () => {
+    const fields: StandardCrudFieldDefinition[] = [
+      { key: 'remark', labelKey: '备注', modelField: 'Remark', kind: 'textarea' },
+      { key: 'sortOrder', labelKey: '排序', modelField: 'SortOrder', kind: 'number' },
+      { key: 'isPrimary', labelKey: '主岗', modelField: 'IsPrimary', kind: 'checkbox' },
+      { key: 'entryRange', labelKey: '入职范围', modelField: 'EntryRange', kind: 'dateRange' },
+      { key: 'createdAt', labelKey: '创建时间', modelField: 'CreatedAt', kind: 'readonly' },
+    ];
+    const values = {
+      remark: 'hello',
+      sortOrder: 3,
+      isPrimary: true,
+      entryRange: ['2026-01-01', '2026-01-31'],
+      createdAt: '2026-01-01',
+    };
+
+    await render(
+      <StandardCrudForm
+        formId="field-kind-form"
+        mode="edit"
+        fields={fields}
+        sections={[]}
+        values={values}
+        onChange={vi.fn()}
+        onSubmit={() => undefined}
+        saving={false}
+        titleForSection={(titleKey) => titleKey}
+      />,
+    );
+
+    expect(container.querySelector('textarea')).not.toBeNull();
+    expect(container.querySelector('input[type="number"]')).not.toBeNull();
+    expect(container.textContent).toContain('主岗');
+    expect(container.querySelectorAll('input[type="date"]')).toHaveLength(2);
+    expect(container.textContent).toContain('2026-01-01');
   });
 
   it('shows field-level required validation below empty fields', async () => {

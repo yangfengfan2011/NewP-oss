@@ -27,7 +27,7 @@
 
 - 明确人员中心标准 CRUD 哪些能力应迁回 metadata，哪些能力必须继续留在代码内核。
 - 固化 `nav / view / model / dic / enum` 在标准 CRUD V1 中的职责边界。
-- 定义字段控件类型、字段数据源、表单模式、查询默认值、列表列和标准动作的 V1 metadata 结构。
+- 定义字段控件类型、字段数据源、表单模式、查询默认值、列表列和标准动作的 V1 metadata 结构，并尽量复用当前 `uiType / form / view / dataSource` 模型字段协议。
 - 明确 `EID / ENAME / ECODE` 平台协议字段继续沿用当前内核固定映射，不新增业务 metadata 字段映射机制。
 - 让人员中心成为“标准 CRUD metadata 样板”的第一批回收对象，而不是继续扩散 TSX 注册代码样板。
 - 为后续实施计划提供入口、边界、验证方式、失败信号和回滚思路。
@@ -48,7 +48,7 @@
 本设计允许后续实施涉及：
 
 - `modules/Organization/metadata/models/Person.model.json`
-  - 补齐字段控件、表单模式、数据源、默认值、必填、只读/隐藏等字段级静态语义。
+  - 补齐字段控件、表单模式、数据源、默认值、必填、只读/隐藏等字段级静态语义；优先复用当前 `uiType` 字段，不新增平行 UI 对象分区。
 - `modules/Organization/metadata/views/PersonList.view.json`
   - 补齐查询条件、默认查询条件、默认排序、列表列、页面动作、行动作和导出声明。
 - `modules/Organization/metadata/views/PersonDetail.view.json`
@@ -86,7 +86,7 @@
 - `EID / ENAME / ECODE` 是平台协议字段，业务 metadata 不允许自行声明 alias/mapping。
 - lookup provider、特殊 renderer、特殊 action handler 仍由模块代码注册，Shell 只通过受控 key 查找。
 - V1 不支持 metadata 表达式显隐、动态联动脚本、按行动态按钮能力预计算。
-- 任何 schema 扩展都必须有校验失败信号，不能静默忽略未知 control、未知 dataSource、未知 action 或不存在字段。
+- 任何 schema 扩展都必须有校验失败信号，不能静默忽略未知 `uiType`、未知 dataSource、未知 action 或不存在字段。
 
 ## 6. 总体方案
 
@@ -105,7 +105,7 @@
 
 控件类型是字段静态语义的一部分，不是独立生命周期对象。若新增 `controls/*.json`，人员中心会为了一个字段同时跳转 model、view、control、provider 多处文件，反而破坏 AI-first 小上下文目标。
 
-V1 只在 model field 上声明 `ui.control`，Shell 通过固定控件 registry 渲染。控件 registry 是代码内核，不是 metadata 类型。
+V1 只在 model field 上声明 `uiType`，Shell 通过固定控件 registry 渲染。控件 registry 是代码内核，不是 metadata 类型。
 
 ### 6.3 为什么不新增 action metadata
 
@@ -123,7 +123,7 @@ V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使�
 
 ### 7.1 model field
 
-`Person.model.json` 中每个字段允许补齐以下字段级声明：
+`Person.model.json` 中每个字段允许补齐以下字段级声明。`uiType`、`form`、`view`、`dataSource` 已经是当前模型元数据的受控字段分区，本设计优先扩展它们的含义，而不是新增平行结构：
 
 ```json
 {
@@ -136,9 +136,7 @@ V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使�
     "valueType": "enum",
     "clrType": "EmploymentStatus"
   },
-  "ui": {
-    "control": "select"
-  },
+  "uiType": "select",
   "form": {
     "create": {
       "mode": "editable",
@@ -164,7 +162,7 @@ V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使�
 - `readonly`
 - `hidden`
 
-字段控件 V1 只允许：
+字段控件 V1 对应 `uiType`，只允许：
 
 - `text`
 - `textarea`
@@ -185,7 +183,9 @@ Shell 可以根据字段语义推导默认控件：
 - `storage.type = date/datetime` 默认 `date`
 - 其他字符串默认 `text`
 
-显式 `ui.control` 只用于覆盖默认推导，不能引入未知控件。
+显式 `uiType` 只用于覆盖默认推导，不能引入未知控件。若字段未声明 `uiType`，Shell 可以按上述规则推导控件；若推导失败，默认使用 `readonly` 或直接校验失败，具体策略在实施计划中固定。
+
+内核固定字段可以补充 UI/schema 信息但不重复 storage。例如 `ENAME` 已通过 `builtinFields` 启用时，允许在 `fields` 中增加同名条目声明 `uiType / form / view / dataSource`，但不能重新声明 `storage`。
 
 ### 7.2 dataSource
 
@@ -208,13 +208,11 @@ Shell 可以根据字段语义推导默认控件：
 {
   "type": "model",
   "key": "Company",
-  "model": "Company",
-  "valueField": "EID",
-  "labelField": "ENAME"
+  "model": "Company"
 }
 ```
 
-只声明“这是对另一个模型的受控引用”。实际查询 API、权限、分页、搜索和缓存由代码 provider 或后端标准 option endpoint 承接。
+只声明“这是对另一个模型的受控引用”。V1 默认使用平台协议字段 `EID` 作为候选值、`ENAME` 作为候选标签；若目标模型不符合该协议，首轮应改用 `provider`，不在 metadata 中新增字段映射。实际查询 API、权限、分页、搜索和缓存由代码 provider 或后端标准 option endpoint 承接。
 
 `provider`：
 
@@ -277,7 +275,7 @@ Shell 可以根据字段语义推导默认控件：
     ],
     "defaults": [
       {
-        "field": "IsEnabled",
+        "field": "isEnabled",
         "value": true
       }
     ],
@@ -294,7 +292,7 @@ Shell 可以根据字段语义推导默认控件：
 
 - `source = model` 时，`field` 必须引用 `Person.model.json` 中存在的字段或内核固定字段。
 - `source = preset` 时，`preset` 首轮只允许 `keyword`。
-- `defaults.field` 必须存在于 `query.fields` 或 `advancedFilter.sections.fields` 中；若默认值不显示在筛选区，需要用 `hidden: true` 显式声明隐藏查询项，而不是隐式塞入。
+- `defaults.field` 引用查询项的 `key`，不是模型字段名；该 key 必须存在于 `query.fields` 或 `advancedFilter.sections.fields` 中。若默认值不显示在筛选区，需要用 `hidden: true` 显式声明隐藏查询项，而不是隐式塞入。
 - 默认值只作用于首次进入页面和点击重置。
 - 查询参数名使用 `key`，绑定模型字段使用 `field`。这不是通用字段映射，只是查询项来源声明。
 
@@ -345,7 +343,7 @@ Shell 可以根据字段语义推导默认控件：
       "labelKey": "Action_Create",
       "standardAction": "create",
       "variant": "primary",
-      "permission": "Organization.Person.Create"
+      "permissions": ["Organization.Person.Create"]
     },
     {
       "key": "refresh",
@@ -372,7 +370,7 @@ Shell 可以根据字段语义推导默认控件：
       "standardAction": "disable",
       "variant": "danger",
       "confirmMessageKey": "Action_Disable_Confirm",
-      "permission": "Organization.Person.Disable",
+      "permissions": ["Organization.Person.Disable"],
       "handlerKey": "organization.person.disable"
     }
   ]
@@ -384,7 +382,7 @@ Shell 可以根据字段语义推导默认控件：
 - `standardAction` 首轮允许 `create / refresh / view / edit / delete / disable / submit`。
 - `variant` 首轮允许 `default / primary / danger`。
 - `confirmMessageKey` 指向 dic，不允许直接硬编码确认文案。
-- `permission` 只声明按钮显示所需权限，权限判断由 Shell/Auth 运行时执行。
+- `permissions` 只声明按钮显示所需权限，权限判断由 Shell/Auth 运行时执行；字段命名与 nav metadata 保持一致，统一使用数组。
 - `handlerKey` 只绑定模块注册的受控 handler，不描述执行步骤。
 - 导出能力继续使用 `export` 区块，不进入 `pageActions`。
 
@@ -441,7 +439,7 @@ section 内字段顺序、字段模式和控件类型继续来自 `Person.model.
 2. Runtime metadata provider 加载 `PersonList.view.json`。
 3. Standard CRUD registry 按 `listViewKey` 找到人员资源注册。
 4. Schema resolver 读取 view query、columns、actions、export。
-5. Schema resolver 读取 `Person.model.json`，为 `source = model` 的字段补齐控件、数据源、表单模式和静态校验语义。
+5. Schema resolver 读取 `Person.model.json`，为 `source = model` 的字段补齐 `uiType`、数据源、表单模式和静态校验语义。
 6. Shell 根据 query schema 渲染轻筛选条和高级筛选。
 7. 首次进入页面时应用 `query.defaults / defaultSort / defaultPageSize`。
 8. 标准 CRUD client 按 query key 发起列表请求。
@@ -488,7 +486,7 @@ resolver 负责校验：
 - action `standardAction` 是否在允许集合内。
 - action `handlerKey` 是否能在资源注册中找到。
 - dataSource type 是否受支持。
-- control 是否受支持。
+- `uiType` 是否受支持。
 
 ### 9.3 模块资源注册
 
@@ -524,7 +522,7 @@ resolver 负责校验：
 失败信号：
 
 - view metadata 引用不存在的 model。
-- query/column/default/action 引用不存在字段、未知 preset、未知 control 或未知 dataSource。
+- query/column/default/action 引用不存在字段、未知 preset、未知 `uiType` 或未知 dataSource。
 - `handlerKey` 未注册但 action 不是 Shell 可内建执行的标准动作。
 - `dataSource.type = provider` 但 provider key 未注册。
 - `dataSource.type = enum` 但 enum key 不存在。
@@ -591,7 +589,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
    - 删除或收缩 `renderFilters / buildColumns / listActions` 的可声明内容。
 
 3. 回收人员中心表单声明
-   - 在 `Person.model.json` 补齐 control、form mode、dataSource、default、required。
+   - 在 `Person.model.json` 补齐 `uiType`、form mode、dataSource、default、required。
    - 让 StandardCrudForm 从 metadata schema 生成。
 
 4. 回收详情动作和 summary 声明
@@ -619,7 +617,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
   - 涉及后端模型或 CRUD descriptor 时补跑对应 dotnet tests。
 
 - 失败信号是什么：
-  - 未知 control/dataSource/action 被静默忽略。
+  - 未知 `uiType`/dataSource/action 被静默忽略。
   - 修改字段、列、查询、动作仍主要需要改 `personStandardCrudResource.tsx`。
   - 人员中心页面行为和 metadata 声明不一致。
   - 文案仍大量硬编码在 TSX 中。

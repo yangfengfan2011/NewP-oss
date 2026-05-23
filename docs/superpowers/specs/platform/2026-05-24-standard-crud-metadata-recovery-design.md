@@ -120,9 +120,9 @@ V1 只在 model field 上声明 `uiType`，Shell 通过固定控件 registry 渲
 
 ### 6.4 为什么不新增字段映射机制
 
-`EID / ENAME / ECODE` 已经由后端平台内核固定投影，并由 DTO 生成器固定转换为 `Id / DisplayName / Code`。这属于平台协议，不属于业务 metadata。
+`EID / ENAME / ECODE` 已经由后端平台内核和标准 CRUD 输出契约固定定义。前端标准 CRUD metadata、schema resolver 和页面 Host 不再新增任何协议字段映射行为；字段名、DTO 友好字段和投影字段以后端/SDK 已稳定暴露的契约为准。这属于平台协议，不属于业务 metadata。
 
-V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使用协议字段名和模型字段名，友好命名转换由平台代码固定处理。
+V1 不引入通用 `mapsTo / alias / apiField / uiField` 映射。metadata 使用协议字段名和模型字段名；若需要 DTO 友好字段，由后端平台/SDK 输出契约固定提供，不由前端 metadata 或 Host 转换。
 
 ### 6.5 多语言边界
 
@@ -218,6 +218,7 @@ Shell 可以根据字段语义推导默认控件：
 ```
 
 候选项来自现有 enum metadata。字段不得在 model metadata 中重复内联枚举项。
+若 `enum` key 暂时无法解析，Shell 不把页面装配升级为 hard fail；对应控件显示为空选项，并由定向测试、字典/枚举校验或 smoke 验证暴露配置问题。
 
 `model`：
 
@@ -280,14 +281,6 @@ Shell 可以根据字段语义推导默认控件：
         "source": "model",
         "field": "EmploymentStatus",
         "operator": "="
-      },
-      {
-        "key": "isEnabled",
-        "labelKey": "Query_IsEnabled",
-        "source": "model",
-        "field": "IsEnabled",
-        "operator": "=",
-        "hidden": true
       }
     ],
     "defaults": [
@@ -301,6 +294,39 @@ Shell 可以根据字段语义推导默认控件：
       "direction": "asc"
     },
     "defaultPageSize": 20
+  },
+  "advancedFilter": {
+    "enabled": true,
+    "titleKey": "AdvancedFilter_Title",
+    "sections": [
+      {
+        "key": "organization",
+        "titleKey": "AdvancedFilter_Organization",
+        "fields": [
+          {
+            "key": "departmentId",
+            "labelKey": "Query_Department",
+            "source": "model",
+            "field": "DepartmentId",
+            "operator": "="
+          },
+          {
+            "key": "positionId",
+            "labelKey": "Query_Position",
+            "source": "model",
+            "field": "PositionId",
+            "operator": "="
+          },
+          {
+            "key": "isEnabled",
+            "labelKey": "Query_IsEnabled",
+            "source": "model",
+            "field": "IsEnabled",
+            "operator": "="
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -344,7 +370,7 @@ Shell 可以根据字段语义推导默认控件：
 - `labelKey` 指向当前 view `dicKey` 下的字典 entry，例如 `PersonListView.Column_DepartmentName`。
 - `source = model` 表示列绑定模型字段。
 - `source = projection` 表示列来自列表 DTO/projection，例如 `companyName`、`departmentName`。
-- `source = projection` 必须显式声明 `field`，该字段名对应前端标准化后的列表行属性；这里不引入 `mapsTo / alias / apiField` 等通用字段映射。
+- `source = projection` 必须显式声明 `field`，该字段名对应列表行稳定属性；这里不引入 `mapsTo / alias / apiField` 等通用字段映射，也不要求前端为协议字段新增转换层。
 - 列标题始终由 `labelKey` 提供，不从模型字段 label 自动继承。
 - 特殊单元格渲染，如状态标签颜色，允许通过代码 renderer registry 按列 key 或字段语义覆盖。
 - `departmentName` 这类 projection 字段需要显式声明来源，但不进入 model metadata。
@@ -394,7 +420,7 @@ Shell 可以根据字段语义推导默认控件：
       "variant": "danger",
       "confirmMessageKey": "Action_Disable_Confirm",
       "permissions": ["Organization.Person.Disable"],
-      "handlerKey": "organization.person.disable"
+      "handlerKey": "disable"
     }
   ]
 }
@@ -406,7 +432,8 @@ Shell 可以根据字段语义推导默认控件：
 - `variant` 首轮允许 `default / primary / danger`。
 - `labelKey` 和 `confirmMessageKey` 指向当前 view `dicKey` 下的字典 entry，不允许直接硬编码确认文案。
 - `permissions` 只声明按钮显示所需权限，权限判断由 Shell/Auth 运行时执行；字段命名与 nav metadata 保持一致，统一使用数组。
-- `handlerKey` 只绑定模块注册的受控 handler，不描述执行步骤。
+- `handlerKey` 只绑定当前资源注册中的受控 handler，不描述执行步骤。
+- `handlerKey` 是资源局部 key，不是平台受控全局 key；不同资源可以复用 `disable / delete` 这类局部动作 key，Shell 只在当前 `StandardCrudResourceRegistration.actionHandlers` 中查找。
 - 导出能力继续使用 `export` 区块，不进入 `pageActions`。
 
 ### 7.6 detail view
@@ -435,7 +462,7 @@ Shell 可以根据字段语义推导默认控件：
       "standardAction": "disable",
       "variant": "danger",
       "confirmMessageKey": "Action_Disable_Confirm",
-      "handlerKey": "organization.person.disable"
+      "handlerKey": "disable"
     }
   ]
 }
@@ -445,13 +472,13 @@ section 内字段顺序、字段模式和控件类型继续来自 `Person.model.
 
 ### 7.7 协议字段
 
-`EID / ENAME / ECODE` 继续按当前实现处理：
+`EID / ENAME / ECODE` 继续按当前后端/SDK 契约处理：
 
 - `model metadata` 使用协议字段名。
 - `StandardCrudDescriptor` 和 `StandardCrudFieldSet` 使用协议字段名。
 - 后端标准 CRUD 字段字典优先返回协议字段名。
-- DTO 友好命名由平台代码固定处理：`EID -> Id`、`ENAME -> DisplayName`、`ECODE -> Code`。
-- 前端 runtime 可以规范化出 `id / displayName / code`，但这是 SDK/Shell 内核行为，不是业务 metadata 映射。
+- DTO 友好命名由后端平台代码和标准 CRUD 输出契约固定处理。
+- 前端不负责把 `EID / ENAME / ECODE` 映射为其他字段名；页面 metadata、schema resolver 和 Host 只消费后端/SDK 已暴露的稳定字段。
 - `PersonNo` 是人员业务字段，不自动映射为 `ECODE`。
 
 ## 8. 核心流程
@@ -512,6 +539,8 @@ resolver 负责校验：
 - `uiType` 是否受支持。
 - 标准 CRUD view/model 引用的 `labelKey / titleKey / descriptionKey / confirmMessageKey` 是否能在默认语言字典中解析。
 
+dataSource/provider 校验必须作为共享模型校验能力被 list/detail/form schema 合成复用，不能只在列表页 resolver 中执行；否则用户从详情路由或编辑抽屉进入时会绕过 provider 注册失败信号。
+
 ### 9.3 模块资源注册
 
 人员中心 `personStandardCrudResource` 后续只保留代码扩展：
@@ -522,7 +551,9 @@ resolver 负责校验：
 - 特殊 action handler
 - 特殊 column/cell renderer
 - `mapListItem / mapDetail / getRowId`
-- 必要的数据规范化函数
+- 必要的数据规范化函数和模块级提交适配
+
+模块级提交适配只处理 Organization 人员资源独有的提交差异，不承担 `EID / ENAME / ECODE` 等平台协议字段转换；平台协议字段仍由后端/SDK 契约固定处理。
 
 不再长期保留：
 
@@ -550,7 +581,7 @@ resolver 负责校验：
 - `handlerKey` 未注册但 action 不是 Shell 可内建执行的标准动作。
 - `dataSource.type = provider` 但 provider key 未注册。
 - `dataSource.type = model` 无法解析到受控 provider，或尝试隐式调用尚未设计的后端通用 model option endpoint。
-- `dataSource.type = enum` 但 enum key 不存在。
+- `dataSource.type = enum` 但 enum key 不存在时控件候选项为空；这不是装配 hard fail，但应作为验证和 smoke 的失败信号跟进。
 - 标准 CRUD metadata 引用的字典 key 在默认语言中不存在，或 dic entry 未覆盖 `languages.json` 声明的支持语言。
 - 人员中心列表 metadata 重新声明公司筛选或公司列。
 - 标准 CRUD V1 metadata 声明 `treeSelect / cascader / tree view` 等尚未纳入主线的树形能力。

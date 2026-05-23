@@ -4,7 +4,7 @@
 
 **Goal:** 将人员中心标准 CRUD 从前端注册代码声明，收敛为 `view/model/dic/enum metadata` 声明和 Shell/SDK 代码内核执行。
 
-**Architecture:** `modules/Organization/metadata/**` 成为人员中心字段、查询、列表列、动作和文案真源；`frontend/packages/shell` 负责解析、校验、渲染、状态机和错误边界；`frontend/modules/organization` 只保留 provider、renderer、handler、mapper 和必要数据规范化。第一批只回收人员中心，不复制到其他模块。
+**Architecture:** `modules/Organization/metadata/**` 成为人员中心字段、查询、列表列、动作和文案真源；`frontend/packages/shell` 负责解析、校验、渲染、状态机和错误边界；`frontend/modules/organization` 只保留 provider、renderer、handler、list/detail mapper 和真正必要的模块级提交适配。第一批只回收人员中心，不复制到其他模块。
 
 **Tech Stack:** React 18、TypeScript、Vite、Vitest、Ant Design v5、pnpm workspace、.NET 标准 CRUD 后端测试。
 
@@ -32,7 +32,7 @@
   - 校验 model field、query defaults、projection field、action、dataSource、uiType 和 dic key。
 - 新建 `frontend/packages/shell/src/standard-crud/standardCrudMetadataForm.ts`
   - 将 model sections/fields 转换为 `StandardCrudFieldDefinition[]` 和 `StandardCrudFormSection[]`。
-  - 固定平台字段 key 规范化：`EID -> id`、`ENAME -> name`、`ECODE -> code`，其他字段首字母小写。
+  - 字段 key 直接使用后端/metadata 暴露的模型字段名；不在前端新增 `EID / ENAME / ECODE` 或大小写友好名映射。
 - 新建 `frontend/packages/shell/src/standard-crud/standardCrudMetadataQuery.ts`
   - 根据 query schema 生成空筛选、默认筛选、提交查询参数和筛选控件配置。
 - 修改 `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx`
@@ -57,7 +57,8 @@
   - 补齐详情动作确认文案和表单 section 文案的 `zhs/en`。
 - 修改 `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`
   - 删除 `PersonListFiltersPanel`、`personFields`、`personFormSections`、`listActions`、`detailActions`、`buildColumns`、`renderFilters` 的长期声明。
-  - 保留 lookup providers、summary renderers、action handlers、mutation mapper、list/detail mapper、row id。
+  - 保留 lookup providers、summary renderers、action handlers、list/detail mapper、row id，以及真正必要的模块级提交适配。
+  - mutation mapper 只允许处理模块私有提交差异，不允许用于平台协议字段转换。
 - 删除 `frontend/modules/organization/src/runtime/personCenterRuntime.ts`
   - 该文件存在私有 fallback schema，实施后会与平台 metadata resolver 形成双真源。
 - 删除 `frontend/modules/organization/src/runtime/personCenterRuntime.types.ts`
@@ -102,8 +103,18 @@ it('builds list schema with metadata-owned columns actions defaults and localiza
         fields: [
           { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword', operator: 'like' },
           { key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'model', field: 'EmploymentStatus', operator: '=' },
-          { key: 'isEnabled', labelKey: 'Query_IsEnabled', source: 'model', field: 'IsEnabled', operator: '=', hidden: true },
         ],
+        advancedFilter: {
+          enabled: true,
+          sections: [{
+            key: 'organization',
+            fields: [
+              { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId', operator: '=' },
+              { key: 'positionId', labelKey: 'Query_Position', source: 'model', field: 'PositionId', operator: '=' },
+              { key: 'isEnabled', labelKey: 'Query_IsEnabled', source: 'model', field: 'IsEnabled', operator: '=' },
+            ],
+          }],
+        },
         defaults: [{ field: 'isEnabled', value: true }],
         defaultSort: { field: 'PersonNo', direction: 'asc' },
         defaultPageSize: 20,
@@ -127,6 +138,8 @@ it('builds list schema with metadata-owned columns actions defaults and localiza
           builtinFields: ['ENAME'],
           fields: [
             { name: 'PersonNo', storage: { type: 'string' } },
+            { name: 'DepartmentId', storage: { type: 'guid' }, dataSource: { type: 'provider', key: 'organization.departments' } },
+            { name: 'PositionId', storage: { type: 'guid' }, dataSource: { type: 'provider', key: 'organization.positions', dependsOn: ['DepartmentId'] } },
             { name: 'EmploymentStatus', storage: { type: 'string' }, contract: { valueType: 'enum', clrType: 'EmploymentStatus' }, dataSource: { type: 'enum', key: 'EmploymentStatus' } },
             { name: 'IsEnabled', storage: { type: 'bool' } },
           ],
@@ -137,6 +150,8 @@ it('builds list schema with metadata-owned columns actions defaults and localiza
         'PersonListView.Description': '维护组织模块中的人员基础信息。',
         'PersonListView.Query_Keyword': '关键字',
         'PersonListView.Query_EmploymentStatus': '在职状态',
+        'PersonListView.Query_Department': '部门',
+        'PersonListView.Query_Position': '岗位',
         'PersonListView.Query_IsEnabled': '启用状态',
         'PersonListView.Column_PersonNo': '人员编号',
         'PersonListView.Column_DepartmentName': '部门',
@@ -237,6 +252,118 @@ it('fails when query defaults reference an undeclared query field', () => {
     },
   )).toThrow('query default "isEnabled" does not reference a declared query field');
 });
+
+it('fails when a list view references an unknown model', () => {
+  expect(() => buildStandardCrudListSchema(
+    {
+      key: 'organization.person.list',
+      dicKey: 'PersonListView',
+      titleKey: 'Title',
+      mode: 'list',
+      model: 'MissingPerson',
+    },
+    personRegistration,
+    {
+      modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+      defaultLanguageCatalog: {
+        'PersonListView.Title': '人员中心',
+      },
+    },
+  )).toThrow('view "organization.person.list" references unknown model "MissingPerson"');
+});
+
+it('fails when a query field uses an unsupported preset', () => {
+  expect(() => buildStandardCrudListSchema(
+    {
+      key: 'organization.person.list',
+      dicKey: 'PersonListView',
+      titleKey: 'Title',
+      mode: 'list',
+      model: 'Person',
+      query: {
+        fields: [{ key: 'quick', labelKey: 'Query_Quick', source: 'preset', preset: 'quickSearch' }],
+      },
+    },
+    personRegistration,
+    {
+      modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+      defaultLanguageCatalog: {
+        'PersonListView.Title': '人员中心',
+        'PersonListView.Query_Quick': '快速搜索',
+      },
+    },
+  )).toThrow('unsupported query preset "quickSearch"');
+});
+
+it('fails when a metadata action uses an unsupported standard action', () => {
+  expect(() => buildStandardCrudListSchema(
+    {
+      key: 'organization.person.list',
+      dicKey: 'PersonListView',
+      titleKey: 'Title',
+      mode: 'list',
+      model: 'Person',
+      rowActions: [{ key: 'archive', labelKey: 'Action_Archive', standardAction: 'archive' }],
+    },
+    personRegistration,
+    {
+      modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+      defaultLanguageCatalog: {
+        'PersonListView.Title': '人员中心',
+        'PersonListView.Action_Archive': '归档',
+      },
+    },
+  )).toThrow('unsupported standard action "archive"');
+});
+
+it('fails when an action handlerKey is not registered on the current resource', () => {
+  expect(() => buildStandardCrudListSchema(
+    {
+      key: 'organization.person.list',
+      dicKey: 'PersonListView',
+      titleKey: 'Title',
+      mode: 'list',
+      model: 'Person',
+      rowActions: [{ key: 'disable', labelKey: 'Action_Disable', standardAction: 'disable', handlerKey: 'missingDisable' }],
+    },
+    { ...personRegistration, actionHandlers: { disable: async () => undefined } },
+    {
+      modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+      defaultLanguageCatalog: {
+        'PersonListView.Title': '人员中心',
+        'PersonListView.Action_Disable': '停用',
+      },
+    },
+  )).toThrow('action handler "missingDisable" is not registered on resource "organization.person"');
+});
+
+it('fails when metadata declares an unsupported dataSource type', () => {
+  expect(() => buildStandardCrudListSchema(
+    {
+      key: 'organization.person.list',
+      dicKey: 'PersonListView',
+      titleKey: 'Title',
+      mode: 'list',
+      model: 'Person',
+      query: {
+        fields: [{ key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId' }],
+      },
+    },
+    personRegistration,
+    {
+      modelDocuments: [{
+        type: 'model',
+        Person: {
+          fields: [{ name: 'DepartmentId', dataSource: { type: 'tree' } }],
+        },
+      }],
+      defaultLanguageCatalog: {
+        'PersonListView.Title': '人员中心',
+        'PersonListView.Query_Department': '部门',
+      },
+    },
+  )).toThrow('unsupported dataSource type "tree"');
+});
 ```
 
 - [ ] **Step 3: 新建 metadata form 测试**
@@ -273,25 +400,25 @@ describe('standard CRUD metadata form schema', () => {
     });
 
     expect(schema.sections).toEqual([
-      { key: 'basic', titleKey: 'Section_Basic', fields: ['personNo', 'name'] },
-      { key: 'organization', titleKey: 'Section_Organization', fields: ['departmentId', 'positionId', 'employmentStatus', 'isEnabled'] },
+      { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
+      { key: 'organization', titleKey: 'Section_Organization', fields: ['DepartmentId', 'PositionId', 'EmploymentStatus', 'IsEnabled'] },
     ]);
     expect(schema.fields.map((field) => [field.key, field.modelField, field.kind])).toEqual([
-      ['personNo', 'PersonNo', 'text'],
-      ['name', 'ENAME', 'text'],
-      ['departmentId', 'DepartmentId', 'lookup'],
-      ['positionId', 'PositionId', 'lookup'],
-      ['employmentStatus', 'EmploymentStatus', 'enum'],
-      ['isEnabled', 'IsEnabled', 'boolean'],
+      ['PersonNo', 'PersonNo', 'text'],
+      ['ENAME', 'ENAME', 'text'],
+      ['DepartmentId', 'DepartmentId', 'lookup'],
+      ['PositionId', 'PositionId', 'lookup'],
+      ['EmploymentStatus', 'EmploymentStatus', 'enum'],
+      ['IsEnabled', 'IsEnabled', 'boolean'],
     ]);
-    expect(schema.fields.find((field) => field.key === 'personNo')).toMatchObject({ required: true, readOnly: false });
-    expect(schema.fields.find((field) => field.key === 'employmentStatus')).toMatchObject({ defaultValue: 'FullTime' });
-    expect(schema.fields.find((field) => field.key === 'positionId')?.lookup?.dependsOn).toEqual(['departmentId']);
+    expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ required: true, readOnly: false });
+    expect(schema.fields.find((field) => field.key === 'EmploymentStatus')).toMatchObject({ defaultValue: 'FullTime' });
+    expect(schema.fields.find((field) => field.key === 'PositionId')?.lookup?.dependsOn).toEqual(['DepartmentId']);
   });
 
   it('applies edit mode readonly rules from model metadata', () => {
     const schema = buildStandardCrudFormSchemaFromModel(personModel, { mode: 'edit', enumOptions: {} });
-    expect(schema.fields.find((field) => field.key === 'personNo')).toMatchObject({ readOnly: true });
+    expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ readOnly: true });
   });
 
   it('rejects unsupported uiType before rendering', () => {
@@ -319,8 +446,18 @@ const querySchema = {
   fields: [
     { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset' as const, preset: 'keyword', operator: 'like' },
     { key: 'employmentStatus', labelKey: 'Query_EmploymentStatus', source: 'model' as const, field: 'EmploymentStatus', operator: '=' },
-    { key: 'isEnabled', labelKey: 'Query_IsEnabled', source: 'model' as const, field: 'IsEnabled', operator: '=', hidden: true },
   ],
+  advancedFilter: {
+    enabled: true,
+    sections: [{
+      key: 'organization',
+      fields: [
+        { key: 'departmentId', labelKey: 'Query_Department', source: 'model' as const, field: 'DepartmentId', operator: '=' },
+        { key: 'positionId', labelKey: 'Query_Position', source: 'model' as const, field: 'PositionId', operator: '=' },
+        { key: 'isEnabled', labelKey: 'Query_IsEnabled', source: 'model' as const, field: 'IsEnabled', operator: '=' },
+      ],
+    }],
+  },
   defaults: [{ field: 'isEnabled', value: true }],
   defaultPageSize: 20,
 };
@@ -330,11 +467,15 @@ describe('standard CRUD metadata query helpers', () => {
     expect(buildStandardCrudEmptyFilters(querySchema)).toEqual({
       keyword: '',
       employmentStatus: '',
+      departmentId: '',
+      positionId: '',
       isEnabled: '',
     });
     expect(buildStandardCrudDefaultFilters(querySchema)).toEqual({
       keyword: '',
       employmentStatus: '',
+      departmentId: '',
+      positionId: '',
       isEnabled: true,
     });
   });
@@ -343,10 +484,13 @@ describe('standard CRUD metadata query helpers', () => {
     expect(buildStandardCrudListQuery(querySchema, {
       keyword: '张',
       employmentStatus: '',
+      departmentId: 'Dept_1',
+      positionId: '',
       isEnabled: true,
       companyId: 'must-not-leak',
     })).toEqual({
       keyword: '张',
+      departmentId: 'Dept_1',
       isEnabled: true,
     });
   });
@@ -639,6 +783,7 @@ export interface StandardCrudMetadataFormSchema {
 }
 
 const supportedUiTypes = new Set(['text', 'textarea', 'number', 'switch', 'checkbox', 'select', 'lookup', 'date', 'dateRange', 'readonly']);
+const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
 
 function readRecord(value: unknown): MetadataRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as MetadataRecord : {};
@@ -649,10 +794,7 @@ function readArray<T>(value: unknown): T[] {
 }
 
 export function normalizeStandardCrudFieldKey(modelField: string): string {
-  if (modelField === 'EID') return 'id';
-  if (modelField === 'ENAME') return 'name';
-  if (modelField === 'ECODE') return 'code';
-  return modelField.length > 0 ? `${modelField[0].toLowerCase()}${modelField.slice(1)}` : modelField;
+  return modelField;
 }
 
 function normalizeDependencyKey(modelField: string): string {
@@ -672,6 +814,9 @@ function inferKind(field: MetadataRecord): StandardCrudFieldDefinition['kind'] {
   const contract = readRecord(field.contract);
   const dataSource = readRecord(field.dataSource);
   const storage = readRecord(field.storage);
+  if (typeof dataSource.type === 'string' && !supportedDataSourceTypes.has(dataSource.type)) {
+    throw new Error(`unsupported dataSource type "${dataSource.type}"`);
+  }
   if (contract.valueType === 'enum' || dataSource.type === 'enum') return 'enum';
   if (dataSource.type === 'model' || dataSource.type === 'provider') return 'lookup';
   if (storage.type === 'bool') return 'boolean';
@@ -760,6 +905,14 @@ export interface StandardCrudQueryFieldSchema {
   hidden?: boolean;
 }
 
+export interface StandardCrudAdvancedFilterSchema {
+  enabled?: boolean;
+  sections?: Array<{
+    key: string;
+    fields?: StandardCrudQueryFieldSchema[];
+  }>;
+}
+
 export interface StandardCrudQueryDefaultSchema {
   field: string;
   value: unknown;
@@ -767,16 +920,31 @@ export interface StandardCrudQueryDefaultSchema {
 
 export interface StandardCrudQuerySchema {
   fields: StandardCrudQueryFieldSchema[];
+  advancedFilter?: StandardCrudAdvancedFilterSchema;
   defaults?: StandardCrudQueryDefaultSchema[];
   defaultPageSize?: number;
 }
 
-export function buildStandardCrudEmptyFilters(query: StandardCrudQuerySchema): Record<string, unknown> {
-  return Object.fromEntries(query.fields.map((field) => [field.key, '']));
+export function collectStandardCrudQueryFields(
+  query: StandardCrudQuerySchema,
+  advancedFilter: StandardCrudAdvancedFilterSchema | undefined = query.advancedFilter,
+): StandardCrudQueryFieldSchema[] {
+  const advancedFields = (advancedFilter?.sections ?? []).flatMap((section) => section.fields ?? []);
+  return [...query.fields, ...advancedFields];
 }
 
-export function buildStandardCrudDefaultFilters(query: StandardCrudQuerySchema): Record<string, unknown> {
-  const filters = buildStandardCrudEmptyFilters(query);
+export function buildStandardCrudEmptyFilters(
+  query: StandardCrudQuerySchema,
+  advancedFilter?: StandardCrudAdvancedFilterSchema,
+): Record<string, unknown> {
+  return Object.fromEntries(collectStandardCrudQueryFields(query, advancedFilter).map((field) => [field.key, '']));
+}
+
+export function buildStandardCrudDefaultFilters(
+  query: StandardCrudQuerySchema,
+  advancedFilter?: StandardCrudAdvancedFilterSchema,
+): Record<string, unknown> {
+  const filters = buildStandardCrudEmptyFilters(query, advancedFilter);
   for (const item of query.defaults ?? []) {
     filters[item.field] = item.value;
   }
@@ -786,8 +954,9 @@ export function buildStandardCrudDefaultFilters(query: StandardCrudQuerySchema):
 export function buildStandardCrudListQuery(
   query: StandardCrudQuerySchema,
   filters: Record<string, unknown>,
+  advancedFilter?: StandardCrudAdvancedFilterSchema,
 ): Record<string, string | number | boolean | null | undefined> {
-  const allowedKeys = new Set(query.fields.map((field) => field.key));
+  const allowedKeys = new Set(collectStandardCrudQueryFields(query, advancedFilter).map((field) => field.key));
   const result: Record<string, string | number | boolean | null | undefined> = {};
 
   for (const [key, value] of Object.entries(filters)) {
@@ -869,6 +1038,14 @@ function findModelDocument(modelDocuments: Array<Record<string, unknown>>, model
   return readRecord(model?.[modelKey]);
 }
 
+function requireModelDocument(viewKey: string, modelDocuments: Array<Record<string, unknown>>, modelKey: string): Record<string, unknown> {
+  const model = findModelDocument(modelDocuments, modelKey);
+  if (modelKey.length > 0 && Object.keys(model).length === 0) {
+    throw new Error(`view "${viewKey}" references unknown model "${modelKey}"`);
+  }
+  return model;
+}
+
 function collectModelFields(model: Record<string, unknown>): Set<string> {
   const names = new Set<string>(['EID', 'ENAME', 'ECODE']);
   for (const field of readRecordArray(model.fields)) {
@@ -876,6 +1053,71 @@ function collectModelFields(model: Record<string, unknown>): Set<string> {
     if (name.length > 0) names.add(name);
   }
   return names;
+}
+
+const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'submit']);
+const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
+const supportedQueryPresets = new Set(['keyword']);
+
+function collectProviderKeys(registration: StandardCrudResourceRegistration): Set<string> {
+  return new Set((registration.lookupProviders ?? []).map((provider) => provider.key));
+}
+
+export function assertStandardCrudModelDataSources(
+  model: Record<string, unknown>,
+  registration: StandardCrudResourceRegistration,
+): void {
+  const providerKeys = collectProviderKeys(registration);
+  for (const field of readRecordArray(model.fields)) {
+    const fieldName = readString(field.name, '');
+    if (fieldName.length === 0) continue;
+    assertDataSource(fieldName, field, providerKeys);
+  }
+}
+
+function assertDataSource(fieldName: string, field: Record<string, unknown>, providerKeys: Set<string>): void {
+  const dataSource = readRecord(field.dataSource);
+  if (dataSource.type === undefined) return;
+  const type = readString(dataSource.type, '');
+  if (!supportedDataSourceTypes.has(type)) {
+    throw new Error(`unsupported dataSource type "${type}"`);
+  }
+  if (type === 'provider') {
+    const providerKey = readString(dataSource.key, '');
+    if (!providerKeys.has(providerKey)) {
+      throw new Error(`dataSource provider "${providerKey}" for field "${fieldName}" is not registered`);
+    }
+  }
+  if (type === 'model') {
+    const providerKey = `model.${readString(dataSource.model, readString(dataSource.key, ''))}`;
+    if (!providerKeys.has(providerKey)) {
+      throw new Error(`model dataSource provider "${providerKey}" for field "${fieldName}" is not registered`);
+    }
+  }
+}
+
+function assertAction(action: StandardCrudRuntimeActionSchema, registration: StandardCrudResourceRegistration): void {
+  if (action.standardAction && !supportedStandardActions.has(action.standardAction)) {
+    throw new Error(`unsupported standard action "${action.standardAction}"`);
+  }
+  if (action.handlerKey && !registration.actionHandlers?.[action.handlerKey]) {
+    throw new Error(`action handler "${action.handlerKey}" is not registered on resource "${registration.resourceKey}"`);
+  }
+}
+
+function assertQuery(query: StandardCrudRuntimeQuerySchema, advancedFilter?: StandardCrudAdvancedFilterSchema): void {
+  const fields = collectStandardCrudQueryFields(query, advancedFilter);
+  const queryKeys = new Set(fields.map((field) => field.key));
+  for (const field of fields) {
+    if (field.source === 'preset' && field.preset && !supportedQueryPresets.has(field.preset)) {
+      throw new Error(`unsupported query preset "${field.preset}"`);
+    }
+  }
+  for (const item of query.defaults) {
+    if (!queryKeys.has(item.field)) {
+      throw new Error(`query default "${item.field}" does not reference a declared query field`);
+    }
+  }
 }
 ```
 
@@ -886,7 +1128,8 @@ const context = arguments[2] as StandardCrudSchemaResolverContext | undefined;
 const dicKey = readString(view.dicKey, registration.resourceKey);
 assertDictionaryKey(dicKey, readString(view.titleKey, 'Title'), context?.defaultLanguageCatalog);
 const modelKey = readString(view.model, '');
-const model = modelKey.length > 0 ? findModelDocument(context?.modelDocuments ?? [], modelKey) : {};
+const viewKey = readString(view.key, registration.listViewKey);
+const model = modelKey.length > 0 ? requireModelDocument(viewKey, context?.modelDocuments ?? [], modelKey) : {};
 const modelFields = collectModelFields(model);
 ```
 
@@ -902,7 +1145,14 @@ if (column.source === 'projection' && column.field.length === 0) {
 if (column.source === 'model' && !modelFields.has(column.field)) {
   throw new Error(`column "${column.key}" references unknown model field "${column.field}"`);
 }
+assertStandardCrudModelDataSources(model, registration);
+for (const action of [...schema.pageActions, ...schema.rowActions]) {
+  assertAction(action, registration);
+}
+assertQuery(schema.query, schema.advancedFilter);
 ```
+
+`buildStandardCrudDetailSchema` 和 `buildStandardCrudFormSchemaFromModel` 所在调用链必须复用 `assertStandardCrudModelDataSources`；不要只在 list schema 中校验 provider/model dataSource，否则用户直达详情或编辑抽屉时会绕过 provider 注册失败信号。
 
 - [ ] **Step 5: 跑 Task 1 测试并修正类型错误**
 
@@ -941,7 +1191,7 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 
 - [ ] **Step 1: 更新 `PersonList.view.json`**
 
-把 `query.fields` 调整为不含 `companyId` 和 `departmentId`，并增加默认查询：
+把 `query.fields` 调整为不含 `companyId`，并增加默认查询；部门、岗位、启用状态进入高级查询，不放在轻筛选条：
 
 ```json
 "query": {
@@ -959,14 +1209,6 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
       "source": "model",
       "field": "EmploymentStatus",
       "operator": "="
-    },
-    {
-      "key": "isEnabled",
-      "labelKey": "Query_IsEnabled",
-      "source": "model",
-      "field": "IsEnabled",
-      "operator": "=",
-      "hidden": true
     }
   ],
   "defaults": [
@@ -983,13 +1225,41 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 }
 ```
 
-把 `advancedFilter.enabled` 改为 `false` 且 `sections` 为空数组：
+把 `advancedFilter.enabled` 改为 `true`，补齐部门、岗位和启用状态高级查询字段；部门和岗位仍使用普通 lookup，不引入树形控件：
 
 ```json
 "advancedFilter": {
-  "enabled": false,
+  "enabled": true,
   "titleKey": "AdvancedFilter_Title",
-  "sections": []
+  "sections": [
+    {
+      "key": "organization",
+      "titleKey": "AdvancedFilter_Organization",
+      "fields": [
+        {
+          "key": "departmentId",
+          "labelKey": "Query_Department",
+          "source": "model",
+          "field": "DepartmentId",
+          "operator": "="
+        },
+        {
+          "key": "positionId",
+          "labelKey": "Query_Position",
+          "source": "model",
+          "field": "PositionId",
+          "operator": "="
+        },
+        {
+          "key": "isEnabled",
+          "labelKey": "Query_IsEnabled",
+          "source": "model",
+          "field": "IsEnabled",
+          "operator": "="
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -1196,6 +1466,18 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
   "zhs": "启用状态",
   "en": "Enabled"
 },
+"Query_Department": {
+  "zhs": "部门",
+  "en": "Department"
+},
+"Query_Position": {
+  "zhs": "岗位",
+  "en": "Position"
+},
+"AdvancedFilter_Organization": {
+  "zhs": "组织信息",
+  "en": "Organization"
+},
 "Action_Delete": {
   "zhs": "删除",
   "en": "Delete"
@@ -1250,6 +1532,9 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 ```ts
 expect(manifest.catalogs.zhs['PersonListView.Action_Delete_Confirm']).toBe('确认删除该人员吗？');
 expect(manifest.catalogs.en['PersonListView.Action_Delete_Confirm']).toBe('Delete this person?');
+expect(manifest.catalogs.zhs['PersonListView.Query_Department']).toBe('部门');
+expect(manifest.catalogs.zhs['PersonListView.Query_Position']).toBe('岗位');
+expect(manifest.catalogs.zhs['PersonListView.AdvancedFilter_Organization']).toBe('组织信息');
 ```
 
 - [ ] **Step 6: 验证 metadata 与字典**
@@ -1353,7 +1638,7 @@ const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
 把初始状态从 `registration.createEmptyFilters()` 改为：
 
 ```ts
-const initialFilters = useMemo(() => buildStandardCrudDefaultFilters(schema.query), [schema.query]);
+const initialFilters = useMemo(() => buildStandardCrudDefaultFilters(schema.query, schema.advancedFilter), [schema.query, schema.advancedFilter]);
 const [filters, setFilters] = useState<TFilter>(() => initialFilters as TFilter);
 const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialFilters as TFilter);
 ```
@@ -1368,7 +1653,7 @@ setAppliedFilters(initialFilters as TFilter);
 在 `tableRequest.buildQuery` 中优先使用 metadata：
 
 ```ts
-buildQuery: () => buildStandardCrudListQuery(schema.query, appliedFilters),
+buildQuery: () => buildStandardCrudListQuery(schema.query, appliedFilters, schema.advancedFilter),
 ```
 
 - [ ] **Step 4: 用 metadata 渲染轻筛选**
@@ -1438,6 +1723,8 @@ const filterBar = (
   />
 );
 ```
+
+同时补一个高级筛选面板或抽屉，字段来自 `schema.advancedFilter.sections[].fields`，复用 `renderMetadataFilterField` 和相同 filters 状态；部门、岗位、启用状态必须能从高级筛选写入 `filters.departmentId / filters.positionId / filters.isEnabled`，并被 `buildStandardCrudListQuery` 提交。若现有 Host 暂无高级筛选容器，本任务先使用受控弹层实现，不把高级筛选字段塞回轻筛选条。
 
 - [ ] **Step 5: 用 metadata 渲染 columns/actions**
 
@@ -1645,7 +1932,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
 };
 ```
 
-资源注册删除 `buildMutationValues`，由 Host 使用 metadata fields 调用 `normalizeStandardCrudSubmitValues(fields, values)`。人员中心当前没有必须保留的专属 mutation mapper。
+资源注册删除当前不必要的 `buildMutationValues`，由 Host 使用 metadata fields 调用 `normalizeStandardCrudSubmitValues(fields, values)`。后续只有在 Organization 人员资源存在真正模块级提交差异时，才允许恢复专属提交适配；该适配不得用于 `EID / ENAME / ECODE` 或大小写友好名等平台协议字段转换。
 
 - [ ] **Step 3: 删除私有 runtime fallback**
 

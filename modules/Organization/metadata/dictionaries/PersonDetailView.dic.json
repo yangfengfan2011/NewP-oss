@@ -33,6 +33,14 @@
     "Action_Disable": {
       "zhs": "停用",
       "en": "Disable"
+    },
+    "Action_Disable_Confirm": {
+      "zhs": "确认停用当前人员吗？",
+      "en": "Disable this person?"
+    },
+    "Detail_Info": {
+      "zhs": "详情信息",
+      "en": "Details"
     }
   }
 }

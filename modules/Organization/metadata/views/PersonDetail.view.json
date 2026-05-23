@@ -19,11 +19,16 @@
     "pageActions": [
       {
         "key": "edit",
-        "labelKey": "Action_Edit"
+        "labelKey": "Action_Edit",
+        "standardAction": "edit"
       },
       {
         "key": "disable",
-        "labelKey": "Action_Disable"
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "variant": "danger",
+        "confirmMessageKey": "Action_Disable_Confirm",
+        "handlerKey": "disable"
       }
     ]
   }

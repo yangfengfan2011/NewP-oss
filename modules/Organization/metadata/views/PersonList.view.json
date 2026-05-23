@@ -20,27 +20,24 @@
           "operator": "like"
         },
         {
-          "key": "companyId",
-          "labelKey": "Query_Company",
-          "source": "model",
-          "field": "CompanyId",
-          "operator": "="
-        },
-        {
-          "key": "departmentId",
-          "labelKey": "Query_Department",
-          "source": "model",
-          "field": "DepartmentId",
-          "operator": "="
-        },
-        {
           "key": "employmentStatus",
           "labelKey": "Query_EmploymentStatus",
           "source": "model",
           "field": "EmploymentStatus",
           "operator": "="
         }
-      ]
+      ],
+      "defaults": [
+        {
+          "field": "isEnabled",
+          "value": true
+        }
+      ],
+      "defaultSort": {
+        "field": "PersonNo",
+        "direction": "asc"
+      },
+      "defaultPageSize": 20
     },
     "advancedFilter": {
       "enabled": true,
@@ -51,30 +48,24 @@
           "titleKey": "AdvancedFilter_Organization",
           "fields": [
             {
-              "key": "companyId",
-              "labelKey": "Query_Company",
-              "source": "model",
-              "field": "CompanyId",
-              "operator": "="
-            },
-            {
               "key": "departmentId",
               "labelKey": "Query_Department",
               "source": "model",
               "field": "DepartmentId",
               "operator": "="
-            }
-          ]
-        },
-        {
-          "key": "status",
-          "titleKey": "AdvancedFilter_Status",
-          "fields": [
+            },
             {
-              "key": "employmentStatus",
-              "labelKey": "Query_EmploymentStatus",
+              "key": "positionId",
+              "labelKey": "Query_Position",
               "source": "model",
-              "field": "EmploymentStatus",
+              "field": "PositionId",
+              "operator": "="
+            },
+            {
+              "key": "isEnabled",
+              "labelKey": "Query_IsEnabled",
+              "source": "model",
+              "field": "IsEnabled",
               "operator": "="
             }
           ]
@@ -84,51 +75,79 @@
     "columns": [
       {
         "key": "personNo",
-        "labelKey": "Column_PersonNo"
+        "labelKey": "Column_PersonNo",
+        "source": "model",
+        "field": "PersonNo",
+        "width": 140,
+        "sortable": true
       },
       {
         "key": "name",
-        "labelKey": "Column_Name"
-      },
-      {
-        "key": "companyName",
-        "labelKey": "Column_CompanyName"
+        "labelKey": "Column_Name",
+        "source": "model",
+        "field": "ENAME"
       },
       {
         "key": "departmentName",
-        "labelKey": "Column_DepartmentName"
+        "labelKey": "Column_DepartmentName",
+        "source": "projection",
+        "field": "departmentName"
       },
       {
         "key": "employmentStatus",
-        "labelKey": "Column_EmploymentStatus"
+        "labelKey": "Column_EmploymentStatus",
+        "source": "model",
+        "field": "EmploymentStatus"
       },
       {
         "key": "isEnabled",
-        "labelKey": "Column_IsEnabled"
+        "labelKey": "Column_IsEnabled",
+        "source": "model",
+        "field": "IsEnabled"
       }
     ],
     "pageActions": [
       {
         "key": "create",
-        "labelKey": "Action_Create"
+        "labelKey": "Action_Create",
+        "standardAction": "create",
+        "variant": "primary",
+        "permissions": [
+          "Organization.Person.Create"
+        ]
       },
       {
         "key": "refresh",
-        "labelKey": "Action_Refresh"
+        "labelKey": "Action_Refresh",
+        "standardAction": "refresh"
       }
     ],
     "rowActions": [
       {
         "key": "view",
-        "labelKey": "Action_View"
+        "labelKey": "Action_View",
+        "standardAction": "view"
       },
       {
         "key": "edit",
-        "labelKey": "Action_Edit"
+        "labelKey": "Action_Edit",
+        "standardAction": "edit"
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete",
+        "variant": "danger",
+        "confirmMessageKey": "Action_Delete_Confirm",
+        "handlerKey": "delete"
       },
       {
         "key": "disable",
-        "labelKey": "Action_Disable"
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "variant": "danger",
+        "confirmMessageKey": "Action_Disable_Confirm",
+        "handlerKey": "disable"
       }
     ],
     "export": {

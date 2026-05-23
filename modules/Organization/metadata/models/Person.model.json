@@ -32,6 +32,42 @@
         "name": "PersonNo",
         "storage": {
           "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
         }
       },
       {
@@ -39,6 +75,21 @@
         "storage": {
           "type": "guid",
           "nullable": true
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
         },
         "dataSource": {
           "type": "model",
@@ -52,10 +103,27 @@
           "type": "guid",
           "nullable": true
         },
+        "uiType": "lookup",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
         "dataSource": {
-          "type": "model",
-          "key": "Department",
-          "model": "Department"
+          "type": "provider",
+          "key": "organization.departments",
+          "dependsOn": [
+            "CompanyId"
+          ]
         }
       },
       {
@@ -64,10 +132,27 @@
           "type": "guid",
           "nullable": true
         },
+        "uiType": "lookup",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
         "dataSource": {
-          "type": "model",
-          "key": "Position",
-          "model": "Position"
+          "type": "provider",
+          "key": "organization.positions",
+          "dependsOn": [
+            "DepartmentId"
+          ]
         }
       },
       {
@@ -80,6 +165,22 @@
           "valueType": "enum",
           "clrType": "EmploymentStatus"
         },
+        "uiType": "select",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "defaultValue": "FullTime"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
         "dataSource": {
           "type": "enum",
           "key": "EmploymentStatus"
@@ -89,6 +190,22 @@
         "name": "IsEnabled",
         "storage": {
           "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "defaultValue": true
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
         }
       }
     ]

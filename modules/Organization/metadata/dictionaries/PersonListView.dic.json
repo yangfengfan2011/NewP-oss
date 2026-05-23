@@ -22,17 +22,25 @@
       "zhs": "部门",
       "en": "Department"
     },
+    "Query_Position": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
     "Query_EmploymentStatus": {
       "zhs": "在职状态",
       "en": "Employment Status"
+    },
+    "Query_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
     },
     "AdvancedFilter_Title": {
       "zhs": "高级筛选",
       "en": "Advanced Filter"
     },
     "AdvancedFilter_Organization": {
-      "zhs": "组织范围",
-      "en": "Organization Scope"
+      "zhs": "组织信息",
+      "en": "Organization"
     },
     "AdvancedFilter_Status": {
       "zhs": "状态条件",
@@ -78,9 +86,29 @@
       "zhs": "编辑",
       "en": "Edit"
     },
+    "Action_Delete": {
+      "zhs": "删除",
+      "en": "Delete"
+    },
+    "Action_Delete_Confirm": {
+      "zhs": "确认删除该人员吗？",
+      "en": "Delete this person?"
+    },
     "Action_Disable": {
       "zhs": "停用",
       "en": "Disable"
+    },
+    "Action_Disable_Confirm": {
+      "zhs": "确认停用该人员？",
+      "en": "Disable this person?"
+    },
+    "Action_Processing": {
+      "zhs": "处理中...",
+      "en": "Processing..."
+    },
+    "Action_More": {
+      "zhs": "更多",
+      "en": "More"
     },
     "Action_ApplyAdvanced": {
       "zhs": "应用筛选",
@@ -101,6 +129,18 @@
     "Toolbar_BatchActions": {
       "zhs": "批量操作",
       "en": "Batch Actions"
+    },
+    "Drawer_View": {
+      "zhs": "查看人员",
+      "en": "View Person"
+    },
+    "Drawer_Edit": {
+      "zhs": "编辑人员",
+      "en": "Edit Person"
+    },
+    "Drawer_Create": {
+      "zhs": "新建人员",
+      "en": "Create Person"
     },
     "Export_Current": {
       "zhs": "导出当前",

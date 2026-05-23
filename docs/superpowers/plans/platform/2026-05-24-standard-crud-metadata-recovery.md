@@ -1189,7 +1189,7 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 - Verify: `./scripts/validate-dic-localization.ps1`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- vite-config`
 
-- [ ] **Step 1: 更新 `PersonList.view.json`**
+- [x] **Step 1: 更新 `PersonList.view.json`**
 
 把 `query.fields` 调整为不含 `companyId`，并增加默认查询；部门、岗位、启用状态进入高级查询，不放在轻筛选条：
 
@@ -1349,7 +1349,7 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 ]
 ```
 
-- [ ] **Step 2: 更新 `PersonDetail.view.json`**
+- [x] **Step 2: 更新 `PersonDetail.view.json`**
 
 把 `pageActions` 改为：
 
@@ -1371,7 +1371,7 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 ]
 ```
 
-- [ ] **Step 3: 更新 `Person.model.json` 字段 UI/schema**
+- [x] **Step 3: 更新 `Person.model.json` 字段 UI/schema**
 
 在 `fields` 中补齐下面形态；保留现有 `storage/contract/dataSource`，只补缺失 UI 和 form 语义：
 
@@ -1457,7 +1457,7 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 }
 ```
 
-- [ ] **Step 4: 更新字典**
+- [x] **Step 4: 更新字典**
 
 在 `PersonListView.dic.json` 增加：
 
@@ -1525,7 +1525,7 @@ git commit -m "功能：实现标准CRUD元数据schema合成"
 }
 ```
 
-- [ ] **Step 5: 更新 vite localization manifest 测试**
+- [x] **Step 5: 更新 vite localization manifest 测试**
 
 在 `frontend/packages/shell/src/__tests__/vite-config.test.ts` 的 localization 测试中补断言：
 
@@ -1537,7 +1537,7 @@ expect(manifest.catalogs.zhs['PersonListView.Query_Position']).toBe('岗位');
 expect(manifest.catalogs.zhs['PersonListView.AdvancedFilter_Organization']).toBe('组织信息');
 ```
 
-- [ ] **Step 6: 验证 metadata 与字典**
+- [x] **Step 6: 验证 metadata 与字典**
 
 Run:
 

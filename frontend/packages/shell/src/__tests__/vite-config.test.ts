@@ -44,5 +44,10 @@ describe('vite config', () => {
     expect(manifest.catalogs.zhs['Navigation.OrganizationTree']).toBe('组织树');
     expect(manifest.catalogs.zhs['Navigation.PositionManagement']).toBe('岗位管理');
     expect(manifest.catalogs.zhs['PersonListView.Title']).toBe('人员中心');
+    expect(manifest.catalogs.zhs['PersonListView.Action_Delete_Confirm']).toBe('确认删除该人员吗？');
+    expect(manifest.catalogs.en['PersonListView.Action_Delete_Confirm']).toBe('Delete this person?');
+    expect(manifest.catalogs.zhs['PersonListView.Query_Department']).toBe('部门');
+    expect(manifest.catalogs.zhs['PersonListView.Query_Position']).toBe('岗位');
+    expect(manifest.catalogs.zhs['PersonListView.AdvancedFilter_Organization']).toBe('组织信息');
   });
 });

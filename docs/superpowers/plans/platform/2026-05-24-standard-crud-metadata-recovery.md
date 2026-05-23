@@ -85,7 +85,7 @@
 - Create: `frontend/packages/shell/src/__tests__/standard-crud-metadata-query.test.ts`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry standard-crud-metadata-form standard-crud-metadata-query`
 
-- [ ] **Step 1: 扩展 schema resolver 测试，先写失败用例**
+- [x] **Step 1: 扩展 schema resolver 测试，先写失败用例**
 
 在 `frontend/packages/shell/src/__tests__/standard-crud-schema-and-registry.test.ts` 追加：
 
@@ -183,7 +183,7 @@ it('builds list schema with metadata-owned columns actions defaults and localiza
 });
 ```
 
-- [ ] **Step 2: 为校验失败补测试**
+- [x] **Step 2: 为校验失败补测试**
 
 继续追加：
 
@@ -366,7 +366,7 @@ it('fails when metadata declares an unsupported dataSource type', () => {
 });
 ```
 
-- [ ] **Step 3: 新建 metadata form 测试**
+- [x] **Step 3: 新建 metadata form 测试**
 
 创建 `frontend/packages/shell/src/__tests__/standard-crud-metadata-form.test.ts`：
 
@@ -430,7 +430,7 @@ describe('standard CRUD metadata form schema', () => {
 });
 ```
 
-- [ ] **Step 4: 新建 metadata query 测试**
+- [x] **Step 4: 新建 metadata query 测试**
 
 创建 `frontend/packages/shell/src/__tests__/standard-crud-metadata-query.test.ts`：
 
@@ -497,7 +497,7 @@ describe('standard CRUD metadata query helpers', () => {
 });
 ```
 
-- [ ] **Step 5: 运行测试确认失败**
+- [x] **Step 5: 运行测试确认失败**
 
 Run:
 
@@ -513,7 +513,7 @@ FAIL ... Cannot find module '../standard-crud/standardCrudMetadataForm'
 FAIL ... Cannot find module '../standard-crud/standardCrudMetadataQuery'
 ```
 
-- [ ] **Step 6: 提交失败测试**
+- [x] **Step 6: 提交失败测试**
 
 Run:
 

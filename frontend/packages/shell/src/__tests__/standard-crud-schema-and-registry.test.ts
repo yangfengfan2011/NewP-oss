@@ -17,6 +17,13 @@ const personRegistration = {
   mapListItem: (value: unknown) => value,
   getRowId: () => 'row-1',
   buildColumns: () => [],
+  lookupProviders: [
+    { key: 'organization.departments', load: async () => [] },
+    { key: 'organization.positions', load: async () => [] },
+  ],
+  actionHandlers: {
+    disable: async () => undefined,
+  },
 };
 
 describe('standard CRUD schema resolver and registry', () => {
@@ -98,6 +105,303 @@ describe('standard CRUD schema resolver and registry', () => {
     });
     expect(schema.columns).toEqual([{ key: 'name', labelKey: 'Column_Name' }]);
     expect(schema.exportModes).toEqual(['current']);
+  });
+
+  it('builds list schema with metadata-owned columns actions defaults and localization checks', () => {
+    const schema = buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        query: {
+          fields: [
+            { key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword', operator: 'like' },
+            {
+              key: 'employmentStatus',
+              labelKey: 'Query_EmploymentStatus',
+              source: 'model',
+              field: 'EmploymentStatus',
+              operator: '=',
+            },
+          ],
+          defaults: [{ field: 'isEnabled', value: true }],
+          defaultSort: { field: 'PersonNo', direction: 'asc' },
+          defaultPageSize: 20,
+        },
+        advancedFilter: {
+          enabled: true,
+          sections: [{
+            key: 'organization',
+            fields: [
+              { key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId', operator: '=' },
+              { key: 'positionId', labelKey: 'Query_Position', source: 'model', field: 'PositionId', operator: '=' },
+              { key: 'isEnabled', labelKey: 'Query_IsEnabled', source: 'model', field: 'IsEnabled', operator: '=' },
+            ],
+          }],
+        },
+        columns: [
+          { key: 'personNo', labelKey: 'Column_PersonNo', source: 'model', field: 'PersonNo', width: 140, sortable: true },
+          { key: 'departmentName', labelKey: 'Column_DepartmentName', source: 'projection', field: 'departmentName' },
+        ],
+        pageActions: [
+          {
+            key: 'create',
+            labelKey: 'Action_Create',
+            standardAction: 'create',
+            variant: 'primary',
+            permissions: ['Organization.Person.Create'],
+          },
+        ],
+        rowActions: [
+          {
+            key: 'disable',
+            labelKey: 'Action_Disable',
+            standardAction: 'disable',
+            variant: 'danger',
+            confirmMessageKey: 'Action_Disable_Confirm',
+            handlerKey: 'disable',
+          },
+        ],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            builtinFields: ['ENAME'],
+            fields: [
+              { name: 'PersonNo', storage: { type: 'string' } },
+              { name: 'DepartmentId', storage: { type: 'guid' }, dataSource: { type: 'provider', key: 'organization.departments' } },
+              {
+                name: 'PositionId',
+                storage: { type: 'guid' },
+                dataSource: { type: 'provider', key: 'organization.positions', dependsOn: ['DepartmentId'] },
+              },
+              {
+                name: 'EmploymentStatus',
+                storage: { type: 'string' },
+                contract: { valueType: 'enum', clrType: 'EmploymentStatus' },
+                dataSource: { type: 'enum', key: 'EmploymentStatus' },
+              },
+              { name: 'IsEnabled', storage: { type: 'bool' } },
+            ],
+          },
+        }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
+          'PersonListView.Query_Keyword': '关键字',
+          'PersonListView.Query_EmploymentStatus': '在职状态',
+          'PersonListView.Query_Department': '部门',
+          'PersonListView.Query_Position': '岗位',
+          'PersonListView.Query_IsEnabled': '启用状态',
+          'PersonListView.Column_PersonNo': '人员编号',
+          'PersonListView.Column_DepartmentName': '部门',
+          'PersonListView.Action_Create': '新建',
+          'PersonListView.Action_Disable': '停用',
+          'PersonListView.Action_Disable_Confirm': '确认停用该人员？',
+        },
+      },
+    );
+
+    expect(schema.query.defaults).toEqual([{ field: 'isEnabled', value: true }]);
+    expect(schema.query.defaultSort).toEqual({ field: 'PersonNo', direction: 'asc' });
+    expect(schema.query.defaultPageSize).toBe(20);
+    expect(schema.columns).toEqual([
+      { key: 'personNo', labelKey: 'Column_PersonNo', source: 'model', field: 'PersonNo', width: 140, sortable: true },
+      { key: 'departmentName', labelKey: 'Column_DepartmentName', source: 'projection', field: 'departmentName' },
+    ]);
+    expect(schema.pageActions[0]).toMatchObject({
+      key: 'create',
+      standardAction: 'create',
+      variant: 'primary',
+      requiredPermissions: ['Organization.Person.Create'],
+    });
+    expect(schema.rowActions[0]).toMatchObject({
+      key: 'disable',
+      confirmMessageKey: 'Action_Disable_Confirm',
+      handlerKey: 'disable',
+    });
+  });
+
+  it('fails when projection column has no field', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        columns: [{ key: 'departmentName', labelKey: 'Column_DepartmentName', source: 'projection' }],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Column_DepartmentName': '部门',
+        },
+      },
+    )).toThrow('projection column "departmentName" must declare field');
+  });
+
+  it('fails when a metadata label key is missing from default language catalog', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        pageActions: [{ key: 'create', labelKey: 'Action_Create', standardAction: 'create' }],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+        },
+      },
+    )).toThrow('missing dictionary key "PersonListView.Action_Create"');
+  });
+
+  it('fails when query defaults reference an undeclared query field', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        query: {
+          fields: [{ key: 'keyword', labelKey: 'Query_Keyword', source: 'preset', preset: 'keyword' }],
+          defaults: [{ field: 'isEnabled', value: true }],
+        },
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Query_Keyword': '关键字',
+        },
+      },
+    )).toThrow('query default "isEnabled" does not reference a declared query field');
+  });
+
+  it('fails when a list view references an unknown model', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'MissingPerson',
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+        },
+      },
+    )).toThrow('view "organization.person.list" references unknown model "MissingPerson"');
+  });
+
+  it('fails when a query field uses an unsupported preset', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        query: {
+          fields: [{ key: 'quick', labelKey: 'Query_Quick', source: 'preset', preset: 'quickSearch' }],
+        },
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Query_Quick': '快速搜索',
+        },
+      },
+    )).toThrow('unsupported query preset "quickSearch"');
+  });
+
+  it('fails when a metadata action uses an unsupported standard action', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        rowActions: [{ key: 'archive', labelKey: 'Action_Archive', standardAction: 'archive' }],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Action_Archive': '归档',
+        },
+      },
+    )).toThrow('unsupported standard action "archive"');
+  });
+
+  it('fails when an action handlerKey is not registered on the current resource', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        rowActions: [{ key: 'disable', labelKey: 'Action_Disable', standardAction: 'disable', handlerKey: 'missingDisable' }],
+      },
+      { ...personRegistration, actionHandlers: { disable: async () => undefined } },
+      {
+        modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Action_Disable': '停用',
+        },
+      },
+    )).toThrow('action handler "missingDisable" is not registered on resource "organization.person"');
+  });
+
+  it('fails when metadata declares an unsupported dataSource type', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        mode: 'list',
+        model: 'Person',
+        query: {
+          fields: [{ key: 'departmentId', labelKey: 'Query_Department', source: 'model', field: 'DepartmentId' }],
+        },
+      },
+      personRegistration,
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            fields: [{ name: 'DepartmentId', dataSource: { type: 'tree' } }],
+          },
+        }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Query_Department': '部门',
+        },
+      },
+    )).toThrow('unsupported dataSource type "tree"');
   });
 
   it('filters malformed metadata elements instead of throwing while building schemas', () => {

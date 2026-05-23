@@ -847,9 +847,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const createActionLabel = createAction ? t(`${schema.dicKey}.${createAction.labelKey}`, createAction.labelKey) : undefined;
   const editActionLabel = editAction ? t(`${schema.dicKey}.${editAction.labelKey}`, editAction.labelKey) : undefined;
-  const createDrawerTitle = resolveDrawerTitle(createActionLabel, '新建', pageTitle, createActionLabel);
-  const editDrawerTitle = resolveDrawerTitle(editActionLabel, '编辑', pageTitle, createActionLabel);
-  const viewDrawerTitle = resolveDrawerTitle(undefined, '查看', pageTitle, createActionLabel);
+  const createDrawerTitle = t(
+    `${schema.dicKey}.Drawer_Create`,
+    resolveDrawerTitle(createActionLabel, '新建', pageTitle, createActionLabel),
+  );
+  const editDrawerTitle = t(
+    `${schema.dicKey}.Drawer_Edit`,
+    resolveDrawerTitle(editActionLabel, '编辑', pageTitle, createActionLabel),
+  );
+  const viewDrawerTitle = t(
+    `${schema.dicKey}.Drawer_View`,
+    resolveDrawerTitle(undefined, '查看', pageTitle, createActionLabel),
+  );
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
 
   const content = (

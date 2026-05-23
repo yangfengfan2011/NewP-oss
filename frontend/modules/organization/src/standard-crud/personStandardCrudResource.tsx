@@ -1,14 +1,8 @@
-import type { Dispatch, SetStateAction } from 'react';
-import { Input, Select } from 'antd';
 import {
-  normalizeStandardCrudSubmitValues,
-  type StandardCrudFieldDefinition,
-  type StandardCrudFormSection,
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
-import { StatusTag } from '@icp-platform/ui';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
@@ -17,7 +11,6 @@ import {
   employmentStatusOptions,
   getCompanies,
   getDepartments,
-  getEmploymentStatusLabel,
   getPositions,
   mapPersonDetailView,
   mapPersonListItem,
@@ -46,96 +39,6 @@ function buildListQuery(filters: PersonListFilters): Record<string, string | nul
   };
 }
 
-function PersonListFiltersPanel({
-  filters,
-  setFilters,
-}: {
-  filters: PersonListFilters;
-  setFilters: Dispatch<SetStateAction<PersonListFilters>>;
-}) {
-  return (
-    <div className="np-person-filter-shell">
-      <div className="np-person-filter-grid">
-        <Input
-          aria-label="按工号 / 姓名搜索"
-          className="np-filter-control np-filter-control-keyword"
-          value={filters.keyword}
-          onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
-          placeholder="按工号 / 姓名搜索"
-        />
-        <Select
-          aria-label="在职状态"
-          className="np-filter-select"
-          value={filters.employmentStatus || undefined}
-          onChange={(value) => setFilters((current) => ({ ...current, employmentStatus: value ?? '' }))}
-          placeholder="全部状态"
-          allowClear
-          options={employmentStatusOptions}
-        />
-      </div>
-    </div>
-  );
-}
-
-const personFields = [
-  { key: 'personNo', labelKey: '工号', modelField: 'PersonNo', kind: 'text', required: true, trim: true, readOnly: true },
-  { key: 'name', labelKey: '姓名', modelField: 'ENAME', fallbackFields: ['Name'], kind: 'text', required: true, trim: true },
-  {
-    key: 'companyId',
-    labelKey: '所属公司',
-    modelField: 'CompanyId',
-    kind: 'lookup',
-    emptyAsNull: true,
-    lookup: { providerKey: 'organization.companies', placeholder: '请选择公司', currentValueLabelField: 'CompanyName' },
-  },
-  {
-    key: 'departmentId',
-    labelKey: '所属部门',
-    modelField: 'DepartmentId',
-    kind: 'lookup',
-    emptyAsNull: true,
-    lookup: {
-      providerKey: 'organization.departments',
-      dependsOn: ['companyId'],
-      placeholder: '请先选择公司',
-      currentValueLabelField: 'DepartmentName',
-    },
-  },
-  {
-    key: 'positionId',
-    labelKey: '岗位',
-    modelField: 'PositionId',
-    kind: 'lookup',
-    emptyAsNull: true,
-    lookup: {
-      providerKey: 'organization.positions',
-      dependsOn: ['departmentId'],
-      placeholder: '可先保持空白',
-      currentValueLabelField: 'PositionName',
-    },
-  },
-  {
-    key: 'employmentStatus',
-    labelKey: '用工状态',
-    modelField: 'EmploymentStatus',
-    kind: 'enum',
-    emptyAsNull: true,
-    options: employmentStatusOptions,
-  },
-  { key: 'isEnabled', labelKey: '启用状态', modelField: 'IsEnabled', kind: 'boolean', defaultValue: true },
-] satisfies StandardCrudFieldDefinition[];
-
-const personFormSections = [
-  { key: 'basic', titleKey: '基础信息', fields: ['personNo', 'name'] },
-  { key: 'organization', titleKey: '组织信息', fields: ['companyId', 'departmentId', 'positionId', 'employmentStatus', 'isEnabled'] },
-] satisfies StandardCrudFormSection[];
-
-function buildPersonMutationValues(values: Record<string, unknown>) {
-  // 详情页工号保持只读；提交映射需要显式包含创建态输入的工号，避免把 UI 编辑边界泄漏成后端请求缺字段。
-  const mutationFields = personFields.map((field) => (field.key === 'personNo' ? { ...field, readOnly: false } : field));
-  return normalizeStandardCrudSubmitValues(mutationFields, values);
-}
-
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.companies',
@@ -144,7 +47,7 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.departments',
     load: async ({ dependencyValues }) => {
-      const companyId = dependencyValues.companyId;
+      const companyId = dependencyValues.CompanyId ?? dependencyValues.companyId;
       if (typeof companyId !== 'string' || companyId.length === 0) {
         return [];
       }
@@ -155,7 +58,7 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.positions',
     load: async ({ dependencyValues }) => {
-      const departmentId = dependencyValues.departmentId;
+      const departmentId = dependencyValues.DepartmentId ?? dependencyValues.departmentId;
       if (typeof departmentId !== 'string' || departmentId.length === 0) {
         return [];
       }
@@ -174,7 +77,7 @@ const personSummaryRenderers = {
   ),
 };
 
-// 该注册只声明人员资源如何接入平台 Host；表单字段、lookup、动作和摘要 renderer 均通过标准 CRUD 扩展点暴露。
+// 该注册只保留模块私有 provider、renderer、handler 和 mapper；标准字段、列、查询和动作由 metadata + Shell 内核合成。
 export const personStandardCrudResource: StandardCrudResourceRegistration<PersonListFilters, PersonListRow, PersonDetailView> = {
   resourceKey: 'organization.person',
   apiRoute: '/api/organization/persons',
@@ -182,23 +85,12 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   listRoutePath: '/organization/persons',
   detailViewKey: 'organization.person.detail',
   detailRoutePath: '/organization/persons/:id',
-  listPanelTitle: '人员列表',
-  permissions: ['Organization.Person.View'],
-  fields: personFields,
-  formSections: personFormSections,
+  permissions: ['Organization.Person.View', 'Organization.Person.Create'],
   lookupProviders: organizationLookupProviders,
+  enumOptions: {
+    EmploymentStatus: employmentStatusOptions,
+  },
   summaryRenderers: personSummaryRenderers,
-  detailActions: [
-    { key: 'disable', labelKey: '停用', variant: 'danger', confirmMessage: '确认停用当前人员吗？' },
-  ],
-  listActions: [
-    { key: 'create', labelKey: '新建人员', variant: 'primary', standardAction: 'create' },
-    { key: 'refresh', labelKey: '刷新', variant: 'default', standardAction: 'refresh' },
-    { key: 'view', labelKey: '查看', standardAction: 'view' },
-    { key: 'edit', labelKey: '编辑', standardAction: 'edit' },
-    { key: 'delete', labelKey: '删除', variant: 'danger', standardAction: 'delete', confirmMessage: '确认删除该人员吗？' },
-    { key: 'disable', labelKey: '停用', variant: 'danger', standardAction: 'disable', confirmMessage: '确认停用该人员？' },
-  ],
   actionHandlers: {
     refresh: ({ refresh }) => {
       refresh();
@@ -220,34 +112,9 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       refresh();
     },
   },
-  buildMutationValues: buildPersonMutationValues,
   createEmptyFilters,
   buildListQuery,
   mapListItem: mapPersonListItem,
   getRowId: (row) => row.id,
-  buildColumns: () => [
-    { key: 'personNo', title: '工号' },
-    { key: 'name', title: '姓名' },
-    { key: 'departmentName', title: '部门', render: (item) => item.departmentName || item.departmentId },
-    {
-      key: 'employmentStatus',
-      title: '在职状态',
-      render: (item) => (
-        <StatusTag tone="processing" className="np-status-tag-blue">
-          {item.employmentStatusLabel || getEmploymentStatusLabel(item.employmentStatus)}
-        </StatusTag>
-      ),
-    },
-    {
-      key: 'isEnabled',
-      title: '启用状态',
-      render: (item) => (
-        <StatusTag tone={item.isEnabled ? 'success' : 'warning'} className="np-status-tag-green">
-          {item.isEnabled ? '启用' : '停用'}
-        </StatusTag>
-      ),
-    },
-  ],
-  renderFilters: (context) => <PersonListFiltersPanel filters={context.filters} setFilters={context.setFilters} />,
   mapDetail: mapPersonDetailView,
 };

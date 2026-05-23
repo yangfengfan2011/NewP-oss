@@ -7,6 +7,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
+import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
+import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
@@ -23,6 +26,28 @@ const organizationServiceMocks = vi.hoisted(() => ({
   getDepartments: vi.fn(async () => []),
   getPositions: vi.fn(async () => []),
 }));
+
+function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(dictionary.PersonListView).map(([key, value]) => [
+      `PersonListView.${key}`,
+      value.zhs,
+    ]),
+  );
+}
+
+const personListCatalog = {
+  ...flattenZhsCatalog(personListDictionary),
+  'PersonListView.Field_PersonNo': '人员编号',
+  'PersonListView.Field_ENAME': '姓名',
+  'PersonListView.Field_CompanyId': '所属公司',
+  'PersonListView.Field_DepartmentId': '所属部门',
+  'PersonListView.Field_PositionId': '岗位',
+  'PersonListView.Field_EmploymentStatus': '在职状态',
+  'PersonListView.Field_IsEnabled': '启用状态',
+  'PersonListView.Section_Basic': '基础信息',
+  'PersonListView.Section_Organization': '组织信息',
+};
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
@@ -109,7 +134,8 @@ function findInputByLabel(container: ParentNode, labelText: string): HTMLInputEl
 
   const fieldId = label.getAttribute('for');
   if (!fieldId) {
-    return null;
+    const nestedInput = label.querySelector('input');
+    return nestedInput instanceof HTMLInputElement ? nestedInput : null;
   }
 
   const ownerDocument = container instanceof Document ? container : container.ownerDocument;
@@ -135,25 +161,25 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function renderHost(container: HTMLElement, initialEntries = ['/organization/persons']) {
+function renderHost(
+  container: HTMLElement,
+  initialEntries = ['/organization/persons'],
+  viewDocument: typeof personListViewDocument = personListViewDocument,
+) {
   const root = createRoot(container);
   root.render(
     <MemoryRouter initialEntries={initialEntries}>
-      <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}>
+      <LocalizationProvider
+        defaultLanguage="zhs"
+        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+        catalogs={{ zhs: personListCatalog }}
+      >
         <RuntimeMetadataProvider
           value={{
             manifest: { modules: [] },
             navDocuments: [],
-            viewDocuments: [{
-              type: 'view',
-              view: {
-                key: 'organization.person.list',
-                mode: 'list',
-                titleKey: '人员中心',
-                descriptionKey: '人员列表维护',
-              },
-            }],
-            modelDocuments: [],
+            viewDocuments: [viewDocument],
+            modelDocuments: [personModelDocument],
           }}
         >
           <StandardCrudListPageHost viewKey="organization.person.list" />
@@ -243,7 +269,13 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const createButton = findAntdButtonByText(container, '新建人员');
+    expect(container.textContent).toContain('人员编号');
+    expect(container.textContent).toContain('姓名');
+    expect(container.textContent).toContain('部门');
+    expect(container.textContent).not.toContain('公司');
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+
+    const createButton = findAntdButtonByText(container, '新建');
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
     expect(document.body.textContent).toContain('新建人员');
@@ -268,6 +300,32 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
     expect(document.body.textContent).toContain('编辑人员');
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('编辑人员');
+  });
+
+  it('projection 字段缺值时仍渲染列表行', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{ EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: 'Dept_1' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    expect(container.textContent).toContain('张三');
+    expect(container.textContent).not.toContain('Cannot read');
   });
 
   it('平台新建按钮不依赖资源 create handler', async () => {
@@ -301,7 +359,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const createButton = findAntdButtonByText(container, '新建人员');
+    const createButton = findAntdButtonByText(container, '新建');
     expect(createButton).toBeDefined();
 
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -407,7 +465,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
-    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
     expect(document.body.textContent).toContain('详情加载失败，请稍后重试');
     expect(document.body.textContent).not.toContain('保存修改');
     expect(findInputByLabel(document.body, '姓名')).toBeNull();
@@ -430,11 +488,11 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const createButton = findAntdButtonByText(container, '新建人员');
+    const createButton = findAntdButtonByText(container, '新建');
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
-    const personNoInput = findInputByLabel(document.body, '工号');
+    const personNoInput = findInputByLabel(document.body, '人员编号');
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
     expect(personNoInput).not.toBeNull();
     expect(personNoInput?.readOnly).toBe(false);
@@ -487,23 +545,8 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.textContent).toContain('确认删除该人员吗？');
   });
 
-  it('资源未声明删除时不展示删除入口', async () => {
-    const resource = organizationModule.standardCrudResources?.[0];
-    if (!resource) {
-      throw new Error('未找到人员标准 CRUD 资源。');
-    }
-
-    const sampleModule = {
-      ...organizationModule,
-      standardCrudResources: [{
-        ...resource,
-        listActions: resource.listActions?.filter((action) => action.standardAction !== 'delete'),
-        actionHandlers: Object.fromEntries(
-          Object.entries(resource.actionHandlers ?? {}).filter(([key]) => key !== 'delete'),
-        ),
-      }],
-    };
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+  it('metadata 未声明删除时不展示删除入口', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
       total: 1,
@@ -515,7 +558,13 @@ describe('人员中心 CRUD Pro 样板', () => {
     document.body.appendChild(container);
 
     await act(async () => {
-      root = renderHost(container);
+      root = renderHost(container, ['/organization/persons'], {
+        ...personListViewDocument,
+        view: {
+          ...personListViewDocument.view,
+          rowActions: personListViewDocument.view.rowActions.filter((action) => action.standardAction !== 'delete'),
+        },
+      });
     });
     await flushAsync();
 
@@ -632,7 +681,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
-    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
 
     const deleteButton = await findOverflowRowActionButton(container, '张三', '删除');
     expect(deleteButton).toBeDefined();
@@ -647,7 +696,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(secondRow?.textContent).not.toContain('删除张三失败');
     expect(Array.from(container.querySelectorAll('[role="alert"]')).filter((item) => item.textContent?.includes('删除张三失败'))).toHaveLength(1);
     expect(listRequestCount).toBe(1);
-    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('人员中心');
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
     expect(document.body.textContent).toContain('查看人员');
   });
 
@@ -758,7 +807,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const keyword = container.querySelector('input[placeholder="按工号 / 姓名搜索"]');
+    const keyword = findInputByLabel(container, '关键字');
     expect(keyword).toBeInstanceOf(HTMLInputElement);
 
     await act(async () => {

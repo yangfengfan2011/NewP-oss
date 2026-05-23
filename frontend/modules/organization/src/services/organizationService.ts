@@ -65,6 +65,10 @@ export interface PersonUserLinkSummaryData {
 
 export interface PersonListRow {
   id: string;
+  PersonNo: string;
+  ENAME: string;
+  EmploymentStatus: string;
+  IsEnabled: boolean;
   personNo: string;
   name: string;
   companyId: string;
@@ -131,11 +135,19 @@ function readDateString(record: Record<string, unknown>, keys: string[], fallbac
 export function mapPersonListItem(value: unknown): PersonListRow {
   const row = isStandardCrudRecord(value) ? value : {};
   const employmentStatus = readStandardCrudString(row, ['EmploymentStatus'], 'FullTime');
+  const isEnabled = readStandardCrudBoolean(row, ['IsEnabled'], true);
+  const personNo = readStandardCrudString(row, ['PersonNo']);
+  const name = readStandardCrudString(row, ['ENAME']);
 
   return {
     id: readStandardCrudString(row, ['EID']),
-    personNo: readStandardCrudString(row, ['PersonNo']),
-    name: readStandardCrudString(row, ['ENAME']),
+    // 列表 Host 按 metadata 字段读取，模块 mapper 明确补齐协议字段，避免 Shell 引入隐式字段别名。
+    PersonNo: personNo,
+    ENAME: name,
+    EmploymentStatus: employmentStatus,
+    IsEnabled: isEnabled,
+    personNo,
+    name,
     companyId: readStandardCrudString(row, ['CompanyId']),
     companyName: readStandardCrudString(row, ['CompanyName'], readStandardCrudString(row, ['CompanyId'])),
     departmentId: readStandardCrudString(row, ['DepartmentId']),
@@ -144,7 +156,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     positionName: readStandardCrudNullableString(row, ['PositionName']),
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
-    isEnabled: readStandardCrudBoolean(row, ['IsEnabled'], true),
+    isEnabled,
   };
 }
 

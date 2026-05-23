@@ -1852,7 +1852,7 @@ git commit -m "功能：让标准CRUD宿主消费元数据schema"
 - Modify: `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- organization-person-create-flow organization-person-phase2-shrink person-center-crud-pro-sample`
 
-- [ ] **Step 1: 更新 shrink 测试**
+- [x] **Step 1: 更新 shrink 测试**
 
 在 `organization-person-phase2-shrink.test.tsx` 增加断言：
 
@@ -1871,7 +1871,7 @@ expect(personStandardCrudResource.lookupProviders?.map((provider) => provider.ke
 expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['refresh', 'delete', 'disable']);
 ```
 
-- [ ] **Step 2: 收缩 `personStandardCrudResource.tsx`**
+- [x] **Step 2: 收缩 `personStandardCrudResource.tsx`**
 
 删除这些 import：
 
@@ -1934,7 +1934,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
 
 资源注册删除当前不必要的 `buildMutationValues`，由 Host 使用 metadata fields 调用 `normalizeStandardCrudSubmitValues(fields, values)`。后续只有在 Organization 人员资源存在真正模块级提交差异时，才允许恢复专属提交适配；该适配不得用于 `EID / ENAME / ECODE` 或大小写友好名等平台协议字段转换。
 
-- [ ] **Step 3: 删除私有 runtime fallback**
+- [x] **Step 3: 删除私有 runtime fallback**
 
 Run:
 
@@ -1967,7 +1967,7 @@ export default function PersonCreatePage() {
 }
 ```
 
-- [ ] **Step 4: 人员集成测试覆盖 metadata 行为**
+- [x] **Step 4: 人员集成测试覆盖 metadata 行为**
 
 在 `person-center-crud-pro-sample.test.tsx` 补断言：
 
@@ -1996,7 +1996,7 @@ expect(container.textContent).toContain('张三');
 expect(container.textContent).not.toContain('Cannot read');
 ```
 
-- [ ] **Step 5: 运行人员中心定向测试**
+- [x] **Step 5: 运行人员中心定向测试**
 
 Run:
 
@@ -2010,7 +2010,7 @@ Expected:
 Test Files 3 passed
 ```
 
-- [ ] **Step 6: 提交人员模块收缩**
+- [x] **Step 6: 提交人员模块收缩**
 
 Run:
 

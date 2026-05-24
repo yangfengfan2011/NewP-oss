@@ -27,12 +27,6 @@
           "operator": "="
         }
       ],
-      "defaults": [
-        {
-          "field": "isEnabled",
-          "value": true
-        }
-      ],
       "defaultSort": {
         "field": "PersonNo",
         "direction": "asc"
@@ -148,6 +142,13 @@
         "variant": "danger",
         "confirmMessageKey": "Action_Disable_Confirm",
         "handlerKey": "disable"
+      },
+      {
+        "key": "enable",
+        "labelKey": "Action_Enable",
+        "standardAction": "enable",
+        "confirmMessageKey": "Action_Enable_Confirm",
+        "handlerKey": "enable"
       }
     ],
     "export": {

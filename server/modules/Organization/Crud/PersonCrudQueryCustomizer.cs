@@ -24,7 +24,9 @@ public sealed class PersonCrudQueryCustomizer : IStandardCrudQueryCustomizer
 
         AddEquals(filters, conditions, "companyId", "CompanyId");
         AddEquals(filters, conditions, "departmentId", "DepartmentId");
+        AddEquals(filters, conditions, "positionId", "PositionId");
         AddEquals(filters, conditions, "employmentStatus", "EmploymentStatus");
+        AddEquals(filters, conditions, "isEnabled", "IsEnabled");
         return conditions;
     }
 

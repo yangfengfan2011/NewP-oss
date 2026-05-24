@@ -15,6 +15,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     private static readonly HashSet<string> StandardQueryKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "page",
+        "pageIndex",
         "pageSize",
         "sortBy",
         "sortDirection"
@@ -157,7 +158,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         }
 
         return new StandardCrudListQuery(
-            Page: ReadInt(query, "page", 1),
+            Page: ReadInt(query, "pageIndex", ReadInt(query, "page", 1)),
             PageSize: ReadInt(query, "pageSize", 20),
             SortBy: ReadString(query, "sortBy"),
             SortDirection: ReadString(query, "sortDirection"),

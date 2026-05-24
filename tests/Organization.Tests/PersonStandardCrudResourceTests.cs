@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
@@ -67,6 +68,26 @@ public sealed class PersonStandardCrudResourceTests
         Assert.DoesNotContain("CompanyId", required.Keys);
         Assert.DoesNotContain("DepartmentId", required.Keys);
         Assert.DoesNotContain("EmploymentStatus", required.Keys);
+    }
+
+    [Fact]
+    public void PersonCrudQueryCustomizer_MapsPositionAndEnabledFilters()
+    {
+        var customizer = new PersonCrudQueryCustomizer();
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        var conditions = customizer.BuildConditions(
+            descriptor,
+            new StandardCrudListQuery(Filters: new Dictionary<string, string?>
+            {
+                ["positionId"] = "Position_1",
+                ["isEnabled"] = "false"
+            }));
+
+        Assert.Contains(conditions, condition =>
+            condition.Field == "PositionId" && condition.Operator == "=" && Equals(condition.Value, "Position_1"));
+        Assert.Contains(conditions, condition =>
+            condition.Field == "IsEnabled" && condition.Operator == "=" && Equals(condition.Value, "false"));
     }
 
     [Fact]

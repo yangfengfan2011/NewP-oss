@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/organization/src/services/organizationService';
 import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
 
 describe('organization person standard CRUD phase 2 registration', () => {
@@ -16,7 +17,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'organization.positions',
     ]);
     expect(Object.keys(personStandardCrudResource.summaryRenderers ?? {})).toEqual(['userLink', 'authorizationSummary']);
-    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['refresh', 'delete', 'disable']);
+    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['refresh', 'delete', 'disable', 'enable']);
   });
 
   it('retains metadata-compatible permissions and runtime adapters', () => {
@@ -35,5 +36,33 @@ describe('organization person standard CRUD phase 2 registration', () => {
       keyword: 'P001',
       employmentStatus: 'FullTime',
     });
+  });
+
+  it('does not present empty employment status as FullTime', () => {
+    const row = mapPersonListItem({
+      EID: 'Person_1',
+      PersonNo: 'P001',
+      ENAME: '张三',
+      EmploymentStatus: null,
+      IsEnabled: true,
+    });
+
+    expect(row.EmploymentStatus).toBe('');
+    expect(row.employmentStatus).toBe('');
+    expect(row.employmentStatusLabel).toBe('');
+
+    const detail = mapPersonDetailView({
+      fields: {
+        EID: 'Person_1',
+        PersonNo: 'P001',
+        ENAME: '张三',
+        EmploymentStatus: null,
+        IsEnabled: true,
+      },
+      summaries: {},
+    });
+
+    expect(detail.employmentStatus).toBe('');
+    expect(detail.employmentStatusLabel).toBe('');
   });
 });

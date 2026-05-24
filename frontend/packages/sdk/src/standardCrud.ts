@@ -131,7 +131,7 @@ export interface StandardCrudActionDefinition {
   key: string;
   labelKey: string;
   variant?: 'default' | 'primary' | 'danger';
-  standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'submit';
+  standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'enable' | 'submit';
   confirmMessage?: string;
   confirmMessageKey?: string;
   requiredPermissions?: string[];

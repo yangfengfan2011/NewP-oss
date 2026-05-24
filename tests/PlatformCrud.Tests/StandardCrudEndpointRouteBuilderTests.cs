@@ -22,12 +22,13 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         await using var app = BuildApp(recording);
         await app.StartAsync();
 
-        var response = await app.GetTestClient().GetAsync("/api/organization/persons?page=2&pageSize=5&keyword=张");
+        var response = await app.GetTestClient().GetAsync("/api/organization/persons?pageIndex=2&pageSize=5&keyword=张");
 
         response.EnsureSuccessStatusCode();
         Assert.Equal(2, recording.LastListQuery!.Page);
         Assert.Equal(5, recording.LastListQuery.PageSize);
         Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
+        Assert.DoesNotContain("pageIndex", recording.LastListQuery.Filters.Keys);
     }
 
     [Fact]

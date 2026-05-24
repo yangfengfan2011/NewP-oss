@@ -134,7 +134,7 @@ function readDateString(record: Record<string, unknown>, keys: string[], fallbac
 
 export function mapPersonListItem(value: unknown): PersonListRow {
   const row = isStandardCrudRecord(value) ? value : {};
-  const employmentStatus = readStandardCrudString(row, ['EmploymentStatus'], 'FullTime');
+  const employmentStatus = readStandardCrudString(row, ['EmploymentStatus']);
   const isEnabled = readStandardCrudBoolean(row, ['IsEnabled'], true);
   const personNo = readStandardCrudString(row, ['PersonNo']);
   const name = readStandardCrudString(row, ['ENAME']);
@@ -164,7 +164,7 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
   const detail = normalizeStandardCrudDetail(value);
   const fields = detail.fields;
   const summaries = detail.summaries;
-  const employmentStatus = readStandardCrudString(fields, ['EmploymentStatus'], 'FullTime');
+  const employmentStatus = readStandardCrudString(fields, ['EmploymentStatus']);
 
   return {
     id: readStandardCrudString(fields, ['EID']),
@@ -300,6 +300,10 @@ export async function disablePerson(personId: string): Promise<PersonDetailView>
       '停用人员失败',
     ),
   );
+}
+
+export async function enablePerson(personId: string): Promise<PersonDetailView> {
+  return updatePerson(personId, { IsEnabled: true });
 }
 
 export async function searchIdentityUsers(keyword: string): Promise<IdentityUserOptionDto[]> {

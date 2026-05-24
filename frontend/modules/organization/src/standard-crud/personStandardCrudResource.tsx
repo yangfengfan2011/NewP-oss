@@ -8,6 +8,7 @@ import PersonUserLinkCard from '../components/PersonUserLinkCard';
 import {
   deletePerson,
   disablePerson,
+  enablePerson,
   employmentStatusOptions,
   getCompanies,
   getDepartments,
@@ -109,6 +110,14 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       }
 
       await disablePerson(id);
+      refresh();
+    },
+    enable: async ({ id, refresh }) => {
+      if (!id) {
+        throw new Error('缺少人员标识，无法启用。');
+      }
+
+      await enablePerson(id);
       refresh();
     },
   },

@@ -84,7 +84,7 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
   source: 'user-action',
 };
 
-const MAX_ROW_ACTION_BUTTONS = 2;
+const MAX_ROW_ACTION_BUTTONS = 3;
 
 function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
   if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
@@ -971,8 +971,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           placement="right"
           destroyOnClose
           onClose={() => setAdvancedFilterOpen(false)}
-          footer={(
-            <Space className="np-advanced-filter-drawer-footer">
+        >
+          <div className="np-advanced-filter-drawer">
+            <Space className="np-advanced-filter-drawer-actions">
               <AntdButton
                 onClick={() => {
                   context.resetFilters();
@@ -992,9 +993,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 {t(`${schema.dicKey}.Action_ApplyAdvanced`, '应用筛选')}
               </AntdButton>
             </Space>
-          )}
-        >
-          <div className="np-advanced-filter-drawer">
             {schema.advancedFilter.sections.map((section) => (
               <section key={section.key} className="np-advanced-filter-section">
                 <h3 className="np-advanced-filter-section-title">

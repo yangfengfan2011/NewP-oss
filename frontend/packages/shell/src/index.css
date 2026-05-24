@@ -480,7 +480,7 @@ a:hover {
   gap: 14px;
 }
 
-.ant-drawer .np-advanced-filter-drawer-footer {
+.ant-drawer .np-advanced-filter-drawer-actions {
   justify-content: flex-end;
   width: 100%;
 }

@@ -31,6 +31,7 @@ async function flushProTableRequest(): Promise<void> {
 
 const serviceMocks = vi.hoisted(() => ({
   disablePerson: vi.fn(),
+  enablePerson: vi.fn(),
 }));
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -39,6 +40,7 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
   return {
     ...actual,
     disablePerson: serviceMocks.disablePerson,
+    enablePerson: serviceMocks.enablePerson,
     getCompanies: async () => [],
     getDepartments: async () => [],
     getEmploymentStatusLabel: (value: string) => value,
@@ -172,7 +174,7 @@ describe('organization person center list layout', () => {
     });
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
     expect(container.querySelector('.np-crud-workspace-header .ant-btn-primary')?.textContent).toContain('新建人员');
@@ -226,10 +228,11 @@ describe('organization person center list layout', () => {
     const firstActionCell = bodyRows[0]?.querySelector('td:last-child');
     expect(firstActionCell?.textContent).not.toContain('查看');
     expect(firstActionCell?.textContent).toContain('编辑');
+    expect(firstActionCell?.textContent).toContain('删除');
     expect(firstActionCell?.textContent).toContain('更多');
-    expect(firstActionCell?.textContent).not.toContain('删除');
     expect(firstActionCell?.textContent).not.toContain('停用');
-    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(1);
+    expect(firstActionCell?.textContent).not.toContain('启用');
+    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(2);
     expect(firstActionCell?.querySelector('.np-row-actions-more')).not.toBeNull();
     expect(bodyRows[0]?.querySelector('.np-table-row-view-button')).not.toBeNull();
     await act(async () => {
@@ -237,6 +240,7 @@ describe('organization person center list layout', () => {
     });
     expect(document.body.textContent).toContain('删除');
     expect(document.body.textContent).toContain('停用');
+    expect(document.body.textContent).toContain('启用');
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);

@@ -274,7 +274,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).toContain('启用');
     expect(container.textContent).not.toContain('PartTime');
     expect(container.textContent).not.toContain('true');
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
     expect(filterLabels.length).toBeGreaterThan(0);
@@ -615,6 +615,7 @@ describe('人员中心 CRUD Pro 样板', () => {
 
     expect(container.textContent).not.toContain('删除');
     expect(container.textContent).toContain('停用');
+    expect(container.textContent).toContain('启用');
   });
 
   it('delete handler 即使不主动 refresh，确认删除成功后 Host 也会刷新一次列表', async () => {

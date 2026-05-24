@@ -186,6 +186,14 @@
       "zhs": "确认停用该人员？",
       "en": "Disable this person?"
     },
+    "Action_Enable": {
+      "zhs": "启用",
+      "en": "Enable"
+    },
+    "Action_Enable_Confirm": {
+      "zhs": "确认启用该人员？",
+      "en": "Enable this person?"
+    },
     "Action_Processing": {
       "zhs": "处理中...",
       "en": "Processing..."

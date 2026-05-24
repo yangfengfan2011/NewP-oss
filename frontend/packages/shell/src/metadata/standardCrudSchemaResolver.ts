@@ -94,7 +94,7 @@ export interface StandardCrudDetailRuntimeSchema {
 }
 
 const builtinModelFields = ['EID', 'ENAME', 'ECODE'];
-const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'submit']);
+const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'enable', 'submit']);
 const supportedActionVariants = new Set(['default', 'primary', 'danger']);
 const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
 const supportedQueryPresets = new Set(['keyword']);

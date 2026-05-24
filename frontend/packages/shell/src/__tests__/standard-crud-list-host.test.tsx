@@ -110,7 +110,6 @@ const personListViewDocument = {
           ],
         }],
       },
-      defaults: [{ field: 'isEnabled', value: true }],
     },
     columns: [
       { key: 'personNo', labelKey: 'Column_PersonNo', source: 'model', field: 'PersonNo' },
@@ -140,6 +139,13 @@ const personListViewDocument = {
         handlerKey: 'disablePerson',
         confirmMessageKey: 'Action_Disable_Confirm',
       },
+      {
+        key: 'enable',
+        labelKey: 'Action_Enable',
+        standardAction: 'enable',
+        handlerKey: 'enablePerson',
+        confirmMessageKey: 'Action_Enable_Confirm',
+      },
     ],
   },
 };
@@ -165,6 +171,8 @@ const personListCatalog = {
   'PersonListView.Action_Delete_Confirm': '确认删除该人员吗？',
   'PersonListView.Action_Disable': '停用',
   'PersonListView.Action_Disable_Confirm': '确认停用该人员？',
+  'PersonListView.Action_Enable': '启用',
+  'PersonListView.Action_Enable_Confirm': '确认启用该人员？',
   'PersonListView.Field_PersonNo': '人员编号',
   'PersonListView.Field_ENAME': '姓名',
   'PersonListView.Field_DepartmentId': '部门',
@@ -248,6 +256,7 @@ describe('StandardCrudListPageHost', () => {
               refresh: vi.fn(),
               deletePerson: vi.fn(),
               disablePerson: vi.fn(),
+              enablePerson: vi.fn(),
             },
             ...overrides,
           },
@@ -273,7 +282,7 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.textContent).toContain('张三');
     expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
   });
@@ -357,6 +366,7 @@ describe('StandardCrudListPageHost', () => {
         refresh: vi.fn(),
         deletePerson: vi.fn(),
         disablePerson,
+        enablePerson: vi.fn(),
       },
       buildColumns: undefined,
       renderFilters: undefined,
@@ -379,7 +389,7 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.textContent).toContain('关键字');
     expect(container.textContent).toContain('在职状态');
     expect(container.textContent).toContain('更多筛选');
@@ -391,6 +401,11 @@ describe('StandardCrudListPageHost', () => {
     expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(0);
     expect(container.querySelector('.np-table-row-view-button')).not.toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '编辑')).toBe(1);
+    expect(container.textContent).toContain('删除');
+    expect(container.textContent).toContain('更多');
+    expect(container.textContent).not.toContain('停用');
+    expect(container.textContent).not.toContain('启用');
+    expect(container.querySelectorAll('.np-row-action-button')).toHaveLength(2);
     await act(async () => {
       const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
         button.textContent?.replace(/\s+/g, '') === '更多');
@@ -398,6 +413,7 @@ describe('StandardCrudListPageHost', () => {
     });
     expect(document.body.textContent).toContain('删除');
     expect(document.body.textContent).toContain('停用');
+    expect(document.body.textContent).toContain('启用');
     expect(container.textContent).not.toContain('公司');
     expect(container.querySelector('.np-person-filter-grid .ant-select')).not.toBeNull();
 
@@ -419,5 +435,35 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
 
     expect(container.textContent).toContain('未找到标准 CRUD 前端资源注册项');
+  });
+
+  it('renders advanced filter actions above filter fields', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost();
+    await flushProTableRequest();
+
+    await act(async () => {
+      const advancedFilterButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '更多筛选');
+      advancedFilterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const drawerBody = document.body.querySelector('.ant-drawer-body');
+    const actions = drawerBody?.querySelector('.np-advanced-filter-drawer-actions');
+    const firstSection = drawerBody?.querySelector('.np-advanced-filter-section');
+
+    expect(document.body.querySelector('.ant-drawer-footer')).toBeNull();
+    expect(actions).not.toBeNull();
+    expect(firstSection).not.toBeNull();
+    expect(actions?.compareDocumentPosition(firstSection as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions?.textContent).toContain('重置条件');
+    expect(actions?.textContent).toContain('应用筛选');
   });
 });

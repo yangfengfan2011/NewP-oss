@@ -51,6 +51,14 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
                 Description = "允许查看组织结构中的人员信息",
                 ModuleId = ModuleId,
                 Group = "人员"
+            },
+            new PermissionDescriptor
+            {
+                Code = "Organization.Person.Create",
+                DisplayName = "新建人员",
+                Description = "允许新建组织结构中的人员信息",
+                ModuleId = ModuleId,
+                Group = "人员"
             }
         };
     }

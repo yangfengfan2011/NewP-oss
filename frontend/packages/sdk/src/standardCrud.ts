@@ -105,6 +105,7 @@ export interface StandardCrudFieldDefinition {
   labelKey: string;
   modelField: string;
   kind: StandardCrudFieldKind;
+  placeholder?: string;
   fallbackFields?: string[];
   required?: boolean;
   readOnly?: boolean;

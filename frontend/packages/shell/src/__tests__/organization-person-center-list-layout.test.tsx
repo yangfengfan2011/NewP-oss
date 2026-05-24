@@ -8,6 +8,9 @@ import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
+import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
+import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
@@ -42,20 +45,23 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
   };
 });
 
+function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(dictionary.PersonListView).map(([key, value]) => [
+      `PersonListView.${key}`,
+      value.zhs,
+    ]),
+  );
+}
+
 const standardCrudListViewMetadata = {
   manifest: { modules: [] },
   navDocuments: [],
-  viewDocuments: [{
-    type: 'view' as const,
-    view: {
-      key: 'organization.person.list',
-      mode: 'list',
-      titleKey: '人员中心',
-      descriptionKey: '人员列表维护',
-    },
-  }],
-  modelDocuments: [],
+  viewDocuments: [personListViewDocument],
+  modelDocuments: [personModelDocument],
 };
+
+const personListCatalog = flattenZhsCatalog(personListDictionary);
 
 describe('organization person center list layout', () => {
   let container: HTMLDivElement;
@@ -68,7 +74,7 @@ describe('organization person center list layout', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: {} }}
+          catalogs={{ zhs: personListCatalog }}
         >
           <RuntimeMetadataProvider value={standardCrudListViewMetadata}>
             <StandardCrudListPageHost viewKey="organization.person.list" />
@@ -166,7 +172,7 @@ describe('organization person center list layout', () => {
     });
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
     expect(container.querySelector('.np-crud-workspace-header .ant-btn-primary')?.textContent).toContain('新建人员');
@@ -188,10 +194,10 @@ describe('organization person center list layout', () => {
       (node) => (node as HTMLTableColElement).style.width,
     );
     expect(tableColumnWidths).toEqual(expect.arrayContaining(['40px', '40px']));
-    expect(container.querySelector('.ant-tag')).not.toBeNull();
     expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
-    expect(container.querySelector('.ant-input[placeholder="按工号 / 姓名搜索"]')).not.toBeNull();
+    expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
     expect(container.querySelector('.ant-select')).not.toBeNull();
     expect(container.textContent).not.toContain('全部公司');
     expect(container.textContent).not.toContain('公司');
@@ -201,23 +207,31 @@ describe('organization person center list layout', () => {
     expect(filterSelects[0]?.classList.contains('np-filter-control')).toBe(false);
     expect(container.textContent).toContain('新建人员');
     expect(container.textContent).toContain('刷新');
-    expect(container.textContent).toContain('更多筛选');
+    expect(container.textContent).toContain('高级筛选');
     expect(container.textContent).not.toContain('人员列表');
-    expect(container.textContent).toContain('工号');
+    expect(container.textContent).toContain('关键字');
+    expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('张三');
     expect(container.textContent).toContain('李四');
+    expect(container.textContent).toContain('兼职');
+    expect(container.textContent).toContain('正式');
+    expect(container.textContent).toContain('启用');
+    expect(container.textContent).not.toContain('PartTime');
+    expect(container.textContent).not.toContain('FullTime');
+    expect(container.textContent).not.toContain('true');
     const bodyRows = Array.from(container.querySelectorAll('.ant-table-tbody > tr'));
     expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(true);
     expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(true);
     const firstActionCell = bodyRows[0]?.querySelector('td:last-child');
-    expect(firstActionCell?.textContent).toContain('查看');
+    expect(firstActionCell?.textContent).not.toContain('查看');
     expect(firstActionCell?.textContent).toContain('编辑');
     expect(firstActionCell?.textContent).toContain('更多');
     expect(firstActionCell?.textContent).not.toContain('删除');
     expect(firstActionCell?.textContent).not.toContain('停用');
-    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(2);
+    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(1);
     expect(firstActionCell?.querySelector('.np-row-actions-more')).not.toBeNull();
+    expect(bodyRows[0]?.querySelector('.np-table-row-view-button')).not.toBeNull();
     await act(async () => {
       firstActionCell?.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

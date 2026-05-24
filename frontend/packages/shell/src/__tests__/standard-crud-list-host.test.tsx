@@ -388,7 +388,8 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
-    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(0);
+    expect(container.querySelector('.np-table-row-view-button')).not.toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '编辑')).toBe(1);
     await act(async () => {
       const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>

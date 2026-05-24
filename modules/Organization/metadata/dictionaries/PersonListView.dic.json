@@ -10,29 +10,113 @@
       "zhs": "维护组织模块中的人员基础信息。",
       "en": "Manage person master data in the organization module."
     },
+    "Section_Basic": {
+      "zhs": "基础信息",
+      "en": "Basic"
+    },
+    "Section_Organization": {
+      "zhs": "组织信息",
+      "en": "Organization"
+    },
+    "Field_PersonNo": {
+      "zhs": "人员编号",
+      "en": "Person No."
+    },
+    "Field_PersonNo_Placeholder": {
+      "zhs": "请输入人员编号",
+      "en": "Enter person no."
+    },
+    "Field_ENAME": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "Field_ENAME_Placeholder": {
+      "zhs": "请输入姓名",
+      "en": "Enter name"
+    },
+    "Field_CompanyId": {
+      "zhs": "所属公司",
+      "en": "Company"
+    },
+    "Field_CompanyId_Placeholder": {
+      "zhs": "请选择所属公司",
+      "en": "Select company"
+    },
+    "Field_DepartmentId": {
+      "zhs": "所属部门",
+      "en": "Department"
+    },
+    "Field_DepartmentId_Placeholder": {
+      "zhs": "请选择所属部门",
+      "en": "Select department"
+    },
+    "Field_PositionId": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "Field_PositionId_Placeholder": {
+      "zhs": "请选择岗位",
+      "en": "Select position"
+    },
+    "Field_EmploymentStatus": {
+      "zhs": "在职状态",
+      "en": "Employment Status"
+    },
+    "Field_EmploymentStatus_Placeholder": {
+      "zhs": "请选择在职状态",
+      "en": "Select employment status"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
     "Query_Keyword": {
       "zhs": "关键字",
       "en": "Keyword"
+    },
+    "Query_Keyword_Placeholder": {
+      "zhs": "按工号 / 姓名搜索",
+      "en": "Search by person no. / name"
     },
     "Query_Company": {
       "zhs": "公司",
       "en": "Company"
     },
+    "Query_Company_Placeholder": {
+      "zhs": "全部公司",
+      "en": "All companies"
+    },
     "Query_Department": {
       "zhs": "部门",
       "en": "Department"
+    },
+    "Query_Department_Placeholder": {
+      "zhs": "全部部门",
+      "en": "All departments"
     },
     "Query_Position": {
       "zhs": "岗位",
       "en": "Position"
     },
+    "Query_Position_Placeholder": {
+      "zhs": "全部岗位",
+      "en": "All positions"
+    },
     "Query_EmploymentStatus": {
       "zhs": "在职状态",
       "en": "Employment Status"
     },
+    "Query_EmploymentStatus_Placeholder": {
+      "zhs": "全部在职状态",
+      "en": "All employment statuses"
+    },
     "Query_IsEnabled": {
       "zhs": "启用状态",
       "en": "Enabled"
+    },
+    "Query_IsEnabled_Placeholder": {
+      "zhs": "全部启用状态",
+      "en": "All enabled states"
     },
     "AdvancedFilter_Title": {
       "zhs": "高级筛选",
@@ -71,8 +155,8 @@
       "en": "Enabled"
     },
     "Action_Create": {
-      "zhs": "新建",
-      "en": "Create"
+      "zhs": "新建人员",
+      "en": "Create Person"
     },
     "Action_Refresh": {
       "zhs": "刷新",

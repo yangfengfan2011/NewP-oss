@@ -38,15 +38,6 @@ function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<stri
 
 const personListCatalog = {
   ...flattenZhsCatalog(personListDictionary),
-  'PersonListView.Field_PersonNo': '人员编号',
-  'PersonListView.Field_ENAME': '姓名',
-  'PersonListView.Field_CompanyId': '所属公司',
-  'PersonListView.Field_DepartmentId': '所属部门',
-  'PersonListView.Field_PositionId': '岗位',
-  'PersonListView.Field_EmploymentStatus': '在职状态',
-  'PersonListView.Field_IsEnabled': '启用状态',
-  'PersonListView.Section_Basic': '基础信息',
-  'PersonListView.Section_Organization': '组织信息',
 };
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -92,6 +83,11 @@ function findRowActionButton(container: ParentNode, rowText: string, buttonText:
   }
 
   return findAntdButtonByText(row, buttonText);
+}
+
+function findRowViewIconButton(container: ParentNode, rowText: string): HTMLElement | undefined {
+  const row = findTableRowByText(container, rowText);
+  return row?.querySelector<HTMLElement>('.np-table-row-view-button') ?? undefined;
 }
 
 async function findOverflowRowActionButton(container: ParentNode, rowText: string, buttonText: string): Promise<HTMLElement | undefined> {
@@ -254,7 +250,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       }
 
       return new Response(JSON.stringify({
-        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', EmploymentStatus: 'PartTime', IsEnabled: true }],
         total: 1,
         page: 1,
         pageSize: 20,
@@ -273,13 +269,26 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
     expect(container.textContent).not.toContain('公司');
+    expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
+    expect(container.textContent).toContain('兼职');
+    expect(container.textContent).toContain('启用');
+    expect(container.textContent).not.toContain('PartTime');
+    expect(container.textContent).not.toContain('true');
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/organization/persons?isEnabled=true&pageIndex=1&pageSize=20', { method: 'GET' });
+
+    const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
+    expect(filterLabels.length).toBeGreaterThan(0);
+    expect(filterLabels.every((label) => label.classList.contains('np-filter-field'))).toBe(true);
+    expect(filterLabels.some((label) => label.classList.contains('np-filter-control'))).toBe(false);
+    expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
 
     const createButton = findAntdButtonByText(container, '新建');
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
     expect(document.body.textContent).toContain('新建人员');
     expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
+    expect(findInputByLabel(document.body, '人员编号')?.placeholder).toBe('请输入人员编号');
+    expect(findInputByLabel(document.body, '姓名')?.placeholder).toBe('请输入姓名');
 
     const closeButton = document.body.querySelector('.ant-drawer-close') as HTMLButtonElement;
     await act(async () => closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -287,8 +296,10 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.textContent).not.toContain('编辑人员');
     expect(document.body.querySelector('.ant-drawer')).toBeNull();
 
-    const viewButton = findAntdButtonByText(container, '查看');
-    await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(findRowActionButton(container, '张三', '查看')).toBeUndefined();
+    const viewIconButton = findRowViewIconButton(container, '张三');
+    expect(viewIconButton).toBeDefined();
+    await act(async () => viewIconButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
     expect(document.body.textContent).toContain('查看人员');
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
@@ -300,6 +311,40 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
     expect(document.body.textContent).toContain('编辑人员');
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('编辑人员');
+  });
+
+  it('高级筛选通过右侧抽屉展示并复用本地化标签', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const advancedFilterButton = findAntdButtonByText(container, '高级筛选');
+    expect(advancedFilterButton).toBeDefined();
+
+    await act(async () => advancedFilterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('高级筛选');
+    expect(document.body.querySelector('.ant-drawer-right')).not.toBeNull();
+    expect(document.body.querySelector('.ant-popover')).toBeNull();
+    expect(document.body.textContent).toContain('组织信息');
+    expect(document.body.textContent).toContain('部门');
+    expect(document.body.textContent).toContain('岗位');
+    expect(document.body.textContent).toContain('启用状态');
+    expect(document.body.textContent).not.toContain('AdvancedFilter_Organization');
+    expect(document.body.textContent).not.toContain('Query_Department');
   });
 
   it('projection 字段缺值时仍渲染列表行', async () => {
@@ -676,9 +721,9 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const viewButton = findRowActionButton(container, '张三', '查看');
-    expect(viewButton).toBeDefined();
-    await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const viewIconButton = findRowViewIconButton(container, '张三');
+    expect(viewIconButton).toBeDefined();
+    await act(async () => viewIconButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
@@ -764,7 +809,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const firstViewButton = findRowActionButton(container, '张三', '查看');
+    const firstViewButton = findRowViewIconButton(container, '张三');
     expect(firstViewButton).toBeDefined();
     await act(async () => firstViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -777,7 +822,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await clickPopconfirmButton('确认');
     await flushAsync();
 
-    const secondViewButton = findRowActionButton(container, '李四', '查看');
+    const secondViewButton = findRowViewIconButton(container, '李四');
     expect(secondViewButton).toBeDefined();
     await act(async () => secondViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();

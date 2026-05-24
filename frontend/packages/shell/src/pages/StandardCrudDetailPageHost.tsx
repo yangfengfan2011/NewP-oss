@@ -75,10 +75,15 @@ function localizeStandardCrudFields(
   dicKey: string,
   t: (key: string, fallback?: string) => string,
 ): StandardCrudFieldDefinition[] {
-  return fields.map((field) => ({
-    ...field,
-    labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
-  }));
+  return fields.map((field) => {
+    const placeholder = t(`${dicKey}.${field.labelKey}_Placeholder`, '');
+
+    return {
+      ...field,
+      labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
+      placeholder: placeholder.length > 0 ? placeholder : field.placeholder,
+    };
+  });
 }
 
 function toDictionaryBlockKey(blockKey: string): string {

@@ -102,7 +102,7 @@ export function StandardCrudField({
   }
 
   if (isSelectField) {
-    const placeholder = loading ? '正在加载...' : field.lookup?.placeholder;
+    const placeholder = loading ? '正在加载...' : field.lookup?.placeholder ?? field.placeholder;
     const hasCurrentValue = typeof value === 'string' && value.length > 0;
     const fallbackEnumValue = field.kind === 'enum' && !placeholder ? options[0]?.value : undefined;
     const selectValue = hasCurrentValue ? value : fallbackEnumValue;
@@ -139,6 +139,7 @@ export function StandardCrudField({
           id={field.key}
           className="sh-form-input np-standard-crud-input"
           value={value == null ? '' : String(value)}
+          placeholder={field.placeholder}
           required={!readOnly && field.required}
           disabled={readOnly}
           onChange={(event) => onChange(field.key, event.target.value)}
@@ -201,6 +202,7 @@ export function StandardCrudField({
         className="sh-form-input np-standard-crud-input"
         type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
         value={String(inputValue)}
+        placeholder={field.placeholder}
         required={!readOnly && field.required}
         disabled={readOnly}
         onChange={(event) => {

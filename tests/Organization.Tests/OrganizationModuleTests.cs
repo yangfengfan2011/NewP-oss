@@ -17,11 +17,13 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void GetPermissions_DeclaresPersonViewPermission()
+    public void GetPermissions_DeclaresPersonViewAndCreatePermissions()
     {
         var module = new OrganizationModule();
+        var permissions = module.GetPermissions();
 
-        Assert.Contains(module.GetPermissions(), permission => permission.Code == "Organization.Person.View");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Person.View");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Person.Create");
     }
 
     [Fact]

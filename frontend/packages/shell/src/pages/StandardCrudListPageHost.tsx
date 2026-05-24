@@ -11,7 +11,7 @@ import {
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button as AntdButton, Popconfirm, Popover, Select } from 'antd';
+import { Button as AntdButton, Drawer, Popconfirm, Popover, Select, Space } from 'antd';
 import {
   CrudFormDrawer,
   CrudSearchBar,
@@ -49,7 +49,6 @@ interface DeleteActionErrorState {
   key: string;
   message: string;
 }
-
 interface RowActionItem {
   key: string;
   label: ReactNode;
@@ -85,7 +84,7 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
   source: 'user-action',
 };
 
-const MAX_ROW_ACTION_BUTTONS = 3;
+const MAX_ROW_ACTION_BUTTONS = 2;
 
 function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
   if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
@@ -116,10 +115,42 @@ function localizeStandardCrudFields(
   dicKey: string,
   t: (key: string, fallback?: string) => string,
 ): StandardCrudFieldDefinition[] {
-  return fields.map((field) => ({
-    ...field,
-    labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
-  }));
+  return fields.map((field) => {
+    const placeholder = t(`${dicKey}.${field.labelKey}_Placeholder`, '');
+
+    return {
+      ...field,
+      labelKey: t(`${dicKey}.${field.labelKey}`, field.labelKey),
+      placeholder: placeholder.length > 0 ? placeholder : field.placeholder,
+    };
+  });
+}
+
+function readMetadataRecord(value: unknown): MetadataRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as MetadataRecord) : {};
+}
+
+function readModelFieldStorageType(modelField: MetadataRecord): string {
+  const storage = readMetadataRecord(modelField.storage);
+  return typeof storage.type === 'string' ? storage.type : '';
+}
+
+function readModelFieldEnumKey(modelField: MetadataRecord): string {
+  const dataSource = readMetadataRecord(modelField.dataSource);
+  const contract = readMetadataRecord(modelField.contract);
+  const dataSourceType = typeof dataSource.type === 'string' ? dataSource.type : '';
+  if (dataSourceType !== 'enum' && contract.valueType !== 'enum') {
+    return '';
+  }
+
+  if (typeof dataSource.key === 'string' && dataSource.key.length > 0) {
+    return dataSource.key;
+  }
+  if (typeof contract.clrType === 'string' && contract.clrType.length > 0) {
+    return contract.clrType;
+  }
+
+  return '';
 }
 
 function renderMetadataFilterField(
@@ -133,18 +164,20 @@ function renderMetadataFilterField(
   registration: StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
   value: unknown,
   onChange: (key: string, value: unknown) => void,
-  labelFor: (labelKey: string) => string,
+  textFor: (labelKey: string, fallback?: string) => string,
 ): ReactElement {
-  const fieldLabel = labelFor(field.labelKey);
+  const fieldLabel = textFor(field.labelKey, field.labelKey);
+  const placeholder = textFor(`${field.labelKey}_Placeholder`, '');
   const enumOptions = field.dataSourceKey ? registration.enumOptions?.[field.dataSourceKey] : undefined;
   if (enumOptions) {
     return (
-      <label key={field.key} className="np-filter-control">
+      <label key={field.key} className="np-filter-field">
         <span className="sh-form-label">{fieldLabel}</span>
         <Select
           className="np-filter-select"
           value={typeof value === 'string' && value.length > 0 ? value : undefined}
           allowClear
+          placeholder={placeholder}
           options={enumOptions}
           onChange={(nextValue) => onChange(field.key, nextValue ?? '')}
         />
@@ -159,12 +192,13 @@ function renderMetadataFilterField(
   if (storageType === 'bool') {
     const selectedValue = typeof value === 'boolean' ? String(value) : undefined;
     return (
-      <label key={field.key} className="np-filter-control">
+      <label key={field.key} className="np-filter-field">
         <span className="sh-form-label">{fieldLabel}</span>
         <Select
           className="np-filter-select"
           value={selectedValue}
           allowClear
+          placeholder={placeholder}
           options={[
             { value: 'true', label: '是' },
             { value: 'false', label: '否' },
@@ -186,15 +220,66 @@ function renderMetadataFilterField(
   }
 
   return (
-    <label key={field.key} className="np-filter-control">
+    <label key={field.key} className="np-filter-field">
       <span className="sh-form-label">{fieldLabel}</span>
       <input
-        className="sh-form-input"
+        className="np-filter-control"
         value={value == null ? '' : String(value)}
+        placeholder={placeholder}
         onChange={(event) => onChange(field.key, event.target.value)}
       />
     </label>
   );
+}
+
+function readTableCellValue<TRow extends Record<string, unknown>>(row: TRow, key: string): unknown {
+  return row[key];
+}
+
+function renderBooleanTableCell(value: unknown): ReactElement | string {
+  if (typeof value !== 'boolean') {
+    return value == null ? '' : String(value);
+  }
+
+  return (
+    <span
+      className={value
+        ? 'np-standard-crud-cell-status np-standard-crud-cell-status-enabled'
+        : 'np-standard-crud-cell-status np-standard-crud-cell-status-disabled'}
+    >
+      {value ? '启用' : '停用'}
+    </span>
+  );
+}
+
+function renderMetadataTableCell<TRow extends Record<string, unknown>>(
+  row: TRow,
+  column: {
+    key: string;
+    dataIndex?: string;
+    metadataField?: string;
+    metadataSource?: 'model' | 'projection';
+  },
+  modelDocument: MetadataRecord,
+  registration: StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
+): ReactNode {
+  const value = readTableCellValue(row, column.dataIndex ?? column.key);
+  if (column.metadataSource !== 'model') {
+    return value == null ? '' : String(value);
+  }
+
+  const modelField = findStandardCrudModelField(modelDocument, column.metadataField);
+  const enumKey = readModelFieldEnumKey(modelField);
+  if (enumKey.length > 0) {
+    const option = registration.enumOptions?.[enumKey]?.find((item) => item.value === value);
+    return option?.label ?? (value == null ? '' : String(value));
+  }
+
+  if (readModelFieldStorageType(modelField) === 'bool') {
+    return renderBooleanTableCell(value);
+  }
+
+  return value == null ? '' : String(value);
 }
 
 function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
@@ -598,6 +683,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
 
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
+  const viewAction = schema.rowActions.find((action) => action.standardAction === 'view');
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
   const refreshAction = schema.pageActions.find((action) => action.standardAction === 'refresh');
   const rowActionDefinitions = schema.rowActions;
@@ -618,6 +704,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       sorter: column.sortable === true,
       render: registeredColumn?.render,
       metadataField: column.field,
+      metadataSource: column.source,
     };
   });
   const standardColumns = shouldRenderActionColumn
@@ -639,6 +726,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             : null;
           const rowActions: RowActionItem[] = rowActionDefinitions
             .filter((action) => hasActionPermission(action, grantedPermissions))
+            .filter((action) => action.standardAction !== 'view')
             .map((action): RowActionItem => {
               const pendingKey = `${action.key}:${rowId}`;
               const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
@@ -646,15 +734,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
                 : undefined;
 
-              if (action.standardAction === 'view') {
-                return {
-                  key: action.key,
-                  label,
-                  onClick: () => {
-                    void openViewDrawer(rowId);
-                  },
-                };
-              }
               if (action.standardAction === 'edit') {
                 return {
                   key: action.key,
@@ -752,7 +831,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     title: column.title,
     width: column.width,
     sorter: column.sorter,
-    render: (_: unknown, row: TRow) => (column.render ? column.render(row) : readTableCell(row, column.dataIndex ?? column.key)),
+    render: (_: unknown, row: TRow) => (column.render
+      ? column.render(row)
+      : renderMetadataTableCell(
+        row,
+        column,
+        modelDocument,
+        registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
+      )),
   }));
 
   const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, grantedPermissions));
@@ -801,7 +887,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
             filters[field.key],
             (key, value) => setFilters((current) => ({ ...current, [key]: value })),
-            (labelKey) => t(`${schema.dicKey}.${labelKey}`, labelKey),
+            (labelKey, fallback) => t(`${schema.dicKey}.${labelKey}`, fallback ?? labelKey),
           ))}
         </div>
       )}
@@ -809,28 +895,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       onSearch={context.applyFilters}
       onReset={context.resetFilters}
       more={schema.advancedFilter.enabled ? (
-        <Popover
-          placement="bottomRight"
-          trigger="click"
-          open={advancedFilterOpen}
-          onOpenChange={setAdvancedFilterOpen}
-          content={(
-            <div className="np-person-filter-grid">
-              {schema.advancedFilter.sections.flatMap((section) => section.fields).map((field) => renderMetadataFilterField(
-                field,
-                modelDocument,
-                registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
-                filters[field.key],
-                (key, value) => setFilters((current) => ({ ...current, [key]: value })),
-                (labelKey) => t(`${schema.dicKey}.${labelKey}`, labelKey),
-              ))}
-            </div>
-          )}
-        >
-          <AntdButton type="text" size="middle">
-            {t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
-          </AntdButton>
-        </Popover>
+        <AntdButton type="text" size="middle" onClick={() => setAdvancedFilterOpen(true)}>
+          {t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
+        </AntdButton>
       ) : undefined}
     />
   );
@@ -871,7 +938,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         loading={loading}
         selectableRows
         showRowNumber
-        rowIcon={<UserOutlined />}
+        rowIcon={(row) => (
+          <button
+            type="button"
+            className="np-table-row-view-button"
+            aria-label={viewAction ? t(`${schema.dicKey}.${viewAction.labelKey}`, viewAction.labelKey) : '查看'}
+            onClick={() => {
+              void openViewDrawer(registration.getRowId(row));
+            }}
+          >
+            <UserOutlined />
+          </button>
+        )}
         onRefresh={() => void handleRefresh()}
       />
     </div>
@@ -885,6 +963,58 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       >
         {content}
       </CrudWorkspacePage>
+      {schema.advancedFilter.enabled ? (
+        <Drawer
+          open={advancedFilterOpen}
+          title={t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
+          width={420}
+          placement="right"
+          destroyOnClose
+          onClose={() => setAdvancedFilterOpen(false)}
+          footer={(
+            <Space className="np-advanced-filter-drawer-footer">
+              <AntdButton
+                onClick={() => {
+                  context.resetFilters();
+                }}
+                disabled={loading}
+              >
+                {t(`${schema.dicKey}.Action_ResetAdvanced`, '重置条件')}
+              </AntdButton>
+              <AntdButton
+                type="primary"
+                loading={loading}
+                onClick={() => {
+                  context.applyFilters();
+                  setAdvancedFilterOpen(false);
+                }}
+              >
+                {t(`${schema.dicKey}.Action_ApplyAdvanced`, '应用筛选')}
+              </AntdButton>
+            </Space>
+          )}
+        >
+          <div className="np-advanced-filter-drawer">
+            {schema.advancedFilter.sections.map((section) => (
+              <section key={section.key} className="np-advanced-filter-section">
+                <h3 className="np-advanced-filter-section-title">
+                  {t(`${schema.dicKey}.${section.titleKey}`, section.titleKey)}
+                </h3>
+                <div className="np-advanced-filter-grid">
+                  {section.fields.map((field) => renderMetadataFilterField(
+                    field,
+                    modelDocument,
+                    registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
+                    filters[field.key],
+                    (key, value) => setFilters((current) => ({ ...current, [key]: value })),
+                    (labelKey, fallback) => t(`${schema.dicKey}.${labelKey}`, fallback ?? labelKey),
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </Drawer>
+      ) : null}
       <CrudFormDrawer
         open={drawerState.mode === 'view'}
         title={viewDrawerTitle}
@@ -944,9 +1074,4 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       </CrudFormDrawer>
     </>
   );
-}
-
-function readTableCell<TRow extends Record<string, unknown>>(row: TRow, key: string): string {
-  const value = row[key];
-  return value == null ? '' : String(value);
 }

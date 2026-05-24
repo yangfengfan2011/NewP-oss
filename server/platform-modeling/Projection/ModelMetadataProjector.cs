@@ -109,8 +109,11 @@ public sealed class ModelMetadataProjector
 
     private static FieldKind ResolveFieldKind(ModelMetadataField field)
     {
-        // model 数据源表示受控模型引用，只影响 DTO 展示伴随字段等契约语义，不改变 storage 投影。
+        // model 数据源天然表示模型引用；provider 只有在 lookup 控件语义下才表示受控引用展示。
+        // 这里仅影响 DTO 展示伴随字段，不改变 storage 投影或数据库结构。
         return string.Equals(field.DataSource?.Type, "model", StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(field.DataSource?.Type, "provider", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(field.UiType, "lookup", StringComparison.OrdinalIgnoreCase))
             ? FieldKind.Reference
             : FieldKind.Scalar;
     }

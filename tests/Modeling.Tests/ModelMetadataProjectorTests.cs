@@ -223,6 +223,44 @@ public class ModelMetadataProjectorTests
     }
 
     [Fact]
+    public void Project_TreatsProviderLookupDataSourceFieldsAsReferencesWithoutChangingStorageType()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Organization",
+            Model = new ModelMetadataModel
+            {
+                Name = "Person",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "CompanyId",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "guid",
+                            Nullable = true
+                        },
+                        UiType = "lookup",
+                        DataSource = new ModelMetadataDataSource
+                        {
+                            Type = "provider",
+                            Key = "organization.companies"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        Assert.Contains(definition.Fields, static field =>
+            field is { Name: "CompanyId", Kind: FieldKind.Reference, ValueType: FieldValueType.ObjectId, StoreType: "guid" });
+    }
+
+    [Fact]
     public void Project_AddsEntityFixedFieldsAndSkipsBuiltinFieldAuthoringEntry()
     {
         var document = new ModelMetadataDocument

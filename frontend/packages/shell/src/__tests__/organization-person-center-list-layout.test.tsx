@@ -195,7 +195,7 @@ describe('organization person center list layout', () => {
     const tableColumnWidths = Array.from(container.querySelectorAll('col')).map(
       (node) => (node as HTMLTableColElement).style.width,
     );
-    expect(tableColumnWidths).toEqual(expect.arrayContaining(['40px', '40px']));
+    expect(tableColumnWidths).toEqual(expect.arrayContaining(['30px', '40px']));
     expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();

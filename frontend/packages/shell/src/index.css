@@ -549,6 +549,10 @@ a:hover {
 }
 
 .np-table-row-number-cell {
+  width: 30px !important;
+  min-width: 30px;
+  max-width: 30px;
+  padding-inline: 0 !important;
   color: #475569;
   font-variant-numeric: tabular-nums;
 }

@@ -48,7 +48,8 @@ export interface SearchTablePageProps<TRow> {
 
 const DEFAULT_COLUMN_WIDTH = 160;
 const MIN_COLUMN_WIDTH = 96;
-const CHROME_COLUMN_WIDTH = 40;
+const ROW_NUMBER_COLUMN_WIDTH = 30;
+const ROW_ICON_COLUMN_WIDTH = 40;
 const FIXED_CHROME_COLUMN_KEYS = new Set(['__rowNumber', '__rowIcon']);
 
 interface ResizableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {
@@ -217,7 +218,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         key: '__rowNumber',
         dataIndex: '__rowNumber',
         title: '',
-        width: CHROME_COLUMN_WIDTH,
+        width: ROW_NUMBER_COLUMN_WIDTH,
         align: 'center',
         className: 'np-table-chrome-cell np-table-row-number-cell',
         sorter: false,
@@ -230,7 +231,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         key: '__rowIcon',
         dataIndex: '__rowIcon',
         title: '',
-        width: CHROME_COLUMN_WIDTH,
+        width: ROW_ICON_COLUMN_WIDTH,
         align: 'center',
         className: 'np-table-chrome-cell np-table-row-icon-cell',
         sorter: false,

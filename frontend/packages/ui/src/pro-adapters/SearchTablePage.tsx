@@ -221,6 +221,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         width: ROW_NUMBER_COLUMN_WIDTH,
         align: 'center',
         className: 'np-table-chrome-cell np-table-row-number-cell',
+        hideInSetting: true,
         sorter: false,
         render: (_: ReactNode, __: TRow, index: number) => (current - 1) * pageSize + index + 1,
       });
@@ -234,6 +235,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         width: ROW_ICON_COLUMN_WIDTH,
         align: 'center',
         className: 'np-table-chrome-cell np-table-row-icon-cell',
+        hideInSetting: true,
         sorter: false,
         render: (_: ReactNode, row: TRow) => (
           <span className="np-table-row-icon">

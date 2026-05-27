@@ -196,6 +196,17 @@ describe('organization person center list layout', () => {
       (node) => (node as HTMLTableColElement).style.width,
     );
     expect(tableColumnWidths).toEqual(expect.arrayContaining(['30px', '40px']));
+    const columnSettingIcon = container.querySelector('.anticon-setting');
+    expect(columnSettingIcon).not.toBeNull();
+    await act(async () => {
+      columnSettingIcon?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+    const settingColumnTexts = Array.from(
+      document.body.querySelectorAll('.ant-pro-table-column-setting-list .ant-tree-treenode'),
+    ).map((node) => node.textContent?.replace(/\s+/g, '') ?? '');
+    expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '部门', '在职状态', '启用状态', '操作']);
+    expect(settingColumnTexts.filter((text) => text.length === 0)).toHaveLength(1);
     expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();

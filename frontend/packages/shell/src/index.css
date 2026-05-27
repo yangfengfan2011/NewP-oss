@@ -171,7 +171,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 24px;
+  padding: 10px;
   overflow: auto;
   background: #f6f8fa;
 }
@@ -957,7 +957,7 @@ a:hover {
   }
 
   .np-app-content {
-    padding: 16px;
+    padding: 10px;
   }
 
   .np-person-filter-grid {

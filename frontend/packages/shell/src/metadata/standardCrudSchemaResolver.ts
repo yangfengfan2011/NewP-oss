@@ -18,6 +18,12 @@ export interface StandardCrudRuntimeFieldSchema {
   dataSourceKey?: string;
 }
 
+export interface StandardCrudRowActionVisibilitySchema {
+  field: string;
+  operator: 'equals';
+  value: boolean | string | number | null;
+}
+
 export interface StandardCrudRuntimeActionSchema {
   key: string;
   labelKey: string;
@@ -26,6 +32,7 @@ export interface StandardCrudRuntimeActionSchema {
   confirmMessageKey?: string;
   handlerKey?: string;
   requiredPermissions?: string[];
+  visibleWhen?: StandardCrudRowActionVisibilitySchema;
 }
 
 export interface StandardCrudRuntimeColumnSchema {
@@ -121,12 +128,27 @@ function readPermissions(value: unknown): string[] {
   return readArray<unknown>(value).filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
+function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySchema {
+  const record = readRecord(value);
+  const field = readString(record.field);
+  const operator = readString(record.operator);
+
+  return {
+    field,
+    operator: operator as StandardCrudRowActionVisibilitySchema['operator'],
+    value: record.value as StandardCrudRowActionVisibilitySchema['value'],
+  };
+}
+
 function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   const standardAction = readString(value.standardAction);
   const variant = readString(value.variant);
   const confirmMessageKey = readString(value.confirmMessageKey);
   const handlerKey = readString(value.handlerKey);
   const requiredPermissions = readPermissions(value.requiredPermissions ?? value.permissions);
+  const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
+    ? readActionVisibility(value.visibleWhen)
+    : undefined;
 
   return {
     key: readString(value.key),
@@ -136,6 +158,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(confirmMessageKey.length > 0 ? { confirmMessageKey } : {}),
     ...(handlerKey.length > 0 ? { handlerKey } : {}),
     ...(requiredPermissions.length > 0 ? { requiredPermissions } : {}),
+    ...(visibleWhen ? { visibleWhen } : {}),
   };
 }
 
@@ -420,6 +443,34 @@ function assertModelFieldReference(
   }
 }
 
+function assertActionVisibility(action: StandardCrudRuntimeActionSchema, modelFields: Set<string>): void {
+  if (!action.visibleWhen) {
+    return;
+  }
+  if (action.visibleWhen.field.length === 0) {
+    throw new Error(`row action "${action.key}" visibleWhen must declare field`);
+  }
+  if (action.visibleWhen.operator.length === 0) {
+    throw new Error(`row action "${action.key}" visibleWhen must declare operator`);
+  }
+  if (action.visibleWhen.operator !== 'equals') {
+    throw new Error(`row action "${action.key}" visibleWhen uses unsupported operator "${action.visibleWhen.operator}"`);
+  }
+  if (
+    typeof action.visibleWhen.value !== 'boolean'
+    && typeof action.visibleWhen.value !== 'string'
+    && typeof action.visibleWhen.value !== 'number'
+    && action.visibleWhen.value !== null
+  ) {
+    throw new Error(`row action "${action.key}" visibleWhen value must be a boolean, string, number or null`);
+  }
+  assertModelFieldReference(
+    action.visibleWhen.field,
+    modelFields,
+    `row action "${action.key}" visibleWhen references unknown model field "${action.visibleWhen.field}"`,
+  );
+}
+
 function assertQuery(query: StandardCrudRuntimeQuerySchema, advancedFilter?: StandardCrudAdvancedFilterSchema): void {
   const fields = collectStandardCrudQueryFields(query, advancedFilter);
   const declaredKeys = new Set(fields.map((field) => field.key));
@@ -523,6 +574,10 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     }
   }
   assertLocalizedActions(dicKey, [...schema.pageActions, ...schema.rowActions], context?.defaultLanguageCatalog);
+
+  for (const action of schema.rowActions) {
+    assertActionVisibility(action, modelFields);
+  }
 
   if (Object.keys(model).length > 0) {
     for (const field of collectStandardCrudQueryFields(schema.query, schema.advancedFilter)) {

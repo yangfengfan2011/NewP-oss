@@ -141,14 +141,24 @@
         "standardAction": "disable",
         "variant": "danger",
         "confirmMessageKey": "Action_Disable_Confirm",
-        "handlerKey": "disable"
+        "handlerKey": "disable",
+        "visibleWhen": {
+          "field": "IsEnabled",
+          "operator": "equals",
+          "value": true
+        }
       },
       {
         "key": "enable",
         "labelKey": "Action_Enable",
         "standardAction": "enable",
         "confirmMessageKey": "Action_Enable_Confirm",
-        "handlerKey": "enable"
+        "handlerKey": "enable",
+        "visibleWhen": {
+          "field": "IsEnabled",
+          "operator": "equals",
+          "value": false
+        }
       }
     ],
     "export": {

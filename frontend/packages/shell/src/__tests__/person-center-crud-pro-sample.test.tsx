@@ -186,6 +186,31 @@ function renderHost(
   return root;
 }
 
+function createPersonListViewDocumentWithRowActionVisibility(): typeof personListViewDocument {
+  return {
+    ...personListViewDocument,
+    view: {
+      ...personListViewDocument.view,
+      rowActions: personListViewDocument.view.rowActions.map((action) => {
+        if (action.standardAction === 'disable') {
+          return {
+            ...action,
+            visibleWhen: { field: 'IsEnabled', operator: 'equals', value: true },
+          };
+        }
+        if (action.standardAction === 'enable') {
+          return {
+            ...action,
+            visibleWhen: { field: 'IsEnabled', operator: 'equals', value: false },
+          };
+        }
+
+        return action;
+      }),
+    },
+  } as typeof personListViewDocument;
+}
+
 describe('人员中心 CRUD Pro 样板', () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -590,6 +615,51 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.textContent).toContain('确认删除该人员吗？');
   });
 
+  it('按人员启用状态展示启用停用，并将危险动作收纳到更多', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [
+        { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true },
+        { EID: 'person-2', PersonNo: 'P0002', ENAME: '李四', IsEnabled: false },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container, ['/organization/persons'], createPersonListViewDocumentWithRowActionVisibility());
+    });
+    await flushAsync();
+
+    const enabledRow = findTableRowByText(container, '张三');
+    const disabledRow = findTableRowByText(container, '李四');
+    const enabledActionCell = enabledRow?.querySelector('td:last-child');
+    const disabledActionCell = disabledRow?.querySelector('td:last-child');
+    expect(enabledActionCell?.textContent).toContain('编辑');
+    expect(enabledActionCell?.textContent).toContain('更多');
+    expect(enabledActionCell?.textContent).not.toContain('删除');
+    expect(enabledActionCell?.textContent).not.toContain('停用');
+    expect(enabledActionCell?.textContent).not.toContain('启用');
+    expect(disabledActionCell?.textContent).toContain('编辑');
+    expect(disabledActionCell?.textContent).toContain('启用');
+    expect(disabledActionCell?.textContent).toContain('更多');
+    expect(disabledActionCell?.textContent).not.toContain('停用');
+
+    await act(async () => {
+      findAntdButtonByText(enabledRow ?? container, '更多')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushAsync();
+
+    const enabledOverflowMenu = document.body.querySelector('.np-row-actions-overflow-menu');
+    expect(enabledOverflowMenu?.textContent).toContain('删除');
+    expect(enabledOverflowMenu?.textContent).toContain('停用');
+    expect(enabledOverflowMenu?.textContent).not.toContain('启用');
+  });
+
   it('metadata 未声明删除时不展示删除入口', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
@@ -614,8 +684,18 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
 
     expect(container.textContent).not.toContain('删除');
-    expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('启用');
+
+    const moreButton = findAntdButtonByText(container, '更多');
+    expect(moreButton).toBeDefined();
+    await act(async () => {
+      moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushAsync();
+
+    const overflowMenu = document.body.querySelector('.np-row-actions-overflow-menu');
+    expect(overflowMenu?.textContent).toContain('停用');
+    expect(overflowMenu?.textContent).not.toContain('删除');
   });
 
   it('delete handler 即使不主动 refresh，确认删除成功后 Host 也会刷新一次列表', async () => {
@@ -744,6 +824,51 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(listRequestCount).toBe(1);
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
     expect(document.body.textContent).toContain('查看人员');
+  });
+
+  it('删除失败时展示后端透传的业务错误', async () => {
+    const resource = organizationModule.standardCrudResources?.[0];
+    if (!resource) {
+      throw new Error('未找到人员标准 CRUD 资源。');
+    }
+
+    const deleteHandler = vi.fn(async () => {
+      throw new Error('当前人员已绑定账号，不能删除。');
+    });
+    const sampleModule = {
+      ...organizationModule,
+      standardCrudResources: [{
+        ...resource,
+        actionHandlers: {
+          ...(resource.actionHandlers ?? {}),
+          delete: deleteHandler,
+        },
+      }],
+    };
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const deleteButton = await findOverflowRowActionButton(container, '张三', '删除');
+    expect(deleteButton).toBeDefined();
+    await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    await clickPopconfirmButton('确认');
+    await flushAsync();
+
+    expect(container.textContent).toContain('当前人员已绑定账号，不能删除。');
   });
 
   it('删除等待期间打开其他记录详情后，成功回调不会误关新抽屉', async () => {

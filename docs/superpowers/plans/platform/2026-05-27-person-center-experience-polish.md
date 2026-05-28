@@ -52,7 +52,7 @@
 - Modify: `frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry`
 
-- [ ] **Step 1: 写 schema 保留 visibleWhen 的失败测试**
+- [x] **Step 1: 写 schema 保留 visibleWhen 的失败测试**
 
 在 `frontend/packages/shell/src/__tests__/standard-crud-schema-and-registry.test.ts` 的 metadata-owned list schema 用例中，把 `disable` 动作扩展为：
 
@@ -79,7 +79,7 @@ expect(schema.rowActions[0]).toMatchObject({
 });
 ```
 
-- [ ] **Step 2: 写 unsupported visibleWhen operator 的失败测试**
+- [x] **Step 2: 写 unsupported visibleWhen operator 的失败测试**
 
 在同一测试文件追加：
 
@@ -119,7 +119,7 @@ it('fails when row action visibleWhen uses an unsupported operator', () => {
 });
 ```
 
-- [ ] **Step 3: 写 unknown visibleWhen field 的失败测试**
+- [x] **Step 3: 写 unknown visibleWhen field 的失败测试**
 
 追加：
 
@@ -159,7 +159,7 @@ it('fails when row action visibleWhen references an unknown model field', () => 
 });
 ```
 
-- [ ] **Step 4: 运行测试确认失败**
+- [x] **Step 4: 运行测试确认失败**
 
 Run:
 
@@ -169,7 +169,57 @@ pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-an
 
 Expected: 至少 1 个断言失败，失败原因与 `visibleWhen` 未解析或未校验有关。
 
-- [ ] **Step 5: 实现最小 schema 支持**
+- [x] **Step 5: 写空 field / operator 与非法 value 类型的失败测试**
+
+在同一测试文件追加 3 个静态校验用例，分别断言：
+
+```ts
+visibleWhen: { field: '', operator: 'equals', value: true }
+```
+
+抛出：
+
+```ts
+row action "disable" visibleWhen must declare field
+```
+
+```ts
+visibleWhen: { field: 'IsEnabled', operator: '', value: true }
+```
+
+抛出：
+
+```ts
+row action "disable" visibleWhen must declare operator
+```
+
+```ts
+visibleWhen: { field: 'IsEnabled', operator: 'equals', value: { enabled: true } }
+```
+
+抛出：
+
+```ts
+row action "disable" visibleWhen value must be a boolean, string, number or null
+```
+
+这些用例必须与 unsupported operator、unknown field 一起失败，防止非法 metadata 被静默收敛成 `null`。
+
+再追加 malformed `visibleWhen` 用例：
+
+```ts
+visibleWhen: {}
+```
+
+抛出：
+
+```ts
+row action "disable" visibleWhen must declare field
+```
+
+注意：只有 `visibleWhen` 属性完全不存在时才表示未声明；只要 metadata 显式提供了 `visibleWhen`，就必须进入静态校验。
+
+- [x] **Step 6: 实现最小 schema 支持**
 
 在 `frontend/packages/shell/src/metadata/standardCrudSchemaResolver.ts` 增加类型：
 
@@ -194,16 +244,11 @@ function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySc
   const record = readRecord(value);
   const field = readString(record.field);
   const operator = readString(record.operator);
-  if (field.length === 0 && operator.length === 0 && !Object.prototype.hasOwnProperty.call(record, 'value')) {
-    return undefined;
-  }
 
   return {
     field,
     operator: operator as StandardCrudRowActionVisibilitySchema['operator'],
-    value: typeof record.value === 'boolean' || typeof record.value === 'string' || typeof record.value === 'number' || record.value === null
-      ? record.value
-      : null,
+    value: record.value as StandardCrudRowActionVisibilitySchema['value'],
   };
 }
 ```
@@ -211,7 +256,9 @@ function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySc
 在 `readAction` 返回值中追加：
 
 ```ts
-const visibleWhen = readActionVisibility(value.visibleWhen);
+const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
+  ? readActionVisibility(value.visibleWhen)
+  : undefined;
 ...
 ...(visibleWhen ? { visibleWhen } : {}),
 ```
@@ -223,8 +270,22 @@ function assertActionVisibility(action: StandardCrudRuntimeActionSchema, modelFi
   if (!action.visibleWhen) {
     return;
   }
+  if (action.visibleWhen.field.length === 0) {
+    throw new Error(`row action "${action.key}" visibleWhen must declare field`);
+  }
+  if (action.visibleWhen.operator.length === 0) {
+    throw new Error(`row action "${action.key}" visibleWhen must declare operator`);
+  }
   if (action.visibleWhen.operator !== 'equals') {
     throw new Error(`row action "${action.key}" visibleWhen uses unsupported operator "${action.visibleWhen.operator}"`);
+  }
+  if (
+    typeof action.visibleWhen.value !== 'boolean'
+    && typeof action.visibleWhen.value !== 'string'
+    && typeof action.visibleWhen.value !== 'number'
+    && action.visibleWhen.value !== null
+  ) {
+    throw new Error(`row action "${action.key}" visibleWhen value must be a boolean, string, number or null`);
   }
   assertModelFieldReference(
     action.visibleWhen.field,
@@ -242,7 +303,7 @@ for (const action of schema.rowActions) {
 }
 ```
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 7: 运行测试确认通过**
 
 Run:
 
@@ -261,7 +322,9 @@ Expected: `standard-crud-schema-and-registry` 通过。
 - Modify: `frontend/packages/shell/src/index.css`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample organization-person-center-list-layout`
 
-- [ ] **Step 1: 写启用/停用互斥与危险动作进更多的失败测试**
+> 执行顺序说明：Task 2 先验证 Shell Host 投影能力，真实 `PersonList.view.json` 的状态声明在 Task 3 更新。因此 Task 2 中断言启用/停用互斥的测试，使用测试内局部 view metadata 注入 `disable/enable.visibleWhen`，不得提前修改真实 metadata 文件。
+
+- [x] **Step 1: 写启用/停用互斥与危险动作进更多的失败测试**
 
 在 `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx` 追加：
 
@@ -307,7 +370,7 @@ it('按人员启用状态展示启用停用，并将危险动作收纳到更多'
 });
 ```
 
-- [ ] **Step 2: 调整现有布局测试期望**
+- [x] **Step 2: 调整现有布局测试期望**
 
 在 `frontend/packages/shell/src/__tests__/organization-person-center-list-layout.test.tsx` 的列表布局用例中，把操作列断言调整为：
 
@@ -332,7 +395,7 @@ expect(actionHeader?.className).toContain('ant-table-cell-fix-right');
 expect(actionHeader?.getAttribute('style') ?? '').toContain('right: 0px');
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run:
 
@@ -342,7 +405,7 @@ pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-
 
 Expected: 行动作仍未按 `visibleWhen` 过滤，危险动作仍可能平铺或操作列未 fixed，测试失败。
 
-- [ ] **Step 4: 实现 Host 行动作投影 helper**
+- [x] **Step 4: 实现 Host 行动作投影 helper**
 
 在 `frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx` 常量区替换：
 
@@ -394,7 +457,7 @@ function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
   ];
 ```
 
-- [ ] **Step 5: 在 row action 构建链路应用 visibleWhen 与 danger**
+- [x] **Step 5: 在 row action 构建链路应用 visibleWhen 与 danger**
 
 在 `rowActions` 构造链路中，将过滤链调整为：
 
@@ -414,7 +477,7 @@ danger: isDangerRowAction(action),
 
 删除动作仍保留 `confirmMessage`、`setDeletingActionKey`、`context.refresh()` 和 `closeDrawerForRow(rowId)` 的现有流程。
 
-- [ ] **Step 6: 固定操作列并设置宽度**
+- [x] **Step 6: 固定操作列并设置宽度**
 
 在操作列定义中设置：
 
@@ -441,7 +504,7 @@ fixed: column.fixed,
 fixed: undefined,
 ```
 
-- [ ] **Step 7: 收敛 CSS 防止操作列换行抖动**
+- [x] **Step 7: 收敛 CSS 防止操作列换行抖动**
 
 把 `frontend/packages/shell/src/index.css` 中 `.np-row-actions` 调整为：
 
@@ -465,7 +528,7 @@ fixed: undefined,
 }
 ```
 
-- [ ] **Step 8: 运行测试确认通过**
+- [x] **Step 8: 运行测试确认通过**
 
 Run:
 
@@ -481,7 +544,7 @@ Expected: 两个测试文件通过。
 - Modify: `modules/Organization/metadata/views/PersonList.view.json`
 - Verify: `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry person-center-crud-pro-sample`
 
-- [ ] **Step 1: 给 disable 增加 IsEnabled=true 条件**
+- [x] **Step 1: 给 disable 增加 IsEnabled=true 条件**
 
 在 `modules/Organization/metadata/views/PersonList.view.json` 的 `disable` 动作中加入：
 
@@ -511,7 +574,7 @@ Expected: 两个测试文件通过。
 }
 ```
 
-- [ ] **Step 2: 给 enable 增加 IsEnabled=false 条件**
+- [x] **Step 2: 给 enable 增加 IsEnabled=false 条件**
 
 在 `enable` 动作中加入：
 
@@ -540,7 +603,7 @@ Expected: 两个测试文件通过。
 }
 ```
 
-- [ ] **Step 3: 运行 schema 与人员中心测试**
+- [x] **Step 3: 运行 schema 与人员中心测试**
 
 Run:
 
@@ -561,7 +624,7 @@ Expected: schema resolver 能解析 metadata 中的 `visibleWhen`，人员中心
   - `pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample`
   - `pnpm --dir frontend --filter @icp-modules/organization build`
 
-- [ ] **Step 1: 新增 Organization 服务错误解析测试**
+- [x] **Step 1: 新增 Organization 服务错误解析测试**
 
 创建 `frontend/packages/shell/src/__tests__/organization-service-error-handling.test.ts`：
 
@@ -593,7 +656,7 @@ describe('organizationService error handling', () => {
 });
 ```
 
-- [ ] **Step 2: 在 Shell 人员中心样板中补透传行为测试**
+- [x] **Step 2: 在 Shell 人员中心样板中补透传行为测试**
 
 在 `person-center-crud-pro-sample.test.tsx` 删除失败用例旁追加：
 
@@ -644,7 +707,7 @@ it('删除失败时展示后端透传的业务错误', async () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run:
 
@@ -656,7 +719,7 @@ pnpm --dir frontend --filter @icp-modules/organization build
 
 Expected: `organization-service-error-handling` 因 `requestJson` 尚未解析后端消息而失败；人员中心样板测试继续通过或只在错误消息透传断言处失败；Organization build 通过。
 
-- [ ] **Step 4: 实现错误响应解析 helper**
+- [x] **Step 4: 实现错误响应解析 helper**
 
 在 `frontend/modules/organization/src/services/organizationService.ts` 的 `requestJson` 前增加：
 
@@ -708,7 +771,7 @@ if (!response.ok) {
 }
 ```
 
-- [ ] **Step 5: 运行验证**
+- [x] **Step 5: 运行验证**
 
 Run:
 
@@ -724,9 +787,9 @@ Expected: 样板测试通过，Organization TypeScript build 通过。
 
 **Files:**
 - Modify: `docs/modules/organization-implementation.md`
-- Verify: 文档人工检查加 `rg -n "人员中心标准 CRUD 样板|visibleWhen|操作列|错误透传" docs/modules/organization-implementation.md`
+- Verify: 文档人工检查加 `rg -n "人员中心标准 CRUD 样板|visibleWhen|操作列|错误透传|真实列表 API|standard-crud-schema-and-registry|organization-service-error-handling" docs/modules/organization-implementation.md docs/superpowers/plans/platform/2026-05-27-person-center-experience-polish.md`
 
-- [ ] **Step 1: 补文档章节**
+- [x] **Step 1: 补文档章节**
 
 在 `docs/modules/organization-implementation.md` 的“前端实现”后追加：
 
@@ -740,6 +803,8 @@ Expected: 样板测试通过，Organization TypeScript build 通过。
 - `frontend/modules/organization/src/standard-crud/personStandardCrudResource.tsx`：保留人员资源的 provider、mapper、renderer 和 action handler，不承载 Shell 通用页面规则。
 - `frontend/modules/organization/src/services/organizationService.ts`：负责 Organization API 调用和后端业务错误透传。
 
+当前人员中心标准 CRUD 已接入 `/api/organization/persons` 列表与详情。
+
 当前边界：
 
 - 不在本样板中维护用户、角色、授权中心或动作级授权配置。
@@ -749,7 +814,8 @@ Expected: 样板测试通过，Organization TypeScript build 通过。
 验证入口：
 
 ```powershell
-pnpm --dir frontend --filter @icp-platform/shell test -- person-center-crud-pro-sample organization-person-center-list-layout
+pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry person-center-crud-pro-sample organization-person-center-list-layout
+pnpm --dir frontend --filter @icp-platform/shell test -- organization-service-error-handling
 pnpm --dir frontend --filter @icp-modules/organization build
 dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
 ```
@@ -759,12 +825,12 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 回滚方式：回退 `PersonList.view.json` 的 `visibleWhen`、Shell Host 行动作投影、Organization 服务错误解析和本章节文档；本轮不涉及数据库迁移或后端契约变更。
 ```
 
-- [ ] **Step 2: 检查文档关键字**
+- [x] **Step 2: 检查文档关键字**
 
 Run:
 
 ```powershell
-rg -n "人员中心标准 CRUD 样板|visibleWhen|操作列|错误透传" docs/modules/organization-implementation.md
+rg -n "人员中心标准 CRUD 样板|visibleWhen|操作列|错误透传|真实列表 API|standard-crud-schema-and-registry|organization-service-error-handling" docs/modules/organization-implementation.md docs/superpowers/plans/platform/2026-05-27-person-center-experience-polish.md
 ```
 
 Expected: 输出新增章节中的关键行。
@@ -774,7 +840,7 @@ Expected: 输出新增章节中的关键行。
 **Files:**
 - 仅验证；如果前面任务暴露小范围问题，只修正本计划列出的文件。
 
-- [ ] **Step 1: 运行前端定向测试**
+- [x] **Step 1: 运行前端定向测试**
 
 Run:
 
@@ -785,17 +851,18 @@ pnpm --dir frontend --filter @icp-platform/shell test -- organization-service-er
 
 Expected: 全部通过；允许出现既有 AntD `findDOMNode` 或 React Router future warning，但不能有 failed test。
 
-- [ ] **Step 2: 运行 Organization 前端构建**
+- [x] **Step 2: 运行 Shell 与 Organization 前端构建**
 
 Run:
 
 ```powershell
+pnpm --dir frontend --filter @icp-platform/shell build
 pnpm --dir frontend --filter @icp-modules/organization build
 ```
 
-Expected: TypeScript 编译通过。
+Expected: Shell 与 Organization TypeScript 编译通过。
 
-- [ ] **Step 3: 运行后端 Organization 定向测试**
+- [x] **Step 3: 运行后端 Organization 定向测试**
 
 Run:
 
@@ -805,7 +872,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v mini
 
 Expected: 测试通过。若遇到 .NET build server 文件锁，先运行 `dotnet build-server shutdown`，再重跑同一命令。
 
-- [ ] **Step 4: 运行设计文档校验**
+- [x] **Step 4: 运行设计文档校验**
 
 Run:
 
@@ -816,7 +883,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 
 Expected: 两个脚本都通过。
 
-- [ ] **Step 5: 检查工作区 diff**
+- [x] **Step 5: 检查工作区 diff**
 
 Run:
 
@@ -825,9 +892,9 @@ git status --short
 git diff --stat
 ```
 
-Expected: diff 只包含本计划列出的文件，以及 `docs/architecture/ai-first-design-check-targets.txt` 中设计登记项。若出现无关文件，先确认来源，不回退用户改动。
+Expected: diff 只包含本计划列出的文件；若设计校验脚本确实要求同步 `docs/architecture/ai-first-design-check-targets.txt` 设计登记项，必须在最终说明中单独标注。若出现无关文件，先确认来源，不回退用户改动。
 
-- [ ] **Step 6: 准备最终汇报**
+- [x] **Step 6: 准备最终汇报**
 
 最终汇报必须包含：
 

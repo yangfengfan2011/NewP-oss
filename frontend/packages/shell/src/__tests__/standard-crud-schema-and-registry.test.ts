@@ -164,6 +164,7 @@ describe('standard CRUD schema resolver and registry', () => {
             variant: 'danger',
             confirmMessageKey: 'Action_Disable_Confirm',
             handlerKey: 'disable',
+            visibleWhen: { field: 'IsEnabled', operator: 'equals', value: true },
           },
         ],
       },
@@ -226,7 +227,160 @@ describe('standard CRUD schema resolver and registry', () => {
       key: 'disable',
       confirmMessageKey: 'Action_Disable_Confirm',
       handlerKey: 'disable',
+      visibleWhen: { field: 'IsEnabled', operator: 'equals', value: true },
     });
+  });
+
+  it('fails when row action visibleWhen uses an unsupported operator', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        columns: [{ key: 'isEnabled', labelKey: 'Column_IsEnabled', source: 'model', field: 'IsEnabled' }],
+        rowActions: [{
+          key: 'disable',
+          labelKey: 'Action_Disable',
+          standardAction: 'disable',
+          handlerKey: 'disable',
+          visibleWhen: { field: 'IsEnabled', operator: 'notEquals', value: true },
+        }],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: { fields: [{ name: 'IsEnabled', storage: { type: 'bool' } }] },
+        }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
+          'PersonListView.Column_IsEnabled': '启用状态',
+          'PersonListView.Action_Disable': '停用',
+        },
+      },
+    )).toThrow('row action "disable" visibleWhen uses unsupported operator "notEquals"');
+  });
+
+  it('fails when row action visibleWhen references an unknown model field', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        columns: [{ key: 'isEnabled', labelKey: 'Column_IsEnabled', source: 'model', field: 'IsEnabled' }],
+        rowActions: [{
+          key: 'disable',
+          labelKey: 'Action_Disable',
+          standardAction: 'disable',
+          handlerKey: 'disable',
+          visibleWhen: { field: 'MissingState', operator: 'equals', value: true },
+        }],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: { fields: [{ name: 'IsEnabled', storage: { type: 'bool' } }] },
+        }],
+        defaultLanguageCatalog: {
+          'PersonListView.Title': '人员中心',
+          'PersonListView.Description': '维护组织模块中的人员基础信息。',
+          'PersonListView.Column_IsEnabled': '启用状态',
+          'PersonListView.Action_Disable': '停用',
+        },
+      },
+    )).toThrow('row action "disable" visibleWhen references unknown model field "MissingState"');
+  });
+
+  it('fails when row action visibleWhen declares an empty field', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        rowActions: [{
+          key: 'disable',
+          labelKey: 'Action_Disable',
+          standardAction: 'disable',
+          handlerKey: 'disable',
+          visibleWhen: { field: '', operator: 'equals', value: true },
+        }],
+      },
+      personRegistration,
+    )).toThrow('row action "disable" visibleWhen must declare field');
+  });
+
+  it('fails when row action visibleWhen declares an empty operator', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        rowActions: [{
+          key: 'disable',
+          labelKey: 'Action_Disable',
+          standardAction: 'disable',
+          handlerKey: 'disable',
+          visibleWhen: { field: 'IsEnabled', operator: '', value: true },
+        }],
+      },
+      personRegistration,
+    )).toThrow('row action "disable" visibleWhen must declare operator');
+  });
+
+  it('fails when row action visibleWhen value is not primitive or null', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        rowActions: [{
+          key: 'disable',
+          labelKey: 'Action_Disable',
+          standardAction: 'disable',
+          handlerKey: 'disable',
+          visibleWhen: { field: 'IsEnabled', operator: 'equals', value: { enabled: true } },
+        }],
+      },
+      personRegistration,
+    )).toThrow('row action "disable" visibleWhen value must be a boolean, string, number or null');
+  });
+
+  it('fails when row action visibleWhen is declared without required properties', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        titleKey: 'Title',
+        descriptionKey: 'Description',
+        mode: 'list',
+        model: 'Person',
+        rowActions: [{
+          key: 'disable',
+          labelKey: 'Action_Disable',
+          standardAction: 'disable',
+          handlerKey: 'disable',
+          visibleWhen: {},
+        }],
+      },
+      personRegistration,
+    )).toThrow('row action "disable" visibleWhen must declare field');
   });
 
   it('fails when projection column has no field', () => {

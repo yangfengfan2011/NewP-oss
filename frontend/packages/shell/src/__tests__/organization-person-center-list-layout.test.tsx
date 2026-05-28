@@ -59,11 +59,36 @@ function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<stri
 const standardCrudListViewMetadata = {
   manifest: { modules: [] },
   navDocuments: [],
-  viewDocuments: [personListViewDocument],
+  viewDocuments: [createPersonListViewDocumentWithRowActionVisibility()],
   modelDocuments: [personModelDocument],
 };
 
 const personListCatalog = flattenZhsCatalog(personListDictionary);
+
+function createPersonListViewDocumentWithRowActionVisibility(): typeof personListViewDocument {
+  return {
+    ...personListViewDocument,
+    view: {
+      ...personListViewDocument.view,
+      rowActions: personListViewDocument.view.rowActions.map((action) => {
+        if (action.standardAction === 'disable') {
+          return {
+            ...action,
+            visibleWhen: { field: 'IsEnabled', operator: 'equals', value: true },
+          };
+        }
+        if (action.standardAction === 'enable') {
+          return {
+            ...action,
+            visibleWhen: { field: 'IsEnabled', operator: 'equals', value: false },
+          };
+        }
+
+        return action;
+      }),
+    },
+  } as typeof personListViewDocument;
+}
 
 describe('organization person center list layout', () => {
   let container: HTMLDivElement;
@@ -195,7 +220,7 @@ describe('organization person center list layout', () => {
     const tableColumnWidths = Array.from(container.querySelectorAll('col')).map(
       (node) => (node as HTMLTableColElement).style.width,
     );
-    expect(tableColumnWidths).toEqual(expect.arrayContaining(['30px', '40px']));
+    expect(tableColumnWidths).toEqual(expect.arrayContaining(['30px', '40px', '176px']));
     const columnSettingIcon = container.querySelector('.anticon-setting');
     expect(columnSettingIcon).not.toBeNull();
     await act(async () => {
@@ -206,7 +231,7 @@ describe('organization person center list layout', () => {
       document.body.querySelectorAll('.ant-pro-table-column-setting-list .ant-tree-treenode'),
     ).map((node) => node.textContent?.replace(/\s+/g, '') ?? '');
     expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '部门', '在职状态', '启用状态', '操作']);
-    expect(settingColumnTexts.filter((text) => text.length === 0)).toHaveLength(1);
+    expect(settingColumnTexts.filter((text) => text.length === 0)).toHaveLength(2);
     expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
@@ -237,21 +262,27 @@ describe('organization person center list layout', () => {
     expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(true);
     expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(true);
     const firstActionCell = bodyRows[0]?.querySelector('td:last-child');
+    expect(firstActionCell?.className).toContain('ant-table-cell-fix-right');
     expect(firstActionCell?.textContent).not.toContain('查看');
     expect(firstActionCell?.textContent).toContain('编辑');
-    expect(firstActionCell?.textContent).toContain('删除');
     expect(firstActionCell?.textContent).toContain('更多');
+    expect(firstActionCell?.textContent).not.toContain('删除');
     expect(firstActionCell?.textContent).not.toContain('停用');
     expect(firstActionCell?.textContent).not.toContain('启用');
-    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(2);
+    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(1);
     expect(firstActionCell?.querySelector('.np-row-actions-more')).not.toBeNull();
+    const actionHeader = container.querySelector('th:last-child');
+    expect(actionHeader?.className).toContain('ant-table-cell-fix-right');
+    expect(actionHeader?.getAttribute('style') ?? '').toContain('right: 0px');
     expect(bodyRows[0]?.querySelector('.np-table-row-view-button')).not.toBeNull();
     await act(async () => {
       firstActionCell?.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(document.body.textContent).toContain('删除');
-    expect(document.body.textContent).toContain('停用');
-    expect(document.body.textContent).toContain('启用');
+    await flushProTableRequest();
+    const overflowMenu = document.body.querySelector('.np-row-actions-overflow-menu');
+    expect(overflowMenu?.textContent).toContain('删除');
+    expect(overflowMenu?.textContent).toContain('停用');
+    expect(overflowMenu?.textContent).not.toContain('启用');
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);

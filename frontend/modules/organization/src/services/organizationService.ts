@@ -111,10 +111,49 @@ export function getEmploymentStatusLabel(status: string): string {
   return employmentStatusOptions.find((option) => option.value === status)?.label ?? status;
 }
 
+function readErrorMessage(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.message === 'string' && record.message.trim().length > 0) {
+    return record.message;
+  }
+
+  const nestedError = record.error;
+  if (nestedError && typeof nestedError === 'object' && !Array.isArray(nestedError)) {
+    const nestedMessage = (nestedError as Record<string, unknown>).message;
+    if (typeof nestedMessage === 'string' && nestedMessage.trim().length > 0) {
+      return nestedMessage;
+    }
+  }
+
+  return undefined;
+}
+
+// 非 2xx 响应只在这里解释错误体，调用方仍负责提供稳定兜底文案，避免格式漂移时暴露空提示。
+async function readResponseErrorMessage(response: Response, fallback: string): Promise<string> {
+  const contentType = response.headers.get('content-type') ?? '';
+  try {
+    if (contentType.toLowerCase().includes('application/json')) {
+      return readErrorMessage(await response.json()) ?? fallback;
+    }
+
+    const text = await response.text();
+    return readErrorMessage(text) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 async function requestJson<T>(path: string, init: RequestInit, errorMessage: string): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
-    throw new Error(errorMessage);
+    throw new Error(await readResponseErrorMessage(response, errorMessage));
   }
 
   if (response.status === 204) {

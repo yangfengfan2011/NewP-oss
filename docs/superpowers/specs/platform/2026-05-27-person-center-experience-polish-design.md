@@ -17,7 +17,7 @@
 - 人员列表行操作按当前行状态展示：启用人员只展示“停用”，停用人员只展示“启用”。
 - 人员列表操作列固定在右侧，列多或横向滚动时仍能直接操作当前行。
 - 操作列按最多 3 个常用操作设计宽度，避免为更多潜在动作无限扩宽。
-- 删除等危险动作统一收纳到“更多”中，避免与查看、编辑、停用、启用等常用动作平铺。
+- 删除、停用等危险动作统一收纳到“更多”中，避免与查看、编辑、启用等常用动作平铺。
 - Organization 前端服务能够优先展示后端业务错误消息，例如人员已绑定账号时删除失败的具体原因。
 - 补齐人员中心样板文档，说明 metadata、Shell Host、Organization 资源声明和错误处理的入口与边界。
 
@@ -93,7 +93,8 @@ Organization 的 `requestJson` 对错误响应做结构化解析，优先使用�
 
 ### 7.1 行动作状态声明
 
-状态声明只支持受控字段、受控操作符和值比较，第一版只覆盖布尔字段等值判断。
+状态声明只支持受控字段、受控操作符和值比较，第一版用于人员中心布尔状态字段，同时保留 `string | number | null` 等 primitive 值的受控 schema 形态，方便后续复用。
+`field` 与 `operator` 必须显式声明，`operator` 只允许 `equals`，`value` 只允许 `boolean | string | number | null`；非法输入必须在 schema resolver 阶段失败，不能静默转换为其他值。
 
 ```ts
 interface StandardCrudRowActionVisibility {
@@ -200,7 +201,7 @@ const STANDARD_CRUD_ACTION_COLUMN_WIDTH = 176;
 
 - 行状态来源于列表接口返回的当前行数据，人员中心使用 `IsEnabled`。
 - 动作声明来源于 runtime metadata 视图定义。
-- 危险动作归类优先使用已有 `standardAction` 语义，第一版将 `delete` 视为危险动作。
+- 危险动作归类优先使用已有 `standardAction` 语义和 metadata `variant`，第一版将 `delete` 或 `variant=danger` 视为危险动作。
 - 错误消息来源于后端响应体；前端不持久化错误，只在当前交互中提示。
 - 操作列固定和宽度属于 UI 投影状态，不进入 metadata。
 
@@ -231,8 +232,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 
 行为验收：
 
-- 启用人员行展示停用，不展示启用。
-- 停用人员行展示启用，不展示停用。
+- 启用人员行的可用动作中包含停用、不包含启用；停用因 `variant=danger` 收纳在“更多”中。
+- 停用人员行展示启用，不展示停用；启用作为非危险动作可平铺在操作列。
 - 删除动作位于更多菜单内，并保留确认。
 - 操作列固定右侧，列多时无需滚到末尾才能操作。
 - 操作列宽度适合最多 3 个常用操作，不出现明显空白或挤压。

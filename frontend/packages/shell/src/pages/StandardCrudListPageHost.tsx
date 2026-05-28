@@ -22,7 +22,7 @@ import {
   createSearchTableRequest,
 } from '@icp-platform/ui';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
+import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
@@ -84,7 +84,31 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
   source: 'user-action',
 };
 
-const MAX_ROW_ACTION_BUTTONS = 3;
+const STANDARD_CRUD_INLINE_ACTION_LIMIT = 3;
+const STANDARD_CRUD_ACTION_COLUMN_WIDTH = 176;
+
+function readRowActionValue(row: Record<string, unknown>, field: string): unknown {
+  return row[field];
+}
+
+// 行状态可见性只在 Host 投影阶段解释，metadata 仍只声明静态约束。
+function isRowActionVisibleForRow(
+  action: Pick<StandardCrudRuntimeActionSchema, 'visibleWhen'>,
+  row: Record<string, unknown>,
+): boolean {
+  if (!action.visibleWhen) {
+    return true;
+  }
+  if (action.visibleWhen.operator !== 'equals') {
+    return false;
+  }
+
+  return readRowActionValue(row, action.visibleWhen.field) === action.visibleWhen.value;
+}
+
+function isDangerRowAction(action: Pick<StandardCrudRuntimeActionSchema, 'standardAction' | 'variant'>): boolean {
+  return action.standardAction === 'delete' || action.variant === 'danger';
+}
 
 function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
   if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
@@ -283,10 +307,15 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
 }
 
 function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
-  const hasOverflow = actions.length > MAX_ROW_ACTION_BUTTONS;
-  const inlineLimit = hasOverflow ? MAX_ROW_ACTION_BUTTONS - 1 : MAX_ROW_ACTION_BUTTONS;
-  const inlineActions = actions.slice(0, inlineLimit);
-  const overflowActions = actions.slice(inlineLimit);
+  const inlineCandidates = actions.filter((action) => !action.danger);
+  const dangerActions = actions.filter((action) => action.danger);
+  const hasOverflow = dangerActions.length > 0 || inlineCandidates.length > STANDARD_CRUD_INLINE_ACTION_LIMIT;
+  const inlineLimit = hasOverflow ? STANDARD_CRUD_INLINE_ACTION_LIMIT - 1 : STANDARD_CRUD_INLINE_ACTION_LIMIT;
+  const inlineActions = inlineCandidates.slice(0, inlineLimit);
+  const overflowActions = [
+    ...inlineCandidates.slice(inlineLimit),
+    ...dangerActions,
+  ];
   const renderActionButton = (action: RowActionItem, className: string) => {
     const button = (
       <AntdButton
@@ -701,6 +730,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       dataIndex: column.field,
       title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
       width: column.width,
+      fixed: undefined,
       sorter: column.sortable === true,
       render: registeredColumn?.render,
       metadataField: column.field,
@@ -714,7 +744,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         key: 'actions',
         dataIndex: 'actions',
         title: '操作',
-        width: undefined,
+        width: STANDARD_CRUD_ACTION_COLUMN_WIDTH,
+        fixed: 'right' as const,
         sorter: false,
         render: (row: TRow) => {
           const rowId = registration.getRowId(row);
@@ -726,6 +757,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             : null;
           const rowActions: RowActionItem[] = rowActionDefinitions
             .filter((action) => hasActionPermission(action, grantedPermissions))
+            .filter((action) => isRowActionVisibleForRow(action, row as Record<string, unknown>))
             .filter((action) => action.standardAction !== 'view')
             .map((action): RowActionItem => {
               const pendingKey = `${action.key}:${rowId}`;
@@ -747,7 +779,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 return {
                   key: action.key,
                   label,
-                  danger: true,
+                  danger: isDangerRowAction(action),
                   confirmMessage,
                   loading: deletingActionKey === pendingKey,
                   disabled: deletingActionKey !== null,
@@ -783,7 +815,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               return {
                 key: action.key,
                 label,
-                danger: action.variant === 'danger',
+                danger: isDangerRowAction(action),
                 confirmMessage,
                 loading: rowActionPendingKey === pendingKey,
                 disabled: rowActionPendingKey !== null || !handler,
@@ -830,6 +862,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     dataIndex: column.dataIndex,
     title: column.title,
     width: column.width,
+    fixed: column.fixed,
     sorter: column.sorter,
     render: (_: unknown, row: TRow) => (column.render
       ? column.render(row)

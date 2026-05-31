@@ -234,11 +234,44 @@ export interface StandardCrudResourceRegistration<
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudClient {
   list: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>;
+  exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
   getDetail: (id: string) => Promise<StandardCrudDetail>;
   create: (values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   update: (id: string, values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   delete: (id: string) => Promise<void>;
   disable: (id: string) => Promise<StandardCrudDetail>;
+}
+
+/** 标准 CRUD 导出范围；前端只传递用户意图，最终分页边界由后端导出内核裁剪。 */
+export type StandardCrudExportMode = 'current' | 'all';
+
+/** 标准 CRUD 导出列请求；来源是 view.columns 的运行时投影，后端仍会按 descriptor 白名单校验。 */
+export interface StandardCrudExportColumnRequest {
+  key: string;
+  field: string;
+  title: string;
+}
+
+/** 标准 CRUD 导出查询请求；filters 承载当前已应用筛选，pageIndex/pageSize 只对 current 模式生效。 */
+export interface StandardCrudExportQueryRequest {
+  pageIndex: number;
+  pageSize: number;
+  sortBy?: string | null;
+  sortDirection?: string | null;
+  filters: Record<string, string | number | boolean | null | undefined>;
+}
+
+/** 标准 CRUD 导出请求；模块不参与执行流程，只通过 metadata 开启能力。 */
+export interface StandardCrudExportRequest {
+  mode: StandardCrudExportMode;
+  columns: StandardCrudExportColumnRequest[];
+  query: StandardCrudExportQueryRequest;
+}
+
+/** 标准 CRUD 导出响应；fileName 来自后端 Content-Disposition，缺失时由 Host 提供兜底。 */
+export interface StandardCrudExportResponse {
+  blob: Blob;
+  fileName?: string;
 }
 
 /** 判断未知响应是否为可读取记录；数组被排除，避免把列表误当作详情字段。 */
@@ -649,10 +682,52 @@ async function requestJson<T>(fetcher: typeof fetch, path: string, init: Request
   return response.json() as Promise<T>;
 }
 
+function parseContentDispositionFileName(contentDisposition: string | null): string | undefined {
+  if (!contentDisposition) {
+    return undefined;
+  }
+
+  const encodedMatch = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+  if (encodedMatch?.[1]) {
+    return decodeURIComponent(encodedMatch[1]);
+  }
+
+  const fileNameMatch = /filename="?([^";]+)"?/i.exec(contentDisposition);
+  return fileNameMatch?.[1];
+}
+
+async function requestBlob(
+  fetcher: typeof fetch,
+  path: string,
+  init: RequestInit,
+  errorMessage: string,
+): Promise<StandardCrudExportResponse> {
+  const response = await fetcher(path, init);
+  if (!response.ok) {
+    throw new Error(errorMessage);
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: parseContentDispositionFileName(response.headers.get('content-disposition')),
+  };
+}
+
 /** 创建标准 CRUD fetch 客户端；调用方可注入 fetcher 用于测试、鉴权包装或 Host 级横切处理。 */
 export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch = fetch): StandardCrudClient {
   return {
     list: (query) => requestJson<unknown>(fetcher, buildStandardCrudPath(apiRoute, query), { method: 'GET' }, '加载标准列表失败'),
+    exportList: (request) =>
+      requestBlob(
+        fetcher,
+        `${apiRoute}/export`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+        },
+        '导出标准列表失败',
+      ),
     getDetail: async (id) =>
       normalizeStandardCrudDetail(
         await requestJson<unknown>(fetcher, `${apiRoute}/${encodeURIComponent(id)}`, { method: 'GET' }, '加载标准详情失败'),

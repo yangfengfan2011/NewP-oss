@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthorization, useLocalization } from '@icp-platform/core';
-import { UserOutlined } from '@ant-design/icons';
+import { DownloadOutlined, UserOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -10,8 +10,8 @@ import {
   normalizeStandardCrudSubmitValues,
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
-import type { StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button as AntdButton, Drawer, Popconfirm, Popover, Select, Space } from 'antd';
+import type { StandardCrudExportMode, StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { Button as AntdButton, Drawer, Popconfirm, Popover, Select, Space, message } from 'antd';
 import {
   CrudFormDrawer,
   CrudSearchBar,
@@ -49,6 +49,12 @@ interface DeleteActionErrorState {
   key: string;
   message: string;
 }
+
+interface TablePaginationState {
+  current: number;
+  pageSize: number;
+}
+
 interface RowActionItem {
   key: string;
   label: ReactNode;
@@ -86,6 +92,10 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
 
 const STANDARD_CRUD_INLINE_ACTION_LIMIT = 3;
 const STANDARD_CRUD_ACTION_COLUMN_WIDTH = 176;
+const DEFAULT_TABLE_PAGINATION: TablePaginationState = {
+  current: 1,
+  pageSize: 20,
+};
 
 function readRowActionValue(row: Record<string, unknown>, field: string): unknown {
   return row[field];
@@ -436,6 +446,29 @@ function hasActionPermission(action: { requiredPermissions?: string[] }, granted
   return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
 }
 
+function formatTimestampForFileName(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('');
+}
+
+function downloadStandardCrudBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveListViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
@@ -470,6 +503,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useLocalization();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
@@ -518,6 +552,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
   const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
+  const [tablePagination, setTablePagination] = useState<TablePaginationState>(DEFAULT_TABLE_PAGINATION);
+  const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
@@ -549,10 +585,54 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     detailRequestIdRef.current += 1;
   };
 
-  const closeDrawer = () => {
+  const buildDrawerSearch = (mode: Exclude<CrudDrawerMode, 'closed'>, id?: string): string => {
+    const params = new URLSearchParams(location.search);
+    params.set('drawer', mode);
+    if (id) {
+      params.set('id', id);
+    } else {
+      params.delete('id');
+    }
+
+    const search = params.toString();
+    return search.length > 0 ? `?${search}` : '';
+  };
+
+  const clearDrawerSearch = (): string => {
+    const params = new URLSearchParams(location.search);
+    params.delete('drawer');
+    params.delete('id');
+    const search = params.toString();
+    return search.length > 0 ? `?${search}` : '';
+  };
+
+  const syncDrawerRoute = (mode: Exclude<CrudDrawerMode, 'closed'>, id?: string) => {
+    const search = buildDrawerSearch(mode, id);
+    if (search === location.search) {
+      return;
+    }
+
+    handledRouteSearchRef.current = search;
+    navigate({ pathname: location.pathname, search });
+  };
+
+  const clearDrawerRoute = () => {
+    if (!location.search.includes('drawer=') && !location.search.includes('id=')) {
+      return;
+    }
+
+    const search = clearDrawerSearch();
+    handledRouteSearchRef.current = search;
+    navigate({ pathname: location.pathname, search }, { replace: true });
+  };
+
+  const closeDrawer = (options: { syncRoute?: boolean } = {}) => {
     invalidateDetailRequests();
     setDetailLoading(false);
     setDrawerState(CLOSED_DRAWER_STATE);
+    if (options.syncRoute !== false) {
+      clearDrawerRoute();
+    }
   };
 
   useEffect(() => {
@@ -577,12 +657,22 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setDetailError(null);
     setSaveError(null);
     setDrawerState({ mode: 'create', source });
+    if (source === 'user-action') {
+      syncDrawerRoute('create');
+    }
   };
 
-  const openViewDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action'): Promise<boolean> => {
+  const openViewDrawer = async (
+    id: string,
+    source: CrudDrawerState['source'] = 'user-action',
+    options: { syncRoute?: boolean } = {},
+  ): Promise<boolean> => {
     const requestId = detailRequestIdRef.current + 1;
     detailRequestIdRef.current = requestId;
     setDrawerState({ mode: 'view', id, source });
+    if (source === 'user-action' && options.syncRoute !== false) {
+      syncDrawerRoute('view', id);
+    }
     setDetailLoading(true);
     setDetailError(null);
     setSaveError(null);
@@ -612,7 +702,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const openEditDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action') => {
-    const loaded = await openViewDrawer(id, source);
+    if (source === 'user-action') {
+      syncDrawerRoute('edit', id);
+    }
+    const loaded = await openViewDrawer(id, source, { syncRoute: false });
     if (!loaded) {
       return;
     }
@@ -666,12 +759,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     // 旧入口只负责把 URL 查询参数投影成当前抽屉态；实际详情加载和错误边界仍由 Host 统一处理。
     if (drawer === 'create') {
       openCreateDrawer('route-compatibility');
+      return;
     }
     if (drawer === 'view' && id) {
       void openViewDrawer(id, 'route-compatibility');
+      return;
     }
     if (drawer === 'edit' && id) {
       void openEditDrawer(id, 'route-compatibility');
+      return;
+    }
+    if (!drawer) {
+      closeDrawer({ syncRoute: false });
     }
   }, [location.search]);
 
@@ -737,6 +836,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       metadataSource: column.source,
     };
   });
+  const exportColumns = schema.columns.map((column) => ({
+    key: column.key,
+    field: column.field,
+    title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
+  }));
   const standardColumns = shouldRenderActionColumn
     ? [
       ...metadataColumns,
@@ -875,6 +979,60 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }));
 
   const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, grantedPermissions));
+  const handleExport = async (mode: StandardCrudExportMode) => {
+    try {
+      setExportingMode(mode);
+      const filtersQuery = buildStandardCrudListQuery(
+        schema.query,
+        appliedFilters as Record<string, unknown>,
+        schema.advancedFilter,
+      );
+      const response = await client.exportList({
+        mode,
+        columns: exportColumns,
+        query: {
+          pageIndex: tablePagination.current,
+          pageSize: tablePagination.pageSize,
+          filters: filtersQuery,
+        },
+      });
+      const fallbackModeLabel = mode === 'current' ? '当前页' : '全部';
+      downloadStandardCrudBlob(
+        response.blob,
+        response.fileName ?? `${pageTitle}-${fallbackModeLabel}-${formatTimestampForFileName()}.xlsx`,
+      );
+    } catch (exportError) {
+      void message.error(exportError instanceof Error ? exportError.message : '导出标准列表失败');
+    } finally {
+      setExportingMode(null);
+    }
+  };
+  const exportToolbar = schema.exportModes.length > 0 ? (
+    <Space>
+      {schema.exportModes.includes('current') ? (
+        <AntdButton
+          size="small"
+          icon={<DownloadOutlined />}
+          loading={exportingMode === 'current'}
+          disabled={exportingMode !== null}
+          onClick={() => void handleExport('current')}
+        >
+          {t(`${schema.dicKey}.Export_Current`, '导出当前')}
+        </AntdButton>
+      ) : null}
+      {schema.exportModes.includes('all') ? (
+        <AntdButton
+          size="small"
+          icon={<DownloadOutlined />}
+          loading={exportingMode === 'all'}
+          disabled={exportingMode !== null}
+          onClick={() => void handleExport('all')}
+        >
+          {t(`${schema.dicKey}.Export_All`, '导出全部')}
+        </AntdButton>
+      ) : null}
+    </Space>
+  ) : undefined;
   const headerActions = visiblePageActions.length > 0
     ? (
       <>
@@ -971,6 +1129,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         loading={loading}
         selectableRows
         showRowNumber
+        toolbar={exportToolbar}
+        onPageChange={setTablePagination}
         rowIcon={(row) => (
           <button
             type="button"

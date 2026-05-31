@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.IO.Compression;
+using System.Text;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
@@ -47,6 +50,80 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         Assert.Equal("Person_00000000000000000000000000000001", recording.LastDetailId);
         Assert.Equal(7, recording.LastOptionsQuery!.PageSize);
         Assert.Equal("张", recording.LastOptionsQuery.Filters!["keyword"]);
+    }
+
+    [Fact]
+    public async Task MapStandardCrudResources_ExportsCurrentPageAsXlsx()
+    {
+        var recording = new RecordingStandardCrudService
+        {
+            ListResult = new StandardCrudListResult(
+                [new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }],
+                1,
+                2,
+                5,
+                null,
+                null)
+        };
+        await using var app = BuildApp(recording);
+        await app.StartAsync();
+
+        var response = await app.GetTestClient().PostAsJsonAsync(
+            "/api/organization/persons/export",
+            new
+            {
+                mode = "current",
+                query = new
+                {
+                    pageIndex = 2,
+                    pageSize = 5,
+                    filters = new Dictionary<string, string?> { ["keyword"] = "张" }
+                },
+                columns = new[]
+                {
+                    new { key = "personNo", field = "PersonNo", title = "人员编号" },
+                    new { key = "name", field = "ENAME", title = "姓名" },
+                    new { key = "blocked", field = "SecretField", title = "秘密字段" }
+                }
+            });
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(2, recording.LastListQuery!.Page);
+        Assert.Equal(5, recording.LastListQuery.PageSize);
+        Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.True(bytes.Length > 0);
+        AssertXlsxContains(bytes, "人员编号", "张三");
+        AssertXlsxDoesNotContain(bytes, "秘密字段");
+    }
+
+    [Fact]
+    public async Task MapStandardCrudResources_ExportsAllWithNormalizedPaging()
+    {
+        var recording = new RecordingStandardCrudService();
+        await using var app = BuildApp(recording);
+        await app.StartAsync();
+
+        var response = await app.GetTestClient().PostAsJsonAsync(
+            "/api/organization/persons/export",
+            new
+            {
+                mode = "all",
+                query = new
+                {
+                    pageIndex = 3,
+                    pageSize = 20,
+                    filters = new Dictionary<string, string?> { ["keyword"] = "张" }
+                },
+                columns = new[] { new { key = "name", field = "ENAME", title = "姓名" } }
+            });
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(1, recording.LastListQuery!.Page);
+        Assert.True(recording.LastListQuery.PageSize > 20);
+        Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
     }
 
     [Fact]
@@ -151,7 +228,9 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddSingleton<IStandardCrudService>(recording);
+        builder.Services.AddSingleton<StandardCrudXlsxWriter>();
         builder.Services.AddScoped<StandardCrudEndpoint>();
+        builder.Services.AddScoped<StandardCrudExportService>();
         builder.Services.AddStandardCrudResource(Descriptor());
         return builder;
     }
@@ -187,6 +266,31 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         }
     };
 
+    private static void AssertXlsxContains(byte[] bytes, params string[] expectedValues)
+    {
+        var sheetXml = ReadXlsxSheetXml(bytes);
+        foreach (var expectedValue in expectedValues)
+        {
+            Assert.Contains(expectedValue, sheetXml);
+        }
+    }
+
+    private static void AssertXlsxDoesNotContain(byte[] bytes, string unexpectedValue)
+    {
+        Assert.DoesNotContain(unexpectedValue, ReadXlsxSheetXml(bytes));
+    }
+
+    private static string ReadXlsxSheetXml(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+        Assert.NotNull(entry);
+        using var entryStream = entry.Open();
+        using var reader = new StreamReader(entryStream, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
     private sealed class RecordingStandardCrudService : IStandardCrudService
     {
         public StandardCrudListQuery? LastListQuery { get; private set; }
@@ -194,12 +298,13 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         public string? LastDetailId { get; private set; }
         public string? LastMutation { get; private set; }
         public IReadOnlyDictionary<string, object?>? LastMutationValues { get; private set; }
+        public StandardCrudListResult ListResult { get; init; } = new([], 0, 1, 20, null, null);
         public StandardCrudMutationResult MutationResult { get; init; } = StandardCrudMutationResult.Success(Detail("Person_00000000000000000000000000000001"));
 
         public Task<StandardCrudListResult> ListAsync(StandardCrudDescriptor descriptor, StandardCrudListQuery query, CancellationToken cancellationToken = default)
         {
             LastListQuery = query;
-            return Task.FromResult(new StandardCrudListResult([], 0, query.Page, query.PageSize, query.SortBy, query.SortDirection));
+            return Task.FromResult(ListResult with { Page = query.Page, PageSize = query.PageSize, SortBy = query.SortBy, SortDirection = query.SortDirection });
         }
 
         public Task<StandardCrudDetail?> GetDetailAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default)

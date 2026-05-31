@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
@@ -39,6 +39,7 @@ function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<stri
 const personListCatalog = {
   ...flattenZhsCatalog(personListDictionary),
 };
+let currentLocationSearch = '';
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
@@ -165,6 +166,7 @@ function renderHost(
   const root = createRoot(container);
   root.render(
     <MemoryRouter initialEntries={initialEntries}>
+      <LocationProbe />
       <LocalizationProvider
         defaultLanguage="zhs"
         supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
@@ -184,6 +186,12 @@ function renderHost(
     </MemoryRouter>,
   );
   return root;
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  currentLocationSearch = location.search;
+  return null;
 }
 
 function createPersonListViewDocumentWithRowActionVisibility(): typeof personListViewDocument {
@@ -219,6 +227,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     organizationServiceMocks.getCompanies.mockResolvedValue([]);
     organizationServiceMocks.getDepartments.mockResolvedValue([]);
     organizationServiceMocks.getPositions.mockResolvedValue([]);
+    currentLocationSearch = '';
 
     const getComputedStyle = window.getComputedStyle.bind(window);
     Object.defineProperty(window, 'matchMedia', {
@@ -587,6 +596,37 @@ describe('人员中心 CRUD Pro 样板', () => {
 
     expect(document.body.textContent).toContain('新建人员');
     expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
+  });
+
+  it('用户打开和关闭抽屉时同步清理 URL 兼容参数', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container, ['/organization/persons?tab=active']);
+    });
+    await flushAsync();
+
+    const createButton = findAntdButtonByText(container, '新建');
+    await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(currentLocationSearch).toContain('tab=active');
+    expect(currentLocationSearch).toContain('drawer=create');
+
+    const closeButton = document.body.querySelector('.ant-drawer-close') as HTMLButtonElement;
+    await act(async () => closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    expect(currentLocationSearch).toBe('?tab=active');
   });
 
   it('人员中心声明删除时按危险确认动作渲染', async () => {

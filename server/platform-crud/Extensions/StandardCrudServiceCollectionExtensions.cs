@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
@@ -26,8 +27,10 @@ public static class StandardCrudServiceCollectionExtensions
     {
         services.AddPlatformObjectIdGeneration();
         services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
+        services.TryAddSingleton<StandardCrudXlsxWriter>();
         services.AddScoped<IStandardCrudRepository, EfStandardCrudRepository>();
         services.AddScoped<IStandardCrudService, StandardCrudService>();
+        services.AddScoped<StandardCrudExportService>();
         services.AddScoped<StandardCrudEndpoint>();
         return services;
     }

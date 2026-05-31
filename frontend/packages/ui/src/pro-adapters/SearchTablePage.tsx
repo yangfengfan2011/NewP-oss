@@ -52,6 +52,7 @@ export interface SearchTablePageProps<TRow> {
   selectableRows?: boolean;
   showRowNumber?: boolean;
   rowIcon?: ReactNode | ((row: TRow) => ReactNode);
+  onPageChange?: (pagination: { current: number; pageSize: number }) => void;
   className?: string;
 }
 
@@ -194,6 +195,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   selectableRows = false,
   showRowNumber = false,
   rowIcon,
+  onPageChange,
   className,
 }: SearchTablePageProps<TRow>) {
   const [data, setData] = useState<TRow[]>([]);
@@ -361,6 +363,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
           onChange={(nextCurrent, nextPageSize) => {
             setCurrent(nextCurrent);
             setPageSize(nextPageSize);
+            onPageChange?.({ current: nextCurrent, pageSize: nextPageSize });
           }}
         />
       </div>

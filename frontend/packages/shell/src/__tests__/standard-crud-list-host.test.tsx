@@ -173,6 +173,8 @@ const personListCatalog = {
   'PersonListView.Action_Disable_Confirm': '确认停用该人员？',
   'PersonListView.Action_Enable': '启用',
   'PersonListView.Action_Enable_Confirm': '确认启用该人员？',
+  'PersonListView.Export_Current': '导出当前',
+  'PersonListView.Export_All': '导出全部',
   'PersonListView.Field_PersonNo': '人员编号',
   'PersonListView.Field_ENAME': '姓名',
   'PersonListView.Field_DepartmentId': '部门',
@@ -192,7 +194,10 @@ describe('StandardCrudListPageHost', () => {
     container?.remove();
   });
 
-  async function renderHost(catalogOverrides: Record<string, string> = {}) {
+  async function renderHost(
+    catalogOverrides: Record<string, string> = {},
+    viewDocument: typeof personListViewDocument = personListViewDocument,
+  ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -215,7 +220,7 @@ describe('StandardCrudListPageHost', () => {
                 manifest: { modules: [] },
                 navDocuments: [],
                 modelDocuments: [personModelDocument],
-                viewDocuments: [personListViewDocument],
+                viewDocuments: [viewDocument],
               }}
             >
               <StandardCrudListPageHost viewKey="organization.person.list" />
@@ -224,6 +229,18 @@ describe('StandardCrudListPageHost', () => {
         </MemoryRouter>,
       );
     });
+  }
+
+  function createExportablePersonListViewDocument(): typeof personListViewDocument {
+    return {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        export: {
+          modes: ['current', 'all'],
+        },
+      },
+    };
   }
 
   function mockStandardCrudModule(
@@ -331,6 +348,62 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).toContain('刷新');
   });
 
+  it('exports current page through standard CRUD backend using view columns', async () => {
+    mockStandardCrudModule();
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:standard-crud-export'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([80, 75]), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          },
+        }),
+      );
+
+    await renderHost({}, createExportablePersonListViewDocument());
+    await flushProTableRequest();
+
+    await act(async () => {
+      const exportButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '导出当前');
+      exportButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [exportUrl, exportInit] = fetchMock.mock.calls[1];
+    expect(exportUrl).toBe('/api/organization/persons/export');
+    expect(exportInit).toMatchObject({ method: 'POST' });
+    const body = JSON.parse(String((exportInit as RequestInit).body));
+    expect(body.mode).toBe('current');
+    expect(body.query).toMatchObject({ pageIndex: 1, pageSize: 20 });
+    expect(body.columns).toEqual([
+      { key: 'personNo', field: 'PersonNo', title: '人员编号' },
+      { key: 'name', field: 'ENAME', title: '姓名' },
+      { key: 'departmentName', field: 'DepartmentName', title: '部门' },
+    ]);
+  });
+
   it('renders error state without an empty state after load failure', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('列表接口不可用'));
@@ -401,10 +474,10 @@ describe('StandardCrudListPageHost', () => {
     expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(0);
     expect(container.querySelector('.np-table-row-view-button')).not.toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '编辑')).toBe(1);
-    expect(container.textContent).toContain('删除');
+    expect(container.textContent).not.toContain('删除');
     expect(container.textContent).toContain('更多');
     expect(container.textContent).not.toContain('停用');
-    expect(container.textContent).not.toContain('启用');
+    expect(container.textContent).toContain('启用');
     expect(container.querySelectorAll('.np-row-action-button')).toHaveLength(2);
     await act(async () => {
       const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>

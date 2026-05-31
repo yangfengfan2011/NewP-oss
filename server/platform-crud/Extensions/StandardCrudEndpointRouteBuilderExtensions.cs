@@ -21,6 +21,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         "sortDirection"
     };
 
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>
     /// 按 descriptor.Route 自动映射标准 CRUD API；特殊业务动作仍应留在模块 Controller。
     /// </summary>
@@ -58,6 +60,38 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         {
             var result = await endpoint.OptionsAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
             return Results.Ok(result);
+        });
+
+        endpoints.MapPost(route + "/export", async (
+            HttpContext context,
+            StandardCrudExportService exportService,
+            CancellationToken cancellationToken) =>
+        {
+            var request = await ReadExportRequestAsync(context, cancellationToken);
+            if (request is null)
+            {
+                return Results.BadRequest(new StandardCrudError
+                {
+                    StatusCode = StatusCodes.Status400BadRequest,
+                    Code = "StandardCrud.Export.InvalidRequest",
+                    Message = "标准 CRUD 导出请求不能为空。"
+                });
+            }
+
+            try
+            {
+                var file = await exportService.ExportAsync(descriptor, request, cancellationToken);
+                return Results.File(file.Content, file.ContentType, file.FileName);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new StandardCrudError
+                {
+                    StatusCode = StatusCodes.Status400BadRequest,
+                    Code = "StandardCrud.Export.InvalidRequest",
+                    Message = ex.Message
+                });
+            }
         });
 
         endpoints.MapGet(route + "/{id}", async (
@@ -139,6 +173,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
 
         yield return StandardRouteCandidate.Create("GET", route, descriptor.ResourceKey);
         yield return StandardRouteCandidate.Create("GET", route + "/options", descriptor.ResourceKey);
+        yield return StandardRouteCandidate.Create("POST", route + "/export", descriptor.ResourceKey);
         yield return StandardRouteCandidate.Create("GET", route + "/{id}", descriptor.ResourceKey);
         yield return StandardRouteCandidate.Create("POST", route, descriptor.ResourceKey);
         yield return StandardRouteCandidate.Create("PUT", route + "/{id}", descriptor.ResourceKey);
@@ -164,6 +199,14 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             SortDirection: ReadString(query, "sortDirection"),
             Filters: filters);
     }
+
+    private static async Task<StandardCrudExportRequest?> ReadExportRequestAsync(
+        HttpContext context,
+        CancellationToken cancellationToken) =>
+        await JsonSerializer.DeserializeAsync<StandardCrudExportRequest>(
+            context.Request.Body,
+            WebJsonOptions,
+            cancellationToken);
 
     private static async Task<IReadOnlyDictionary<string, object?>> ReadValuesAsync(
         HttpContext context,

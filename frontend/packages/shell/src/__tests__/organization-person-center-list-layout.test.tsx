@@ -221,6 +221,22 @@ describe('organization person center list layout', () => {
       (node) => (node as HTMLTableColElement).style.width,
     );
     expect(tableColumnWidths).toEqual(expect.arrayContaining(['30px', '40px', '176px']));
+    const rowNumberHeaderCell = container.querySelector<HTMLTableCellElement>('th.np-table-row-number-cell');
+    const rowIconHeaderCell = container.querySelector<HTMLTableCellElement>('th.np-table-row-icon-cell');
+    const rowNumberBodyCell = container.querySelector<HTMLTableCellElement>('td.np-table-row-number-cell');
+    const rowIconBodyCell = container.querySelector<HTMLTableCellElement>('td.np-table-row-icon-cell');
+    expect(rowNumberHeaderCell?.style.width).toBe('30px');
+    expect(rowNumberHeaderCell?.style.minWidth).toBe('30px');
+    expect(rowNumberHeaderCell?.style.maxWidth).toBe('30px');
+    expect(rowIconHeaderCell?.style.width).toBe('40px');
+    expect(rowIconHeaderCell?.style.minWidth).toBe('40px');
+    expect(rowIconHeaderCell?.style.maxWidth).toBe('40px');
+    expect(rowNumberBodyCell?.style.width).toBe('30px');
+    expect(rowNumberBodyCell?.style.minWidth).toBe('30px');
+    expect(rowNumberBodyCell?.style.maxWidth).toBe('30px');
+    expect(rowIconBodyCell?.style.width).toBe('40px');
+    expect(rowIconBodyCell?.style.minWidth).toBe('40px');
+    expect(rowIconBodyCell?.style.maxWidth).toBe('40px');
     const columnSettingIcon = container.querySelector('.anticon-setting');
     expect(columnSettingIcon).not.toBeNull();
     await act(async () => {
@@ -258,7 +274,7 @@ describe('organization person center list layout', () => {
     expect(container.textContent).not.toContain('PartTime');
     expect(container.textContent).not.toContain('FullTime');
     expect(container.textContent).not.toContain('true');
-    const bodyRows = Array.from(container.querySelectorAll('.ant-table-tbody > tr'));
+    const bodyRows = Array.from(container.querySelectorAll('.ant-table-tbody > tr.ant-table-row'));
     expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(true);
     expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(true);
     const firstActionCell = bodyRows[0]?.querySelector('td:last-child');

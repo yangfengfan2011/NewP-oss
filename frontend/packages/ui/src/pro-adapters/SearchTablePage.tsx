@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState, type Key, type MouseEvent, type ReactNode, type ThHTMLAttributes } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type Key,
+  type MouseEvent,
+  type ReactNode,
+  type ThHTMLAttributes,
+} from 'react';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { Pagination } from 'antd';
@@ -95,7 +104,15 @@ function ResizableHeaderCell({
   };
 
   return (
-    <th {...restProps} style={{ ...style, width, minWidth: canResize ? MIN_COLUMN_WIDTH : width }}>
+    <th
+      {...restProps}
+      style={{
+        ...style,
+        width,
+        minWidth: canResize ? MIN_COLUMN_WIDTH : width,
+        maxWidth: canResize ? undefined : width,
+      }}
+    >
       <div className="np-table-column-header">
         <span className="np-table-column-header-content">{children}</span>
         {canResize ? (
@@ -137,6 +154,14 @@ function normalizeColumnWidth(width: ProColumns<Record<string, unknown>>['width'
   }
 
   return undefined;
+}
+
+function buildFixedChromeColumnStyle(width: number): CSSProperties {
+  return {
+    width,
+    minWidth: width,
+    maxWidth: width,
+  };
 }
 
 function compareSortValue(left: unknown, right: unknown): number {
@@ -245,12 +270,20 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
       });
     }
 
-    return [...chromeColumns, ...columns].map((column) => {
+    const rawColumns = [...chromeColumns, ...columns];
+    // 保留一个普通数据列吸收表格剩余宽度，避免序号、图标等 chrome 列被浏览器按比例拉伸。
+    const elasticColumnKey = rawColumns
+      .map((column) => resolveColumnKey(column))
+      .find((columnKey) => !FIXED_CHROME_COLUMN_KEYS.has(columnKey) && columnKey !== 'actions');
+
+    return rawColumns.map((column) => {
       const columnKey = resolveColumnKey(column);
       const baseWidth = normalizeColumnWidth(column.width) ?? (columnKey === 'actions' ? 220 : DEFAULT_COLUMN_WIDTH);
-      const width = columnWidths[columnKey] ?? baseWidth;
       const fixedChromeColumn = FIXED_CHROME_COLUMN_KEYS.has(columnKey);
+      const width = columnKey === elasticColumnKey && columnWidths[columnKey] === undefined ? undefined : columnWidths[columnKey] ?? baseWidth;
       const existingOnHeaderCell = column.onHeaderCell as ((nextColumn: unknown) => Record<string, unknown>) | undefined;
+      const existingOnCell = column.onCell as ((row: TRow, rowIndex?: number) => Record<string, unknown>) | undefined;
+      const fixedChromeColumnStyle = fixedChromeColumn ? buildFixedChromeColumnStyle(width ?? baseWidth) : undefined;
 
       return {
         ...column,
@@ -269,6 +302,23 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
                 setColumnWidths((currentWidths) => ({ ...currentWidths, [targetColumnKey]: nextWidth }));
               },
         }),
+        onCell: fixedChromeColumn
+          ? (row: TRow, rowIndex?: number) => {
+              const existingCellProps = existingOnCell ? existingOnCell(row, rowIndex) : {};
+              const existingStyle =
+                existingCellProps.style && typeof existingCellProps.style === 'object'
+                  ? (existingCellProps.style as CSSProperties)
+                  : undefined;
+
+              return {
+                ...existingCellProps,
+                style: {
+                  ...existingStyle,
+                  ...fixedChromeColumnStyle,
+                },
+              };
+            }
+          : column.onCell,
       } as ProColumns<TRow>;
     });
   }, [columnWidths, columns, current, pageSize, rowIcon, showRowNumber]);
@@ -295,6 +345,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         tableAlertRender={false}
         tableAlertOptionRender={false}
         tableLayout="fixed"
+        scroll={{ x: 'max-content' }}
         pagination={false}
       />
       {footerFill}

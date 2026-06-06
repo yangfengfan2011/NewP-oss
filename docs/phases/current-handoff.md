@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-05-24
+最近更新：2026-06-06
 
 ## 1. 目的
 
@@ -37,6 +37,58 @@
 如果本文档与具体设计、计划或验证记录冲突，以更具体、更新的任务文档为准，并在下一次收口时修正本文档。
 
 ## 4. 最近完成
+
+### 4.9 标准 CRUD 通用 XLSX 导出与抽屉 URL 同步
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-06-01-standard-crud-xlsx-export-and-drawer-url-design.md`
+- `docs/superpowers/plans/platform/2026-06-01-standard-crud-xlsx-export-and-drawer-url.md`
+
+完成内容：
+
+- 标准 CRUD 后端新增通用 `/export` 路由、导出请求模型、导出服务和最小 XLSX writer。
+- 导出列由前端运行时 `view.columns` 投影提交，但后端仍按 descriptor `FieldSet.ListFields` 白名单裁剪，避免模块或前端把未授权字段导出。
+- 前端 SDK 新增标准 CRUD `exportList` 调用，Shell List Host 根据 `export.modes` 渲染 `导出当前 / 导出全部` 入口。
+- 标准 CRUD 列表抽屉打开与关闭已同步 `drawer/id` URL 参数，关闭时保留无关查询参数并清理抽屉参数。
+
+验证结论：
+
+- AI-first 设计校验和 target 检查通过。
+- `PlatformCrud.Tests` 中 StandardCrud 相关测试通过。
+- Shell `standard-crud-list-host.test.tsx` 与 `person-center-crud-pro-sample.test.tsx` 通过，Shell build 通过。
+
+当前推荐下一步：
+
+- 先处理标准 CRUD 查询边界问题：当前疑似存在列表查询每次按全量数据和全字段读取的风险，应独立设计并验证分页、筛选、排序、projection 字段裁剪和导出 `current/all` 查询边界，再继续扩第二个资源试点。
+
+### 4.8 人员中心体验完善包 A
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-05-27-person-center-experience-polish-design.md`
+- `docs/superpowers/plans/platform/2026-05-27-person-center-experience-polish.md`
+- `docs/modules/organization-implementation.md`
+
+完成内容：
+
+- 人员中心行动作支持 `visibleWhen` 状态条件，避免启用、停用等互斥动作同时展示。
+- 标准 CRUD 操作列、危险动作收纳、错误透传和列表接口状态体验完成一轮收敛。
+- Organization service 补充后端业务错误透传，人员中心删除绑定账号人员时不再只显示泛化错误。
+- `docs/modules/organization-implementation.md` 补充人员中心标准 CRUD 样板入口、边界、验证入口、失败信号和回滚口径。
+
+验证结论：
+
+- Shell 定向测试、Organization service 错误处理测试、Shell build、Organization 前端 build、Organization 后端测试通过。
+- AI-first 设计校验和 target 检查通过。
+
+当前推荐下一步：
+
+- 人员中心体验包 A 已收口；后续体验细化、动作级权限、`PersonNo` 数据库唯一索引和高级筛选不应混入下一轮查询边界修复。
 
 ### 4.7 标准 CRUD 元数据回收
 
@@ -252,19 +304,22 @@
 
 ## 5. 当前推荐下一步
 
-人员中心标准 CRUD 元数据回收已完成，当前下一步不再指向“先设计元数据回收”。应基于人员中心样板评估第二个标准 CRUD 资源，或继续拆包补齐样板边界、Ant Design 页面族重做、required field / 数据一致性等主线，并为所选方向单独补设计和计划。
+人员中心标准 CRUD 元数据回收、体验包 A、通用 XLSX 导出与抽屉 URL 同步均已完成。当前最高优先级不再是马上复制第二个标准 CRUD 资源，而是先解决标准 CRUD 查询边界问题：当前疑似存在列表接口每次全量查询、未按分页裁剪、并读取全部字段的风险。该问题会直接影响列表性能、导出边界、projection 契约和下一批资源试点的可复制性。
+
+下一轮应先补详细设计和实施计划，目标是把标准 CRUD 的分页、筛选、排序、projection 字段裁剪、导出 `current/all` 行为边界和失败信号收口到平台内核。未完成该收口前，不建议扩展第二个标准 CRUD 资源。
 
 推荐优先级：
 
-1. 基于人员中心样板评估第二个标准 CRUD 资源，但在复制前先确认是否需要树形 lookup 或通用 model option endpoint。
-2. 选择下一批标准 CRUD 资源试点时，应沿用 metadata 声明标准查询、列、字段、动作的形态；代码注册只保留 provider、renderer、handler、mapper 等执行扩展。
-3. 单独设计人员删除独立权限、业务冲突提示和后端 guard 失败展示细化，不混入样板固化提交。
-4. 若继续 Ant Design 页面重做主线，再按页面族拆包选择配置管理、权限中心、文件中心、插件运维或元数据配置中心。
-5. 若继续标准 CRUD 后端主线，优先独立设计 required field / 模型必填校验，避免把资源必填规则重新塞回模块专属 validator。
-6. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
-7. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
-8. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
-9. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
+1. 设计并验证标准 CRUD 查询边界：确认当前实现是否全量查数据、是否全字段读取；修复后端 list query 的分页、筛选、排序、projection 字段裁剪，并明确导出 `current/all` 的查询上限和字段白名单。
+2. 查询边界修复完成后，再基于人员中心样板评估第二个标准 CRUD 资源；复制前仍需确认是否需要树形 lookup 或通用 model option endpoint。
+3. 选择下一批标准 CRUD 资源试点时，应沿用 metadata 声明标准查询、列、字段、动作的形态；代码注册只保留 provider、renderer、handler、mapper 等执行扩展。
+4. 单独设计人员删除独立权限、业务冲突提示和后端 guard 失败展示细化，不混入查询边界修复。
+5. 若继续 Ant Design 页面重做主线，再按页面族拆包选择配置管理、权限中心、文件中心、插件运维或元数据配置中心。
+6. 若继续标准 CRUD 后端主线，required field / 模型必填校验应另起设计，避免和查询边界修复互相扩范围。
+7. 若继续数据一致性主线，单独设计 `PersonNo` 数据库唯一索引或并发强一致性策略。
+8. 若继续 EID 主线，单独设计历史裸 GUID 数据迁移；当前开发数据库仍按空库重建口径处理。
+9. 若继续平台元数据主线，再拆包吸收 `docs/designs/platform/review-open-items-tracker.md` 中“已冻结，待计划吸收”的问题。
+10. 若继续业务验证主线，单独拆包处理真实业务页消费接入或下一批 Dictionary / Enumeration 样本扩展。
 
 ## 6. 未解决问题
 
@@ -290,11 +345,45 @@
 
 来源：`docs/verification/organization-module-verification.md`
 
+- 当前疑似存在标准 CRUD list 查询按全量数据和全字段读取的风险；下一轮应优先用测试或日志确认实际 SQL / 查询路径，再修正分页、projection 和导出边界。
 - `ENAME` 等字段必填校验仍需要后续标准 CRUD required field 或模型必填校验设计承接。
 - `PersonNo` 当前由标准 CRUD 服务层保证全局唯一，但未引入数据库唯一索引；并发强一致性如需支持，应另开设计。
 - 标准 CRUD 自动路由映射当前已由 Person 试点验证；下一批资源接入前仍应逐个确认 descriptor 路由、字段边界和模块专属能力是否拆分清楚。
 
 ## 7. 验证快照
+
+标准 CRUD 通用 XLSX 导出与抽屉 URL 同步验证覆盖：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-06-01-standard-crud-xlsx-export-and-drawer-url-design.md
+powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1
+dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter StandardCrud
+pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-list-host.test.tsx person-center-crud-pro-sample.test.tsx
+pnpm --dir frontend --filter @icp-platform/shell build
+```
+
+验证结论：
+
+- 标准 CRUD 导出路由、字段白名单、当前页导出、全部导出分页归一化和前端导出入口已有定向覆盖。
+- 抽屉 URL 同步已有创建、查看、编辑、关闭清理参数的前端定向覆盖。
+- 查询边界仍需下一轮补强：当前验证尚不足以证明列表接口没有全量查数据或全字段读取。
+
+人员中心体验完善包 A 验证覆盖：
+
+```powershell
+pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry person-center-crud-pro-sample organization-person-center-list-layout
+pnpm --dir frontend --filter @icp-platform/shell test -- organization-service-error-handling
+pnpm --dir frontend --filter @icp-platform/shell build
+pnpm --dir frontend --filter @icp-modules/organization build
+dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-05-27-person-center-experience-polish-design.md
+powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1
+```
+
+验证结论：
+
+- 行动作状态条件、危险动作收纳、操作列、业务错误透传和人员中心样板文档已有定向覆盖。
+- 该验证不覆盖标准 CRUD 查询是否按后端分页和 projection 裁剪执行。
 
 标准 CRUD 元数据回收验证覆盖：
 
@@ -456,6 +545,7 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 历史阶段文档中仍可能出现旧推荐语，应以本文件和对应任务的最新计划、验证记录为准。
 - Vite 开发态现在直接投影内建 metadata 和 localization；如果未来 runtime 资源改由 Host 统一代理，需要同步收敛 Vite 插件，避免两套投影规则漂移。
 - 前端标准 CRUD 第二批仍以 Person 资源为试点，下一批资源接入前需要重新确认字段、lookup、动作、summary 和模块专属能力边界。
+- 标准 CRUD 当前最重要风险是查询边界疑似不清：如果列表每次全量取数或全字段读取，会影响性能、导出边界、字段权限和下一批资源复制。
 - 人员中心删除本轮仍沿用资源级权限边界；如需独立删除权限或更细业务冲突展示，应另起设计和计划。
 - 人员中心当前已完成第一轮 metadata 回收；下一批资源仍需先确认 lookup 类型、option endpoint、动作权限和 projection 字段契约，不应无设计直接复制。
 
@@ -470,3 +560,5 @@ rg -n "MapStandardCrudResources|AddStandardCrudResource|IStandardCrudResourceReg
 - 如果下一步方向选择变化，先更新本文件第 5 节，再补对应设计或计划，避免多个入口同时表达不同推荐。
 - 如果人员中心 CRUD Pro 样板需要回滚，应反向回退本轮 UI CRUD Pro adapter、Shell standard CRUD Host 抽屉状态机、路由兼容和人员资源动作声明；独立详情页仍可作为深链接和回滚入口。
 - 如果标准 CRUD 元数据回收需要回滚，应反向回退 Shell metadata resolver/Host 改动，恢复 `personStandardCrudResource.tsx` 中字段、列、查询、动作声明，并反向回退 `modules/Organization/metadata/**` 中本轮 schema 调整。
+- 如果人员中心体验完善包 A 需要回滚，应回退 `PersonList.view.json` 的 `visibleWhen`、Shell Host 行动作投影、Organization 服务错误解析和 `docs/modules/organization-implementation.md` 中新增样板说明。
+- 如果标准 CRUD 通用导出与抽屉 URL 同步需要回滚，应删除新增导出模型、writer、服务、`/export` 路由和 SDK `exportList`，回退 Host 导出按钮与 URL 同步逻辑；原有 `export.modes` metadata 解析可保留，不影响既有页面。

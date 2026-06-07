@@ -1,12 +1,15 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Query.Models;
+using ICP.Platform.Query.Runtime;
 
 namespace ICP.Platform.Crud.Runtime;
 
 public sealed class StandardCrudService : IStandardCrudService
 {
     private readonly IStandardCrudRepository _repository;
+    private readonly IPlatformQueryExecutor _queryExecutor;
     private readonly IReadOnlyDictionary<string, IStandardCrudQueryCustomizer> _queryCustomizers;
     private readonly IReadOnlyDictionary<string, IStandardCrudDisplayValueResolver> _displayResolvers;
     private readonly IReadOnlyDictionary<(string ResourceKey, string Key), IStandardCrudSummaryProvider> _summaryProviders;
@@ -16,6 +19,7 @@ public sealed class StandardCrudService : IStandardCrudService
 
     public StandardCrudService(
         IStandardCrudRepository repository,
+        IPlatformQueryExecutor queryExecutor,
         IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
         IEnumerable<IStandardCrudDisplayValueResolver> displayResolvers,
         IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
@@ -24,6 +28,7 @@ public sealed class StandardCrudService : IStandardCrudService
         IEnumerable<IStandardCrudDeleteGuard> deleteGuards)
     {
         _repository = repository;
+        _queryExecutor = queryExecutor;
         _queryCustomizers = queryCustomizers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _displayResolvers = displayResolvers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _summaryProviders = summaryProviders.ToDictionary(item => (item.ResourceKey, item.Key));
@@ -33,7 +38,7 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     /// <summary>
-    /// 列表读取先校验 descriptor，再将模块查询扩展收敛为仓储条件，最后补齐显示值。
+    /// 列表读取先校验 descriptor，再将模块查询扩展收敛为平台查询条件，最后补齐显示值。
     /// </summary>
     public async Task<StandardCrudListResult> ListAsync(
         StandardCrudDescriptor descriptor,
@@ -42,14 +47,31 @@ public sealed class StandardCrudService : IStandardCrudService
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
         var conditions = BuildConditions(descriptor, query);
-        var result = await _repository.ListAsync(descriptor, query, conditions, cancellationToken);
-        var items = new List<IReadOnlyDictionary<string, object?>>();
-        foreach (var row in result.Items)
-        {
-            items.Add(await ApplyDisplayValuesAsync(descriptor, row, cancellationToken));
-        }
+        var queryDescriptor = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor);
+        var platformRequest = new PlatformQueryRequest(
+            query.Fields,
+            query.Page,
+            query.PageSize,
+            query.SortBy,
+            query.SortDirection,
+            conditions.Select(condition => new PlatformQueryCondition(
+                condition.Field,
+                condition.Operator,
+                condition.Value,
+                condition.GroupKey,
+                condition.GroupOperator)).ToList());
 
-        return result with { Items = items };
+        var result = await _queryExecutor.QueryAsync(queryDescriptor, platformRequest, cancellationToken);
+        var rows = await ApplyDisplayValuesAsync(descriptor, result.Items, result.RequestedDisplayFields, cancellationToken);
+        var projectedRows = rows.Select(row => Project(row, result.ResponseFields)).ToList();
+
+        return new StandardCrudListResult(
+            projectedRows,
+            result.Total,
+            result.Page,
+            result.PageSize,
+            result.SortBy,
+            result.SortDirection);
     }
 
     /// <summary>
@@ -67,7 +89,7 @@ public sealed class StandardCrudService : IStandardCrudService
             return null;
         }
 
-        var fields = await ApplyDisplayValuesAsync(descriptor, row, cancellationToken);
+        var fields = await ApplyDisplayValuesToSingleRowAsync(descriptor, row, descriptor.DisplayValueFields, cancellationToken);
         var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
         foreach (var key in descriptor.SummaryBlockKeys)
         {
@@ -257,7 +279,7 @@ public sealed class StandardCrudService : IStandardCrudService
         return deleted ? StandardCrudMutationResult.Success() : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
     }
 
-    // 查询扩展点只产出标准条件，仓储仍负责具体执行，避免模块逻辑直接进入持久化实现。
+    // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。
     private IReadOnlyList<StandardCrudQueryCondition> BuildConditions(StandardCrudDescriptor descriptor, StandardCrudListQuery query)
     {
         return _queryCustomizers.TryGetValue(descriptor.ResourceKey, out var customizer)
@@ -266,21 +288,80 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     // 显示值补齐以 row copy 方式合并，确保扩展点不能修改仓储返回的原始字段集合。
-    private async Task<IReadOnlyDictionary<string, object?>> ApplyDisplayValuesAsync(
+    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ApplyDisplayValuesAsync(
         StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> row,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken)
     {
-        var values = new Dictionary<string, object?>(row, StringComparer.Ordinal);
-        if (_displayResolvers.TryGetValue(descriptor.ResourceKey, out var resolver))
+        var values = rows
+            .Select(row => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(row, StringComparer.Ordinal))
+            .ToList();
+        if (requestedDisplayFields.Count == 0)
         {
-            foreach (var pair in await resolver.ResolveAsync(descriptor, row, cancellationToken))
+            return values;
+        }
+
+        if (!_displayResolvers.TryGetValue(descriptor.ResourceKey, out var resolver))
+        {
+            throw new InvalidOperationException(
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 请求了显示值字段，但未注册显示值解析器。");
+        }
+
+        EnsureDisplayResolverImplementation(descriptor, resolver);
+        if (values.Count == 0)
+        {
+            return values;
+        }
+
+        var resolvedRows = await resolver.ResolveListAsync(
+            descriptor,
+            rows,
+            requestedDisplayFields,
+            cancellationToken);
+        if (resolvedRows.Count != values.Count)
+        {
+            throw new InvalidOperationException(
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回行数 {resolvedRows.Count}，预期 {values.Count}。");
+        }
+
+        for (var index = 0; index < values.Count; index++)
+        {
+            foreach (var pair in resolvedRows[index])
             {
-                values[pair.Key] = pair.Value;
+                ((Dictionary<string, object?>)values[index])[pair.Key] = pair.Value;
             }
         }
 
         return values;
+    }
+
+    private static void EnsureDisplayResolverImplementation(
+        StandardCrudDescriptor descriptor,
+        IStandardCrudDisplayValueResolver resolver)
+    {
+        var resolverType = resolver.GetType();
+        var implementsBatch = resolverType.GetMethod(
+            nameof(IStandardCrudDisplayValueResolver.ResolveListAsync),
+            [typeof(StandardCrudDescriptor), typeof(IReadOnlyList<IReadOnlyDictionary<string, object?>>), typeof(IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField>), typeof(CancellationToken)]) is not null;
+        var implementsSingle = resolverType.GetMethod(
+            nameof(IStandardCrudDisplayValueResolver.ResolveAsync),
+            [typeof(StandardCrudDescriptor), typeof(IReadOnlyDictionary<string, object?>), typeof(CancellationToken)]) is not null;
+        if (!implementsBatch && !implementsSingle)
+        {
+            throw new InvalidOperationException(
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器未实现批量 ResolveListAsync，也未提供兼容的单行 ResolveAsync。");
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<string, object?>> ApplyDisplayValuesToSingleRowAsync(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> row,
+        IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> requestedDisplayFields,
+        CancellationToken cancellationToken)
+    {
+        var resolvedRows = await ApplyDisplayValuesAsync(descriptor, [row], requestedDisplayFields, cancellationToken);
+        return resolvedRows[0];
     }
 
     // 写入后统一按 detail 流程补齐显示值和摘要块，保证 create/update/disable 的返回结构与详情读取一致。
@@ -289,7 +370,7 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> row,
         CancellationToken cancellationToken)
     {
-        var fields = await ApplyDisplayValuesAsync(descriptor, row, cancellationToken);
+        var fields = await ApplyDisplayValuesToSingleRowAsync(descriptor, row, descriptor.DisplayValueFields, cancellationToken);
         var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
         foreach (var key in descriptor.SummaryBlockKeys)
         {
@@ -335,6 +416,19 @@ public sealed class StandardCrudService : IStandardCrudService
         }
 
         return filtered;
+    }
+
+    private static IReadOnlyDictionary<string, object?> Project(
+        IReadOnlyDictionary<string, object?> row,
+        IReadOnlyList<string> responseFields)
+    {
+        var projected = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var field in responseFields)
+        {
+            projected[field] = row.TryGetValue(field, out var value) ? value : null;
+        }
+
+        return projected;
     }
 
     // 必填校验属于标准写入前置校验；创建检查缺失，更新只检查本次提交字段是否被清空。

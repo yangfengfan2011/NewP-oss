@@ -1079,7 +1079,7 @@ git commit -m "功能：接入标准 CRUD 查询描述符"
 - Modify: `tests/PlatformCrud.Tests/StandardCrudEfRepositoryTests.cs`
 - Modify: `tests/PlatformCrud.Tests/Support/InMemoryStandardCrudRepository.cs`
 
-- [ ] **Step 1: 写服务层失败测试，锁定 query executor 和 response fields**
+- [x] **Step 1: 写服务层失败测试，锁定 query executor 和 response fields**
 
 Modify `tests/PlatformCrud.Tests/StandardCrudServiceReadTests.cs` list test to use a fake platform executor:
 
@@ -1181,7 +1181,7 @@ public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsyn
 }
 ```
 
-- [ ] **Step 2: 写导出字段失败测试**
+- [x] **Step 2: 写导出字段失败测试**
 
 Extend `StandardCrudEndpointRouteBuilderTests.MapStandardCrudResources_ExportsCurrentPageAsXlsx`:
 
@@ -1207,7 +1207,7 @@ Extend `MapStandardCrudResources_ExportsAllWithNormalizedPaging`:
 Assert.Equal(["ENAME"], recording.LastListQuery.Fields);
 ```
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
 Run:
 
@@ -1217,7 +1217,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Standar
 
 Expected: FAIL because `StandardCrudService` still calls repository list and export does not set fields.
 
-- [ ] **Step 4: 更新 display resolver 契约和 service 构造**
+- [x] **Step 4: 更新 display resolver 契约和 service 构造**
 
 Modify `IStandardCrudDisplayValueResolver`:
 
@@ -1256,7 +1256,7 @@ Update all test helpers constructing `StandardCrudService` by passing a fake que
 new RecordingPlatformQueryExecutor(new PlatformQueryResult([], 0, 1, 20, null, null, [], []))
 ```
 
-- [ ] **Step 5: 实现 ListAsync 适配平台查询**
+- [x] **Step 5: 实现 ListAsync 适配平台查询**
 
 Replace list implementation with this flow:
 
@@ -1312,7 +1312,7 @@ For detail/create/update/disable returns, call resolver through a one-row `Resol
 var displayValues = await resolver.ResolveListAsync(descriptor, [row], descriptor.DisplayValueFields, cancellationToken);
 ```
 
-- [ ] **Step 6: 更新导出 fields 构造**
+- [x] **Step 6: 更新导出 fields 构造**
 
 First update `StandardCrudExportService.NormalizeColumns` so display value columns are exportable:
 
@@ -1355,7 +1355,7 @@ Call it as:
 var query = BuildQuery(request.Query, mode, columns);
 ```
 
-- [ ] **Step 7: 移除旧列表仓储双真源**
+- [x] **Step 7: 移除旧列表仓储双真源**
 
 Modify `IStandardCrudRepository` and `EfStandardCrudRepository`:
 
@@ -1367,7 +1367,7 @@ Update `InMemoryStandardCrudRepository` by removing its `ListAsync`; write tests
 
 Remove or rewrite `StandardCrudEfRepositoryTests.ListAsync_*` tests. The equivalent behavior is now covered by `PlatformQueryExecutorTests`.
 
-- [ ] **Step 8: 注册查询内核**
+- [x] **Step 8: 注册查询内核**
 
 Modify `StandardCrudServiceCollectionExtensions.AddStandardCrudKernel`:
 
@@ -1382,7 +1382,7 @@ Add using:
 using ICP.Platform.Query.Runtime;
 ```
 
-- [ ] **Step 9: Run GREEN**
+- [x] **Step 9: Run GREEN**
 
 Run:
 
@@ -1393,7 +1393,7 @@ dotnet build server\platform-crud\PlatformCrud.csproj -nr:false -v minimal
 
 Expected: both PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```powershell
 git add server\platform-crud tests\PlatformCrud.Tests

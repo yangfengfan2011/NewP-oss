@@ -29,7 +29,7 @@ public sealed class StandardCrudExportService
     {
         var mode = NormalizeMode(request.Mode);
         var columns = NormalizeColumns(descriptor, request.Columns);
-        var query = BuildQuery(request.Query, mode);
+        var query = BuildQuery(request.Query, mode, columns);
         var result = await _service.ListAsync(descriptor, query, cancellationToken);
         var content = _writer.Write("Export", columns, result.Items);
 
@@ -51,7 +51,9 @@ public sealed class StandardCrudExportService
         StandardCrudDescriptor descriptor,
         IReadOnlyList<StandardCrudExportColumn> columns)
     {
-        var allowedFields = descriptor.FieldSet.ListFields.ToHashSet(StringComparer.Ordinal);
+        var allowedFields = descriptor.FieldSet.ListFields
+            .Concat(descriptor.DisplayValueFields.Select(static field => field.Field))
+            .ToHashSet(StringComparer.Ordinal);
         var normalized = columns
             .Where(column =>
                 !string.IsNullOrWhiteSpace(column.Field)
@@ -68,7 +70,10 @@ public sealed class StandardCrudExportService
         return normalized;
     }
 
-    private static StandardCrudListQuery BuildQuery(StandardCrudExportListQuery? query, string mode)
+    private static StandardCrudListQuery BuildQuery(
+        StandardCrudExportListQuery? query,
+        string mode,
+        IReadOnlyList<StandardCrudExportColumn> columns)
     {
         var pageIndex = query?.PageIndex > 0 ? query.PageIndex : 1;
         var pageSize = query?.PageSize > 0 ? query.PageSize : 20;
@@ -84,6 +89,7 @@ public sealed class StandardCrudExportService
             pageSize,
             query?.SortBy,
             query?.SortDirection,
-            query?.Filters);
+            query?.Filters,
+            columns.Select(static column => column.Field).Distinct(StringComparer.Ordinal).ToList());
     }
 }

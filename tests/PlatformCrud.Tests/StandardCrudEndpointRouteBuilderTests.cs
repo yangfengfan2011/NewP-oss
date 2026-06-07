@@ -8,6 +8,7 @@ using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Query.Descriptors;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -99,6 +100,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
                 {
                     new { key = "personNo", field = "PersonNo", title = "人员编号" },
                     new { key = "name", field = "ENAME", title = "姓名" },
+                    new { key = "companyName", field = "CompanyName", title = "公司" },
                     new { key = "blocked", field = "SecretField", title = "秘密字段" }
                 }
             });
@@ -108,6 +110,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         Assert.Equal(2, recording.LastListQuery!.Page);
         Assert.Equal(5, recording.LastListQuery.PageSize);
         Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
+        Assert.Equal(["PersonNo", "ENAME", "CompanyName"], recording.LastListQuery.Fields);
 
         var bytes = await response.Content.ReadAsByteArrayAsync();
         Assert.True(bytes.Length > 0);
@@ -140,6 +143,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         Assert.Equal(1, recording.LastListQuery!.Page);
         Assert.True(recording.LastListQuery.PageSize > 20);
         Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
+        Assert.Equal(["ENAME"], recording.LastListQuery.Fields);
     }
 
     [Fact]
@@ -263,11 +267,15 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         DisplayField = "ENAME",
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
-            CreateFields: ["PersonNo", "ENAME", "IsEnabled"],
-            UpdateFields: ["ENAME", "IsEnabled"]),
+            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            CreateFields: ["PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            UpdateFields: ["ENAME", "CompanyId", "IsEnabled"]),
         OptionLabelFields = ["PersonNo", "ENAME"],
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+        ],
         DeletePolicy = StandardCrudDeletePolicy.Conditional
     };
 

@@ -21,36 +21,6 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
     }
 
     /// <summary>
-    /// 读取标准 CRUD 列表；动态字段的类型差异在代码内核中显式处理，避免把过滤语义下沉到元数据解释层。
-    /// </summary>
-    public async Task<StandardCrudListResult> ListAsync(
-        StandardCrudDescriptor descriptor,
-        StandardCrudListQuery query,
-        IReadOnlyList<StandardCrudQueryCondition> conditions,
-        CancellationToken cancellationToken = default)
-    {
-        var page = query.Page <= 0 ? 1 : query.Page;
-        var pageSize = query.PageSize <= 0 ? 20 : query.PageSize;
-        var rows = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var source = ApplyConditions(rows, conditions);
-        source = ApplySort(source, descriptor, query);
-
-        var total = source.Count();
-        var pageRows = source.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-
-        return new StandardCrudListResult(
-            pageRows.Select(row => Project(row, descriptor.FieldSet.ListFields)).ToList(),
-            total,
-            page,
-            pageSize,
-            query.SortBy,
-            query.SortDirection);
-    }
-
-    /// <summary>
     /// 读取详情字段集合；返回值只包含 descriptor 中允许暴露的 detail 字段。
     /// </summary>
     public async Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
@@ -175,75 +145,6 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         return true;
     }
 
-    private static IEnumerable<IReadOnlyDictionary<string, object?>> ApplyConditions(
-        IEnumerable<IReadOnlyDictionary<string, object?>> source,
-        IReadOnlyList<StandardCrudQueryCondition> conditions)
-    {
-        var executableConditions = conditions.Where(IsExecutableCondition).ToList();
-        foreach (var condition in executableConditions.Where(condition => string.IsNullOrWhiteSpace(condition.GroupKey)))
-        {
-            source = source.Where(row => MatchesCondition(row, condition));
-        }
-
-        foreach (var group in executableConditions
-            .Where(condition => !string.IsNullOrWhiteSpace(condition.GroupKey))
-            .GroupBy(condition => condition.GroupKey, StringComparer.Ordinal))
-        {
-            var groupOperators = group
-                .Select(condition => string.IsNullOrWhiteSpace(condition.GroupOperator) ? "and" : condition.GroupOperator)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            if (groupOperators.Count > 1)
-            {
-                throw new InvalidOperationException($"标准 CRUD 查询条件组 {group.Key} 不能混用组合操作符。");
-            }
-
-            var groupOperator = groupOperators[0];
-            if (!string.Equals(groupOperator, "or", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(groupOperator, "and", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"标准 CRUD 查询条件组 {group.Key} 不支持组合操作符 {groupOperator}。");
-            }
-
-            source = string.Equals(groupOperator, "or", StringComparison.OrdinalIgnoreCase)
-                ? source.Where(row => group.Any(condition => MatchesCondition(row, condition)))
-                : source.Where(row => group.All(condition => MatchesCondition(row, condition)));
-        }
-
-        return source;
-    }
-
-    private static bool IsExecutableCondition(StandardCrudQueryCondition condition) =>
-        condition.Value is not null &&
-        (string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase));
-
-    private static bool MatchesCondition(IReadOnlyDictionary<string, object?> row, StandardCrudQueryCondition condition)
-    {
-        if (!row.TryGetValue(condition.Field, out var value))
-        {
-            return false;
-        }
-
-        if (string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase))
-        {
-            return ValuesEqual(value, condition.Value);
-        }
-
-        return ReadString(value).Contains(ReadString(condition.Value), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static IEnumerable<IReadOnlyDictionary<string, object?>> ApplySort(
-        IEnumerable<IReadOnlyDictionary<string, object?>> source,
-        StandardCrudDescriptor descriptor,
-        StandardCrudListQuery query)
-    {
-        var sortBy = string.IsNullOrWhiteSpace(query.SortBy) ? descriptor.DisplayField : query.SortBy;
-        return string.Equals(query.SortDirection, "desc", StringComparison.OrdinalIgnoreCase)
-            ? source.OrderByDescending(row => ReadComparable(row, sortBy))
-            : source.OrderBy(row => ReadComparable(row, sortBy));
-    }
-
     private static IReadOnlyDictionary<string, object?> Project(
         IReadOnlyDictionary<string, object?> row,
         IReadOnlyList<string> fields)
@@ -255,26 +156,6 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         }
 
         return projected;
-    }
-
-    private static bool ValuesEqual(object? left, object? right)
-    {
-        if (left is null || right is null)
-        {
-            return left is null && right is null;
-        }
-
-        if (left is bool leftBool && bool.TryParse(ReadString(right), out var rightBool))
-        {
-            return leftBool == rightBool;
-        }
-
-        if (left is DateTime leftDateTime && DateTime.TryParse(ReadString(right), out var rightDateTime))
-        {
-            return leftDateTime == rightDateTime;
-        }
-
-        return string.Equals(ReadString(left), ReadString(right), StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool UniqueValuesEqual(object? left, object? right, StandardCrudUniqueConstraint constraint)
@@ -308,9 +189,4 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         row.TryGetValue(key, out var value) ? ReadString(value) : string.Empty;
 
     private static string ReadString(object? value) => value?.ToString() ?? string.Empty;
-
-    private static IComparable ReadComparable(IReadOnlyDictionary<string, object?> row, string key) =>
-        row.TryGetValue(key, out var value) && value is IComparable comparable
-            ? comparable
-            : string.Empty;
 }

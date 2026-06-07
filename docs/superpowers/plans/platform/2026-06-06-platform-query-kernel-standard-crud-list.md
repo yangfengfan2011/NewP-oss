@@ -1837,7 +1837,7 @@ git commit -m "功能：标准 CRUD 列表提交字段意图"
 - Modify: `docs/verification/verification-matrix.md`
 - Create: `docs/verification/records/2026-06-06-platform-query-kernel-standard-crud-list.md`
 
-- [ ] **Step 1: 新增验证记录**
+- [x] **Step 1: 新增验证记录**
 
 Create `docs/verification/records/2026-06-06-platform-query-kernel-standard-crud-list.md`:
 
@@ -1881,7 +1881,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 回退 `server/platform-query`、Standard CRUD adapter、结构化 display value 声明、`fields` 参数解析与 Shell 传参；恢复原先 `DisplayValueFields` 字符串列表和默认 Standard CRUD list 查询。
 ````
 
-- [ ] **Step 2: 更新交接台账**
+- [x] **Step 2: 更新交接台账**
 
 Modify `docs/phases/current-handoff.md` by adding a new recent-completion entry near the top:
 
@@ -1915,7 +1915,7 @@ Modify `docs/phases/current-handoff.md` by adding a new recent-completion entry 
 - 基于平台查询内核评估 lookup 或第二个 Standard CRUD 资源接入；不要在没有详细设计的情况下扩展 display value 排序/筛选。
 ```
 
-- [ ] **Step 3: 更新验证矩阵**
+- [x] **Step 3: 更新验证矩阵**
 
 Modify `docs/verification/verification-matrix.md` under Standard CRUD related verification:
 
@@ -1934,7 +1934,7 @@ Modify `docs/verification/verification-matrix.md` under Standard CRUD related ve
 - [records/2026-06-06-platform-query-kernel-standard-crud-list.md](records/2026-06-06-platform-query-kernel-standard-crud-list.md)
 ```
 
-- [ ] **Step 4: Run full final verification**
+- [x] **Step 4: Run full final verification**
 
 Run:
 
@@ -1951,7 +1951,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 
 Expected: all PASS. If one command fails, stop, record the failing command and first actionable failure snippet, then fix within the current task before continuing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add docs/phases/current-handoff.md docs/verification/verification-matrix.md docs/verification/records/2026-06-06-platform-query-kernel-standard-crud-list.md

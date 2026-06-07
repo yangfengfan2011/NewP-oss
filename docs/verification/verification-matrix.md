@@ -183,6 +183,21 @@
 
 - [records/2026-05-24-standard-crud-metadata-recovery.md](records/2026-05-24-standard-crud-metadata-recovery.md)
 
+### Platform Query Kernel Standard CRUD List
+
+- `dotnet build server\platform-query\PlatformQuery.csproj -nr:false -v minimal`
+- `dotnet build apps\host-api\HostApi.csproj -nr:false -v minimal`
+- `dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter StandardCrud -nr:false -v minimal`
+- `dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal`
+- `pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-schema-and-registry standard-crud-metadata-query standard-crud-sdk standard-crud-list-host person-center-crud-pro-sample`
+- `pnpm --dir frontend --filter @icp-platform/shell build`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-06-06-platform-query-kernel-standard-crud-list-design.md`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1`
+
+参考：
+
+- [records/2026-06-06-platform-query-kernel-standard-crud-list.md](records/2026-06-06-platform-query-kernel-standard-crud-list.md)
+
 ## 模块级验证
 
 ### Kernel

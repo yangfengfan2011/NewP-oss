@@ -38,6 +38,42 @@
 
 ## 4. 最近完成
 
+### 4.11 平台查询内核与 Standard CRUD 列表接入
+
+状态：已完成并验证。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-06-06-platform-query-kernel-standard-crud-list-design.md`
+- `docs/superpowers/plans/platform/2026-06-06-platform-query-kernel-standard-crud-list.md`
+- `docs/verification/records/2026-06-06-platform-query-kernel-standard-crud-list.md`
+
+完成内容：
+
+- 新增 `server/platform-query` 查询内核，统一字段校验、查询层筛选、排序、分页和投影。
+- Standard CRUD List 首个接入平台查询内核，并保留 `StandardCrudListResult` 响应外形。
+- 人员中心 display value 改为结构化声明和批量解析，避免按行 N+1。
+- Shell 按当前 view columns 与 row action `visibleWhen` 依赖提交 `fields`，并在 schema resolver 拒绝宿主保留查询键。
+- 人员中心真实 `PersonList.view.json` 已与后端字段契约对齐，`DepartmentName` 不再因大小写不一致破坏真实运行。
+- 导出 `current/all` 按导出列构造查询字段并复用同一后端字段校验。
+
+验证结论：
+
+- `PlatformQuery` / `HostApi` 构建通过。
+- `PlatformCrud.Tests` 中 `StandardCrud` 相关测试通过，`Organization.Tests` 全量通过。
+- Shell 标准 CRUD 定向测试通过，5 files / 71 tests；Shell build 通过。
+- AI-first 设计校验和 target 检查通过。
+
+当前推荐下一步：
+
+- 基于平台查询内核评估 lookup 或第二个 Standard CRUD 资源接入。
+- 不要在没有详细设计的情况下继续扩展 display value 排序/筛选，或让 metadata 重新承载执行流程。
+
+已知风险与回滚思路：
+
+- Shell 测试仍有既有 jsdom / AntD / React Router warnings，Shell build 仍有既有 Vite chunk-size warning，本轮未新增相应治理。
+- 如需回退本轮，可优先按提交逆序回退 `d00a6e6d`、`31454f33`、`3f9c4b99`、`8c32e628`、`aff575e0`、`47039fc0`；只回退前端字段意图时优先回退 `d00a6e6d`。
+
 ### 4.10 平台持久化操作内核设计
 
 状态：设计已完成并验证；尚未进入代码实现，也未创建实施计划。

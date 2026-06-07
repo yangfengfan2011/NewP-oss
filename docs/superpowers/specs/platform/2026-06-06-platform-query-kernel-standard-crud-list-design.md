@@ -19,6 +19,7 @@
 - Standard CRUD List 改为调用平台查询内核，作为第一批接入样板。
 - 前端 Standard CRUD List Host 按当前 `view.columns` 向后端提交本次列表需要的字段。
 - 后端不信任前端字段，仍以平台查询 descriptor 为安全边界裁剪字段。
+- 筛选字段、排序字段、行状态依赖字段和 display source 字段都必须由查询内核统一校验，不允许绕过字段白名单。
 - 将 `DisplayValueFields` 从字符串列表改造成结构化引用显示值声明，明确展示字段、源 EID 字段、目标模型和目标显示字段。
 - 返回 API 外形保持 `StandardCrudListResult`，不改变列表响应格式。
 
@@ -30,6 +31,7 @@
 - 不处理 `PersonNo` 数据库唯一索引或历史数据迁移。
 - 不引入用户级列显隐持久化；本轮只消费当前 view metadata 解析出的列。
 - 不把前端 `fields` 当作数据库查询真源；它只表达当前视图意图，最终字段由后端内核校验和补齐。
+- 不重做导出格式和导出模式；本轮只确保导出复用列表查询时不会被新的字段裁剪语义破坏。
 
 ## 4. 范围
 
@@ -45,6 +47,7 @@ Standard CRUD 接入范围：
 - `server/platform-crud/Models/StandardCrudListQuery.cs`
 - `server/platform-crud/Extensions/StandardCrudEndpointRouteBuilderExtensions.cs`
 - `server/platform-crud/Runtime/StandardCrudService.cs`
+- `server/platform-crud/Runtime/StandardCrudExportService.cs`
 - `server/platform-crud/Persistence/EfStandardCrudRepository.cs` 或替换为通用 query executor 调用
 - `server/modules/Organization/Crud/PersonCrudDescriptorFactory.cs`
 - `server/modules/Organization/Crud/PersonCrudDisplayValueResolver.cs`
@@ -93,7 +96,7 @@ GET /api/organization/persons?pageIndex=1&pageSize=20&fields=EID,PersonNo,ENAME,
 1. Endpoint 将 `fields` 解析到 `StandardCrudListQuery.Fields`。
 2. Standard CRUD adapter 将 `StandardCrudDescriptor` 转换为 `PlatformQueryDescriptor`。
 3. Platform Query Kernel 校验 requested fields，只允许请求真实模型字段和声明过的 display value 字段。
-4. Platform Query Kernel 计算 response fields。
+4. Platform Query Kernel 统一校验筛选字段、排序字段、行状态依赖字段和 display source 字段，所有字段都必须来自查询 descriptor 的显式声明。
 5. Platform Query Kernel 计算 DB select fields：
    - 请求中的真实模型字段。
    - `IdField`。
@@ -104,6 +107,12 @@ GET /api/organization/persons?pageIndex=1&pageSize=20&fields=EID,PersonNo,ENAME,
 6. Query executor 在 EF 查询层执行 `Where / Count / OrderBy / Skip / Take / Select`。
 7. Display value resolver 根据结构化声明批量补充展示字段。
 8. Standard CRUD adapter 将查询结果包装为 `StandardCrudListResult`。
+
+字段解析分三类结果：
+
+- `ResponseFields`：本次 API 响应允许返回的字段，来自请求字段或默认响应字段，只包含真实模型字段和声明过的 display value 字段。
+- `DbSelectFields`：EF 查询层必须读取的真实模型字段，包括响应真实字段、`IdField`、筛选字段、排序字段、行状态依赖字段和 display value 的 `SourceField`。
+- `InternalOnlyFields`：为筛选、排序、行状态或 display value 补齐而读取、但不应出现在响应中的字段。
 
 ## 7. 关键模型
 
@@ -117,14 +126,16 @@ public sealed class PlatformQueryDescriptor
     public required string ResourceKey { get; init; }
     public required string ModelName { get; init; }
     public required string IdField { get; init; }
-    public required IReadOnlyList<string> AllowedFields { get; init; }
+    public required IReadOnlyList<string> AllowedModelFields { get; init; }
     public IReadOnlyList<PlatformDisplayValueField> DisplayValueFields { get; init; } = [];
     public IReadOnlyList<string> DefaultFields { get; init; } = [];
     public string? DefaultSortField { get; init; }
 }
 ```
 
-Standard CRUD 的 `FieldSet.ListFields` 会映射为 `AllowedFields / DefaultFields`，但其他功能点后续可以直接声明自己的查询 descriptor。
+`AllowedModelFields` 只表示真实模型字段，`DisplayValueFields` 表示可响应的引用显示字段。查询内核计算响应字段时使用 `AllowedResponseFields = AllowedModelFields + DisplayValueFields.Field`；计算数据库字段时只允许真实模型字段和 display value 的 `SourceField` 进入 EF `Select`。
+
+Standard CRUD 的 `FieldSet.ListFields` 会映射为 `AllowedModelFields / DefaultFields`，结构化 display value 字段单独映射为 `DisplayValueFields`。其他功能点后续可以直接声明自己的查询 descriptor。
 
 ### 7.2 PlatformQueryRequest
 
@@ -139,6 +150,8 @@ public sealed record PlatformQueryRequest(
 ```
 
 `Fields` 为空时使用 `DefaultFields`，非空时表达当前调用方的视图字段意图。
+
+`SortBy` 和 `Conditions[*].Field` 必须按 `AllowedModelFields` 校验；第一版不支持按 display value 字段排序或筛选，避免把跨模型显示值解析混入 SQL 查询内核。
 
 ### 7.3 PlatformDisplayValueField
 
@@ -216,7 +229,7 @@ Standard CRUD List 主流程：
 1. Shell 从 `schema.columns` 采集字段，提交 `fields`。
 2. Endpoint 解析 `fields/pageIndex/pageSize/sortBy/sortDirection`。
 3. Standard CRUD adapter 生成 `PlatformQueryRequest`。
-4. Query Kernel 校验 requested fields，并计算 response fields、db select fields、requested display fields。
+4. Query Kernel 校验 requested fields、筛选字段、排序字段和依赖字段，并计算 response fields、db select fields、requested display fields。
 5. Query executor 根据 db select fields 下推查询。
 6. Service 调用批量 display resolver 补充 `CompanyName / DepartmentName / PositionName`。
 7. Standard CRUD adapter 按 response fields 输出 `StandardCrudListResult`。
@@ -237,9 +250,17 @@ fields=EID,PersonNo,ENAME,CompanyName
 
 前端 SDK `list` 支持 `fields` 参数，并以逗号分隔字符串编码。Shell 不需要知道 display value 依赖，但需要把当前 view columns 字段和 row action `visibleWhen` 条件字段合并后提交；后端继续校验这些字段是否允许查询。
 
+Endpoint 解析时必须把 `fields` 视为标准查询参数，加入 `StandardQueryKeys` 并从 `Filters` 中排除。否则旧逻辑会把 `fields` 当作业务筛选 key 透传给模块 query customizer，造成字段意图和筛选意图混淆。
+
 其他功能点未来不引用 `StandardCrudRepository`，而是引用 `IPlatformQueryExecutor` 或平台查询 adapter。
 
 Organization 只更新 descriptor 和 resolver，不新增人员专属列表接口。
+
+`StandardCrudExportService` 当前复用 `IStandardCrudService.ListAsync` 读取导出数据。本轮需要明确导出口径：
+
+- `current` 导出按用户提交的导出列构造查询字段，并保留当前页分页语义。
+- `all` 导出按用户提交的导出列构造查询字段，并保留现有 `ExportAllPageSize` 上限语义。
+- 导出列仍由后端按 descriptor 和 display value 声明校验；不因前端列请求而返回未授权字段。
 
 ## 10. 数据与状态
 
@@ -250,7 +271,7 @@ Organization 只更新 descriptor 和 resolver，不新增人员专属列表接�
 - `view.columns`
 - `StandardCrudListQuery.Fields`
 - `PlatformQueryRequest.Fields`
-- `PlatformQueryDescriptor.AllowedFields`
+- `PlatformQueryDescriptor.AllowedModelFields`
 - `PlatformQueryDescriptor.DisplayValueFields`
 - EF model property 元数据
 
@@ -260,6 +281,8 @@ Organization 只更新 descriptor 和 resolver，不新增人员专属列表接�
 
 - 请求未知字段：返回 400 或稳定错误，避免 metadata 漂移静默失败。
 - 请求未授权字段：返回 400，不静默回退全字段。
+- 请求未知筛选字段或排序字段：返回 400 或稳定错误，不允许进入 EF 动态表达式。
+- 请求按 display value 字段筛选或排序：第一版返回 400 或稳定错误，后续如需支持必须另开设计。
 - display value source EID 为空：展示字段返回空字符串或 null，由 resolver 稳定处理。
 - target 模型或字段不存在：启动期 descriptor 校验优先发现；运行期作为稳定错误处理。
 
@@ -269,12 +292,15 @@ Organization 只更新 descriptor 和 resolver，不新增人员专属列表接�
 - 批量 resolver 需要避免跨模块直接访问对方持久化细节；本轮人员中心解析 Company/Department/Position 仍在 Organization 模块内。
 - 不同数据库 provider 对动态表达式翻译能力不同，需要用 SQL 形状测试和现有 provider smoke 兜底。
 - 如果 view.columns 漏掉行状态字段，行操作 `visibleWhen` 可能缺值；本轮由 Shell 从 row action condition 采集状态依赖字段并随 `fields` 提交，后端按 descriptor 校验并补齐。
+- 导出服务复用列表查询后，如果没有同步构造导出字段，可能出现导出列缺值或导出读取全字段；本轮把导出字段裁剪纳入同一查询 adapter 处理。
 
 ## 12. 验证方案
 
 最小验证：
 
 ```powershell
+dotnet build server\platform-query\PlatformQuery.csproj -nr:false -v minimal
+dotnet build apps\host-api\HostApi.csproj -nr:false -v minimal
 dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter StandardCrud -nr:false -v minimal
 dotnet test tests\Organization.Tests\Organization.Tests.csproj -nr:false -v minimal
 pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-list-host person-center-crud-pro-sample
@@ -289,28 +315,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets
 - 请求 `CompanyName` 时 SQL 直接选择 `CompanyName`，而不是选择 `CompanyId` 后由 resolver 补显示值。
 - 其他功能点只能通过引用 Standard CRUD 才能复用查询下推能力。
 - 请求未知字段没有稳定失败。
+- 请求未知筛选字段、未知排序字段或 display value 排序没有稳定失败。
 - `CompanyName / DepartmentName / PositionName` 返回缺失或触发 N+1 查询。
+- 导出 current/all 因列表字段裁剪缺少导出列，或导出绕开字段裁剪继续读取全字段。
 
 ## 13. 已决策口径
 
 - 平台查询内核单独建立 `server/platform-query` 项目；Standard CRUD 通过 adapter 接入，不作为其他功能点复用查询能力的入口。
 - `fields` 参数采用逗号分隔字符串，SDK 统一生成和 URL 编码，后端统一解析、去重并保持字段顺序。
+- `fields` 是标准查询参数，不进入 `Filters`；筛选字段和排序字段由查询内核按真实模型字段白名单校验。
+- 第一版不支持按 display value 字段筛选或排序。
 - 行动作 `visibleWhen` 依赖字段由 Shell 根据 row action condition 字段一并提交；后端仍按 descriptor 校验并补齐，不允许前端绕过字段边界。
+- 导出 current/all 继续复用 Standard CRUD 列表服务，但必须按导出列构造查询字段，并由同一平台查询 adapter 校验和补齐依赖字段。
 
 ## 14. 实施拆分建议
 
-1. 建立平台查询内核模型与 executor，先覆盖字段校验、查询层分页和字段投影。
+1. 建立平台查询内核模型与 executor，先覆盖字段校验、查询层分页和字段投影，并区分 `ResponseFields / DbSelectFields / InternalOnlyFields`。
 2. 更新 Standard CRUD descriptor adapter：把 `FieldSet.ListFields` 和结构化 display value 字段映射为平台查询 descriptor。
 3. 更新前端 SDK / Shell：从 view columns 和 row action condition 生成 `fields`。
-4. 更新后端 endpoint/service：解析 `fields`，调用平台查询内核。
+4. 更新后端 endpoint/service：解析 `fields`，把 `fields` 从 filters 排除，调用平台查询内核。
 5. 更新 display resolver：支持批量解析引用显示值。
-6. 补 SQL 形状测试、字段错误测试、人员中心 display value 测试。
-7. 更新交接台账和验证记录。
+6. 更新导出服务：按导出列构造查询字段，继续保留 current/all 模式边界。
+7. 补 SQL 形状测试、字段错误测试、导出字段测试、人员中心 display value 测试。
+8. 更新交接台账和验证记录。
 
 ## 15. AI-First 最小检查清单
 
 - 入口在哪里：`IPlatformQueryExecutor` 是查询能力入口；`StandardCrudListPageHost` 生成 `fields`，Standard CRUD service 作为首个 adapter 调用查询内核。
 - 边界在哪里：本轮只建设平台查询内核和 Standard CRUD List 首个接入；不新增资源、不改数据库结构、不改非接入功能点。
 - 如何验证：运行 PlatformCrud / Organization 后端定向测试、Shell 标准 CRUD 前端测试、AI-first 设计校验。
-- 失败信号是什么：SQL 全字段查询、内存分页、display value 字段被误当真实列、其他功能点只能引用 Standard CRUD 才能复用查询能力、未知字段静默忽略、显示值 N+1 或缺失。
+- 失败信号是什么：SQL 全字段查询、内存分页、display value 字段被误当真实列、其他功能点只能引用 Standard CRUD 才能复用查询能力、未知字段或未知排序/筛选字段静默忽略、display value 排序/筛选未稳定失败、显示值 N+1 或缺失、导出列缺失或导出绕开字段裁剪。
 - 如何回滚：回退平台查询内核、Standard CRUD adapter、结构化 display value 声明、`fields` 参数解析与 SDK/Shell 传参；恢复原先 `DisplayValueFields` 字符串列表和默认 Standard CRUD list 查询。

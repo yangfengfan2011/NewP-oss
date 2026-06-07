@@ -21,5 +21,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\..\server\platform-query\PlatformQuery.csproj" />
   </ItemGroup>
 </Project>

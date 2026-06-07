@@ -123,7 +123,7 @@
 - Modify: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 - Modify: `ICP-Platform.sln`
 
-- [ ] **Step 1: 写字段规划失败测试**
+- [x] **Step 1: 写字段规划失败测试**
 
 Create `tests/PlatformCrud.Tests/PlatformQueryFieldPlannerTests.cs`:
 
@@ -220,7 +220,7 @@ public sealed class PlatformQueryFieldPlannerTests
 }
 ```
 
-- [ ] **Step 2: 加测试项目引用并运行 RED**
+- [x] **Step 2: 加测试项目引用并运行 RED**
 
 Modify `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`:
 
@@ -236,7 +236,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Platform
 
 Expected: FAIL because `server/platform-query` and `PlatformQueryFieldPlanner` do not exist.
 
-- [ ] **Step 3: 新建平台查询项目与契约模型**
+- [x] **Step 3: 新建平台查询项目与契约模型**
 
 Create `server/platform-query/PlatformQuery.csproj`:
 
@@ -328,7 +328,7 @@ public sealed class PlatformQueryValidationException : InvalidOperationException
 }
 ```
 
-- [ ] **Step 4: 实现字段规划内核**
+- [x] **Step 4: 实现字段规划内核**
 
 Create `server/platform-query/Runtime/PlatformQueryFieldPlanner.cs` with these rules:
 
@@ -451,7 +451,7 @@ public static class PlatformQueryFieldPlanner
 }
 ```
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 Run:
 
@@ -461,7 +461,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Platform
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add ICP-Platform.sln server\platform-query tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj tests\PlatformCrud.Tests\PlatformQueryFieldPlannerTests.cs

@@ -479,7 +479,7 @@ git commit -m "功能：新增平台查询字段规划"
 - Modify: `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`
 - Modify: `tests/PlatformCrud.Tests/Support/PlatformCrudModelDefinitions.cs`
 
-- [ ] **Step 1: 写 SQL 形状与查询行为失败测试**
+- [x] **Step 1: 写 SQL 形状与查询行为失败测试**
 
 Modify `tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj`:
 
@@ -617,7 +617,7 @@ public sealed class PlatformQueryExecutorTests
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -627,7 +627,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter Platform
 
 Expected: FAIL because `EfPlatformQueryExecutor` does not exist.
 
-- [ ] **Step 3: 实现 executor 契约和结果模型**
+- [x] **Step 3: 实现 executor 契约和结果模型**
 
 Create `server/platform-query/Models/PlatformQueryResult.cs`:
 
@@ -681,7 +681,7 @@ public static class PlatformQueryServiceCollectionExtensions
 }
 ```
 
-- [ ] **Step 4: 实现 EF 查询下推**
+- [x] **Step 4: 实现 EF 查询下推**
 
 Create `server/platform-query/Runtime/EfPlatformQueryExecutor.cs` with these implementation points:
 
@@ -791,7 +791,7 @@ Condition and sort rules:
 // mixed group operators throw PlatformQueryValidationException("PlatformQuery.MixedConditionGroupOperator", ...).
 ```
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 Run:
 
@@ -802,7 +802,7 @@ dotnet build server\platform-query\PlatformQuery.csproj -nr:false -v minimal
 
 Expected: both PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add server\platform-query tests\PlatformCrud.Tests ICP-Platform.sln

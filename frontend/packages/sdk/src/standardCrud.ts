@@ -650,7 +650,7 @@ export function normalizeStandardCrudListResult<TItem>(
   };
 }
 
-/** 构建标准 CRUD API 路径；空字符串和空值不会进入查询串，保持筛选重置语义稳定。 */
+/** 构建标准 CRUD API 路径；`fields` 等逗号分隔参数统一交给 URLSearchParams 编码，空字符串和空值不会进入查询串。 */
 export function buildStandardCrudPath(
   apiRoute: string,
   query?: Record<string, string | number | boolean | null | undefined>,

@@ -105,6 +105,7 @@ const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', '
 const supportedActionVariants = new Set(['default', 'primary', 'danger']);
 const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
 const supportedQueryPresets = new Set(['keyword']);
+const reservedStandardCrudQueryKeys = new Set(['page', 'pageindex', 'pagesize', 'sortby', 'sortdirection', 'fields']);
 
 function readString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
@@ -476,6 +477,9 @@ function assertQuery(query: StandardCrudRuntimeQuerySchema, advancedFilter?: Sta
   const declaredKeys = new Set(fields.map((field) => field.key));
 
   for (const field of fields) {
+    if (reservedStandardCrudQueryKeys.has(field.key.toLowerCase())) {
+      throw new Error(`query field key "${field.key}" is reserved for standard CRUD requests`);
+    }
     if (field.source === 'preset' && field.preset && !supportedQueryPresets.has(field.preset)) {
       throw new Error(`unsupported query preset "${field.preset}"`);
     }

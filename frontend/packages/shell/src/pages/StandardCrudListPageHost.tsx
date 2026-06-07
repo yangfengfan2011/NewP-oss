@@ -26,7 +26,11 @@ import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } fro
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
-import { buildStandardCrudDefaultFilters, buildStandardCrudListQuery } from '../standard-crud/standardCrudMetadataQuery';
+import {
+  buildStandardCrudDefaultFilters,
+  buildStandardCrudListQuery,
+  collectStandardCrudListRequestFields,
+} from '../standard-crud/standardCrudMetadataQuery';
 import {
   buildStandardCrudDetailFormValues,
 } from '../standard-crud/standardCrudDetailView';
@@ -533,6 +537,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     () => buildStandardCrudDefaultFilters(schema.query, schema.advancedFilter),
     [schema.query, schema.advancedFilter],
   );
+  const listRequestFields = useMemo(
+    () => collectStandardCrudListRequestFields(schema.columns, schema.rowActions),
+    [schema.columns, schema.rowActions],
+  );
   const [filters, setFilters] = useState<TFilter>(() => initialFilters as TFilter);
   const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialFilters as TFilter);
   const [rows, setRows] = useState<TRow[]>([]);
@@ -777,11 +785,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const tableRequest = useMemo(
     () =>
       createSearchTableRequest<Record<string, unknown>, TRow, TRow>({
-        buildQuery: () => buildStandardCrudListQuery(
-          schema.query,
-          appliedFilters as Record<string, unknown>,
-          schema.advancedFilter,
-        ),
+        buildQuery: () => ({
+          ...buildStandardCrudListQuery(
+            schema.query,
+            appliedFilters as Record<string, unknown>,
+            schema.advancedFilter,
+          ),
+          ...(listRequestFields.length > 0 ? { fields: listRequestFields.join(',') } : {}),
+        }),
         load: async (query) => {
           try {
             setLoading(true);
@@ -807,7 +818,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         },
         mapRow: (row) => row,
       }),
-    [client, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter],
+    [client, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter, listRequestFields],
   );
 
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');

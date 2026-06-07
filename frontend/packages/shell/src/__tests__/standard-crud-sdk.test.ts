@@ -73,6 +73,14 @@ describe('standard CRUD SDK helpers', () => {
     );
   });
 
+  it('encodes fields as a comma separated standard CRUD query parameter', () => {
+    expect(buildStandardCrudPath('/api/organization/persons', {
+      pageIndex: 1,
+      pageSize: 20,
+      fields: 'EID,PersonNo,CompanyName',
+    })).toBe('/api/organization/persons?pageIndex=1&pageSize=20&fields=EID%2CPersonNo%2CCompanyName');
+  });
+
   it('creates a fetch-backed standard CRUD client', async () => {
     const fetcher = vi.fn(async () =>
       new Response(JSON.stringify({ fields: { EID: 'Person_1' }, summaries: {} }), {

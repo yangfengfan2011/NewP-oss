@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -308,7 +308,13 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).toContain('启用');
     expect(container.textContent).not.toContain('PartTime');
     expect(container.textContent).not.toContain('true');
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('fields='),
+      { method: 'GET' },
+    );
+    expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
+      'fields=EID,PersonNo,ENAME,DepartmentName,EmploymentStatus,IsEnabled',
+    );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
     expect(filterLabels.length).toBeGreaterThan(0);

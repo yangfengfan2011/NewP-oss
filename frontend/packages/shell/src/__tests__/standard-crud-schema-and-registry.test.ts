@@ -495,6 +495,33 @@ describe('standard CRUD schema resolver and registry', () => {
     )).toThrow('unsupported query preset "quickSearch"');
   });
 
+  it.each(['fields', 'page', 'pageIndex', 'pageSize', 'sortBy', 'sortDirection'])(
+    'fails when query metadata uses reserved standard CRUD query key "%s"',
+    (reservedKey) => {
+      expect(() => buildStandardCrudListSchema(
+        {
+          key: 'organization.person.list',
+          dicKey: 'PersonListView',
+          titleKey: 'Title',
+          mode: 'list',
+          model: 'Person',
+          query: {
+            fields: [{ key: reservedKey, labelKey: 'Query_Reserved', source: 'preset', preset: 'keyword' }],
+          },
+        },
+        personRegistration,
+        {
+          modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+          defaultLanguageCatalog: {
+            'PersonListView.Title': '人员中心',
+            'PersonListView.Description': '维护组织模块中的人员基础信息。',
+            'PersonListView.Query_Reserved': '保留字段',
+          },
+        },
+      )).toThrow(`query field key "${reservedKey}" is reserved for standard CRUD requests`);
+    },
+  );
+
   it('fails when a metadata action uses an unsupported standard action', () => {
     expect(() => buildStandardCrudListSchema(
       {

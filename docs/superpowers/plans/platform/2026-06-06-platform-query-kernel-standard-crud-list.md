@@ -1665,7 +1665,7 @@ git commit -m "功能：人员列表结构化显示值批量解析"
 - Modify: `frontend/packages/shell/src/__tests__/standard-crud-list-host.test.tsx`
 - Modify: `frontend/packages/shell/src/__tests__/person-center-crud-pro-sample.test.tsx`
 
-- [ ] **Step 1: 写 SDK URL 编码测试**
+- [x] **Step 1: 写 SDK URL 编码测试**
 
 Add to `frontend/packages/shell/src/__tests__/standard-crud-sdk.test.ts`:
 
@@ -1679,7 +1679,7 @@ it('encodes fields as a comma separated standard CRUD query parameter', () => {
 });
 ```
 
-- [ ] **Step 2: 写 Host fields 请求失败测试**
+- [x] **Step 2: 写 Host fields 请求失败测试**
 
 Add to `frontend/packages/shell/src/__tests__/standard-crud-list-host.test.tsx`:
 
@@ -1726,7 +1726,7 @@ expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).
 );
 ```
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
 Run:
 
@@ -1736,7 +1736,7 @@ pnpm --dir frontend --filter @icp-platform/shell test -- standard-crud-sdk stand
 
 Expected: FAIL because Host does not add `fields`.
 
-- [ ] **Step 4: 实现 fields 收集 helper**
+- [x] **Step 4: 实现 fields 收集 helper**
 
 Modify `frontend/packages/shell/src/standard-crud/standardCrudMetadataQuery.ts`:
 
@@ -1774,7 +1774,7 @@ export function collectStandardCrudListRequestFields(
 }
 ```
 
-- [ ] **Step 5: Host list 请求追加 fields**
+- [x] **Step 5: Host list 请求追加 fields**
 
 Modify import in `StandardCrudListPageHost.tsx`:
 
@@ -1812,7 +1812,7 @@ buildQuery: () => ({
 
 Keep export unchanged: it already sends `columns`, and backend constructs export `Fields`.
 
-- [ ] **Step 6: Run GREEN**
+- [x] **Step 6: Run GREEN**
 
 Run:
 
@@ -1823,7 +1823,7 @@ pnpm --dir frontend --filter @icp-platform/shell build
 
 Expected: PASS. Existing Vite chunk-size warnings are acceptable if no new error appears.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add frontend/packages/sdk/src/standardCrud.ts frontend/packages/shell/src/standard-crud/standardCrudMetadataQuery.ts frontend/packages/shell/src/pages/StandardCrudListPageHost.tsx frontend/packages/shell/src/__tests__

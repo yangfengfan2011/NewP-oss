@@ -29,6 +29,14 @@ export interface StandardCrudQuerySchema {
   defaultPageSize?: number;
 }
 
+export interface StandardCrudListFieldColumnSource {
+  field: string;
+}
+
+export interface StandardCrudListFieldActionSource {
+  visibleWhen?: { field?: string };
+}
+
 export function collectStandardCrudQueryFields(
   query: StandardCrudQuerySchema,
   advancedFilter: StandardCrudAdvancedFilterSchema | undefined = query.advancedFilter,
@@ -81,4 +89,28 @@ export function buildStandardCrudListQuery(
   }
 
   return result;
+}
+
+export function collectStandardCrudListRequestFields(
+  columns: StandardCrudListFieldColumnSource[],
+  rowActions: StandardCrudListFieldActionSource[],
+  idField = 'EID',
+): string[] {
+  const fields: string[] = [];
+  const add = (field: string | undefined) => {
+    const normalized = field?.trim();
+    if (normalized && !fields.includes(normalized)) {
+      fields.push(normalized);
+    }
+  };
+
+  add(idField);
+  for (const column of columns) {
+    add(column.field);
+  }
+  for (const action of rowActions) {
+    add(action.visibleWhen?.field);
+  }
+
+  return fields;
 }

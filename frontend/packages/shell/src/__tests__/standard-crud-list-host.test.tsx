@@ -299,9 +299,41 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20',
+      { method: 'GET' },
+    );
     expect(container.textContent).toContain('张三');
     expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
+  });
+
+  it('requests view columns and row action state fields through fields parameter', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      items: [{ EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '研发部', IsEnabled: true }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const viewDocument = {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        rowActions: personListViewDocument.view.rowActions.map((action) =>
+          action.key === 'disable'
+            ? { ...action, visibleWhen: { field: 'IsEnabled', operator: 'equals', value: true } }
+            : action),
+      },
+    };
+
+    await renderHost({}, viewDocument);
+    await flushProTableRequest();
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName%2CIsEnabled&pageIndex=1&pageSize=20',
+      { method: 'GET' },
+    );
   });
 
   it('keeps runtime title and description out of the single-list workspace chrome', async () => {
@@ -462,7 +494,10 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20',
+      { method: 'GET' },
+    );
     expect(container.textContent).toContain('关键字');
     expect(container.textContent).toContain('在职状态');
     expect(container.textContent).toContain('更多筛选');

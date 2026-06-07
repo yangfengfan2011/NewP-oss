@@ -33,6 +33,25 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
         return entity is null ? null : Map(entity);
     }
 
+    public async Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(
+        IReadOnlyCollection<string> departmentIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (departmentIds.Count == 0)
+        {
+            return new Dictionary<string, Department>(StringComparer.Ordinal);
+        }
+
+        var entities = await Entities
+            .AsNoTracking()
+            .Where(department => departmentIds.Contains(EF.Property<string>(department, "EID")))
+            .ToListAsync(cancellationToken);
+
+        return entities
+            .Select(Map)
+            .ToDictionary(department => department.Id, StringComparer.Ordinal);
+    }
+
     public async Task<bool> ExistsSiblingCodeAsync(
         string companyId,
         string? parentDepartmentId,

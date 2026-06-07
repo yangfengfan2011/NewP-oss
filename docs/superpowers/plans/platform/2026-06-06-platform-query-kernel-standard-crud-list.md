@@ -1414,7 +1414,7 @@ git commit -m "功能：标准 CRUD 列表接入平台查询内核"
 - Modify: `tests/Organization.Tests/PersonStandardCrudResourceTests.cs`
 - Modify: `tests/Organization.Tests/EfOrganizationRepositoryTests.cs`
 
-- [ ] **Step 1: 写 descriptor 结构化 display value 测试**
+- [x] **Step 1: 写 descriptor 结构化 display value 测试**
 
 Modify `tests/Organization.Tests/PersonStandardCrudResourceTests.cs`:
 
@@ -1453,7 +1453,7 @@ with field-object assertions:
 Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "CompanyName");
 ```
 
-- [ ] **Step 2: 写批量 resolver 测试**
+- [x] **Step 2: 写批量 resolver 测试**
 
 Add to `PersonStandardCrudResourceTests.cs` or a new `PersonCrudDisplayValueResolverTests.cs`:
 
@@ -1500,7 +1500,7 @@ public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
 }
 ```
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
 Run:
 
@@ -1510,7 +1510,7 @@ dotnet test tests\Organization.Tests\Organization.Tests.csproj --filter "PersonS
 
 Expected: FAIL because descriptor and resolver still use string display fields and single-row resolver.
 
-- [ ] **Step 4: 更新人员 descriptor**
+- [x] **Step 4: 更新人员 descriptor**
 
 Modify `PersonCrudDescriptorFactory.Create()`:
 
@@ -1529,7 +1529,7 @@ Add:
 using ICP.Platform.Query.Descriptors;
 ```
 
-- [ ] **Step 5: 增加组织仓储批量读取**
+- [x] **Step 5: 增加组织仓储批量读取**
 
 Add to repository interfaces:
 
@@ -1574,7 +1574,7 @@ public async Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
 
 Use the same pattern for departments and positions.
 
-- [ ] **Step 6: 实现批量 display resolver**
+- [x] **Step 6: 实现批量 display resolver**
 
 Modify `PersonCrudDisplayValueResolver.ResolveListAsync`:
 
@@ -1637,7 +1637,7 @@ private static string ReadDisplayName(
         : string.Empty;
 ```
 
-- [ ] **Step 7: Run GREEN**
+- [x] **Step 7: Run GREEN**
 
 Run:
 
@@ -1648,7 +1648,7 @@ dotnet build server\modules\Organization\OrganizationModule.csproj -nr:false -v 
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add server\modules\Organization tests\Organization.Tests

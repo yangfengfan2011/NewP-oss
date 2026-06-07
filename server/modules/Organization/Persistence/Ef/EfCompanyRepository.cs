@@ -29,6 +29,25 @@ public sealed class EfCompanyRepository : ICompanyRepository
         return entity is null ? null : Map(entity);
     }
 
+    public async Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
+        IReadOnlyCollection<string> companyIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (companyIds.Count == 0)
+        {
+            return new Dictionary<string, Company>(StringComparer.Ordinal);
+        }
+
+        var entities = await Entities
+            .AsNoTracking()
+            .Where(company => companyIds.Contains(EF.Property<string>(company, "EID")))
+            .ToListAsync(cancellationToken);
+
+        return entities
+            .Select(Map)
+            .ToDictionary(company => company.Id, StringComparer.Ordinal);
+    }
+
     public async Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default)
     {
         var entities = await Entities.AsNoTracking().ToListAsync(cancellationToken);

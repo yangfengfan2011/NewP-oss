@@ -106,6 +106,49 @@ public class EfOrganizationRepositoryTests
     }
 
     [Fact]
+    public async Task EfOrganizationRepositories_GetByIdsAsync_ReturnsIndexedEntities()
+    {
+        using var dbContext = CreateDbContext();
+        var companyRepository = new EfCompanyRepository(dbContext);
+        var departmentRepository = new EfDepartmentRepository(dbContext);
+        var positionRepository = new EfPositionRepository(dbContext);
+
+        var company = new Company
+        {
+            Id = "Company_44444444444444444444444444444444",
+            Code = "ROOT",
+            Name = "总公司"
+        };
+        var department = new Department
+        {
+            Id = "Department_55555555555555555555555555555555",
+            CompanyId = company.Id,
+            Code = "RD",
+            Name = "研发部"
+        };
+        var position = new Position
+        {
+            Id = "Position_66666666666666666666666666666666",
+            CompanyId = company.Id,
+            DepartmentId = department.Id,
+            Code = "DEV",
+            Name = "工程师"
+        };
+
+        await companyRepository.CreateAsync(company);
+        await departmentRepository.CreateAsync(department);
+        await positionRepository.CreateAsync(position);
+
+        var companies = await companyRepository.GetByIdsAsync([company.Id, "Company_missing"]);
+        var departments = await departmentRepository.GetByIdsAsync([department.Id, "Department_missing"]);
+        var positions = await positionRepository.GetByIdsAsync([position.Id, "Position_missing"]);
+
+        Assert.Equal("总公司", companies[company.Id].Name);
+        Assert.Equal("研发部", departments[department.Id].Name);
+        Assert.Equal("工程师", positions[position.Id].Name);
+    }
+
+    [Fact]
     public void OrganizationModule_ConfigureServices_RegistersRepositoriesAndServices()
     {
         var services = new ServiceCollection();

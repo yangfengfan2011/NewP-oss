@@ -4,6 +4,9 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Query.Descriptors;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -33,9 +36,9 @@ public sealed class PersonStandardCrudResourceTests
 
         Assert.Equal("organization.person", descriptor.ResourceKey);
         Assert.Equal("api/organization/persons", descriptor.Route);
-        Assert.Contains("CompanyName", descriptor.DisplayValueFields);
-        Assert.Contains("DepartmentName", descriptor.DisplayValueFields);
-        Assert.Contains("PositionName", descriptor.DisplayValueFields);
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "CompanyName");
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "DepartmentName");
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
         Assert.Contains("userLink", descriptor.SummaryBlockKeys);
         Assert.Contains("authorizationSummary", descriptor.SummaryBlockKeys);
         var constraint = Assert.Single(descriptor.UniqueConstraints);
@@ -48,8 +51,29 @@ public sealed class PersonStandardCrudResourceTests
     {
         var descriptor = PersonCrudDescriptorFactory.Create();
 
-        Assert.Contains("DepartmentName", descriptor.DisplayValueFields);
-        Assert.Contains("PositionName", descriptor.DisplayValueFields);
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "DepartmentName");
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
+    }
+
+    [Fact]
+    public void PersonCrudDescriptor_DeclaresStructuredDisplayValueFields()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        Assert.Contains(descriptor.DisplayValueFields, field =>
+            field.Field == "CompanyName" &&
+            field.SourceField == "CompanyId" &&
+            field.TargetModelName == "Company" &&
+            field.TargetIdField == "EID" &&
+            field.TargetDisplayField == "ENAME");
+        Assert.Contains(descriptor.DisplayValueFields, field =>
+            field.Field == "DepartmentName" &&
+            field.SourceField == "DepartmentId" &&
+            field.TargetModelName == "Department");
+        Assert.Contains(descriptor.DisplayValueFields, field =>
+            field.Field == "PositionName" &&
+            field.SourceField == "PositionId" &&
+            field.TargetModelName == "Position");
     }
 
     [Fact]
@@ -98,5 +122,162 @@ public sealed class PersonStandardCrudResourceTests
 
         Assert.Null(legacyType);
         Assert.NotNull(typeof(PersonUserLinksController));
+    }
+
+    [Fact]
+    public async Task PersonCrudDisplayValueResolver_ResolvesRequestedDisplayFieldsInBatch()
+    {
+        var companyRepository = new FakeCompanyRepository(
+        [
+            new Company { Id = "Company_1", Name = "总公司" }
+        ]);
+        var departmentRepository = new FakeDepartmentRepository(
+        [
+            new Department { Id = "Department_1", Name = "研发部" }
+        ]);
+        var positionRepository = new FakePositionRepository(
+        [
+            new Position { Id = "Position_1", Name = "工程师" }
+        ]);
+        var resolver = new PersonCrudDisplayValueResolver(
+            companyRepository,
+            departmentRepository,
+            positionRepository);
+
+        var descriptor = PersonCrudDescriptorFactory.Create();
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
+        [
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = "Position_1" },
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = null }
+        ];
+
+        var resolved = await resolver.ResolveListAsync(
+            descriptor,
+            rows,
+            descriptor.DisplayValueFields,
+            CancellationToken.None);
+
+        Assert.Equal("总公司", resolved[0]["CompanyName"]);
+        Assert.Equal("研发部", resolved[1]["DepartmentName"]);
+        Assert.Equal(string.Empty, resolved[1]["PositionName"]);
+        Assert.Equal(1, companyRepository.BatchCallCount);
+        Assert.Equal(1, departmentRepository.BatchCallCount);
+        Assert.Equal(1, positionRepository.BatchCallCount);
+    }
+
+    private sealed class FakeCompanyRepository : ICompanyRepository
+    {
+        private readonly IReadOnlyDictionary<string, Company> _companies;
+
+        public FakeCompanyRepository(IEnumerable<Company> companies)
+        {
+            _companies = companies.ToDictionary(company => company.Id, StringComparer.Ordinal);
+        }
+
+        public int BatchCallCount { get; private set; }
+
+        public Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_companies.Values.ToList());
+
+        public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_companies.TryGetValue(companyId, out var company) ? company : null);
+
+        public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
+            IReadOnlyCollection<string> companyIds,
+            CancellationToken cancellationToken = default)
+        {
+            BatchCallCount++;
+            return Task.FromResult<IReadOnlyDictionary<string, Company>>(
+                _companies.Values
+                    .Where(company => companyIds.Contains(company.Id))
+                    .ToDictionary(company => company.Id, StringComparer.Ordinal));
+        }
+
+        public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task CreateAsync(Company company, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdateAsync(Company company, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeDepartmentRepository : IDepartmentRepository
+    {
+        private readonly IReadOnlyDictionary<string, Department> _departments;
+
+        public FakeDepartmentRepository(IEnumerable<Department> departments)
+        {
+            _departments = departments.ToDictionary(department => department.Id, StringComparer.Ordinal);
+        }
+
+        public int BatchCallCount { get; private set; }
+
+        public Task<List<Department>> GetByCompanyIdAsync(string companyId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_departments.Values.Where(department => department.CompanyId == companyId).ToList());
+
+        public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_departments.TryGetValue(departmentId, out var department) ? department : null);
+
+        public Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(
+            IReadOnlyCollection<string> departmentIds,
+            CancellationToken cancellationToken = default)
+        {
+            BatchCallCount++;
+            return Task.FromResult<IReadOnlyDictionary<string, Department>>(
+                _departments.Values
+                    .Where(department => departmentIds.Contains(department.Id))
+                    .ToDictionary(department => department.Id, StringComparer.Ordinal));
+        }
+
+        public Task<bool> ExistsSiblingCodeAsync(
+            string companyId,
+            string? parentDepartmentId,
+            string code,
+            string? excludedDepartmentId = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task CreateAsync(Department department, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdateAsync(Department department, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakePositionRepository : IPositionRepository
+    {
+        private readonly IReadOnlyDictionary<string, Position> _positions;
+
+        public FakePositionRepository(IEnumerable<Position> positions)
+        {
+            _positions = positions.ToDictionary(position => position.Id, StringComparer.Ordinal);
+        }
+
+        public int BatchCallCount { get; private set; }
+
+        public Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_positions.Values.Where(position => position.DepartmentId == departmentId).ToList());
+
+        public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_positions.TryGetValue(positionId, out var position) ? position : null);
+
+        public Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(
+            IReadOnlyCollection<string> positionIds,
+            CancellationToken cancellationToken = default)
+        {
+            BatchCallCount++;
+            return Task.FromResult<IReadOnlyDictionary<string, Position>>(
+                _positions.Values
+                    .Where(position => positionIds.Contains(position.Id))
+                    .ToDictionary(position => position.Id, StringComparer.Ordinal));
+        }
+
+        public Task CreateAsync(Position position, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdateAsync(Position position, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

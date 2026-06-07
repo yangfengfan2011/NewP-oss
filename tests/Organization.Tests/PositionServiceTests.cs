@@ -90,6 +90,15 @@ public class PositionServiceTests
         public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_positions.FirstOrDefault(position => position.Id == positionId) is { } position ? Clone(position) : null);
 
+        public Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(
+            IReadOnlyCollection<string> positionIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, Position>>(
+                _positions
+                    .Where(position => positionIds.Contains(position.Id))
+                    .Select(Clone)
+                    .ToDictionary(position => position.Id, StringComparer.Ordinal));
+
         public Task CreateAsync(Position position, CancellationToken cancellationToken = default)
         {
             _positions.Add(Clone(position));

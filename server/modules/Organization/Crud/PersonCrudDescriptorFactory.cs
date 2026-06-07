@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
@@ -23,7 +24,12 @@ public static class PersonCrudDescriptorFactory
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "UpdatedAt"]),
         OptionLabelFields = ["PersonNo", "ENAME"],
         SummaryBlockKeys = ["userLink", "authorizationSummary"],
-        DisplayValueFields = ["CompanyName", "DepartmentName", "PositionName"],
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME"),
+            new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
+            new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
+        ],
         DeletePolicy = StandardCrudDeletePolicy.Conditional,
         RequiredFields =
         [

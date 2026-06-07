@@ -6,6 +6,9 @@ public interface ICompanyRepository
 {
     Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
+        IReadOnlyCollection<string> companyIds,
+        CancellationToken cancellationToken = default);
     Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default);
     Task CreateAsync(Company company, CancellationToken cancellationToken = default);
     Task UpdateAsync(Company company, CancellationToken cancellationToken = default);

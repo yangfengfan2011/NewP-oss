@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
+using ICP.Platform.Query.Descriptors;
 using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
@@ -81,7 +82,12 @@ public sealed class StandardCrudServiceReadTests
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId"]),
         OptionLabelFields = ["PersonNo", "ENAME"],
-        DisplayValueFields = ["CompanyName", "DepartmentName", "PositionName"],
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME"),
+            new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
+            new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
+        ],
         SummaryBlockKeys = summaryKeys ?? []
     };
 

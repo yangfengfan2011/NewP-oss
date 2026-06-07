@@ -26,6 +26,7 @@ public static class StandardCrudDescriptorValidator
             throw new InvalidOperationException("标准 CRUD 条件删除资源必须声明 ResourceKey。");
         }
 
+        ValidateDisplayValueFields(descriptor);
         ValidateRequiredFields(descriptor);
         ValidateUniqueConstraints(descriptor);
     }
@@ -36,6 +37,43 @@ public static class StandardCrudDescriptorValidator
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new InvalidOperationException($"标准 CRUD 资源 {resourceKey} 缺少 {name}。");
+        }
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition)
+        {
+            throw new InvalidOperationException(message);
+        }
+    }
+
+    // display value 只描述结构化引用展示字段；source/target 元数据必须在这里静态收口，避免后续接入层各自兜底。
+    private static void ValidateDisplayValueFields(StandardCrudDescriptor descriptor)
+    {
+        foreach (var displayField in descriptor.DisplayValueFields)
+        {
+            Require(
+                !string.IsNullOrWhiteSpace(displayField.Field),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 存在空 display value 字段。");
+            Require(
+                !string.IsNullOrWhiteSpace(displayField.SourceField),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 未声明 source 字段。");
+            Require(
+                descriptor.FieldSet.ListFields.Contains(displayField.SourceField, StringComparer.Ordinal),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 引用了未纳入列表字段白名单的 source 字段 {displayField.SourceField}。");
+            Require(
+                !descriptor.FieldSet.ListFields.Contains(displayField.Field, StringComparer.Ordinal),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 不能同时作为真实列表字段声明。");
+            Require(
+                !string.IsNullOrWhiteSpace(displayField.TargetModelName),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 未声明目标模型。");
+            Require(
+                !string.IsNullOrWhiteSpace(displayField.TargetIdField),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 未声明目标 id 字段。");
+            Require(
+                !string.IsNullOrWhiteSpace(displayField.TargetDisplayField),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 未声明目标显示字段。");
         }
     }
 

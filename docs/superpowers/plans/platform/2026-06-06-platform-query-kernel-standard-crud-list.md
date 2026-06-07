@@ -821,7 +821,7 @@ git commit -m "功能：实现平台查询 EF 执行器"
 - Modify: `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`
 - Modify: `tests/PlatformCrud.Tests/StandardCrudEndpointRouteBuilderTests.cs`
 
-- [ ] **Step 1: 写 descriptor adapter 和 endpoint fields 失败测试**
+- [x] **Step 1: 写 descriptor adapter 和 endpoint fields 失败测试**
 
 Add to `tests/PlatformCrud.Tests/StandardCrudDescriptorTests.cs`:
 
@@ -894,7 +894,7 @@ public async Task MapStandardCrudResources_ParsesFieldsOutsideFilters()
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -904,7 +904,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Standar
 
 Expected: FAIL because descriptor still uses string display fields and `fields` is still treated as a filter key.
 
-- [ ] **Step 3: 修改 Standard CRUD descriptor 和 list query**
+- [x] **Step 3: 修改 Standard CRUD descriptor 和 list query**
 
 Modify `server/platform-crud/PlatformCrud.csproj`:
 
@@ -938,7 +938,7 @@ public sealed record StandardCrudListQuery(
     IReadOnlyList<string>? Fields = null);
 ```
 
-- [ ] **Step 4: 实现 adapter、validator 和 endpoint 解析**
+- [x] **Step 4: 实现 adapter、validator 和 endpoint 解析**
 
 Create `server/platform-crud/Runtime/StandardCrudQueryDescriptorAdapter.cs`:
 
@@ -1048,7 +1048,7 @@ catch (PlatformQueryValidationException ex)
 }
 ```
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 Run:
 
@@ -1058,7 +1058,7 @@ dotnet test tests\PlatformCrud.Tests\PlatformCrud.Tests.csproj --filter "Standar
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add server\platform-crud tests\PlatformCrud.Tests

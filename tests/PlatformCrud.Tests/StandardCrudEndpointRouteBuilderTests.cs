@@ -35,6 +35,22 @@ public sealed class StandardCrudEndpointRouteBuilderTests
     }
 
     [Fact]
+    public async Task MapStandardCrudResources_ParsesFieldsOutsideFilters()
+    {
+        var recording = new RecordingStandardCrudService();
+        await using var app = BuildApp(recording);
+        await app.StartAsync();
+
+        var response = await app.GetTestClient().GetAsync(
+            "/api/organization/persons?pageIndex=2&pageSize=5&fields=EID,PersonNo,CompanyName,IsEnabled&keyword=张");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(["EID", "PersonNo", "CompanyName", "IsEnabled"], recording.LastListQuery!.Fields);
+        Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
+        Assert.DoesNotContain("fields", recording.LastListQuery.Filters.Keys);
+    }
+
+    [Fact]
     public async Task MapStandardCrudResources_MapsReadOnlyStandardRoutes()
     {
         var recording = new RecordingStandardCrudService();

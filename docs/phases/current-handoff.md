@@ -1,6 +1,6 @@
 # 当前交接台账
 
-最近更新：2026-06-06
+最近更新：2026-06-07
 
 ## 1. 目的
 
@@ -37,6 +37,39 @@
 如果本文档与具体设计、计划或验证记录冲突，以更具体、更新的任务文档为准，并在下一次收口时修正本文档。
 
 ## 4. 最近完成
+
+### 4.10 平台持久化操作内核设计
+
+状态：设计已完成并验证；尚未进入代码实现，也未创建实施计划。
+
+主要依据：
+
+- `docs/superpowers/specs/platform/2026-06-07-platform-persistence-operations-kernel-design.md`
+
+完成内容：
+
+- 新增平台持久化操作内核详细设计，定位为 `platform-query` 查询内核的兄弟能力，专注写侧/持久化操作，不并入当前查询内核设计。
+- 明确 `platform-query` 继续负责字段白名单、筛选、排序、分页、投影和 display value；新内核负责显式事务、批量插入、批量更新、批量删除、审计字段、主键生成、失败回滚和 provider 差异。
+- 明确 Standard CRUD create/update/delete 可作为首个接入者，但其他模块未来应能直接面向 `IPlatformPersistenceOperations` / `IPlatformUnitOfWork`，不必绕 Standard CRUD。
+- 明确写侧 descriptor 只能声明资源归属、模型、主键、写字段、审计字段、必填和唯一约束等静态边界，不承载执行流程、事务流程、chunk 流程、回滚流程或 provider fallback。
+- 补充数据库底层设计约束：descriptor 与 `ModelDefinition` / EF metadata 对齐、数据库唯一索引作为最终事实源、写侧内核不做 DDL、不触发 dev schema sync、EF execution strategy 不得只重试部分 chunk、rollback 后清理 `ChangeTracker` 或丢弃 scope、UTC 审计时间、collation 差异、死锁/锁等待超时/事务状态不明的 provider 错误归一化。
+
+验证结论：
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\platform\2026-06-07-platform-persistence-operations-kernel-design.md` 通过。
+- `powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1` 通过，新增设计已登记到 `docs/architecture/ai-first-design-check-targets.txt`。
+
+当前推荐下一步：
+
+- 如继续推进写侧内核，应先明确要求创建实施计划，并在计划前做一致性 review，重点确认项目命名、契约目录、EF adapter 目录、`IPlatformObjectIdGenerator` 中立化方式、Standard CRUD 写侧迁移顺序和 provider smoke 环境。
+- 第一批实现建议优先压住高风险点：`DbContext` 显式事务、EF execution strategy 与 manual transaction 关系、rollback 后 `ChangeTracker` 清理、批量 all-or-nothing、provider 异常归一化。
+- 不应把该写侧设计混入当前 `platform-query` / Standard CRUD List 查询边界实施；读侧查询内核仍按既有设计独立推进。
+
+已知风险与回滚思路：
+
+- 当前只有设计文档，没有运行时代码；具体可行性仍需后续定向测试和 provider smoke 验证。
+- 如设计方向暂不采用，可删除该设计文档，并从 `docs/architecture/ai-first-design-check-targets.txt` 移除对应登记。
+- 未来实现时应保留并可切回现有 Standard CRUD / EF repository 直接写入路径；写侧内核不影响 `platform-query` 读侧能力。
 
 ### 4.9 标准 CRUD 通用 XLSX 导出与抽屉 URL 同步
 

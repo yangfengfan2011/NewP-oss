@@ -3,6 +3,7 @@ import {
   buildStandardCrudDefaultFilters,
   buildStandardCrudEmptyFilters,
   buildStandardCrudListQuery,
+  collectStandardCrudListRequestFields,
 } from '../standard-crud/standardCrudMetadataQuery';
 
 const querySchema = {
@@ -56,5 +57,20 @@ describe('standard CRUD metadata query helpers', () => {
       departmentId: 'Dept_1',
       isEnabled: true,
     });
+  });
+
+  it('collects list request fields from columns and row action state dependencies', () => {
+    expect(collectStandardCrudListRequestFields(
+      [
+        { field: ' PersonNo ' },
+        { field: 'DepartmentName' },
+        { field: 'PersonNo' },
+      ],
+      [
+        { visibleWhen: { field: ' IsEnabled ' } },
+        { visibleWhen: { field: 'IsEnabled' } },
+        {},
+      ],
+    )).toEqual(['EID', 'PersonNo', 'DepartmentName', 'IsEnabled']);
   });
 });

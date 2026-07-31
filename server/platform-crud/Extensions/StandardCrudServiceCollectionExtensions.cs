@@ -4,6 +4,7 @@ using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Query.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -26,6 +27,7 @@ public static class StandardCrudServiceCollectionExtensions
     public static IServiceCollection AddStandardCrudKernel(this IServiceCollection services)
     {
         services.AddPlatformObjectIdGeneration();
+        services.AddPlatformQueryKernel();
         services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
         services.TryAddSingleton<StandardCrudXlsxWriter>();
         services.AddScoped<IStandardCrudRepository, EfStandardCrudRepository>();

@@ -3,6 +3,9 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
+using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Query.Models;
+using ICP.Platform.Query.Runtime;
 using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
@@ -10,15 +13,36 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudServiceReadTests
 {
     [Fact]
-    public async Task ListAsync_AppliesQueryCustomizerAndDisplayValueResolver()
+    public async Task ListAsync_UsesPlatformQueryExecutorAndProjectsResponseFields()
     {
         var repository = new InMemoryStandardCrudRepository(
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三", ["CompanyId"] = "company-1", ["DepartmentId"] = "department-1" },
             new Dictionary<string, object?> { ["EID"] = "person-2", ["PersonNo"] = "P002", ["ENAME"] = "李四", ["CompanyId"] = "company-2", ["DepartmentId"] = "department-2" }
         ]);
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["CompanyId"] = "company-1",
+                ["EmploymentStatus"] = "FullTime"
+            }
+        ],
+        Total: 1,
+        Page: 1,
+        PageSize: 20,
+        SortBy: "PersonNo",
+        SortDirection: "asc",
+        ResponseFields: ["EID", "PersonNo", "CompanyName"],
+        RequestedDisplayFields:
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+        ]));
         var service = new StandardCrudService(
             repository,
+            executor,
             [new KeywordQueryCustomizer()],
             [new PersonDisplayResolver()],
             [],
@@ -26,14 +50,22 @@ public sealed class StandardCrudServiceReadTests
             [],
             []);
 
-        var result = await service.ListAsync(Descriptor(), new StandardCrudListQuery(Filters: new Dictionary<string, string?> { ["keyword"] = "P001" }));
+        var result = await service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(
+                SortBy: "PersonNo",
+                SortDirection: "asc",
+                Filters: new Dictionary<string, string?> { ["keyword"] = "P001" },
+                Fields: ["EID", "PersonNo", "CompanyName"]));
 
+        Assert.Equal(["EID", "PersonNo", "CompanyName"], executor.LastRequest!.Fields);
+        Assert.Equal("PersonNo", executor.LastRequest.SortBy);
+        var condition = Assert.Single(executor.LastRequest.Conditions!);
+        Assert.Equal("PersonNo", condition.Field);
         var row = Assert.Single(result.Items);
         Assert.Equal("公司一", row["CompanyName"]);
-        Assert.True(row.ContainsKey("DepartmentName"));
-        Assert.True(row.ContainsKey("PositionName"));
-        Assert.Equal("部门一", row["DepartmentName"]);
-        Assert.Null(row["PositionName"]);
+        Assert.Equal(["EID", "PersonNo", "CompanyName"], row.Keys);
+        Assert.False(row.ContainsKey("CompanyId"));
     }
 
     [Fact]
@@ -43,7 +75,15 @@ public sealed class StandardCrudServiceReadTests
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(repository, [], [], [new FailingSummaryProvider()], [], [], []);
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            [],
+            [new PersonDisplayResolver()],
+            [new FailingSummaryProvider()],
+            [],
+            [],
+            []);
 
         var detail = await service.GetDetailAsync(Descriptor(summaryKeys: ["userLink"]), "person-1");
 
@@ -58,13 +98,177 @@ public sealed class StandardCrudServiceReadTests
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(repository, [], [], [], [], [], []);
+        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], []);
 
         var options = await service.OptionsAsync(Descriptor(), new StandardCrudListQuery());
 
         var option = Assert.Single(options);
         Assert.Equal("person-1", option.Value);
         Assert.Equal("P001 张三", option.Label);
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenDisplayResolverReturnsDifferentRowCount_ThrowsStableMessage()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["CompanyId"] = "company-1" }
+        ]);
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["CompanyId"] = "company-1"
+            }
+        ],
+        Total: 1,
+        Page: 1,
+        PageSize: 20,
+        SortBy: "PersonNo",
+        SortDirection: "asc",
+        ResponseFields: ["EID", "PersonNo", "CompanyName"],
+        RequestedDisplayFields:
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+        ]));
+        var service = new StandardCrudService(
+            repository,
+            executor,
+            [],
+            [new BrokenPersonDisplayResolver()],
+            [],
+            [],
+            [],
+            []);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Fields: ["EID", "PersonNo", "CompanyName"])));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的显示值解析器返回行数 0，预期 1。", ex.Message);
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenDisplayResolverProvidesNoSupportedImplementation_ThrowsStableMessage()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["CompanyId"] = "company-1" }
+        ]);
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["CompanyId"] = "company-1"
+            }
+        ],
+        Total: 1,
+        Page: 1,
+        PageSize: 20,
+        SortBy: "PersonNo",
+        SortDirection: "asc",
+        ResponseFields: ["EID", "PersonNo", "CompanyName"],
+        RequestedDisplayFields:
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+        ]));
+        var service = new StandardCrudService(
+            repository,
+            executor,
+            [],
+            [new MissingDisplayResolver()],
+            [],
+            [],
+            [],
+            []);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Fields: ["EID", "PersonNo", "CompanyName"])));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的显示值解析器未实现批量 ResolveListAsync，也未提供兼容的单行 ResolveAsync。",
+            ex.Message);
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenDisplayFieldsRequestedWithoutResolver_ThrowsStableMessage()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["CompanyId"] = "company-1" }
+        ]);
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["CompanyId"] = "company-1"
+            }
+        ],
+        Total: 1,
+        Page: 1,
+        PageSize: 20,
+        SortBy: "PersonNo",
+        SortDirection: "asc",
+        ResponseFields: ["EID", "PersonNo", "CompanyName"],
+        RequestedDisplayFields:
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+        ]));
+        var service = new StandardCrudService(
+            repository,
+            executor,
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Fields: ["EID", "PersonNo", "CompanyName"])));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 请求了显示值字段，但未注册显示值解析器。", ex.Message);
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenDisplayFieldsRequestedWithoutResolverAndNoRows_ThrowsStableMessage()
+    {
+        var repository = new InMemoryStandardCrudRepository([]);
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+            [],
+            Total: 0,
+            Page: 1,
+            PageSize: 20,
+            SortBy: "PersonNo",
+            SortDirection: "asc",
+            ResponseFields: ["EID", "PersonNo", "CompanyName"],
+            RequestedDisplayFields:
+            [
+                new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+            ]));
+        var service = new StandardCrudService(
+            repository,
+            executor,
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Fields: ["EID", "PersonNo", "CompanyName"])));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 请求了显示值字段，但未注册显示值解析器。", ex.Message);
     }
 
     private static StandardCrudDescriptor Descriptor(IReadOnlyList<string>? summaryKeys = null) => new()
@@ -81,7 +285,12 @@ public sealed class StandardCrudServiceReadTests
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId"]),
         OptionLabelFields = ["PersonNo", "ENAME"],
-        DisplayValueFields = ["CompanyName", "DepartmentName", "PositionName"],
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME"),
+            new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
+            new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
+        ],
         SummaryBlockKeys = summaryKeys ?? []
     };
 
@@ -101,19 +310,64 @@ public sealed class StandardCrudServiceReadTests
     {
         public string ResourceKey => "organization.person";
 
-        public Task<IReadOnlyDictionary<string, object?>> ResolveAsync(
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
             StandardCrudDescriptor descriptor,
-            IReadOnlyDictionary<string, object?> row,
+            IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+            IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<IReadOnlyDictionary<string, object?>>(new Dictionary<string, object?>
-            {
-                ["CompanyName"] = row.TryGetValue("CompanyId", out var companyId) && Equals(companyId, "company-1") ? "公司一" : string.Empty,
-                ["DepartmentName"] = row.TryGetValue("DepartmentId", out var departmentId) && Equals(departmentId, "department-1") ? "部门一" : string.Empty,
-                ["PositionName"] = row.TryGetValue("PositionId", out var positionId) ? positionId : null
-            });
+            IReadOnlyList<IReadOnlyDictionary<string, object?>> result = rows.Select(row =>
+                (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["CompanyName"] = row.TryGetValue("CompanyId", out var companyId) && Equals(companyId, "company-1")
+                        ? "公司一"
+                        : string.Empty
+                }).ToList();
+
+            return Task.FromResult(result);
         }
     }
+
+    private sealed class BrokenPersonDisplayResolver : IStandardCrudDisplayValueResolver
+    {
+        public string ResourceKey => "organization.person";
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+            IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>([]);
+    }
+
+    private sealed class MissingDisplayResolver : IStandardCrudDisplayValueResolver
+    {
+        public string ResourceKey => "organization.person";
+    }
+
+    private sealed class RecordingPlatformQueryExecutor : IPlatformQueryExecutor
+    {
+        private readonly PlatformQueryResult _result;
+
+        public RecordingPlatformQueryExecutor(PlatformQueryResult result)
+        {
+            _result = result;
+        }
+
+        public PlatformQueryRequest? LastRequest { get; private set; }
+
+        public Task<PlatformQueryResult> QueryAsync(
+            PlatformQueryDescriptor descriptor,
+            PlatformQueryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            return Task.FromResult(_result);
+        }
+    }
+
+    private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
+        new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));
 
     private sealed class FailingSummaryProvider : IStandardCrudSummaryProvider
     {

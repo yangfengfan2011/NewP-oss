@@ -6,6 +6,9 @@ public interface IPositionRepository
 {
     Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default);
     Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(
+        IReadOnlyCollection<string> positionIds,
+        CancellationToken cancellationToken = default);
     Task CreateAsync(Position position, CancellationToken cancellationToken = default);
     Task UpdateAsync(Position position, CancellationToken cancellationToken = default);
 }

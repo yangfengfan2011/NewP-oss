@@ -6,15 +6,6 @@ namespace ICP.Platform.Crud.Abstractions;
 public interface IStandardCrudRepository
 {
     /// <summary>
-    /// 按标准 CRUD 描述符读取分页列表；调用方负责传入已由扩展点归一化后的查询条件。
-    /// </summary>
-    Task<StandardCrudListResult> ListAsync(
-        StandardCrudDescriptor descriptor,
-        StandardCrudListQuery query,
-        IReadOnlyList<StandardCrudQueryCondition> conditions,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// 按资源主键读取详情字段；未找到时返回 null，避免仓储层决定 HTTP 语义。
     /// </summary>
     Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(

@@ -1,6 +1,8 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
@@ -23,28 +25,64 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
     public string ResourceKey => "organization.person";
 
     /// <summary>
-    /// 为标准 CRUD 行数据补齐展示名；引用读取失败时返回空字符串，由调用侧继续展示原始字段。
+    /// 按请求字段批量补齐人员显示名；只批量读取当前真正需要的引用实体，避免列表逐行放大查询。
     /// </summary>
-    public async Task<IReadOnlyDictionary<string, object?>> ResolveAsync(
+    public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
         StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> row,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken = default)
     {
-        var companyId = ReadStringOrNull(row, "CompanyId");
-        var departmentId = ReadStringOrNull(row, "DepartmentId");
-        var positionId = ReadStringOrNull(row, "PositionId");
+        _ = descriptor;
+        var requested = requestedDisplayFields.Select(field => field.Field).ToHashSet(StringComparer.Ordinal);
+        var companyIds = requested.Contains("CompanyName") ? CollectIds(rows, "CompanyId") : [];
+        var departmentIds = requested.Contains("DepartmentName") ? CollectIds(rows, "DepartmentId") : [];
+        var positionIds = requested.Contains("PositionName") ? CollectIds(rows, "PositionId") : [];
 
-        var company = companyId is not null ? await _companyRepository.GetByIdAsync(companyId, cancellationToken) : null;
-        var department = departmentId is not null ? await _departmentRepository.GetByIdAsync(departmentId, cancellationToken) : null;
-        var position = positionId is not null ? await _positionRepository.GetByIdAsync(positionId, cancellationToken) : null;
+        var companies = await _companyRepository.GetByIdsAsync(companyIds, cancellationToken);
+        var departments = await _departmentRepository.GetByIdsAsync(departmentIds, cancellationToken);
+        var positions = await _positionRepository.GetByIdsAsync(positionIds, cancellationToken);
 
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        return rows.Select(row => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["CompanyName"] = company?.Name ?? string.Empty,
-            ["DepartmentName"] = department?.Name ?? string.Empty,
-            ["PositionName"] = position?.Name ?? string.Empty
-        };
+            ["CompanyName"] = ReadDisplayName(row, "CompanyId", companies),
+            ["DepartmentName"] = ReadDisplayName(row, "DepartmentId", departments),
+            ["PositionName"] = ReadDisplayName(row, "PositionId", positions)
+        }).ToList();
     }
+
+    private static IReadOnlyCollection<string> CollectIds(
+        IEnumerable<IReadOnlyDictionary<string, object?>> rows,
+        string field) =>
+        rows.Select(row => ReadStringOrNull(row, field))
+            .Where(id => id is not null)
+            .Select(id => id!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    private static string ReadDisplayName(
+        IReadOnlyDictionary<string, object?> row,
+        string sourceField,
+        IReadOnlyDictionary<string, Company> companies) =>
+        ReadStringOrNull(row, sourceField) is { } id && companies.TryGetValue(id, out var company)
+            ? company.Name
+            : string.Empty;
+
+    private static string ReadDisplayName(
+        IReadOnlyDictionary<string, object?> row,
+        string sourceField,
+        IReadOnlyDictionary<string, Department> departments) =>
+        ReadStringOrNull(row, sourceField) is { } id && departments.TryGetValue(id, out var department)
+            ? department.Name
+            : string.Empty;
+
+    private static string ReadDisplayName(
+        IReadOnlyDictionary<string, object?> row,
+        string sourceField,
+        IReadOnlyDictionary<string, Position> positions) =>
+        ReadStringOrNull(row, sourceField) is { } id && positions.TryGetValue(id, out var position)
+            ? position.Name
+            : string.Empty;
 
     private static string? ReadStringOrNull(IReadOnlyDictionary<string, object?> row, string field) =>
         row.TryGetValue(field, out var value) && !string.IsNullOrWhiteSpace(value?.ToString())

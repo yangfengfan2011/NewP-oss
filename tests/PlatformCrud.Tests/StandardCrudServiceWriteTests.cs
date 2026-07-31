@@ -3,6 +3,9 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
+using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Query.Models;
+using ICP.Platform.Query.Runtime;
 using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
@@ -305,7 +308,7 @@ public sealed class StandardCrudServiceWriteTests
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(repository, [], [], [], [], [], [new BlockingDeleteGuard()]);
+        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], [new BlockingDeleteGuard()]);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -315,7 +318,10 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     private static StandardCrudService Service(InMemoryStandardCrudRepository? repository = null) =>
-        new(repository ?? new InMemoryStandardCrudRepository([]), [], [], [], [], [], []);
+        new(repository ?? new InMemoryStandardCrudRepository([]), EmptyQueryExecutor(), [], [], [], [], [], []);
+
+    private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
+        new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));
 
     private static StandardCrudDescriptor Descriptor(
         StandardCrudDeletePolicy policy = StandardCrudDeletePolicy.None,
@@ -478,6 +484,24 @@ public sealed class StandardCrudServiceWriteTests
             LastExistsValues = new Dictionary<string, object?>(equalityValues, StringComparer.Ordinal);
             LastExcludedId = excludedId;
             return base.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken);
+        }
+    }
+
+    private sealed class RecordingPlatformQueryExecutor : IPlatformQueryExecutor
+    {
+        private readonly PlatformQueryResult _result;
+
+        public RecordingPlatformQueryExecutor(PlatformQueryResult result)
+        {
+            _result = result;
+        }
+
+        public Task<PlatformQueryResult> QueryAsync(
+            PlatformQueryDescriptor descriptor,
+            PlatformQueryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_result);
         }
     }
 }

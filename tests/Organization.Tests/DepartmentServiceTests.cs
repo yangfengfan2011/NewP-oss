@@ -123,6 +123,15 @@ public class DepartmentServiceTests
         public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.FirstOrDefault(department => department.Id == departmentId) is { } department ? Clone(department) : null);
 
+        public Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(
+            IReadOnlyCollection<string> departmentIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, Department>>(
+                _departments
+                    .Where(department => departmentIds.Contains(department.Id))
+                    .Select(Clone)
+                    .ToDictionary(department => department.Id, StringComparer.Ordinal));
+
         public Task<bool> ExistsSiblingCodeAsync(
             string companyId,
             string? parentDepartmentId,

@@ -33,6 +33,25 @@ public sealed class EfPositionRepository : IPositionRepository
         return entity is null ? null : Map(entity);
     }
 
+    public async Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(
+        IReadOnlyCollection<string> positionIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (positionIds.Count == 0)
+        {
+            return new Dictionary<string, Position>(StringComparer.Ordinal);
+        }
+
+        var entities = await Entities
+            .AsNoTracking()
+            .Where(position => positionIds.Contains(EF.Property<string>(position, "EID")))
+            .ToListAsync(cancellationToken);
+
+        return entities
+            .Select(Map)
+            .ToDictionary(position => position.Id, StringComparer.Ordinal);
+    }
+
     public async Task CreateAsync(Position position, CancellationToken cancellationToken = default)
     {
         Entities.Add(ToEntity(position));

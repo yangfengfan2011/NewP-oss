@@ -85,7 +85,7 @@
         "key": "departmentName",
         "labelKey": "Column_DepartmentName",
         "source": "projection",
-        "field": "departmentName"
+        "field": "DepartmentName"
       },
       {
         "key": "employmentStatus",

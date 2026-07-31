@@ -13,30 +13,6 @@ public class InMemoryStandardCrudRepository : IStandardCrudRepository
         _rows = rows.Select(row => new Dictionary<string, object?>(row, StringComparer.Ordinal)).ToList();
     }
 
-    public Task<StandardCrudListResult> ListAsync(
-        StandardCrudDescriptor descriptor,
-        StandardCrudListQuery query,
-        IReadOnlyList<StandardCrudQueryCondition> conditions,
-        CancellationToken cancellationToken = default)
-    {
-        IEnumerable<Dictionary<string, object?>> filtered = _rows;
-        foreach (var condition in conditions)
-        {
-            filtered = filtered.Where(row =>
-                row.TryGetValue(condition.Field, out var value) &&
-                value?.ToString()?.Contains(condition.Value?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase) == true);
-        }
-
-        var items = filtered.Select(row => Project(row, descriptor.FieldSet.ListFields)).ToList();
-        return Task.FromResult(new StandardCrudListResult(
-            items,
-            items.Count,
-            query.Page <= 0 ? 1 : query.Page,
-            query.PageSize <= 0 ? 20 : query.PageSize,
-            query.SortBy,
-            query.SortDirection));
-    }
-
     public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
         StandardCrudDescriptor descriptor,
         string id,

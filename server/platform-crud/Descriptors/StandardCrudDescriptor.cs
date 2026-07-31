@@ -1,3 +1,5 @@
+using ICP.Platform.Query.Descriptors;
+
 namespace ICP.Platform.Crud.Descriptors;
 
 public sealed class StandardCrudDescriptor
@@ -13,7 +15,7 @@ public sealed class StandardCrudDescriptor
     public StandardCrudDeletePolicy DeletePolicy { get; init; } = StandardCrudDeletePolicy.None;
     public IReadOnlyList<string> OptionLabelFields { get; init; } = [];
     public IReadOnlyList<string> SummaryBlockKeys { get; init; } = [];
-    public IReadOnlyList<string> DisplayValueFields { get; init; } = [];
+    public IReadOnlyList<PlatformDisplayValueField> DisplayValueFields { get; init; } = [];
 
     /// <summary>
     /// 标准写入前置必填字段声明；这里只描述字段、作用范围和错误契约，缺失判断由运行时内核执行。

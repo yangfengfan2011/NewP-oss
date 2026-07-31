@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Query.Runtime;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -18,7 +19,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         "pageIndex",
         "pageSize",
         "sortBy",
-        "sortDirection"
+        "sortDirection",
+        "fields"
     };
 
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
@@ -49,8 +51,20 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             StandardCrudEndpoint endpoint,
             CancellationToken cancellationToken) =>
         {
-            var result = await endpoint.ListAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
-            return Results.Ok(result);
+            try
+            {
+                var result = await endpoint.ListAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (PlatformQueryValidationException ex)
+            {
+                return Results.BadRequest(new StandardCrudError
+                {
+                    StatusCode = StatusCodes.Status400BadRequest,
+                    Code = ex.Code,
+                    Message = ex.Message
+                });
+            }
         });
 
         endpoints.MapGet(route + "/options", async (
@@ -82,6 +96,15 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             {
                 var file = await exportService.ExportAsync(descriptor, request, cancellationToken);
                 return Results.File(file.Content, file.ContentType, file.FileName);
+            }
+            catch (PlatformQueryValidationException ex)
+            {
+                return Results.BadRequest(new StandardCrudError
+                {
+                    StatusCode = StatusCodes.Status400BadRequest,
+                    Code = ex.Code,
+                    Message = ex.Message
+                });
             }
             catch (ArgumentException ex)
             {
@@ -197,7 +220,24 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             PageSize: ReadInt(query, "pageSize", 20),
             SortBy: ReadString(query, "sortBy"),
             SortDirection: ReadString(query, "sortDirection"),
-            Filters: filters);
+            Filters: filters,
+            Fields: ParseFields(ReadString(query, "fields")));
+    }
+
+    private static IReadOnlyList<string>? ParseFields(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var fields = value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static field => field.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return fields.Count == 0 ? null : fields;
     }
 
     private static async Task<StandardCrudExportRequest?> ReadExportRequestAsync(

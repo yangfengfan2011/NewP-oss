@@ -112,6 +112,15 @@ public class CompanyServiceTests
         public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.FirstOrDefault(company => company.Id == companyId) is { } company ? Clone(company) : null);
 
+        public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
+            IReadOnlyCollection<string> companyIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, Company>>(
+                _companies
+                    .Where(company => companyIds.Contains(company.Id))
+                    .Select(Clone)
+                    .ToDictionary(company => company.Id, StringComparer.Ordinal));
+
         public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
             Task.FromResult(
                 _companies.FirstOrDefault(company => string.Equals(company.Code, code, StringComparison.OrdinalIgnoreCase)) is { } company

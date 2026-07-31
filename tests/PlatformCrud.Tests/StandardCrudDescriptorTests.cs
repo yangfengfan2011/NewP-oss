@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Crud.Runtime;
 using Xunit;
 
@@ -235,6 +236,32 @@ public sealed class StandardCrudDescriptorTests
         Assert.Equal("标准 CRUD 资源 organization.person 的必填字段 PersonNo 必须包含在 UpdateFields 中。", ex.Message);
     }
 
+    [Fact]
+    public void Adapter_MapsListFieldsAndDisplayValueFieldsToPlatformQueryDescriptor()
+    {
+        var descriptor = DescriptorWithDisplayValueFields();
+
+        var queryDescriptor = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor);
+
+        Assert.Equal(["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"], queryDescriptor.AllowedModelFields);
+        Assert.Equal(["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled", "CompanyName"], queryDescriptor.DefaultFields);
+        var display = Assert.Single(queryDescriptor.DisplayValueFields);
+        Assert.Equal("CompanyName", display.Field);
+        Assert.Equal("CompanyId", display.SourceField);
+    }
+
+    [Fact]
+    public void Validate_WhenDisplayValueSourceFieldIsNotListField_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithDisplayValueFields(sourceField: "SecretCompanyId");
+
+        var error = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的 display value 字段 CompanyName 引用了未纳入列表字段白名单的 source 字段 SecretCompanyId。",
+            error.Message);
+    }
+
     private static StandardCrudRequiredField Required(
         string field,
         StandardCrudRequiredFieldScope scope = StandardCrudRequiredFieldScope.CreateAndUpdate) => new()
@@ -292,4 +319,23 @@ public sealed class StandardCrudDescriptorTests
             UniqueConstraints = constraints
         };
     }
+
+    private static StandardCrudDescriptor DescriptorWithDisplayValueFields(string sourceField = "CompanyId") => new()
+    {
+        ResourceKey = "organization.person",
+        ModuleId = "Organization",
+        ModelName = "Person",
+        Route = "api/organization/persons",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            CreateFields: ["PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            UpdateFields: ["ENAME", "CompanyId", "IsEnabled"]),
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyName", sourceField, "Company", "EID", "ENAME")
+        ]
+    };
 }

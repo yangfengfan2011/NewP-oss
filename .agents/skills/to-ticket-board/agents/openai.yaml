@@ -1,0 +1,7 @@
+interface:
+  display_name: "生成单文件票据板"
+  short_description: "将 .scratch 规格拆成同目录下的单文件实施票据板"
+  default_prompt: "使用 $to-ticket-board 将 .scratch 中已确认的规格转换为同目录单文件票据板。"
+
+policy:
+  allow_implicit_invocation: true

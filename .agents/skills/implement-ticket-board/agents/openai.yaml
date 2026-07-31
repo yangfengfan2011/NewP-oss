@@ -1,0 +1,7 @@
+interface:
+  display_name: "执行单文件票据板"
+  short_description: "按依赖连续实施整张票据板，并完成验证、审查、提交与回写"
+  default_prompt: "使用 $implement-ticket-board 连续执行指定票据板，逐票验证、审查、提交并回写结果。"
+
+policy:
+  allow_implicit_invocation: true

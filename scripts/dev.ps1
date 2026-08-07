@@ -1,6 +1,24 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$frontendRoot = Join-Path $repoRoot "frontend"
+$packageConfig = Get-Content -LiteralPath (Join-Path $frontendRoot "package.json") -Raw | ConvertFrom-Json
+$packageManagerSpec = $packageConfig.packageManager
+$runtimeSpec = $packageConfig.devEngines.runtime
+
+if ($packageManagerSpec -notmatch '^pnpm@(?<Version>\d+\.\d+\.\d+)$') {
+    Write-Host "ERROR: frontend/package.json must declare an exact pnpm packageManager version." -ForegroundColor Red
+    exit 1
+}
+
+$requiredPnpmVersion = $Matches.Version
+
+if ($runtimeSpec.name -ne "node" -or $runtimeSpec.version -notmatch '^\d+\.\d+\.\d+$') {
+    Write-Host "ERROR: frontend/package.json must declare an exact Node.js devEngines.runtime version." -ForegroundColor Red
+    exit 1
+}
+
+$requiredNodeVersion = $runtimeSpec.version
 $logDir = Join-Path $repoRoot ".codex-temp"
 $frontendUrl = "http://localhost:3000"
 $backendUrl = "http://localhost:5000"
@@ -45,11 +63,9 @@ function Show-StartupDiagnostics {
 }
 
 function Ensure-FrontendDependencies {
-    $frontendRoot = Join-Path $repoRoot "frontend"
     $frontendNodeModules = Join-Path $frontendRoot "node_modules"
     $viteCheckArgs = @(
-        "-C",
-        $frontendRoot,
+        "pnpm",
         "--filter",
         "@icp-platform/shell",
         "exec",
@@ -60,8 +76,21 @@ function Ensure-FrontendDependencies {
     $needsInstall = -not (Test-Path -LiteralPath $frontendNodeModules)
 
     if (-not $needsInstall) {
-        & pnpm.cmd @viteCheckArgs *> $null
-        if ($LASTEXITCODE -ne 0) {
+        Push-Location $frontendRoot
+        try {
+            try {
+                & $corepackPath @viteCheckArgs *> $null
+                $viteCheckExitCode = $LASTEXITCODE
+            }
+            catch {
+                $viteCheckExitCode = 1
+            }
+        }
+        finally {
+            Pop-Location
+        }
+
+        if ($viteCheckExitCode -ne 0) {
             $needsInstall = $true
         }
     }
@@ -71,9 +100,21 @@ function Ensure-FrontendDependencies {
     }
 
     Write-Host "Preparing frontend dependencies with pnpm..." -ForegroundColor Cyan
-    & pnpm.cmd -C $frontendRoot install
+    Push-Location $frontendRoot
+    try {
+        try {
+            & $corepackPath pnpm install
+            $pnpmInstallExitCode = $LASTEXITCODE
+        }
+        catch {
+            $pnpmInstallExitCode = 1
+        }
+    }
+    finally {
+        Pop-Location
+    }
 
-    if ($LASTEXITCODE -ne 0) {
+    if ($pnpmInstallExitCode -ne 0) {
         Write-Host "ERROR: frontend dependency installation failed." -ForegroundColor Red
         exit 1
     }
@@ -91,8 +132,36 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: pnpm was not found." -ForegroundColor Red
+$nodeVersion = (node --version).Trim().TrimStart("v")
+if ($nodeVersion -ne $requiredNodeVersion) {
+    Write-Host "ERROR: Node.js $requiredNodeVersion is required; current version is $nodeVersion." -ForegroundColor Red
+    exit 1
+}
+
+if (-not (Get-Command corepack.cmd -ErrorAction SilentlyContinue)) {
+    Write-Host "ERROR: Corepack was not found; pnpm $requiredPnpmVersion cannot be resolved from packageManager." -ForegroundColor Red
+    exit 1
+}
+
+$corepackPath = (Get-Command corepack.cmd).Source
+Push-Location $frontendRoot
+try {
+    try {
+        $pnpmVersionOutput = @(& $corepackPath pnpm --version)
+        $pnpmVersionExitCode = $LASTEXITCODE
+    }
+    catch {
+        $pnpmVersionOutput = @()
+        $pnpmVersionExitCode = 1
+    }
+}
+finally {
+    Pop-Location
+}
+
+$currentPnpmVersion = if ($pnpmVersionOutput.Count -gt 0) { $pnpmVersionOutput[-1].ToString().Trim() } else { "" }
+if ($pnpmVersionExitCode -ne 0 -or $currentPnpmVersion -ne $requiredPnpmVersion) {
+    Write-Host "ERROR: Corepack could not provide pnpm $requiredPnpmVersion from packageManager." -ForegroundColor Red
     exit 1
 }
 
@@ -171,9 +240,9 @@ while ((Get-Date) -lt $backendDeadline -and -not $backendReady) {
 if ($backendReady) {
     Write-Host "Starting Frontend Shell..." -ForegroundColor Cyan
     $frontendProcess = Start-Process `
-        -FilePath "pnpm.cmd" `
-        -ArgumentList "-C", (Join-Path $repoRoot "frontend"), "--filter", "@icp-platform/shell", "dev" `
-        -WorkingDirectory $repoRoot `
+        -FilePath $corepackPath `
+        -ArgumentList "pnpm", "--filter", "@icp-platform/shell", "dev" `
+        -WorkingDirectory $frontendRoot `
         -RedirectStandardOutput $frontendOutLog `
         -RedirectStandardError $frontendErrLog `
         -PassThru

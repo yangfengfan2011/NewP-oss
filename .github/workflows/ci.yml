@@ -41,15 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
+      - name: 安装 Node.js 与 pnpm
+        uses: pnpm/setup@v2
         with:
-          node-version: '20'
-
-      - name: 安装 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+          package-json-file: frontend/package.json
+          install: false
 
       - name: 安装依赖
         working-directory: frontend

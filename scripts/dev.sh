@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+frontend_root="$repo_root/frontend"
 log_dir="$repo_root/.codex-temp"
 frontend_url="http://localhost:3000"
 backend_url="http://localhost:5000"
@@ -64,13 +65,12 @@ show_startup_diagnostics() {
 }
 
 ensure_frontend_dependencies() {
-  local frontend_root="$repo_root/frontend"
   local frontend_node_modules="$frontend_root/node_modules"
   local needs_install=false
 
   if [ ! -d "$frontend_node_modules" ]; then
     needs_install=true
-  elif ! pnpm -C "$frontend_root" --filter @icp-platform/shell exec vite --version >/dev/null 2>&1; then
+  elif ! (cd "$frontend_root" && corepack pnpm --filter @icp-platform/shell exec vite --version) >/dev/null 2>&1; then
     needs_install=true
   fi
 
@@ -79,7 +79,7 @@ ensure_frontend_dependencies() {
   fi
 
   echo "Preparing frontend dependencies with pnpm..."
-  pnpm -C "$frontend_root" install
+  (cd "$frontend_root" && corepack pnpm install)
 }
 
 port_in_use() {
@@ -101,7 +101,32 @@ echo "=== Start ICP local dev environment ==="
 
 command -v dotnet >/dev/null 2>&1 || { echo "ERROR: dotnet was not found."; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "ERROR: node was not found."; exit 1; }
-command -v pnpm >/dev/null 2>&1 || { echo "ERROR: pnpm was not found."; exit 1; }
+command -v corepack >/dev/null 2>&1 || { echo "ERROR: Corepack was not found."; exit 1; }
+
+if ! toolchain_spec="$(node -e 'const config = require(process.argv[1]); const manager = config.packageManager; const runtime = config.devEngines && config.devEngines.runtime; if (!/^pnpm@\d+\.\d+\.\d+$/.test(manager) || !runtime || runtime.name !== "node" || !/^\d+\.\d+\.\d+$/.test(runtime.version)) process.exit(1); process.stdout.write(runtime.version + "|" + manager.slice(5));' "$frontend_root/package.json")"; then
+  echo "ERROR: frontend/package.json must declare exact Node.js and pnpm versions."
+  exit 1
+fi
+
+required_node_version="${toolchain_spec%%|*}"
+required_pnpm_version="${toolchain_spec#*|}"
+node_version="$(node --version)"
+node_version="${node_version#v}"
+
+if [ "$node_version" != "$required_node_version" ]; then
+  echo "ERROR: Node.js $required_node_version is required; current version is $node_version."
+  exit 1
+fi
+
+if ! current_pnpm_version="$(cd "$frontend_root" && corepack pnpm --version)"; then
+  echo "ERROR: Corepack could not provide pnpm $required_pnpm_version from packageManager."
+  exit 1
+fi
+
+if [ "$current_pnpm_version" != "$required_pnpm_version" ]; then
+  echo "ERROR: Corepack provided pnpm $current_pnpm_version; packageManager requires $required_pnpm_version."
+  exit 1
+fi
 
 ensure_frontend_dependencies
 
@@ -133,7 +158,7 @@ wait_for_url "$backend_url/api/auth/current-user" "$backend_startup_timeout_seco
 
 if [ "$backend_ready" = true ]; then
   echo "Starting Frontend Shell..."
-  pnpm -C "$repo_root/frontend" --filter @icp-platform/shell dev >"$frontend_out_log" 2>"$frontend_err_log" &
+  (cd "$frontend_root" && exec corepack pnpm --filter @icp-platform/shell dev) >"$frontend_out_log" 2>"$frontend_err_log" &
   frontend_pid=$!
   frontend_started=true
   frontend_ready=true

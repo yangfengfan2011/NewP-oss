@@ -1,8 +1,10 @@
-# Post-Phase 6 阶段总控文档
+# Post-Phase 6 阶段总控文档（历史）
+
+> 退场说明：本文档记录旧阶段推进方式，不再作为当前任务入口、状态源或下一步依据。当前任务从 `AGENTS.md`、当前 GitHub issue/spec、相关源码与测试，以及按需触发的 Matt Pocock skill 进入。
 
 ## 1. 目的
 
-这份文档用于把 Post-Phase 6 阶段的主线推进顺序收敛到一个地方，作为后续拆工作包、做状态判断和组织阶段验收的统一入口。
+这份文档用于保留 Post-Phase 6 阶段当时的主线推进顺序，供追溯旧工作包、状态判断和阶段验收口径。
 
 它回答三件事：
 
@@ -10,16 +12,9 @@
 - 接下来推荐按什么顺序推进
 - 后续每个阶段应保持什么边界
 
-## 2. 使用方式
+## 2. 历史使用方式
 
-推荐顺序：
-
-1. 先阅读 `AGENTS.md`
-2. 再阅读 `docs/architecture/ai-first-execution-standard.md`
-3. 再阅读 `docs/phases/current-handoff.md`，确认最近完成、推荐下一步和未解决问题
-4. 再阅读本文件，确认当前所在阶段和下一阶段
-5. 只执行当前工作包，不顺手扩范围
-6. 由主线程负责最终审查、返修和决定是否进入下一阶段
+只有在追溯 Post-Phase 6 历史决策时才读取本文档，并回到当时对应的设计与验证记录核对证据。新任务不得从本文件推导当前优先级或恢复旧工作流。
 
 ## 3. 总体原则
 
@@ -97,16 +92,6 @@
 - `Dictionary` 与 `Enumeration` 已形成从静态资源生成到最小前端消费的闭环
 - 后续工作不应混入本轮已完成的转换和消费接入包
 
-## 8. 当前推荐入口
+## 8. 退场后的入口
 
-如果现在开始下一轮工作，建议从这里进入：
-
-1. `AGENTS.md`
-2. `docs/architecture/ai-first-execution-standard.md`
-3. `docs/phases/current-handoff.md`
-4. `docs/phases/post-phase-6-stage-map.md`
-5. 当前阶段对应的设计、计划、模块说明和验证记录
-
-当前推荐的后续方向是：
-
-- 先阅读 `docs/phases/current-handoff.md` 中的“当前推荐下一步”，再按单一目标拆包推进
+新任务统一从 `AGENTS.md`、当前 GitHub issue/spec、相关源码与测试进入，并按任务触发相应 Matt Pocock skill。本文档中的“后续方向”只代表当时阶段判断。

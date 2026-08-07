@@ -15,15 +15,14 @@
 - [architecture/ai-first-execution-standard.md](architecture/ai-first-execution-standard.md)
 - [architecture/ai-first-design-check-targets.txt](architecture/ai-first-design-check-targets.txt)
 
-## 2. phases
+## 2. phases（历史）
 
-按阶段沉淀的计划、总结、阶段实施材料。
+旧阶段沉淀的计划、总结和实施材料，不再表示当前路线图。
 
 - [phases/phase-2-minimum-runnable-plan.md](phases/phase-2-minimum-runnable-plan.md)
 - [phases/phase-3-extension-contracts-summary.md](phases/phase-3-extension-contracts-summary.md)
 - [phases/scaffold-summary.md](phases/scaffold-summary.md)
-- [phases/current-handoff.md](phases/current-handoff.md)
-- [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
+- [phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)（历史阶段图）
 
 ## 3. modules
 
@@ -38,16 +37,16 @@
 - [modules/audit-implementation.md](modules/audit-implementation.md)
 - [modules/files-implementation.md](modules/files-implementation.md)
 
-## 4. designs
+## 4. designs（历史）
 
-既有历史详细设计文档与设计模板。后续新增设计默认进入 `docs/superpowers/specs/`。
+既有历史详细设计文档与设计模板。新任务的设计产物遵守 `AGENTS.md`、当前 GitHub issue/spec 或已调用 skill 的契约。
 
 - [designs/README.md](designs/README.md)
 - [designs/detailed-design-template.md](designs/detailed-design-template.md)
 
-## 5. migration
+## 5. migration（历史）
 
-旧平台资产盘点、迁移策略与模板。
+旧平台资产盘点、迁移策略与模板，仅用于明确迁移或兼容任务的历史取证，不作为 NewP 的设计来源。
 
 - [migration/oldp-asset-inventory-v1.md](migration/oldp-asset-inventory-v1.md)
 - [migration/oldp-asset-disposition-v1.md](migration/oldp-asset-disposition-v1.md)
@@ -71,7 +70,7 @@
 - [verification/ai-first-execution-standard-phase-5-verification.md](verification/ai-first-execution-standard-phase-5-verification.md)
 - [verification/ai-first-execution-standard-phase-6-verification.md](verification/ai-first-execution-standard-phase-6-verification.md)
 - [verification/ai-first-execution-standard-phase-7-verification.md](verification/ai-first-execution-standard-phase-7-verification.md)
-- [verification/verification-matrix.md](verification/verification-matrix.md)
+- [verification/verification-matrix.md](verification/verification-matrix.md)（历史验证索引）
 
 ## 7. developer
 
@@ -118,9 +117,9 @@
 
 - [history/collaboration/README.md](history/collaboration/README.md)
 
-## 10. superpowers
+## 10. superpowers（历史）
 
-后续新增设计规格与实施计划沉淀。新增详细设计默认放在 `superpowers/specs/`，实施计划默认放在 `superpowers/plans/`。
+旧 Superpowers 工作流生成的设计规格与实施计划，仅用于追溯历史决策和验证证据，不再接收新任务产物。
 
 - [superpowers/specs/](superpowers/specs/)
 - [superpowers/plans/](superpowers/plans/)
@@ -129,9 +128,9 @@
 
 - 仓库入口：[../README.md](../README.md)
 - 仓库规则：[../AGENTS.md](../AGENTS.md)
-- 当前交接台账：[phases/current-handoff.md](phases/current-handoff.md)
-- 当前阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
-- 详细设计入口：[superpowers/README.md](superpowers/README.md)
+- Issue 与规格约定：[agents/issue-tracker.md](agents/issue-tracker.md)
+- 分流标签：[agents/triage-labels.md](agents/triage-labels.md)
+- 领域文档约定：[agents/domain.md](agents/domain.md)
 - 组件化开发超短版：[developer/componentized-development-quickstart.md](developer/componentized-development-quickstart.md)
 - 代码注释规则：[developer/code-commenting-guidelines.md](developer/code-commenting-guidelines.md)
 - 架构总览：[architecture/architecture.md](architecture/architecture.md)
@@ -139,3 +138,5 @@
 - 组件化 Example：[developer/componentized-example-module.md](developer/componentized-example-module.md)
 - 本地开发环境：[guides/local-environment.md](guides/local-environment.md)
 - 历史状态归档：[current-status.md](current-status.md)
+- 历史阶段图：[phases/post-phase-6-stage-map.md](phases/post-phase-6-stage-map.md)
+- 历史 Superpowers 文档：[superpowers/README.md](superpowers/README.md)

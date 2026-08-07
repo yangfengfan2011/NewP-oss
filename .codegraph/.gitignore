@@ -1,2 +1,4 @@
-graph.db-shm
-graph.db-wal
+*.db-shm
+*.db-wal
+daemon.pid
+daemon.log

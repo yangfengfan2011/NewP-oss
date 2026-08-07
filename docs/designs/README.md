@@ -1,6 +1,6 @@
 # 历史详细设计文档
 
-本目录保留既有历史详细设计文档与详细设计模板。后续新增详细设计文档默认放在 `docs/superpowers/specs/`，实施计划默认放在 `docs/superpowers/plans/`。
+本目录保留既有详细设计与模板，供追溯历史决策。新任务不再向本目录或 `docs/superpowers/` 写入设计与计划，当前产物遵守 `AGENTS.md`、GitHub issue/spec、用户指令或已调用 skill 的契约。
 
 ## 目录分层
 
@@ -15,79 +15,14 @@
 - `roadmap/`
   - 阶段规划、阶段收口、阶段路线图相关设计
 
-默认规则：
+## 使用边界
 
-- 后续新增详细设计默认放在 `docs/superpowers/specs/`。
-- `docs/designs/` 下旧文档不要求一次性迁移。
-- 旧文档在后续被修改时，可按当时工作包要求顺手迁移到 `docs/superpowers/specs/` 或继续在原位置维护。
-- 当某份设计稳定为长期规范后，可再提炼到 `docs/architecture/` 或 `docs/developer/`。
+- 本目录中的文档描述当时的目标、约束和取舍，不自动代表当前源码状态或当前产品方向。
+- 追溯历史时应同时核对对应提交、当前源码与测试；发生冲突时，以 `AGENTS.md` 定义的当前事实源和决策源为准。
+- 新的长期架构或开发规范应进入 `docs/architecture/`、`docs/developer/` 或上下文 ADR，不通过修改历史设计来建立当前规则。
+- [detailed-design-template.md](detailed-design-template.md) 仅用于理解旧文档结构，不再是新任务的默认模板。
 
-## 规则
-
-- 任何新的功能、模块、阶段性改造、行为变更，在正式实现前都必须先有详细设计文档。
-- 没有详细设计文档时，只允许做信息收集、问题排查、方案讨论和设计草稿，不进入正式实现。
-- 详细设计应在方案达成一致后落盘，并在实现过程中持续维护。
-
-## 推荐命名
-
-- 模块设计：`<module-name>-design.md`
-- 能力设计：`<capability-name>-design.md`
-- 阶段设计：`phase-<n>-<topic>-design.md`
-
-示例：
-
-- `identity-lite-design.md`
-- `authorization-design.md`
-- `configcenter-import-design.md`
-- `platform/metadata-driven-backoffice-ui-design.md`
-- `modules/organization-person-center-pilot-design.md`
-
-## 应包含的内容
-
-- 背景与目标
-- 范围与非目标
-- 设计约束
-- 关键模型
-- 核心流程
-- 接口与集成点
-- 数据与状态
-- 错误处理与风险
-- 验证方案
-- 未决问题
-
-## 模板
-
-请优先从模板开始：
-
-- [detailed-design-template.md](detailed-design-template.md)
-
-如果需要快速创建一份新设计文档，可使用：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignName <your-design-name>
-```
-
-脚本默认会在文件名前补当天日期，生成 `docs/superpowers/specs/YYYY-MM-DD-<your-design-name>-design.md`；如果名称已带 `YYYY-MM-DD-` 前缀，则保持原样。
-如主题明确，可通过 `-Category platform|modules|tooling|roadmap` 直接落到 `docs/superpowers/specs/<category>/`。
-
-新增设计文档还应同时满足：
-
-- 明确回答 AI-first 最小检查清单中的 5 项必答项：入口、边界、验证、失败信号、回滚
-- 不保留 `TODO`、`TBD`、`待补`、`占位` 这类占位词
-
-建议在提交前运行定向校验：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\<your-design>.md
-```
-
-如果这份设计文档需要进入 AI-first 受控门禁，可登记到显式目标清单：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\superpowers\specs\<your-design>.md
-```
-
-## 当前设计文档
+## 历史设计文档
 
 - [identity-lite-design.md](identity-lite-design.md)
 - [authorization-design.md](authorization-design.md)

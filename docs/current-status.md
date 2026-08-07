@@ -1,14 +1,13 @@
 # 当前项目状态（历史归档）
 
 > 归档说明：本文档曾用于集中维护仓库阶段状态，但当前已不再作为“当前事实源”或新任务入口继续维护。
-> 现阶段请以 `AGENTS.md`、`docs/phases/current-handoff.md`、`docs/phases/post-phase-6-stage-map.md`、`docs/superpowers/README.md` 以及任务直接相关的设计、计划、模块说明和验证记录为准。
+> 现阶段请以 `AGENTS.md`、当前 GitHub issue/spec、当前源码与测试，以及任务按需触发的 Matt Pocock skill 和相关领域/架构文档为准。
 > 下方内容仅作为历史状态流水和旧阶段线索保留，不能单独用来判断当前下一步。
 
-## 当前文档入口口径
+## 历史文档入口口径
 
-- 后续新增详细设计默认放在 `docs/superpowers/specs/<category>/`，分类为 `platform / modules / tooling / roadmap`。
-- 后续新增实施计划默认放在 `docs/superpowers/plans/<category>/`，分类为 `platform / modules / tooling / roadmap`。
-- `docs/designs/` 作为既有历史设计与模板目录继续保留，不要求一次性迁移。
+- `docs/superpowers/`、`docs/phases/post-phase-6-stage-map.md` 和本文档均已退场，只保留历史设计、计划和阶段证据。
+- 新规格与任务不再按旧目录规则落位；具体产物遵守当前 GitHub issue/spec 约定、用户指令或已调用 skill 的契约。
 
 ## 阶段完成度
 

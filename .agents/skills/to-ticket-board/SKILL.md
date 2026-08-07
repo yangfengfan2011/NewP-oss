@@ -10,8 +10,8 @@ description: 将 `.scratch/feature-slug/spec.md` 中已确认的规格拆成同�
 ## 输入与输出
 
 - 默认读取 `.scratch/<feature-slug>/spec.md`；未指定功能目录时，只在来源唯一且明确时自行定位。
-- 先读取仓库 `AGENTS.md`、`Docs/agents/issue-tracker.md` 和与任务直接相关的项目规则。
-- 把结果输出到规格同目录的 `.scratch/<feature-slug>/tickets.md`。除非用户明确指定其他路径，不要写入 `Docs/superpowers/specs/`、`Docs/superpowers/plans/` 或其他目录。
+- 先读取仓库 `AGENTS.md`、`docs/agents/issue-tracker.md` 和与任务直接相关的项目规则。
+- 把结果输出到规格同目录的 `.scratch/<feature-slug>/tickets.md`。除非用户明确指定其他路径，不要写入 `docs/superpowers/specs/`、`docs/superpowers/plans/` 或其他目录。
 - 在文件顶部记录规格来源。用户明确以一个既有规格或其他路径为来源时，仍把新票据板写入对应的 `.scratch/<feature-slug>/tickets.md`，不要迁移或改写原规格。
 - 使用 [assets/ticket-board-template.md](assets/ticket-board-template.md) 作为结构起点，并按实际任务删减不需要的字段。
 
@@ -32,7 +32,7 @@ description: 将 `.scratch/feature-slug/spec.md` 中已确认的规格拆成同�
 - 验收条件描述可观察结果，不只写“完成实现”。
 - 验证命令尽量具体到项目、测试或手工路径；无法预先确定时写出需要确认的验证类型和失败信号。
 - 依赖使用票据编号；无依赖时写“无”。
-- 状态值遵守 `Docs/agents/triage-labels.md` 中的票据板状态定义。
+- 票据板状态只使用 `draft`、`ready`、`in-progress`、`blocked`、`completed`；单票状态只使用 `pending`、`in-progress`、`blocked`、`completed`、`skipped`。`docs/agents/triage-labels.md` 中的值只用于 GitHub Issue 分流，不写入票据板状态字段。
 - 不创建 `.scratch/<feature-slug>/issues/` 下的逐票文件。既有逐票文件只作为历史参考，不与 `tickets.md` 双向同步。
 
 ## 更新已有票据板

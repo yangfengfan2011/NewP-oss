@@ -1,14 +1,14 @@
-# AI-First 执行标准
+# AI-First 执行标准（历史）
 
 ## 1. 目的
 
-本文档是 `NewP` 仓库中 AI-first 执行层的正式入口，用来把已经分散在 `AGENTS.md`、`docs/architecture/ai-first-platform-criteria.md`、`docs/architecture/componentization-guardrails.md` 与设计模板中的规则收成一套可直接执行的日常标准。
+本文档记录 NewP 曾采用的 AI-first / Superpowers 执行闭环，现已退出当前工作流。当前入口是 `AGENTS.md`、当前 GitHub issue/spec 和按需触发的 Matt Pocock skill。
 
-它不替代上述源文档，而是提供统一引用口径和最小执行闭环。
+保留本文档仅用于追溯旧阶段的规则、脚本和验证依据，不从中推导新任务的当前流程。
 
-## 2. 适用范围
+## 2. 历史适用范围
 
-默认适用于当前仓库中所有新增的：
+该标准曾默认适用于当时新增的：
 
 - 任务拆分与工作包
 - 详细设计文档
@@ -92,9 +92,9 @@
 
 详细边界见 [componentization-guardrails.md](componentization-guardrails.md)。
 
-## 7. 当前最小执行闭环
+## 7. 历史最小执行闭环
 
-本仓库当前已落地的 AI-first 执行闭环入口如下：
+本仓库当时落地的 AI-first 执行闭环入口如下：
 
 1. 正式标准入口：本文档
 2. 设计默认入口：[../superpowers/specs/](../superpowers/specs/)
@@ -110,34 +110,34 @@
 示例命令：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\detailed-design-template.md
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\designs\detailed-design-template.md
 ```
 
 校验当前受控基础集：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-first-design-targets.ps1
 ```
 
 对某份新增设计文档做提交前校验：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\<your-design>.md
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-ai-first-design.ps1 -Path .\docs\superpowers\specs\<your-design>.md
 ```
 
 如果这份设计文档需要进入显式目标清单：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\superpowers\specs\<your-design>.md
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\register-ai-first-design-target.ps1 -DesignPath .\docs\superpowers\specs\<your-design>.md
 ```
 
 如果需要直接按模板创建并登记一份新设计文档：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignName <your-design-name>
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\new-design-doc.ps1 -DesignName <your-design-name>
 ```
 
-当前推荐的默认执行顺序是：
+当时推荐的默认执行顺序是：
 
 1. 用 `new-design-doc.ps1` / `new-design-doc.sh` 创建设计文档
 2. 用 `validate-ai-first-design.ps1` 做提交前校验

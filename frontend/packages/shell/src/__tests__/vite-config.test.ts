@@ -1,10 +1,9 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest';
-import config, {
-  createBuiltinRuntimeLocalizationManifest,
-  createBuiltinRuntimeMetadataManifest,
-} from '../../vite.config';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath, URL } from 'node:url';
+import config from '../../vite.config';
 
 describe('vite config', () => {
   it('keeps metadata api traffic under the shared /api proxy so page routes do not collide', () => {
@@ -25,34 +24,28 @@ describe('vite config', () => {
     expect(proxy).not.toHaveProperty('/metadata-config');
   });
 
-  it('projects built-in module metadata for standard page entries during dev and build', () => {
-    const manifest = createBuiltinRuntimeMetadataManifest();
-    const organization = manifest.modules.find(module => module.moduleId === 'Organization');
+  it('proxies the compiler-owned runtime catalog and projections through the Host', () => {
+    const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
 
-    expect(organization).toBeDefined();
-    expect(organization?.metadataBasePath).toBe('/plugins/runtime/modules/Organization/metadata');
-    expect(organization?.navFiles).toContain('navigation/Organization.nav.json');
-    expect(organization?.viewFiles).toContain('views/PersonList.view.json');
-    expect(organization?.viewFiles).toContain('views/PersonDetail.view.json');
-    expect(organization?.modelFiles).toContain('models/Person.model.json');
+    expect(serverConfig.server?.proxy?.['/plugins']).toMatchObject({
+      target: 'http://127.0.0.1:5000',
+      changeOrigin: true,
+    });
   });
 
-  it('projects built-in dictionaries into the dev localization manifest', () => {
-    const manifest = createBuiltinRuntimeLocalizationManifest();
+  it('builds the implementation registry outside the runtime loader', () => {
+    const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
+    const pluginNames = (serverConfig.plugins ?? [])
+      .flat()
+      .filter((plugin): plugin is Exclude<typeof plugin, false | null | undefined> => Boolean(plugin))
+      .map((plugin) => plugin.name);
+    const loaderSource = readFileSync(
+      fileURLToPath(new URL('../active-module-runtime-loader.ts', import.meta.url)),
+      'utf8',
+    );
 
-    expect(manifest.defaultLanguage).toBe('zhs');
-    expect(manifest.catalogs.zhs['Navigation.PluginOps']).toBe('插件运维');
-    expect(manifest.catalogs.zhs['Navigation.FilesHome']).toBe('文件首页');
-    expect(manifest.catalogs.zhs['Navigation.DemoList']).toBe('演示列表');
-    expect(manifest.catalogs.zhs['Navigation.ModuleTemplateSampleHome']).toBe('模板示例首页');
-    expect(manifest.catalogs.zhs['Navigation.PersonCenter']).toBe('人员中心');
-    expect(manifest.catalogs.zhs['Navigation.OrganizationTree']).toBe('组织树');
-    expect(manifest.catalogs.zhs['Navigation.PositionManagement']).toBe('岗位管理');
-    expect(manifest.catalogs.zhs['PersonListView.Title']).toBe('人员中心');
-    expect(manifest.catalogs.zhs['PersonListView.Action_Delete_Confirm']).toBe('确认删除该人员吗？');
-    expect(manifest.catalogs.en['PersonListView.Action_Delete_Confirm']).toBe('Delete this person?');
-    expect(manifest.catalogs.zhs['PersonListView.Query_Department']).toBe('部门');
-    expect(manifest.catalogs.zhs['PersonListView.Query_Position']).toBe('岗位');
-    expect(manifest.catalogs.zhs['PersonListView.AdvancedFilter_Organization']).toBe('组织信息');
+    expect(pluginNames).toContain('newp-frontend-entry-registry');
+    expect(loaderSource).not.toContain(['import', 'meta', 'glob'].join('.'));
+    expect(loaderSource).not.toContain(['..', '..', '..', 'modules', '*', 'src', 'index.ts'].join('/'));
   });
 });

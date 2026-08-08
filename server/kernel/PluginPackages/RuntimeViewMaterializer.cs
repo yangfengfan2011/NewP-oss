@@ -1,5 +1,7 @@
 using ICP.Platform.Kernel.PluginDiscovery;
+using ICP.Platform.Kernel.ModulePlanning;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
@@ -19,6 +21,9 @@ public class RuntimeViewMaterializer
     private readonly LocalizationRuntimeManifestBuilder _localizationManifestBuilder;
     private readonly MetadataRuntimeManifestBuilder _metadataRuntimeManifestBuilder;
     private readonly Action<string, string> _moveDirectory;
+    private readonly string? _builtInModulesRoot;
+    private readonly ModuleCapsuleCandidateReader _candidateReader = new();
+    private readonly CanonicalModulePlanCompiler _compiler = new();
 
     public RuntimeViewMaterializer(InstalledPluginStateStore stateStore)
         : this(stateStore, new FrontendRuntimeManifestBuilder())
@@ -32,6 +37,20 @@ public class RuntimeViewMaterializer
             new LocalizationRuntimeManifestBuilder(),
             new MetadataRuntimeManifestBuilder(),
             Directory.Move)
+    {
+    }
+
+    public RuntimeViewMaterializer(
+        InstalledPluginStateStore stateStore,
+        FrontendRuntimeManifestBuilder frontendManifestBuilder,
+        string builtInModulesRoot)
+        : this(
+            stateStore,
+            frontendManifestBuilder,
+            new LocalizationRuntimeManifestBuilder(),
+            new MetadataRuntimeManifestBuilder(),
+            Directory.Move,
+            builtInModulesRoot)
     {
     }
 
@@ -54,17 +73,61 @@ public class RuntimeViewMaterializer
         LocalizationRuntimeManifestBuilder localizationManifestBuilder,
         MetadataRuntimeManifestBuilder metadataRuntimeManifestBuilder,
         Action<string, string> moveDirectory)
+        : this(
+            stateStore,
+            frontendManifestBuilder,
+            localizationManifestBuilder,
+            metadataRuntimeManifestBuilder,
+            moveDirectory,
+            null)
+    {
+    }
+
+    internal RuntimeViewMaterializer(
+        InstalledPluginStateStore stateStore,
+        FrontendRuntimeManifestBuilder frontendManifestBuilder,
+        LocalizationRuntimeManifestBuilder localizationManifestBuilder,
+        MetadataRuntimeManifestBuilder metadataRuntimeManifestBuilder,
+        Action<string, string> moveDirectory,
+        string? builtInModulesRoot)
     {
         _stateStore = stateStore;
         _frontendManifestBuilder = frontendManifestBuilder;
         _localizationManifestBuilder = localizationManifestBuilder;
         _metadataRuntimeManifestBuilder = metadataRuntimeManifestBuilder;
         _moveDirectory = moveDirectory;
+        _builtInModulesRoot = string.IsNullOrWhiteSpace(builtInModulesRoot)
+            ? null
+            : Path.GetFullPath(builtInModulesRoot);
     }
 
     public void Materialize(string installRoot)
     {
         var enabledRecords = _stateStore.LoadAllEnabled();
+        var installedCandidates = _candidateReader.ReadInstalled(enabledRecords);
+        var candidates = installedCandidates.AsEnumerable();
+        if (_builtInModulesRoot is not null)
+        {
+            var installedModuleIds = installedCandidates
+                .Select(static candidate => candidate.ModuleId)
+                .ToHashSet(StringComparer.Ordinal);
+            // B11 之前由 compatibility resolver 选择同 ID 的已安装版本；编译器仍负责拒绝大小写折叠碰撞。
+            candidates = candidates.Concat(
+                _candidateReader.ReadBuiltIn(_builtInModulesRoot)
+                    .Where(candidate => !installedModuleIds.Contains(candidate.ModuleId)));
+        }
+
+        var compilation = _compiler.Compile("active-module-runtime", candidates);
+        if (!compilation.IsSuccess || compilation.Plan is null)
+        {
+            var details = string.Join(
+                Environment.NewLine,
+                compilation.Diagnostics.Select(static diagnostic =>
+                    $"{diagnostic.Code}: {diagnostic.Message}"));
+            throw new InvalidOperationException($"Canonical Module Plan compilation failed.{Environment.NewLine}{details}");
+        }
+
+        var plan = compilation.Plan;
         // 所有输出先进入 staging；只有全部成功后才会替换正式 runtime/public，
         // 避免中途失败时留下半更新的运行时视图。
         var stagingRoot = Path.Combine(installRoot, $".materialize-staging-{Guid.NewGuid():N}");
@@ -78,26 +141,34 @@ public class RuntimeViewMaterializer
             Directory.CreateDirectory(stagedBackendViewRoot);
             Directory.CreateDirectory(stagedPublicRoot);
 
-            foreach (var record in enabledRecords)
+            foreach (var module in plan.Modules)
             {
-                MaterializeBackendView(stagedBackendViewRoot, record);
-                StageFrontendAssets(stagedPublicRoot, record);
-                StageModuleMetadata(stagedRuntimeRoot, record);
-                StagePlatformResources(stagedRuntimeRoot, record);
+                MaterializeBackendView(stagedBackendViewRoot, module);
+                StageFrontendAssets(stagedPublicRoot, module);
+                StageModuleMetadata(stagedRuntimeRoot, module);
+                StagePlatformResources(stagedRuntimeRoot, module);
             }
 
             var frontendManifestPath = Path.Combine(stagedRuntimeRoot, "frontend-plugin-manifest.json");
-            File.WriteAllText(frontendManifestPath, _frontendManifestBuilder.Build(enabledRecords));
+            File.WriteAllText(frontendManifestPath, _frontendManifestBuilder.Build(plan));
 
-            var enabledModuleOrder = enabledRecords
-                .Select(record => record.ModuleId)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var enabledModuleOrder = plan.Modules
+                .Select(static module => module.ModuleId)
                 .ToArray();
             var localizationManifestPath = Path.Combine(stagedRuntimeRoot, "localization-manifest.json");
-            File.WriteAllText(localizationManifestPath, _localizationManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder));
+            File.WriteAllText(
+                localizationManifestPath,
+                BindProjection(_localizationManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder), plan));
 
             var metadataRuntimeManifestPath = Path.Combine(stagedRuntimeRoot, "metadata-runtime-manifest.json");
-            File.WriteAllText(metadataRuntimeManifestPath, _metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder));
+            File.WriteAllText(
+                metadataRuntimeManifestPath,
+                BindProjection(_metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder), plan));
+
+            File.WriteAllBytes(Path.Combine(stagedRuntimeRoot, "canonical-module-plan.json"), plan.CanonicalBytes);
+            File.WriteAllText(
+                Path.Combine(stagedRuntimeRoot, "active-module-runtime.json"),
+                new ActiveModuleRuntimeCatalogBuilder(_frontendManifestBuilder.PublicBaseUrl).Build(plan));
 
             ReplaceProjection(installRoot, stagedRuntimeRoot, stagedPublicRoot, commitWorkspaceRoot);
         }
@@ -115,14 +186,25 @@ public class RuntimeViewMaterializer
         }
     }
 
-    private static void MaterializeBackendView(string backendViewRoot, InstalledPluginRecord record)
+    private void MaterializeBackendView(string backendViewRoot, CanonicalModulePlanModule module)
     {
-        var backendRoot = Path.Combine(record.PackageRoot, "backend");
+        if (string.IsNullOrWhiteSpace(module.BackendEntry))
+        {
+            return;
+        }
+
+        if (module.Provenance.SourceKind == "built-in")
+        {
+            MaterializeBuiltInBackendView(backendViewRoot, module);
+            return;
+        }
+
+        var backendRoot = Path.Combine(module.PackageRoot, "backend");
         var backendManifestPath = Path.Combine(backendRoot, "plugin.backend.json");
         var backendManifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(backendManifestPath), ManifestJsonOptions)
             ?? throw new JsonException($"Backend manifest '{backendManifestPath}' deserialized to null.");
 
-        var targetDirectory = Path.Combine(backendViewRoot, record.ModuleId);
+        var targetDirectory = Path.Combine(backendViewRoot, module.ModuleId);
         Directory.CreateDirectory(targetDirectory);
 
         // backend-load-view 是运行时消费的统一后端视图。
@@ -137,10 +219,46 @@ public class RuntimeViewMaterializer
         }
     }
 
-    private static void StageFrontendAssets(string publicRoot, InstalledPluginRecord record)
+    private void MaterializeBuiltInBackendView(
+        string backendViewRoot,
+        CanonicalModulePlanModule module)
     {
-        var frontendRoot = Path.GetFullPath(Path.Combine(record.PackageRoot, "frontend"));
+        var sourceManifestPath = Path.Combine(module.PackageRoot, "plugin.json");
+        var distributionRoot = _builtInModulesRoot is null
+            ? Path.GetDirectoryName(module.PackageRoot)!
+            : Path.GetDirectoryName(_builtInModulesRoot)!;
+        var entryAssemblyPath = Path.GetFullPath(Path.Combine(module.PackageRoot, module.BackendEntry!));
+        if (!entryAssemblyPath.StartsWith(
+                Path.GetFullPath(distributionRoot) + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(entryAssemblyPath))
+        {
+            throw new FileNotFoundException(
+                $"Built-in backend entry for '{module.ModuleId}' is missing or outside the distribution root.",
+                module.BackendEntry);
+        }
+
+        var targetDirectory = Path.Combine(backendViewRoot, module.ModuleId);
+        Directory.CreateDirectory(targetDirectory);
+        var targetEntryName = Path.GetFileName(entryAssemblyPath);
+        File.Copy(entryAssemblyPath, Path.Combine(targetDirectory, targetEntryName), overwrite: true);
+
+        var manifest = JsonNode.Parse(File.ReadAllText(sourceManifestPath))?.AsObject()
+            ?? throw new JsonException($"Built-in module manifest '{sourceManifestPath}' deserialized to null.");
+        manifest["entryAssembly"] = targetEntryName;
+        File.WriteAllText(
+            Path.Combine(targetDirectory, "plugin.json"),
+            manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+    }
+
+    private static void StageFrontendAssets(string publicRoot, CanonicalModulePlanModule module)
+    {
+        var frontendRoot = Path.GetFullPath(Path.Combine(module.PackageRoot, "frontend"));
         var frontendManifestPath = Path.Combine(frontendRoot, "plugin.frontend.json");
+        if (!File.Exists(frontendManifestPath))
+        {
+            return;
+        }
         var frontendManifest = System.Text.Json.JsonSerializer.Deserialize<FrontendPackageManifest>(File.ReadAllText(frontendManifestPath), ManifestJsonOptions)
             ?? throw new System.Text.Json.JsonException($"Frontend manifest '{frontendManifestPath}' deserialized to null.");
 
@@ -152,7 +270,7 @@ public class RuntimeViewMaterializer
         // public 目录交付的是资产根和入口清单，真正入口仍由运行时 manifest 决定。
         ResolveContainedFilePath(frontendRoot, entryManifest.Entry, "Entry");
 
-        var targetRoot = Path.Combine(publicRoot, record.ModuleId, record.Version);
+        var targetRoot = Path.Combine(publicRoot, module.ModuleId, module.Version);
         var assetRootName = Path.GetFileName(assetRootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         CopyDirectory(assetRootPath, Path.Combine(targetRoot, assetRootName));
         File.Copy(
@@ -161,21 +279,23 @@ public class RuntimeViewMaterializer
             overwrite: true);
     }
 
-    private static void StageModuleMetadata(string runtimeRoot, InstalledPluginRecord record)
+    private static void StageModuleMetadata(string runtimeRoot, CanonicalModulePlanModule module)
     {
-        var packageMetadataRoot = Path.Combine(record.PackageRoot, "modules", record.ModuleId, "metadata");
+        var packageMetadataRoot = module.Provenance.SourceKind == "built-in"
+            ? Path.Combine(module.PackageRoot, "metadata")
+            : Path.Combine(module.PackageRoot, "modules", module.ModuleId, "metadata");
         if (!Directory.Exists(packageMetadataRoot))
         {
             return;
         }
 
-        var targetMetadataRoot = Path.Combine(runtimeRoot, "modules", record.ModuleId, "metadata");
+        var targetMetadataRoot = Path.Combine(runtimeRoot, "modules", module.ModuleId, "metadata");
         CopyDirectory(packageMetadataRoot, targetMetadataRoot);
     }
 
-    private static void StagePlatformResources(string runtimeRoot, InstalledPluginRecord record)
+    private static void StagePlatformResources(string runtimeRoot, CanonicalModulePlanModule module)
     {
-        var packageResourcesRoot = Path.Combine(record.PackageRoot, "resources");
+        var packageResourcesRoot = Path.Combine(module.PackageRoot, "resources");
         if (!Directory.Exists(packageResourcesRoot))
         {
             return;
@@ -184,7 +304,7 @@ public class RuntimeViewMaterializer
         // 平台公共资源按最终生效视图汇总到同一个 resources 目录；
         // 冲突时直接失败，而不是依赖复制顺序做隐式覆盖。
         var targetResourcesRoot = Path.Combine(runtimeRoot, "resources");
-        CopyDirectoryRejectingConflicts(packageResourcesRoot, targetResourcesRoot, record.ModuleId);
+        CopyDirectoryRejectingConflicts(packageResourcesRoot, targetResourcesRoot, module.ModuleId);
     }
 
     private static string ResolveContainedPath(string rootPath, string? relativePath, string propertyName)
@@ -231,6 +351,15 @@ public class RuntimeViewMaterializer
         }
 
         return candidatePath;
+    }
+
+    private static string BindProjection(string projectionJson, CanonicalModulePlan plan)
+    {
+        var projection = JsonNode.Parse(projectionJson)?.AsObject()
+            ?? throw new JsonException("Runtime compatibility projection deserialized to null.");
+        projection.Insert(0, "projectionHash", plan.PlanHash);
+        projection.Insert(0, "snapshotId", plan.SnapshotId);
+        return projection.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
     }
 
     private void ReplaceProjection(string installRoot, string stagedRuntimeRoot, string stagedPublicRoot, string commitWorkspaceRoot)

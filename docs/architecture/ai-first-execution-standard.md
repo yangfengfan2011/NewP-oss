@@ -87,7 +87,7 @@
 
 - Host 只负责启动、组合、模块加载、统一认证与宿主级能力。
 - Shell 只负责布局、全局 Provider、菜单聚合、路由聚合和模块受控注册。
-- 正常前端模块接入时，唯一允许修改的 Shell 级入口仍是 `frontend/packages/shell/src/builtin-runtime-plugins.ts`。
+- 正常前端模块接入通过 Module Capsule 与 Active Module Runtime Catalog 完成；不得为业务模块修改 Shell 内部列表或增加 moduleId 特判。
 - 公共能力进入 `Kernel / SDK / Contracts`，模块私有能力留在模块内部。
 
 详细边界见 [componentization-guardrails.md](componentization-guardrails.md)。

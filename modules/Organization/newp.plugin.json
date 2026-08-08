@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Organization",
+  "displayName": "组织结构",
+  "version": "1.0.0",
+  "description": "组织结构管理模块",
+  "entryAssembly": "../../OrganizationModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "organization.backend"
+  },
+  "frontend": {
+    "behaviorKey": "organization.frontend",
+    "entry": "organization",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "organization.person.list",
+      "organization.person.detail",
+      "organization.tree.page",
+      "organization.positions.page"
+    ]
+  },
+  "security": {
+    "permissions": [
+      {
+        "code": "Organization.Person.View",
+        "displayName": "查看人员",
+        "description": "允许查看组织结构中的人员信息",
+        "group": "人员"
+      },
+      {
+        "code": "Organization.Person.Create",
+        "displayName": "新建人员",
+        "description": "允许新建组织结构中的人员信息",
+        "group": "人员"
+      },
+      {
+        "code": "Organization.Person.Update",
+        "displayName": "更新人员",
+        "description": "允许更新、停用或启用组织结构中的人员信息",
+        "group": "人员"
+      },
+      {
+        "code": "Organization.Person.Delete",
+        "displayName": "删除人员",
+        "description": "允许删除组织结构中的人员信息",
+        "group": "人员"
+      },
+      {
+        "code": "Organization.Person.LinkUser",
+        "displayName": "关联登录用户",
+        "description": "允许为人员关联登录用户",
+        "group": "人员"
+      },
+      {
+        "code": "Organization.Company.View",
+        "displayName": "查看公司",
+        "description": "查看公司",
+        "group": "公司"
+      },
+      {
+        "code": "Organization.Company.Create",
+        "displayName": "新建公司",
+        "description": "新建公司",
+        "group": "公司"
+      },
+      {
+        "code": "Organization.Company.Update",
+        "displayName": "更新公司",
+        "description": "更新公司",
+        "group": "公司"
+      },
+      {
+        "code": "Organization.Department.View",
+        "displayName": "查看部门",
+        "description": "查看部门",
+        "group": "部门"
+      },
+      {
+        "code": "Organization.Department.Create",
+        "displayName": "新建部门",
+        "description": "新建部门",
+        "group": "部门"
+      },
+      {
+        "code": "Organization.Department.Update",
+        "displayName": "更新部门",
+        "description": "更新部门",
+        "group": "部门"
+      },
+      {
+        "code": "Organization.Position.View",
+        "displayName": "查看岗位",
+        "description": "查看岗位",
+        "group": "岗位"
+      },
+      {
+        "code": "Organization.Position.Create",
+        "displayName": "新建岗位",
+        "description": "新建岗位",
+        "group": "岗位"
+      },
+      {
+        "code": "Organization.Position.Update",
+        "displayName": "更新岗位",
+        "description": "更新岗位",
+        "group": "岗位"
+      }
+    ]
+  }
+}

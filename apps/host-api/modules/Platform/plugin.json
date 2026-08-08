@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Platform",
+  "displayName": "平台组合",
+  "version": "1.0.0",
+  "description": "平台级 metadata 与 localization 组合胶囊",
+  "entryAssembly": null,
+  "dependencies": [],
+  "frontend": {
+    "enabled": false
+  }
+}

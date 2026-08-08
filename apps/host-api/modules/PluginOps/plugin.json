@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "PluginOps",
+  "displayName": "插件运维",
+  "version": "1.0.0",
+  "description": "插件运维前端内建模块",
+  "entryAssembly": null,
+  "dependencies": [],
+  "frontend": {
+    "entry": "plugin-ops",
+    "bindingMode": "legacy-module"
+  }
+}

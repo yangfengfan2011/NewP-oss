@@ -65,13 +65,11 @@
 
 ## 前端受控接入点
 
-内建前端模块接入时，唯一允许直接修改的 Shell 级清单是：
+Shell 不维护业务模块清单。内建与外部模块都由 `GET /plugins/active-module-runtime.json` 选择，Shell 只提供受控 import implementation registry，并在全部入口通过后一次提交 `ModuleRegistry`。
 
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+迁移期内建模块在 `apps/host-api/modules/<ModuleId>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `modules/<ModuleId>/newp.plugin.json` 为根 authoring owner。模块实现仍位于 `frontend/modules/<module>/src/index.ts`，但该源码目录不能反向决定活动模块集合。
 
-模块实现仍位于 `frontend/modules/<module>/src/index.ts`，由 Shell 的模块加载器发现；外部插件按插件包和运行时清单契约接入，不把上述内建清单作为默认入口。
-
-新增模块需要修改 Shell 其他内部文件时，先满足 `AGENTS.md` 的设计门禁，并在已确认的设计工件中说明现有契约或受控清单为什么不足。
+新增模块需要修改 Shell 内部文件时，先满足 `AGENTS.md` 的设计门禁，并在已确认的设计工件中说明 Active Module Runtime Catalog 与 behavior binding seam 为什么不足。
 
 ## 模板要求
 
@@ -94,9 +92,9 @@
 `new-module` 脚手架在内建模块模式下只自动更新以下受控接入点：
 
 - `apps/host-api/HostApi.csproj`
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+- `apps/host-api/modules/<ModuleId>/plugin.json`
 
-外部插件模式不修改 Host 或 Shell。脚手架不引导开发者直接修改 Shell 其他内部结构。
+外部插件模式不修改 Host 或 Shell。脚手架不引导开发者修改 Shell 内部结构；后续 capsule adopter 应把 legacy transport 迁移为根 `newp.plugin.json` 与 behavior bindings。
 
 ## 实施前检查
 

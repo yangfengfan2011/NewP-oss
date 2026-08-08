@@ -44,7 +44,7 @@ frontend/modules/your-module/
 
 ### 前端规则
 
-- `src/index.ts` 只做 `FrontendModule` 声明
+- `src/index.ts` 只做稳定 key 到实现的 behavior binding；legacy adapter 才保留 `FrontendModule`
 - `src/pages/*` 放页面
 - `src/services/*` 放 API 访问
 - 不要直接改 Shell 内部结构
@@ -54,7 +54,7 @@ frontend/modules/your-module/
 正常新增模块时，默认只改：
 
 - 后端：`apps/host-api/HostApi.csproj`
-- 前端：`frontend/packages/shell/src/builtin-runtime-plugins.ts`
+- 模块 transport：`apps/host-api/modules/<ModuleId>/plugin.json`；canonical adopter 改用 `modules/<ModuleId>/newp.plugin.json`
 
 如果你发现还要改 Host / Shell 其他内部文件，先停下来，先补设计。
 
@@ -62,13 +62,13 @@ frontend/modules/your-module/
 
 把当前前端装配记成两句话就够了：
 
-- 正式运行时优先走 `frontend-plugin-manifest.json`
-- 研发期联调在 manifest 不可用时回退到 `builtin-runtime-plugins.ts`
+- Host 从 Canonical Module Plan 生成唯一的 `active-module-runtime.json`
+- Shell 只有整份目录加载成功后才一次提交模块，不存在 workspace fallback
 
 也就是说：
 
-- 开发期加一个内建模块，通常改的是 `builtin-runtime-plugins.ts`
-- 看正式交付路径时，关注的是运行时 manifest 和动态装配
+- 开发期加一个内建模块，通常只增加 capsule/transport 声明与行为实现
+- 看正式交付路径时，关注同一活动快照与原子动态装配
 
 ## 6. 什么情况下不要直接写代码
 

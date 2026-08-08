@@ -37,10 +37,12 @@ frontend/
 Copy-Item .\frontend\templates\frontend-module-template .\frontend\modules\example-module -Recurse
 ```
 
-模板闭环的受控接入点仍然是：
+模块的受控接入点是可提交的根 capsule 与 metadata：
 
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
-- `frontend/packages/shell/src/registerModules.ts`（负责消费受控接入点并完成注册）
+- `modules/<Module>/newp.plugin.json`（身份、版本、依赖与 behavior key）
+- `modules/<Module>/metadata/**`（路由、菜单、权限引用与模型）
+
+Shell 只消费 Host 编译的 `active-module-runtime.json`，常规模块接入不再修改 Shell 内部注册表。
 
 仓库里也提供 `scripts/new-module.ps1` 与 `scripts/new-module.sh` 作为后续自动化便利，但它们是建立在模板契约之上的扩展，不替代模板本身。
 
@@ -55,7 +57,7 @@ pnpm build
 
 ## 设计约束
 
-- 模块接入保持显式注册，不做隐式扫描。
+- 模块接入保持 capsule 显式声明，不在 Shell 中维护第二份清单。
 - 模块目录命名使用 kebab-case。
 - 模块说明和新增注释统一使用中文。
 - Phase 6 原始目标是“模板可复用、构建链路可验证、接入边界清晰”。

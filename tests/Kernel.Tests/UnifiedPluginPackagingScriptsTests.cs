@@ -19,6 +19,19 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
     }
 
     [Fact]
+    public void NewModule_UsesBuiltInCapsuleInsteadOfDeletedShellRegistry()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repoRoot, "scripts", "new-module.ps1"));
+        var shellWrapper = File.ReadAllText(Path.Combine(repoRoot, "scripts", "new-module.sh"));
+
+        Assert.DoesNotContain("builtin-runtime-plugins.ts", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("builtin-runtime-plugins.ts", shellWrapper, StringComparison.Ordinal);
+        Assert.Contains("apps\\host-api\\modules", script, StringComparison.Ordinal);
+        Assert.Contains("legacy-module", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PackUnifiedPlugin_WritesFrontendPublicBasePathMatchingHostStaticAssetsRoute()
     {
         var repoRoot = FindRepositoryRoot();
@@ -120,7 +133,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = "pwsh.exe",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

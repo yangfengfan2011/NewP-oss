@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
@@ -11,6 +12,8 @@ public class FrontendRuntimeManifestBuilder
     };
 
     private readonly string _publicBaseUrl;
+
+    public string PublicBaseUrl => _publicBaseUrl;
 
     public FrontendRuntimeManifestBuilder()
         : this(DefaultPublicBaseUrl)
@@ -30,6 +33,40 @@ public class FrontendRuntimeManifestBuilder
                 .Select(CreateEntry)
                 .OrderBy(entry => entry.Url, StringComparer.OrdinalIgnoreCase)
                 .Select(entry => new { url = entry.Url })
+                .ToArray()
+        };
+
+        return JsonSerializer.Serialize(manifest, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        }) + Environment.NewLine;
+    }
+
+    public string Build(CanonicalModulePlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var manifest = new
+        {
+            snapshotId = plan.SnapshotId,
+            projectionHash = plan.PlanHash,
+            plugins = plan.Modules
+                .Where(static module => !string.IsNullOrWhiteSpace(module.FrontendEntry))
+                .Select(module => module.Provenance.SourceKind == "built-in"
+                    ? (object)new
+                    {
+                        moduleId = module.FrontendEntry,
+                        canonicalModuleId = module.ModuleId,
+                        version = module.Version,
+                        behaviorKey = module.FrontendBehaviorKey,
+                        bindingMode = module.FrontendBindingMode,
+                        bindings = module.FrontendBindings
+                    }
+                    : new
+                    {
+                        url = CombinePublicPath(
+                            _publicBaseUrl,
+                            $"{module.ModuleId}/{module.Version}/{module.FrontendEntry!.TrimStart('/')}")
+                    })
                 .ToArray()
         };
 

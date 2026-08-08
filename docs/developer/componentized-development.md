@@ -154,20 +154,11 @@
 
 ### 前端
 
-前端模块正常接入时，默认允许修改的 Shell 级入口是：
+前端模块没有需要手工维护的 Shell 级业务清单。内建与外部模块都由 `GET /plugins/active-module-runtime.json` 选择；研发启动也必须经过同一 Canonical Module Plan 和 Shell loader，不能在目录不可用时回退到 workspace 源码集合。
 
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+内建 legacy adapter 的受控接入点是 `apps/host-api/modules/<ModuleId>/plugin.json`；完成 capsule cutover 的模块使用 `modules/<ModuleId>/newp.plugin.json` 与 TypeScript behavior bindings。`frontend-plugin-manifest.json` 只保留为同一计划生成的 compatibility projection。
 
-当前前端插件化收口之后，还新增了一个正式运行时入口：
-
-- `frontend/packages/shell/src/plugin-manifest-loader.ts`
-
-理解方式是：
-
-- 研发期本地联调：仍可通过 `builtin-runtime-plugins.ts` 的内建模块清单完成
-- 正式运行时装配：优先通过 `frontend-plugin-manifest.json` + 动态导入完成
-
-如果一个任务需要改动 Shell 其他内部文件，应该先说明为什么现有契约、清单入口或受控接入点不够用。
+如果一个任务需要改动 Shell 内部文件，应该先说明为什么 Active Module Runtime Catalog、behavior binding 或现有受控接入点不够用。
 
 ## 7. 什么情况下必须先补设计
 
@@ -189,30 +180,28 @@
 
 ## 8. 当前前端插件化该怎么理解
 
-现在前端的正式方向已经不是“只能源码接线”，而是：
-
-- Shell 优先读取运行时 manifest
-- manifest 不可用时回退到研发期内建模块清单
-- 清单存在时，单个插件失败不会拖垮整个 Shell
-
-当前 manifest 示例：
+Shell 只读取一个 Active Module Runtime Catalog，并以 all-or-nothing 语义装配其 required frontend entries：
 
 ```json
 {
-  "plugins": [
-    { "moduleId": "demo" },
-    { "moduleId": "files" }
+  "snapshotId": "<plan-hash>",
+  "planHash": "<plan-hash>",
+  "modules": [
+    {
+      "moduleId": "Organization",
+      "version": "1.0.0",
+      "frontend": { "moduleId": "organization", "bindingMode": "behavior-bindings" }
+    }
   ]
 }
 ```
 
 但要注意：
 
-- 日常接入内建业务模块时，优先声明 `moduleId`
-- `url` / `exportName` 仍然保留，主要用于未来独立前端插件包或外部资源入口
-- 这不等于前后端插件包已经完全统一
-- 也不等于已经有远程插件市场、版本矩阵或签名治理
-- 现在只是先把前端的正式运行时入口收出来
+- 内建 `moduleId` 与外部 `url` 都由同一活动目录选择，不由 Shell 本地列表决定
+- 任一 required entry 失败都不提交部分模块，并进入 fatal/retry
+- 研发 source adapter 也必须经过同一 compiler 与活动目录，不存在 manifest 缺失回退
+- desired/active/LKG、远程发布物与签名治理仍由后续平台能力承担
 
 ## 9. 开发完成后至少做哪些验证
 
@@ -237,8 +226,8 @@
 如果涉及前端插件装配，再补：
 
 - `pnpm --filter @icp-platform/shell test`
-- 无 runtime manifest 时的本地回退验证
-- 有 runtime manifest 时的动态装配验证
+- Active Module Runtime Catalog 不可用时的 fatal/retry 验证
+- 单个 required entry 失败时 registry 无部分提交验证
 
 ## 10. 最常见的误区
 

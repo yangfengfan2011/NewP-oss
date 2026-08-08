@@ -565,9 +565,9 @@ export default ${frontendModuleVariable};
 
 if ((-not $SkipIntegration) -and (-not $ExternalPlugin)) {
     $hostApiPath = Join-Path $repoRoot 'apps\host-api\HostApi.csproj'
-    $builtinRuntimePluginsPath = Join-Path $frontendRoot 'packages\shell\src\builtin-runtime-plugins.ts'
+    $hostModuleRoot = Join-Path $repoRoot "apps\host-api\modules\$ModuleName"
+    $hostModuleManifestPath = Join-Path $hostModuleRoot 'plugin.json'
     $projectReferenceLine = "    <ProjectReference Include=""..\..\server\modules\$ModuleName\$ModuleName.csproj"" />"
-    $builtinModuleEntryLine = "  { moduleId: '$moduleSlug' },"
 
     Update-FileContent -Path $hostApiPath -Transform {
         param($content)
@@ -586,20 +586,25 @@ if ((-not $SkipIntegration) -and (-not $ExternalPlugin)) {
         $content.Replace($match.Value, $newBlock)
     }
 
-    Update-FileContent -Path $builtinRuntimePluginsPath -Transform {
-        param($content)
-
-        if (-not $content.Contains($builtinModuleEntryLine)) {
-            $content = [regex]::Replace(
-                $content,
-                '(?ms)(export const BUILTIN_RUNTIME_PLUGIN_ENTRIES:\s*BuiltinRuntimePluginEntry\[\]\s*=\s*\[[\s\S]*?)(\r?\n\];)',
-                ('${1}' + "`r`n" + $builtinModuleEntryLine + '${2}'),
-                1
-            )
+    New-Item -ItemType Directory -Path $hostModuleRoot -Force | Out-Null
+    $hostModuleManifest = [ordered]@{
+        schemaVersion = '1.0'
+        moduleId = $ModuleName
+        displayName = $DisplayName
+        version = '1.0.0'
+        description = "$DisplayName built-in module"
+        entryAssembly = "../../$ModuleName.dll"
+        dependencies = @()
+        hostVersion = [ordered]@{
+            min = '1.0.0'
+            max = '2.0.0'
         }
-
-        $content
+        frontend = [ordered]@{
+            entry = $moduleSlug
+            bindingMode = 'legacy-module'
+        }
     }
+    Set-Utf8Content -Path $hostModuleManifestPath -Content (($hostModuleManifest | ConvertTo-Json -Depth 4) + [Environment]::NewLine)
 }
 
 Write-Host ''
@@ -610,7 +615,7 @@ if ($ExternalPlugin) {
     Write-Host 'No Host or frontend integration was performed.' -ForegroundColor Yellow
 } else {
     Write-Host "Frontend module: frontend/modules/$moduleSlug" -ForegroundColor Green
-    Write-Host 'Allowed integration targets: apps/host-api/HostApi.csproj and frontend/packages/shell/src/builtin-runtime-plugins.ts' -ForegroundColor Cyan
+    Write-Host "Allowed integration targets: apps/host-api/HostApi.csproj and apps/host-api/modules/$ModuleName/plugin.json" -ForegroundColor Cyan
     Write-Host 'Do not modify other Host/Shell internals for normal module integration unless a separate design approves it.' -ForegroundColor Yellow
 }
 

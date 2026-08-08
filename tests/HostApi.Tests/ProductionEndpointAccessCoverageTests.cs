@@ -73,7 +73,13 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.Contains(
             plan.ActivePermissions,
             static permission => permission.Code == OrganizationPermissions.PersonDelete);
-        Assert.Equal(3, manifestEndpoints.Length);
+        Assert.Equal(4, manifestEndpoints.Length);
+        Assert.Contains(
+            manifestEndpoints,
+            static endpoint => string.Equals(
+                endpoint.RoutePattern.RawText,
+                "/plugins/active-module-runtime.json",
+                StringComparison.Ordinal));
         Assert.All(
             manifestEndpoints,
             static endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<IAllowAnonymous>()));

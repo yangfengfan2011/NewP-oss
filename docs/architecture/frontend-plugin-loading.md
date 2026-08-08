@@ -1,179 +1,65 @@
-# 前端插件加载
+# 前端模块活动目录加载
 
-本文档说明当前前端 Shell 的运行时插件加载主线，以及它和研发期源码联调之间的关系。
+本文档说明 Shell 当前唯一受支持的前端模块发现与装配路径。模块所有权与投影决策以 GitHub Issue #5 为决策源，本文只记录已经落地的运行时事实。
 
-## 当前机制
+## 唯一发现入口
 
-Shell 启动时按下面顺序完成前端模块装配：
+Shell 启动时只读取：
 
-1. 读取 `import.meta.env.VITE_FRONTEND_PLUGIN_MANIFEST_URL`
-2. 如果未配置，则使用默认地址 `/plugins/frontend-plugin-manifest.json`
-3. 通过 `fetch` 请求运行时插件清单
-4. 如果清单存在，则优先按清单逐项动态加载前端模块
-5. 如果清单不存在或当前环境不可达，则回退到内建模块清单和本地源码加载路径
-6. 将成功装载的 `FrontendModule` 注册到 `ModuleRegistry`
-7. 在注册完成后执行 `ModuleRegistry.initializeAll()`
-8. 最后再渲染 React Shell
-
-对应实现位置：
-
-- 清单加载：`frontend/packages/shell/src/plugin-manifest-loader.ts`
-- 内建插件清单：`frontend/packages/shell/src/builtin-runtime-plugins.ts`
-- 装配入口：`frontend/packages/shell/src/registerModules.ts`
-- 启动顺序：`frontend/packages/shell/src/main.tsx`
-- 清单生成：`frontend/packages/shell/vite.config.ts`
-
-这里需要区分两个职责：
-
-- `builtin-runtime-plugins.ts` 是内建业务模块的受控清单入口
-- `registerModules.ts` 负责运行时装配、失败处理和研发期回退编排，不应再作为日常手工维护的模块列表
-
-## 运行时清单来源
-
-当前前端运行时清单有两类来源：
-
-1. 宿主安装目录驱动的运行时清单
-2. Shell 在 Vite 开发和构建阶段自动生成的开发期清单
-
-对于统一插件包 Phase 1，HostApi 会把安装目录中的：
-
-- `runtime/frontend-plugin-manifest.json`
-
-映射到：
-
-- `/plugins/frontend-plugin-manifest.json`
-
-并把安装目录中的：
-
-- `public/`
-
-映射到：
-
-- `/plugin-assets`
-
-这使得已启用插件的前端入口 URL 可以直接写入运行时清单并由 Shell 动态导入。
-
-如果当前没有统一插件包安装结果，默认运行时清单仍不依赖手工维护的 `public/plugins/frontend-plugin-manifest.json`，而是由 Shell 在 Vite 开发和构建阶段自动生成。默认包含的内建模块来自：
-
-- `demo`
-- `audit`
-- `authorization`
-- `config-center`
-- `files`
-- `module-template-sample`
-- `sample-plugin`
-
-生成后的清单格式示例：
-
-```json
-{
-  "plugins": [
-    { "moduleId": "demo" },
-    { "moduleId": "audit" },
-    { "moduleId": "authorization" },
-    { "moduleId": "files" }
-  ]
-}
+```http
+GET /plugins/active-module-runtime.json
 ```
 
-字段说明：
+该活动目录由 `Canonical Module Plan` 生成，包含同一 `snapshotId` / `planHash` 下的模块身份、版本、依赖、前端入口和 behavior binding 信息。frontend、metadata、localization compatibility projection 也由同一 plan 生成，并携带相同的 `snapshotId` 与 `projectionHash`。
 
-- `plugins`
-  前端插件入口数组。
-- `moduleId`
-  Vite 管理的内建模块标识。Shell 会把它解析到受控源码入口。
-- `url`
-  可选。若声明，则按外部 URL 动态导入模块。统一插件包 Phase 1 当前主要使用该字段。
-- `exportName`
-  可选。若声明，则使用命名导出；若未声明，则默认读取模块的 `default` 导出。
+对应实现：
 
-默认推荐优先使用 `moduleId`。`url` 和 `exportName` 主要用于未来的外部前端插件交付场景。
+- 计划编译：`server/kernel/ModulePlanning/CanonicalModulePlanCompiler.cs`
+- 活动目录生成：`server/kernel/ModulePlanning/ActiveModuleRuntimeCatalogBuilder.cs`
+- 运行时投影：`server/kernel/PluginPackages/RuntimeViewMaterializer.cs`
+- Shell 加载：`frontend/packages/shell/src/active-module-runtime-loader.ts`
+- 原子注册：`frontend/packages/shell/src/registerModules.ts`
+- fatal / retry：`frontend/packages/shell/src/bootstrap.ts`
 
-## 打包与运行时加载关系
+旧的 `frontend-plugin-manifest.json`、metadata manifest 和 localization manifest 是同一计划生成的 compatibility projection，不再承担独立模块发现职责。
 
-当前前端插件平台采用的是 “Vite-managed internal module + runtime manifest” 的方式：
+## 启动与失败语义
 
-- 业务模块源码入口来自 `frontend/modules/*/src/index.ts`
-- Shell 通过 `import.meta.glob` 建立 internal registry
-- 运行时清单优先声明 `moduleId`，不直接指向 `tsc` 产物
-- Vite 在构建时为这些动态入口生成可加载 chunk，Shell 在运行时按清单再去装配它们
+Shell 按以下顺序启动：
 
-这样做的目的，是避免把 `tsc` 直接输出的原始 ESM 文件当作浏览器运行时插件入口使用。原始 `dist/index.js` 往往会保留无扩展名的相对导入，不适合作为稳定交付物。
+1. 获取并校验 Active Module Runtime Catalog 的基本结构。
+2. 按目录中的 required frontend entries 导入全部模块。
+3. behavior binding 模式校验目录声明的 behavior key 与模块导出一致。
+4. 所有入口都成功后，调用 `ModuleRegistry.replaceAll` 一次提交完整快照。
+5. 初始化全部模块并渲染正常 Shell。
 
-对于统一插件包 Phase 1，流程进一步扩展为：
+任一目录读取、入口导入或 behavior key 校验失败时：
 
-1. 统一插件包安装到标准安装目录
-2. 启用操作把已启用版本重建为 `runtime/frontend-plugin-manifest.json`
-3. 同一次启用操作把对应前端产物投影到 `public/<ModuleId>/<Version>/...`
-4. HostApi 通过 `/plugins/frontend-plugin-manifest.json` 与 `/plugin-assets/...` 对外暴露运行时入口
+- 不提交部分模块、菜单或路由；
+- 不回退到旧 manifest 或手工业务模块列表；
+- 不补注册所谓 host-managed 模块；
+- Shell 只显示非模块的 fatal / retry 页面；
+- retry 会重新读取并重新装载整份快照。
 
-补充说明：
+## 内建与外部入口
 
-- 常规 `install` 不会切换当前启用版本
-- 如果重复安装的正好是当前已启用版本，PluginOps 仍会立即重建运行时清单和 `public/` 资源投影，保持前端入口与状态一致
+内建模块由 Host 构建输出中的 capsule transport 声明进入候选集。当前两类入口都由活动目录选择：
 
-## 研发期回退机制
+- `moduleId`：指向 Vite 管理的内建源码入口；Shell 的 import registry 只提供可导入实现，不决定活动模块集合。
+- `url`：指向安装包物化到 `/plugin-assets/<ModuleId>/<Version>/...` 的外部入口。
 
-研发期本地回退仍然保留，但不再依赖静态源码导入列表。当前回退机制同样通过受控的懒加载 registry 装配以下内建模块：
+新增内建模块不修改 Shell 业务列表。迁移期 legacy 模块在 `apps/host-api/modules/<ModuleId>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `modules/<ModuleId>/newp.plugin.json` 为根 authoring owner。Organization 是首个 behavior-binding adopter。
 
-- `demo`
-- `audit`
-- `authorization`
-- `config-center`
-- `files`
-- `module-template-sample`
+## 所有权边界
 
-这意味着：
+- module identity、version、dependencies：Module Capsule 根声明。
+- route、menu、permission reference、model/view key：authoring metadata / security 声明。
+- React page、renderer、action handler：TypeScript behavior bindings。
+- runtime URL、projection references、snapshot/hash：ModuleProjectionCompiler 生成。
+- Shell：只加载活动目录、原子提交 registry，并承载 fatal/retry；不维护业务模块 ID 特判。
 
-- 正式交付入口优先走运行时清单
-- 研发期在清单不可达时，仍可通过本地源码继续联调
-- 运行时加载与研发期回退共用同一套受控模块标识
-
-## 部分失败策略
-
-当运行时清单存在时：
-
-- Shell 不会因为单个插件加载失败而整体中断
-- 成功加载的模块仍会继续注册
-- 失败项会输出明确警告日志
-- 不会因为某个运行时模块失败，就自动退回整份本地源码模块清单
-
-这个策略的目的是避免生产环境把“运行时交付损坏”悄悄掩盖成“研发期源码回退仍可工作”。
+legacy frontend modules 仍由兼容 adapter 装载，但不得作为新增 canonical interface 的模板。新 adopter 应逐步把 TS 中的 identity、route、menu 和 permission 声明迁回其唯一 authoring owner。
 
 ## 当前边界
 
-当前实现已经补齐了前端运行时装配、构建期 manifest 生成，以及统一插件包安装结果驱动的运行时清单，但仍未覆盖以下能力：
-
-- 前端插件签名或来源校验
-- 前端插件依赖冲突治理
-- 热插拔、热更新或运行时卸载
-- 更完整的宿主级隔离与恢复机制
-
-因此，现阶段应把它理解为：
-
-- Shell 已具备正式的前端运行时清单入口
-- 业务模块已经能通过 Vite-managed internal module 参与运行时装配
-- 统一插件包 Phase 1 已能把安装状态投影为运行时清单和静态资源目录
-- 更完整的签名、依赖治理和宿主级隔离，仍属于后续阶段工作
-
-## Host-managed 内部模块
-
-除运行时清单驱动的模块外，当前 Shell 还支持一类“宿主管理模块”：
-
-- 模块示例：`plugin-ops`
-- 注册方式：仍通过 `builtin-runtime-plugins.ts` 声明受控入口
-- 装配规则：不写入构建出的运行时 manifest，但在 Shell 启动时由宿主额外注册
-
-这样做的原因是：
-
-- `plugin-ops` 属于平台自身的管理入口，不应依赖安装结果才能出现
-- 即使运行时 manifest 已存在，Shell 仍需要保证该模块可访问
-- 它与普通业务模块共用同一套 Vite-managed internal module 装配路径，避免再引入一套特殊加载机制
-
-当前 `plugin-ops` 的前端可见性规则是：
-
-- 路由：`/plugin-ops`
-- `requireAuth: true`
-- 不再附加前端权限点拦截
-
-这不是放宽管理员边界，而是把“是否允许访问运维 API”的最终判断保持在后端 `AdminOnly` 策略上，避免前端因当前权限模型未下发对应权限点而提前把页面挡住。
+本阶段已经实现确定性 Canonical Module Plan、共同快照投影、Organization behavior binding 和 Shell all-or-nothing 注册。desired/active/LKG 生命周期、外仓公开 SDK 与完整外部插件闸门由后续实施 Issue 承担；不得在 Shell 中提前复制这些职责。

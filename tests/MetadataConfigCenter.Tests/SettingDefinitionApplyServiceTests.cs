@@ -84,7 +84,9 @@ public class SettingDefinitionApplyServiceTests
         public static async Task<MetadataApplyTestRepository> CreateAsync(bool includeRuntimeProjection)
         {
             var sourceRoot = FindRepositoryRoot();
-            var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-apply-tests", Guid.NewGuid().ToString("N"));
+            // Windows 的用户临时目录可能被安全软件短暂占用，干扰本测试要验证的目录级原子回滚。
+            // 改用已忽略的仓库 artifacts 目录，确保正向和回滚 move 处在同一工作卷。
+            var tempRoot = Path.Combine(sourceRoot, "artifacts", "test-temp", "metadata-config-center-apply-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(tempRoot, "modules", "ConfigCenter"));
 
             var sourceMetadata = Path.Combine(sourceRoot, "modules", "ConfigCenter", "metadata");

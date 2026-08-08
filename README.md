@@ -151,5 +151,5 @@ macOS / Linux:
 - 开发入口：[docs/developer/componentized-development.md](docs/developer/componentized-development.md)
 - 完整护栏：[docs/architecture/componentization-guardrails.md](docs/architecture/componentization-guardrails.md)
 - 新模块优先通过模板、`Contracts / SDK` 和受控入口接入。
-- 常规前端模块接入只更新 `frontend/packages/shell/src/builtin-runtime-plugins.ts`。
+- 常规前端模块由 Module Capsule 编译进 `GET /plugins/active-module-runtime.json`；Shell 不维护业务模块清单。
 - 任务需要修改其他 Host 或 Shell 内部实现时，先按 `AGENTS.md` 的设计门禁形成并确认设计工件。

@@ -18,6 +18,10 @@ public static class PluginManifestEndpointRouteBuilderExtensions
 
         MapManifest(
             endpoints,
+            "/plugins/active-module-runtime.json",
+            Path.Combine(pluginInstallRoot, "runtime", "active-module-runtime.json"));
+        MapManifest(
+            endpoints,
             "/plugins/frontend-plugin-manifest.json",
             Path.Combine(pluginInstallRoot, "runtime", "frontend-plugin-manifest.json"));
         MapManifest(

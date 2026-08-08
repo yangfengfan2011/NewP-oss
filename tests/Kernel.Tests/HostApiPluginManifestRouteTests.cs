@@ -64,6 +64,47 @@ public class HostApiPluginManifestRouteTests : IDisposable
     }
 
     [Fact]
+    public async Task ActiveModuleRuntimeCatalogRoute_BindsAllCompatibilityProjectionsToOneSnapshot()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await HostApiProcess.StartAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var activeResponse = await client.GetAsync("/plugins/active-module-runtime.json");
+        var activeBody = await activeResponse.Content.ReadAsStringAsync();
+        Assert.True(
+            activeResponse.IsSuccessStatusCode,
+            $"Status: {activeResponse.StatusCode}\nBody: {activeBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var active = JsonDocument.Parse(activeBody);
+        var snapshotId = active.RootElement.GetProperty("snapshotId").GetString();
+        var projectionHash = active.RootElement.GetProperty("projections").GetProperty("projectionHash").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(snapshotId));
+        Assert.Equal(active.RootElement.GetProperty("planHash").GetString(), projectionHash);
+        Assert.Contains(
+            active.RootElement.GetProperty("modules").EnumerateArray(),
+            module => module.GetProperty("moduleId").GetString() == "Organization");
+
+        foreach (var route in new[]
+                 {
+                     "/plugins/frontend-plugin-manifest.json",
+                     "/plugins/metadata-runtime-manifest.json",
+                     "/plugins/localization-manifest.json"
+                 })
+        {
+            using var projection = JsonDocument.Parse(await client.GetStringAsync(route));
+            Assert.Equal(snapshotId, projection.RootElement.GetProperty("snapshotId").GetString());
+            Assert.Equal(projectionHash, projection.RootElement.GetProperty("projectionHash").GetString());
+        }
+    }
+
+    [Fact]
     public async Task LocalizationManifestRoute_ReturnsJson()
     {
         var installRoot = CreateTempRoot();
@@ -435,4 +476,3 @@ public class HostApiPluginManifestRouteTests : IDisposable
         }
     }
 }
-

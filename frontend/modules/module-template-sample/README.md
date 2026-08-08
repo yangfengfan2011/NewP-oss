@@ -20,14 +20,14 @@
 
 ## 这个模块怎么接入
 
-研发期默认通过：
+可提交的 authoring 入口是：
 
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
+- `modules/ModuleTemplateSample/metadata/**`
+- 对应的根 module capsule
 
-正式运行时方向则会通过：
+开发与正式运行时都由 Host 编译并由 Shell 消费：
 
-- `frontend/packages/shell/src/plugin-manifest-loader.ts`
-- `frontend-plugin-manifest.json`
+- `/plugins/active-module-runtime.json`
 
 ## 推荐阅读
 

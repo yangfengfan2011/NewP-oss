@@ -18,6 +18,10 @@
 
   <ItemGroup>
     <Content Update="modules\**\plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\modules\Organization\newp.plugin.json">
+      <Link>modules\Organization\plugin.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

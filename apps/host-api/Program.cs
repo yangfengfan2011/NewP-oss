@@ -95,6 +95,7 @@ var hostVersion = builder.Configuration["Platform:HostVersion"]
     ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
     ?? "1.0.0";
 var disabledPlugins = builder.Configuration.GetSection("Platform:DisabledPlugins").Get<string[]>() ?? Array.Empty<string>();
+var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
 
 var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
 builder.Services.AddSingleton(stateStore);
@@ -106,7 +107,10 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<UnifiedPluginPackageInstaller>();
 builder.Services.AddSingleton<UnifiedPluginPackageOperations>();
 builder.Services.AddSingleton(sp =>
-    new RuntimeViewMaterializer(sp.GetRequiredService<InstalledPluginStateStore>()));
+    new RuntimeViewMaterializer(
+        sp.GetRequiredService<InstalledPluginStateStore>(),
+        new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl),
+        modulesRootPath));
 builder.Services.AddSingleton(sp =>
     new PluginOperationsLifecycleService(
         sp.GetRequiredService<InstalledPluginStateStore>(),
@@ -115,19 +119,12 @@ builder.Services.AddSingleton(sp =>
         sp.GetRequiredService<RuntimeViewMaterializer>(),
         sp.GetRequiredService<PluginUploadService>(),
         pluginInstallRoot));
-var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
 var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
-var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder);
+var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, modulesRootPath);
 materializer.Materialize(pluginInstallRoot);
-var runtimeRootPath = Path.Combine(pluginInstallRoot, "runtime");
-ProjectBuiltInModuleMetadata(runtimeRootPath, modulesRootPath);
-WriteLocalizationRuntimeManifest(runtimeRootPath);
-WriteMetadataRuntimeManifest(runtimeRootPath);
 
 var backendLoadViewPath = Path.Combine(pluginInstallRoot, "runtime", "backend-load-view");
-var pluginDiscoveryRoot = Directory.Exists(backendLoadViewPath) && Directory.EnumerateFileSystemEntries(backendLoadViewPath).Any()
-    ? backendLoadViewPath
-    : modulesRootPath;
+var pluginDiscoveryRoot = backendLoadViewPath;
 var pluginAssemblyLoader = new PluginRuntimeAssemblyLoader(hostVersion, disabledPlugins);
 var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(pluginDiscoveryRoot);
 var activeControllerAssemblies = new[]
@@ -255,101 +252,3 @@ var menus = registry.GetAllMenus();
 logger.LogInformation("Loaded {Count} menu items", menus.Count);
 
 app.Run();
-
-static void ProjectBuiltInModuleMetadata(string runtimeRootPath, string modulesRootPath)
-{
-    if (!Directory.Exists(modulesRootPath))
-    {
-        return;
-    }
-
-    var runtimeModulesPath = Path.Combine(runtimeRootPath, "modules");
-    var backendLoadViewPath = Path.Combine(runtimeRootPath, "backend-load-view");
-    var pluginOwnedModuleIds = Directory.Exists(backendLoadViewPath)
-        ? Directory.GetDirectories(backendLoadViewPath)
-            .Select(Path.GetFileName)
-            .Where(moduleId => !string.IsNullOrWhiteSpace(moduleId))
-            .Cast<string>()
-            .ToHashSet(StringComparer.OrdinalIgnoreCase)
-        : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var modulePath in Directory.GetDirectories(modulesRootPath))
-    {
-        var moduleId = Path.GetFileName(modulePath);
-        if (string.IsNullOrWhiteSpace(moduleId) || pluginOwnedModuleIds.Contains(moduleId))
-        {
-            continue;
-        }
-
-        var sourceMetadataPath = Path.Combine(modulePath, "metadata");
-        if (!Directory.Exists(sourceMetadataPath))
-        {
-            continue;
-        }
-
-        var targetMetadataPath = Path.Combine(runtimeModulesPath, moduleId, "metadata");
-        // 内建模块的 runtime metadata 需要每次启动都与仓库源目录重新对齐，
-        // 否则 runtime 目录里一旦残留旧投影，就会继续漏掉后来新增的词典或视图定义。
-        if (Directory.Exists(targetMetadataPath))
-        {
-            Directory.Delete(targetMetadataPath, recursive: true);
-        }
-
-        // 内建模块只作为无插件接管时的 metadata runtime 回退；插件已接管的模块不会被这里覆盖。
-        CopyDirectory(sourceMetadataPath, targetMetadataPath);
-    }
-}
-
-static void WriteMetadataRuntimeManifest(string runtimeRootPath)
-{
-    var runtimeModulesPath = Path.Combine(runtimeRootPath, "modules");
-    var moduleOrder = Directory.Exists(runtimeModulesPath)
-        ? Directory.GetDirectories(runtimeModulesPath)
-            .Select(Path.GetFileName)
-            .Where(moduleId => !string.IsNullOrWhiteSpace(moduleId))
-            .Cast<string>()
-            .OrderBy(moduleId => moduleId, StringComparer.OrdinalIgnoreCase)
-            .ToArray()
-        : Array.Empty<string>();
-
-    File.WriteAllText(
-        Path.Combine(runtimeRootPath, "metadata-runtime-manifest.json"),
-        new MetadataRuntimeManifestBuilder().Build(runtimeRootPath, moduleOrder));
-}
-
-static void WriteLocalizationRuntimeManifest(string runtimeRootPath)
-{
-    var runtimeModulesPath = Path.Combine(runtimeRootPath, "modules");
-    var moduleOrder = Directory.Exists(runtimeModulesPath)
-        ? Directory.GetDirectories(runtimeModulesPath)
-            .Select(Path.GetFileName)
-            .Where(moduleId => !string.IsNullOrWhiteSpace(moduleId))
-            .Cast<string>()
-            .OrderBy(moduleId => moduleId, StringComparer.OrdinalIgnoreCase)
-            .ToArray()
-        : Array.Empty<string>();
-
-    File.WriteAllText(
-        Path.Combine(runtimeRootPath, "localization-manifest.json"),
-        new LocalizationRuntimeManifestBuilder().Build(runtimeRootPath, moduleOrder));
-}
-
-static void CopyDirectory(string sourceDirectory, string destinationDirectory)
-{
-    Directory.CreateDirectory(destinationDirectory);
-
-    foreach (var directory in Directory.GetDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
-    {
-        var relativePath = Path.GetRelativePath(sourceDirectory, directory);
-        Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
-    }
-
-    foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
-    {
-        var relativePath = Path.GetRelativePath(sourceDirectory, file);
-        var destinationPath = Path.Combine(destinationDirectory, relativePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        File.Copy(file, destinationPath, overwrite: false);
-    }
-}
-

@@ -23,4 +23,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\modules\Organization\newp.plugin.json">
+      <LogicalName>ICP.Platform.Modules.Organization.newp.plugin.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

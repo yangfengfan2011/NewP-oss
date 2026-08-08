@@ -169,7 +169,7 @@ public class EnumerationToStaticResourcesScriptTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = "pwsh.exe",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

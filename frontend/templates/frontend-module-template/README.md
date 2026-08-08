@@ -43,7 +43,7 @@ pnpm build
 - `src/index.ts` should only declare the frontend module.
 - `src/pages/*` should contain page entry logic only.
 - `src/services/*` should contain API access only.
-- Normal module integration should only update `frontend/packages/shell/src/builtin-runtime-plugins.ts`.
+- Normal module integration should declare its root capsule and metadata; the Shell consumes the compiler-owned active catalog.
 - Do not modify other shell internals unless a separate design explicitly approves it.
 - Do not embed live API verification or host page styling into the template unless the target module actually needs them.
 

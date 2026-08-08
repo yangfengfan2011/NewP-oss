@@ -55,7 +55,7 @@ if ! printf '%s\n' "${ps_args[@]}" | grep -q -- '^-ModuleName$'; then
 fi
 
 if command -v pwsh >/dev/null 2>&1; then
-  echo "Allowed integration targets: apps/host-api/HostApi.csproj and frontend/packages/shell/src/builtin-runtime-plugins.ts"
+  echo "Built-in modules are discovered through apps/host-api/modules/<ModuleName>/plugin.json and the active module runtime catalog."
   echo "Do not modify other Host/Shell internals for normal module integration unless a separate design approves it."
   exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$ps_script" "${ps_args[@]}"
 fi
@@ -65,7 +65,7 @@ if command -v powershell.exe >/dev/null 2>&1; then
     ps_script="$(wslpath -w "$ps_script")"
   fi
 
-  echo "Allowed integration targets: apps/host-api/HostApi.csproj and frontend/packages/shell/src/builtin-runtime-plugins.ts"
+  echo "Built-in modules are discovered through apps/host-api/modules/<ModuleName>/plugin.json and the active module runtime catalog."
   echo "Do not modify other Host/Shell internals for normal module integration unless a separate design approves it."
   exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps_script" "${ps_args[@]}"
 fi

@@ -135,6 +135,18 @@ export interface I18nResource {
   messages: Record<string, string>;
 }
 
+/**
+ * 可执行前端实现只绑定稳定 key；模块身份、路由、菜单与权限由活动运行时目录提供。
+ */
+export interface FrontendBehaviorBindings {
+  behaviorKey: string;
+  standardCrudResources?: StandardCrudResourceRegistration[];
+  standardListViews?: StandardListViewRegistration[];
+  customPages?: CustomPageRegistration[];
+  initialize?: () => void | Promise<void>;
+  cleanup?: () => void | Promise<void>;
+}
+
 export interface FrontendModule {
   metadata: ModuleMetadata;
   standardCrudResources?: StandardCrudResourceRegistration[];
@@ -159,6 +171,7 @@ export type ShellView = 'business' | 'platform';
 export class ModuleRegistry {
   private static modules: Map<string, FrontendModule> = new Map();
   private static initialized = false;
+  private static activeSnapshotId: string | null = null;
 
   static register(module: FrontendModule): void {
     if (this.modules.has(module.metadata.moduleId)) {
@@ -167,6 +180,40 @@ export class ModuleRegistry {
     }
     this.modules.set(module.metadata.moduleId, module);
     console.log(`Module registered: ${module.metadata.moduleId} v${module.metadata.version}`);
+  }
+
+  /**
+   * 在所有模块完成装载和校验后一次性替换活动注册表，避免 Shell 观察到部分新快照。
+   */
+  static replaceAll(modules: FrontendModule[], snapshotId: string): void {
+    if (!snapshotId.trim()) {
+      throw new Error('MODULE_SNAPSHOT_INVALID: snapshotId is required');
+    }
+
+    const nextModules = new Map<string, FrontendModule>();
+    const normalizedModuleIds = new Set<string>();
+    for (const module of modules) {
+      const moduleId = module.metadata?.moduleId?.trim();
+      if (!moduleId) {
+        throw new Error('MODULE_IDENTITY_INVALID: moduleId is required');
+      }
+
+      const normalizedModuleId = moduleId.toLocaleLowerCase('en-US');
+      if (normalizedModuleIds.has(normalizedModuleId)) {
+        throw new Error(`MODULE_IDENTITY_MISMATCH: duplicate moduleId ${moduleId}`);
+      }
+
+      normalizedModuleIds.add(normalizedModuleId);
+      nextModules.set(moduleId, module);
+    }
+
+    this.modules = nextModules;
+    this.activeSnapshotId = snapshotId;
+    this.initialized = false;
+  }
+
+  static getActiveSnapshotId(): string | null {
+    return this.activeSnapshotId;
   }
 
   static getModule(moduleId: string): FrontendModule | undefined {

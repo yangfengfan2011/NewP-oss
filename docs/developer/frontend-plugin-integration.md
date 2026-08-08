@@ -1,155 +1,58 @@
-# 前端插件接入指南
+# 前端模块接入指南
 
-本文档说明当前阶段前端插件如何接入 Shell，以及研发期接线与正式运行时交付之间的区别。
+Shell 当前只通过 Active Module Runtime Catalog 发现活动前端模块。新增模块不修改 Shell 业务列表，也不存在 manifest 不可用时的 workspace fallback。
 
-## 1. 当前接入目标
+## 1. 选择 authoring 模式
 
-当前阶段的目标不是一次性完成前后端插件包完全统一，而是先让前端具备正式运行时入口：
+### Canonical behavior binding
 
-- 研发期可以继续使用工作区源码模块开发
-- 正式交付时可以切到运行时清单 + 动态导入
-- 两条路径共用同一个 `FrontendModule` 合同
-
-## 2. 前端模块导出要求
-
-当前前端插件仍然需要对外暴露 `@icp-platform/sdk` 中定义的 `FrontendModule`。
-
-最小示例：
+新平台能力或正在完成 capsule cutover 的模块应以 Module Capsule 根声明拥有 identity / version / dependencies，并让 TypeScript 只导出稳定 behavior key 的实现：
 
 ```ts
-import { FrontendModule } from '@icp-platform/sdk';
-import DemoHome from './pages/DemoHome';
+import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
+import ExamplePage from './pages/ExamplePage';
 
-export const demoModule: FrontendModule = {
-  metadata: {
-    moduleId: 'demo',
-    displayName: '示例模块',
-    version: '1.0.0'
-  },
-  routes: [
-    {
-      path: '/demo',
-      component: DemoHome
-    }
-  ]
+const exampleBindings: FrontendBehaviorBindings = {
+  behaviorKey: 'example.frontend',
+  customPages: [
+    { pageKey: 'example.page', component: ExamplePage },
+  ],
 };
 
-export default demoModule;
+export default exampleBindings;
 ```
 
-建议：
+route、menu 和 permission reference 应由 navigation / security authoring 拥有，不能在 TypeScript 中重复声明。`modules/<ModuleId>/newp.plugin.json` 引用 behavior key 与公开 bindings；compiler 会在活动快照提交前验证缺失、孤儿和冲突。
 
-- 保留 `default` 导出，便于运行时清单直接装配
-- 如果确有需要，也可以同时提供命名导出，再由清单中的 `exportName` 指定
+### Legacy compatibility adapter
 
-## 3. 运行时清单如何指向前端模块
+尚未完成 cutover 的仓内模块可以暂时继续导出 `FrontendModule`，由 `apps/host-api/modules/<ModuleId>/plugin.json` 声明 `bindingMode: "legacy-module"` 与前端 entry。该模式只用于迁移，不是新增 canonical interface 的模板。
 
-当前 Shell 读取的前端运行时清单优先使用 `moduleId`：
+## 2. 运行时装配
 
-```json
-{
-  "plugins": [
-    { "moduleId": "demo" },
-    { "moduleId": "files" }
-  ]
-}
+Host 从 Canonical Module Plan 生成：
+
+```http
+GET /plugins/active-module-runtime.json
 ```
 
-对应关系如下：
+目录中的内建 `moduleId` 指向 Vite 管理的实现入口；外部 `url` 指向物化后的版本化资产。Shell 会先导入并校验整份目录，再调用 `ModuleRegistry.replaceAll` 一次提交。任一入口失败时只显示 fatal / retry，不保留部分菜单或路由。
 
-- `moduleId`
-  指向 `frontend/packages/shell/src/builtin-runtime-plugins.ts` 和 internal registry 中的受控模块标识。
-- `url`
-  可选。用于未来外部前端插件入口或自定义资源地址。
-- `exportName`
-  可选。仅在 `url` 对应的模块需要命名导出时使用；未声明时读取默认导出。
+`frontend-plugin-manifest.json` 仍可作为同一 plan 生成的 compatibility projection，但不再是 Shell 的发现入口。
 
-因此，正式运行时接入的关键不是改 Shell 内部，而是：
+## 3. 内建模块接入步骤
 
-1. 对内建业务模块，确保模块已进入 `builtin-runtime-plugins.ts`
-2. 让运行时清单中的 `moduleId` 指向该受控模块标识
-3. 确保导出对象符合 `FrontendModule` 合同
+1. 在 `server/modules/<ModuleId>` 与 `frontend/modules/<module-slug>` 实现模块行为。
+2. 把静态 route / menu / permission / model 事实放入对应 authoring owner。
+3. 为 legacy adapter 提供 `apps/host-api/modules/<ModuleId>/plugin.json`，或为 canonical adopter 提供 `modules/<ModuleId>/newp.plugin.json`。
+4. 后端项目需要编译进 Host 时，更新 `apps/host-api/HostApi.csproj` 的 ProjectReference。
+5. 不修改 `frontend/packages/shell/src` 的业务注册逻辑。
 
-如果未来接入独立前端插件包，再额外使用 `url` / `exportName` 描述外部入口。
+## 4. 验证
 
-## 4. 研发期路径与正式交付路径
+- 编译器测试应证明 binding 缺失、route / permission / model owner 冲突会拒绝整份 candidate。
+- Shell 测试应证明单入口失败时 `ModuleRegistry` 不产生部分提交。
+- 启动 Host 后确认活动目录包含模块的 canonical identity、version、dependencies 与前端入口。
+- 运行 `corepack pnpm --dir frontend --filter @icp-platform/shell test` 和受影响模块测试。
 
-### 研发期
-
-当前研发期仍然允许通过 `builtin-runtime-plugins.ts` 中维护的内建模块清单接入：
-
-- 适合仓库内建模块开发
-- 适合快速联调和本地调试
-- 不代表正式交付模型
-
-### 正式交付期
-
-当前正式交付路径应优先采用：
-
-1. 构建前端插件产物
-2. 将产物部署到 Shell 运行时可访问的位置
-3. 提供 `frontend-plugin-manifest.json`
-4. 让 Shell 在启动时通过清单动态导入
-
-当前阶段，正式交付已经不再要求必须修改工作区源码，才能把前端模块接入到 Shell。
-
-## 5. 推荐接入步骤
-
-### 步骤 1：准备前端插件入口
-
-- 确保构建后存在稳定入口文件
-- 确保入口文件导出 `FrontendModule`
-
-### 步骤 2：准备运行时清单
-
-在 Shell 可访问的位置放置清单文件，例如：
-
-```json
-{
-  "plugins": [
-    { "moduleId": "demo" }
-  ]
-}
-```
-
-如需自定义地址，可设置：
-
-```bash
-VITE_FRONTEND_PLUGIN_MANIFEST_URL=/custom/frontend-plugin-manifest.json
-```
-
-### 步骤 3：启动并验证
-
-启动 Shell 后确认：
-
-- 模块已被注册
-- 相关路由可访问
-- 相关菜单已出现
-- 控制台没有未处理的动态导入失败
-
-## 6. 验证建议
-
-当前至少执行以下验证：
-
-1. `pnpm --filter @icp-platform/shell build`
-2. 在无运行时清单时，确认仍能回退到内建模块清单
-3. 在提供运行时清单时，确认 Shell 优先装配运行时模块
-4. 在清单里故意放入一个错误入口时，确认：
-   - 失败项有清晰警告
-   - 成功项仍然会继续注册
-   - 不会悄悄退回整份本地源码列表
-
-## 7. 当前边界
-
-当前实现仍然只是“前端插件化收口”的第一步，不应理解为已经完成：
-
-- 前后端插件包一体化交付
-- 后端清单自动生成前端清单
-- 前端插件远程市场分发
-- 版本矩阵、签名与来源治理
-
-当前更准确的描述是：
-
-- Shell 已拥有正式运行时清单入口
-- 前端模块不再只能靠源码接线
-- 后续仍需继续完成前后端插件交付模型对齐
+外仓发布物、desired/active/LKG 与远端插件完整生命周期由对应 Platform API / PluginGate 实施票负责，不通过修改 Shell 绕过。

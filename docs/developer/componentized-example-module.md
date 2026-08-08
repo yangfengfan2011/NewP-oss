@@ -192,42 +192,19 @@ Shell 不需要知道这个模块页面怎么写、服务怎么调，只需要�
 
 ### 5.2 前端接入
 
-当前研发期前端接入入口是：
+`module-template-sample` 由内建 transport 声明进入 Canonical Module Plan，再由 `active-module-runtime.json` 选择其前端实现。Shell 中没有需要手工追加的业务模块清单。
 
-- `frontend/packages/shell/src/builtin-runtime-plugins.ts`
-
-`module-template-sample` 会在这里进入 Shell 的内建模块清单。
-
-这说明了一条非常重要的规则：
-
-- 正常新增前端模块时，默认只修改 `builtin-runtime-plugins.ts`
-- 不要直接去改 Shell 其他内部结构
+正常新增模块只增加 capsule/transport 声明与模块自身实现；不要为业务模块修改 Shell 内部结构。
 
 ## 6. 这个 Example 和运行时 manifest 的关系
 
-现在前端已经有正式的运行时装配入口：
+现在前端唯一发现入口是 `GET /plugins/active-module-runtime.json`。研发期 source adapter 与正式安装包都会先经过同一 compiler、validation 和 projection；来源差异不会改变 Shell 的装配语义。
 
-- `frontend/packages/shell/src/plugin-manifest-loader.ts`
-
-这意味着这个 Example 需要按两条路径来理解。
-
-### 研发期
-
-- 通过 `builtin-runtime-plugins.ts` 的内建模块清单接入
-- 适合仓库内联调开发
-
-### 正式运行时
-
-- Shell 优先读取 `frontend-plugin-manifest.json`
-- manifest 中优先声明 `moduleId`
-- 若 manifest 可用，则按运行时清单动态装配模块
+目录中的内建 `moduleId` 只选择 Vite 管理的实现入口，外部 `url` 选择版本化资产。所有 required entries 成功后才一次提交 registry。
 
 ### 一句话记忆
 
-- 正式运行时：优先走 manifest
-- 研发期联调：manifest 不可用时回退到 builtin 清单
-
-这层说明很重要，因为它决定了你在“开发期接线”时看的是 `builtin-runtime-plugins.ts`，但在“正式交付模型”里看的是运行时 manifest。
+- 研发与正式运行都走同一活动目录；目录缺失或入口失败时进入 fatal/retry，不做 workspace fallback。
 
 同时也要注意：
 
@@ -262,14 +239,14 @@ Shell 不需要知道这个模块页面怎么写、服务怎么调，只需要�
 - `src/pages/ExamplePage.tsx`
 - `src/services/exampleService.ts`
 
-先让 `src/index.ts` 只负责模块声明。
+先让 `src/index.ts` 只负责稳定 key 到实现的 behavior binding；legacy 示例若仍导出 `FrontendModule`，应明确标记为兼容路径。
 
 ### 步骤 3：接入受控入口
 
 默认只接这些入口：
 
 - 后端：`HostApi.csproj`
-- 前端：`builtin-runtime-plugins.ts`
+- 模块 transport：`apps/host-api/modules/<ModuleId>/plugin.json`；canonical adopter 使用 `modules/<ModuleId>/newp.plugin.json`
 
 如果你发现还得改 Host / Shell 其他内部文件，先停一下，检查是不是设计没补，或者契约不够。
 

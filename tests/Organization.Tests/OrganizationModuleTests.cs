@@ -1,5 +1,6 @@
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +16,16 @@ public class OrganizationModuleTests
         var module = new OrganizationModule();
 
         Assert.Equal("Organization", module.ModuleId);
+    }
+
+    [Fact]
+    public void Module_UsesEmbeddedCapsuleAndExposesOnlyStableBackendBehaviorKey()
+    {
+        var module = new OrganizationModule();
+
+        var binding = Assert.IsAssignableFrom<IModuleBehaviorBinding>(module);
+        Assert.IsAssignableFrom<ModuleCapsuleBindingBase>(module);
+        Assert.Equal("organization.backend", binding.BehaviorKey);
     }
 
     [Fact]

@@ -49,10 +49,10 @@ frontend/templates/frontend-module-template/
 
 ## 宿主接入点
 
-- 受控入口：`frontend/packages/shell/src/builtin-runtime-plugins.ts`
-- 注册消费：`frontend/packages/shell/src/registerModules.ts`
+- authoring 入口：`modules/<Module>/newp.plugin.json` 与 `modules/<Module>/metadata/**`
+- 运行时消费：Host 编译 `active-module-runtime.json`，Shell 原子加载其声明的全部前端入口
 
-常规前端模块接入只应修改受控入口，不直接改 Shell 布局、Provider 结构或内部路由拼装逻辑。
+常规前端模块接入只应修改自有 capsule、metadata 和 behavior binding，不直接改 Shell 布局、Provider 结构或内部路由拼装逻辑。
 
 ## 推荐标准
 

@@ -34,11 +34,12 @@ public class EfModelProjectionTests
             .Options;
 
         using var db = new EfPlatformDbContext(options, definitions);
-        var entityType = db.Model.FindEntityType("ConfigItem");
-        var table = StoreObjectIdentifier.Table("ConfigItem", null);
+        var entityType = db.Model.FindEntityType("platform.core/ConfigItem");
+        var table = StoreObjectIdentifier.Table("ConfigItem", "dbo");
 
         Assert.NotNull(entityType);
         Assert.Equal("ConfigItem", entityType!.GetTableName());
+        Assert.Equal("dbo", entityType.GetSchema());
         Assert.Equal("Id", entityType.FindProperty("Id")!.GetColumnName(table));
         Assert.Equal("Key", entityType.FindProperty("Key")!.GetColumnName(table));
         Assert.NotNull(entityType.FindPrimaryKey());

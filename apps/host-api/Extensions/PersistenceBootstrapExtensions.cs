@@ -3,6 +3,7 @@ using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.Persistence.Planning;
 using ICP.Platform.HostApi.Readiness;
 
 namespace ICP.Platform.HostApi.Extensions;
@@ -11,15 +12,17 @@ public static class PersistenceBootstrapExtensions
 {
     public static IServiceCollection AddPlatformPersistence(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        CompiledPersistencePlan plan)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(plan);
 
         var repositoryRoot = LocateRepositoryRootFromAppBase();
         services.AddEfCorePersistence(
             configuration,
-            GetPlatformModelDefinitions(),
+            plan,
             WorktreeDatabaseIdentity.Resolve(repositoryRoot));
         services.AddSingleton<PersistenceReadinessState>();
         services.AddSingleton<IReadinessContributor, PersistenceReadinessContributor>();
@@ -27,8 +30,10 @@ public static class PersistenceBootstrapExtensions
             && string.Equals(configuration["Persistence:Provider"], "SqlServer", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton(_ => BuildDevelopmentSchemaSyncOptions(configuration));
-            services.AddScoped(static provider =>
-                DevelopmentSchemaSyncCoordinator.Create(provider.GetRequiredService<DevelopmentSchemaSyncOptions>()));
+            services.AddScoped(provider =>
+                DevelopmentSchemaSyncCoordinator.Create(
+                    provider.GetRequiredService<DevelopmentSchemaSyncOptions>(),
+                    plan));
         }
 
         return services;
@@ -90,8 +95,9 @@ public static class PersistenceBootstrapExtensions
         }
     }
 
-    public static IReadOnlyList<ICP.Platform.Modeling.Definitions.ModelDefinition> GetPlatformModelDefinitions() =>
-        PlatformPersistenceModelCatalog.GetDefinitions();
+    public static IReadOnlyList<ICP.Platform.Modeling.Definitions.ModelDefinition> GetPlatformModelDefinitions(
+        CompiledPersistencePlan plan) =>
+        PlatformPersistenceModelCatalog.GetDefinitions(plan);
 
     private static DevelopmentSchemaSyncOptions BuildDevelopmentSchemaSyncOptions(IConfiguration configuration)
     {

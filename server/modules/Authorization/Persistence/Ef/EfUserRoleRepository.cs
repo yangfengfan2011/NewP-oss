@@ -61,7 +61,7 @@ public sealed class EfUserRoleRepository : IUserRoleRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("UserRole");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("UserRole"));
 
     private static UserRole Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

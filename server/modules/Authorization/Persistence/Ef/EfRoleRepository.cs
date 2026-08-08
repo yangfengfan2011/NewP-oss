@@ -94,7 +94,7 @@ public sealed class EfRoleRepository : IRoleRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("Role");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Role"));
 
     private static Role Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

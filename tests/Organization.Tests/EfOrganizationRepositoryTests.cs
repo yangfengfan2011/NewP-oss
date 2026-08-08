@@ -180,7 +180,7 @@ public class EfOrganizationRepositoryTests
     public void PlatformPersistenceModelCatalog_IncludesProviderProjectedOrganizationDefinitions()
     {
         var referencedAssemblies = typeof(PlatformPersistenceModelCatalog).Assembly.GetReferencedAssemblies();
-        var definitions = PlatformPersistenceModelCatalog.GetDefinitions();
+        var definitions = PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions());
 
         Assert.Contains(referencedAssemblies, assembly => assembly.Name == "OrganizationModule");
         Assert.Contains(definitions, definition => definition.Name == "Company");

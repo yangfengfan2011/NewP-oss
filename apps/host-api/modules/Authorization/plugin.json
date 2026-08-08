@@ -8,5 +8,13 @@
   "hostVersion": {
     "min": "1.0.0",
     "max": "2.0.0"
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/Permission.model.json",
+      "metadata/models/Role.model.json",
+      "metadata/models/RolePermission.model.json",
+      "metadata/models/UserRole.model.json"
+    ]
   }
 }

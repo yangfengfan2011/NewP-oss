@@ -87,7 +87,7 @@ public sealed class EfDepartmentRepository : IDepartmentRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("Department");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Department"));
 
     private static Department Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

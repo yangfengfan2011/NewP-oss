@@ -51,7 +51,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         var entityType = ResolveEntityType(descriptor);
 
         IQueryable<Dictionary<string, object?>> query = _dbContext
-            .Set<Dictionary<string, object?>>(descriptor.ModelName)
+            .Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking();
 
         query = ApplyConditions(query, descriptor, entityType, request.Conditions ?? []);
@@ -303,7 +303,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
 
     private IEntityType ResolveEntityType(PlatformQueryDescriptor descriptor)
     {
-        return _dbContext.Model.FindEntityType(descriptor.ModelName)
+        return _dbContext.Model.FindEntityType(_dbContext.ResolveModelKey(descriptor.ModelName))
             ?? _dbContext.Model.GetEntityTypes()
                 .FirstOrDefault(entity =>
                     entity.ClrType == typeof(Dictionary<string, object?>) &&

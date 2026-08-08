@@ -360,7 +360,24 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.PermissionCodes),
             Sort(candidate.PermissionReferences),
             Sort(candidate.ModelKeys),
-            candidate.Provenance);
+            candidate.Provenance,
+            NormalizePersistence(candidate.Persistence));
+    }
+
+    private static ModulePersistenceContribution? NormalizePersistence(ModulePersistenceContribution? persistence)
+    {
+        if (persistence is null)
+        {
+            return null;
+        }
+
+        return new ModulePersistenceContribution(
+            Sort(persistence.ModelPaths),
+            persistence.MigrationBundles
+                .OrderBy(static bundle => bundle.Provider, StringComparer.Ordinal)
+                .ThenBy(static bundle => bundle.AssemblyPath, StringComparer.Ordinal)
+                .ThenBy(static bundle => bundle.ManifestPath, StringComparer.Ordinal)
+                .ToArray());
     }
 
     private static IReadOnlyList<string> Sort(IReadOnlyList<string> values)

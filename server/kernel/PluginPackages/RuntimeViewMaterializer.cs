@@ -101,7 +101,7 @@ public class RuntimeViewMaterializer
             : Path.GetFullPath(builtInModulesRoot);
     }
 
-    public void Materialize(string installRoot)
+    public CanonicalModulePlan Materialize(string installRoot)
     {
         var enabledRecords = _stateStore.LoadAllEnabled();
         var installedCandidates = _candidateReader.ReadInstalled(enabledRecords);
@@ -171,6 +171,7 @@ public class RuntimeViewMaterializer
                 new ActiveModuleRuntimeCatalogBuilder(_frontendManifestBuilder.PublicBaseUrl).Build(plan));
 
             ReplaceProjection(installRoot, stagedRuntimeRoot, stagedPublicRoot, commitWorkspaceRoot);
+            return plan;
         }
         finally
         {

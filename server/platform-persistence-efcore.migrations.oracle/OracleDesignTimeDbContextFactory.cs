@@ -19,6 +19,8 @@ public sealed class OracleDesignTimeDbContextFactory : IDesignTimeDbContextFacto
             connectionString,
             typeof(OracleDesignTimeDbContextFactory).Assembly.GetName().Name);
 
-        return new EfPlatformDbContext(optionsBuilder.Options, PlatformPersistenceModelCatalog.GetDefinitions());
+        return new EfPlatformDbContext(
+            optionsBuilder.Options,
+            PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions()));
     }
 }

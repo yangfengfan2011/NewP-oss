@@ -5,6 +5,7 @@ using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.EfCore.Sql;
 using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,9 +29,10 @@ public class EfCorePersistenceServiceCollectionExtensionsTests
             })
             .Build();
 
+        var plan = BuildPlan();
         services.AddEfCorePersistence(
             configuration,
-            BuildDefinitions(),
+            plan,
             WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
 
         using var provider = services.BuildServiceProvider();
@@ -43,9 +45,28 @@ public class EfCorePersistenceServiceCollectionExtensionsTests
 
         Assert.Equal("SqlServer", dialect.Name);
         Assert.IsType<EfSqlQueryExecutor>(executor);
-        Assert.IsType<PersistenceMigrationRunner>(runner);
-        Assert.NotNull(dbContext);
-        Assert.NotNull(dbContext.Model.FindEntityType("ConfigItem"));
+        var concreteRunner = Assert.IsType<PersistenceMigrationRunner>(runner);
+        Assert.Same(plan, provider.GetRequiredService<CompiledPersistencePlan>());
+        Assert.Same(plan, concreteRunner.Plan);
+        Assert.Same(plan, dbContext.PersistencePlan);
+        Assert.Equal(plan.PlanDigest, dbContext.ModelCacheSignature);
+        var entityType = dbContext.Model.FindEntityType("platform.core/ConfigItem");
+        Assert.NotNull(entityType);
+        Assert.Equal("dbo", entityType.GetSchema());
+    }
+
+    private static CompiledPersistencePlan BuildPlan()
+    {
+        var definitions = BuildDefinitions();
+        return new CompiledPersistencePlan(
+            CandidateId: "test-candidate",
+            SnapshotId: new string('a', 64),
+            ModulePlanHash: new string('a', 64),
+            Provider: PersistenceProvider.SqlServer,
+            PlanDigest: PersistenceModelDigest.Compute(definitions),
+            CanonicalBytes: [],
+            Models: definitions,
+            Streams: []);
     }
 
     private static IReadOnlyList<ModelDefinition> BuildDefinitions() =>

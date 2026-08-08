@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -24,6 +27,9 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string AdminConnectionEnvironmentVariable = "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION";
     private const string PreviousMigration = "20260428145214_AlignModelMetadataEntityKeys";
     private const string LatestMigration = "20260808054041_AlignOrganizationSchemaDrift";
+    private const string ModuleMigrationOne = "20260809001000_CreateAssetCatalog";
+    private const string ModuleMigrationTwo = "20260809002000_AddUniqueAssetCode";
+    private const string ModuleSchema = "np_partner_assetcatalog";
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -44,6 +50,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_MigrationFailureKeepsReadableSafePrefix() =>
         RunCatalogScenarioAsync("failure", VerifyMigrationFailureKeepsReadableSafePrefixAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerModuleMigrations_ApplyNoOpFailureRetryAndOldPlanAhead() =>
+        RunCatalogScenarioAsync("module", VerifyModuleMigrationLifecycleAsync);
 
     private static async Task RunCatalogScenarioAsync(
         string purpose,
@@ -268,9 +279,83 @@ public sealed class SqlServerPersistenceSmokeTests
             "SELECT TOP (0) [Code], [Name] FROM [Company]; SELECT TOP (0) [Name] FROM [Person];");
     }
 
+    private static async Task VerifyModuleMigrationLifecycleAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        var firstPlan = BuildModulePlan(includeSecondMigration: false);
+        var secondPlan = BuildModulePlan(includeSecondMigration: true);
+
+        using var firstProvider = BuildProvider(applicationConnectionString, identity, firstPlan);
+        Assert.False(await RunMigrationsAsync(firstProvider));
+        var firstHistory = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        Assert.Contains(ModuleMigrationOne, firstHistory);
+        Assert.DoesNotContain(ModuleMigrationTwo, firstHistory);
+        Assert.True(await SchemaObjectExistsAsync(
+            applicationConnectionString,
+            ModuleSchema,
+            "Asset",
+            "U"));
+        Assert.False(await SchemaObjectExistsAsync(
+            applicationConnectionString,
+            ModuleSchema,
+            "__EFMigrationsHistory",
+            "U"));
+
+        Assert.False(await RunMigrationsAsync(firstProvider));
+        Assert.Equal(firstHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
+
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            INSERT INTO [{ModuleSchema}].[Asset] ([Id], [Code])
+            VALUES (N'asset-1', N'DUPLICATE'), (N'asset-2', N'DUPLICATE');
+            """);
+
+        using var secondProvider = BuildProvider(applicationConnectionString, identity, secondPlan);
+        await Assert.ThrowsAsync<SqlException>(() => RunMigrationsAsync(secondProvider));
+
+        var failedHistory = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        Assert.Contains(ModuleMigrationOne, failedHistory);
+        Assert.DoesNotContain(ModuleMigrationTwo, failedHistory);
+        Assert.False(await IndexExistsAsync(
+            applicationConnectionString,
+            ModuleSchema,
+            "Asset",
+            "UX_Asset_Code"));
+        await ExecuteNonQueryAsync(
+            applicationConnectionString,
+            $"SELECT TOP (0) [Id], [Code] FROM [{ModuleSchema}].[Asset];");
+
+        // Candidate 失败时，仍处于旧 frontier 的 Active 可继续启动并读写。
+        Assert.False(await RunMigrationsAsync(firstProvider));
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            DELETE FROM [{ModuleSchema}].[Asset] WHERE [Id] = N'asset-2';
+            """);
+
+        Assert.False(await RunMigrationsAsync(secondProvider));
+        var completedHistory = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        Assert.Contains(ModuleMigrationTwo, completedHistory);
+        Assert.True(await IndexExistsAsync(
+            applicationConnectionString,
+            ModuleSchema,
+            "Asset",
+            "UX_Asset_Code"));
+
+        Assert.False(await RunMigrationsAsync(secondProvider));
+        Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
+
+        // 新 frontier 生效后，旧 Active 只标记 database-ahead，绝不尝试 Down。
+        Assert.True(await RunMigrationsAsync(firstProvider));
+        await ExecuteNonQueryAsync(
+            applicationConnectionString,
+            $"SELECT TOP (0) [Id], [Code] FROM [{ModuleSchema}].[Asset];");
+        Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
+    }
+
     private static async Task<bool> RunMigrationsAsync(ServiceProvider provider)
     {
-        await using var scope = provider.CreateAsyncScope();
+        using var scope = provider.CreateScope();
         var runner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
         await runner.MigrateAsync();
         return runner.DatabaseAhead;
@@ -278,7 +363,8 @@ public sealed class SqlServerPersistenceSmokeTests
 
     private static ServiceProvider BuildProvider(
         string applicationConnectionString,
-        WorktreeDatabaseIdentity identity)
+        WorktreeDatabaseIdentity identity,
+        CompiledPersistencePlan? plan = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -292,13 +378,100 @@ public sealed class SqlServerPersistenceSmokeTests
         var services = new ServiceCollection();
         services.AddEfCorePersistence(
             configuration,
-            PlatformPersistenceModelCatalog.GetDefinitions(),
+            plan ?? TestPersistencePlan.Create(),
             identity);
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateOnBuild = true,
             ValidateScopes = true
         });
+    }
+
+    private static CompiledPersistencePlan BuildModulePlan(bool includeSecondMigration)
+    {
+        var externalModel = new ModelDefinition(
+            "Asset",
+            "Asset",
+            ModelKind.Entity,
+            [
+                new FieldDefinition(
+                    "Id",
+                    "Id",
+                    FieldKind.Scalar,
+                    FieldValueType.ObjectId,
+                    "nvarchar(64)",
+                    Required: true,
+                    IsPrimaryKey: true,
+                    IsAuditField: false),
+                new FieldDefinition(
+                    "Code",
+                    "Code",
+                    FieldKind.Scalar,
+                    FieldValueType.Text,
+                    "nvarchar(128)",
+                    Required: true,
+                    IsPrimaryKey: false,
+                    IsAuditField: false)
+            ],
+            includeSecondMigration
+                ? [new IndexDefinition("UX_Asset_Code", ["Code"], IsUnique: true)]
+                : [],
+            "Partner.AssetCatalog",
+            ModuleSchema);
+        var models = TestPersistencePlan.Create().Models.Append(externalModel).ToArray();
+        var modelDigest = PersistenceModelDigest.Compute(models);
+        var migrations = new List<CompiledMigrationStep>
+        {
+            new(
+                "000001",
+                ModuleMigrationOne,
+                null,
+                new string('1', 64),
+                new string('0', 64),
+                modelDigest,
+                "safe-expand")
+        };
+        if (includeSecondMigration)
+        {
+            migrations.Add(new CompiledMigrationStep(
+                "000002",
+                ModuleMigrationTwo,
+                new string('1', 64),
+                new string('2', 64),
+                modelDigest,
+                modelDigest,
+                "safe-expand"));
+        }
+
+        var stream = new ModuleMigrationStream(
+            "Partner.AssetCatalog",
+            PersistenceProvider.SqlServer,
+            typeof(CreateAssetCatalogMigration).Assembly.Location,
+            "test-manifest.json",
+            new string('a', 64),
+            modelDigest,
+            migrations[^1].MigrationId,
+            IsLegacyBaseline: false,
+            migrations);
+        var legacyStream = new ModuleMigrationStream(
+            "platform.core",
+            PersistenceProvider.SqlServer,
+            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
+            "platform.core:legacy-baseline",
+            modelDigest,
+            modelDigest,
+            LatestMigration,
+            IsLegacyBaseline: true,
+            []);
+        return new CompiledPersistencePlan(
+            "test-module-candidate",
+            new string('b', 64),
+            new string('c', 64),
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            models,
+            [legacyStream, stream]);
     }
 
     private static async Task<string> CreateCatalogAsync(
@@ -398,6 +571,53 @@ public sealed class SqlServerPersistenceSmokeTests
         return Convert.ToInt32(await command.ExecuteScalarAsync()) == 1;
     }
 
+    private static async Task<bool> SchemaObjectExistsAsync(
+        string connectionString,
+        string schema,
+        string objectName,
+        string objectType)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM [sys].[objects] AS [objects]
+            INNER JOIN [sys].[schemas] AS [schemas] ON [schemas].[schema_id] = [objects].[schema_id]
+            WHERE [schemas].[name] = @schema
+              AND [objects].[name] = @objectName
+              AND [objects].[type] = @objectType;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@objectName", objectName);
+        command.Parameters.AddWithValue("@objectType", objectType);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) == 1;
+    }
+
+    private static async Task<bool> IndexExistsAsync(
+        string connectionString,
+        string schema,
+        string table,
+        string index)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM [sys].[indexes] AS [indexes]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [indexes].[object_id]
+            INNER JOIN [sys].[schemas] AS [schemas] ON [schemas].[schema_id] = [tables].[schema_id]
+            WHERE [schemas].[name] = @schema
+              AND [tables].[name] = @table
+              AND [indexes].[name] = @index;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        command.Parameters.AddWithValue("@index", index);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) == 1;
+    }
+
     private static async Task<string[]> ReadAppliedMigrationsAsync(string connectionString)
     {
         await using var connection = new SqlConnection(connectionString);
@@ -433,6 +653,61 @@ public sealed class SqlServerPersistenceSmokeTests
 
         throw new InvalidOperationException("无法定位仓库根目录。");
     }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class CreateAssetCatalogMigration : Migration
+{
+    public const string MigrationId = ModuleMigrationIds.CreateAssetCatalog;
+
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.EnsureSchema(SqlServerModuleMigrationNames.Schema);
+        migrationBuilder.CreateTable(
+            name: "Asset",
+            schema: SqlServerModuleMigrationNames.Schema,
+            columns: table => new
+            {
+                Id = table.Column<string>(type: "nvarchar(64)", nullable: false),
+                Code = table.Column<string>(type: "nvarchar(128)", nullable: false)
+            },
+            constraints: table => table.PrimaryKey("PK_Asset", asset => asset.Id));
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class AddUniqueAssetCodeMigration : Migration
+{
+    public const string MigrationId = ModuleMigrationIds.AddUniqueAssetCode;
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.CreateIndex(
+            name: "UX_Asset_Code",
+            schema: SqlServerModuleMigrationNames.Schema,
+            table: "Asset",
+            column: "Code",
+            unique: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+internal static class ModuleMigrationIds
+{
+    public const string CreateAssetCatalog = "20260809001000_CreateAssetCatalog";
+    public const string AddUniqueAssetCode = "20260809002000_AddUniqueAssetCode";
+}
+
+internal static class SqlServerModuleMigrationNames
+{
+    public const string Schema = "np_partner_assetcatalog";
 }
 
 [CollectionDefinition(SqlServerPersistenceSmokeCollection.Name, DisableParallelization = true)]

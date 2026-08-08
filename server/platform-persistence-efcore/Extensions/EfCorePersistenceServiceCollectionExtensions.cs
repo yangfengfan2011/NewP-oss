@@ -4,6 +4,7 @@ using ICP.Platform.Persistence.EfCore.Ownership;
 using ICP.Platform.Persistence.EfCore.Sql;
 using ICP.Platform.Persistence.Extensions;
 using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
@@ -17,15 +18,15 @@ public static class EfCorePersistenceServiceCollectionExtensions
     public static IServiceCollection AddEfCorePersistence(
         this IServiceCollection services,
         IConfiguration configuration,
-        IReadOnlyList<ModelDefinition> definitions,
+        CompiledPersistencePlan plan,
         WorktreeDatabaseIdentity databaseIdentity)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(definitions);
+        ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(databaseIdentity);
 
-        services.AddSingleton(definitions);
+        services.AddSingleton(plan);
         services.AddSingleton(databaseIdentity);
         services.AddOptions<PersistenceOptions>()
             .Bind(configuration.GetSection(PersistenceOptions.SectionName));
@@ -40,7 +41,6 @@ public static class EfCorePersistenceServiceCollectionExtensions
         services.AddDbContext<EfPlatformDbContext>((sp, builder) =>
         {
             var options = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
-            var modelDefinitions = sp.GetRequiredService<IReadOnlyList<ModelDefinition>>();
 
             PersistenceOptionValidation.Validate(options);
 
@@ -48,8 +48,6 @@ public static class EfCorePersistenceServiceCollectionExtensions
             var migrationsAssembly = EfCoreProviderOptions.GetDefaultMigrationsAssembly(options.Provider);
             EfCoreProviderOptions.Configure(builder, options.Provider, connectionString, migrationsAssembly);
             builder.ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>();
-
-            _ = modelDefinitions;
         });
 
         services.AddScoped<ISqlQueryExecutor, EfSqlQueryExecutor>();
@@ -62,6 +60,32 @@ public static class EfCorePersistenceServiceCollectionExtensions
         services.AddScoped<IPersistenceMigrationRunner, PersistenceMigrationRunner>();
 
         return services;
+    }
+
+    /// <summary>
+    /// 仅供尚未切换到 Canonical Module Plan 的设计期与测试调用方使用。
+    /// </summary>
+    public static IServiceCollection AddEfCorePersistence(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IReadOnlyList<ModelDefinition> definitions,
+        WorktreeDatabaseIdentity databaseIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(definitions);
+        var provider = Enum.TryParse<PersistenceProvider>(configuration["Persistence:Provider"], true, out var configured)
+            ? configured
+            : PersistenceProvider.SqlServer;
+        var digest = PersistenceModelDigest.Compute(definitions);
+        var plan = new CompiledPersistencePlan(
+            "platform.core-legacy",
+            digest,
+            digest,
+            provider,
+            digest,
+            Array.Empty<byte>(),
+            definitions,
+            Array.Empty<ModuleMigrationStream>());
+        return services.AddEfCorePersistence(configuration, plan, databaseIdentity);
     }
     private static ISqlDialect CreateDialect(PersistenceProvider provider) =>
         provider switch

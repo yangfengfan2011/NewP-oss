@@ -17,6 +17,8 @@ using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Modules.Audit.Services;
 using ICP.Platform.Modules.MetadataConfigCenter;
+using ICP.Platform.Persistence;
+using ICP.Platform.Persistence.Composition;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -80,7 +82,6 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 builder.Services.AddLocalAuthSeeding(builder.Configuration);
-builder.Services.AddPlatformPersistence(builder.Configuration);
 
 var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
 var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
@@ -121,7 +122,32 @@ builder.Services.AddSingleton(sp =>
         pluginInstallRoot));
 var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
 var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, modulesRootPath);
-materializer.Materialize(pluginInstallRoot);
+var canonicalModulePlan = materializer.Materialize(pluginInstallRoot);
+var configuredPersistenceProvider = builder.Configuration["Persistence:Provider"];
+var persistenceProvider = PersistenceProvider.SqlServer;
+if (!string.IsNullOrWhiteSpace(configuredPersistenceProvider)
+    && !Enum.TryParse(configuredPersistenceProvider, true, out persistenceProvider))
+{
+    throw new InvalidOperationException("Persistence provider is missing or unsupported.");
+}
+
+var storageTypeMapPath = Path.Combine(
+    AppContext.BaseDirectory,
+    "server",
+    "platform-modeling",
+    "metadata",
+    "storage-types.json");
+var persistenceCompilation = new PersistencePlanCompiler(storageTypeMapPath)
+    .Compile(canonicalModulePlan, persistenceProvider);
+if (!persistenceCompilation.IsSuccess || persistenceCompilation.Plan is null)
+{
+    var details = string.Join(
+        Environment.NewLine,
+        persistenceCompilation.Diagnostics.Select(static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}"));
+    throw new InvalidOperationException($"Compiled Persistence Plan failed.{Environment.NewLine}{details}");
+}
+
+builder.Services.AddPlatformPersistence(builder.Configuration, persistenceCompilation.Plan);
 
 var backendLoadViewPath = Path.Combine(pluginInstallRoot, "runtime", "backend-load-view");
 var pluginDiscoveryRoot = backendLoadViewPath;

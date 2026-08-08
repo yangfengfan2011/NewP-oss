@@ -9,6 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\modules\ConfigCenter\ConfigCenter.csproj" />
     <ProjectReference Include="..\modules\Authorization\AuthorizationModule.csproj" />
     <ProjectReference Include="..\modules\Organization\OrganizationModule.csproj" />

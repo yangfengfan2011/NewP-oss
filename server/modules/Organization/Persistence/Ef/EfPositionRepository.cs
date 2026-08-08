@@ -72,7 +72,7 @@ public sealed class EfPositionRepository : IPositionRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("Position");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Position"));
 
     private static Position Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

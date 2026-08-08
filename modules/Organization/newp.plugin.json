@@ -111,5 +111,14 @@
         "group": "岗位"
       }
     ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/Company.model.json",
+      "metadata/models/Department.model.json",
+      "metadata/models/Person.model.json",
+      "metadata/models/PersonUserLink.model.json",
+      "metadata/models/Position.model.json"
+    ]
   }
 }

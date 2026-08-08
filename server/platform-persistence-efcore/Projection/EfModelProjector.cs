@@ -10,8 +10,8 @@ public sealed class EfModelProjector
     {
         foreach (var definition in definitions)
         {
-            var entity = modelBuilder.SharedTypeEntity(definition.Name, typeof(Dictionary<string, object?>));
-            entity.ToTable(definition.TableName);
+            var entity = modelBuilder.SharedTypeEntity(definition.LogicalKey, typeof(Dictionary<string, object?>));
+            entity.ToTable(definition.TableName, definition.SchemaName);
 
             foreach (var field in definition.Fields)
             {

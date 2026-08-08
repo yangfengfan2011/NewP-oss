@@ -76,7 +76,7 @@ public sealed class EfValueListRepository : IValueListRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("ValueListItem");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("ValueListItem"));
 
     private static ValueListItem Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

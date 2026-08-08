@@ -1,4 +1,5 @@
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -9,18 +10,24 @@ public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner
     private readonly EfPlatformDbContext _dbContext;
     private readonly PersistenceOptions _options;
     private readonly IReadOnlyList<IPersistenceMigrationGuard> _guards;
+    private readonly ModuleMigrationExecutor _moduleMigrationExecutor;
 
     public PersistenceMigrationRunner(
         EfPlatformDbContext dbContext,
+        CompiledPersistencePlan plan,
         IOptions<PersistenceOptions> options,
         IEnumerable<IPersistenceMigrationGuard> guards)
     {
         _dbContext = dbContext;
+        Plan = plan;
         _options = options.Value;
         _guards = guards.ToArray();
+        _moduleMigrationExecutor = new ModuleMigrationExecutor(dbContext, plan);
     }
 
     public bool DatabaseAhead { get; private set; }
+
+    public CompiledPersistencePlan Plan { get; }
 
     public async Task MigrateAsync(CancellationToken cancellationToken = default)
     {
@@ -30,6 +37,8 @@ public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner
             return;
         }
 
+        _moduleMigrationExecutor.ValidateBeforeConnection();
+
         foreach (var guard in _guards)
         {
             var result = await guard.VerifyAsync(cancellationToken);
@@ -38,7 +47,7 @@ public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner
 
         if (!DatabaseAhead)
         {
-            await _dbContext.Database.MigrateAsync(cancellationToken);
+            await _moduleMigrationExecutor.ApplyAsync(cancellationToken);
         }
     }
 }

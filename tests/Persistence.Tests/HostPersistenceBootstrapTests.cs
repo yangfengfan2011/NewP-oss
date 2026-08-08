@@ -27,7 +27,7 @@ public class HostPersistenceBootstrapTests
             })
             .Build();
 
-        services.AddPlatformPersistence(configuration);
+        services.AddPlatformPersistence(configuration, TestPersistencePlan.Create());
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
@@ -66,7 +66,7 @@ public class HostPersistenceBootstrapTests
         var configuration = BuildConfiguration();
 
         services.AddLogging();
-        services.AddPlatformPersistence(configuration);
+        services.AddPlatformPersistence(configuration, TestPersistencePlan.Create());
         services.AddModuleSystem(options =>
         {
             options.Assemblies.Add(typeof(AuthorizationModule).Assembly);

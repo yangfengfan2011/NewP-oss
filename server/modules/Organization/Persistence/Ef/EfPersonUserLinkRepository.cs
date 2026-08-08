@@ -51,7 +51,7 @@ public sealed class EfPersonUserLinkRepository : IPersonUserLinkRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("PersonUserLink");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("PersonUserLink"));
 
     private static PersonUserLink Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

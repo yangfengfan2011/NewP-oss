@@ -28,7 +28,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         string id,
         CancellationToken cancellationToken = default)
     {
-        var row = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
+        var row = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .FirstOrDefaultAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
 
@@ -43,7 +43,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         StandardCrudListQuery query,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
+        var rows = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .Take(query.PageSize <= 0 ? 50 : query.PageSize)
             .ToListAsync(cancellationToken);
@@ -69,7 +69,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         string? excludedId = null,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
+        var rows = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -93,7 +93,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
             row[descriptor.IdField] = _objectIdGenerator.NewId(descriptor.ModelName);
         }
 
-        _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName).Add(row);
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName)).Add(row);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Project(row, descriptor.FieldSet.DetailFields);
     }
@@ -107,7 +107,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
-        var row = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
+        var row = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .FirstOrDefaultAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
 
         if (row is null)
@@ -132,7 +132,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         string id,
         CancellationToken cancellationToken = default)
     {
-        var row = await _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName)
+        var row = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .FirstOrDefaultAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
 
         if (row is null)
@@ -140,7 +140,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
             return false;
         }
 
-        _dbContext.Set<Dictionary<string, object?>>(descriptor.ModelName).Remove(row);
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName)).Remove(row);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }

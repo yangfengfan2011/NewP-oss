@@ -122,7 +122,8 @@ public sealed class ModuleCapsuleCandidateReader
             new ModulePlanProvenance(
                 "built-in",
                 Path.GetFullPath(manifestPath),
-                "/"));
+                "/"),
+            ReadPersistence(root, manifestPath));
     }
 
     private static ModuleCapsuleCandidate ReadInstalledModule(InstalledPluginRecord record)
@@ -168,7 +169,43 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.PermissionReferences,
             metadata.PermissionReferences,
             metadata.ModelKeys,
-            new ModulePlanProvenance("installed-package", manifestPath, "/"));
+            new ModulePlanProvenance("installed-package", manifestPath, "/"),
+            ReadPersistence(root, manifestPath));
+    }
+
+    private static ModulePersistenceContribution? ReadPersistence(JsonElement root, string sourcePath)
+    {
+        if (!TryGetObject(root, "persistence", out var persistence))
+        {
+            return null;
+        }
+
+        var modelPaths = ReadStringArray(persistence, "models");
+        var bundles = new List<ModuleMigrationBundleReference>();
+        if (TryGetObject(persistence, "migrations", out var migrations))
+        {
+            foreach (var property in migrations.EnumerateObject().OrderBy(static item => item.Name, StringComparer.Ordinal))
+            {
+                if (property.Value.ValueKind != JsonValueKind.Object)
+                {
+                    throw new JsonException($"Persistence migration '{property.Name}' must be an object in '{sourcePath}'.");
+                }
+
+                var provider = property.Name.ToLowerInvariant() switch
+                {
+                    "sqlserver" => "SqlServer",
+                    "oracle" => "Oracle",
+                    "mysql" => "MySql",
+                    _ => throw new JsonException($"Unsupported persistence provider '{property.Name}' in '{sourcePath}'.")
+                };
+                bundles.Add(new ModuleMigrationBundleReference(
+                    provider,
+                    RequiredString(property.Value, "assembly", sourcePath),
+                    RequiredString(property.Value, "manifest", sourcePath)));
+            }
+        }
+
+        return new ModulePersistenceContribution(modelPaths, bundles);
     }
 
     private static MetadataFacts ReadMetadata(string metadataRoot, string moduleId)

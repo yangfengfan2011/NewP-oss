@@ -80,7 +80,7 @@ public sealed class EfPermissionRepository : IPermissionRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("Permission");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Permission"));
 
     private static Permission Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

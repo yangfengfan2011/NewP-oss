@@ -30,7 +30,7 @@ public class DevelopmentSchemaSyncBootstrapTests
             })
             .Build();
 
-        services.AddPlatformPersistence(configuration);
+        services.AddPlatformPersistence(configuration, TestPersistencePlan.Create());
 
         Assert.Contains(services, item => item.ServiceType.Name.Contains("DevelopmentSchemaSyncCoordinator", StringComparison.Ordinal));
     }
@@ -49,7 +49,7 @@ public class DevelopmentSchemaSyncBootstrapTests
             })
             .Build();
 
-        services.AddPlatformPersistence(configuration);
+        services.AddPlatformPersistence(configuration, TestPersistencePlan.Create());
 
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {

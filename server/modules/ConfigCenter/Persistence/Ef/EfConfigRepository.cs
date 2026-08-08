@@ -140,7 +140,7 @@ public sealed class EfConfigRepository : IConfigRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("ConfigItem");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("ConfigItem"));
 
     // 这里仍然使用字典实体而不是强类型 EF 实体，目的是复用平台建模层的统一存储表示，
     // 避免模块仓储绕开建模约束直接绑定数据库实现细节。

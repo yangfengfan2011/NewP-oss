@@ -77,7 +77,7 @@ public sealed class EfCompanyRepository : ICompanyRepository
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>("Company");
+    private DbSet<Dictionary<string, object?>> Entities => _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Company"));
 
     private static Company Map(IReadOnlyDictionary<string, object?> entity) => new()
     {

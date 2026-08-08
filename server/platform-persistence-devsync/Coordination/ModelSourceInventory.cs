@@ -1,4 +1,5 @@
 using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Modeling.Definitions;
 
 namespace ICP.Platform.Persistence.DevSync.Coordination;
 
@@ -30,11 +31,25 @@ public sealed class ModelSourceInventory
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var requiredModels = PlatformPersistenceModelCatalog.GetDefinitions()
+        var requiredModels = PlatformCoreLegacyModelSource.GetDefinitions()
             .Select(static definition => definition.Name)
             .ToArray();
 
         return CreateForTests(requiredModels, options.RepositoryRoot);
+    }
+
+    /// <summary>
+    /// 使用同一已编译计划的模型集合建立真源清单，不再从全局 catalog 重新枚举。
+    /// </summary>
+    public static ModelSourceInventory Create(
+        DevelopmentSchemaSyncOptions options,
+        IReadOnlyList<ModelDefinition> definitions)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(definitions);
+        return CreateForTests(
+            definitions.Select(static definition => definition.Name).ToArray(),
+            options.RepositoryRoot);
     }
 
     /// <summary>

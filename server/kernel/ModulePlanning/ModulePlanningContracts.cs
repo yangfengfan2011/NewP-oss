@@ -21,7 +21,23 @@ public sealed record ModuleCapsuleCandidate(
     IReadOnlyList<string> PermissionCodes,
     IReadOnlyList<string> PermissionReferences,
     IReadOnlyList<string> ModelKeys,
-    ModulePlanProvenance Provenance);
+    ModulePlanProvenance Provenance,
+    ModulePersistenceContribution? Persistence = null);
+
+/// <summary>
+/// 模块胶囊对持久化编译器公开的声明式工件引用。
+/// </summary>
+public sealed record ModulePersistenceContribution(
+    IReadOnlyList<string> ModelPaths,
+    IReadOnlyList<ModuleMigrationBundleReference> MigrationBundles);
+
+/// <summary>
+/// 一个 provider-specific migration bundle 的包内引用。
+/// </summary>
+public sealed record ModuleMigrationBundleReference(
+    string Provider,
+    string AssemblyPath,
+    string ManifestPath);
 
 /// <summary>
 /// 运行时事实的 authoring 来源。
@@ -52,7 +68,8 @@ public sealed record CanonicalModulePlanModule(
     IReadOnlyList<string> PermissionCodes,
     IReadOnlyList<string> PermissionReferences,
     IReadOnlyList<string> ModelKeys,
-    ModulePlanProvenance Provenance);
+    ModulePlanProvenance Provenance,
+    ModulePersistenceContribution? Persistence = null);
 
 /// <summary>
 /// 编译成功后唯一可供 runtime materializer 消费的计划。

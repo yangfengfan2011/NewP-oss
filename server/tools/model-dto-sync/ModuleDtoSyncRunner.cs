@@ -20,7 +20,7 @@ public static class ModuleDtoSyncRunner
         var signaturesByModule = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
         var metadataRepositoryRoot = ResolveMetadataRepositoryRoot(repositoryRoot);
 
-        foreach (var definition in PlatformPersistenceModelCatalog.GetDefinitions())
+        foreach (var definition in PlatformCoreLegacyModelSource.GetDefinitions())
         {
             var moduleId = ResolveModuleId(definition.Name);
             var outputDirectory = Path.Combine(repositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");

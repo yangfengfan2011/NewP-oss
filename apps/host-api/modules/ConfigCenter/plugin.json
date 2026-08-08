@@ -8,5 +8,11 @@
   "hostVersion": {
     "min": "1.0.0",
     "max": "2.0.0"
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/ConfigItem.model.json",
+      "metadata/models/ValueListItem.model.json"
+    ]
   }
 }

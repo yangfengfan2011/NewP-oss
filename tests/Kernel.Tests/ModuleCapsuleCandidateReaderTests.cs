@@ -55,6 +55,15 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
                     "displayName": "更新人员"
                   }
                 ]
+              },
+              "persistence": {
+                "models": ["metadata/models/Person.model.json"],
+                "migrations": {
+                  "sqlServer": {
+                    "assembly": "backend/Organization.SqlServerMigrations.dll",
+                    "manifest": "backend/Organization.SqlServerMigrations.json"
+                  }
+                }
               }
             }
             """);
@@ -133,9 +142,19 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
             ["Organization.Person.Update", "Organization.Person.View"],
             candidate.PermissionReferences.Distinct(StringComparer.Ordinal).OrderBy(static code => code, StringComparer.Ordinal));
         Assert.Equal(["Organization.Person"], candidate.ModelKeys);
+        Assert.NotNull(candidate.Persistence);
+        Assert.Equal(["metadata/models/Person.model.json"], candidate.Persistence.ModelPaths);
+        var bundle = Assert.Single(candidate.Persistence.MigrationBundles);
+        Assert.Equal("SqlServer", bundle.Provider);
+        Assert.Equal("backend/Organization.SqlServerMigrations.dll", bundle.AssemblyPath);
+        Assert.Equal("backend/Organization.SqlServerMigrations.json", bundle.ManifestPath);
 
         var compilation = new CanonicalModulePlanCompiler().Compile("organization-adopter", candidates);
         Assert.True(compilation.IsSuccess, string.Join(Environment.NewLine, compilation.Diagnostics));
+        var compiledPersistence = Assert.Single(compilation.Plan!.Modules).Persistence;
+        Assert.NotNull(compiledPersistence);
+        Assert.Equal(candidate.Persistence.ModelPaths, compiledPersistence.ModelPaths);
+        Assert.Equal(bundle, Assert.Single(compiledPersistence.MigrationBundles));
     }
 
     public void Dispose()

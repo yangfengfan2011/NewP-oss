@@ -3,6 +3,7 @@ using ICP.Platform.Persistence.DevSync.Execution;
 using ICP.Platform.Persistence.DevSync.Models;
 using ICP.Platform.Persistence.DevSync.Planning;
 using ICP.Platform.Persistence.DevSync.Schema;
+using ICP.Platform.Persistence.Planning;
 
 namespace ICP.Platform.Persistence.DevSync.Coordination;
 
@@ -100,8 +101,29 @@ public sealed class DevelopmentSchemaSyncCoordinator
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
+        return Create(options, ModelSourceInventory.Create(options));
+    }
+
+    /// <summary>
+    /// Host 入口使用已编译计划中的同一模型集合，避免重新枚举模块 catalog。
+    /// </summary>
+    public static DevelopmentSchemaSyncCoordinator Create(
+        DevelopmentSchemaSyncOptions options,
+        CompiledPersistencePlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(plan);
+        options.Validate();
+        return Create(options, ModelSourceInventory.Create(options, plan.Models));
+    }
+
+    private static DevelopmentSchemaSyncCoordinator Create(
+        DevelopmentSchemaSyncOptions options,
+        ModelSourceInventory inventory)
+    {
+
         return new DevelopmentSchemaSyncCoordinator(
-            ModelSourceInventory.Create(options),
+            inventory,
             _ => Task.FromResult(new BaseDtoSignatureVerifier().VerifyRepository(options.RepositoryRoot)),
             cancellationToken => BuildPlanAsync(options, cancellationToken),
             (plan, cancellationToken) => ApplySafePlanAsync(options, plan, cancellationToken),

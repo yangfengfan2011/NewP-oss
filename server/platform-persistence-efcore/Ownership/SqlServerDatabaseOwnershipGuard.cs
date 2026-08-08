@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Persistence.EfCore.Ownership;
@@ -17,13 +18,16 @@ public sealed class SqlServerDatabaseOwnershipGuard : IPersistenceMigrationGuard
 
     private readonly EfPlatformDbContext _dbContext;
     private readonly WorktreeDatabaseIdentity _identity;
+    private readonly CompiledPersistencePlan _plan;
 
     public SqlServerDatabaseOwnershipGuard(
         EfPlatformDbContext dbContext,
-        WorktreeDatabaseIdentity identity)
+        WorktreeDatabaseIdentity identity,
+        CompiledPersistencePlan plan)
     {
         _dbContext = dbContext;
         _identity = identity;
+        _plan = plan;
     }
 
     public async Task<PersistenceMigrationGuardResult> VerifyAsync(
@@ -44,7 +48,13 @@ public sealed class SqlServerDatabaseOwnershipGuard : IPersistenceMigrationGuard
                 : null;
             var tables = await ReadUserTablesAsync(connection, transaction, cancellationToken);
             var appliedMigrations = await ReadAppliedMigrationsAsync(connection, transaction, cancellationToken);
-            var knownMigrations = _dbContext.Database.GetMigrations().ToArray();
+            var knownMigrations = _dbContext.Database.GetMigrations()
+                .Concat(_plan.Streams
+                    .Where(stream => !stream.IsLegacyBaseline && stream.Provider == _plan.Provider)
+                    .SelectMany(static stream => stream.Migrations)
+                    .Select(static migration => migration.MigrationId))
+                .OrderBy(static migrationId => migrationId, StringComparer.Ordinal)
+                .ToArray();
 
             var inspection = new DatabaseOwnershipInspection(
                 marker,

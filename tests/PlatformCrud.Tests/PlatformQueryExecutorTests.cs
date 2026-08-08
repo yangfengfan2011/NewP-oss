@@ -20,7 +20,7 @@ public sealed class PlatformQueryExecutorTests
         await connection.OpenAsync();
         await using var dbContext = BuildDbContext(connection, sql);
         await dbContext.Database.EnsureCreatedAsync();
-        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
             Row("Person_1", "P001", "张三", "FullTime", true),
             Row("Person_2", "P002", "李四", "FullTime", true),
             Row("Person_3", "X003", "王五", "PartTime", true));
@@ -59,7 +59,7 @@ public sealed class PlatformQueryExecutorTests
         await connection.OpenAsync();
         await using var dbContext = BuildDbContext(connection, []);
         await dbContext.Database.EnsureCreatedAsync();
-        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
             Row("Person_1", "P001", "张三", "FullTime", true),
             Row("Person_2", "X002", "李四", "FullTime", true));
         await dbContext.SaveChangesAsync();

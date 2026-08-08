@@ -19,6 +19,8 @@ public sealed class SqlServerDesignTimeDbContextFactory : IDesignTimeDbContextFa
             connectionString,
             typeof(SqlServerDesignTimeDbContextFactory).Assembly.GetName().Name);
 
-        return new EfPlatformDbContext(optionsBuilder.Options, PlatformPersistenceModelCatalog.GetDefinitions());
+        return new EfPlatformDbContext(
+            optionsBuilder.Options,
+            PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions()));
     }
 }

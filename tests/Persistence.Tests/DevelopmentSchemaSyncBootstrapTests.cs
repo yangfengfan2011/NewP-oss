@@ -79,7 +79,7 @@ public class DevelopmentSchemaSyncBootstrapTests
         var document = XDocument.Load(projectPath);
         var runtimeIncludes = new[]
         {
-            @"..\..\modules\**\metadata\models\*.model.json",
+            @"..\..\modules\**\metadata\**\*.json",
             @"..\..\server\platform-modeling\metadata\storage-types.json"
         };
 

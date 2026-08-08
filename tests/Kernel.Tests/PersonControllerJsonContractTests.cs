@@ -60,7 +60,7 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
             builder.UseSetting("DevelopmentSchemaSync:Enabled", "false");
-            builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
+            builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IStandardCrudService>();

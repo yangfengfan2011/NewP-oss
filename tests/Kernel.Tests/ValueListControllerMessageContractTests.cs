@@ -95,7 +95,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
             builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
-            builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
+            builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IValueListRepository>();

@@ -11,6 +11,7 @@ import {
 } from '@icp-platform/ui';
 
 interface AccessLog {
+  [key: string]: unknown;
   id: number;
   accessTime: string;
   userId?: string;

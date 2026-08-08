@@ -199,7 +199,10 @@ describe('organization person center list layout', () => {
     });
     await flushProTableRequest();
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons?pageIndex=1&pageSize=20', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName%2CEmploymentStatus%2CIsEnabled&pageIndex=1&pageSize=20',
+      { method: 'GET' },
+    );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
     expect(container.querySelector('.np-crud-workspace-header .ant-btn-primary')?.textContent).toContain('新建人员');

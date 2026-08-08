@@ -7,10 +7,20 @@ import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonDetailPage from '../../../../modules/organization/src/pages/PersonDetailPage';
+import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
+import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const personDetailCatalog = Object.fromEntries(
+  Object.entries(personDetailDictionary.PersonDetailView).map(([key, value]) => [
+    `PersonDetailView.${key}`,
+    value.zhs,
+  ]),
+);
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
@@ -72,23 +82,14 @@ describe('organization person center detail layout', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: {} }}
+          catalogs={{ zhs: personDetailCatalog }}
         >
           <RuntimeMetadataProvider
             value={{
               manifest: { modules: [] },
               navDocuments: [],
-              viewDocuments: [{
-                type: 'view',
-                view: {
-                  key: 'organization.person.detail',
-                  mode: 'detail',
-                  titleKey: '人员详情',
-                  descriptionKey: '人员详情维护',
-                  summaryBlocks: ['userLink', 'authorizationSummary'],
-                },
-              }],
-              modelDocuments: [],
+              viewDocuments: [personDetailViewDocument],
+              modelDocuments: [personModelDocument],
             }}
           >
             <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" />

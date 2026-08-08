@@ -601,7 +601,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
             builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
-            builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Development");
+            builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
                 var seederDesc = services.FirstOrDefault(d =>

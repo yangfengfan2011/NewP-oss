@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "dev": "pnpm --filter @icp-platform/shell dev",
+    "test": "pnpm -r --if-present test",
     "build": "pnpm -r build",
     "clean": "pnpm -r exec rimraf dist node_modules .vite"
   },

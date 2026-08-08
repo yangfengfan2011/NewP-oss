@@ -553,11 +553,13 @@ public class AiFirstDesignValidationScriptTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = "pwsh.exe",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
                 CreateNoWindow = true
             }
         };
@@ -565,7 +567,8 @@ public class AiFirstDesignValidationScriptTests : IDisposable
         process.StartInfo.ArgumentList.Add("-NoProfile");
         process.StartInfo.ArgumentList.Add("-ExecutionPolicy");
         process.StartInfo.ArgumentList.Add("Bypass");
-        process.StartInfo.ArgumentList.Add("-File");
+        process.StartInfo.ArgumentList.Add("-Command");
+        process.StartInfo.ArgumentList.Add("& { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $target = $args[0]; $targetArgs = @($args | Select-Object -Skip 1); & $target @targetArgs }");
         process.StartInfo.ArgumentList.Add(scriptPath);
         foreach (var argument in arguments)
         {

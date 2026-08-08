@@ -51,6 +51,10 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      - name: 运行测试
+        working-directory: frontend
+        run: pnpm test
+
       - name: 构建
         working-directory: frontend
         run: pnpm build

@@ -3,7 +3,7 @@
   "displayName": "Plugin With Valid Hash",
   "version": "1.0.0",
   "entryAssembly": "PluginWithValidHash.dll",
-  "entryAssemblySha256": "854f4364f0df0d369292759292150330cb3021fbe0deb212d97c68e87ff3e715",
+  "entryAssemblySha256": "430ae70da4aae8bf2024a11d6b800a71917e768739707f35d847e1f726b080fc",
   "hostVersion": {
     "min": "1.0.0",
     "max": "2.0.0"

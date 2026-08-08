@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
-import { ModuleRegistry, type StandardCrudFieldDefinition, type StandardCrudFormSection } from '@icp-platform/sdk';
+import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
@@ -26,7 +26,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     container?.remove();
   });
 
-  async function renderHost() {
+  async function renderHost(modelDocument: Record<string, unknown>) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -52,9 +52,11 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
                     titleKey: 'Title',
                     descriptionKey: 'Description',
                     mode: 'detail',
+                    model: 'Person',
                   },
                 },
               ],
+              modelDocuments: [modelDocument],
             }}
           >
             <StandardCrudDetailPageHost viewKey="organization.person.detail" id="Person_1" />
@@ -65,12 +67,10 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
   }
 
   it('renders a standard edit form when registration declares fields without a custom detail renderer', async () => {
-    const fields: StandardCrudFieldDefinition[] = [
-      { key: 'name', labelKey: '姓名', modelField: 'ENAME', kind: 'text' },
-    ];
-    const formSections: StandardCrudFormSection[] = [
-      { key: 'basic', titleKey: '基础信息', fields: ['name'] },
-    ];
+    const modelDocument = createPersonModelDocument(
+      [{ name: 'ENAME', storage: { type: 'string' }, uiType: 'text', form: { edit: { mode: 'editable' } } }],
+      [{ key: 'basic', titleKey: '基础信息', fields: ['ENAME'] }],
+    );
 
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {
@@ -81,8 +81,6 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
             apiRoute: '/api/organization/persons',
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            fields,
-            formSections,
             createEmptyFilters: () => ({}),
             buildListQuery: () => ({}),
             mapListItem: (value: unknown) => value,
@@ -99,7 +97,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       }),
     );
 
-    await renderHost();
+    await renderHost(modelDocument);
     await act(async () => undefined);
 
     expect(container.textContent).toContain('基础信息');
@@ -108,9 +106,10 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
   });
 
   it('submits normalized standard form values through the standard CRUD client', async () => {
-    const fields: StandardCrudFieldDefinition[] = [
-      { key: 'name', labelKey: '姓名', modelField: 'ENAME', kind: 'text', trim: true },
-    ];
+    const modelDocument = createPersonModelDocument(
+      [{ name: 'ENAME', storage: { type: 'string' }, uiType: 'text', form: { edit: { mode: 'editable' } } }],
+      [{ key: 'basic', titleKey: '基础信息', fields: ['ENAME'] }],
+    );
 
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {
@@ -121,8 +120,6 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
             apiRoute: '/api/organization/persons',
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            fields,
-            formSections: [{ key: 'basic', titleKey: '基础信息', fields: ['name'] }],
             createEmptyFilters: () => ({}),
             buildListQuery: () => ({}),
             mapListItem: (value: unknown) => value,
@@ -139,7 +136,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       }),
     );
 
-    await renderHost();
+    await renderHost(modelDocument);
     await act(async () => undefined);
 
     await act(async () => {
@@ -154,32 +151,14 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
   });
 
   it('clears dependent lookup values when parent lookup changes', async () => {
-    const fields: StandardCrudFieldDefinition[] = [
-      {
-        key: 'companyId',
-        labelKey: '所属公司',
-        modelField: 'CompanyId',
-        kind: 'lookup',
-        emptyAsNull: true,
-        lookup: { providerKey: 'companies', currentValueLabelField: 'CompanyName' },
-      },
-      {
-        key: 'departmentId',
-        labelKey: '所属部门',
-        modelField: 'DepartmentId',
-        kind: 'lookup',
-        emptyAsNull: true,
-        lookup: { providerKey: 'departments', dependsOn: ['companyId'], currentValueLabelField: 'DepartmentName' },
-      },
-      {
-        key: 'positionId',
-        labelKey: '岗位',
-        modelField: 'PositionId',
-        kind: 'lookup',
-        emptyAsNull: true,
-        lookup: { providerKey: 'positions', dependsOn: ['departmentId'], currentValueLabelField: 'PositionName' },
-      },
-    ];
+    const modelDocument = createPersonModelDocument(
+      [
+        createLookupField('CompanyId', 'companies'),
+        createLookupField('DepartmentId', 'departments', ['CompanyId']),
+        createLookupField('PositionId', 'positions', ['DepartmentId']),
+      ],
+      [{ key: 'organization', titleKey: '组织信息', fields: ['CompanyId', 'DepartmentId', 'PositionId'] }],
+    );
 
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {
@@ -190,8 +169,6 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
             apiRoute: '/api/organization/persons',
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            fields,
-            formSections: [{ key: 'organization', titleKey: '组织信息', fields: ['companyId', 'departmentId', 'positionId'] }],
             lookupProviders: [
               { key: 'companies', load: vi.fn(async () => [{ value: 'Company_2', label: '二号公司' }]) },
               { key: 'departments', load: vi.fn(async () => [{ value: 'Dept_1', label: '一部' }]) },
@@ -224,13 +201,22 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       ),
     );
 
-    await renderHost();
-    await act(async () => undefined);
+    await renderHost(modelDocument);
+    await flushAsyncWork();
 
-    const companySelect = container.querySelector('select') as HTMLSelectElement;
+    const companySelect = container.querySelector('.np-standard-crud-select .ant-select-selector');
+    expect(companySelect).not.toBeNull();
     await act(async () => {
-      companySelect.value = 'Company_2';
-      companySelect.dispatchEvent(new Event('change', { bubbles: true }));
+      companySelect?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    const companyOption = Array.from(document.body.querySelectorAll('.ant-select-item-option')).find(
+      (option) => option.textContent?.includes('二号公司'),
+    );
+    expect(companyOption).toBeDefined();
+    await act(async () => {
+      companyOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await act(async () => {
@@ -244,3 +230,29 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     });
   });
 });
+
+function createPersonModelDocument(fields: Record<string, unknown>[], sections: Record<string, unknown>[]) {
+  return {
+    type: 'model',
+    Person: { fields, sections },
+  };
+}
+
+function createLookupField(name: string, providerKey: string, dependsOn: string[] = []) {
+  return {
+    name,
+    storage: { type: 'guid', nullable: true },
+    uiType: 'lookup',
+    form: { edit: { mode: 'editable' } },
+    dataSource: { type: 'provider', key: providerKey, dependsOn },
+  };
+}
+
+async function flushAsyncWork(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}

@@ -11,6 +11,7 @@ import {
 } from '@icp-platform/ui';
 
 interface OperationLog {
+  [key: string]: unknown;
   id: number;
   operationTime: string;
   userId?: string;

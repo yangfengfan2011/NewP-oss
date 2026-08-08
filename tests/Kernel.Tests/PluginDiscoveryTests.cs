@@ -1,15 +1,35 @@
 using ICP.Platform.Kernel.PluginDiscovery;
+using System.Text;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
 public class PluginDiscoveryTests
 {
+    private static readonly byte[] FixtureAssemblyContent =
+        Encoding.UTF8.GetBytes("ICP.Platform.Kernel.Tests.PluginDiscoveryFixture/v1");
+
     private readonly string _testDataPath;
 
     public PluginDiscoveryTests()
     {
-        _testDataPath = Path.Combine(Directory.GetCurrentDirectory(), "TestData");
+        _testDataPath = Path.Combine(AppContext.BaseDirectory, "TestData");
+        EnsureEntryAssemblyFixtures();
+    }
+
+    private void EnsureEntryAssemblyFixtures()
+    {
+        foreach (var (directory, fileName) in new[]
+        {
+            ("CorePlugin", "Core.dll"),
+            ("IncompatiblePlugin", "IncompatiblePlugin.dll"),
+            ("PluginWithInvalidHash", "PluginWithInvalidHash.dll"),
+            ("PluginWithValidHash", "PluginWithValidHash.dll"),
+            ("ValidPlugin", "TestPlugin.dll")
+        })
+        {
+            File.WriteAllBytes(Path.Combine(_testDataPath, directory, fileName), FixtureAssemblyContent);
+        }
     }
 
     [Fact]

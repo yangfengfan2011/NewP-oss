@@ -581,7 +581,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     total,
   };
   const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
-  const activeFormFields = drawerState.mode === 'create' ? createFields : drawerState.mode === 'edit' ? editFields : [];
+  // 查看抽屉同样依赖 lookup 当前值标签；只有关闭状态才不启动 provider，避免只读字段退化为原始 ID。
+  const activeFormFields = drawerState.mode === 'create' ? createFields : drawerState.mode === 'closed' ? [] : editFields;
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
     fields: activeFormFields,
     providers: registration.lookupProviders ?? [],

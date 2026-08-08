@@ -370,6 +370,66 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('编辑人员');
   });
 
+  it('冷启动后直接查看人员时使用详情中的公司和部门名称', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/person-1')) {
+        return new Response(JSON.stringify({
+          fields: {
+            EID: 'person-1',
+            PersonNo: 'P0001',
+            ENAME: '张三',
+            CompanyId: 'Company_1',
+            CompanyName: '示例公司',
+            DepartmentId: 'Department_1',
+            DepartmentName: '研发部',
+            EmploymentStatus: 'FullTime',
+            IsEnabled: true,
+          },
+          summaries: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      return new Response(JSON.stringify({
+        items: [{
+          EID: 'person-1',
+          PersonNo: 'P0001',
+          ENAME: '张三',
+          CompanyName: '示例公司',
+          DepartmentName: '研发部',
+          EmploymentStatus: 'FullTime',
+          IsEnabled: true,
+        }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container);
+    });
+    await flushAsync();
+
+    const viewIconButton = findRowViewIconButton(container, '张三');
+    await act(async () => viewIconButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+
+    const companyField = Array.from(document.body.querySelectorAll('.np-standard-crud-field'))
+      .find((field) => field.querySelector('label')?.textContent?.includes('公司'));
+    const departmentField = Array.from(document.body.querySelectorAll('.np-standard-crud-field'))
+      .find((field) => field.querySelector('label')?.textContent?.includes('部门'));
+
+    expect(companyField?.textContent).toContain('示例公司');
+    expect(companyField?.textContent).not.toContain('Company_1');
+    expect(departmentField?.textContent).toContain('研发部');
+    expect(departmentField?.textContent).not.toContain('Department_1');
+  });
+
   it('高级筛选通过右侧抽屉展示并复用本地化标签', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({

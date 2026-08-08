@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 
 [ApiController]
 [Route("api/organization/positions")]
+[EndpointModule("Organization")]
 public sealed class PositionsController : ControllerBase
 {
     private readonly IPositionService _positionService;
@@ -16,6 +18,7 @@ public sealed class PositionsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(OrganizationPermissions.PositionView)]
     public async Task<ActionResult<List<PositionDto>>> GetByDepartment(
         [FromQuery] string departmentId,
         CancellationToken cancellationToken = default)
@@ -25,6 +28,7 @@ public sealed class PositionsController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission(OrganizationPermissions.PositionView)]
     public async Task<ActionResult<PositionDto>> Get(string id, CancellationToken cancellationToken = default)
     {
         var position = await _positionService.GetByIdAsync(id, cancellationToken);
@@ -32,6 +36,7 @@ public sealed class PositionsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(OrganizationPermissions.PositionCreate)]
     public async Task<ActionResult<PositionDto>> Create(
         [FromBody] PositionDto dto,
         CancellationToken cancellationToken = default)
@@ -48,6 +53,7 @@ public sealed class PositionsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission(OrganizationPermissions.PositionUpdate)]
     public async Task<ActionResult<PositionDto>> Update(
         string id,
         [FromBody] PositionDto dto,

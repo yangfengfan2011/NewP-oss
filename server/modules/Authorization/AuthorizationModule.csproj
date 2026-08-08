@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />

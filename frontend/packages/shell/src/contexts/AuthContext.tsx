@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = (permission: string): boolean => {
     if (!user) return false;
-    return user.permissions.includes('*') || user.permissions.includes(permission);
+    return user.permissions.includes(permission);
   };
 
   const hasAnyPermission = (permissions: string[]): boolean => {

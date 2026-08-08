@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 
 [ApiController]
 [Route("api/authorization/roles")]
+[EndpointModule("Authorization")]
 public class RoleController : ControllerBase
 {
     private readonly IRoleService _roleService;
@@ -16,6 +18,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(AuthorizationPermissions.RoleView)]
     public async Task<ActionResult<List<RoleDto>>> GetAllRoles(CancellationToken cancellationToken)
     {
         var roles = await _roleService.GetAllRolesAsync(cancellationToken);
@@ -23,6 +26,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpGet("{roleId}")]
+    [RequirePermission(AuthorizationPermissions.RoleView)]
     public async Task<ActionResult<RoleDto>> GetRoleById(string roleId, CancellationToken cancellationToken)
     {
         var role = await _roleService.GetRoleByIdAsync(roleId, cancellationToken);
@@ -34,6 +38,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(AuthorizationPermissions.RoleCreate)]
     public async Task<ActionResult<RoleDto>> CreateRole([FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
@@ -48,6 +53,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpPut("{roleId}")]
+    [RequirePermission(AuthorizationPermissions.RoleEdit)]
     public async Task<ActionResult<RoleDto>> UpdateRole(string roleId, [FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
@@ -62,6 +68,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpDelete("{roleId}")]
+    [RequirePermission(AuthorizationPermissions.RoleDelete)]
     public async Task<ActionResult> DeleteRole(string roleId, CancellationToken cancellationToken)
     {
         try
@@ -76,6 +83,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpGet("{roleId}/permissions")]
+    [RequirePermission(AuthorizationPermissions.RoleView)]
     public async Task<ActionResult<RolePermissionsDto>> GetRolePermissions(string roleId, CancellationToken cancellationToken)
     {
         var permissions = await _roleService.GetRolePermissionsAsync(roleId, cancellationToken);
@@ -83,6 +91,7 @@ public class RoleController : ControllerBase
     }
 
     [HttpPut("{roleId}/permissions")]
+    [RequirePermission(AuthorizationPermissions.PermissionAssign)]
     public async Task<ActionResult> AssignRolePermissions(string roleId, [FromBody] AssignRolePermissionsRequest request, CancellationToken cancellationToken)
     {
         try

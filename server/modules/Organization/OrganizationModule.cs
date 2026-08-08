@@ -46,7 +46,7 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
         {
             new PermissionDescriptor
             {
-                Code = "Organization.Person.View",
+                Code = OrganizationPermissions.PersonView,
                 DisplayName = "查看人员",
                 Description = "允许查看组织结构中的人员信息",
                 ModuleId = ModuleId,
@@ -54,12 +54,54 @@ public sealed class OrganizationModule : ModuleBase, IPermissionProvider
             },
             new PermissionDescriptor
             {
-                Code = "Organization.Person.Create",
+                Code = OrganizationPermissions.PersonCreate,
                 DisplayName = "新建人员",
                 Description = "允许新建组织结构中的人员信息",
                 ModuleId = ModuleId,
                 Group = "人员"
-            }
+            },
+            new PermissionDescriptor
+            {
+                Code = OrganizationPermissions.PersonUpdate,
+                DisplayName = "更新人员",
+                Description = "允许更新、停用或启用组织结构中的人员信息",
+                ModuleId = ModuleId,
+                Group = "人员"
+            },
+            new PermissionDescriptor
+            {
+                Code = OrganizationPermissions.PersonDelete,
+                DisplayName = "删除人员",
+                Description = "允许删除组织结构中的人员信息",
+                ModuleId = ModuleId,
+                Group = "人员"
+            },
+            new PermissionDescriptor
+            {
+                Code = OrganizationPermissions.PersonLinkUser,
+                DisplayName = "关联登录用户",
+                Description = "允许为人员关联登录用户",
+                ModuleId = ModuleId,
+                Group = "人员"
+            },
+            Permission(OrganizationPermissions.CompanyView, "查看公司", "公司"),
+            Permission(OrganizationPermissions.CompanyCreate, "新建公司", "公司"),
+            Permission(OrganizationPermissions.CompanyUpdate, "更新公司", "公司"),
+            Permission(OrganizationPermissions.DepartmentView, "查看部门", "部门"),
+            Permission(OrganizationPermissions.DepartmentCreate, "新建部门", "部门"),
+            Permission(OrganizationPermissions.DepartmentUpdate, "更新部门", "部门"),
+            Permission(OrganizationPermissions.PositionView, "查看岗位", "岗位"),
+            Permission(OrganizationPermissions.PositionCreate, "新建岗位", "岗位"),
+            Permission(OrganizationPermissions.PositionUpdate, "更新岗位", "岗位")
         };
     }
+
+    private PermissionDescriptor Permission(string code, string displayName, string group) => new()
+    {
+        Code = code,
+        DisplayName = displayName,
+        Description = displayName,
+        ModuleId = ModuleId,
+        Group = group
+    };
 }

@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 
 [ApiController]
 [Route("api/authorization/users")]
+[EndpointModule("Authorization")]
 public class UserRoleController : ControllerBase
 {
     private readonly IRoleService _roleService;
@@ -18,6 +20,7 @@ public class UserRoleController : ControllerBase
     }
 
     [HttpGet("{userId}/roles")]
+    [RequirePermission(AuthorizationPermissions.RoleView)]
     public async Task<ActionResult<UserRoleAssignmentsDto>> GetUserRoles(string userId, CancellationToken cancellationToken)
     {
         var userRoles = await _roleService.GetUserRolesAsync(userId, cancellationToken);
@@ -25,6 +28,7 @@ public class UserRoleController : ControllerBase
     }
 
     [HttpPut("{userId}/roles")]
+    [RequirePermission(AuthorizationPermissions.UserAssignRole)]
     public async Task<ActionResult> AssignUserRoles(string userId, [FromBody] AssignUserRolesRequest request, CancellationToken cancellationToken)
     {
         await _roleService.AssignUserRolesAsync(userId, request, User.Identity?.Name, cancellationToken);
@@ -32,6 +36,7 @@ public class UserRoleController : ControllerBase
     }
 
     [HttpGet("{userId}/permissions")]
+    [DenyAll("Arbitrary-user permission projection is not a supported runtime interface.")]
     public async Task<ActionResult<List<string>>> GetUserPermissions(string userId, CancellationToken cancellationToken)
     {
         var permissions = await _authorizationService.GetUserPermissionsAsync(userId, cancellationToken);
@@ -39,6 +44,7 @@ public class UserRoleController : ControllerBase
     }
 
     [HttpPost("{userId}/check-permission")]
+    [DenyAll("Arbitrary-user permission checks must use the server-trusted current subject.")]
     public async Task<ActionResult<bool>> CheckPermission(string userId, [FromBody] CheckPermissionRequest request, CancellationToken cancellationToken)
     {
         var hasPermission = await _authorizationService.HasPermissionAsync(userId, request.PermissionCode, cancellationToken);

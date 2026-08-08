@@ -1,4 +1,4 @@
-using ICP.Platform.Kernel.ModuleLoader;
+using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.Extensions.Logging;
@@ -8,30 +8,47 @@ namespace ICP.Platform.HostApi.Authentication;
 
 public sealed class LocalAuthSeeder
 {
-    private readonly ModuleRegistry _moduleRegistry;
     private readonly IPermissionService _permissionService;
     private readonly IRoleService _roleService;
     private readonly LocalAuthOptions _options;
     private readonly ILogger<LocalAuthSeeder> _logger;
 
     public LocalAuthSeeder(
-        ModuleRegistry moduleRegistry,
         IPermissionService permissionService,
         IRoleService roleService,
         IOptions<LocalAuthOptions> options,
         ILogger<LocalAuthSeeder> logger)
     {
-        _moduleRegistry = moduleRegistry;
         _permissionService = permissionService;
         _roleService = roleService;
         _options = options.Value;
         _logger = logger;
     }
 
-    public async Task SeedAsync(CancellationToken cancellationToken = default)
+    public async Task SeedAsync(
+        IReadOnlyCollection<PermissionDescriptor> activePermissions,
+        CancellationToken cancellationToken = default)
     {
-        var permissions = _moduleRegistry.GetAllPermissions();
-        await _permissionService.SyncPermissionsAsync(permissions, cancellationToken);
+        ArgumentNullException.ThrowIfNull(activePermissions);
+
+        var permissionCodes = activePermissions
+            .Select(static permission => permission.Code)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        await _permissionService.SyncPermissionsAsync(activePermissions, cancellationToken);
+
+        var synchronizedCodes = (await _permissionService.GetAllPermissionsAsync(cancellationToken))
+            .Select(static permission => permission.Code)
+            .ToHashSet(StringComparer.Ordinal);
+        var missingCodes = permissionCodes
+            .Where(code => !synchronizedCodes.Contains(code))
+            .ToArray();
+        if (missingCodes.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: active permissions were not synchronized: {string.Join(", ", missingCodes)}");
+        }
 
         var role = await _roleService.GetRoleByCodeAsync(_options.AdminRoleCode, cancellationToken);
         if (role is null)
@@ -44,16 +61,33 @@ public sealed class LocalAuthSeeder
             }, "system", cancellationToken);
         }
 
-        var permissionCodes = permissions.Select(permission => permission.Code).Distinct().ToList();
         await _roleService.AssignRolePermissionsAsync(role.Id, new AssignRolePermissionsRequest
         {
             PermissionCodes = permissionCodes
         }, "system", cancellationToken);
+        var assignedPermissionCodes = (await _roleService.GetRolePermissionsAsync(role.Id, cancellationToken))
+            .PermissionCodes
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (!permissionCodes.SequenceEqual(assignedPermissionCodes, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: LocalAdmin role permissions did not converge to the active catalog.");
+        }
 
         await _roleService.AssignUserRolesAsync(_options.AdminUserId, new AssignUserRolesRequest
         {
             RoleCodes = new List<string> { _options.AdminRoleCode }
         }, "system", cancellationToken);
+        var assignedRoleCodes = (await _roleService.GetUserRolesAsync(_options.AdminUserId, cancellationToken))
+            .RoleCodes
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (!new[] { _options.AdminRoleCode }.SequenceEqual(assignedRoleCodes, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: local administrator roles did not converge to LocalAdmin only.");
+        }
 
         _logger.LogInformation("Seeded local auth admin {UserName} with {PermissionCount} permissions.", _options.Username, permissionCodes.Count);
     }

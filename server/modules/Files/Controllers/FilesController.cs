@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Files.Abstractions;
 using ICP.Platform.Modules.Files.Dto;
 using ICP.Platform.Modules.Files.Models;
@@ -8,6 +9,7 @@ namespace ICP.Platform.Modules.Files.Controllers;
 
 [ApiController]
 [Route("api/files")]
+[DenyAll("Files product endpoints remain frozen in the current batch.")]
 public class FilesController : ControllerBase
 {
     private readonly IFileService _fileService;

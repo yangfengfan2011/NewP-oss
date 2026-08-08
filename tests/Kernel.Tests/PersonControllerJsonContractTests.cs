@@ -1,12 +1,20 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using ICP.Platform.Authorization;
+using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Modules.Organization;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -65,6 +73,17 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             {
                 services.RemoveAll<IStandardCrudService>();
                 services.AddSingleton<IStandardCrudService>(StandardCrudService);
+                services.RemoveAll<IPermissionDecisionSource>();
+                services.AddSingleton<IPermissionDecisionSource, PersonCreatePermissionDecisionSource>();
+                services
+                    .AddAuthentication(options =>
+                    {
+                        options.DefaultAuthenticateScheme = TestAuthenticationHandler.SchemeName;
+                        options.DefaultChallengeScheme = TestAuthenticationHandler.SchemeName;
+                    })
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
+                        TestAuthenticationHandler.SchemeName,
+                        static _ => { });
             });
         }
 
@@ -75,6 +94,39 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             {
                 Directory.Delete(_installRoot, recursive: true);
             }
+        }
+    }
+
+    private sealed class PersonCreatePermissionDecisionSource : IPermissionDecisionSource
+    {
+        public ValueTask<PermissionDecision> EvaluateAsync(
+            string subjectId,
+            string permissionCode,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(permissionCode == OrganizationPermissions.PersonCreate
+                ? PermissionDecision.Granted
+                : PermissionDecision.Denied);
+    }
+
+    private sealed class TestAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+    {
+        public const string SchemeName = "PersonJsonContract";
+
+        public TestAuthenticationHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder)
+            : base(options, logger, encoder)
+        {
+        }
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var identity = new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "person-json-contract-subject")],
+                SchemeName);
+            var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
+            return Task.FromResult(AuthenticateResult.Success(ticket));
         }
     }
 

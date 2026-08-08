@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.ModuleTemplateSample.DTOs;
 using ICP.Platform.Modules.ModuleTemplateSample.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.ModuleTemplateSample.Controllers;
 
 [ApiController]
 [Route("api/module-template-sample")]
+[DenyAll("Module template sample endpoints are not production capabilities.")]
 public class SampleStatusController : ControllerBase
 {
     private readonly ISampleStatusService _service;

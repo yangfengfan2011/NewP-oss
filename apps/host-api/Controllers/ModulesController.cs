@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModuleLoader;
 using Microsoft.AspNetCore.Mvc;
 
@@ -5,6 +6,7 @@ namespace ICP.Platform.HostApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[DenyAll("Legacy module introspection endpoints remain frozen in the current batch.")]
 public class ModulesController : ControllerBase
 {
     private readonly ModuleRegistry _registry;

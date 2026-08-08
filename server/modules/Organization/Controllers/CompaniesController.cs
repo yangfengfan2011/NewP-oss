@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 
 [ApiController]
 [Route("api/organization/companies")]
+[EndpointModule("Organization")]
 public sealed class CompaniesController : ControllerBase
 {
     private readonly ICompanyService _companyService;
@@ -16,6 +18,7 @@ public sealed class CompaniesController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission(OrganizationPermissions.CompanyView)]
     public async Task<ActionResult<List<CompanyDto>>> GetAll(CancellationToken cancellationToken = default)
     {
         var companies = await _companyService.GetAllAsync(cancellationToken);
@@ -23,6 +26,7 @@ public sealed class CompaniesController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission(OrganizationPermissions.CompanyView)]
     public async Task<ActionResult<CompanyDto>> Get(string id, CancellationToken cancellationToken = default)
     {
         var company = await _companyService.GetByIdAsync(id, cancellationToken);
@@ -30,6 +34,7 @@ public sealed class CompaniesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(OrganizationPermissions.CompanyCreate)]
     public async Task<ActionResult<CompanyDto>> Create(
         [FromBody] CompanyDto dto,
         CancellationToken cancellationToken = default)
@@ -46,6 +51,7 @@ public sealed class CompaniesController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission(OrganizationPermissions.CompanyUpdate)]
     public async Task<ActionResult<CompanyDto>> Update(
         string id,
         [FromBody] CompanyDto dto,

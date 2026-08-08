@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,7 @@ public static class PermissionAuthorizationServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddAuthorization();
+        services.TryAddScoped<IPermissionDecisionSource, IndeterminatePermissionDecisionSource>();
         services.TryAddScoped<PermissionGate>();
         services.TryAddEnumerable(
             ServiceDescriptor.Transient<IAuthorizationHandler, PermissionAuthorizationHandler>());

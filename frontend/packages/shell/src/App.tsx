@@ -50,7 +50,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AuthorizationGate({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
 
-  return <AuthorizationProvider userId={auth.user?.id}>{children}</AuthorizationProvider>;
+  return <AuthorizationProvider isAuthenticated={auth.isAuthenticated}>{children}</AuthorizationProvider>;
 }
 
 function StandardCrudDetailRoute({ viewKey }: { viewKey: string }) {

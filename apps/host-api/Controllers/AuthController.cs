@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.HostApi.Authentication;
 using PlatformAuthorizationService = ICP.Platform.Modules.Authorization.Services.IAuthorizationService;
 using Microsoft.AspNetCore.Authentication;
@@ -74,7 +75,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpGet("current-user")]
-    [Authorize]
+    [AuthenticatedOnly]
     public async Task<ActionResult<AuthUserResponse>> GetCurrentUser(CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

@@ -1,10 +1,12 @@
-using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
+using ICP.Platform.Modules.ConfigCenter.Controllers;
+using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Repositories;
+using ICP.Platform.Modules.ConfigCenter.Services;
+using ICP.Platform.Sdk.UserMessages;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
@@ -23,61 +25,50 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
     [Fact]
     public async Task Create_ReturnsStructuredUserMessage_WhenDuplicateCode()
     {
-        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-
+        using var scope = _factory.Services.CreateScope();
+        var controller = new ValueListController(scope.ServiceProvider.GetRequiredService<IValueListService>());
         var code = "STATUS_ACTIVE_" + Guid.NewGuid().ToString("N");
-
-        var createResponse = await client.PostAsJsonAsync("/api/value-lists", new
+        var createResult = await controller.Create(new ValueListItemDto
         {
-            code,
-            name = "启用"
+            Code = code,
+            DisplayName = "启用"
         });
-        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+        Assert.IsType<OkObjectResult>(createResult.Result);
 
-        var duplicateResponse = await client.PostAsJsonAsync("/api/value-lists", new
+        var duplicateResult = await controller.Create(new ValueListItemDto
         {
-            code,
-            name = "重复"
+            Code = code,
+            DisplayName = "重复"
         });
+        var errorResult = Assert.IsType<ObjectResult>(duplicateResult.Result);
+        Assert.Equal(400, errorResult.StatusCode);
+        var message = Assert.IsType<UserMessageDto>(errorResult.Value);
 
-        Assert.Equal(HttpStatusCode.BadRequest, duplicateResponse.StatusCode);
-
-        using var document = JsonDocument.Parse(await duplicateResponse.Content.ReadAsStringAsync());
-        var root = document.RootElement;
-
-        Assert.False(root.GetProperty("success").GetBoolean());
-        Assert.Equal("error", root.GetProperty("level").GetString());
-        Assert.Equal("ValueLists.CodeAlreadyExists", root.GetProperty("messageKey").GetString());
-        Assert.Equal(code, root.GetProperty("messageArgs").GetProperty("code").GetString());
-        Assert.Equal(RenderDictionaryText("CodeAlreadyExists", ("code", code)), root.GetProperty("fallbackMessage").GetString());
-        Assert.False(root.TryGetProperty("message", out _));
+        Assert.False(message.Success);
+        Assert.Equal(UserMessageLevel.error, message.Level);
+        Assert.Equal("ValueLists.CodeAlreadyExists", message.MessageKey);
+        Assert.Equal(code, message.MessageArgs!["code"]);
+        Assert.Equal(RenderDictionaryText("CodeAlreadyExists", ("code", code)), message.FallbackMessage);
+        Assert.Null(typeof(UserMessageDto).GetProperty("Message"));
     }
 
     [Fact]
     public async Task Delete_ReturnsStructuredUserMessage_WhenItemIsMissing()
     {
-        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-
+        using var scope = _factory.Services.CreateScope();
+        var controller = new ValueListController(scope.ServiceProvider.GetRequiredService<IValueListService>());
         const string missingId = "missing-id";
-        var deleteResponse = await client.DeleteAsync($"/api/value-lists/{missingId}");
+        var deleteResult = await controller.Delete(missingId);
+        var errorResult = Assert.IsType<ObjectResult>(deleteResult);
+        Assert.Equal(404, errorResult.StatusCode);
+        var message = Assert.IsType<UserMessageDto>(errorResult.Value);
 
-        Assert.Equal(HttpStatusCode.NotFound, deleteResponse.StatusCode);
-
-        using var document = JsonDocument.Parse(await deleteResponse.Content.ReadAsStringAsync());
-        var root = document.RootElement;
-
-        Assert.False(root.GetProperty("success").GetBoolean());
-        Assert.Equal("error", root.GetProperty("level").GetString());
-        Assert.Equal("ValueLists.ItemNotFound", root.GetProperty("messageKey").GetString());
-        Assert.Equal(missingId, root.GetProperty("messageArgs").GetProperty("id").GetString());
-        Assert.Equal(RenderDictionaryText("ItemNotFound", ("id", missingId)), root.GetProperty("fallbackMessage").GetString());
-        Assert.False(root.TryGetProperty("message", out _));
+        Assert.False(message.Success);
+        Assert.Equal(UserMessageLevel.error, message.Level);
+        Assert.Equal("ValueLists.ItemNotFound", message.MessageKey);
+        Assert.Equal(missingId, message.MessageArgs!["id"]);
+        Assert.Equal(RenderDictionaryText("ItemNotFound", ("id", missingId)), message.FallbackMessage);
+        Assert.Null(typeof(UserMessageDto).GetProperty("Message"));
     }
 
     public class TestWebApplicationFactory : WebApplicationFactory<Program>, IDisposable

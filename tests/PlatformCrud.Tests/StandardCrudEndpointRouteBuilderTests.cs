@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.IO.Compression;
+using System.Security.Claims;
 using System.Text;
 using ICP.Platform.Authorization;
+using ICP.Platform.Authorization.Abstractions;
+using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
@@ -33,7 +37,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             .Select(endpoint => new EndpointPermission(
                 endpoint.RoutePattern.RawText,
                 endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? [],
-                endpoint.Metadata.GetMetadata<PermissionRequirement>()?.PermissionCode))
+                endpoint.Metadata.GetMetadata<RequirePermissionAttribute>()?.PermissionCode))
             .ToArray();
 
         AssertPermission(requirements, "GET", "/api/organization/persons", "Organization.Person.View");
@@ -267,6 +271,14 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         var builder = CreateBuilder(recording);
 
         var app = builder.Build();
+        app.Use(async (context, next) =>
+        {
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "standard-crud-test-subject")],
+                "StandardCrudTests"));
+            await next();
+        });
+        app.UseAuthorization();
         app.MapStandardCrudResources();
         return app;
     }
@@ -275,6 +287,8 @@ public sealed class StandardCrudEndpointRouteBuilderTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        builder.Services.AddPlatformAuthorization();
+        builder.Services.AddSingleton<IPermissionDecisionSource, GrantAllPermissionDecisionSource>();
         builder.Services.AddSingleton<IStandardCrudService>(recording);
         builder.Services.AddSingleton<StandardCrudXlsxWriter>();
         builder.Services.AddScoped<StandardCrudEndpoint>();
@@ -283,30 +297,39 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         return builder;
     }
 
+    private sealed class GrantAllPermissionDecisionSource : IPermissionDecisionSource
+    {
+        public ValueTask<PermissionDecision> EvaluateAsync(
+            string subjectId,
+            string permissionCode,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(PermissionDecision.Granted);
+    }
+
     private static StandardCrudDescriptor Descriptor(
         string resourceKey = "organization.person",
         string route = "api/organization/persons") => new()
-    {
-        ResourceKey = resourceKey,
-        ModuleId = "Organization",
-        ModelName = "Person",
-        Route = route,
-        IdField = "EID",
-        DisplayField = "ENAME",
-        EnabledField = "IsEnabled",
-        FieldSet = new StandardCrudFieldSet(
+        {
+            ResourceKey = resourceKey,
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = route,
+            IdField = "EID",
+            DisplayField = "ENAME",
+            EnabledField = "IsEnabled",
+            FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "IsEnabled"]),
-        OptionLabelFields = ["PersonNo", "ENAME"],
-        DisplayValueFields =
+            OptionLabelFields = ["PersonNo", "ENAME"],
+            DisplayValueFields =
         [
             new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
         ],
-        Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
-        DeletePolicy = StandardCrudDeletePolicy.Conditional
-    };
+            Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
+            DeletePolicy = StandardCrudDeletePolicy.Conditional
+        };
 
     private static void AssertPermission(
         IReadOnlyList<EndpointPermission> requirements,

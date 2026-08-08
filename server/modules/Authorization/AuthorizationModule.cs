@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Repositories;
@@ -21,6 +22,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
 
         // 注册核心服务
         services.AddScoped<IAuthorizationService, AuthorizationService>();
+        services.AddScoped<IPermissionDecisionSource, AuthorizationPermissionDecisionSource>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPermissionService, PermissionService>();
 
@@ -37,7 +39,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
         {
             new PermissionDescriptor
             {
-                Code = "Authorization.Role.View",
+                Code = AuthorizationPermissions.RoleView,
                 DisplayName = "查看角色",
                 Description = "允许查看角色列表和详情",
                 ModuleId = ModuleId,
@@ -45,7 +47,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
             },
             new PermissionDescriptor
             {
-                Code = "Authorization.Role.Create",
+                Code = AuthorizationPermissions.RoleCreate,
                 DisplayName = "创建角色",
                 Description = "允许创建新角色",
                 ModuleId = ModuleId,
@@ -53,7 +55,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
             },
             new PermissionDescriptor
             {
-                Code = "Authorization.Role.Edit",
+                Code = AuthorizationPermissions.RoleEdit,
                 DisplayName = "编辑角色",
                 Description = "允许编辑角色信息",
                 ModuleId = ModuleId,
@@ -61,7 +63,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
             },
             new PermissionDescriptor
             {
-                Code = "Authorization.Role.Delete",
+                Code = AuthorizationPermissions.RoleDelete,
                 DisplayName = "删除角色",
                 Description = "允许删除角色",
                 ModuleId = ModuleId,
@@ -69,7 +71,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
             },
             new PermissionDescriptor
             {
-                Code = "Authorization.Permission.View",
+                Code = AuthorizationPermissions.PermissionView,
                 DisplayName = "查看权限",
                 Description = "允许查看权限列表",
                 ModuleId = ModuleId,
@@ -77,7 +79,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
             },
             new PermissionDescriptor
             {
-                Code = "Authorization.Permission.Assign",
+                Code = AuthorizationPermissions.PermissionAssign,
                 DisplayName = "分配权限",
                 Description = "允许为角色分配权限",
                 ModuleId = ModuleId,
@@ -85,7 +87,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
             },
             new PermissionDescriptor
             {
-                Code = "Authorization.User.AssignRole",
+                Code = AuthorizationPermissions.UserAssignRole,
                 DisplayName = "分配用户角色",
                 Description = "允许为用户分配角色",
                 ModuleId = ModuleId,
@@ -106,7 +108,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
                 Route = "/authorization",
                 Icon = "shield",
                 Order = 10,
-                RequiredPermission = "Authorization.Role.View",
+                RequiredPermission = AuthorizationPermissions.RoleView,
                 ModuleId = ModuleId
             },
             new MenuDescriptor
@@ -117,7 +119,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
                 Route = "/authorization/roles",
                 Icon = "user-group",
                 Order = 1,
-                RequiredPermission = "Authorization.Role.View",
+                RequiredPermission = AuthorizationPermissions.RoleView,
                 ModuleId = ModuleId
             },
             new MenuDescriptor
@@ -128,7 +130,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
                 Route = "/authorization/permissions",
                 Icon = "key",
                 Order = 2,
-                RequiredPermission = "Authorization.Permission.View",
+                RequiredPermission = AuthorizationPermissions.PermissionView,
                 ModuleId = ModuleId
             }
         };

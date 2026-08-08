@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
 
 export interface Permission {
   code: string;
@@ -20,16 +20,16 @@ const AuthorizationContext = createContext<AuthorizationContextValue | undefined
 
 export interface AuthorizationProviderProps {
   children: ReactNode;
-  userId?: string;
+  isAuthenticated?: boolean;
   apiBaseUrl?: string;
 }
 
-export function AuthorizationProvider({ children, userId, apiBaseUrl = '/api' }: AuthorizationProviderProps) {
+export function AuthorizationProvider({ children, isAuthenticated = false, apiBaseUrl = '/api' }: AuthorizationProviderProps) {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPermissions = async () => {
-    if (!userId) {
+  const fetchPermissions = useCallback(async () => {
+    if (!isAuthenticated) {
       setPermissions([]);
       setLoading(false);
       return;
@@ -37,10 +37,12 @@ export function AuthorizationProvider({ children, userId, apiBaseUrl = '/api' }:
 
     try {
       setLoading(true);
-      const response = await fetch(`${apiBaseUrl}/authorization/users/${userId}/permissions`);
+      const response = await fetch(`${apiBaseUrl}/auth/current-user`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
-        setPermissions(data);
+        setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
       } else {
         console.error('Failed to fetch permissions:', response.statusText);
         setPermissions([]);
@@ -51,11 +53,11 @@ export function AuthorizationProvider({ children, userId, apiBaseUrl = '/api' }:
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBaseUrl, isAuthenticated]);
 
   useEffect(() => {
-    fetchPermissions();
-  }, [userId]);
+    void fetchPermissions();
+  }, [fetchPermissions]);
 
   const hasPermission = (permission: string): boolean => {
     return permissions.includes(permission);

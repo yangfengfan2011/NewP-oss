@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Audit.DTOs;
 using ICP.Platform.Modules.Audit.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.Audit.Controllers;
 
 [ApiController]
 [Route("api/audit/access-logs")]
+[DenyAll("Audit product endpoints remain frozen in the current batch.")]
 public class AccessLogsController : ControllerBase
 {
     private readonly IAuditService _auditService;

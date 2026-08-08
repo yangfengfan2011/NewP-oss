@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.MetadataConfigCenter.DTOs;
 using ICP.Platform.Modules.MetadataConfigCenter.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ namespace ICP.Platform.Modules.MetadataConfigCenter.Controllers;
 
 [ApiController]
 [Route("api/metadata-config/modules/{moduleId}/settings")]
+[DenyAll("MetadataConfigCenter product endpoints remain frozen in the current batch.")]
 public class SettingDefinitionsController : ControllerBase
 {
     private readonly ISettingDefinitionAuthoringService _settingDefinitionAuthoringService;

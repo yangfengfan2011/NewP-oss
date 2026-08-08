@@ -1,8 +1,12 @@
 ﻿using System.Reflection;
 using System.Text.Json.Serialization;
+using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.HostApi.Authorization;
+using ICP.Platform.HostApi.Endpoints;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.HostApi.Readiness;
@@ -12,14 +16,17 @@ using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Modules.MetadataConfigCenter;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers(options =>
+var mvcBuilder = builder.Services.AddControllers(options =>
     {
         // 生成 DTO 同时承载 create/update/response；Id 等服务端生成字段不能因为 C# 非空标注被请求模型绑定强制必填。
         options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
@@ -36,7 +43,15 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy =>
         policy.RequireRole("LocalAdmin"));
+    options.AddPolicy(DenyAllAttribute.PolicyName, policy =>
+        policy.RequireAuthenticatedUser().RequireAssertion(static _ => false));
+    // 启动审计阻止当前漏标 endpoint；fallback 继续覆盖运行期后来加入的漏网 endpoint。
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireAssertion(static _ => false)
+        .Build();
 });
+builder.Services.AddPlatformAuthorization();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -113,28 +128,35 @@ var pluginDiscoveryRoot = Directory.Exists(backendLoadViewPath) && Directory.Enu
     : modulesRootPath;
 var pluginAssemblyLoader = new PluginRuntimeAssemblyLoader(hostVersion, disabledPlugins);
 var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(pluginDiscoveryRoot);
+var activeControllerAssemblies = new[]
+    {
+        Assembly.GetExecutingAssembly(),
+        typeof(MetadataConfigCenterModule).Assembly
+    }
+    .Concat(pluginLoadResult.LoadedAssemblies)
+    .DistinctBy(static assembly => assembly.FullName, StringComparer.Ordinal)
+    .ToArray();
+mvcBuilder.ConfigureApplicationPartManager(manager =>
+{
+    // 只让活动模块贡献 Controller；引用但未装载的模块不能绕过 active catalog 进入 endpoint plan。
+    manager.ApplicationParts.Clear();
+    foreach (var assembly in activeControllerAssemblies)
+    {
+        manager.ApplicationParts.Add(new AssemblyPart(assembly));
+    }
+});
 
 builder.Services.AddModuleSystem(options =>
 {
-    options.Assemblies.Add(Assembly.GetExecutingAssembly());
-    options.Assemblies.Add(typeof(MetadataConfigCenterModule).Assembly);
-    foreach (var pluginAssembly in pluginLoadResult.LoadedAssemblies)
+    foreach (var assembly in activeControllerAssemblies)
     {
-        options.Assemblies.Add(pluginAssembly);
+        options.Assemblies.Add(assembly);
     }
 });
 
 var app = builder.Build();
 
 await app.ApplyPlatformPersistenceAsync();
-
-var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
-if (!skipLocalAuthSeeding)
-{
-    using var scope = app.Services.CreateScope();
-    var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
-    await seeder.SeedAsync();
-}
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -144,53 +166,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.Map("/plugins/frontend-plugin-manifest.json", manifestApp =>
-{
-    manifestApp.Run(async context =>
-    {
-        var manifestPath = Path.Combine(pluginInstallRoot, "runtime", "frontend-plugin-manifest.json");
-        if (!File.Exists(manifestPath))
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
-        }
-
-        context.Response.ContentType = "application/json";
-        await context.Response.SendFileAsync(manifestPath);
-    });
-});
-
-app.Map("/plugins/localization-manifest.json", manifestApp =>
-{
-    manifestApp.Run(async context =>
-    {
-        var manifestPath = Path.Combine(pluginInstallRoot, "runtime", "localization-manifest.json");
-        if (!File.Exists(manifestPath))
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
-        }
-
-        context.Response.ContentType = "application/json";
-        await context.Response.SendFileAsync(manifestPath);
-    });
-});
-
-app.Map("/plugins/metadata-runtime-manifest.json", manifestApp =>
-{
-    manifestApp.Run(async context =>
-    {
-        var manifestPath = Path.Combine(pluginInstallRoot, "runtime", "metadata-runtime-manifest.json");
-        if (!File.Exists(manifestPath))
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
-        }
-
-        context.Response.ContentType = "application/json";
-        await context.Response.SendFileAsync(manifestPath);
-    });
-});
+app.MapPluginManifestEndpoints(pluginInstallRoot);
 
 var runtimeModulesPath = Path.Combine(pluginInstallRoot, "runtime", "modules");
 if (Directory.Exists(runtimeModulesPath))
@@ -223,6 +199,18 @@ if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 }
 
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
+var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
+    ((IEndpointRouteBuilder)app).DataSources,
+    registry);
+
+var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
+if (!skipLocalAuthSeeding)
+{
+    using var scope = app.Services.CreateScope();
+    var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
+    await seeder.SeedAsync(endpointAccessPlan.ActivePermissions);
+}
+
 var modules = registry.GetAllModules();
 var logger = app.Logger;
 

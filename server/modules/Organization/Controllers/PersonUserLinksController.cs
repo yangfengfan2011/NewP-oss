@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Services;
@@ -7,6 +8,7 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 
 [ApiController]
 [Route("api/organization/persons")]
+[EndpointModule("Organization")]
 public sealed class PersonUserLinksController : ControllerBase
 {
     private readonly IIdentityUserDirectory _identityUserDirectory;
@@ -21,6 +23,7 @@ public sealed class PersonUserLinksController : ControllerBase
     }
 
     [HttpGet("user-options")]
+    [RequirePermission(OrganizationPermissions.PersonLinkUser)]
     public async Task<ActionResult<IReadOnlyList<IdentityUserOptionDto>>> SearchUserOptions(
         [FromQuery] string keyword,
         CancellationToken cancellationToken = default)
@@ -30,6 +33,7 @@ public sealed class PersonUserLinksController : ControllerBase
     }
 
     [HttpPut("{id}/user-link")]
+    [RequirePermission(OrganizationPermissions.PersonLinkUser)]
     public async Task<ActionResult<PersonUserLinkDto>> LinkUser(
         string id,
         [FromBody] LinkPersonUserRequest request,

@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Services;
 using ICP.Platform.Sdk.UserMessages;
@@ -7,6 +8,7 @@ namespace ICP.Platform.Modules.ConfigCenter.Controllers;
 
 [ApiController]
 [Route("api/value-lists")]
+[DenyAll("ConfigCenter product endpoints remain frozen in the current batch.")]
 public class ValueListController : ControllerBase
 {
     private readonly IValueListService _service;

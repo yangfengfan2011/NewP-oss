@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using ICP.Platform.Authorization.Abstractions;
+using ICP.Platform.Authorization.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ICP.Platform.Authorization.Tests;
@@ -33,6 +35,24 @@ public sealed class PermissionGateTests
         var subject = AuthenticatedSubject.FromPrincipal(CreatePrincipal("trusted-subject"));
 
         var result = await gate.EvaluateAsync(subject, new PermissionRequirement("Organization.Person.View"));
+
+        Assert.Equal(PermissionDecision.Indeterminate, result.Decision);
+        Assert.Equal(PermissionGateFailureCodes.DecisionUnavailable, result.FailureCode);
+    }
+
+    [Fact]
+    public async Task AddPlatformAuthorization_WhenDecisionSourceIsNotRegistered_FailsClosed()
+    {
+        var services = new ServiceCollection();
+        services.AddPlatformAuthorization();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var gate = scope.ServiceProvider.GetRequiredService<PermissionGate>();
+        var subject = AuthenticatedSubject.FromPrincipal(CreatePrincipal("trusted-subject"));
+
+        var result = await gate.EvaluateAsync(
+            subject,
+            new PermissionRequirement("Organization.Person.View"));
 
         Assert.Equal(PermissionDecision.Indeterminate, result.Decision);
         Assert.Equal(PermissionGateFailureCodes.DecisionUnavailable, result.FailureCode);

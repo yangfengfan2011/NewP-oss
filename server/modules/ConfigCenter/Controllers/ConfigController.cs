@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.ConfigCenter.DTOs;
 using ICP.Platform.Modules.ConfigCenter.Imports;
 using ICP.Platform.Modules.ConfigCenter.Services;
@@ -7,6 +8,7 @@ namespace ICP.Platform.Modules.ConfigCenter.Controllers;
 
 [ApiController]
 [Route("api/config")]
+[DenyAll("ConfigCenter product endpoints remain frozen in the current batch.")]
 public class ConfigController : ControllerBase
 {
     private readonly IConfigService _configService;

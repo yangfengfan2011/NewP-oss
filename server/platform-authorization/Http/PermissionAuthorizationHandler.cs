@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace ICP.Platform.Authorization.Http;
 
@@ -9,10 +11,14 @@ public sealed class PermissionAuthorizationHandler
     : AuthorizationHandler<PermissionAuthorizationRequirement>
 {
     private readonly PermissionGate _gate;
+    private readonly ILogger<PermissionAuthorizationHandler> _logger;
 
-    public PermissionAuthorizationHandler(PermissionGate gate)
+    public PermissionAuthorizationHandler(
+        PermissionGate gate,
+        ILogger<PermissionAuthorizationHandler> logger)
     {
         _gate = gate;
+        _logger = logger;
     }
 
     protected override async Task HandleRequirementAsync(
@@ -31,11 +37,19 @@ public sealed class PermissionAuthorizationHandler
         }
         catch (PermissionSubjectException exception)
         {
+            _logger.LogCritical(
+                "PermissionGate could not establish a trusted subject for endpoint {Endpoint}. FailureCode: {FailureCode}",
+                GetEndpointDisplayName(context.Resource),
+                exception.FailureCode);
             context.Fail(new AuthorizationFailureReason(this, exception.FailureCode));
             return;
         }
 
-        var result = await _gate.EvaluateAsync(subject, requirement.Requirement);
+        var httpContext = context.Resource as HttpContext;
+        var result = await _gate.EvaluateAsync(
+            subject,
+            requirement.Requirement,
+            httpContext?.RequestAborted ?? default);
         switch (result.Decision)
         {
             case PermissionDecision.Granted:
@@ -43,6 +57,17 @@ public sealed class PermissionAuthorizationHandler
                 break;
             case PermissionDecision.Denied:
             case PermissionDecision.Indeterminate:
+                if (result.Decision is PermissionDecision.Indeterminate)
+                {
+                    _logger.LogError(
+                        "PermissionGate decision unavailable for endpoint {Endpoint}, permission {Permission}, subject {SubjectId}, correlation {CorrelationId}. FailureCode: {FailureCode}",
+                        GetEndpointDisplayName(context.Resource),
+                        requirement.Requirement.PermissionCode,
+                        subject.SubjectId,
+                        httpContext?.TraceIdentifier,
+                        result.FailureCode ?? PermissionGateFailureCodes.DecisionUnavailable);
+                }
+
                 context.Fail(new AuthorizationFailureReason(
                     this,
                     result.FailureCode ?? PermissionGateFailureCodes.DecisionUnavailable));
@@ -54,4 +79,9 @@ public sealed class PermissionAuthorizationHandler
                 break;
         }
     }
+
+    private static string GetEndpointDisplayName(object? resource) =>
+        resource is HttpContext httpContext
+            ? httpContext.GetEndpoint()?.DisplayName ?? "(unknown)"
+            : "(unknown)";
 }

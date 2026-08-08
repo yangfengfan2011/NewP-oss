@@ -128,13 +128,27 @@ public class RuntimeViewMaterializer
         }
 
         var plan = compilation.Plan;
+        using var stage = Stage(installRoot, plan);
+        using var commit = stage.BeginCommit();
+        commit.Complete();
+        return plan;
+    }
+
+    /// <summary>
+    /// 从已编译计划构建尚不可见的 runtime/public staging；不会读取或修改启用状态。
+    /// </summary>
+    public RuntimeViewProjectionStage Stage(string installRoot, CanonicalModulePlan plan)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(installRoot);
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var resolvedInstallRoot = Path.GetFullPath(installRoot);
         // 所有输出先进入 staging；只有全部成功后才会替换正式 runtime/public，
         // 避免中途失败时留下半更新的运行时视图。
-        var stagingRoot = Path.Combine(installRoot, $".materialize-staging-{Guid.NewGuid():N}");
+        var stagingRoot = Path.Combine(resolvedInstallRoot, $".materialize-staging-{Guid.NewGuid():N}");
         var stagedRuntimeRoot = Path.Combine(stagingRoot, "runtime");
         var stagedBackendViewRoot = Path.Combine(stagedRuntimeRoot, "backend-load-view");
         var stagedPublicRoot = Path.Combine(stagingRoot, "public");
-        var commitWorkspaceRoot = Path.Combine(installRoot, $".materialize-commit-{Guid.NewGuid():N}");
 
         try
         {
@@ -170,20 +184,18 @@ public class RuntimeViewMaterializer
                 Path.Combine(stagedRuntimeRoot, "active-module-runtime.json"),
                 new ActiveModuleRuntimeCatalogBuilder(_frontendManifestBuilder.PublicBaseUrl).Build(plan));
 
-            ReplaceProjection(installRoot, stagedRuntimeRoot, stagedPublicRoot, commitWorkspaceRoot);
-            return plan;
+            return new RuntimeViewProjectionStage(
+                this,
+                resolvedInstallRoot,
+                stagingRoot,
+                stagedRuntimeRoot,
+                stagedPublicRoot,
+                plan);
         }
-        finally
+        catch
         {
-            if (Directory.Exists(stagingRoot))
-            {
-                Directory.Delete(stagingRoot, recursive: true);
-            }
-
-            if (Directory.Exists(commitWorkspaceRoot))
-            {
-                Directory.Delete(commitWorkspaceRoot, recursive: true);
-            }
+            TryDeleteDirectory(stagingRoot);
+            throw;
         }
     }
 
@@ -282,6 +294,12 @@ public class RuntimeViewMaterializer
 
     private static void StageModuleMetadata(string runtimeRoot, CanonicalModulePlanModule module)
     {
+        if (string.Equals(module.FrontendBindingMode, "standard-data", StringComparison.Ordinal))
+        {
+            StageStandardDataModule(runtimeRoot, module);
+            return;
+        }
+
         var packageMetadataRoot = module.Provenance.SourceKind == "built-in"
             ? Path.Combine(module.PackageRoot, "metadata")
             : Path.Combine(module.PackageRoot, "modules", module.ModuleId, "metadata");
@@ -292,6 +310,201 @@ public class RuntimeViewMaterializer
 
         var targetMetadataRoot = Path.Combine(runtimeRoot, "modules", module.ModuleId, "metadata");
         CopyDirectory(packageMetadataRoot, targetMetadataRoot);
+    }
+
+    private static void StageStandardDataModule(string runtimeRoot, CanonicalModulePlanModule module)
+    {
+        var moduleRuntimeRoot = Path.Combine(runtimeRoot, "modules", module.ModuleId);
+        var targetMetadataRoot = Path.Combine(moduleRuntimeRoot, "metadata");
+        var packageMetadataRoot = Path.Combine(module.PackageRoot, "metadata");
+        if (Directory.Exists(packageMetadataRoot))
+        {
+            CopyDirectory(packageMetadataRoot, targetMetadataRoot);
+        }
+
+        var manifest = ReadPackageObject(module.PackageRoot, "plugin.json");
+        var artifacts = manifest["artifacts"]?.AsObject()
+            ?? throw new JsonException($"Standard data package '{module.ModuleId}' is missing artifacts.");
+        var blueprintRelativePath = RequiredString(artifacts, "blueprint", module.ModuleId);
+        var projectionRelativePath = RequiredString(artifacts, "standardProjection", module.ModuleId);
+        var blueprintPath = ResolveContainedFilePath(module.PackageRoot, blueprintRelativePath, "Blueprint");
+        var projectionPath = ResolveContainedFilePath(module.PackageRoot, projectionRelativePath, "StandardProjection");
+
+        CopyContract(blueprintPath, Path.Combine(moduleRuntimeRoot, "authoring", "newp.plugin.json"));
+        CopyContract(projectionPath, Path.Combine(moduleRuntimeRoot, "projections", "standard-data.json"));
+
+        var blueprint = JsonNode.Parse(File.ReadAllText(blueprintPath))?.AsObject()
+            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' deserialized to null.");
+        var projection = JsonNode.Parse(File.ReadAllText(projectionPath))?.AsObject()
+            ?? throw new JsonException($"Standard data projection for '{module.ModuleId}' deserialized to null.");
+        WriteStandardDataMetadata(targetMetadataRoot, module, blueprint, projection);
+    }
+
+    private static void WriteStandardDataMetadata(
+        string metadataRoot,
+        CanonicalModulePlanModule module,
+        JsonObject blueprint,
+        JsonObject projection)
+    {
+        var standardData = blueprint["standardData"]?.AsObject()
+            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' is missing standardData.");
+        var resources = standardData["resources"]?.AsArray()
+            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' is missing resources.");
+        var projectedResources = projection["resources"]?.AsArray()
+            ?? throw new JsonException($"Standard data projection for '{module.ModuleId}' is missing resources.");
+        var navigation = blueprint["navigation"]?.AsObject()
+            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' is missing navigation.");
+        var moduleSlug = RequiredString(projection, "moduleSlug", module.ModuleId);
+        var navigationItems = new List<object>
+        {
+            new
+            {
+                key = moduleSlug,
+                titleKey = RequiredString(navigation, "group", module.ModuleId),
+                icon = "database",
+                order = navigation["order"]?.GetValue<int>() ?? 0
+            }
+        };
+
+        foreach (var resourceNode in resources)
+        {
+            var resource = resourceNode?.AsObject()
+                ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' contains an invalid resource.");
+            var resourceKey = RequiredString(resource, "key", module.ModuleId);
+            var resourceSlug = ToRouteToken(resourceKey);
+            var resourceProjection = projectedResources
+                .Select(static item => item?.AsObject())
+                .SingleOrDefault(item => item is not null
+                    && string.Equals(item["resourceKey"]?.GetValue<string>(), resourceKey, StringComparison.Ordinal))
+                ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' has no projection.");
+            var pageRoute = RequiredString(resourceProjection, "pageRoute", module.ModuleId);
+            var permissionCodes = resourceProjection["permissionCodes"]?.AsArray()
+                .Select(static item => item?.GetValue<string>() ?? string.Empty)
+                .Where(static code => code.Length > 0)
+                .ToArray() ?? [];
+            var viewPermission = permissionCodes.Single(code => code.EndsWith(".View", StringComparison.Ordinal));
+            var createPermission = permissionCodes.Single(code => code.EndsWith(".Create", StringComparison.Ordinal));
+            var updatePermission = permissionCodes.Single(code => code.EndsWith(".Update", StringComparison.Ordinal));
+            var deletePermission = permissionCodes.Single(code => code.EndsWith(".Delete", StringComparison.Ordinal));
+            var listViewKey = $"{moduleSlug}.{resourceSlug}.list";
+            var detailViewKey = $"{moduleSlug}.{resourceSlug}.detail";
+            var fields = resource["fields"]?.AsArray()
+                ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' is missing fields.");
+
+            navigationItems.Add(new
+            {
+                key = $"{moduleSlug}.{resourceSlug}",
+                titleKey = RequiredString(resource, "displayName", module.ModuleId),
+                icon = "table",
+                parentKey = moduleSlug,
+                path = pageRoute,
+                order = navigation["order"]?.GetValue<int>() ?? 0,
+                entryType = "standard-list",
+                targetKey = listViewKey,
+                permissions = new[] { viewPermission }
+            });
+
+            var columns = fields.Select(fieldNode =>
+            {
+                var field = fieldNode?.AsObject()
+                    ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' contains an invalid field.");
+                var fieldName = RequiredString(field, "name", module.ModuleId);
+                return new
+                {
+                    key = ToRouteToken(fieldName),
+                    labelKey = fieldName,
+                    source = "model",
+                    field = fieldName,
+                    sortable = true
+                };
+            }).ToArray();
+
+            WriteJson(
+                Path.Combine(metadataRoot, "views", $"{resourceKey}List.view.json"),
+                new
+                {
+                    schemaVersion = "1.0",
+                    type = "view",
+                    view = new
+                    {
+                        key = listViewKey,
+                        dicKey = $"{resourceKey}ListView",
+                        titleKey = RequiredString(resource, "displayName", module.ModuleId),
+                        mode = "list",
+                        model = resourceKey,
+                        editorMode = "drawer",
+                        detailViewKey,
+                        columns,
+                        pageActions = new object[]
+                        {
+                            new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary", permissions = new[] { createPermission } },
+                            new { key = "refresh", labelKey = "Action_Refresh", standardAction = "refresh", variant = (string?)null, permissions = Array.Empty<string>() }
+                        },
+                        rowActions = new object[]
+                        {
+                            new { key = "view", labelKey = "Action_View", standardAction = "view", variant = (string?)null, permissions = Array.Empty<string>() },
+                            new { key = "edit", labelKey = "Action_Edit", standardAction = "edit", variant = (string?)null, permissions = new[] { updatePermission } },
+                            new { key = "delete", labelKey = "Action_Delete", standardAction = "delete", variant = "danger", permissions = new[] { deletePermission } }
+                        }
+                    }
+                });
+            WriteJson(
+                Path.Combine(metadataRoot, "views", $"{resourceKey}Detail.view.json"),
+                new
+                {
+                    schemaVersion = "1.0",
+                    type = "view",
+                    view = new
+                    {
+                        key = detailViewKey,
+                        dicKey = $"{resourceKey}DetailView",
+                        titleKey = RequiredString(resource, "displayName", module.ModuleId),
+                        mode = "detail",
+                        model = resourceKey,
+                        pageActions = new[]
+                        {
+                            new { key = "edit", labelKey = "Action_Edit", standardAction = "edit", permissions = new[] { updatePermission } }
+                        }
+                    }
+                });
+        }
+
+        WriteJson(
+            Path.Combine(metadataRoot, "navigation", "standard-data.nav.json"),
+            new
+            {
+                schemaVersion = "1.0",
+                type = "nav",
+                navigation = new { items = navigationItems }
+            });
+    }
+
+    private static JsonObject ReadPackageObject(string packageRoot, string relativePath)
+    {
+        var path = ResolveContainedFilePath(packageRoot, relativePath, "PackageManifest");
+        return JsonNode.Parse(File.ReadAllText(path))?.AsObject()
+            ?? throw new JsonException($"Package file '{relativePath}' deserialized to null.");
+    }
+
+    private static string RequiredString(JsonObject value, string propertyName, string moduleId) =>
+        value[propertyName]?.GetValue<string>() is { Length: > 0 } result
+            ? result
+            : throw new JsonException($"Standard data package '{moduleId}' is missing {propertyName}.");
+
+    private static string ToRouteToken(string value) =>
+        string.Concat(value.Select((character, index) =>
+            char.IsUpper(character) && index > 0 ? $"-{char.ToLowerInvariant(character)}" : char.ToLowerInvariant(character).ToString()));
+
+    private static void CopyContract(string sourcePath, string destinationPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        File.Copy(sourcePath, destinationPath, overwrite: true);
+    }
+
+    private static void WriteJson(string path, object value)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
     }
 
     private static void StagePlatformResources(string runtimeRoot, CanonicalModulePlanModule module)
@@ -363,10 +576,13 @@ public class RuntimeViewMaterializer
         return projection.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
     }
 
-    private void ReplaceProjection(string installRoot, string stagedRuntimeRoot, string stagedPublicRoot, string commitWorkspaceRoot)
+    internal RuntimeViewProjectionCommit BeginCommit(RuntimeViewProjectionStage stage)
     {
-        var runtimeRoot = Path.Combine(installRoot, "runtime");
-        var publicRoot = Path.Combine(installRoot, "public");
+        var runtimeRoot = Path.Combine(stage.InstallRoot, "runtime");
+        var publicRoot = Path.Combine(stage.InstallRoot, "public");
+        var commitWorkspaceRoot = Path.Combine(
+            stage.InstallRoot,
+            $".materialize-commit-{Guid.NewGuid():N}");
         var runtimeBackupRoot = Path.Combine(commitWorkspaceRoot, "runtime-backup");
         var publicBackupRoot = Path.Combine(commitWorkspaceRoot, "public-backup");
         var runtimeExists = Directory.Exists(runtimeRoot);
@@ -390,31 +606,33 @@ public class RuntimeViewMaterializer
                 _moveDirectory(publicRoot, publicBackupRoot);
             }
 
-            _moveDirectory(stagedRuntimeRoot, runtimeRoot);
+            _moveDirectory(stage.StagedRuntimeRoot, runtimeRoot);
             runtimeCommitted = true;
 
-            _moveDirectory(stagedPublicRoot, publicRoot);
+            _moveDirectory(stage.StagedPublicRoot, publicRoot);
             publicCommitted = true;
 
-            if (Directory.Exists(runtimeBackupRoot))
-            {
-                Directory.Delete(runtimeBackupRoot, recursive: true);
-            }
-
-            if (Directory.Exists(publicBackupRoot))
-            {
-                Directory.Delete(publicBackupRoot, recursive: true);
-            }
+            return new RuntimeViewProjectionCommit(
+                runtimeRoot,
+                publicRoot,
+                runtimeBackupRoot,
+                publicBackupRoot,
+                commitWorkspaceRoot,
+                runtimeExists,
+                publicExists,
+                runtimeCommitted,
+                publicCommitted);
         }
         catch
         {
             RestoreProjection(runtimeRoot, runtimeBackupRoot, runtimeExists, runtimeCommitted);
             RestoreProjection(publicRoot, publicBackupRoot, publicExists, publicCommitted);
+            TryDeleteDirectory(commitWorkspaceRoot);
             throw;
         }
     }
 
-    private static void RestoreProjection(string destinationPath, string backupPath, bool destinationPreviouslyExisted, bool destinationWasReplaced)
+    internal static void RestoreProjection(string destinationPath, string backupPath, bool destinationPreviouslyExisted, bool destinationWasReplaced)
     {
         if (destinationWasReplaced && Directory.Exists(destinationPath))
         {
@@ -425,6 +643,20 @@ public class RuntimeViewMaterializer
         if (destinationPreviouslyExisted && Directory.Exists(backupPath))
         {
             Directory.Move(backupPath, destinationPath);
+        }
+    }
+
+    internal static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
         }
     }
 
@@ -516,5 +748,147 @@ public class RuntimeViewMaterializer
     private sealed class FrontendEntryManifest
     {
         public string Entry { get; set; } = string.Empty;
+    }
+}
+
+/// <summary>
+/// 尚未发布的 runtime/public 投影。Dispose 只清理本次 staging。
+/// </summary>
+public sealed class RuntimeViewProjectionStage : IDisposable
+{
+    private readonly RuntimeViewMaterializer _owner;
+    private bool _commitStarted;
+    private bool _disposed;
+
+    internal RuntimeViewProjectionStage(
+        RuntimeViewMaterializer owner,
+        string installRoot,
+        string stagingRoot,
+        string stagedRuntimeRoot,
+        string stagedPublicRoot,
+        CanonicalModulePlan plan)
+    {
+        _owner = owner;
+        InstallRoot = installRoot;
+        StagingRoot = stagingRoot;
+        StagedRuntimeRoot = stagedRuntimeRoot;
+        StagedPublicRoot = stagedPublicRoot;
+        Plan = plan;
+    }
+
+    internal string InstallRoot { get; }
+
+    internal string StagingRoot { get; }
+
+    internal string StagedRuntimeRoot { get; }
+
+    internal string StagedPublicRoot { get; }
+
+    public CanonicalModulePlan Plan { get; }
+
+    public string BackendLoadViewRoot => Path.Combine(StagedRuntimeRoot, "backend-load-view");
+
+    public RuntimeViewProjectionCommit BeginCommit()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_commitStarted)
+        {
+            throw new InvalidOperationException("Runtime projection staging already started a commit.");
+        }
+
+        var commit = _owner.BeginCommit(this);
+        _commitStarted = true;
+        return commit;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        RuntimeViewMaterializer.TryDeleteDirectory(StagingRoot);
+    }
+}
+
+/// <summary>
+/// runtime/public 的可回滚目录切换。Complete 后新投影成为最终结果；否则 Dispose 恢复旧投影。
+/// </summary>
+public sealed class RuntimeViewProjectionCommit : IDisposable
+{
+    private readonly string _runtimeRoot;
+    private readonly string _publicRoot;
+    private readonly string _runtimeBackupRoot;
+    private readonly string _publicBackupRoot;
+    private readonly string _commitWorkspaceRoot;
+    private readonly bool _runtimePreviouslyExisted;
+    private readonly bool _publicPreviouslyExisted;
+    private readonly bool _runtimeCommitted;
+    private readonly bool _publicCommitted;
+    private bool _completed;
+    private bool _disposed;
+
+    internal RuntimeViewProjectionCommit(
+        string runtimeRoot,
+        string publicRoot,
+        string runtimeBackupRoot,
+        string publicBackupRoot,
+        string commitWorkspaceRoot,
+        bool runtimePreviouslyExisted,
+        bool publicPreviouslyExisted,
+        bool runtimeCommitted,
+        bool publicCommitted)
+    {
+        _runtimeRoot = runtimeRoot;
+        _publicRoot = publicRoot;
+        _runtimeBackupRoot = runtimeBackupRoot;
+        _publicBackupRoot = publicBackupRoot;
+        _commitWorkspaceRoot = commitWorkspaceRoot;
+        _runtimePreviouslyExisted = runtimePreviouslyExisted;
+        _publicPreviouslyExisted = publicPreviouslyExisted;
+        _runtimeCommitted = runtimeCommitted;
+        _publicCommitted = publicCommitted;
+    }
+
+    public void Complete()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_completed)
+        {
+            return;
+        }
+
+        // active state 已原子提交后不能再回滚投影；先标记完成，再清理只用于恢复的备份。
+        _completed = true;
+        RuntimeViewMaterializer.TryDeleteDirectory(_runtimeBackupRoot);
+        RuntimeViewMaterializer.TryDeleteDirectory(_publicBackupRoot);
+        RuntimeViewMaterializer.TryDeleteDirectory(_commitWorkspaceRoot);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (!_completed)
+        {
+            RuntimeViewMaterializer.RestoreProjection(
+                _runtimeRoot,
+                _runtimeBackupRoot,
+                _runtimePreviouslyExisted,
+                _runtimeCommitted);
+            RuntimeViewMaterializer.RestoreProjection(
+                _publicRoot,
+                _publicBackupRoot,
+                _publicPreviouslyExisted,
+                _publicCommitted);
+        }
+
+        RuntimeViewMaterializer.TryDeleteDirectory(_commitWorkspaceRoot);
     }
 }

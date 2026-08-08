@@ -57,6 +57,7 @@
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.sqlserver\PlatformPersistence.EfCore.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.oracle\PlatformPersistence.EfCore.OracleMigrations.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.mysql\PlatformPersistence.EfCore.MySqlMigrations.csproj" />
+    <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
     <ProjectReference Include="..\..\server\modules\Demo\DemoModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Authorization\AuthorizationModule.csproj" />
     <ProjectReference Include="..\..\server\modules\ConfigCenter\ConfigCenter.csproj" />

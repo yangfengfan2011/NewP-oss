@@ -183,6 +183,30 @@ public class PluginOperationsUploadTests : IDisposable
         Assert.NotEmpty(result.Errors);
     }
 
+    [Fact]
+    public async Task UploadZipWithCaseInsensitiveDuplicatePath_IsRejectedBeforeExtraction()
+    {
+        using var zipStream = new MemoryStream();
+        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var writer = new StreamWriter(archive.CreateEntry("plugin.json").Open()))
+            {
+                writer.Write("{}");
+            }
+
+            using (var writer = new StreamWriter(archive.CreateEntry("Plugin.json").Open()))
+            {
+                writer.Write("{}");
+            }
+        }
+        zipStream.Position = 0;
+
+        var result = await _service.UploadAndVerifyAsync(zipStream, "collision.zip");
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("大小写", StringComparison.Ordinal));
+    }
+
     // ── 后端清单损坏 ──────────────────────────────────────────────────────
 
     [Fact]

@@ -54,18 +54,7 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
                         entryAssembly = module.BackendEntry,
                         behaviorKey = module.BackendBehaviorKey
                     },
-                frontend = module.FrontendEntry is null
-                    ? null
-                    : new
-                    {
-                        moduleId = module.Provenance.SourceKind == "built-in" ? module.FrontendEntry : null,
-                        url = module.Provenance.SourceKind == "built-in"
-                            ? null
-                            : CombinePublicPath(_publicBaseUrl, module.ModuleId, module.Version, module.FrontendEntry),
-                        behaviorKey = module.FrontendBehaviorKey,
-                        bindingMode = module.FrontendBindingMode,
-                        bindings = module.FrontendBindings
-                    },
+                frontend = BuildFrontend(module),
                 metadataBasePath = $"/plugins/runtime/modules/{module.ModuleId}/metadata",
                 permissionCodes = module.PermissionCodes,
                 modelKeys = module.ModelKeys
@@ -86,5 +75,37 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
         string entry)
     {
         return $"{publicBaseUrl.TrimEnd('/')}/{moduleId}/{version}/{entry.TrimStart('/')}";
+    }
+
+    private object? BuildFrontend(CanonicalModulePlanModule module)
+    {
+        if (module.FrontendEntry is null)
+        {
+            return null;
+        }
+
+        if (string.Equals(module.FrontendBindingMode, "standard-data", StringComparison.Ordinal))
+        {
+            var runtimeBaseUrl = $"/plugins/runtime/modules/{module.ModuleId}";
+            return new
+            {
+                projectionUrl = $"{runtimeBaseUrl}/projections/standard-data.json",
+                blueprintUrl = $"{runtimeBaseUrl}/authoring/newp.plugin.json",
+                behaviorKey = module.FrontendBehaviorKey,
+                bindingMode = module.FrontendBindingMode,
+                bindings = module.FrontendBindings
+            };
+        }
+
+        return new
+        {
+            moduleId = module.Provenance.SourceKind == "built-in" ? module.FrontendEntry : null,
+            url = module.Provenance.SourceKind == "built-in"
+                ? null
+                : CombinePublicPath(_publicBaseUrl, module.ModuleId, module.Version, module.FrontendEntry),
+            behaviorKey = module.FrontendBehaviorKey,
+            bindingMode = module.FrontendBindingMode,
+            bindings = module.FrontendBindings
+        };
     }
 }

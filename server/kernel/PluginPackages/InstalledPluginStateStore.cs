@@ -32,6 +32,11 @@ public class InstalledPluginStateStore
     private readonly Action<string, string, string?> _replaceFile;
     private readonly Action<string, string> _moveFile;
 
+    /// <summary>
+    /// 插件平台用于解析版本清单的安装根；调用方不得据此绕过状态存储直接改写文件。
+    /// </summary>
+    public string InstallRoot => _installRoot;
+
     public InstalledPluginStateStore(string installRoot)
         : this(
             installRoot,

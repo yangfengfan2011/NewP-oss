@@ -1,5 +1,6 @@
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Kernel.ModuleLoader;
+using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -133,6 +134,20 @@ public class ModuleSystemTests
         Assert.Equal(2, sorted.Count);
         Assert.Equal("A", sorted[0].ModuleId);
         Assert.Equal("B", sorted[1].ModuleId);
+    }
+
+    [Fact]
+    public void AddModuleSystem_RegistersDeclarativeProjectedModuleThroughControlledEntry()
+    {
+        var services = new ServiceCollection();
+        var projected = new TestModule();
+        projected.SetModuleId("Projected");
+
+        services.AddModuleSystem(options => options.ProjectedModules.Add(projected));
+
+        using var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<ModuleRegistry>();
+        Assert.Same(projected, registry.GetModule("Projected"));
     }
 }
 

@@ -4,21 +4,24 @@ using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.Planning;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Acceptance;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Endpoints;
 using ICP.Platform.HostApi.Extensions;
+using ICP.Platform.HostApi.PluginActivation;
 using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
-using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Modules.Audit.Services;
-using ICP.Platform.Modules.MetadataConfigCenter;
 using ICP.Platform.Persistence;
-using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Plugin.Contracts;
+using ICP.Platform.PluginPlatform.Activation;
+using ICP.Platform.PluginPlatform.Lifecycle;
+using ICP.Platform.PluginPlatform.StandardData;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -95,34 +98,44 @@ var pluginInstallRoot = Path.IsPathRooted(configuredPluginInstallRoot)
 var hostVersion = builder.Configuration["Platform:HostVersion"]
     ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
     ?? "1.0.0";
-var disabledPlugins = builder.Configuration.GetSection("Platform:DisabledPlugins").Get<string[]>() ?? Array.Empty<string>();
 var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
 
 var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
+var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginInstallRoot));
+var platformApiCatalog = new PlatformApiHostCatalog(
+    PlatformApiReleaseIdentity.Version,
+    [PlatformApiReleaseIdentity.StandardDataProfile],
+    [new PlatformApiReleaseReference(
+        PlatformApiReleaseIdentity.Version,
+        PlatformApiReleaseIdentity.ReleaseDigest)]);
+var standardDataInspector = new StandardDataPackageInspector(platformApiCatalog);
+var standardDataInstaller = new StandardDataPackageInstaller(
+    pluginInstallRoot,
+    stateStore,
+    standardDataInspector);
+var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
+var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, modulesRootPath);
+
 builder.Services.AddSingleton(stateStore);
+builder.Services.AddSingleton(lifecycleManager);
+builder.Services.AddSingleton(standardDataInspector);
+builder.Services.AddSingleton(standardDataInstaller);
+builder.Services.AddSingleton(materializer);
 builder.Services.AddSingleton<PluginOperationsAdminService>();
 builder.Services.AddSingleton(sp =>
     new PluginUploadService(
         sp.GetRequiredService<InstalledPluginStateStore>(),
         pluginInstallRoot));
 builder.Services.AddSingleton<UnifiedPluginPackageInstaller>();
-builder.Services.AddSingleton<UnifiedPluginPackageOperations>();
-builder.Services.AddSingleton(sp =>
-    new RuntimeViewMaterializer(
-        sp.GetRequiredService<InstalledPluginStateStore>(),
-        new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl),
-        modulesRootPath));
 builder.Services.AddSingleton(sp =>
     new PluginOperationsLifecycleService(
         sp.GetRequiredService<InstalledPluginStateStore>(),
         sp.GetRequiredService<UnifiedPluginPackageInstaller>(),
-        sp.GetRequiredService<UnifiedPluginPackageOperations>(),
-        sp.GetRequiredService<RuntimeViewMaterializer>(),
+        sp.GetRequiredService<StandardDataPackageInstaller>(),
+        sp.GetRequiredService<PluginLifecycleManager>(),
         sp.GetRequiredService<PluginUploadService>(),
         pluginInstallRoot));
-var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
-var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, modulesRootPath);
-var canonicalModulePlan = materializer.Materialize(pluginInstallRoot);
+
 var configuredPersistenceProvider = builder.Configuration["Persistence:Provider"];
 var persistenceProvider = PersistenceProvider.SqlServer;
 if (!string.IsNullOrWhiteSpace(configuredPersistenceProvider)
@@ -137,28 +150,38 @@ var storageTypeMapPath = Path.Combine(
     "platform-modeling",
     "metadata",
     "storage-types.json");
-var persistenceCompilation = new PersistencePlanCompiler(storageTypeMapPath)
-    .Compile(canonicalModulePlan, persistenceProvider);
-if (!persistenceCompilation.IsSuccess || persistenceCompilation.Plan is null)
+
+var pluginInventory = InstalledPluginInventoryAdapter.Create(stateStore);
+var activationGate = new PluginActivationGate(
+    lifecycleManager,
+    new StandardDataPackagePreflight(standardDataInspector, hostVersion),
+    new StandardDataCandidatePlanCompiler(modulesRootPath, standardDataInspector),
+    new HostPluginPermissionCatalogValidator(),
+    new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider),
+    new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
+using var activationSession = activationGate.Prepare(pluginInventory);
+var canonicalModulePlan = activationSession.ModulePlan;
+
+// Build 前所有持久化服务都绑定到激活会话编译出的同一个计划实例。
+builder.Services.AddPlatformPersistence(builder.Configuration, activationSession.PersistencePlan);
+
+var standardDataDescriptors = new StandardDataCrudDescriptorProjector().Project(canonicalModulePlan);
+if (standardDataDescriptors.Count > 0)
 {
-    var details = string.Join(
-        Environment.NewLine,
-        persistenceCompilation.Diagnostics.Select(static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}"));
-    throw new InvalidOperationException($"Compiled Persistence Plan failed.{Environment.NewLine}{details}");
+    builder.Services.AddStandardCrudKernel();
+    foreach (var descriptor in standardDataDescriptors)
+    {
+        builder.Services.AddStandardCrudResource(descriptor);
+    }
 }
 
-builder.Services.AddPlatformPersistence(builder.Configuration, persistenceCompilation.Plan);
-
-var backendLoadViewPath = Path.Combine(pluginInstallRoot, "runtime", "backend-load-view");
-var pluginDiscoveryRoot = backendLoadViewPath;
-var pluginAssemblyLoader = new PluginRuntimeAssemblyLoader(hostVersion, disabledPlugins);
-var pluginLoadResult = pluginAssemblyLoader.LoadAssemblies(pluginDiscoveryRoot);
+var activeModuleAssemblies = new CanonicalModuleAssemblyLoader(AppContext.BaseDirectory)
+    .Load(canonicalModulePlan);
 var activeControllerAssemblies = new[]
     {
-        Assembly.GetExecutingAssembly(),
-        typeof(MetadataConfigCenterModule).Assembly
+        Assembly.GetExecutingAssembly()
     }
-    .Concat(pluginLoadResult.LoadedAssemblies)
+    .Concat(activeModuleAssemblies)
     .DistinctBy(static assembly => assembly.FullName, StringComparer.Ordinal)
     .ToArray();
 mvcBuilder.ConfigureApplicationPartManager(manager =>
@@ -173,15 +196,19 @@ mvcBuilder.ConfigureApplicationPartManager(manager =>
 
 builder.Services.AddModuleSystem(options =>
 {
-    foreach (var assembly in activeControllerAssemblies)
+    foreach (var assembly in activeModuleAssemblies)
     {
         options.Assemblies.Add(assembly);
+    }
+
+    foreach (var module in canonicalModulePlan.Modules.Where(static module =>
+                 string.Equals(module.FrontendBindingMode, "standard-data", StringComparison.Ordinal)))
+    {
+        options.ProjectedModules.Add(new ProjectedStandardDataModule(module));
     }
 });
 
 var app = builder.Build();
-
-await app.ApplyPlatformPersistenceAsync();
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -192,6 +219,35 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Acceptan
 }
 
 app.MapPluginManifestEndpoints(pluginInstallRoot);
+
+var registeredServices = app.Services.GetService<IServiceProviderIsService>();
+app.MapControllers();
+app.MapPersonnelAcceptanceFixture(builder.Configuration);
+if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
+{
+    app.MapStandardCrudResources();
+}
+
+var registry = app.Services.GetRequiredService<ModuleRegistry>();
+var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
+    ((IEndpointRouteBuilder)app).DataSources,
+    registry);
+
+var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
+var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancellationToken =>
+{
+    if (skipLocalAuthSeeding)
+    {
+        return;
+    }
+
+    using var scope = app.Services.CreateScope();
+    var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
+    await seeder.SeedAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
+});
+await activationSession.CompleteAsync(
+    new HostPluginMigrationExecutor(app, activationSession.PersistencePlan),
+    permissionSynchronizer);
 
 var runtimeModulesPath = Path.Combine(pluginInstallRoot, "runtime", "modules");
 if (Directory.Exists(runtimeModulesPath))
@@ -215,52 +271,23 @@ if (Directory.Exists(publicAssetsPath))
 }
 
 app.UseAuthentication();
-var registeredServices = app.Services.GetService<IServiceProviderIsService>();
 if (registeredServices?.IsService(typeof(IAuditService)) is true)
 {
     // Audit 插件被跳过时不能留下依赖其 scoped service 的宿主中间件。
     app.UseAuditMiddleware();
 }
 app.UseAuthorization();
-app.MapControllers();
-app.MapPersonnelAcceptanceFixture(builder.Configuration);
-if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
-{
-    app.MapStandardCrudResources();
-}
-
-var registry = app.Services.GetRequiredService<ModuleRegistry>();
-var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
-    ((IEndpointRouteBuilder)app).DataSources,
-    registry);
-
-var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
-if (!skipLocalAuthSeeding)
-{
-    using var scope = app.Services.CreateScope();
-    var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
-    await seeder.SeedAsync(endpointAccessPlan.ActivePermissions);
-}
 
 var modules = registry.GetAllModules();
 var logger = app.Logger;
 
 logger.LogInformation(
-    "Plugin discovery root: {PluginInstallRoot}, backend load view: {BackendLoadViewPath}, host version: {HostVersion}, loadable plugins: {LoadedCount}, skipped plugins: {SkippedCount}",
-    pluginDiscoveryRoot,
-    backendLoadViewPath,
+    "Plugin activation snapshot {SnapshotId} ({PlanHash}) committed from {PluginInstallRoot}; host version: {HostVersion}, canonical modules: {ModuleCount}",
+    canonicalModulePlan.SnapshotId,
+    canonicalModulePlan.PlanHash,
+    pluginInstallRoot,
     hostVersion,
-    pluginLoadResult.SuccessfulPlugins.Count,
-    pluginLoadResult.FailedPlugins.Count);
-
-foreach (var failedPlugin in pluginLoadResult.FailedPlugins)
-{
-    logger.LogWarning(
-        "Skipped plugin package {PluginDirectory}: {ErrorType} - {ErrorMessage}",
-        failedPlugin.PluginDirectory ?? "(unknown)",
-        failedPlugin.ErrorType,
-        failedPlugin.ErrorMessage ?? "No details");
-}
+    canonicalModulePlan.Modules.Count);
 
 logger.LogInformation("=== Loaded Modules ===");
 foreach (var (moduleId, module) in modules)

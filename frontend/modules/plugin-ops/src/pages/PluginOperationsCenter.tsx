@@ -29,6 +29,8 @@ function getStatusLabel(status: string): string {
       return '已安装';
     case 'Disabled':
       return '已禁用';
+    case 'PendingRestart':
+      return '等待重启';
     case 'Uninstalled':
       return '已卸载';
     case 'Failed':
@@ -49,6 +51,10 @@ function getNoticeTone(result: PluginOperationResult): NoticeTone {
     return 'error';
   }
 
+  if (result.status === 'PendingRestart') {
+    return 'warning';
+  }
+
   const message = result.message.trim().toLowerCase();
   if (message.includes('warning') || message.includes('warn') || message.includes('警告')) {
     return 'warning';
@@ -61,6 +67,8 @@ function getInitialSelectedVersions(modules: PluginModuleStatus[]): Record<strin
   const selections: Record<string, string> = {};
   modules.forEach((module) => {
     selections[module.moduleId] =
+      module.desiredVersion ??
+      module.activeVersion ??
       module.currentEnabledVersion ??
       module.installedVersions[module.installedVersions.length - 1] ??
       '';
@@ -150,7 +158,9 @@ export default function PluginOperationsCenter() {
   }
 
   const installedCount = modules.filter((module) => module.installedVersions.length > 0).length;
-  const enabledCount = modules.filter((module) => module.status === 'Enabled').length;
+  const enabledCount = modules.filter(
+    (module) => Boolean(module.activeVersion ?? module.currentEnabledVersion),
+  ).length;
   const failedCount = modules.filter((module) => module.status === 'Failed').length;
 
   if (loading) {
@@ -164,7 +174,7 @@ export default function PluginOperationsCenter() {
           <span className="sh-page-eyebrow">运维中心</span>
           <h1 className="sh-page-title">插件运维中心</h1>
           <p className="sh-page-description">
-            统一查看插件安装状态，完成插件包校验、安装、启用、禁用、卸载和回滚。
+            统一查看 installed、desired、active 与 LKG；启用、禁用和回滚会在下一次 Host 冷启动生效。
           </p>
         </div>
       </section>
@@ -191,7 +201,7 @@ export default function PluginOperationsCenter() {
 
       <div className="sh-helper-block">
         <h3 className="sh-helper-block-title">操作边界</h3>
-        <p>页面登录后即可访问，但真正的管理员边界仍由后端 `AdminOnly` 策略兜底。</p>
+        <p>安装不会自动启用；desired 与 active 不一致时必须重启。卸载只在禁用已成功提交后开放，数据与迁移账本会保留。</p>
       </div>
 
       {notice ? (
@@ -271,7 +281,9 @@ export default function PluginOperationsCenter() {
                   <th>模块</th>
                   <th>状态</th>
                   <th>已安装版本</th>
-                  <th>当前启用</th>
+                  <th>期望状态</th>
+                  <th>当前活动</th>
+                  <th>最近良好</th>
                   <th>最近操作</th>
                   <th>最近错误</th>
                   <th>运维动作</th>
@@ -286,7 +298,12 @@ export default function PluginOperationsCenter() {
                     </td>
                     <td>{getStatusLabel(module.status)}</td>
                     <td>{getVersionsLabel(module.installedVersions)}</td>
-                    <td>{module.currentEnabledVersion ?? '未启用'}</td>
+                    <td>
+                      {module.desiredEnabled ? module.desiredVersion ?? '未选择' : '禁用'}
+                      {module.restartRequired ? '（等待重启）' : ''}
+                    </td>
+                    <td>{module.activeVersion ?? module.currentEnabledVersion ?? '未启用'}</td>
+                    <td>{module.lastKnownGoodVersion ?? '无'}</td>
                     <td>{module.lastOperation ?? '无'}</td>
                     <td>{module.lastError ?? '无'}</td>
                     <td>

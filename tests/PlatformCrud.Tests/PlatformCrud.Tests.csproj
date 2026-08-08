@@ -23,6 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\server\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\..\server\plugin-contracts\Plugin.Contracts.csproj" />
     <ProjectReference Include="..\..\server\platform-query\PlatformQuery.csproj" />
   </ItemGroup>
 </Project>

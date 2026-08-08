@@ -1,6 +1,8 @@
 using System.IO.Compression;
 using System.Text.Json;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Plugin.Contracts;
+using ICP.Platform.PluginPlatform.StandardData;
 
 namespace ICP.Platform.HostApi.PluginOperations;
 
@@ -13,9 +15,14 @@ public class PluginUploadService
     private readonly InstalledPluginStateStore _stateStore;
     private readonly string _installRoot;
     private readonly UnifiedPluginPackageScanner _scanner;
+    private readonly StandardDataPackageInspector _standardDataInspector;
 
     public PluginUploadService(InstalledPluginStateStore stateStore, string installRoot)
-        : this(stateStore, installRoot, new UnifiedPluginPackageScanner())
+        : this(
+            stateStore,
+            installRoot,
+            new UnifiedPluginPackageScanner(),
+            new StandardDataPackageInspector(CreateHostCatalog()))
     {
     }
 
@@ -23,10 +30,20 @@ public class PluginUploadService
         InstalledPluginStateStore stateStore,
         string installRoot,
         UnifiedPluginPackageScanner scanner)
+        : this(stateStore, installRoot, scanner, new StandardDataPackageInspector(CreateHostCatalog()))
+    {
+    }
+
+    internal PluginUploadService(
+        InstalledPluginStateStore stateStore,
+        string installRoot,
+        UnifiedPluginPackageScanner scanner,
+        StandardDataPackageInspector standardDataInspector)
     {
         _stateStore = stateStore;
         _installRoot = Path.GetFullPath(installRoot);
         _scanner = scanner;
+        _standardDataInspector = standardDataInspector;
     }
 
     /// <summary>
@@ -66,7 +83,38 @@ public class PluginUploadService
             };
         }
 
-        // 使用 UnifiedPluginPackageScanner 校验
+        if (IsStandardDataPackage(uploadDir))
+        {
+            var inspection = _standardDataInspector.Inspect(uploadDir);
+            if (!inspection.IsSuccess)
+            {
+                var invalidResult = new PluginUploadVerifyResultDto
+                {
+                    UploadId = uploadId,
+                    IsValid = false,
+                    Errors = inspection.Diagnostics
+                        .Select(static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}")
+                        .ToArray()
+                };
+                await PersistUploadRecordAsync(uploadDir, invalidResult);
+                return invalidResult;
+            }
+
+            var standardManifest = inspection.Manifest!;
+            var standardResult = new PluginUploadVerifyResultDto
+            {
+                UploadId = uploadId,
+                ModuleId = standardManifest.ModuleId,
+                DisplayName = standardManifest.DisplayName,
+                Version = standardManifest.Version,
+                IsValid = true,
+                Errors = Array.Empty<string>()
+            };
+            await PersistUploadRecordAsync(uploadDir, standardResult);
+            return standardResult;
+        }
+
+        // 非 standard-data 包继续使用旧扫描器完成一轮兼容读取。
         var scanResult = _scanner.ScanPackage(uploadDir);
 
         if (!scanResult.IsSuccess || scanResult.Manifest is null)
@@ -128,6 +176,18 @@ public class PluginUploadService
     private static async Task ExtractZipToDirectoryAsync(Stream zipStream, string destinationDirectory)
     {
         using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+        var normalizedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in archive.Entries)
+        {
+            var normalizedPath = entry.FullName
+                .Replace('\\', '/')
+                .TrimEnd('/');
+            if (normalizedPath.Length > 0 && !normalizedPaths.Add(normalizedPath))
+            {
+                throw new InvalidDataException($"zip 文件中包含大小写折叠路径冲突：{entry.FullName}");
+            }
+        }
 
         foreach (var entry in archive.Entries)
         {
@@ -186,4 +246,30 @@ public class PluginUploadService
             // 清理失败时不抛异常，让 GC 或定时任务后续处理
         }
     }
+
+    private static bool IsStandardDataPackage(string packageRoot)
+    {
+        try
+        {
+            var manifestPath = Path.Combine(packageRoot, "plugin.json");
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            return document.RootElement.TryGetProperty("profile", out var profile)
+                && string.Equals(
+                    profile.GetString(),
+                    PlatformApiReleaseIdentity.StandardDataProfile,
+                    StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is IOException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static PlatformApiHostCatalog CreateHostCatalog() =>
+        new(
+            PlatformApiReleaseIdentity.Version,
+            [PlatformApiReleaseIdentity.StandardDataProfile],
+            [new PlatformApiReleaseReference(
+                PlatformApiReleaseIdentity.Version,
+                PlatformApiReleaseIdentity.ReleaseDigest)]);
 }

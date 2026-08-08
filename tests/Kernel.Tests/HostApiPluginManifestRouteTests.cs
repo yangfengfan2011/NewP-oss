@@ -301,6 +301,14 @@ public class HostApiPluginManifestRouteTests : IDisposable
 
     private static void EnableInstalledPackage(string packageRoot, string installRoot, string moduleId)
     {
+        var moduleAssemblyPath = moduleId switch
+        {
+            "Audit" => typeof(ICP.Platform.Modules.Audit.AuditModule).Assembly.Location,
+            "Organization" => typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
+            _ => throw new InvalidOperationException($"No test module assembly is registered for '{moduleId}'.")
+        };
+        File.Copy(moduleAssemblyPath, Path.Combine(packageRoot, "backend", "AuditModule.dll"), overwrite: true);
+
         var stateStore = new InstalledPluginStateStore(installRoot);
         var installer = new UnifiedPluginPackageInstaller(stateStore);
         var installResult = installer.Install(packageRoot, installRoot);

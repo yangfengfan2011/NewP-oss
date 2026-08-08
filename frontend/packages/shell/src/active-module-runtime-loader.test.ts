@@ -125,4 +125,103 @@ describe('active-module-runtime-loader', () => {
     await expect(loadActiveModuleRuntimeWith({ fetchCatalog, internalModules: {} }))
       .rejects.toThrow('ACTIVE_MODULE_RUNTIME_UNAVAILABLE');
   });
+
+  it('projects a standard-data entry without importing plugin runtime code', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-standard-data',
+        planHash: 'plan-standard-data',
+        modules: [
+          {
+            moduleId: 'Partner.AssetCatalog',
+            version: '1.0.0',
+            displayName: 'Asset Catalog',
+            dependencies: [],
+            frontend: {
+              projectionUrl: '/plugins/runtime/modules/Partner.AssetCatalog/projections/standard-data.json',
+              blueprintUrl: '/plugins/runtime/modules/Partner.AssetCatalog/authoring/newp.plugin.json',
+              behaviorKey: 'standard-data.v1',
+              bindingMode: 'standard-data',
+              bindings: ['Partner.AssetCatalog.Asset'],
+            },
+          },
+        ],
+      }),
+    });
+    const fetchJson = vi.fn(async (url: string) => {
+      if (url.endsWith('newp.plugin.json')) {
+        return {
+          moduleId: 'Partner.AssetCatalog',
+          version: '1.0.0',
+          standardData: {
+            resources: [
+              {
+                key: 'Asset',
+                displayName: 'Asset',
+                displayField: 'Name',
+                fields: [
+                  { name: 'Name', type: 'string', required: true },
+                  { name: 'IsEnabled', type: 'boolean', required: false },
+                ],
+              },
+            ],
+          },
+        };
+      }
+
+      return {
+        moduleSlug: 'partner-asset-catalog',
+        resources: [
+          {
+            resourceKey: 'Asset',
+            apiRoute: '/api/standard/partner-asset-catalog/assets',
+            pageRoute: '/assets',
+            permissionCodes: [
+              'Partner.AssetCatalog.Asset.View',
+              'Partner.AssetCatalog.Asset.Create',
+              'Partner.AssetCatalog.Asset.Update',
+              'Partner.AssetCatalog.Asset.Delete',
+            ],
+          },
+        ],
+      };
+    });
+    const importModule = vi.fn();
+
+    const result = await loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      fetchJson,
+      importModule,
+      internalModules: {},
+    });
+
+    expect(importModule).not.toHaveBeenCalled();
+    expect(result.modules).toHaveLength(1);
+    const module = result.modules[0];
+    const resource = module.standardCrudResources?.[0];
+    expect(resource).toMatchObject({
+      resourceKey: 'Partner.AssetCatalog.Asset',
+      apiRoute: '/api/standard/partner-asset-catalog/assets',
+      listViewKey: 'partner-asset-catalog.asset.list',
+      listRoutePath: '/assets',
+      detailViewKey: 'partner-asset-catalog.asset.detail',
+      detailRoutePath: '/assets/:id',
+      permissions: ['Partner.AssetCatalog.Asset.View'],
+    });
+    expect(resource?.fields).toEqual([
+      expect.objectContaining({ key: 'Name', modelField: 'Name', kind: 'text', required: true }),
+      expect.objectContaining({ key: 'IsEnabled', modelField: 'IsEnabled', kind: 'boolean', required: false }),
+    ]);
+    expect(resource?.getRowId({ EID: 'asset-1' })).toBe('asset-1');
+    expect(module.permissions?.map((permission) => permission.code)).toEqual([
+      'Partner.AssetCatalog.Asset.View',
+      'Partner.AssetCatalog.Asset.Create',
+      'Partner.AssetCatalog.Asset.Update',
+      'Partner.AssetCatalog.Asset.Delete',
+    ]);
+  });
 });

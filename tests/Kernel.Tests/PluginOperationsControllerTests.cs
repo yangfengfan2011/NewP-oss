@@ -172,7 +172,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     }
 
     [Fact]
-    public async Task Enable_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    public async Task Enable_ReturnsPendingRestart_WithoutRefreshingRuntimeView()
     {
         var armFailure = false;
         using var factory = new TestWebApplicationFactory
@@ -187,20 +187,22 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         armFailure = true;
         var response = await client.PostAsJsonAsync("/api/plugin-ops/modules/Audit/enable", new { version = "2.0.0" });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var dto = doc.RootElement;
-        Assert.Equal("Failed", dto.GetProperty("status").GetString());
-        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("PendingRestart", dto.GetProperty("status").GetString());
 
         var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Audit");
         Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
         var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
         using var moduleDoc = JsonDocument.Parse(moduleJson);
         var moduleDto = moduleDoc.RootElement;
-        Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
+        Assert.Equal("PendingRestart", moduleDto.GetProperty("status").GetString());
         Assert.Equal("1.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
+        Assert.Equal("2.0.0", moduleDto.GetProperty("desiredVersion").GetString());
+        Assert.Equal("1.0.0", moduleDto.GetProperty("activeVersion").GetString());
+        Assert.True(moduleDto.GetProperty("restartRequired").GetBoolean());
     }
 
     [Fact]
@@ -233,7 +235,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     }
 
     [Fact]
-    public async Task Disable_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    public async Task Disable_ReturnsPendingRestart_WithoutRefreshingRuntimeView()
     {
         var armFailure = false;
         using var factory = new TestWebApplicationFactory
@@ -246,20 +248,22 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         armFailure = true;
         var response = await client.PostAsync("/api/plugin-ops/modules/Audit/disable", null);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var dto = doc.RootElement;
-        Assert.Equal("Failed", dto.GetProperty("status").GetString());
-        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("PendingRestart", dto.GetProperty("status").GetString());
 
         var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Audit");
         Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
         var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
         using var moduleDoc = JsonDocument.Parse(moduleJson);
         var moduleDto = moduleDoc.RootElement;
-        Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
+        Assert.Equal("PendingRestart", moduleDto.GetProperty("status").GetString());
         Assert.Equal("1.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
+        Assert.False(moduleDto.GetProperty("desiredEnabled").GetBoolean());
+        Assert.Equal("1.0.0", moduleDto.GetProperty("activeVersion").GetString());
+        Assert.True(moduleDto.GetProperty("restartRequired").GetBoolean());
     }
 
     [Fact]
@@ -304,7 +308,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     }
 
     [Fact]
-    public async Task Delete_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    public async Task Delete_DisabledInactiveModule_DoesNotRefreshRuntimeView()
     {
         var armFailure = false;
         using var factory = new TestWebApplicationFactory
@@ -319,25 +323,14 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         armFailure = true;
         var response = await client.DeleteAsync("/api/plugin-ops/modules/Cleanup");
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var dto = doc.RootElement;
-        Assert.Equal("Failed", dto.GetProperty("status").GetString());
-        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Uninstalled", dto.GetProperty("status").GetString());
 
         var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Cleanup");
-        Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
-        var moduleJson = await moduleResponse.Content.ReadAsStringAsync();
-        using var moduleDoc = JsonDocument.Parse(moduleJson);
-        var moduleDto = moduleDoc.RootElement;
-        Assert.Equal("Installed", moduleDto.GetProperty("status").GetString());
-        Assert.Null(moduleDto.GetProperty("currentEnabledVersion").GetString());
-        var installedVersions = moduleDto.GetProperty("installedVersions")
-            .EnumerateArray()
-            .Select(v => v.GetString())
-            .ToList();
-        Assert.Contains("1.0.0", installedVersions);
+        Assert.Equal(HttpStatusCode.NotFound, moduleResponse.StatusCode);
     }
 
     [Fact]
@@ -352,11 +345,15 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     }
 
     [Fact]
-    public async Task Rollback_Returns400_WhenNoPreviousVersion()
+    public async Task Rollback_ReturnsPendingRestart_WhenLastKnownGoodEqualsActive()
     {
         using var client = await CreateAuthenticatedClientAsync();
         var response = await client.PostAsync("/api/plugin-ops/modules/Audit/rollback", null);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal("PendingRestart", doc.RootElement.GetProperty("status").GetString());
+        Assert.Equal("1.0.0", doc.RootElement.GetProperty("version").GetString());
     }
 
     [Fact]
@@ -378,23 +375,23 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         var installResponse = await client.PostAsync($"/api/plugin-ops/uploads/{uploadId}/install", null);
         Assert.Equal(HttpStatusCode.OK, installResponse.StatusCode);
 
-        // Enable version 2.0.0 so there is a previous version (1.0.0) to roll back to
+        // Enable only changes desired; active and LKG remain 1.0.0 until a cold restart commits 2.0.0.
         var enableResponse = await client.PostAsJsonAsync("/api/plugin-ops/modules/Audit/enable", new { version = "2.0.0" });
         Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
 
-        // Rollback should succeed: 2.0.0 → 1.0.0
+        // Rollback points desired back to LKG without changing active.
         var response = await client.PostAsync("/api/plugin-ops/modules/Audit/rollback", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var dto = doc.RootElement;
-        Assert.Equal("Enabled", dto.GetProperty("status").GetString());
+        Assert.Equal("PendingRestart", dto.GetProperty("status").GetString());
         Assert.Equal("Audit", dto.GetProperty("moduleId").GetString());
         Assert.Equal("1.0.0", dto.GetProperty("version").GetString());
     }
 
     [Fact]
-    public async Task Rollback_Returns400_WhenRuntimeViewMaterializerRefreshFails()
+    public async Task Rollback_ReturnsPendingRestart_WithoutRefreshingRuntimeView()
     {
         var armFailure = false;
         using var factory = new TestWebApplicationFactory
@@ -412,12 +409,11 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         armFailure = true;
         var response = await client.PostAsync("/api/plugin-ops/modules/Audit/rollback", null);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var dto = doc.RootElement;
-        Assert.Equal("Failed", dto.GetProperty("status").GetString());
-        Assert.Contains("restore", dto.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("PendingRestart", dto.GetProperty("status").GetString());
 
         var moduleResponse = await client.GetAsync("/api/plugin-ops/modules/Audit");
         Assert.Equal(HttpStatusCode.OK, moduleResponse.StatusCode);
@@ -425,7 +421,10 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         using var moduleDoc = JsonDocument.Parse(moduleJson);
         var moduleDto = moduleDoc.RootElement;
         Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
-        Assert.Equal("2.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
+        Assert.Equal("Enabled", moduleDto.GetProperty("status").GetString());
+        Assert.Equal("1.0.0", moduleDto.GetProperty("currentEnabledVersion").GetString());
+        Assert.Equal("1.0.0", moduleDto.GetProperty("desiredVersion").GetString());
+        Assert.False(moduleDto.GetProperty("restartRequired").GetBoolean());
         var installedVersions = moduleDto.GetProperty("installedVersions")
             .EnumerateArray()
             .Select(v => v.GetString())
@@ -637,6 +636,10 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             var stateStore = new InstalledPluginStateStore(_installRoot);
             var installer = new UnifiedPluginPackageInstaller(stateStore);
             var auditRoot = _testData.CreateValidPackage("Audit", "1.0.0");
+            File.Copy(
+                typeof(ICP.Platform.Modules.Audit.AuditModule).Assembly.Location,
+                Path.Combine(auditRoot, "backend", "AuditModule.dll"),
+                overwrite: true);
             var result = installer.Install(auditRoot, _installRoot);
             Assert.Equal("Installed", result.Status);
             Assert.True(stateStore.TryLoad("Audit", out var record, out var loadError));

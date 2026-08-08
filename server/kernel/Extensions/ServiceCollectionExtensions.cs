@@ -37,6 +37,14 @@ public static class ServiceCollectionExtensions
             module.ConfigureServices(services);
         }
 
+        // 无运行时代码的声明式模块只能通过这个受控入口进入同一注册表；
+        // 它们不参与程序集发现，也不能覆盖已装载模块。
+        foreach (var module in options.ProjectedModules.OrderBy(static item => item.ModuleId, StringComparer.Ordinal))
+        {
+            registry.RegisterModule(module);
+            module.ConfigureServices(services);
+        }
+
         return services;
     }
 }
@@ -50,4 +58,9 @@ public class ModuleOptions
     /// 要扫描的程序集列表
     /// </summary>
     public List<System.Reflection.Assembly> Assemblies { get; } = new();
+
+    /// <summary>
+    /// 由已验证 Canonical Module Plan 派生、且不携带运行时代码的声明式模块。
+    /// </summary>
+    public List<IModule> ProjectedModules { get; } = new();
 }

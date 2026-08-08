@@ -9,8 +9,10 @@ export const ACTIVE_MODULE_RUNTIME_URL = '/plugins/active-module-runtime.json';
 export interface ActiveModuleFrontendEntry {
   moduleId?: string | null;
   url?: string | null;
+  projectionUrl?: string | null;
+  blueprintUrl?: string | null;
   behaviorKey?: string | null;
-  bindingMode: 'behavior-bindings' | 'legacy-module';
+  bindingMode: 'behavior-bindings' | 'legacy-module' | 'standard-data';
   bindings: string[];
 }
 
@@ -45,11 +47,150 @@ export interface ActiveModuleRuntimeLoaderDependencies {
     json: () => Promise<ActiveModuleRuntimeCatalog>;
   }>;
   importModule?: (url: string) => Promise<Record<string, unknown>>;
+  fetchJson?: (url: string) => Promise<unknown>;
   internalModules?: Record<string, () => Promise<Record<string, unknown>>>;
+}
+
+interface StandardDataBlueprintField {
+  name: string;
+  type: 'string' | 'date' | 'dateTime' | 'boolean' | 'integer' | 'decimal';
+  required: boolean;
+}
+
+interface StandardDataBlueprintResource {
+  key: string;
+  displayName: string;
+  displayField: string;
+  fields: StandardDataBlueprintField[];
+}
+
+interface StandardDataBlueprint {
+  moduleId: string;
+  version: string;
+  standardData: { resources: StandardDataBlueprintResource[] };
+}
+
+interface StandardDataProjectionResource {
+  resourceKey: string;
+  apiRoute: string;
+  pageRoute: string;
+  permissionCodes: string[];
+}
+
+interface StandardDataProjection {
+  moduleSlug: string;
+  resources: StandardDataProjectionResource[];
 }
 
 function defaultImporter(url: string): Promise<Record<string, unknown>> {
   return import(/* @vite-ignore */ url);
+}
+
+async function defaultJsonFetcher(url: string): Promise<unknown> {
+  const response = await fetch(url, { credentials: 'same-origin' });
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status} ${response.statusText}`.trim());
+  }
+
+  return response.json();
+}
+
+function toRouteToken(value: string): string {
+  return value.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+function mapStandardFieldKind(type: StandardDataBlueprintField['type']) {
+  if (type === 'boolean') return 'boolean' as const;
+  if (type === 'integer' || type === 'decimal') return 'number' as const;
+  if (type === 'date' || type === 'dateTime') return 'date' as const;
+  return 'text' as const;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+async function projectStandardDataModule(
+  entry: ActiveModuleRuntimeEntry,
+  frontend: ActiveModuleFrontendEntry,
+  fetchJson: (url: string) => Promise<unknown>,
+): Promise<FrontendModule> {
+  if (frontend.behaviorKey !== 'standard-data.v1'
+    || !frontend.blueprintUrl
+    || !frontend.projectionUrl) {
+    throw new Error(`standard-data entry '${entry.moduleId}' is incomplete`);
+  }
+
+  const [blueprintValue, projectionValue] = await Promise.all([
+    fetchJson(frontend.blueprintUrl),
+    fetchJson(frontend.projectionUrl),
+  ]);
+  const blueprint = blueprintValue as StandardDataBlueprint;
+  const projection = projectionValue as StandardDataProjection;
+  if (blueprint.moduleId !== entry.moduleId
+    || blueprint.version !== entry.version
+    || !Array.isArray(blueprint.standardData?.resources)
+    || !projection.moduleSlug
+    || !Array.isArray(projection.resources)) {
+    throw new Error(`standard-data contracts for '${entry.moduleId}' do not match the active catalog`);
+  }
+
+  const standardCrudResources = blueprint.standardData.resources.map((resource) => {
+    const projected = projection.resources.find((candidate) => candidate.resourceKey === resource.key);
+    const bindingKey = `${entry.moduleId}.${resource.key}`;
+    if (!projected || !frontend.bindings.includes(bindingKey)) {
+      throw new Error(`standard-data resource '${bindingKey}' has no active projection binding`);
+    }
+
+    const resourceSlug = toRouteToken(resource.key);
+    const viewPermission = projected.permissionCodes.find((code) => code.endsWith('.View'));
+    if (!viewPermission) {
+      throw new Error(`standard-data resource '${bindingKey}' has no View permission`);
+    }
+
+    return {
+      resourceKey: bindingKey,
+      apiRoute: projected.apiRoute,
+      listViewKey: `${projection.moduleSlug}.${resourceSlug}.list`,
+      listRoutePath: projected.pageRoute,
+      detailViewKey: `${projection.moduleSlug}.${resourceSlug}.detail`,
+      detailRoutePath: `${projected.pageRoute.replace(/\/$/, '')}/:id`,
+      listPanelTitle: resource.displayName,
+      permissions: [viewPermission],
+      fields: resource.fields.map((field) => ({
+        key: field.name,
+        labelKey: field.name,
+        modelField: field.name,
+        kind: mapStandardFieldKind(field.type),
+        required: field.required,
+        trim: field.type === 'string',
+        emptyAsNull: !field.required,
+      })),
+      createEmptyFilters: () => ({}),
+      buildListQuery: (filters: Record<string, string>) => filters,
+      mapListItem: asRecord,
+      getRowId: (row: Record<string, unknown>) => {
+        const id = row.EID ?? row.eid ?? row.Id ?? row.id;
+        return typeof id === 'string' ? id : '';
+      },
+    };
+  });
+  const permissionCodes = projection.resources
+    .flatMap((resource) => resource.permissionCodes)
+    .filter((code, index, all) => all.indexOf(code) === index);
+
+  return {
+    metadata: {
+      moduleId: entry.moduleId,
+      displayName: entry.displayName,
+      version: entry.version,
+      description: entry.description,
+    },
+    standardCrudResources,
+    permissions: permissionCodes.map((code) => ({ code, name: code })),
+  } satisfies FrontendModule;
 }
 
 export async function loadActiveModuleRuntimeWith(
@@ -59,6 +200,7 @@ export async function loadActiveModuleRuntimeWith(
   const fetchCatalog = dependencies.fetchCatalog ?? ((url: string) => fetch(url));
   const internalModules = dependencies.internalModules ?? internalModuleRegistry;
   const importModule = dependencies.importModule ?? defaultImporter;
+  const fetchJson = dependencies.fetchJson ?? defaultJsonFetcher;
   const response = await fetchCatalog(catalogUrl);
   if (!response.ok) {
     throw new Error(
@@ -77,6 +219,10 @@ export async function loadActiveModuleRuntimeWith(
         .filter((entry) => entry.frontend)
         .map(async (entry) => {
           const frontend = entry.frontend!;
+          if (frontend.bindingMode === 'standard-data') {
+            return projectStandardDataModule(entry, frontend, fetchJson);
+          }
+
           let exports: Record<string, unknown>;
           let resolvedEntry: string;
           if (frontend.moduleId) {

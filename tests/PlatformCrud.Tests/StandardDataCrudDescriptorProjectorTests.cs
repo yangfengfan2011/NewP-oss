@@ -1,0 +1,164 @@
+using System.Text.Json;
+using ICP.Platform.Crud.Planning;
+using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Plugin.Contracts;
+using Xunit;
+
+namespace ICP.Platform.Crud.Tests;
+
+public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
+{
+    private readonly string _packageRoot = Path.Combine(
+        Path.GetTempPath(),
+        "newp-standard-data-crud-tests",
+        Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void Project_StandardDataModule_DerivesCrudDescriptorFromBlueprintAndProjection()
+    {
+        WritePackageContracts();
+        var plan = new CanonicalModulePlan(
+            "candidate",
+            "1.0",
+            "plan-hash",
+            "snapshot",
+            [],
+            [CreateModule()]);
+
+        var descriptor = Assert.Single(new StandardDataCrudDescriptorProjector().Project(plan));
+
+        Assert.Equal("Partner.AssetCatalog.Asset", descriptor.ResourceKey);
+        Assert.Equal("Partner.AssetCatalog", descriptor.ModuleId);
+        Assert.Equal("Asset", descriptor.ModelName);
+        Assert.Equal("api/standard/partner-asset-catalog/assets", descriptor.Route);
+        Assert.Equal("EID", descriptor.IdField);
+        Assert.Equal("Name", descriptor.DisplayField);
+        Assert.Equal(["EID", "Name", "SerialNo"], descriptor.FieldSet.ListFields);
+        Assert.Equal(["Name", "SerialNo"], descriptor.FieldSet.CreateFields);
+        Assert.Equal(
+            "Partner.AssetCatalog.Asset.View",
+            descriptor.Authorization!.GetPermissionCode(ICP.Platform.Crud.Descriptors.StandardCrudOperation.List));
+        Assert.Equal("Name", Assert.Single(descriptor.RequiredFields).Field);
+        Assert.Equal("SerialNo", Assert.Single(descriptor.UniqueConstraints).Fields.Single());
+    }
+
+    [Fact]
+    public void Project_NonStandardModule_IsIgnored()
+    {
+        var module = CreateModule() with { FrontendBindingMode = "behavior-bindings" };
+        var plan = new CanonicalModulePlan("candidate", "1.0", "hash", "snapshot", [], [module]);
+
+        Assert.Empty(new StandardDataCrudDescriptorProjector().Project(plan));
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_packageRoot))
+        {
+            Directory.Delete(_packageRoot, recursive: true);
+        }
+    }
+
+    private CanonicalModulePlanModule CreateModule() => new(
+        "Partner.AssetCatalog",
+        "1.0.0",
+        "Asset Catalog",
+        null,
+        _packageRoot,
+        null,
+        null,
+        "projections/standard-data.json",
+        "standard-data.v1",
+        "standard-data",
+        [],
+        ["/api/standard/partner-asset-catalog/assets", "/assets"],
+        ["Partner.AssetCatalog.Asset"],
+        ["Partner.AssetCatalog.Asset"],
+        [
+            "Partner.AssetCatalog.Asset.View",
+            "Partner.AssetCatalog.Asset.Create",
+            "Partner.AssetCatalog.Asset.Update",
+            "Partner.AssetCatalog.Asset.Delete"
+        ],
+        [],
+        ["Asset"],
+        new ModulePlanProvenance("installed-package", Path.Combine(_packageRoot, "plugin.json"), "/"));
+
+    private void WritePackageContracts()
+    {
+        Directory.CreateDirectory(Path.Combine(_packageRoot, "authoring"));
+        Directory.CreateDirectory(Path.Combine(_packageRoot, "projections"));
+        var blueprint = new StandardPluginBlueprint(
+            "1.0",
+            "standard-data.v1",
+            "Partner.AssetCatalog",
+            "Asset Catalog",
+            "1.0.0",
+            null,
+            new StandardPluginCompatibility(
+                new PlatformApiVersionRange("1.0.0", "2.0.0"),
+                new StandardPersistenceCompatibility("ef-migrations.v1", ["sqlServer"])),
+            new StandardDataBlueprint(
+            [
+                new StandardDataResourceBlueprint(
+                    "Asset",
+                    "Assets",
+                    "Asset",
+                    "Name",
+                    [
+                        new StandardDataFieldBlueprint("Name", "string", Required: true),
+                        new StandardDataFieldBlueprint("SerialNo", "string", Required: false, Unique: true)
+                    ])
+            ]),
+            new StandardNavigationBlueprint("business", "Assets", "Assets", 200),
+            new StandardPersistenceBlueprint([], new Dictionary<string, StandardMigrationBundleBlueprint>()));
+        var projection = new StandardPluginProjection(
+            "partner-asset-catalog",
+            [
+                new StandardDataResourceProjection(
+                    "Asset",
+                    "/api/standard/partner-asset-catalog/assets",
+                    "/assets",
+                    "np_partner_asset_catalog",
+                    "assets",
+                    ["UX_assets_SerialNo"],
+                    [
+                        "Partner.AssetCatalog.Asset.View",
+                        "Partner.AssetCatalog.Asset.Create",
+                        "Partner.AssetCatalog.Asset.Update",
+                        "Partner.AssetCatalog.Asset.Delete"
+                    ])
+            ]);
+        var manifest = new StandardPluginPackageManifest(
+            1,
+            "standard-data.v1",
+            "Partner.AssetCatalog",
+            "Asset Catalog",
+            "1.0.0",
+            null,
+            new PlatformApiAttestation(
+                "1.0.0",
+                "1.0.0",
+                "2.0.0",
+                "sha256:" + new string('0', 64),
+                "standard-data.v1",
+                "ef-migrations.v1",
+                ["sqlServer"]),
+            new StandardPluginPackageArtifacts(
+                "authoring/newp.plugin.json",
+                "projections/standard-data.json",
+                "provenance/explain.json"),
+            blueprint.Persistence,
+            new StandardPluginPackageChecksums("checksums/sha256sums.json"));
+
+        File.WriteAllText(
+            Path.Combine(_packageRoot, "plugin.json"),
+            JsonSerializer.Serialize(manifest, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        File.WriteAllText(
+            Path.Combine(_packageRoot, "authoring", "newp.plugin.json"),
+            JsonSerializer.Serialize(blueprint, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        File.WriteAllText(
+            Path.Combine(_packageRoot, "projections", "standard-data.json"),
+            JsonSerializer.Serialize(projection, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+    }
+}

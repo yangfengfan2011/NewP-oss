@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.PluginPlatform</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\kernel\Kernel.csproj" />
+    <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\plugin-contracts\Plugin.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

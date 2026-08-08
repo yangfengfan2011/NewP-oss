@@ -7,11 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\kernel\Kernel.csproj" />
     <ProjectReference Include="..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
     <ProjectReference Include="..\platform-query\PlatformQuery.csproj" />
+    <ProjectReference Include="..\plugin-contracts\Plugin.Contracts.csproj" />
     <ProjectReference Include="..\sdk\Sdk.csproj" />
   </ItemGroup>
 

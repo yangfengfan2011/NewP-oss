@@ -51,7 +51,18 @@ public class FrontendRuntimeManifestBuilder
             projectionHash = plan.PlanHash,
             plugins = plan.Modules
                 .Where(static module => !string.IsNullOrWhiteSpace(module.FrontendEntry))
-                .Select(module => module.Provenance.SourceKind == "built-in"
+                .Select(module => string.Equals(module.FrontendBindingMode, "standard-data", StringComparison.Ordinal)
+                    ? (object)new
+                    {
+                        projectionUrl = $"/plugins/runtime/modules/{module.ModuleId}/projections/standard-data.json",
+                        blueprintUrl = $"/plugins/runtime/modules/{module.ModuleId}/authoring/newp.plugin.json",
+                        canonicalModuleId = module.ModuleId,
+                        version = module.Version,
+                        behaviorKey = module.FrontendBehaviorKey,
+                        bindingMode = module.FrontendBindingMode,
+                        bindings = module.FrontendBindings
+                    }
+                    : module.Provenance.SourceKind == "built-in"
                     ? (object)new
                     {
                         moduleId = module.FrontendEntry,

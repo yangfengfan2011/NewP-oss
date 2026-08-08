@@ -1,0 +1,333 @@
+using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginDiscovery;
+using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Plugin.Contracts;
+using ICP.Platform.PluginPlatform.Activation;
+using ICP.Platform.PluginPlatform.Lifecycle;
+
+namespace ICP.Platform.PluginPlatform.StandardData;
+
+/// <summary>
+/// 对 desired 中的 standard-data 包与内建 capsules 使用同一个 Canonical Module Plan 编译器。
+/// </summary>
+public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanCompiler
+{
+    private readonly string? _builtInModulesRoot;
+    private readonly StandardDataPackageInspector _inspector;
+    private readonly ModuleCapsuleCandidateReader _candidateReader = new();
+    private readonly CanonicalModulePlanCompiler _compiler = new();
+
+    public StandardDataCandidatePlanCompiler(
+        string? builtInModulesRoot,
+        StandardDataPackageInspector inspector)
+    {
+        _builtInModulesRoot = string.IsNullOrWhiteSpace(builtInModulesRoot)
+            ? null
+            : Path.GetFullPath(builtInModulesRoot);
+        _inspector = inspector;
+    }
+
+    public CanonicalModulePlan Compile(
+        IReadOnlyList<InstalledPluginInventoryItem> inventory,
+        ResolvedPluginLifecycleState state)
+    {
+        var candidates = new List<ModuleCapsuleCandidate>();
+        var enabledDesiredModuleIds = state.DesiredModules
+            .Where(static item => item.Enabled)
+            .Select(static item => item.ModuleId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (_builtInModulesRoot is not null)
+        {
+            // 同 ID 的已安装 desired 版本是内建模块的显式升级候选；
+            // 仅排除大小写完全一致的内建项，大小写折叠冲突仍交给 Canonical 编译器拒绝。
+            candidates.AddRange(_candidateReader.ReadBuiltIn(_builtInModulesRoot)
+                .Where(candidate => !enabledDesiredModuleIds.Contains(candidate.ModuleId)));
+        }
+
+        foreach (var desired in state.DesiredModules
+                     .Where(static item => item.Enabled)
+                     .OrderBy(static item => item.ModuleId, StringComparer.Ordinal))
+        {
+            var installed = inventory.SingleOrDefault(item =>
+                string.Equals(item.ModuleId, desired.ModuleId, StringComparison.OrdinalIgnoreCase));
+            var packageRoot = installed?.FindPackageRoot(desired.Version);
+            if (installed is null || string.IsNullOrWhiteSpace(packageRoot))
+            {
+                throw new PluginActivationException(
+                    PlatformApiDiagnosticCodes.PackageSchemaUnsupported,
+                    databaseAhead: false,
+                    new InvalidDataException(
+                        $"Desired plugin '{desired.ModuleId}@{desired.Version}' is not installed with a package root."));
+            }
+
+            var profile = PluginPackageProfileReader.Read(packageRoot);
+            if (profile is null)
+            {
+                var legacyCandidate = AssertDesiredIdentity(
+                    desired,
+                    _candidateReader.ReadInstalled(
+                    [
+                        new InstalledPluginRecord
+                        {
+                            ModuleId = installed.ModuleId,
+                            Version = desired.Version,
+                            PackageRoot = packageRoot,
+                            CurrentEnabledVersion = installed.LegacyCurrentEnabledVersion,
+                            IsDisabled = false,
+                            InstalledVersions = installed.InstalledVersions.ToList()
+                        }
+                    ]).Single());
+                candidates.Add(legacyCandidate);
+                continue;
+            }
+
+            if (!string.Equals(profile, PlatformApiReleaseIdentity.StandardDataProfile, StringComparison.Ordinal))
+            {
+                throw new PluginActivationException(
+                    PlatformApiDiagnosticCodes.PluginProfileUnsupported,
+                    databaseAhead: false,
+                    new InvalidDataException($"Plugin profile '{profile}' is not supported."));
+            }
+
+            var inspection = _inspector.Inspect(packageRoot);
+            if (!inspection.IsSuccess)
+            {
+                throw new PluginActivationException(
+                    inspection.Diagnostics[0].Code,
+                    databaseAhead: false,
+                    new InvalidDataException(inspection.Diagnostics[0].Message));
+            }
+
+            var manifest = inspection.Manifest!;
+            if (!string.Equals(manifest.ModuleId, installed.ModuleId, StringComparison.Ordinal)
+                || !string.Equals(manifest.Version, desired.Version, StringComparison.Ordinal))
+            {
+                throw new PluginActivationException(
+                    PlatformApiDiagnosticCodes.PlatformApiAttestationMismatch,
+                    databaseAhead: false,
+                    new InvalidDataException(
+                        $"Desired identity '{desired.ModuleId}@{desired.Version}' does not match package '{manifest.ModuleId}@{manifest.Version}'."));
+            }
+
+            candidates.Add(BuildCandidate(packageRoot, inspection));
+        }
+
+        var compilation = _compiler.Compile("plugin-activation", candidates);
+        if (!compilation.IsSuccess || compilation.Plan is null)
+        {
+            var first = compilation.Diagnostics[0];
+            throw new PluginActivationException(
+                first.Code,
+                databaseAhead: false,
+                new InvalidDataException(first.Message));
+        }
+
+        return compilation.Plan;
+    }
+
+    private static ModuleCapsuleCandidate AssertDesiredIdentity(
+        PluginDesiredModuleState desired,
+        ModuleCapsuleCandidate candidate)
+    {
+        if (!string.Equals(candidate.ModuleId, desired.ModuleId, StringComparison.Ordinal)
+            || !string.Equals(candidate.Version, desired.Version, StringComparison.Ordinal))
+        {
+            throw new PluginActivationException(
+                PlatformApiDiagnosticCodes.PlatformApiAttestationMismatch,
+                databaseAhead: false,
+                new InvalidDataException(
+                    $"Desired identity '{desired.ModuleId}@{desired.Version}' does not match legacy package '{candidate.ModuleId}@{candidate.Version}'."));
+        }
+
+        return candidate;
+    }
+
+    private static ModuleCapsuleCandidate BuildCandidate(
+        string packageRoot,
+        StandardDataPackageInspectionResult inspection)
+    {
+        var manifest = inspection.Manifest!;
+        var projection = inspection.Projection!;
+        var permissions = projection.Resources
+            .SelectMany(static resource => resource.PermissionCodes)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static code => code, StringComparer.Ordinal)
+            .ToArray();
+        var frontendBindings = projection.Resources
+            .Select(resource => $"{manifest.ModuleId}.{resource.ResourceKey}")
+            .OrderBy(static key => key, StringComparer.Ordinal)
+            .ToArray();
+        var migrationBundles = manifest.Persistence.Migrations
+            .OrderBy(static item => item.Key, StringComparer.Ordinal)
+            .Select(static item => new ModuleMigrationBundleReference(
+                NormalizeProvider(item.Key),
+                item.Value.Assembly,
+                item.Value.Manifest))
+            .ToArray();
+
+        return new ModuleCapsuleCandidate(
+            manifest.ModuleId,
+            manifest.Version,
+            manifest.DisplayName,
+            manifest.Description,
+            Path.GetFullPath(packageRoot),
+            BackendEntry: null,
+            BackendBehaviorKey: null,
+            FrontendEntry: manifest.Artifacts.StandardProjection,
+            FrontendBehaviorKey: PlatformApiReleaseIdentity.StandardDataProfile,
+            FrontendBindingMode: "standard-data",
+            Dependencies: Array.Empty<string>(),
+            Routes: projection.Resources
+                .SelectMany(static resource => new[] { resource.ApiRoute, resource.PageRoute })
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static route => route, StringComparer.Ordinal)
+                .ToArray(),
+            FrontendBindings: frontendBindings,
+            FrontendBindingReferences: frontendBindings,
+            PermissionCodes: permissions,
+            PermissionReferences: permissions,
+            ModelKeys: projection.Resources
+                .Select(static resource => resource.ResourceKey)
+                .OrderBy(static key => key, StringComparer.Ordinal)
+                .ToArray(),
+            Provenance: new ModulePlanProvenance(
+                "installed-package",
+                Path.Combine(Path.GetFullPath(packageRoot), "plugin.json"),
+                "/"),
+            Persistence: new ModulePersistenceContribution(
+                manifest.Persistence.Models,
+                migrationBundles));
+    }
+
+    private static string NormalizeProvider(string provider) =>
+        provider.ToLowerInvariant() switch
+        {
+            "sqlserver" => "SqlServer",
+            "oracle" => "Oracle",
+            "mysql" => "MySql",
+            _ => provider
+        };
+}
+
+/// <summary>
+/// 在候选计划编译、连接数据库或执行 DDL 前检查 desired 包。
+/// </summary>
+public sealed class StandardDataPackagePreflight : IPluginPackagePreflight
+{
+    private readonly StandardDataPackageInspector _inspector;
+    private readonly UnifiedPluginPackageScanner _legacyScanner = new();
+    private readonly HostVersionChecker? _hostVersionChecker;
+
+    public StandardDataPackagePreflight(
+        StandardDataPackageInspector inspector,
+        string? hostVersion = null)
+    {
+        _inspector = inspector;
+        _hostVersionChecker = string.IsNullOrWhiteSpace(hostVersion)
+            ? null
+            : new HostVersionChecker(hostVersion);
+    }
+
+    public void Validate(
+        IReadOnlyList<InstalledPluginInventoryItem> inventory,
+        ResolvedPluginLifecycleState state)
+    {
+        foreach (var desired in state.DesiredModules.Where(static item => item.Enabled))
+        {
+            var installed = inventory.SingleOrDefault(item =>
+                string.Equals(item.ModuleId, desired.ModuleId, StringComparison.OrdinalIgnoreCase));
+            var packageRoot = installed?.FindPackageRoot(desired.Version);
+            if (installed is null || string.IsNullOrWhiteSpace(packageRoot))
+            {
+                throw new PluginActivationException(
+                    PlatformApiDiagnosticCodes.PackageSchemaUnsupported,
+                    databaseAhead: false,
+                    new InvalidDataException(
+                        $"Desired plugin '{desired.ModuleId}@{desired.Version}' is not installed with a package root."));
+            }
+
+            var profile = PluginPackageProfileReader.Read(packageRoot);
+            if (profile is null)
+            {
+                ValidateLegacyPackage(desired, packageRoot);
+                continue;
+            }
+
+            if (!string.Equals(profile, PlatformApiReleaseIdentity.StandardDataProfile, StringComparison.Ordinal))
+            {
+                throw new PluginActivationException(
+                    PlatformApiDiagnosticCodes.PluginProfileUnsupported,
+                    databaseAhead: false,
+                    new InvalidDataException($"Plugin profile '{profile}' is not supported."));
+            }
+
+            var result = _inspector.Inspect(packageRoot);
+            if (!result.IsSuccess)
+            {
+                throw new PluginActivationException(
+                    result.Diagnostics[0].Code,
+                    databaseAhead: false,
+                    new InvalidDataException(result.Diagnostics[0].Message));
+            }
+
+            if (!string.Equals(result.Manifest!.ModuleId, desired.ModuleId, StringComparison.Ordinal)
+                || !string.Equals(result.Manifest.Version, desired.Version, StringComparison.Ordinal))
+            {
+                throw new PluginActivationException(
+                    PlatformApiDiagnosticCodes.PlatformApiAttestationMismatch,
+                    databaseAhead: false,
+                    new InvalidDataException(
+                        $"Desired identity '{desired.ModuleId}@{desired.Version}' does not match the package manifest."));
+            }
+        }
+    }
+
+    private void ValidateLegacyPackage(PluginDesiredModuleState desired, string packageRoot)
+    {
+        var scan = _legacyScanner.ScanPackage(packageRoot);
+        if (!scan.IsSuccess || scan.Manifest is null)
+        {
+            throw new PluginActivationException(
+                PlatformApiDiagnosticCodes.PackageSchemaUnsupported,
+                databaseAhead: false,
+                new InvalidDataException(scan.ErrorMessage));
+        }
+
+        if (!string.Equals(scan.Manifest.ModuleId, desired.ModuleId, StringComparison.Ordinal)
+            || !string.Equals(scan.Manifest.Version, desired.Version, StringComparison.Ordinal))
+        {
+            throw new PluginActivationException(
+                PlatformApiDiagnosticCodes.PlatformApiAttestationMismatch,
+                databaseAhead: false,
+                new InvalidDataException(
+                    $"Desired identity '{desired.ModuleId}@{desired.Version}' does not match the legacy package manifest."));
+        }
+
+        if (_hostVersionChecker is not null
+            && !_hostVersionChecker.IsCompatible(new HostVersionRequirement
+            {
+                Min = scan.Manifest.HostVersion.Min,
+                Max = scan.Manifest.HostVersion.Max
+            }))
+        {
+            throw new PluginActivationException(
+                PlatformApiDiagnosticCodes.PlatformApiIncompatible,
+                databaseAhead: false,
+                new InvalidDataException(
+                    $"Legacy plugin '{desired.ModuleId}@{desired.Version}' is incompatible with the current Host version."));
+        }
+    }
+}
+
+internal static class PluginPackageProfileReader
+{
+    public static string? Read(string packageRoot)
+    {
+        var manifestPath = Path.Combine(packageRoot, "plugin.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        return document.RootElement.TryGetProperty("profile", out var profile)
+            ? profile.GetString()
+            : null;
+    }
+}

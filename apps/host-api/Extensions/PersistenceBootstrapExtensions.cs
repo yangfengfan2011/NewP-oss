@@ -41,7 +41,8 @@ public static class PersistenceBootstrapExtensions
 
     public static async Task ApplyPlatformPersistenceAsync(
         this WebApplication app,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<bool>? observeDatabaseAhead = null)
     {
         ArgumentNullException.ThrowIfNull(app);
 
@@ -53,7 +54,14 @@ public static class PersistenceBootstrapExtensions
         try
         {
             var migrationRunner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
-            await migrationRunner.MigrateAsync(cancellationToken);
+            try
+            {
+                await migrationRunner.MigrateAsync(cancellationToken);
+            }
+            finally
+            {
+                observeDatabaseAhead?.Invoke(migrationRunner.DatabaseAhead);
+            }
 
             if (environment.IsDevelopment()
                 && configuration.GetValue<bool>("DevelopmentSchemaSync:Enabled")

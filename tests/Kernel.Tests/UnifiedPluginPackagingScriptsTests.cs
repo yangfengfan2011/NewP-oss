@@ -10,6 +10,15 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
     private readonly List<string> _tempRoots = new();
 
     [Fact]
+    public void PackUnifiedPlugin_DisablesPersistentBuildServers()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"));
+
+        Assert.Contains("--disable-build-servers", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PackUnifiedPlugin_WritesFrontendPublicBasePathMatchingHostStaticAssetsRoute()
     {
         var repoRoot = FindRepositoryRoot();

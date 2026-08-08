@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 
 namespace ICP.Platform.Acceptance;
 
@@ -9,7 +7,16 @@ public sealed class AcceptanceSkeletonRunner
 {
     private static readonly AcceptanceGateDefinition[] Definitions =
     [
-        new(AcceptanceGateKind.Personnel, IsImplemented: false, RequiredScenarios: []),
+        new(
+            AcceptanceGateKind.Personnel,
+            IsImplemented: true,
+            RequiredScenarios:
+            [
+                PersonnelAcceptanceRunner.PreflightScenario,
+                PersonnelAcceptanceRunner.ApiScenario,
+                PersonnelAcceptanceRunner.BrowserScenario,
+                PersonnelAcceptanceRunner.RestartScenario
+            ]),
         new(AcceptanceGateKind.Plugin, IsImplemented: false, RequiredScenarios: [])
     ];
 
@@ -22,40 +29,71 @@ public sealed class AcceptanceSkeletonRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRoot);
 
+        repositoryRoot = Path.GetFullPath(repositoryRoot);
+        outputRoot = Path.GetFullPath(outputRoot);
         var startedAtUtc = DateTimeOffset.UtcNow;
         var runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
-        var runDirectory = Path.Combine(
-            Path.GetFullPath(outputRoot),
-            "runs",
-            $"{startedAtUtc:yyyyMMddTHHmmssfffZ}-{runId}");
+        var runDirectory = Path.Combine(outputRoot, "runs", $"{startedAtUtc:yyyyMMddTHHmmssfffZ}-{runId}");
         Directory.CreateDirectory(runDirectory);
 
         var requestedGates = AcceptanceReducer.GetRequestedGates(selection);
         var eventLogPath = Path.Combine(runDirectory, "events.jsonl");
-        var eventLog = new AcceptanceEventLog(eventLogPath);
-        var observations = new List<AcceptanceObservation>();
-        long sequence = 0;
+        var recorder = new AcceptanceObservationRecorder(new AcceptanceEventLog(eventLogPath));
+        var trackedTreeBefore = await AcceptanceInfrastructure.RunGitAsync(
+            repositoryRoot,
+            ["status", "--porcelain", "--untracked-files=no"],
+            cancellationToken);
+        var commit = await AcceptanceInfrastructure.RunGitAsync(repositoryRoot, ["rev-parse", "HEAD"], cancellationToken);
+        var treeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(trackedTreeBefore)))
+            .ToLowerInvariant();
+        var artifactRefs = new List<string> { "events.jsonl", "request.sanitized.json", "evidence-index.json" };
+        var processIdentities = new List<string>();
+        var cleanup = new AcceptanceCleanupResult("not-started", AcceptanceFailureCodes.CleanupIncomplete);
+        string? databaseFingerprint = null;
+
+        await AcceptanceInfrastructure.WriteJsonAsync(
+            Path.Combine(runDirectory, "request.sanitized.json"),
+            new
+            {
+                schemaVersion = "1.0",
+                requestedGates = requestedGates.Select(AcceptanceReducer.ToGateName).ToArray(),
+                containsSecrets = false
+            },
+            cancellationToken);
 
         foreach (var gate in requestedGates)
         {
-            var started = Observation(++sequence, gate, AcceptanceEventType.RunStarted, null);
-            observations.Add(started);
-            await eventLog.AppendAsync(started, cancellationToken);
+            await recorder.RecordAsync(gate, AcceptanceEventType.RunStarted, cancellationToken: cancellationToken);
+            if (gate is AcceptanceGateKind.Personnel)
+            {
+                var execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
+                    .RunAsync(trackedTreeBefore, cancellationToken);
+                databaseFingerprint = execution.DatabaseFingerprint;
+                processIdentities.AddRange(execution.ProcessIdentities);
+                artifactRefs.AddRange(execution.ArtifactRefs);
+                cleanup = execution.Cleanup;
+                continue;
+            }
 
-            var unavailable = Observation(
-                ++sequence,
+            await recorder.RecordAsync(
                 gate,
                 AcceptanceEventType.GateNotImplemented,
-                AcceptanceFailureCodes.GateNotImplemented);
-            observations.Add(unavailable);
-            await eventLog.AppendAsync(unavailable, cancellationToken);
+                AcceptanceObservationOutcome.Failed,
+                failureCode: AcceptanceFailureCodes.GateNotImplemented,
+                cancellationToken: cancellationToken);
         }
 
-        var reduction = AcceptanceReducer.Reduce(selection, Definitions, observations);
-        var commit = await RunGitAsync(repositoryRoot, ["rev-parse", "HEAD"], cancellationToken);
-        var status = await RunGitAsync(repositoryRoot, ["status", "--porcelain"], cancellationToken);
-        var treeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(status))).ToLowerInvariant();
-        var completedAtUtc = DateTimeOffset.UtcNow;
+        var reduction = AcceptanceReducer.Reduce(selection, Definitions, recorder.Observations);
+        var distinctArtifacts = artifactRefs.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        await AcceptanceInfrastructure.WriteJsonAsync(
+            Path.Combine(runDirectory, "evidence-index.json"),
+            new
+            {
+                schemaVersion = "1.0",
+                evidence = distinctArtifacts.Select(path => new { path }).ToArray()
+            },
+            cancellationToken);
+
         var result = new AcceptanceRunResult(
             SchemaVersion: "1.0",
             RunId: runId,
@@ -64,114 +102,26 @@ public sealed class AcceptanceSkeletonRunner
             TreeHash: treeHash,
             PlatformApiRelease: null,
             PlatformApiDigest: null,
-            ToolVersions: new Dictionary<string, string>(StringComparer.Ordinal),
-            DatabaseFingerprint: null,
-            ProcessIdentities: [],
+            ToolVersions: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["dotnet"] = Environment.Version.ToString(),
+                ["playwright"] = "1.61.0"
+            },
+            DatabaseFingerprint: databaseFingerprint,
+            ProcessIdentities: processIdentities,
             StartedAtUtc: startedAtUtc,
-            CompletedAtUtc: completedAtUtc,
+            CompletedAtUtc: DateTimeOffset.UtcNow,
             Verdict: reduction.Verdict,
             FailureCode: reduction.FailureCode,
             Gates: reduction.Gates,
-            ArtifactRefs: ["events.jsonl", "request.sanitized.json", "evidence-index.json"],
-            Cleanup: new AcceptanceCleanupResult("not-started", AcceptanceFailureCodes.GateNotImplemented));
-
-        await WriteJsonAsync(
-            Path.Combine(runDirectory, "request.sanitized.json"),
-            new
-            {
-                schemaVersion = "1.0",
-                requestedGates = result.RequestedGates,
-                containsSecrets = false
-            },
-            cancellationToken);
-        await WriteJsonAsync(
-            Path.Combine(runDirectory, "evidence-index.json"),
-            new { schemaVersion = "1.0", evidence = Array.Empty<object>() },
-            cancellationToken);
-
+            ArtifactRefs: distinctArtifacts,
+            Cleanup: cleanup);
         var resultPath = Path.Combine(runDirectory, "result.json");
-        await WriteJsonAsync(resultPath, result, cancellationToken);
-        await WriteJsonAtomicallyAsync(
-            Path.Combine(Path.GetFullPath(outputRoot), "current-result.json"),
+        await AcceptanceInfrastructure.WriteJsonAsync(resultPath, result, cancellationToken);
+        await AcceptanceInfrastructure.WriteJsonAtomicallyAsync(
+            Path.Combine(outputRoot, "current-result.json"),
             result,
             cancellationToken);
-
         return new AcceptanceRunOutcome(result.Verdict is AcceptanceVerdict.Passed ? 0 : 1, resultPath);
-    }
-
-    private static AcceptanceObservation Observation(
-        long sequence,
-        AcceptanceGateKind gate,
-        AcceptanceEventType type,
-        string? failureCode) =>
-        new(
-            SchemaVersion: "1.0",
-            Sequence: sequence,
-            OccurredAtUtc: DateTimeOffset.UtcNow,
-            Gate: gate,
-            Type: type,
-            Outcome: type is AcceptanceEventType.GateNotImplemented
-                ? AcceptanceObservationOutcome.Failed
-                : AcceptanceObservationOutcome.Succeeded,
-            Scenario: null,
-            EvidenceRef: null,
-            FailureCode: failureCode);
-
-    private static async Task<string> RunGitAsync(
-        string repositoryRoot,
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
-    {
-        var startInfo = new ProcessStartInfo("git")
-        {
-            WorkingDirectory = repositoryRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("无法启动 git。");
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        var output = await outputTask;
-        var error = await errorTask;
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"git {arguments[0]} 失败：{error.Trim()}");
-        }
-
-        return output.Trim();
-    }
-
-    private static async Task WriteJsonAsync<T>(
-        string path,
-        T value,
-        CancellationToken cancellationToken)
-    {
-        var directory = Path.GetDirectoryName(path)
-            ?? throw new InvalidOperationException("JSON 文件必须具有父目录。");
-        Directory.CreateDirectory(directory);
-        await File.WriteAllTextAsync(
-            path,
-            JsonSerializer.Serialize(value, AcceptanceJson.Options),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            cancellationToken);
-    }
-
-    private static async Task WriteJsonAtomicallyAsync<T>(
-        string path,
-        T value,
-        CancellationToken cancellationToken)
-    {
-        var temporaryPath = $"{path}.{Guid.NewGuid():N}.tmp";
-        await WriteJsonAsync(temporaryPath, value, cancellationToken);
-        File.Move(temporaryPath, path, overwrite: true);
     }
 }

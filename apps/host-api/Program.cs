@@ -5,6 +5,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.HostApi.Acceptance;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Endpoints;
 using ICP.Platform.HostApi.Extensions;
@@ -162,7 +163,7 @@ await app.ApplyPlatformPersistenceAsync();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-if (!app.Environment.IsDevelopment())
+if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Acceptance"))
 {
     app.UseHttpsRedirection();
 }
@@ -199,6 +200,7 @@ if (registeredServices?.IsService(typeof(IAuditService)) is true)
 }
 app.UseAuthorization();
 app.MapControllers();
+app.MapPersonnelAcceptanceFixture(builder.Configuration);
 if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 {
     app.MapStandardCrudResources();
@@ -350,5 +352,4 @@ static void CopyDirectory(string sourceDirectory, string destinationDirectory)
         File.Copy(file, destinationPath, overwrite: false);
     }
 }
-
 

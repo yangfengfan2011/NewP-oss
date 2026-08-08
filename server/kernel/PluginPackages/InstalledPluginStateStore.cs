@@ -33,7 +33,10 @@ public class InstalledPluginStateStore
     private readonly Action<string, string> _moveFile;
 
     public InstalledPluginStateStore(string installRoot)
-        : this(installRoot, File.Replace, File.Move)
+        : this(
+            installRoot,
+            static (sourcePath, destinationPath, _) => File.Move(sourcePath, destinationPath, overwrite: true),
+            File.Move)
     {
     }
 
@@ -93,7 +96,8 @@ public class InstalledPluginStateStore
                 return false;
             }
 
-            // 先写临时文件，再原子替换/移动目标文件，避免崩溃时留下半截 JSON。
+            // 先写同目录临时文件，再以同卷覆盖移动提交，避免 File.Replace 在 Windows 上偶发
+            // ERROR_UNABLE_TO_REMOVE_REPLACED，也避免崩溃时留下半截 JSON。
             var json = JsonSerializer.Serialize(record, _jsonOptions);
             tempPath = Path.Combine(_stateRoot, $"{record.ModuleId}.{Guid.NewGuid():N}.tmp");
             File.WriteAllText(tempPath, json + Environment.NewLine, new UTF8Encoding(false));

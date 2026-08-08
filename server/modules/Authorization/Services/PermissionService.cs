@@ -50,6 +50,12 @@ public class PermissionService : IPermissionService
         {
             if (existingCodes.TryGetValue(descriptor.Code, out var existing))
             {
+                if (MatchesDescriptor(existing, descriptor))
+                {
+                    // LocalAuth 每次启动都会收敛活动权限；跳过无变化写入，避免远端数据库上产生整表空更新。
+                    continue;
+                }
+
                 // 更新现有权限
                 existing.DisplayName = descriptor.DisplayName;
                 existing.Description = descriptor.Description;
@@ -73,6 +79,14 @@ public class PermissionService : IPermissionService
             }
         }
     }
+
+    private static bool MatchesDescriptor(
+        Permission permission,
+        Kernel.Abstractions.PermissionDescriptor descriptor) =>
+        string.Equals(permission.DisplayName, descriptor.DisplayName, StringComparison.Ordinal)
+        && string.Equals(permission.Description, descriptor.Description, StringComparison.Ordinal)
+        && string.Equals(permission.ModuleId, descriptor.ModuleId, StringComparison.Ordinal)
+        && string.Equals(permission.Group, descriptor.Group, StringComparison.Ordinal);
 
     private static PermissionDto MapToDto(Permission permission)
     {

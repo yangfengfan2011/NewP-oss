@@ -19,7 +19,7 @@ function Get-ProjectProperty {
         [Parameter(Mandatory = $true)][string]$PropertyName
     )
 
-    $value = dotnet msbuild $ResolvedProjectPath "-getProperty:$PropertyName"
+    $value = dotnet msbuild $ResolvedProjectPath "-getProperty:$PropertyName" "/nodeReuse:false"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to resolve property '$PropertyName' for '$ResolvedProjectPath'."
     }
@@ -312,7 +312,7 @@ function Build-BackendModule {
     )
 
     Write-Host "Building backend module..." -ForegroundColor Cyan
-    dotnet build $ProjectPath -c $Configuration --nologo
+    dotnet build $ProjectPath -c $Configuration --nologo --disable-build-servers
     if ($LASTEXITCODE -ne 0) {
         throw "Backend build failed."
     }

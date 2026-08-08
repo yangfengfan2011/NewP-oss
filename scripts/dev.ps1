@@ -11,6 +11,12 @@ param(
     [ValidateRange(5, 600)]
     [int]$ShellStartupTimeoutSeconds = 90,
 
+    [ValidateRange(5, 120)]
+    [int]$ShellRequestTimeoutSeconds = 10,
+
+    [ValidateSet("Development", "Acceptance")]
+    [string]$HostEnvironmentName = "Development",
+
     [switch]$SkipDependencyInstall
 )
 
@@ -185,7 +191,8 @@ function Invoke-ShellAcceptance {
         [Parameter(Mandatory)][int]$Port,
         [Parameter(Mandatory)]$ExpectedEndpoint,
         [Parameter(Mandatory)][string]$Username,
-        [Parameter(Mandatory)][string]$Password
+        [Parameter(Mandatory)][string]$Password,
+        [Parameter(Mandatory)][int]$RequestTimeoutSeconds
     )
 
     $baseUri = "http://127.0.0.1:$Port"
@@ -231,7 +238,7 @@ function Invoke-ShellAcceptance {
         -WebSession $webSession `
         -UseBasicParsing `
         -SkipHttpErrorCheck `
-        -TimeoutSec 10
+        -TimeoutSec $RequestTimeoutSeconds
     if ($loginResponse.StatusCode -ne 200) {
         throw "DEV_LOGIN_FAILED: real LocalAuth login returned $($loginResponse.StatusCode)."
     }
@@ -241,7 +248,7 @@ function Invoke-ShellAcceptance {
         -WebSession $webSession `
         -UseBasicParsing `
         -SkipHttpErrorCheck `
-        -TimeoutSec 10
+        -TimeoutSec $RequestTimeoutSeconds
     if ($currentUserResponse.StatusCode -ne 200) {
         throw "DEV_CURRENT_USER_FAILED: authenticated current-user returned $($currentUserResponse.StatusCode)."
     }
@@ -438,7 +445,8 @@ try {
             -Port $ports.ShellPort `
             -ExpectedEndpoint $existingState.endpointIdentity `
             -Username $credentials.Username `
-            -Password $credentials.Password
+            -Password $credentials.Password `
+            -RequestTimeoutSeconds $ShellRequestTimeoutSeconds
 
         $reuseRunId = "reuse-" + [DateTimeOffset]::UtcNow.ToString("yyyyMMddTHHmmssfff") + "-" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
         $runDirectory = Join-Path $devRoot "runs\$reuseRunId"
@@ -497,8 +505,8 @@ try {
 
     Write-DevStage -Stage "host-start" -Status "started"
     $hostEnvironment = @{
-        "ASPNETCORE_ENVIRONMENT" = "Development"
-        "DOTNET_ENVIRONMENT" = "Development"
+        "ASPNETCORE_ENVIRONMENT" = $HostEnvironmentName
+        "DOTNET_ENVIRONMENT" = $HostEnvironmentName
         "ASPNETCORE_URLS" = "http://127.0.0.1:$($ports.HostPort)"
         "DevSupervisor__RepositoryId" = $identity.RepositoryId
         "DevSupervisor__WorktreeId" = $identity.WorktreeId
@@ -575,7 +583,8 @@ try {
         -Port $ports.ShellPort `
         -ExpectedEndpoint $endpointIdentity `
         -Username $credentials.Username `
-        -Password $credentials.Password
+        -Password $credentials.Password `
+        -RequestTimeoutSeconds $ShellRequestTimeoutSeconds
     Write-DevStage -Stage "shell-ready" -Status "passed"
 
     if (-not (Test-DevRootOwnsPort -ExpectedRoot $hostRoot -Port $ports.HostPort) -or

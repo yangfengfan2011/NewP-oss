@@ -113,6 +113,20 @@ public static class AcceptanceReducer
             return Incomplete(AcceptanceFailureCodes.CleanupIncomplete, scenarios, ordered);
         }
 
+        foreach (var requiredType in new[]
+                 {
+                     AcceptanceEventType.RunStarted,
+                     AcceptanceEventType.TreeVerified,
+                     AcceptanceEventType.SecretScanCompleted,
+                     AcceptanceEventType.OwnershipVerified
+                 })
+        {
+            if (!ordered.Any(item => item.Type == requiredType))
+            {
+                return Incomplete(AcceptanceFailureCodes.RequiredEventMissing, scenarios, ordered);
+            }
+        }
+
         return new AcceptanceGateResult(AcceptanceVerdict.Passed, null, scenarios, "completed");
     }
 

@@ -72,6 +72,51 @@ public class AcceptanceReducerTests
     }
 
     [Fact]
+    public void Reduce_WhenObserverFails_ReturnsItsStableFailureCode()
+    {
+        var definition = ImplementedPersonnelGate();
+        var events = CompleteEvents(AcceptanceGateKind.Personnel, "personnel.create").ToList();
+        events.Insert(2, Observation(
+            3,
+            AcceptanceEventType.ScenarioCompleted,
+            "personnel.create",
+            outcome: AcceptanceObservationOutcome.Failed,
+            failureCode: "ACC_PERSONNEL_API_FAILED"));
+
+        var result = AcceptanceReducer.Reduce(
+            AcceptanceGateSelection.Personnel,
+            [definition],
+            events);
+
+        Assert.Equal(AcceptanceVerdict.Failed, result.Verdict);
+        Assert.Equal("ACC_PERSONNEL_API_FAILED", result.FailureCode);
+    }
+
+    [Fact]
+    public void Reduce_WhenOwnershipRevalidationFails_CannotPassOrCleanUp()
+    {
+        var definition = ImplementedPersonnelGate();
+        var events = CompleteEvents(AcceptanceGateKind.Personnel, "personnel.create")
+            .Where(item => item.Type is not AcceptanceEventType.OwnershipVerified
+                           && item.Type is not AcceptanceEventType.CleanupCompleted)
+            .ToList();
+        events.Add(Observation(
+            8,
+            AcceptanceEventType.OwnershipVerified,
+            outcome: AcceptanceObservationOutcome.Failed,
+            failureCode: AcceptanceFailureCodes.OwnershipMismatch));
+
+        var result = AcceptanceReducer.Reduce(
+            AcceptanceGateSelection.Personnel,
+            [definition],
+            events);
+
+        Assert.Equal(AcceptanceVerdict.Failed, result.Verdict);
+        Assert.Equal(AcceptanceFailureCodes.OwnershipMismatch, result.FailureCode);
+        Assert.Equal("failed", result.Gates["personnel"].CleanupStatus);
+    }
+
+    [Fact]
     public void Reduce_WhenAllRequiredObservationsExist_ReturnsPass()
     {
         var definition = ImplementedPersonnelGate();
@@ -93,7 +138,10 @@ public class AcceptanceReducerTests
         Observation(1, AcceptanceEventType.RunStarted, gate: gate),
         Observation(2, AcceptanceEventType.ScenarioCompleted, scenario, gate: gate),
         Observation(3, AcceptanceEventType.EvidenceRecorded, scenario, "personnel/api/create.json", gate),
-        Observation(4, AcceptanceEventType.CleanupCompleted, gate: gate)
+        Observation(4, AcceptanceEventType.TreeVerified, gate: gate),
+        Observation(5, AcceptanceEventType.SecretScanCompleted, gate: gate),
+        Observation(6, AcceptanceEventType.OwnershipVerified, gate: gate),
+        Observation(7, AcceptanceEventType.CleanupCompleted, gate: gate)
     ];
 
     private static AcceptanceObservation Observation(
@@ -101,15 +149,17 @@ public class AcceptanceReducerTests
         AcceptanceEventType type,
         string? scenario = null,
         string? evidenceRef = null,
-        AcceptanceGateKind gate = AcceptanceGateKind.Personnel) =>
+        AcceptanceGateKind gate = AcceptanceGateKind.Personnel,
+        AcceptanceObservationOutcome outcome = AcceptanceObservationOutcome.Succeeded,
+        string? failureCode = null) =>
         new(
             SchemaVersion: "1.0",
             Sequence: sequence,
             OccurredAtUtc: DateTimeOffset.Parse("2026-08-08T00:00:00Z"),
             Gate: gate,
             Type: type,
-            Outcome: AcceptanceObservationOutcome.Succeeded,
+            Outcome: outcome,
             Scenario: scenario,
             EvidenceRef: evidenceRef,
-            FailureCode: null);
+            FailureCode: failureCode);
 }

@@ -9,7 +9,7 @@ try
         options.OutputRoot,
         options.Gate);
 
-    Console.WriteLine($"{AcceptanceFailureCodes.GateNotImplemented}: {outcome.ResultPath}");
+    Console.WriteLine($"ACCEPTANCE_RESULT: {outcome.ResultPath}");
     return outcome.ExitCode;
 }
 catch (Exception exception)

@@ -6,13 +6,8 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public class AcceptanceSkeletonRunnerTests
 {
-    [Theory]
-    [InlineData(AcceptanceGateSelection.Personnel, 1)]
-    [InlineData(AcceptanceGateSelection.Plugin, 1)]
-    [InlineData(AcceptanceGateSelection.All, 2)]
-    public async Task RunAsync_WritesParseableNonGreenResult(
-        AcceptanceGateSelection selection,
-        int expectedGateCount)
+    [Fact]
+    public async Task RunAsync_WhenSelectedGateIsNotImplemented_WritesParseableNonGreenResult()
     {
         var outputRoot = Path.Combine(Path.GetTempPath(), $"newp-acceptance-run-{Guid.NewGuid():N}");
 
@@ -20,7 +15,10 @@ public class AcceptanceSkeletonRunnerTests
         {
             var runner = new AcceptanceSkeletonRunner();
 
-            var outcome = await runner.RunAsync(GetRepositoryRoot(), outputRoot, selection);
+            var outcome = await runner.RunAsync(
+                GetRepositoryRoot(),
+                outputRoot,
+                AcceptanceGateSelection.Plugin);
 
             Assert.Equal(1, outcome.ExitCode);
             Assert.True(File.Exists(outcome.ResultPath));
@@ -32,7 +30,7 @@ public class AcceptanceSkeletonRunnerTests
             Assert.Equal("1.0", result.GetProperty("schemaVersion").GetString());
             Assert.NotEqual("passed", result.GetProperty("verdict").GetString());
             Assert.Equal(AcceptanceFailureCodes.GateNotImplemented, result.GetProperty("failureCode").GetString());
-            Assert.Equal(expectedGateCount, result.GetProperty("gates").EnumerateObject().Count());
+            Assert.Single(result.GetProperty("gates").EnumerateObject());
             Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("commit").GetString()));
             Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("treeHash").GetString()));
 

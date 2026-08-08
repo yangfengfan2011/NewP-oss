@@ -48,6 +48,7 @@ public class RepositoryTestEntrypointTests
 
         Assert.Contains("dotnet test ICP-Platform.sln", powerShell, StringComparison.Ordinal);
         Assert.Contains("dotnet test ICP-Platform.sln", shell, StringComparison.Ordinal);
+        Assert.Contains("--maxcpucount:1", powerShell, StringComparison.Ordinal);
         Assert.Contains("corepack pnpm --dir frontend test", powerShell, StringComparison.Ordinal);
         Assert.Contains("corepack pnpm --dir frontend test", shell, StringComparison.Ordinal);
     }
@@ -72,6 +73,38 @@ public class RepositoryTestEntrypointTests
 
         Assert.Contains("pnpm test", workflow, StringComparison.Ordinal);
         Assert.Contains("pnpm build", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AcceptanceRunner_DoesNotReferenceInternalPersistenceImplementation()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runnerRoot = Path.Combine(repositoryRoot, "tests", "acceptance", "Acceptance.Runner");
+        var project = File.ReadAllText(Path.Combine(runnerRoot, "Acceptance.Runner.csproj"))
+            .Replace('\\', '/');
+
+        Assert.DoesNotContain("server/platform-persistence", project, StringComparison.OrdinalIgnoreCase);
+        foreach (var sourcePath in Directory.EnumerateFiles(runnerRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(
+                "ICP.Platform.Persistence",
+                File.ReadAllText(sourcePath),
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void PersonnelAcceptanceRunner_PerformsExplicitBrowserHardRefresh()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        Assert.Contains("ReloadAsync", runner, StringComparison.Ordinal);
     }
 
     private static string GetRepositoryRoot()

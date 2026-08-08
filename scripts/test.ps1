@@ -6,7 +6,8 @@ Set-Location $repoRoot
 Write-Host "=== Running tests ===" -ForegroundColor Green
 
 Write-Host "=== Backend tests ===" -ForegroundColor Green
-dotnet test ICP-Platform.sln --configuration Release
+# Windows 下多个测试项目并行启动 PowerShell 子进程会争用同名 shim；保持同一 solution 入口但串行调度项目。
+dotnet test ICP-Platform.sln --configuration Release --maxcpucount:1
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

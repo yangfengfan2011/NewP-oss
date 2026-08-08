@@ -21,6 +21,9 @@ public enum AcceptanceEventType
     RunStarted,
     ScenarioCompleted,
     EvidenceRecorded,
+    TreeVerified,
+    SecretScanCompleted,
+    OwnershipVerified,
     CleanupCompleted,
     GateNotImplemented
 }
@@ -45,6 +48,15 @@ public static class AcceptanceFailureCodes
     public const string EvidenceIncomplete = "ACC_EVIDENCE_INCOMPLETE";
     public const string CleanupIncomplete = "ACC_CLEANUP_INCOMPLETE";
     public const string ObserverFailed = "ACC_OBSERVER_FAILED";
+    public const string OwnershipMismatch = "ACC_OWNERSHIP_MISMATCH";
+    public const string TreeChanged = "ACC_TREE_CHANGED";
+    public const string SecretDetected = "ACC_SECRET_DETECTED";
+    public const string CleanupFailed = "ACC_CLEANUP_FAILED";
+    public const string EvidenceUnreadable = "ACC_EVIDENCE_UNREADABLE";
+    public const string PersonnelPreflightFailed = "ACC_PERSONNEL_PREFLIGHT_FAILED";
+    public const string PersonnelApiFailed = "ACC_PERSONNEL_API_FAILED";
+    public const string PersonnelBrowserFailed = "ACC_PERSONNEL_BROWSER_FAILED";
+    public const string PersonnelRestartFailed = "ACC_PERSONNEL_RESTART_FAILED";
 }
 
 public sealed record AcceptanceGateDefinition(

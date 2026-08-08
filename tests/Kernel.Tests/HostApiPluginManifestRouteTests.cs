@@ -269,7 +269,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         Assert.Null(loadError);
         Assert.NotNull(record);
         record!.CurrentEnabledVersion = record.Version;
-        Assert.True(stateStore.TrySave(record, out var saveError));
+        Assert.True(stateStore.TrySave(record, out var saveError), saveError);
         Assert.Null(saveError);
     }
 

@@ -14,6 +14,7 @@ using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Modules.Audit.Services;
 using ICP.Platform.Modules.MetadataConfigCenter;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -190,7 +191,12 @@ if (Directory.Exists(publicAssetsPath))
 }
 
 app.UseAuthentication();
-app.UseAuditMiddleware();
+var registeredServices = app.Services.GetService<IServiceProviderIsService>();
+if (registeredServices?.IsService(typeof(IAuditService)) is true)
+{
+    // Audit 插件被跳过时不能留下依赖其 scoped service 的宿主中间件。
+    app.UseAuditMiddleware();
+}
 app.UseAuthorization();
 app.MapControllers();
 if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.IO.Compression;
 using System.Text;
+using ICP.Platform.Authorization;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
@@ -12,6 +13,7 @@ using ICP.Platform.Query.Descriptors;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -19,6 +21,32 @@ namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudEndpointRouteBuilderTests
 {
+    [Fact]
+    public void MapStandardCrudResources_AttachesFixedPermissionRequirementsToEveryRoute()
+    {
+        var recording = new RecordingStandardCrudService();
+        using var app = BuildApp(recording);
+
+        var requirements = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(static source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Select(endpoint => new EndpointPermission(
+                endpoint.RoutePattern.RawText,
+                endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? [],
+                endpoint.Metadata.GetMetadata<PermissionRequirement>()?.PermissionCode))
+            .ToArray();
+
+        AssertPermission(requirements, "GET", "/api/organization/persons", "Organization.Person.View");
+        AssertPermission(requirements, "GET", "/api/organization/persons/options", "Organization.Person.View");
+        AssertPermission(requirements, "POST", "/api/organization/persons/export", "Organization.Person.View");
+        AssertPermission(requirements, "GET", "/api/organization/persons/{id}", "Organization.Person.View");
+        AssertPermission(requirements, "POST", "/api/organization/persons", "Organization.Person.Create");
+        AssertPermission(requirements, "PUT", "/api/organization/persons/{id}", "Organization.Person.Update");
+        AssertPermission(requirements, "POST", "/api/organization/persons/{id}/disable", "Organization.Person.Update");
+        AssertPermission(requirements, "DELETE", "/api/organization/persons/{id}", "Organization.Person.Delete");
+        Assert.All(requirements, static requirement => Assert.NotNull(requirement.Permission));
+    }
+
     [Fact]
     public async Task MapStandardCrudResources_MapsListRouteFromDescriptor()
     {
@@ -276,8 +304,26 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         [
             new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
         ],
+        Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
         DeletePolicy = StandardCrudDeletePolicy.Conditional
     };
+
+    private static void AssertPermission(
+        IReadOnlyList<EndpointPermission> requirements,
+        string method,
+        string route,
+        string permission)
+    {
+        var requirement = Assert.Single(requirements, item =>
+            string.Equals(item.Route, route, StringComparison.Ordinal)
+            && item.Methods.Contains(method, StringComparer.Ordinal));
+        Assert.Equal(permission, requirement.Permission);
+    }
+
+    private sealed record EndpointPermission(
+        string? Route,
+        IReadOnlyList<string> Methods,
+        string? Permission);
 
     private static StandardCrudDetail Detail(string id) => new()
     {

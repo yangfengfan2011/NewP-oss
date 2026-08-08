@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />

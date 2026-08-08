@@ -12,6 +12,7 @@ public sealed class StandardCrudDescriptor
     public required string DisplayField { get; init; }
     public string? EnabledField { get; init; }
     public required StandardCrudFieldSet FieldSet { get; init; }
+    public StandardCrudAuthorization? Authorization { get; init; }
     public StandardCrudDeletePolicy DeletePolicy { get; init; } = StandardCrudDeletePolicy.None;
     public IReadOnlyList<string> OptionLabelFields { get; init; } = [];
     public IReadOnlyList<string> SummaryBlockKeys { get; init; } = [];

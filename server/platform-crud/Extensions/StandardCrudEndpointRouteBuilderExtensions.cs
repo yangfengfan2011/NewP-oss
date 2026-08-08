@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Authorization;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -32,6 +33,9 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     {
         var registry = endpoints.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>();
         var descriptors = registry.GetAll();
+        StandardCrudAuthorizationValidator.Validate(
+            descriptors,
+            StandardCrudAuthorizationValidator.MappedEndpointOperations);
         ValidateStandardRouteConflicts(descriptors);
 
         foreach (var descriptor in descriptors)
@@ -45,6 +49,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     private static void MapResource(IEndpointRouteBuilder endpoints, StandardCrudDescriptor descriptor)
     {
         var route = "/" + descriptor.Route.Trim().Trim('/');
+        var authorization = descriptor.Authorization!;
 
         endpoints.MapGet(route, async (
             HttpContext context,
@@ -65,7 +70,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                     Message = ex.Message
                 });
             }
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.List)));
 
         endpoints.MapGet(route + "/options", async (
             HttpContext context,
@@ -74,7 +80,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         {
             var result = await endpoint.OptionsAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
             return Results.Ok(result);
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Options)));
 
         endpoints.MapPost(route + "/export", async (
             HttpContext context,
@@ -115,7 +122,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                     Message = ex.Message
                 });
             }
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Export)));
 
         endpoints.MapGet(route + "/{id}", async (
             string id,
@@ -124,7 +132,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         {
             var detail = await endpoint.GetDetailAsync(descriptor, id, cancellationToken);
             return detail is null ? Results.NotFound() : Results.Ok(detail);
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Detail)));
 
         endpoints.MapPost(route, async (
             HttpContext context,
@@ -134,7 +143,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var values = await ReadValuesAsync(context, cancellationToken);
             var result = await endpoint.CreateAsync(descriptor, values, cancellationToken);
             return ToMutationResult(result, detail => Results.Created(BuildCreatedLocation(route, descriptor, detail), detail));
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Create)));
 
         endpoints.MapPut(route + "/{id}", async (
             string id,
@@ -145,7 +155,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var values = await ReadValuesAsync(context, cancellationToken);
             var result = await endpoint.UpdateAsync(descriptor, id, values, cancellationToken);
             return ToMutationResult(result, Results.Ok);
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Update)));
 
         endpoints.MapPost(route + "/{id}/disable", async (
             string id,
@@ -154,7 +165,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         {
             var result = await endpoint.DisableAsync(descriptor, id, cancellationToken);
             return ToMutationResult(result, Results.Ok);
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Disable)));
 
         endpoints.MapDelete(route + "/{id}", async (
             string id,
@@ -165,7 +177,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             return result.Succeeded
                 ? Results.NoContent()
                 : ToErrorResult(result.Error!);
-        });
+        }).WithMetadata(new PermissionRequirement(
+            authorization.GetPermissionCode(StandardCrudOperation.Delete)));
     }
 
     // 自动映射会从一个 descriptor 派生多个路由；这里在启动期拦截派生路由遮挡，避免运行期出现双真源。

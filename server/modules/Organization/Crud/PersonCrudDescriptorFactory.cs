@@ -16,6 +16,7 @@ public static class PersonCrudDescriptorFactory
         Route = "api/organization/persons",
         IdField = "EID",
         DisplayField = "ENAME",
+        Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],

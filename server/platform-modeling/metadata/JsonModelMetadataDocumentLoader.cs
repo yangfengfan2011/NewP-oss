@@ -108,17 +108,20 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
 
         for (var index = 0; index < segments.Length - 2; index++)
         {
-            if (!string.Equals(segments[index], "modules", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(segments[index], "modules", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(segments[index + 2], "metadata", StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                return segments[index + 1];
             }
 
-            if (!string.Equals(segments[index + 2], "metadata", StringComparison.OrdinalIgnoreCase))
+            // 外部包激活后模型位于 packages/<moduleId>/<version>/metadata；
+            // 这里只恢复路径声明的 owner，canonical plan 仍会在持久化计划阶段校验 owner 一致性。
+            if (index < segments.Length - 3
+                && string.Equals(segments[index], "packages", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(segments[index + 3], "metadata", StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                return segments[index + 1];
             }
-
-            return segments[index + 1];
         }
 
         throw new InvalidOperationException($"无法从路径提取 moduleId: {path}");

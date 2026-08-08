@@ -39,6 +39,20 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_InstalledPackageModelAtCanonicalLayout_UsesPackageOwner()
+    {
+        using var package = TestPackage.CreateInstalled("Partner.AssetCatalog", "Asset");
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(package.BuildModule()),
+            PersistenceProvider.SqlServer);
+
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        Assert.Equal("Partner.AssetCatalog", Assert.Single(result.Plan!.Models).OwnerModuleId);
+    }
+
+    [Fact]
     public void Compile_ModelIsAbsentFromCanonicalModuleFacts_RejectsWholeCandidate()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
@@ -228,12 +242,21 @@ public sealed class PersistencePlanCompilerTests
     {
         private readonly string _moduleId;
         private readonly string _modelKey;
+        private readonly string _cleanupRoot;
+        private readonly string _modelRelativePath;
 
-        private TestPackage(string root, string moduleId, string modelKey)
+        private TestPackage(
+            string root,
+            string cleanupRoot,
+            string moduleId,
+            string modelKey,
+            string modelRelativePath)
         {
             Root = root;
+            _cleanupRoot = cleanupRoot;
             _moduleId = moduleId;
             _modelKey = modelKey;
+            _modelRelativePath = modelRelativePath;
         }
 
         public string Root { get; }
@@ -248,10 +271,23 @@ public sealed class PersistencePlanCompilerTests
             "backend",
             "Partner.AssetCatalog.SqlServerMigrations.json");
 
-        public static TestPackage Create(string moduleId, string modelKey)
+        public static TestPackage Create(string moduleId, string modelKey) =>
+            Create(moduleId, modelKey, installedLayout: false);
+
+        public static TestPackage CreateInstalled(string moduleId, string modelKey) =>
+            Create(moduleId, modelKey, installedLayout: true);
+
+        private static TestPackage Create(string moduleId, string modelKey, bool installedLayout)
         {
-            var root = Path.Combine(Path.GetTempPath(), "newp-b9-tests", Guid.NewGuid().ToString("N"));
-            var metadataRoot = Path.Combine(root, "modules", moduleId, "metadata", "models");
+            var cleanupRoot = Path.Combine(Path.GetTempPath(), "newp-b9-tests", Guid.NewGuid().ToString("N"));
+            var root = installedLayout
+                ? Path.Combine(cleanupRoot, "packages", moduleId, "1.0.0")
+                : cleanupRoot;
+            var modelRelativePath = installedLayout
+                ? Path.Combine("metadata", "models", $"{modelKey}.model.json")
+                : Path.Combine("modules", moduleId, "metadata", "models", $"{modelKey}.model.json");
+            var metadataRoot = Path.GetDirectoryName(Path.Combine(root, modelRelativePath))
+                ?? throw new InvalidOperationException("测试模型路径缺少父目录。");
             var backendRoot = Path.Combine(root, "backend");
             Directory.CreateDirectory(metadataRoot);
             Directory.CreateDirectory(backendRoot);
@@ -314,7 +350,7 @@ public sealed class PersistencePlanCompilerTests
                 Path.Combine(backendRoot, "Partner.AssetCatalog.SqlServerMigrations.json"),
                 JsonSerializer.Serialize(migrationManifest));
 
-            return new TestPackage(root, moduleId, modelKey);
+            return new TestPackage(root, cleanupRoot, moduleId, modelKey, modelRelativePath);
         }
 
         public CanonicalModulePlanModule BuildModule(IReadOnlyList<string>? modelKeys = null) =>
@@ -338,7 +374,7 @@ public sealed class PersistencePlanCompilerTests
                 ModelKeys: modelKeys ?? [_modelKey],
                 Provenance: new ModulePlanProvenance("installed-package", Path.Combine(Root, "plugin.json"), "/"),
                 Persistence: new ModulePersistenceContribution(
-                    [Path.Combine("modules", _moduleId, "metadata", "models", $"{_modelKey}.model.json")],
+                    [_modelRelativePath],
                     [new ModuleMigrationBundleReference(
                         "SqlServer",
                         Path.Combine("backend", "Partner.AssetCatalog.SqlServerMigrations.dll"),
@@ -355,9 +391,9 @@ public sealed class PersistencePlanCompilerTests
 
         public void Dispose()
         {
-            if (Directory.Exists(Root))
+            if (Directory.Exists(_cleanupRoot))
             {
-                Directory.Delete(Root, recursive: true);
+                Directory.Delete(_cleanupRoot, recursive: true);
             }
         }
     }

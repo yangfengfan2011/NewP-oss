@@ -22,6 +22,17 @@ const personDetailCatalog = Object.fromEntries(
   ]),
 );
 
+const organizationModuleWithPersonnelWrites = {
+  ...organizationModule,
+  standardCrudResources: organizationModule.standardCrudResources?.map((resource) =>
+    resource.resourceKey === 'organization.person'
+      ? {
+          ...resource,
+          permissions: ['Organization.Person.View', 'Organization.Person.Update'],
+        }
+      : resource),
+};
+
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
 
@@ -115,7 +126,7 @@ describe('organization person center detail layout', () => {
   });
 
   it('renders person detail through the standard CRUD detail host', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({

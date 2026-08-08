@@ -20,7 +20,10 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit",
+        "permissions": [
+          "Organization.Person.Update"
+        ]
       },
       {
         "key": "disable",
@@ -28,7 +31,10 @@
         "standardAction": "disable",
         "variant": "danger",
         "confirmMessageKey": "Action_Disable_Confirm",
-        "handlerKey": "disable"
+        "handlerKey": "disable",
+        "permissions": [
+          "Organization.Person.Update"
+        ]
       }
     ]
   }

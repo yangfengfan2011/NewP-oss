@@ -69,6 +69,9 @@ export interface PersonListRow {
   ENAME: string;
   EmploymentStatus: string;
   IsEnabled: boolean;
+  CompanyName: string;
+  DepartmentName: string;
+  PositionName?: string | null;
   personNo: string;
   name: string;
   companyId: string;
@@ -177,6 +180,9 @@ export function mapPersonListItem(value: unknown): PersonListRow {
   const isEnabled = readStandardCrudBoolean(row, ['IsEnabled'], true);
   const personNo = readStandardCrudString(row, ['PersonNo']);
   const name = readStandardCrudString(row, ['ENAME']);
+  const companyName = readStandardCrudString(row, ['CompanyName']);
+  const departmentName = readStandardCrudString(row, ['DepartmentName']);
+  const positionName = readStandardCrudNullableString(row, ['PositionName']);
 
   return {
     id: readStandardCrudString(row, ['EID']),
@@ -185,14 +191,17 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     ENAME: name,
     EmploymentStatus: employmentStatus,
     IsEnabled: isEnabled,
+    CompanyName: companyName,
+    DepartmentName: departmentName,
+    PositionName: positionName,
     personNo,
     name,
     companyId: readStandardCrudString(row, ['CompanyId']),
-    companyName: readStandardCrudString(row, ['CompanyName'], readStandardCrudString(row, ['CompanyId'])),
+    companyName,
     departmentId: readStandardCrudString(row, ['DepartmentId']),
-    departmentName: readStandardCrudString(row, ['DepartmentName'], readStandardCrudString(row, ['DepartmentId'])),
+    departmentName,
     positionId: readStandardCrudNullableString(row, ['PositionId']),
-    positionName: readStandardCrudNullableString(row, ['PositionName']),
+    positionName,
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled,

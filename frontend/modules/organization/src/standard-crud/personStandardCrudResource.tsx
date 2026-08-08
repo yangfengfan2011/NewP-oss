@@ -43,7 +43,9 @@ function buildListQuery(filters: PersonListFilters): Record<string, string | nul
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.companies',
-    load: async () => (await getCompanies()).map((company) => ({ value: company.id, label: company.name })),
+    load: async () => (await getCompanies())
+      .filter((company) => company.isEnabled)
+      .map((company) => ({ value: company.id, label: company.name })),
   },
   {
     key: 'organization.departments',
@@ -53,7 +55,9 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
         return [];
       }
 
-      return (await getDepartments(companyId)).map((department) => ({ value: department.id, label: department.name }));
+      return (await getDepartments(companyId))
+        .filter((department) => department.isEnabled)
+        .map((department) => ({ value: department.id, label: department.name }));
     },
   },
   {
@@ -86,7 +90,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   listRoutePath: '/organization/persons',
   detailViewKey: 'organization.person.detail',
   detailRoutePath: '/organization/persons/:id',
-  permissions: ['Organization.Person.View', 'Organization.Person.Create'],
+  permissions: ['Organization.Person.View'],
   lookupProviders: organizationLookupProviders,
   enumOptions: {
     EmploymentStatus: employmentStatusOptions,

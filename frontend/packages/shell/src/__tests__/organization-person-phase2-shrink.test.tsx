@@ -21,10 +21,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
   });
 
   it('retains metadata-compatible permissions and runtime adapters', () => {
-    expect(personStandardCrudResource.permissions).toEqual([
-      'Organization.Person.View',
-      'Organization.Person.Create',
-    ]);
+    expect(personStandardCrudResource.permissions).toEqual(['Organization.Person.View']);
     expect(personStandardCrudResource.createEmptyFilters?.()).toEqual({
       keyword: '',
       employmentStatus: '',

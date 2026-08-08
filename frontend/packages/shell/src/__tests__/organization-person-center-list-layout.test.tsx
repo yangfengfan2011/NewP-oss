@@ -65,6 +65,22 @@ const standardCrudListViewMetadata = {
 
 const personListCatalog = flattenZhsCatalog(personListDictionary);
 
+const organizationModuleWithPersonnelWrites = {
+  ...organizationModule,
+  standardCrudResources: organizationModule.standardCrudResources?.map((resource) =>
+    resource.resourceKey === 'organization.person'
+      ? {
+          ...resource,
+          permissions: [
+            'Organization.Person.View',
+            'Organization.Person.Create',
+            'Organization.Person.Update',
+            'Organization.Person.Delete',
+          ],
+        }
+      : resource),
+};
+
 function createPersonListViewDocumentWithRowActionVisibility(): typeof personListViewDocument {
   return {
     ...personListViewDocument,
@@ -158,7 +174,7 @@ describe('organization person center list layout', () => {
   });
 
   it('renders person center through the standard CRUD list host', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -200,7 +216,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName%2CEmploymentStatus%2CIsEnabled&pageIndex=1&pageSize=20',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CEmploymentStatus%2CIsEnabled&pageIndex=1&pageSize=20',
       { method: 'GET' },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
@@ -249,7 +265,7 @@ describe('organization person center list layout', () => {
     const settingColumnTexts = Array.from(
       document.body.querySelectorAll('.ant-pro-table-column-setting-list .ant-tree-treenode'),
     ).map((node) => node.textContent?.replace(/\s+/g, '') ?? '');
-    expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '部门', '在职状态', '启用状态', '操作']);
+    expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '公司', '部门', '在职状态', '启用状态', '操作']);
     expect(settingColumnTexts.filter((text) => text.length === 0)).toHaveLength(2);
     expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
@@ -257,7 +273,6 @@ describe('organization person center list layout', () => {
     expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
     expect(container.querySelector('.ant-select')).not.toBeNull();
     expect(container.textContent).not.toContain('全部公司');
-    expect(container.textContent).not.toContain('公司');
     const filterSelects = Array.from(container.querySelectorAll('.np-person-filter-grid .ant-select'));
     expect(filterSelects).toHaveLength(1);
     expect(filterSelects[0]?.classList.contains('np-filter-select')).toBe(true);
@@ -331,7 +346,7 @@ describe('organization person center list layout', () => {
   });
 
   it('shows a row action error when disabling a person fails', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({

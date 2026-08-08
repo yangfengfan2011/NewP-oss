@@ -82,6 +82,12 @@
         "field": "ENAME"
       },
       {
+        "key": "companyName",
+        "labelKey": "Column_CompanyName",
+        "source": "projection",
+        "field": "CompanyName"
+      },
+      {
         "key": "departmentName",
         "labelKey": "Column_DepartmentName",
         "source": "projection",
@@ -125,7 +131,10 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit",
+        "permissions": [
+          "Organization.Person.Update"
+        ]
       },
       {
         "key": "delete",
@@ -133,7 +142,10 @@
         "standardAction": "delete",
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm",
-        "handlerKey": "delete"
+        "handlerKey": "delete",
+        "permissions": [
+          "Organization.Person.Delete"
+        ]
       },
       {
         "key": "disable",
@@ -142,6 +154,9 @@
         "variant": "danger",
         "confirmMessageKey": "Action_Disable_Confirm",
         "handlerKey": "disable",
+        "permissions": [
+          "Organization.Person.Update"
+        ],
         "visibleWhen": {
           "field": "IsEnabled",
           "operator": "equals",
@@ -154,6 +169,9 @@
         "standardAction": "enable",
         "confirmMessageKey": "Action_Enable_Confirm",
         "handlerKey": "enable",
+        "permissions": [
+          "Organization.Person.Update"
+        ],
         "visibleWhen": {
           "field": "IsEnabled",
           "operator": "equals",

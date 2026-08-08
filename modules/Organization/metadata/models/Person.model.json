@@ -79,10 +79,12 @@
         "uiType": "lookup",
         "form": {
           "create": {
-            "mode": "editable"
+            "mode": "editable",
+            "required": true
           },
           "edit": {
-            "mode": "editable"
+            "mode": "editable",
+            "required": true
           },
           "view": {
             "mode": "readonly"
@@ -105,10 +107,12 @@
         "uiType": "lookup",
         "form": {
           "create": {
-            "mode": "editable"
+            "mode": "editable",
+            "required": true
           },
           "edit": {
-            "mode": "editable"
+            "mode": "editable",
+            "required": true
           },
           "view": {
             "mode": "readonly"
@@ -168,10 +172,12 @@
         "form": {
           "create": {
             "mode": "editable",
-            "defaultValue": "FullTime"
+            "defaultValue": "FullTime",
+            "required": true
           },
           "edit": {
-            "mode": "editable"
+            "mode": "editable",
+            "required": true
           },
           "view": {
             "mode": "readonly"

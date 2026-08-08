@@ -77,7 +77,7 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
-    public void PersonCrudDescriptor_DeclaresRequiredFieldsWithoutTighteningOptionalOrganizationFields()
+    public void PersonCrudDescriptor_RequiresPersonnelGateIdentityAndAffiliationFields()
     {
         var descriptor = PersonCrudDescriptorFactory.Create();
 
@@ -89,9 +89,13 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("Organization.Person.NameRequired", required["ENAME"].ErrorCode);
         Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["IsEnabled"].Scope);
         Assert.Equal("Organization.Person.EnabledRequired", required["IsEnabled"].ErrorCode);
-        Assert.DoesNotContain("CompanyId", required.Keys);
-        Assert.DoesNotContain("DepartmentId", required.Keys);
-        Assert.DoesNotContain("EmploymentStatus", required.Keys);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["CompanyId"].Scope);
+        Assert.Equal("Organization.Person.CompanyRequired", required["CompanyId"].ErrorCode);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["DepartmentId"].Scope);
+        Assert.Equal("Organization.Person.DepartmentRequired", required["DepartmentId"].ErrorCode);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["EmploymentStatus"].Scope);
+        Assert.Equal("Organization.Person.EmploymentStatusRequired", required["EmploymentStatus"].ErrorCode);
+        Assert.DoesNotContain("PositionId", required.Keys);
     }
 
     [Fact]

@@ -1,32 +1,115 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Modules.Organization.Repositories;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
 /// <summary>
 /// 人员标准 CRUD 专属校验入口；PersonNo 全局唯一由 descriptor 的 StandardCrudUniqueConstraint 承接。
 /// </summary>
-public sealed class PersonCrudValidator : IStandardCrudValidator
+public sealed class PersonCrudValidator(
+    ICompanyRepository companyRepository,
+    IDepartmentRepository departmentRepository,
+    IStandardCrudRepository standardCrudRepository) : IStandardCrudValidator
 {
     public string ResourceKey => "organization.person";
 
     /// <summary>
-    /// 创建阶段暂不追加人员专属组合规则，保留入口避免后续规则回流 Controller。
+    /// 创建人员时要求公司、部门都存在且启用，并校验部门归属公司。
     /// </summary>
     public Task<StandardCrudError?> ValidateCreateAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<StandardCrudError?>(null);
+        ValidateAffiliationAsync(values, cancellationToken);
 
     /// <summary>
-    /// 更新阶段暂不追加人员专属组合规则；PersonNo 只读和唯一性边界由标准 CRUD 内核统一处理。
+    /// 更新阶段先与持久化现状合并，再校验完整组织归属，避免局部更新把未提交字段误判为空。
     /// </summary>
     public Task<StandardCrudError?> ValidateUpdateAsync(
         StandardCrudDescriptor descriptor,
         string id,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<StandardCrudError?>(null);
+        ValidateUpdateCandidateAsync(descriptor, id, values, cancellationToken);
+
+    private async Task<StandardCrudError?> ValidateUpdateCandidateAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken)
+    {
+        var existing = await standardCrudRepository.GetByIdAsync(descriptor, id, cancellationToken);
+        if (existing is null)
+        {
+            // 标准 CRUD 内核在调用校验器前已处理不存在；这里只保留竞态下的无副作用退出。
+            return null;
+        }
+
+        var candidate = new Dictionary<string, object?>(existing, StringComparer.Ordinal);
+        foreach (var pair in values)
+        {
+            candidate[pair.Key] = pair.Value;
+        }
+
+        return await ValidateAffiliationAsync(candidate, cancellationToken);
+    }
+
+    private async Task<StandardCrudError?> ValidateAffiliationAsync(
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken)
+    {
+        var companyId = ReadRequiredId(values, "CompanyId");
+        if (companyId is null)
+        {
+            return FieldError("CompanyId", "Organization.Person.CompanyRequired", "所属公司不能为空。", "organization.person.companyRequired");
+        }
+
+        var departmentId = ReadRequiredId(values, "DepartmentId");
+        if (departmentId is null)
+        {
+            return FieldError("DepartmentId", "Organization.Person.DepartmentRequired", "所属部门不能为空。", "organization.person.departmentRequired");
+        }
+
+        var company = await companyRepository.GetByIdAsync(companyId, cancellationToken);
+        if (company is null)
+        {
+            return FieldError("CompanyId", "Organization.Person.CompanyNotFound", "所属公司不存在。", "organization.person.companyNotFound");
+        }
+
+        if (!company.IsEnabled)
+        {
+            return FieldError("CompanyId", "Organization.Person.CompanyDisabled", "所属公司已停用。", "organization.person.companyDisabled");
+        }
+
+        var department = await departmentRepository.GetByIdAsync(departmentId, cancellationToken);
+        if (department is null)
+        {
+            return FieldError("DepartmentId", "Organization.Person.DepartmentNotFound", "所属部门不存在。", "organization.person.departmentNotFound");
+        }
+
+        if (!department.IsEnabled)
+        {
+            return FieldError("DepartmentId", "Organization.Person.DepartmentDisabled", "所属部门已停用。", "organization.person.departmentDisabled");
+        }
+
+        return !string.Equals(department.CompanyId, company.Id, StringComparison.Ordinal)
+            ? FieldError("DepartmentId", "Organization.Person.DepartmentCompanyMismatch", "所属部门不属于所选公司。", "organization.person.departmentCompanyMismatch")
+            : null;
+    }
+
+    private static string? ReadRequiredId(IReadOnlyDictionary<string, object?> values, string field) =>
+        values.TryGetValue(field, out var value) && value is string text && !string.IsNullOrWhiteSpace(text)
+            ? text
+            : null;
+
+    private static StandardCrudError FieldError(string field, string code, string message, string reasonKey) => new()
+    {
+        StatusCode = 400,
+        Code = code,
+        Message = message,
+        ReasonKey = reasonKey,
+        FieldErrors = [new StandardCrudFieldError(field, code, message)]
+    };
 }

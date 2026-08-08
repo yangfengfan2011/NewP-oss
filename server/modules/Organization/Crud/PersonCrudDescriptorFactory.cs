@@ -57,6 +57,30 @@ public static class PersonCrudDescriptorFactory
                 ErrorCode = "Organization.Person.EnabledRequired",
                 Message = "人员启用状态不能为空。",
                 ReasonKey = "organization.person.enabledRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "CompanyId",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.CompanyRequired",
+                Message = "所属公司不能为空。",
+                ReasonKey = "organization.person.companyRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "DepartmentId",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.DepartmentRequired",
+                Message = "所属部门不能为空。",
+                ReasonKey = "organization.person.departmentRequired"
+            },
+            new StandardCrudRequiredField
+            {
+                Field = "EmploymentStatus",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Person.EmploymentStatusRequired",
+                Message = "在职状态不能为空。",
+                ReasonKey = "organization.person.employmentStatusRequired"
             }
         ],
         UniqueConstraints =

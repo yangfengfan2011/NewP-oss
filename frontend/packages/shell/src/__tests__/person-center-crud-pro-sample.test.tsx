@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import organizationModule from '../../../../modules/organization/src/index';
+import baseOrganizationModule from '../../../../modules/organization/src/index';
 import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
 import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
 import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
@@ -38,6 +38,23 @@ function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<stri
 
 const personListCatalog = {
   ...flattenZhsCatalog(personListDictionary),
+};
+
+// 该样板验证管理员写入交互；显式补齐授权，避免把资源路由的 View 门禁误当成当前主体权限。
+const organizationModule = {
+  ...baseOrganizationModule,
+  standardCrudResources: baseOrganizationModule.standardCrudResources?.map((resource) =>
+    resource.resourceKey === 'organization.person'
+      ? {
+          ...resource,
+          permissions: [
+            'Organization.Person.View',
+            'Organization.Person.Create',
+            'Organization.Person.Update',
+            'Organization.Person.Delete',
+          ],
+        }
+      : resource),
 };
 let currentLocationSearch = '';
 
@@ -302,7 +319,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
-    expect(container.textContent).not.toContain('公司');
+    expect(container.textContent).toContain('公司');
     expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
     expect(container.textContent).toContain('兼职');
     expect(container.textContent).toContain('启用');
@@ -313,7 +330,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       { method: 'GET' },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
-      'fields=EID,PersonNo,ENAME,DepartmentName,EmploymentStatus,IsEnabled',
+      'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,EmploymentStatus,IsEnabled',
     );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));

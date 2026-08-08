@@ -1,0 +1,13 @@
+{
+  "name": "partner-asset-catalog-platform-api-baseline",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "build": "node --check frontend-smoke.mjs",
+    "test": "node frontend-smoke.mjs"
+  },
+  "devDependencies": {
+    "@icp-platform/plugin-sdk": "1.0.0"
+  }
+}

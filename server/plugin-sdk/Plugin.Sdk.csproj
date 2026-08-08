@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Plugin.Sdk</RootNamespace>
+    <AssemblyName>ICP.Platform.Plugin.Sdk</AssemblyName>
+    <PackageId>ICP.Platform.Plugin.Sdk</PackageId>
+    <Version>1.0.0</Version>
+    <Description>Build-only helpers for the NewP standard-data plugin authoring interface.</Description>
+    <Authors>ICP Platform Team</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <IsPackable>true</IsPackable>
+    <NuspecFile>Plugin.Sdk.nuspec</NuspecFile>
+    <NuspecProperties>configuration=$(Configuration);id=$(PackageId);version=$(Version);authors=$(Authors);description=$(Description)</NuspecProperties>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Analyzers\**\*.cs" />
+    <ProjectReference Include="..\plugin-contracts\Plugin.Contracts.csproj" />
+    <ProjectReference Include="Analyzers\Plugin.Sdk.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <None Include="..\plugin-contracts\platform-api-release.identity.json"
+          Link="platform-api-release.identity.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="contentFiles/any/any" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,51 @@
+<Project>
+  <PropertyGroup>
+    <NewPPlatformApiVersion>1.0.0</NewPPlatformApiVersion>
+    <NewPPlatformApiExactVersion>[1.0.0]</NewPPlatformApiExactVersion>
+    <NewPPlatformApiReleaseDigest>sha256:e6f17cb0ca9747b06c83d9803d7cc634cff32c3e1234306389bc106a6fc3e273</NewPPlatformApiReleaseDigest>
+    <NewPPlatformApiAttestationPath>$(IntermediateOutputPath)newp\platform-api-attestation.json</NewPPlatformApiAttestationPath>
+  </PropertyGroup>
+
+  <Target Name="ValidateNewPStandardPluginAuthoring" BeforeTargets="PrepareProjectReferences;CoreCompile">
+    <ItemGroup>
+      <_NewPContractsReference Include="@(PackageReference)" Condition="'%(Identity)' == 'ICP.Platform.Plugin.Contracts'" />
+      <_NewPSdkReference Include="@(PackageReference)" Condition="'%(Identity)' == 'ICP.Platform.Plugin.Sdk'" />
+      <_NewPForbiddenPlatformReference Include="@(PackageReference)"
+                                       Condition="'%(Identity)' == 'ICP.Platform.Kernel' Or
+                                                  '%(Identity)' == 'ICP.Platform.HostApi' Or
+                                                  '%(Identity)' == 'ICP.Platform.Persistence' Or
+                                                  '%(Identity)' == 'ICP.Platform.Sdk'" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_NewPContractsReferenceVersion>@(_NewPContractsReference->'%(Version)')</_NewPContractsReferenceVersion>
+      <_NewPSdkReferenceVersion>@(_NewPSdkReference->'%(Version)')</_NewPSdkReferenceVersion>
+    </PropertyGroup>
+
+    <Error Condition="'@(ProjectReference)' != ''"
+           Code="PROJECT_REFERENCE_FORBIDDEN"
+           Text="standard-data.v1 authoring projects cannot use ProjectReference; consume immutable Platform API packages only." />
+    <Error Condition="'@(_NewPContractsReference)' == '' Or '$(_NewPContractsReferenceVersion)' != '$(NewPPlatformApiExactVersion)'"
+           Code="PLATFORM_API_RELEASE_SKEW"
+           Text="ICP.Platform.Plugin.Contracts must be referenced with exact version $(NewPPlatformApiExactVersion)." />
+    <Error Condition="'@(_NewPSdkReference)' == '' Or '$(_NewPSdkReferenceVersion)' != '$(NewPPlatformApiExactVersion)'"
+           Code="PLATFORM_API_RELEASE_SKEW"
+           Text="ICP.Platform.Plugin.Sdk must be referenced with exact version $(NewPPlatformApiExactVersion)." />
+    <Error Condition="'@(_NewPForbiddenPlatformReference)' != ''"
+           Code="FORBIDDEN_PLATFORM_REFERENCE"
+           Text="standard-data.v1 cannot reference platform runtime implementation package(s): @(_NewPForbiddenPlatformReference)." />
+
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(NewPPlatformApiAttestationPath)'))" />
+    <ItemGroup>
+      <_NewPPlatformApiAttestationLine Include="{" />
+      <_NewPPlatformApiAttestationLine Include="  &quot;schemaVersion&quot;: &quot;1.0&quot;," />
+      <_NewPPlatformApiAttestationLine Include="  &quot;builtWith&quot;: &quot;$(NewPPlatformApiVersion)&quot;," />
+      <_NewPPlatformApiAttestationLine Include="  &quot;releaseDigest&quot;: &quot;$(NewPPlatformApiReleaseDigest)&quot;," />
+      <_NewPPlatformApiAttestationLine Include="  &quot;profile&quot;: &quot;standard-data.v1&quot;" />
+      <_NewPPlatformApiAttestationLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(NewPPlatformApiAttestationPath)"
+                      Lines="@(_NewPPlatformApiAttestationLine)"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+  </Target>
+</Project>

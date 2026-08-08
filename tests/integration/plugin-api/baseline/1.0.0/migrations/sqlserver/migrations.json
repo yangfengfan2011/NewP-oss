@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Partner.AssetCatalog",
+  "provider": "SqlServer",
+  "assembly": "Partner.AssetCatalog.Migrations",
+  "modelDigest": "pending-b12-real-migration",
+  "targetModelDigest": "pending-b12-real-migration",
+  "expectedFrontier": "20260809000000_partner_assetcatalog_000001_initial_11111111",
+  "migrations": []
+}

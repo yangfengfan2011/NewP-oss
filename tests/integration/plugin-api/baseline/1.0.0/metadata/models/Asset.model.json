@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Asset": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
+    "fields": [
+      {
+        "name": "PurchasedAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Asset_ECODE",
+        "fields": [
+          "ECODE"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

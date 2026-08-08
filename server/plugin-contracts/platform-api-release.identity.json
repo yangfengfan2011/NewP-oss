@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "1.0",
+  "version": "1.0.0",
+  "releaseDigest": "sha256:e6f17cb0ca9747b06c83d9803d7cc634cff32c3e1234306389bc106a6fc3e273",
+  "profile": "standard-data.v1",
+  "persistenceContract": "ef-migrations.v1"
+}

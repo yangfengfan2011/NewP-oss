@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -134,6 +135,38 @@ public sealed class HealthReadinessTests
         Assert.Null(body.FailureCode);
         Assert.Equal(["telemetry", "database", "manifest"], invocationOrder);
         Assert.Equal(["telemetry", "database", "manifest"], body.Stages.Select(stage => stage.Name));
+    }
+
+    [Fact]
+    public async Task GetReady_WhenSupervisorIdentityIsConfigured_ExposesOnlyStableOwnershipFields()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DevSupervisor:RepositoryId"] = "repo-a",
+                ["DevSupervisor:WorktreeId"] = "worktree-a",
+                ["DevSupervisor:RunId"] = "run-a",
+                ["DevSupervisor:EndpointTokenFingerprint"] = "token-fingerprint-a"
+            })
+            .Build();
+        var evaluator = new ReadinessEvaluator(
+        [
+            FakeContributor.Required(
+                "host",
+                10,
+                _ => ValueTask.FromResult(ReadinessContribution.Ready("ready")))
+        ]);
+        var controller = new HealthController(configuration);
+
+        var response = Assert.IsType<OkObjectResult>(await controller.GetReady(evaluator, CancellationToken.None));
+        var body = Assert.IsType<ReadinessResponseDto>(response.Value);
+
+        Assert.NotNull(body.Supervisor);
+        Assert.Equal("repo-a", body.Supervisor.RepositoryId);
+        Assert.Equal("worktree-a", body.Supervisor.WorktreeId);
+        Assert.Equal("run-a", body.Supervisor.RunId);
+        Assert.Equal("token-fingerprint-a", body.Supervisor.EndpointTokenFingerprint);
+        Assert.DoesNotContain("Password", JsonSerializer.Serialize(body), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

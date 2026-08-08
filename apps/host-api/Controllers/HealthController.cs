@@ -9,6 +9,13 @@ namespace ICP.Platform.HostApi.Controllers;
 [AllowAnonymous]
 public class HealthController : ControllerBase
 {
+    private readonly IConfiguration? _configuration;
+
+    public HealthController(IConfiguration? configuration = null)
+    {
+        _configuration = configuration;
+    }
+
     [HttpGet]
     public IActionResult Get()
     {
@@ -28,8 +35,39 @@ public class HealthController : ControllerBase
         CancellationToken cancellationToken)
     {
         var evaluation = await readinessEvaluator.EvaluateAsync(cancellationToken);
+        var response = evaluation.Response with
+        {
+            Supervisor = CreateSupervisorIdentity(_configuration)
+        };
+
         return evaluation.IsReady
-            ? Ok(evaluation.Response)
-            : StatusCode(StatusCodes.Status503ServiceUnavailable, evaluation.Response);
+            ? Ok(response)
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, response);
+    }
+
+    private static DevSupervisorIdentityDto? CreateSupervisorIdentity(IConfiguration? configuration)
+    {
+        if (configuration is null)
+        {
+            return null;
+        }
+
+        var repositoryId = configuration["DevSupervisor:RepositoryId"];
+        var worktreeId = configuration["DevSupervisor:WorktreeId"];
+        var runId = configuration["DevSupervisor:RunId"];
+        var endpointTokenFingerprint = configuration["DevSupervisor:EndpointTokenFingerprint"];
+        if (string.IsNullOrWhiteSpace(repositoryId)
+            || string.IsNullOrWhiteSpace(worktreeId)
+            || string.IsNullOrWhiteSpace(runId)
+            || string.IsNullOrWhiteSpace(endpointTokenFingerprint))
+        {
+            return null;
+        }
+
+        return new DevSupervisorIdentityDto(
+            repositoryId,
+            worktreeId,
+            runId,
+            endpointTokenFingerprint);
     }
 }

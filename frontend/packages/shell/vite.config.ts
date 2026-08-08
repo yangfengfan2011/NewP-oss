@@ -10,6 +10,8 @@ const localizationManifestPath = 'plugins/localization-manifest.json'
 const metadataRuntimeManifestPath = 'plugins/metadata-runtime-manifest.json'
 const metadataRuntimeModulesPrefix = '/plugins/runtime/modules/'
 const moduleMetadataRoot = fileURLToPath(new URL('../../../modules', import.meta.url))
+const devShellPort = Number.parseInt(process.env.ICP_DEV_SHELL_PORT ?? '3000', 10)
+const devHostPort = Number.parseInt(process.env.ICP_DEV_HOST_PORT ?? '5000', 10)
 
 interface RuntimeMetadataModuleEntry {
   moduleId: string
@@ -279,10 +281,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    host: '127.0.0.1',
+    port: devShellPort,
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: `http://127.0.0.1:${devHostPort}`,
         changeOrigin: true,
       },
     },

@@ -14,8 +14,13 @@ describe('vite config', () => {
     expect(proxy).toBeDefined();
     expect(proxy).toHaveProperty('/api');
     expect(proxy?.['/api']).toMatchObject({
-      target: 'http://localhost:5000',
+      target: 'http://127.0.0.1:5000',
       changeOrigin: true,
+    });
+    expect(serverConfig.server).toMatchObject({
+      host: '127.0.0.1',
+      port: 3000,
+      strictPort: true,
     });
     expect(proxy).not.toHaveProperty('/metadata-config');
   });

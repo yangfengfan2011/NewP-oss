@@ -1,298 +1,681 @@
+param(
+    [ValidateRange(0, 65535)]
+    [int]$HostPort = 0,
+
+    [ValidateRange(0, 65535)]
+    [int]$ShellPort = 0,
+
+    [ValidateRange(5, 600)]
+    [int]$HostStartupTimeoutSeconds = 120,
+
+    [ValidateRange(5, 600)]
+    [int]$ShellStartupTimeoutSeconds = 90,
+
+    [switch]$SkipDependencyInstall
+)
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$supervisorLibrary = Join-Path $repoRoot "scripts\lib\dev-supervisor.ps1"
+. $supervisorLibrary
+
 $frontendRoot = Join-Path $repoRoot "frontend"
-$packageConfig = Get-Content -LiteralPath (Join-Path $frontendRoot "package.json") -Raw | ConvertFrom-Json
-$packageManagerSpec = $packageConfig.packageManager
-$runtimeSpec = $packageConfig.devEngines.runtime
+$frontendPackagePath = Join-Path $frontendRoot "package.json"
+$hostProjectPath = Join-Path $repoRoot "apps\host-api\HostApi.csproj"
+$devRoot = Join-Path $repoRoot ".codex-temp\dev"
+$statePath = Join-Path $devRoot "state.json"
+$currentResultPath = Join-Path $devRoot "current-result.json"
+$lockPath = Join-Path $devRoot "launcher.lock"
+$launcherLock = $null
+$hostProcess = $null
+$shellProcess = $null
+$hostRoot = $null
+$shellRoot = $null
+$runDirectory = $null
+$stagesPath = $null
+$resultPath = $null
+$identity = $null
+$ports = $null
+$logPaths = $null
+$endpointIdentity = $null
+$startedAt = [DateTimeOffset]::UtcNow
+$stopwatch = [Diagnostics.Stopwatch]::StartNew()
 
-if ($packageManagerSpec -notmatch '^pnpm@(?<Version>\d+\.\d+\.\d+)$') {
-    Write-Host "ERROR: frontend/package.json must declare an exact pnpm packageManager version." -ForegroundColor Red
-    exit 1
-}
-
-$requiredPnpmVersion = $Matches.Version
-
-if ($runtimeSpec.name -ne "node" -or $runtimeSpec.version -notmatch '^\d+\.\d+\.\d+$') {
-    Write-Host "ERROR: frontend/package.json must declare an exact Node.js devEngines.runtime version." -ForegroundColor Red
-    exit 1
-}
-
-$requiredNodeVersion = $runtimeSpec.version
-$logDir = Join-Path $repoRoot ".codex-temp"
-$frontendUrl = "http://localhost:3000"
-$backendUrl = "http://localhost:5000"
-$frontendOutLog = Join-Path $logDir "dev-frontend.out.log"
-$frontendErrLog = Join-Path $logDir "dev-frontend.err.log"
-$backendOutLog = Join-Path $logDir "dev-host-api.out.log"
-$backendErrLog = Join-Path $logDir "dev-host-api.err.log"
-$frontendPidFile = Join-Path $logDir "dev-frontend.pid"
-$backendPidFile = Join-Path $logDir "dev-host-api.pid"
-$backendStartupTimeoutSeconds = 120
-$frontendStartupTimeoutSeconds = 90
-$logTailLines = 40
-
-function Show-LogTail {
+function Write-DevStage {
     param(
-        [string]$Title,
-        [string]$Path
+        [Parameter(Mandatory)][string]$Stage,
+        [Parameter(Mandatory)][string]$Status,
+        [AllowNull()][string]$FailureCode = $null,
+        [AllowNull()][string]$Diagnostic = $null
     )
 
-    Write-Host ""
-    Write-Host "=== $Title ===" -ForegroundColor Yellow
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        Write-Host "(log file not found: $Path)" -ForegroundColor DarkGray
+    if ([string]::IsNullOrWhiteSpace($script:stagesPath)) {
         return
     }
 
-    $content = Get-Content -LiteralPath $Path -Tail $logTailLines -ErrorAction SilentlyContinue
-    if (-not $content) {
-        Write-Host "(no log output)" -ForegroundColor DarkGray
-        return
-    }
-
-    $content | ForEach-Object { Write-Host $_ }
+    Write-DevJsonLine -Path $script:stagesPath -Value ([ordered]@{
+        timestampUtc = [DateTimeOffset]::UtcNow.ToString("O")
+        elapsedMs = $script:stopwatch.ElapsedMilliseconds
+        stage = $Stage
+        status = $Status
+        failureCode = $FailureCode
+        diagnostic = ConvertTo-DevSanitizedText $Diagnostic
+    })
 }
 
-function Show-StartupDiagnostics {
-    Show-LogTail -Title "Host API stdout tail" -Path $backendOutLog
-    Show-LogTail -Title "Host API stderr tail" -Path $backendErrLog
-    Show-LogTail -Title "Frontend stdout tail" -Path $frontendOutLog
-    Show-LogTail -Title "Frontend stderr tail" -Path $frontendErrLog
+function Get-StartedProcessSnapshot {
+    param([Parameter(Mandatory)][Diagnostics.Process]$Process)
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        $snapshot = Get-DevProcessSnapshot -ProcessId $Process.Id
+        if ($null -ne $snapshot) {
+            return $snapshot
+        }
+
+        if ($Process.HasExited) {
+            throw "DEV_CHILD_EXITED: process $($Process.Id) exited before its identity could be captured."
+        }
+
+        Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    throw "DEV_PROCESS_IDENTITY_UNAVAILABLE: process $($Process.Id) could not be identified."
 }
 
-function Ensure-FrontendDependencies {
-    $frontendNodeModules = Join-Path $frontendRoot "node_modules"
-    $viteCheckArgs = @(
-        "pnpm",
-        "--filter",
-        "@icp-platform/shell",
-        "exec",
-        "vite",
-        "--version"
+function Invoke-WithProcessEnvironment {
+    param(
+        [Parameter(Mandatory)][hashtable]$Variables,
+        [Parameter(Mandatory)][scriptblock]$Action
     )
 
-    $needsInstall = -not (Test-Path -LiteralPath $frontendNodeModules)
+    $previous = @{}
+    try {
+        foreach ($entry in $Variables.GetEnumerator()) {
+            $previous[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, [EnvironmentVariableTarget]::Process)
+            [Environment]::SetEnvironmentVariable($entry.Key, [string]$entry.Value, [EnvironmentVariableTarget]::Process)
+        }
 
-    if (-not $needsInstall) {
-        Push-Location $frontendRoot
-        try {
+        return & $Action
+    }
+    finally {
+        foreach ($entry in $Variables.GetEnumerator()) {
+            [Environment]::SetEnvironmentVariable($entry.Key, $previous[$entry.Key], [EnvironmentVariableTarget]::Process)
+        }
+    }
+}
+
+function Test-ChildExited {
+    param([AllowNull()][Diagnostics.Process]$Process)
+
+    return $null -eq $Process -or $Process.HasExited
+}
+
+function Wait-HostReady {
+    param(
+        [Parameter(Mandatory)][Diagnostics.Process]$Process,
+        [Parameter(Mandatory)][int]$Port,
+        [Parameter(Mandatory)]$ExpectedEndpoint,
+        [Parameter(Mandatory)][int]$TimeoutSeconds
+    )
+
+    return Wait-DevChildProbe `
+        -IsChildAlive { -not (Test-ChildExited $Process) } `
+        -Probe { Get-DevReadinessResponse -Port $Port } `
+        -IsReady {
+            param($readiness)
+            if ($null -eq $readiness) {
+                return $false
+            }
+
+            if ($null -eq $readiness.supervisor -or -not (Test-DevEndpointIdentity -Expected $ExpectedEndpoint -Actual $readiness.supervisor)) {
+                throw "DEV_HOST_IDENTITY_MISMATCH: the Host readiness endpoint does not belong to this run."
+            }
+
+            if ([string]::Equals([string]$readiness.status, "ready", [StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+
+            if ([string]::Equals([string]$readiness.status, "failed", [StringComparison]::OrdinalIgnoreCase)) {
+                $failureCode = if ([string]::IsNullOrWhiteSpace([string]$readiness.failureCode)) { "unknown" } else { [string]$readiness.failureCode }
+                throw "DEV_HOST_READINESS_FAILED: Host reported failure code $failureCode."
+            }
+
+            return $false
+        } `
+        -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
+        -PollMilliseconds 250 `
+        -ExitFailureCode "DEV_HOST_EXITED" `
+        -TimeoutFailureCode "DEV_HOST_READY_TIMEOUT"
+}
+
+function Wait-ShellHttpReady {
+    param(
+        [Parameter(Mandatory)][Diagnostics.Process]$Process,
+        [Parameter(Mandatory)][int]$Port,
+        [Parameter(Mandatory)][int]$TimeoutSeconds
+    )
+
+    $null = Wait-DevChildProbe `
+        -IsChildAlive { -not (Test-ChildExited $Process) } `
+        -Probe {
             try {
-                & $corepackPath @viteCheckArgs *> $null
-                $viteCheckExitCode = $LASTEXITCODE
+                return Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 3
             }
             catch {
-                $viteCheckExitCode = 1
+                return $null
             }
-        }
-        finally {
-            Pop-Location
-        }
+        } `
+        -IsReady {
+            param($response)
+            return $null -ne $response -and
+                $response.StatusCode -eq 200 -and
+                [string]$response.Headers["Content-Type"] -match "text/html"
+        } `
+        -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
+        -PollMilliseconds 250 `
+        -ExitFailureCode "DEV_SHELL_EXITED" `
+        -TimeoutFailureCode "DEV_SHELL_READY_TIMEOUT"
+}
 
-        if ($viteCheckExitCode -ne 0) {
-            $needsInstall = $true
-        }
+function Invoke-ShellAcceptance {
+    param(
+        [Parameter(Mandatory)][int]$Port,
+        [Parameter(Mandatory)]$ExpectedEndpoint,
+        [Parameter(Mandatory)][string]$Username,
+        [Parameter(Mandatory)][string]$Password
+    )
+
+    $baseUri = "http://127.0.0.1:$Port"
+    $rootResponse = Invoke-WebRequest -Uri "$baseUri/" -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 5
+    if ($rootResponse.StatusCode -ne 200 -or [string]$rootResponse.Headers["Content-Type"] -notmatch "text/html") {
+        throw "DEV_SHELL_HTML_INVALID: Shell origin did not serve HTML."
     }
 
-    if (-not $needsInstall) {
-        return
-    }
+    foreach ($manifestPath in @(
+        "/plugins/frontend-plugin-manifest.json",
+        "/plugins/localization-manifest.json",
+        "/plugins/metadata-runtime-manifest.json")) {
+        $manifestResponse = Invoke-WebRequest -Uri "$baseUri$manifestPath" -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 5
+        if ($manifestResponse.StatusCode -ne 200) {
+            throw "DEV_SHELL_MANIFEST_FAILED: Shell origin returned $($manifestResponse.StatusCode) for $manifestPath."
+        }
 
-    Write-Host "Preparing frontend dependencies with pnpm..." -ForegroundColor Cyan
-    Push-Location $frontendRoot
-    try {
         try {
-            & $corepackPath pnpm install
-            $pnpmInstallExitCode = $LASTEXITCODE
+            $null = $manifestResponse.Content | ConvertFrom-Json
         }
         catch {
-            $pnpmInstallExitCode = 1
+            throw "DEV_SHELL_MANIFEST_INVALID: Shell origin returned invalid JSON for $manifestPath."
         }
+    }
+
+    $proxyResponse = Invoke-WebRequest -Uri "$baseUri/api/health/ready" -UseBasicParsing -SkipHttpErrorCheck -TimeoutSec 5
+    if ($proxyResponse.StatusCode -ne 200) {
+        throw "DEV_SHELL_PROXY_FAILED: proxied Host readiness returned $($proxyResponse.StatusCode)."
+    }
+
+    $proxyReadiness = $proxyResponse.Content | ConvertFrom-Json
+    if ($null -eq $proxyReadiness.supervisor -or -not (Test-DevEndpointIdentity -Expected $ExpectedEndpoint -Actual $proxyReadiness.supervisor)) {
+        throw "DEV_SHELL_PROXY_IDENTITY_MISMATCH: proxied readiness belongs to another run."
+    }
+
+    $webSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $loginBody = @{ username = $Username; password = REDACTED_FOR_OPEN_SOURCE } | ConvertTo-Json -Compress
+    $loginResponse = Invoke-WebRequest `
+        -Uri "$baseUri/api/auth/login" `
+        -Method Post `
+        -ContentType "application/json" `
+        -Body $loginBody `
+        -WebSession $webSession `
+        -UseBasicParsing `
+        -SkipHttpErrorCheck `
+        -TimeoutSec 10
+    if ($loginResponse.StatusCode -ne 200) {
+        throw "DEV_LOGIN_FAILED: real LocalAuth login returned $($loginResponse.StatusCode)."
+    }
+
+    $currentUserResponse = Invoke-WebRequest `
+        -Uri "$baseUri/api/auth/current-user" `
+        -WebSession $webSession `
+        -UseBasicParsing `
+        -SkipHttpErrorCheck `
+        -TimeoutSec 10
+    if ($currentUserResponse.StatusCode -ne 200) {
+        throw "DEV_CURRENT_USER_FAILED: authenticated current-user returned $($currentUserResponse.StatusCode)."
+    }
+
+    $currentUser = $currentUserResponse.Content | ConvertFrom-Json
+    if (-not [string]::Equals([string]$currentUser.username, $Username, [StringComparison]::Ordinal)) {
+        throw "DEV_CURRENT_USER_MISMATCH: current-user did not match the LocalAuth login."
+    }
+}
+
+function Get-LocalAuthCredentials {
+    $settings = Get-Content -LiteralPath (Join-Path $repoRoot "apps\host-api\appsettings.json") -Raw | ConvertFrom-Json
+    $username = if ([string]::IsNullOrWhiteSpace($env:NEWP_DEV_ADMIN_USERNAME)) {
+        [string]$settings.LocalAuth.Username
+    }
+    else {
+        $env:NEWP_DEV_ADMIN_USERNAME
+    }
+    $password = if ([string]::IsNullOrWhiteSpace($env:NEWP_DEV_ADMIN_PASSWORD)) {
+        [string]$settings.LocalAuth.Password
+    }
+    else {
+        $env:NEWP_DEV_ADMIN_PASSWORD
+    }
+
+    if ([string]::IsNullOrWhiteSpace($username) -or [string]::IsNullOrWhiteSpace($password)) {
+        throw "DEV_LOCAL_AUTH_CONFIG_MISSING: LocalAuth credentials are required for the startup smoke check."
+    }
+
+    return [pscustomobject]@{ Username = $username; Password = REDACTED_FOR_OPEN_SOURCE }
+}
+
+function Assert-Toolchain {
+    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+        throw "DEV_DOTNET_MISSING: dotnet was not found."
+    }
+
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        throw "DEV_NODE_MISSING: node was not found."
+    }
+
+    $packageConfig = Get-Content -LiteralPath $frontendPackagePath -Raw | ConvertFrom-Json
+    if ([string]$packageConfig.packageManager -notmatch '^pnpm@(?<Version>\d+\.\d+\.\d+)$') {
+        throw "DEV_PNPM_VERSION_UNPINNED: frontend/package.json must declare an exact pnpm version."
+    }
+
+    $requiredPnpmVersion = $Matches.Version
+    $runtime = $packageConfig.devEngines.runtime
+    if ([string]$runtime.name -ne "node" -or [string]$runtime.version -notmatch '^\d+\.\d+\.\d+$') {
+        throw "DEV_NODE_VERSION_UNPINNED: frontend/package.json must declare an exact Node.js version."
+    }
+
+    $currentNodeVersion = (& node --version).Trim().TrimStart('v')
+    if ($LASTEXITCODE -ne 0 -or $currentNodeVersion -ne [string]$runtime.version) {
+        throw "DEV_NODE_VERSION_MISMATCH: Node.js $($runtime.version) is required; current version is $currentNodeVersion."
+    }
+
+    $corepackCommand = Get-Command corepack.cmd -ErrorAction SilentlyContinue
+    if ($null -eq $corepackCommand) {
+        throw "DEV_COREPACK_MISSING: Corepack is required to resolve the pinned pnpm version."
+    }
+
+    Push-Location $frontendRoot
+    try {
+        $pnpmVersionOutput = @(& $corepackCommand.Source pnpm --version)
+        $pnpmExitCode = $LASTEXITCODE
     }
     finally {
         Pop-Location
     }
 
-    if ($pnpmInstallExitCode -ne 0) {
-        Write-Host "ERROR: frontend dependency installation failed." -ForegroundColor Red
-        exit 1
+    $currentPnpmVersion = if ($pnpmVersionOutput.Count -eq 0) { "" } else { [string]$pnpmVersionOutput[-1] }
+    if ($pnpmExitCode -ne 0 -or $currentPnpmVersion.Trim() -ne $requiredPnpmVersion) {
+        throw "DEV_PNPM_VERSION_MISMATCH: Corepack could not provide pnpm $requiredPnpmVersion."
+    }
+
+    return [pscustomobject]@{
+        CorepackPath = $corepackCommand.Source
+        NodeVersion = [string]$runtime.version
+        PnpmVersion = $requiredPnpmVersion
     }
 }
 
-Write-Host "=== Start ICP local dev environment ===" -ForegroundColor Green
+function Ensure-FrontendDependencies {
+    param(
+        [Parameter(Mandatory)][string]$CorepackPath,
+        [Parameter(Mandatory)][bool]$SkipInstall
+    )
 
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: dotnet was not found." -ForegroundColor Red
-    exit 1
-}
+    $nodeModulesPath = Join-Path $frontendRoot "node_modules"
+    $needsInstall = -not (Test-Path -LiteralPath $nodeModulesPath)
+    if (-not $needsInstall) {
+        Push-Location $frontendRoot
+        try {
+            & $CorepackPath pnpm --filter "@icp-platform/shell" exec vite --version *> $null
+            $needsInstall = $LASTEXITCODE -ne 0
+        }
+        finally {
+            Pop-Location
+        }
+    }
 
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: node was not found." -ForegroundColor Red
-    exit 1
-}
+    if (-not $needsInstall) {
+        return
+    }
 
-$nodeVersion = (node --version).Trim().TrimStart("v")
-if ($nodeVersion -ne $requiredNodeVersion) {
-    Write-Host "ERROR: Node.js $requiredNodeVersion is required; current version is $nodeVersion." -ForegroundColor Red
-    exit 1
-}
+    if ($SkipInstall) {
+        throw "DEV_FRONTEND_DEPENDENCIES_MISSING: frontend dependencies are unavailable and install was disabled."
+    }
 
-if (-not (Get-Command corepack.cmd -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: Corepack was not found; pnpm $requiredPnpmVersion cannot be resolved from packageManager." -ForegroundColor Red
-    exit 1
-}
-
-$corepackPath = (Get-Command corepack.cmd).Source
-Push-Location $frontendRoot
-try {
+    Push-Location $frontendRoot
     try {
-        $pnpmVersionOutput = @(& $corepackPath pnpm --version)
-        $pnpmVersionExitCode = $LASTEXITCODE
+        & $CorepackPath pnpm install
+        if ($LASTEXITCODE -ne 0) {
+            throw "DEV_FRONTEND_INSTALL_FAILED: pnpm install returned exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Write-RunResult {
+    param(
+        [Parameter(Mandatory)][string]$Status,
+        [Parameter(Mandatory)][bool]$Reused,
+        [AllowNull()][string]$FailureCode = $null,
+        [AllowNull()][string]$Diagnostic = $null,
+        [AllowNull()]$EndpointIdentity = $null,
+        [AllowNull()]$Ports = $null,
+        [AllowNull()]$Processes = $null,
+        [AllowNull()]$LogPaths = $null
+    )
+
+    $hostPid = if ($null -eq $Processes -or $null -eq $Processes.host) { $null } else { $Processes.host.pid }
+    $shellPid = if ($null -eq $Processes -or $null -eq $Processes.shell) { $null } else { $Processes.shell.pid }
+    $result = [ordered]@{
+        status = $Status
+        reused = $Reused
+        failureCode = $FailureCode
+        diagnostic = ConvertTo-DevSanitizedText $Diagnostic
+        startedAtUtc = $script:startedAt.ToString("O")
+        completedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
+        durationMs = $script:stopwatch.ElapsedMilliseconds
+        endpointIdentity = $EndpointIdentity
+        ports = $Ports
+        processIds = if ($null -eq $Processes) { $null } else { [ordered]@{ host = $hostPid; shell = $shellPid } }
+        logs = $LogPaths
+    }
+    Write-DevJsonAtomic -Path $script:resultPath -Value $result
+    Write-DevJsonAtomic -Path $script:currentResultPath -Value $result
+}
+
+function Stop-StartedProcesses {
+    if ($null -ne $script:shellRoot) {
+        Stop-DevOwnedProcessTree -ExpectedRoot $script:shellRoot | Out-Null
+    }
+
+    if ($null -ne $script:hostRoot) {
+        Stop-DevOwnedProcessTree -ExpectedRoot $script:hostRoot | Out-Null
+    }
+}
+
+try {
+    $identity = Get-DevWorktreeIdentity -RepositoryRoot $repoRoot
+    $ports = Get-DevWorktreePorts `
+        -IsMainWorktree $identity.IsMainWorktree `
+        -WorktreeId $identity.WorktreeId `
+        -HostPort $HostPort `
+        -ShellPort $ShellPort
+    $credentials = Get-LocalAuthCredentials
+
+    $launcherLock = Enter-DevLauncherLock -Path $lockPath -TimeoutMilliseconds 5000
+
+    $existingState = $null
+    if (Test-Path -LiteralPath $statePath) {
+        try {
+            $existingState = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        }
+        catch {
+            throw "DEV_STATE_INVALID: state.json is not valid JSON."
+        }
+    }
+
+    if ($null -ne $existingState -and
+        [string]$existingState.status -eq "ready" -and
+        [string]$existingState.repositoryId -eq $identity.RepositoryId -and
+        [string]$existingState.worktreeId -eq $identity.WorktreeId -and
+        [string]$existingState.commit -eq $identity.Commit -and
+        [int]$existingState.ports.host -eq $ports.HostPort -and
+        [int]$existingState.ports.shell -eq $ports.ShellPort -and
+        (Test-DevStateOwnership -State $existingState)) {
+        Invoke-ShellAcceptance `
+            -Port $ports.ShellPort `
+            -ExpectedEndpoint $existingState.endpointIdentity `
+            -Username $credentials.Username `
+            -Password $credentials.Password
+
+        $reuseRunId = "reuse-" + [DateTimeOffset]::UtcNow.ToString("yyyyMMddTHHmmssfff") + "-" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+        $runDirectory = Join-Path $devRoot "runs\$reuseRunId"
+        New-Item -ItemType Directory -Path $runDirectory | Out-Null
+        $stagesPath = Join-Path $runDirectory "stages.jsonl"
+        $resultPath = Join-Path $runDirectory "result.json"
+        Write-DevStage -Stage "reuse" -Status "passed"
+        Write-RunResult `
+            -Status "ready" `
+            -Reused $true `
+            -EndpointIdentity $existingState.endpointIdentity `
+            -Ports $existingState.ports `
+            -Processes $existingState.processes `
+            -LogPaths $existingState.logs
+        Write-Host "DEV_READY_REUSED: Host and Shell are already ready for this worktree."
+        Write-Host "Host: http://127.0.0.1:$($ports.HostPort)"
+        Write-Host "Shell: http://127.0.0.1:$($ports.ShellPort)"
+        exit 0
+    }
+
+    foreach ($port in @($ports.HostPort, $ports.ShellPort)) {
+        $listeners = @(Get-DevListeningProcesses -Port $port)
+        if ($listeners.Count -gt 0) {
+            $summary = @($listeners | ForEach-Object { "port $($_.Port) pid $($_.ProcessId) owner $($_.ProcessName)" }) -join "; "
+            throw "DEV_PORT_IN_USE: $summary. No process was stopped."
+        }
+    }
+
+    $runId = [DateTimeOffset]::UtcNow.ToString("yyyyMMddTHHmmssfff") + "-" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    $endpointTokenFingerprint = Get-DevSha256Text -Value ([Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)))
+    $endpointIdentity = [ordered]@{
+        repositoryId = $identity.RepositoryId
+        worktreeId = $identity.WorktreeId
+        runId = $runId
+        endpointTokenFingerprint = $endpointTokenFingerprint
+    }
+    $runDirectory = Join-Path $devRoot "runs\$runId"
+    New-Item -ItemType Directory -Path $runDirectory | Out-Null
+    $stagesPath = Join-Path $runDirectory "stages.jsonl"
+    $resultPath = Join-Path $runDirectory "result.json"
+    $hostOutLog = Join-Path $runDirectory "host.stdout.log"
+    $hostErrLog = Join-Path $runDirectory "host.stderr.log"
+    $shellOutLog = Join-Path $runDirectory "shell.stdout.log"
+    $shellErrLog = Join-Path $runDirectory "shell.stderr.log"
+    $logPaths = [ordered]@{
+        hostStdout = $hostOutLog
+        hostStderr = $hostErrLog
+        shellStdout = $shellOutLog
+        shellStderr = $shellErrLog
+    }
+
+    Write-DevStage -Stage "prerequisites" -Status "started"
+    $toolchain = Assert-Toolchain
+    Ensure-FrontendDependencies -CorepackPath $toolchain.CorepackPath -SkipInstall $SkipDependencyInstall.IsPresent
+    Write-DevStage -Stage "prerequisites" -Status "passed"
+
+    Write-DevStage -Stage "host-start" -Status "started"
+    $hostEnvironment = @{
+        "ASPNETCORE_ENVIRONMENT" = "Development"
+        "DOTNET_ENVIRONMENT" = "Development"
+        "ASPNETCORE_URLS" = "http://127.0.0.1:$($ports.HostPort)"
+        "DevSupervisor__RepositoryId" = $identity.RepositoryId
+        "DevSupervisor__WorktreeId" = $identity.WorktreeId
+        "DevSupervisor__RunId" = $runId
+        "DevSupervisor__EndpointTokenFingerprint" = $endpointTokenFingerprint
+        "LocalAuth__Username" = $credentials.Username
+        "LocalAuth__Password" = $credentials.Password
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:NEWP_DEV_SQLSERVER_CONNECTION_STRING)) {
+        $hostEnvironment["ConnectionStrings__SqlServer"] = $env:NEWP_DEV_SQLSERVER_CONNECTION_STRING
+        $hostEnvironment["Persistence__Adapter"] = "EfCore"
+        $hostEnvironment["Persistence__Provider"] = "SqlServer"
+        $hostEnvironment["Persistence__AutoMigrate"] = "true"
+        $hostEnvironment["Persistence__AutoSeed"] = "true"
+    }
+
+    $hostProcess = Invoke-WithProcessEnvironment -Variables $hostEnvironment -Action {
+        Start-Process `
+            -FilePath "dotnet" `
+            -ArgumentList @("run", "--project", $hostProjectPath, "--no-launch-profile") `
+            -WorkingDirectory $repoRoot `
+            -RedirectStandardOutput $hostOutLog `
+            -RedirectStandardError $hostErrLog `
+            -WindowStyle Hidden `
+            -PassThru
+    }
+    $hostRoot = Get-StartedProcessSnapshot -Process $hostProcess
+    Write-DevStage -Stage "host-start" -Status "passed"
+
+    $startingState = [ordered]@{
+        schemaVersion = 1
+        status = "starting"
+        repositoryId = $identity.RepositoryId
+        worktreeId = $identity.WorktreeId
+        commit = $identity.Commit
+        runId = $runId
+        startedAtUtc = $startedAt.ToString("O")
+        ports = [ordered]@{ host = $ports.HostPort; shell = $ports.ShellPort }
+        endpointIdentity = $endpointIdentity
+        processes = [ordered]@{ host = $hostRoot; shell = $null }
+        logs = $logPaths
+        runDirectory = $runDirectory
+    }
+    Write-DevJsonAtomic -Path $statePath -Value $startingState
+
+    Write-DevStage -Stage "host-ready" -Status "started"
+    $null = Wait-HostReady `
+        -Process $hostProcess `
+        -Port $ports.HostPort `
+        -ExpectedEndpoint $endpointIdentity `
+        -TimeoutSeconds $HostStartupTimeoutSeconds
+    Write-DevStage -Stage "host-ready" -Status "passed"
+
+    Write-DevStage -Stage "shell-start" -Status "started"
+    $shellEnvironment = @{
+        "ICP_DEV_HOST_PORT" = [string]$ports.HostPort
+        "ICP_DEV_SHELL_PORT" = [string]$ports.ShellPort
+    }
+    $shellProcess = Invoke-WithProcessEnvironment -Variables $shellEnvironment -Action {
+        Start-Process `
+            -FilePath $toolchain.CorepackPath `
+            -ArgumentList @("pnpm", "--filter", "@icp-platform/shell", "dev") `
+            -WorkingDirectory $frontendRoot `
+            -RedirectStandardOutput $shellOutLog `
+            -RedirectStandardError $shellErrLog `
+            -WindowStyle Hidden `
+            -PassThru
+    }
+    $shellRoot = Get-StartedProcessSnapshot -Process $shellProcess
+    Write-DevStage -Stage "shell-start" -Status "passed"
+    Write-DevStage -Stage "shell-ready" -Status "started"
+    Wait-ShellHttpReady -Process $shellProcess -Port $ports.ShellPort -TimeoutSeconds $ShellStartupTimeoutSeconds
+    Invoke-ShellAcceptance `
+        -Port $ports.ShellPort `
+        -ExpectedEndpoint $endpointIdentity `
+        -Username $credentials.Username `
+        -Password $credentials.Password
+    Write-DevStage -Stage "shell-ready" -Status "passed"
+
+    if (-not (Test-DevRootOwnsPort -ExpectedRoot $hostRoot -Port $ports.HostPort) -or
+        -not (Test-DevRootOwnsPort -ExpectedRoot $shellRoot -Port $ports.ShellPort)) {
+        throw "DEV_LISTENER_OWNERSHIP_FAILED: a ready listener is outside its launched process tree."
+    }
+
+    $processes = [ordered]@{ host = $hostRoot; shell = $shellRoot }
+    $readyState = [ordered]@{
+        schemaVersion = 1
+        status = "ready"
+        repositoryId = $identity.RepositoryId
+        worktreeId = $identity.WorktreeId
+        commit = $identity.Commit
+        runId = $runId
+        startedAtUtc = $startedAt.ToString("O")
+        readyAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
+        ports = [ordered]@{ host = $ports.HostPort; shell = $ports.ShellPort }
+        endpointIdentity = $endpointIdentity
+        processes = $processes
+        logs = $logPaths
+        runDirectory = $runDirectory
+    }
+    Write-DevJsonAtomic -Path (Join-Path $runDirectory "ownership.json") -Value $readyState
+    Write-DevJsonAtomic -Path $statePath -Value $readyState
+    Write-RunResult `
+        -Status "ready" `
+        -Reused $false `
+        -EndpointIdentity $endpointIdentity `
+        -Ports $readyState.ports `
+        -Processes $processes `
+        -LogPaths $logPaths
+
+    Write-Host "DEV_READY: Host and Shell passed the complete readiness contract."
+    Write-Host "Host: http://127.0.0.1:$($ports.HostPort)"
+    Write-Host "Shell: http://127.0.0.1:$($ports.ShellPort)"
+    Write-Host "Run diagnostics: $runDirectory"
+    exit 0
+}
+catch {
+    $message = ConvertTo-DevSanitizedText $_.Exception.Message
+    $failureCode = if ($message -match '^(DEV_[A-Z0-9_]+):') { $Matches[1] } else { "DEV_START_FAILED" }
+    Write-DevStage -Stage "startup" -Status "failed" -FailureCode $failureCode -Diagnostic $message
+
+    try {
+        Stop-StartedProcesses
+        if ($null -ne $identity -and $null -ne $ports) {
+            $null = Wait-DevPortsReleased -Ports @($ports.HostPort, $ports.ShellPort)
+        }
     }
     catch {
-        $pnpmVersionOutput = @()
-        $pnpmVersionExitCode = 1
+        $rollbackMessage = ConvertTo-DevSanitizedText $_.Exception.Message
+        Write-DevStage -Stage "rollback" -Status "failed" -FailureCode "DEV_ROLLBACK_FAILED" -Diagnostic $rollbackMessage
+        $message = "$message Rollback: $rollbackMessage"
+        $failureCode = "DEV_ROLLBACK_FAILED"
     }
+
+    if (-not [string]::IsNullOrWhiteSpace($resultPath)) {
+        $failureProcesses = if ($null -eq $hostRoot -and $null -eq $shellRoot) { $null } else {
+            [ordered]@{ host = $hostRoot; shell = $shellRoot }
+        }
+        $failureLogs = if ([string]::IsNullOrWhiteSpace($runDirectory)) { $null } else { $logPaths }
+        $failurePorts = if ($null -eq $ports) { $null } else { [ordered]@{ host = $ports.HostPort; shell = $ports.ShellPort } }
+        Write-RunResult `
+            -Status "failed" `
+            -Reused $false `
+            -FailureCode $failureCode `
+            -Diagnostic $message `
+            -Ports $failurePorts `
+            -Processes $failureProcesses `
+            -LogPaths $failureLogs
+
+        $failedState = [ordered]@{
+            schemaVersion = 1
+            status = "failed"
+            failureCode = $failureCode
+            diagnostic = $message
+            repositoryId = if ($null -eq $identity) { $null } else { $identity.RepositoryId }
+            worktreeId = if ($null -eq $identity) { $null } else { $identity.WorktreeId }
+            commit = if ($null -eq $identity) { $null } else { $identity.Commit }
+            runId = if ($null -eq $endpointIdentity) { $null } else { $endpointIdentity.runId }
+            startedAtUtc = $startedAt.ToString("O")
+            failedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
+            ports = $failurePorts
+            endpointIdentity = $endpointIdentity
+            processes = $failureProcesses
+            logs = $failureLogs
+            runDirectory = $runDirectory
+        }
+        Write-DevJsonAtomic -Path $statePath -Value $failedState
+    }
+
+    Write-Host $message -ForegroundColor Red
+    if (-not [string]::IsNullOrWhiteSpace($runDirectory)) {
+        Write-Host "Run diagnostics: $runDirectory"
+    }
+    exit 1
 }
 finally {
-    Pop-Location
-}
-
-$currentPnpmVersion = if ($pnpmVersionOutput.Count -gt 0) { $pnpmVersionOutput[-1].ToString().Trim() } else { "" }
-if ($pnpmVersionExitCode -ne 0 -or $currentPnpmVersion -ne $requiredPnpmVersion) {
-    Write-Host "ERROR: Corepack could not provide pnpm $requiredPnpmVersion from packageManager." -ForegroundColor Red
-    exit 1
-}
-
-Ensure-FrontendDependencies
-
-if (Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1) {
-    Write-Host "ERROR: port 5000 is already in use." -ForegroundColor Red
-    exit 1
-}
-
-if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1) {
-    Write-Host "ERROR: port 3000 is already in use." -ForegroundColor Red
-    exit 1
-}
-
-New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-
-foreach ($path in @($frontendOutLog, $frontendErrLog, $backendOutLog, $backendErrLog, $frontendPidFile, $backendPidFile)) {
-    if (Test-Path $path) {
-        Remove-Item $path -Force
+    if ($null -ne $launcherLock) {
+        $launcherLock.Dispose()
     }
-}
-
-Write-Host "Starting Host API..." -ForegroundColor Cyan
-$previousAspNetCoreEnvironment = $env:ASPNETCORE_ENVIRONMENT
-$previousDotnetEnvironment = $env:DOTNET_ENVIRONMENT
-
-try {
-    $env:ASPNETCORE_ENVIRONMENT = "Development"
-    $env:DOTNET_ENVIRONMENT = "Development"
-
-    $backendProcess = Start-Process `
-        -FilePath "dotnet" `
-        -ArgumentList "run", "--project", (Join-Path $repoRoot "apps\host-api\HostApi.csproj") `
-        -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $backendOutLog `
-        -RedirectStandardError $backendErrLog `
-        -PassThru
-}
-finally {
-    if ($null -eq $previousAspNetCoreEnvironment) {
-        Remove-Item Env:ASPNETCORE_ENVIRONMENT -ErrorAction SilentlyContinue
-    } else {
-        $env:ASPNETCORE_ENVIRONMENT = $previousAspNetCoreEnvironment
-    }
-
-    if ($null -eq $previousDotnetEnvironment) {
-        Remove-Item Env:DOTNET_ENVIRONMENT -ErrorAction SilentlyContinue
-    } else {
-        $env:DOTNET_ENVIRONMENT = $previousDotnetEnvironment
-    }
-}
-
-Set-Content -Path $backendPidFile -Value $backendProcess.Id
-
-$backendReady = $false
-$frontendReady = $false
-$frontendProcess = $null
-$backendDeadline = (Get-Date).AddSeconds($backendStartupTimeoutSeconds)
-
-while ((Get-Date) -lt $backendDeadline -and -not $backendReady) {
-    try {
-        Invoke-WebRequest -UseBasicParsing "$backendUrl/api/auth/current-user" -TimeoutSec 3 | Out-Null
-        $backendReady = $true
-    } catch {
-        if ($_.Exception.Response) {
-            $backendReady = $true
-        }
-    }
-
-    if (-not $backendReady) {
-        Start-Sleep -Seconds 1
-    }
-}
-
-if ($backendReady) {
-    Write-Host "Starting Frontend Shell..." -ForegroundColor Cyan
-    $frontendProcess = Start-Process `
-        -FilePath $corepackPath `
-        -ArgumentList "pnpm", "--filter", "@icp-platform/shell", "dev" `
-        -WorkingDirectory $frontendRoot `
-        -RedirectStandardOutput $frontendOutLog `
-        -RedirectStandardError $frontendErrLog `
-        -PassThru
-
-    Set-Content -Path $frontendPidFile -Value $frontendProcess.Id
-
-    $frontendDeadline = (Get-Date).AddSeconds($frontendStartupTimeoutSeconds)
-
-    while ((Get-Date) -lt $frontendDeadline -and -not $frontendReady) {
-        if ($frontendProcess.HasExited) {
-            break
-        }
-
-        try {
-            Invoke-WebRequest -UseBasicParsing $frontendUrl -TimeoutSec 3 | Out-Null
-            $frontendReady = $true
-        } catch {
-            Start-Sleep -Seconds 1
-        }
-    }
-}
-
-Write-Host ""
-Write-Host "=== Startup result ===" -ForegroundColor Green
-Write-Host "Host API PID: $($backendProcess.Id)" -ForegroundColor Yellow
-Write-Host "Frontend PID: $(if ($frontendProcess) { $frontendProcess.Id } else { 'not started' })" -ForegroundColor Yellow
-Write-Host "Host API logs: $backendOutLog / $backendErrLog"
-Write-Host "Frontend logs: $frontendOutLog / $frontendErrLog"
-Write-Host "PID files: $backendPidFile / $frontendPidFile"
-Write-Host ""
-Write-Host "Host API:  $backendUrl"
-Write-Host "Frontend:  $frontendUrl"
-Write-Host ""
-Write-Host "Default login: admin / admin123" -ForegroundColor Cyan
-Write-Host "Stop services: .\\scripts\\stop-dev.ps1" -ForegroundColor DarkGray
-
-if (-not $backendReady -or -not $frontendReady) {
-    Write-Host ""
-    if (-not $backendReady) {
-        Write-Host "Host API did not become ready within $backendStartupTimeoutSeconds seconds." -ForegroundColor Yellow
-    }
-
-    if ($backendReady -and -not $frontendReady) {
-        if ($frontendProcess -and $frontendProcess.HasExited) {
-            Write-Host "Frontend Shell exited before becoming ready." -ForegroundColor Yellow
-        } else {
-            Write-Host "Frontend Shell did not become ready within $frontendStartupTimeoutSeconds seconds." -ForegroundColor Yellow
-        }
-    }
-
-    Show-StartupDiagnostics
-    exit 1
 }

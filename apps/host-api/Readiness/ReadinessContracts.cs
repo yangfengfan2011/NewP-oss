@@ -49,12 +49,22 @@ public sealed record ReadinessStageDto(
     string? Diagnostic);
 
 /// <summary>
+/// 表示本地开发监督器用于验证端点所有权的稳定、非凭据身份。
+/// </summary>
+public sealed record DevSupervisorIdentityDto(
+    string RepositoryId,
+    string WorktreeId,
+    string RunId,
+    string EndpointTokenFingerprint);
+
+/// <summary>
 /// `/api/health/ready` 的稳定响应 DTO。
 /// </summary>
 public sealed record ReadinessResponseDto(
     string Status,
     string? FailureCode,
-    IReadOnlyList<ReadinessStageDto> Stages);
+    IReadOnlyList<ReadinessStageDto> Stages,
+    DevSupervisorIdentityDto? Supervisor = null);
 
 /// <summary>
 /// 表示一次 readiness 聚合结果。

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using ICP.Platform.HostApi.Readiness;
 
 namespace ICP.Platform.HostApi.Controllers;
 
@@ -15,5 +16,18 @@ public class HealthController : ControllerBase
             Timestamp = DateTime.UtcNow,
             Version = "0.1.0"
         });
+    }
+
+    [HttpGet("ready")]
+    [ProducesResponseType<ReadinessResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ReadinessResponseDto>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> GetReady(
+        [FromServices] IReadinessEvaluator readinessEvaluator,
+        CancellationToken cancellationToken)
+    {
+        var evaluation = await readinessEvaluator.EvaluateAsync(cancellationToken);
+        return evaluation.IsReady
+            ? Ok(evaluation.Response)
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, evaluation.Response);
     }
 }

@@ -5,6 +5,7 @@ using ICP.Platform.Crud.Extensions;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.PluginOperations;
+using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.PluginDiscovery;
@@ -30,6 +31,7 @@ builder.Services.AddControllers(options =>
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHostReadiness();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy =>

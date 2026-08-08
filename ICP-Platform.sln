@@ -111,6 +111,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acceptance.Tests", "tests\a
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acceptance.Runner", "tests\acceptance\Acceptance.Runner\Acceptance.Runner.csproj", "{12000000-0000-0000-0000-000000000014}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HostApi.Tests", "tests\HostApi.Tests\HostApi.Tests.csproj", "{12000000-0000-0000-0000-000000000015}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -529,6 +531,18 @@ Global
 		{12000000-0000-0000-0000-000000000014}.Release|x64.Build.0 = Release|Any CPU
 		{12000000-0000-0000-0000-000000000014}.Release|x86.ActiveCfg = Release|Any CPU
 		{12000000-0000-0000-0000-000000000014}.Release|x86.Build.0 = Release|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Debug|x64.Build.0 = Debug|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Debug|x86.Build.0 = Debug|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Release|Any CPU.Build.0 = Release|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Release|x64.ActiveCfg = Release|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Release|x64.Build.0 = Release|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Release|x86.ActiveCfg = Release|Any CPU
+		{12000000-0000-0000-0000-000000000015}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -584,5 +598,6 @@ Global
 		{12000000-0000-0000-0000-000000000012} = {D4444444-4444-4444-4444-444444444444}
 		{12000000-0000-0000-0000-000000000013} = {D4444444-4444-4444-4444-444444444444}
 		{12000000-0000-0000-0000-000000000014} = {D4444444-4444-4444-4444-444444444444}
+		{12000000-0000-0000-0000-000000000015} = {D4444444-4444-4444-4444-444444444444}
 	EndGlobalSection
 EndGlobal

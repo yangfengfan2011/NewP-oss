@@ -13,6 +13,7 @@ public class RepositoryTestEntrypointTests
         "tests/ConfigCenter.Tests/ConfigCenter.Tests.csproj",
         "tests/DevSchemaSync.Tests/DevSchemaSync.Tests.csproj",
         "tests/Files.Tests/Files.Tests.csproj",
+        "tests/HostApi.Tests/HostApi.Tests.csproj",
         "tests/Kernel.Tests/Kernel.Tests.csproj",
         "tests/MetadataConfigCenter.Tests/MetadataConfigCenter.Tests.csproj",
         "tests/Modeling.Tests/Modeling.Tests.csproj",

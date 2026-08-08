@@ -11,7 +11,7 @@ public sealed class SqlServerDesignTimeDbContextFactory : IDesignTimeDbContextFa
     {
         var optionsBuilder = new DbContextOptionsBuilder<EfPlatformDbContext>();
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer")
-            ?? "Server=localhost,1433;Database=ICP_Platform;User Id=sa;Password=REDACTED_FOR_OPEN_SOURCE;TrustServerCertificate=True;";
+            ?? "Server=(localdb)\\MSSQLLocalDB;Database=NewP_DesignTime;Integrated Security=True;TrustServerCertificate=True;";
 
         EfCoreProviderOptions.Configure(
             optionsBuilder,

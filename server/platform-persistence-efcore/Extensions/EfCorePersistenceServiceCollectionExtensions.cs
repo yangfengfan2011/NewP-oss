@@ -1,7 +1,9 @@
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.EfCore.Ownership;
 using ICP.Platform.Persistence.EfCore.Sql;
 using ICP.Platform.Persistence.Extensions;
+using ICP.Platform.Persistence.Ownership;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
@@ -15,13 +17,16 @@ public static class EfCorePersistenceServiceCollectionExtensions
     public static IServiceCollection AddEfCorePersistence(
         this IServiceCollection services,
         IConfiguration configuration,
-        IReadOnlyList<ModelDefinition> definitions)
+        IReadOnlyList<ModelDefinition> definitions,
+        WorktreeDatabaseIdentity databaseIdentity)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(definitions);
+        ArgumentNullException.ThrowIfNull(databaseIdentity);
 
         services.AddSingleton(definitions);
+        services.AddSingleton(databaseIdentity);
         services.AddOptions<PersistenceOptions>()
             .Bind(configuration.GetSection(PersistenceOptions.SectionName));
 
@@ -48,6 +53,12 @@ public static class EfCorePersistenceServiceCollectionExtensions
         });
 
         services.AddScoped<ISqlQueryExecutor, EfSqlQueryExecutor>();
+        if (Enum.TryParse<PersistenceProvider>(configuration["Persistence:Provider"], true, out var provider)
+            && provider is PersistenceProvider.SqlServer)
+        {
+            services.AddScoped<IPersistenceMigrationGuard, SqlServerDatabaseOwnershipGuard>();
+        }
+
         services.AddScoped<IPersistenceMigrationRunner, PersistenceMigrationRunner>();
 
         return services;

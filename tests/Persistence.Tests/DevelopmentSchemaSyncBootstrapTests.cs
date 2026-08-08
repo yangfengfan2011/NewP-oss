@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using ICP.Platform.HostApi.Extensions;
+using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.DevSync.Execution;
@@ -62,13 +63,9 @@ public class DevelopmentSchemaSyncBootstrapTests
 
         Assert.Equal("SqlServer", options.Provider);
         Assert.Contains("ICP_Platform", options.ConnectionString, StringComparison.Ordinal);
-        Assert.True(options.ApplyChanges);
-        Assert.NotNull(options.ConfirmApply);
-        Assert.True(options.ConfirmApply(new SchemaPlan(
-            new SchemaPlanSummary(0, 0, 0, 0, 0),
-            [],
-            [],
-            [])));
+        Assert.False(options.ApplyChanges);
+        Assert.Null(options.ConfirmApply);
+        Assert.True(options.AllowConfirmOperations);
         Assert.NotNull(coordinator);
     }
 
@@ -119,7 +116,7 @@ public class DevelopmentSchemaSyncBootstrapTests
     }
 
     [Fact]
-    public async Task ApplyPlatformPersistenceAsync_WhenDevelopmentSchemaSyncBlocks_ThrowsInvalidOperationException()
+    public async Task ApplyPlatformPersistenceAsync_WhenDevelopmentSchemaSyncBlocks_RunsMigrationFirstAndThrows()
     {
         var migrationRunner = new RecordingMigrationRunner();
         var applyCalled = false;
@@ -148,13 +145,13 @@ public class DevelopmentSchemaSyncBootstrapTests
 
         Assert.Contains("Confirm", exception.Message, StringComparison.Ordinal);
         Assert.False(applyCalled);
-        Assert.Equal(0, migrationRunner.CallCount);
+        Assert.Equal(1, migrationRunner.CallCount);
     }
 
     [Fact]
-    public async Task ApplyPlatformPersistenceAsync_WhenDevelopmentSchemaSyncSafePlanAllowsStartup_AppliesAndSkipsMigrationRunner()
+    public async Task ApplyPlatformPersistenceAsync_WhenDevelopmentSchemaSyncSafePlanAllowsStartup_ReportsWithoutApplying()
     {
-        var migrationRunner = new RecordingMigrationRunner();
+        var migrationRunner = new RecordingMigrationRunner(databaseAhead: true);
         var applyCalled = false;
         await using var app = BuildApp(
             Environments.Development,
@@ -178,14 +175,20 @@ public class DevelopmentSchemaSyncBootstrapTests
 
         await app.ApplyPlatformPersistenceAsync();
 
-        Assert.True(applyCalled);
-        Assert.Equal(0, migrationRunner.CallCount);
+        Assert.False(applyCalled);
+        Assert.Equal(1, migrationRunner.CallCount);
+        var readiness = new PersistenceReadinessContributor(
+            app.Services.GetRequiredService<PersistenceReadinessState>());
+        var contribution = await readiness.CheckAsync(CancellationToken.None);
+        Assert.Equal(ReadinessState.Ready, contribution.State);
+        Assert.Contains("database-ahead", contribution.Diagnostic, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ApplyPlatformPersistenceAsync_WhenDevelopmentSchemaSyncSafeApplyFails_ThrowsAndSkipsMigrationRunner()
+    public async Task ApplyPlatformPersistenceAsync_WhenMigrationFails_DoesNotPrepareOrApplyDevSchemaSync()
     {
-        var migrationRunner = new RecordingMigrationRunner();
+        var migrationRunner = new RecordingMigrationRunner(new InvalidOperationException("migration failed"));
+        var applyCalled = false;
         await using var app = BuildApp(
             Environments.Development,
             "SqlServer",
@@ -199,14 +202,19 @@ public class DevelopmentSchemaSyncBootstrapTests
                     [new SchemaOperation("AddColumn", "Safe", "Role", "Description", null, "add Description", [])],
                     []),
                 applyConfirmation: static _ => true,
-                applyResult: new ApplyResult(false, false, 0, 0)),
+                applyAsync: (_, _) =>
+                {
+                    applyCalled = true;
+                    return Task.FromResult(new ApplyResult(true, false, 1, 1));
+                }),
             migrationRunner);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             app.ApplyPlatformPersistenceAsync());
 
-        Assert.Contains("执行失败", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(0, migrationRunner.CallCount);
+        Assert.Equal("migration failed", exception.Message);
+        Assert.False(applyCalled);
+        Assert.Equal(1, migrationRunner.CallCount);
     }
 
     [Theory]
@@ -252,6 +260,7 @@ public class DevelopmentSchemaSyncBootstrapTests
         });
         builder.Services.AddSingleton(coordinator);
         builder.Services.AddSingleton<IPersistenceMigrationRunner>(migrationRunner);
+        builder.Services.AddSingleton<PersistenceReadinessState>();
 
         return builder.Build();
     }
@@ -285,14 +294,20 @@ public class DevelopmentSchemaSyncBootstrapTests
         throw new InvalidOperationException("无法定位仓库根目录。");
     }
 
-    private sealed class RecordingMigrationRunner : IPersistenceMigrationRunner
+    private sealed class RecordingMigrationRunner(
+        Exception? exception = null,
+        bool databaseAhead = false) : IPersistenceMigrationRunner
     {
         public int CallCount { get; private set; }
+
+        public bool DatabaseAhead => databaseAhead;
 
         public Task MigrateAsync(CancellationToken cancellationToken = default)
         {
             CallCount++;
-            return Task.CompletedTask;
+            return exception is null
+                ? Task.CompletedTask
+                : Task.FromException(exception);
         }
     }
 }

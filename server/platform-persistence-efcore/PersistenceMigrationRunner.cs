@@ -8,17 +8,37 @@ public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly PersistenceOptions _options;
+    private readonly IReadOnlyList<IPersistenceMigrationGuard> _guards;
 
     public PersistenceMigrationRunner(
         EfPlatformDbContext dbContext,
-        IOptions<PersistenceOptions> options)
+        IOptions<PersistenceOptions> options,
+        IEnumerable<IPersistenceMigrationGuard> guards)
     {
         _dbContext = dbContext;
         _options = options.Value;
+        _guards = guards.ToArray();
     }
 
-    public Task MigrateAsync(CancellationToken cancellationToken = default) =>
-        _options.AutoMigrate
-            ? _dbContext.Database.MigrateAsync(cancellationToken)
-            : Task.CompletedTask;
+    public bool DatabaseAhead { get; private set; }
+
+    public async Task MigrateAsync(CancellationToken cancellationToken = default)
+    {
+        DatabaseAhead = false;
+        if (!_options.AutoMigrate)
+        {
+            return;
+        }
+
+        foreach (var guard in _guards)
+        {
+            var result = await guard.VerifyAsync(cancellationToken);
+            DatabaseAhead |= result.DatabaseAhead;
+        }
+
+        if (!DatabaseAhead)
+        {
+            await _dbContext.Database.MigrateAsync(cancellationToken);
+        }
+    }
 }

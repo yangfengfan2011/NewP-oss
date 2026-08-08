@@ -4,6 +4,7 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.EfCore.Sql;
+using ICP.Platform.Persistence.Ownership;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,10 @@ public class EfCorePersistenceServiceCollectionExtensionsTests
             })
             .Build();
 
-        services.AddEfCorePersistence(configuration, BuildDefinitions());
+        services.AddEfCorePersistence(
+            configuration,
+            BuildDefinitions(),
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();

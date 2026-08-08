@@ -67,7 +67,9 @@ public class EfAuthorizationRepositoryTests
             "Migrations",
             "EfPlatformDbContextModelSnapshot.cs"));
 
-        foreach (var snapshot in new[] { sqlServerSnapshot, mySqlSnapshot, oracleSnapshot })
+        Assert.Contains(".HasColumnName(\"ECODE\")", sqlServerSnapshot, StringComparison.Ordinal);
+
+        foreach (var snapshot in new[] { mySqlSnapshot, oracleSnapshot })
         {
             Assert.Contains("b.ToTable(\"Role\"", snapshot, StringComparison.Ordinal);
             Assert.Contains("b.ToTable(\"Permission\"", snapshot, StringComparison.Ordinal);
@@ -80,6 +82,14 @@ public class EfAuthorizationRepositoryTests
             AssertModelPrimaryKey(snapshot, "RolePermission", "EID");
             AssertModelPrimaryKey(snapshot, "UserRole", "EID");
         }
+
+        Assert.Contains("b.ToTable(\"Role\"", sqlServerSnapshot, StringComparison.Ordinal);
+        Assert.Contains("b.ToTable(\"Permission\"", sqlServerSnapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasColumnName(\"RoleId\")", sqlServerSnapshot, StringComparison.Ordinal);
+        AssertModelPrimaryKey(sqlServerSnapshot, "Role", "EID");
+        AssertModelPrimaryKey(sqlServerSnapshot, "Permission", "EID");
+        AssertModelPrimaryKey(sqlServerSnapshot, "RolePermission", "EID");
+        AssertModelPrimaryKey(sqlServerSnapshot, "UserRole", "EID");
     }
 
     private static EfPlatformDbContext CreateDbContext()

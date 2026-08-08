@@ -2,6 +2,8 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.EfCore.Extensions;
+using ICP.Platform.Persistence.Ownership;
+using ICP.Platform.HostApi.Readiness;
 
 namespace ICP.Platform.HostApi.Extensions;
 
@@ -14,7 +16,13 @@ public static class PersistenceBootstrapExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        services.AddEfCorePersistence(configuration, GetPlatformModelDefinitions());
+        var repositoryRoot = LocateRepositoryRootFromAppBase();
+        services.AddEfCorePersistence(
+            configuration,
+            GetPlatformModelDefinitions(),
+            WorktreeDatabaseIdentity.Resolve(repositoryRoot));
+        services.AddSingleton<PersistenceReadinessState>();
+        services.AddSingleton<IReadinessContributor, PersistenceReadinessContributor>();
         if (configuration.GetValue<bool>("DevelopmentSchemaSync:Enabled")
             && string.Equals(configuration["Persistence:Provider"], "SqlServer", StringComparison.OrdinalIgnoreCase))
         {
@@ -35,23 +43,51 @@ public static class PersistenceBootstrapExtensions
         using var scope = app.Services.CreateScope();
         var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var readiness = scope.ServiceProvider.GetRequiredService<PersistenceReadinessState>();
 
-        if (environment.IsDevelopment()
-            && configuration.GetValue<bool>("DevelopmentSchemaSync:Enabled")
-            && string.Equals(configuration["Persistence:Provider"], "SqlServer", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            var coordinator = scope.ServiceProvider.GetRequiredService<DevelopmentSchemaSyncCoordinator>();
-            var result = await coordinator.ExecuteAsync(cancellationToken);
-            if (!result.StartupAllowed)
+            var migrationRunner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
+            await migrationRunner.MigrateAsync(cancellationToken);
+
+            if (environment.IsDevelopment()
+                && configuration.GetValue<bool>("DevelopmentSchemaSync:Enabled")
+                && string.Equals(configuration["Persistence:Provider"], "SqlServer", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(result.BuildMessage());
+                var coordinator = scope.ServiceProvider.GetRequiredService<DevelopmentSchemaSyncCoordinator>();
+                // Host 永远只准备和报告计划；所有 schema 写入只允许由 EF migrations 完成。
+                var result = await coordinator.PrepareAsync(cancellationToken);
+                if (!result.StartupAllowed)
+                {
+                    throw new InvalidOperationException(result.BuildMessage());
+                }
+
+                if (result.Plan is { } plan
+                    && (plan.Summary.OperationCount > 0 || plan.Summary.UnmanagedTableCount > 0))
+                {
+                    app.Logger.LogWarning(
+                        "Development schema drift reported after migrations: {OperationCount} operations ({SafeCount} safe, {ConfirmCount} confirm), {UnmanagedCount} unmanaged tables. No changes were applied.",
+                        plan.Summary.OperationCount,
+                        plan.Summary.SafeOperationCount,
+                        plan.Summary.ConfirmOperationCount,
+                        plan.Summary.UnmanagedTableCount);
+                }
             }
 
-            return;
+            readiness.MarkReady(migrationRunner.DatabaseAhead);
         }
-
-        var migrationRunner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
-        await migrationRunner.MigrateAsync(cancellationToken);
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            readiness.MarkStarting();
+            throw;
+        }
+        catch (Exception exception)
+        {
+            readiness.MarkFailed(exception is DatabaseOwnershipException ownershipException
+                ? ownershipException.FailureCode
+                : PersistenceReadinessFailureCodes.BootstrapFailed);
+            throw;
+        }
     }
 
     public static IReadOnlyList<ICP.Platform.Modeling.Definitions.ModelDefinition> GetPlatformModelDefinitions() =>
@@ -66,10 +102,10 @@ public static class PersistenceBootstrapExtensions
             LocateRepositoryRootFromAppBase(),
             connectionString,
             provider,
-            ApplyChanges: true,
+            ApplyChanges: false,
             GenerateSqlPreview: false,
-            // Host 启动没有交互输入；Confirm 风险已在 Prepare 阶段阻断，这里只允许 Safe plan 进入执行层。
-            ConfirmApply: static _ => true);
+            // Host 只需要拿到完整 drift 报告；Confirm 计划不再获得执行权，也不替代 EF migration 阻断启动。
+            AllowConfirmOperations: true);
     }
 
     private static string LocateRepositoryRootFromAppBase()

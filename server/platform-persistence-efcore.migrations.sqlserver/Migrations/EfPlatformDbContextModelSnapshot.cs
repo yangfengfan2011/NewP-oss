@@ -29,12 +29,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Code");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("CreatedAt");
@@ -44,15 +38,21 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
 
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("bit")
-                        .HasColumnName("IsEnabled");
-
-                    b.Property<string>("Name")
+                    b.Property<string>("ECODE")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Name");
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit")
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("SortOrder")
                         .IsRequired()
@@ -71,9 +71,9 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
 
                     b.HasKey("EID");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("ECODE")
                         .IsUnique()
-                        .HasDatabaseName("UX_Company_Code");
+                        .HasDatabaseName("UX_Company_ECODE");
 
                     b.HasIndex("EID")
                         .IsUnique()
@@ -174,12 +174,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Code");
-
                     b.Property<string>("CompanyId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -195,15 +189,21 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
 
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("bit")
-                        .HasColumnName("IsEnabled");
-
-                    b.Property<string>("Name")
+                    b.Property<string>("ECODE")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Name");
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit")
+                        .HasColumnName("IsEnabled");
 
                     b.Property<string>("ParentDepartmentId")
                         .HasMaxLength(128)
@@ -237,8 +237,8 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.HasIndex("ParentDepartmentId")
                         .HasDatabaseName("IX_Department_Parent");
 
-                    b.HasIndex("CompanyId", "ParentDepartmentId", "Code")
-                        .HasDatabaseName("IX_Department_Company_Parent_Code");
+                    b.HasIndex("CompanyId", "ParentDepartmentId", "ECODE")
+                        .HasDatabaseName("IX_Department_Company_Parent_ECODE");
 
                     b.ToTable("Department", (string)null);
                 });
@@ -249,12 +249,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
@@ -269,11 +263,17 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("Description");
 
-                    b.Property<string>("DisplayName")
+                    b.Property<string>("ECODE")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("DisplayName");
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
 
                     b.Property<string>("Group")
                         .HasMaxLength(256)
@@ -297,9 +297,9 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
 
                     b.HasKey("EID");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("ECODE")
                         .IsUnique()
-                        .HasDatabaseName("UX_Permission_Code");
+                        .HasDatabaseName("UX_Permission_ECODE");
 
                     b.HasIndex("EID")
                         .IsUnique()
@@ -351,12 +351,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit")
                         .HasColumnName("IsEnabled");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Name");
 
                     b.Property<string>("PersonNo")
                         .IsRequired()
@@ -415,8 +409,8 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
 
                     b.Property<string>("PersonId")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("PersonId");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -458,12 +452,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Code");
-
                     b.Property<string>("CompanyId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -485,6 +473,18 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("DepartmentId");
 
+                    b.Property<string>("ECODE")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
+
                     b.Property<string>("EmploymentStatus")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -494,12 +494,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit")
                         .HasColumnName("IsEnabled");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Name");
 
                     b.Property<string>("SortOrder")
                         .IsRequired()
@@ -538,12 +532,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Code");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("CreatedAt");
@@ -557,6 +545,18 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("Description");
 
+                    b.Property<string>("ECODE")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
+
                     b.Property<bool>("IsBuiltIn")
                         .HasColumnType("bit")
                         .HasColumnName("IsBuiltIn");
@@ -564,12 +564,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit")
                         .HasColumnName("IsEnabled");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Name");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -582,9 +576,9 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
 
                     b.HasKey("EID");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("ECODE")
                         .IsUnique()
-                        .HasDatabaseName("UX_Role_Code");
+                        .HasDatabaseName("UX_Role_ECODE");
 
                     b.HasIndex("EID")
                         .IsUnique()
@@ -721,12 +715,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Code");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("CreatedAt");
@@ -740,11 +728,17 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("Description");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("ECODE")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("Name");
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -757,9 +751,9 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
 
                     b.HasKey("EID");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("ECODE")
                         .IsUnique()
-                        .HasDatabaseName("UX_ValueListItem_Code");
+                        .HasDatabaseName("UX_ValueListItem_ECODE");
 
                     b.HasIndex("EID")
                         .IsUnique()

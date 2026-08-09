@@ -71,6 +71,27 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         Assert.Contains(modules, m => m.GetProperty("moduleId").GetString() == "Audit");
     }
 
+    [Theory]
+    [InlineData("GET", "/api/plugin-ops/modules")]
+    [InlineData("POST", "/api/plugin-ops/uploads/verify")]
+    [InlineData("POST", "/api/plugin-ops/uploads/upload-1/install")]
+    [InlineData("POST", "/api/plugin-ops/modules/Audit/enable")]
+    [InlineData("POST", "/api/plugin-ops/modules/Audit/disable")]
+    [InlineData("POST", "/api/plugin-ops/modules/Audit/rollback")]
+    [InlineData("DELETE", "/api/plugin-ops/modules/Audit")]
+    public async Task PluginOperationsRoutes_Return404_WhenExternalPluginsDisabled(
+        string method,
+        string path)
+    {
+        using var factory = new TestWebApplicationFactory(externalPluginsEnabled: false);
+        using var client = await CreateAuthenticatedClientAsync(factory);
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public async Task GetModule_ReturnsDetail_WhenModuleExists()
     {
@@ -571,10 +592,17 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
     public class TestWebApplicationFactory : WebApplicationFactory<Program>, IDisposable
     {
         private readonly UnifiedPluginPackageTestData _testData = new();
+        private readonly bool _externalPluginsEnabled;
         private readonly string _installRoot;
 
         public TestWebApplicationFactory()
+            : this(externalPluginsEnabled: true)
         {
+        }
+
+        internal TestWebApplicationFactory(bool externalPluginsEnabled)
+        {
+            _externalPluginsEnabled = externalPluginsEnabled;
             _installRoot = Path.Combine(Path.GetTempPath(), "plugin_ops_ctrl_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_installRoot);
             InstallTestPackages();
@@ -598,6 +626,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
+            builder.UseSetting("Platform:ExternalPluginsEnabled", _externalPluginsEnabled ? "true" : "false");
             builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
             builder.UseEnvironment("Testing");

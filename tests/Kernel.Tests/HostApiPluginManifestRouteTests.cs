@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Kernel.PluginPackages;
@@ -103,6 +104,123 @@ public class HostApiPluginManifestRouteTests : IDisposable
             Assert.Equal(projectionHash, projection.RootElement.GetProperty("projectionHash").GetString());
         }
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    public async Task ActiveModuleRuntimeCatalog_WhenExternalPluginsDisabled_UsesBuiltInsOnly(
+        bool? externalPluginsEnabled)
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        await using var host = await HostApiProcess.StartAsync(
+            installRoot,
+            externalPluginsEnabled: externalPluginsEnabled);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        var modules = document.RootElement.GetProperty("modules").EnumerateArray().ToArray();
+        var audit = Assert.Single(modules, module =>
+            module.GetProperty("moduleId").GetString() == "Audit");
+
+        var auditFrontend = audit.GetProperty("frontend");
+        Assert.Equal("audit", auditFrontend.GetProperty("moduleId").GetString());
+        Assert.Equal(JsonValueKind.Null, auditFrontend.GetProperty("url").ValueKind);
+        Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
+        Assert.DoesNotContain(modules, module => module.GetProperty("moduleId").GetString() == "PluginOps");
+    }
+
+    [Fact]
+    public async Task ExternalPluginLifecycle_WhenDisabledThenReenabled_RestoresExistingActiveState()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage();
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+
+        string externalFrontendUrl;
+        await using (var enabledHost = await HostApiProcess.StartAsync(
+                         installRoot,
+                         externalPluginsEnabled: true))
+        {
+            var audit = await ReadActiveModuleAsync(enabledHost, "Audit");
+            externalFrontendUrl = audit.GetProperty("frontend").GetProperty("url").GetString()!;
+            Assert.False(string.IsNullOrWhiteSpace(externalFrontendUrl));
+        }
+
+        var externalStateBeforeDisabledStartup = SnapshotExternalPluginState(installRoot);
+        await using (var disabledHost = await HostApiProcess.StartAsync(
+                         installRoot,
+                         externalPluginsEnabled: false))
+        {
+            var audit = await ReadActiveModuleAsync(disabledHost, "Audit");
+            Assert.Equal("audit", audit.GetProperty("frontend").GetProperty("moduleId").GetString());
+        }
+        AssertExternalPluginStateUnchanged(
+            externalStateBeforeDisabledStartup,
+            SnapshotExternalPluginState(installRoot));
+
+        await using (var reenabledHost = await HostApiProcess.StartAsync(
+                         installRoot,
+                         externalPluginsEnabled: true))
+        {
+            var audit = await ReadActiveModuleAsync(reenabledHost, "Audit");
+            Assert.Equal(externalFrontendUrl, audit.GetProperty("frontend").GetProperty("url").GetString());
+        }
+    }
+
+    private static IReadOnlyDictionary<string, PersistedFileSnapshot> SnapshotExternalPluginState(
+        string installRoot)
+    {
+        var snapshot = new Dictionary<string, PersistedFileSnapshot>(StringComparer.Ordinal);
+        foreach (var rootName in new[] { "packages", "state", "lifecycle" })
+        {
+            var root = Path.Combine(installRoot, rootName);
+            if (!Directory.Exists(root))
+            {
+                continue;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                         .Order(StringComparer.Ordinal))
+            {
+                var relativePath = Path.GetRelativePath(installRoot, path)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                snapshot.Add(
+                    relativePath,
+                    new PersistedFileSnapshot(
+                        Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))),
+                        File.GetLastWriteTimeUtc(path)));
+            }
+        }
+
+        return snapshot;
+    }
+
+    private static void AssertExternalPluginStateUnchanged(
+        IReadOnlyDictionary<string, PersistedFileSnapshot> expected,
+        IReadOnlyDictionary<string, PersistedFileSnapshot> actual)
+    {
+        Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
+        foreach (var (path, expectedFile) in expected)
+        {
+            Assert.Equal(expectedFile, actual[path]);
+        }
+    }
+
+    private sealed record PersistedFileSnapshot(string Sha256, DateTime LastWriteTimeUtc);
 
     [Fact]
     public async Task LocalizationManifestRoute_ReturnsJson()
@@ -299,6 +417,26 @@ public class HostApiPluginManifestRouteTests : IDisposable
         return root;
     }
 
+    private static async Task<JsonElement> ReadActiveModuleAsync(HostApiProcess host, string moduleId)
+    {
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        return Assert.Single(
+                document.RootElement.GetProperty("modules").EnumerateArray(),
+                module => module.GetProperty("moduleId").GetString() == moduleId)
+            .Clone();
+    }
+
     private static void EnableInstalledPackage(string packageRoot, string installRoot, string moduleId)
     {
         var moduleAssemblyPath = moduleId switch
@@ -356,7 +494,10 @@ public class HostApiPluginManifestRouteTests : IDisposable
         public string StdOut => _stdout.ToString();
         public string StdErr => _stderr.ToString();
 
-        public static async Task<HostApiProcess> StartAsync(string installRoot, bool skipLocalAuthSeeding = true)
+        public static async Task<HostApiProcess> StartAsync(
+            string installRoot,
+            bool skipLocalAuthSeeding = true,
+            bool? externalPluginsEnabled = true)
         {
             var repoRoot = FindRepositoryRoot();
             var hostApiDllPath = Path.Combine(repoRoot, "apps", "host-api", "bin", "Debug", "net10.0", "HostApi.dll");
@@ -387,6 +528,11 @@ public class HostApiPluginManifestRouteTests : IDisposable
             process.StartInfo.ArgumentList.Add("--urls");
             process.StartInfo.ArgumentList.Add(baseAddress);
             process.StartInfo.Environment["Platform__PluginInstallRoot"] = installRoot;
+            if (externalPluginsEnabled.HasValue)
+            {
+                process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] =
+                    externalPluginsEnabled.Value ? "true" : "false";
+            }
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
             process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
             process.StartInfo.Environment["Platform__SkipLocalAuthSeeding"] = skipLocalAuthSeeding ? "true" : "false";

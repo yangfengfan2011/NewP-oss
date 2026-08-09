@@ -15,17 +15,21 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
 {
     private readonly string? _builtInModulesRoot;
     private readonly StandardDataPackageInspector _inspector;
+    private readonly IReadOnlySet<string> _excludedBuiltInModuleIds;
     private readonly ModuleCapsuleCandidateReader _candidateReader = new();
     private readonly CanonicalModulePlanCompiler _compiler = new();
 
     public StandardDataCandidatePlanCompiler(
         string? builtInModulesRoot,
-        StandardDataPackageInspector inspector)
+        StandardDataPackageInspector inspector,
+        IEnumerable<string>? excludedBuiltInModuleIds = null)
     {
         _builtInModulesRoot = string.IsNullOrWhiteSpace(builtInModulesRoot)
             ? null
             : Path.GetFullPath(builtInModulesRoot);
         _inspector = inspector;
+        _excludedBuiltInModuleIds = (excludedBuiltInModuleIds ?? [])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     public CanonicalModulePlan Compile(
@@ -42,6 +46,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
             // 同 ID 的已安装 desired 版本是内建模块的显式升级候选；
             // 仅排除大小写完全一致的内建项，大小写折叠冲突仍交给 Canonical 编译器拒绝。
             candidates.AddRange(_candidateReader.ReadBuiltIn(_builtInModulesRoot)
+                .Where(candidate => !_excludedBuiltInModuleIds.Contains(candidate.ModuleId))
                 .Where(candidate => !enabledDesiredModuleIds.Contains(candidate.ModuleId)));
         }
 

@@ -95,13 +95,18 @@ var configuredPluginInstallRoot = builder.Configuration["Platform:PluginInstallR
 var pluginInstallRoot = Path.IsPathRooted(configuredPluginInstallRoot)
     ? configuredPluginInstallRoot
     : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPluginInstallRoot));
+var externalPluginsEnabled = builder.Configuration.GetValue<bool>("Platform:ExternalPluginsEnabled");
+// 关闭态使用独立生命周期状态，避免 built-ins-only 快照覆盖未来重新启用时要恢复的 desired/active/LKG。
+var pluginLifecycleRoot = externalPluginsEnabled
+    ? pluginInstallRoot
+    : Path.Combine(pluginInstallRoot, ".feature-gates", "external-plugins-disabled");
 var hostVersion = builder.Configuration["Platform:HostVersion"]
     ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
     ?? "1.0.0";
 var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
 
 var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
-var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginInstallRoot));
+var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginLifecycleRoot));
 var platformApiCatalog = new PlatformApiHostCatalog(
     PlatformApiReleaseIdentity.Version,
     [PlatformApiReleaseIdentity.StandardDataProfile],
@@ -151,11 +156,16 @@ var storageTypeMapPath = Path.Combine(
     "metadata",
     "storage-types.json");
 
-var pluginInventory = InstalledPluginInventoryAdapter.Create(stateStore);
+var pluginInventory = externalPluginsEnabled
+    ? InstalledPluginInventoryAdapter.Create(stateStore)
+    : Array.Empty<InstalledPluginInventoryItem>();
 var activationGate = new PluginActivationGate(
     lifecycleManager,
     new StandardDataPackagePreflight(standardDataInspector, hostVersion),
-    new StandardDataCandidatePlanCompiler(modulesRootPath, standardDataInspector),
+    new StandardDataCandidatePlanCompiler(
+        modulesRootPath,
+        standardDataInspector,
+        externalPluginsEnabled ? null : ["PluginOps"]),
     new HostPluginPermissionCatalogValidator(),
     new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider),
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
@@ -216,6 +226,23 @@ app.UseSwaggerUI();
 if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Acceptance"))
 {
     app.UseHttpsRedirection();
+}
+
+if (!externalPluginsEnabled)
+{
+    // 关闭态在统一 HTTP seam 上拒绝全部插件运维能力，避免只隐藏 Shell 页面后仍可直接调用写入口。
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments(
+                "/api/plugin-ops",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await next(context);
+    });
 }
 
 app.MapPluginManifestEndpoints(pluginInstallRoot);

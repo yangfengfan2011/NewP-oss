@@ -24,13 +24,25 @@ describe('vite config', () => {
     expect(proxy).not.toHaveProperty('/metadata-config');
   });
 
-  it('proxies the compiler-owned runtime catalog and projections through the Host', () => {
+  it('proxies only compiler-owned runtime resources under /plugins so page routes remain SPA routes', () => {
     const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
+    const proxy = serverConfig.server?.proxy;
+    const runtimeProxy = Object.entries(proxy ?? {})
+      .find(([context]) => context.startsWith('^/plugins/'));
 
-    expect(serverConfig.server?.proxy?.['/plugins']).toMatchObject({
+    expect(proxy).not.toHaveProperty('/plugins');
+    expect(runtimeProxy).toBeDefined();
+    expect(runtimeProxy?.[1]).toMatchObject({
       target: 'http://127.0.0.1:5000',
       changeOrigin: true,
     });
+    const matchesRuntimeProxy = new RegExp(runtimeProxy?.[0] ?? '$a');
+    expect(matchesRuntimeProxy.test('/plugins/active-module-runtime.json')).toBe(true);
+    expect(matchesRuntimeProxy.test('/plugins/frontend-plugin-manifest.json')).toBe(true);
+    expect(matchesRuntimeProxy.test('/plugins/localization-manifest.json')).toBe(true);
+    expect(matchesRuntimeProxy.test('/plugins/metadata-runtime-manifest.json')).toBe(true);
+    expect(matchesRuntimeProxy.test('/plugins/runtime/modules/Partner.AssetCatalog/metadata/models/Asset.model.json')).toBe(true);
+    expect(matchesRuntimeProxy.test('/plugins/partner-asset-catalog/assets')).toBe(false);
   });
 
   it('builds the implementation registry outside the runtime loader', () => {

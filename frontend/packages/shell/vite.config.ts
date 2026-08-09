@@ -78,8 +78,8 @@ export default defineConfig({
         target: `http://127.0.0.1:${devHostPort}`,
         changeOrigin: true,
       },
-      // 开发与生产统一从 Host 的活动目录读取，禁止 Vite 再生成第二份运行时事实。
-      '/plugins': {
+      // 只把编译器拥有的活动目录资源交给 Host；/plugins/<module>/<page> 仍是合法 SPA 页面路由。
+      '^/plugins/(?:(?:active-module-runtime|frontend-plugin-manifest|localization-manifest|metadata-runtime-manifest)\\.json(?:\\?|$)|runtime(?:/|$))': {
         target: `http://127.0.0.1:${devHostPort}`,
         changeOrigin: true,
       },

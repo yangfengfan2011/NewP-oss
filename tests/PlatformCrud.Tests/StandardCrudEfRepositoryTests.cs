@@ -118,6 +118,41 @@ public sealed class StandardCrudEfRepositoryTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenDateTimeValueIsRoundTripText_ConvertsToMappedClrType()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        await dbContext.SaveChangesAsync();
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var expected = new DateTime(2026, 8, 9, 2, 3, 4, DateTimeKind.Utc);
+
+        var updated = await repository.UpdateAsync(
+            Descriptor(),
+            "person-1",
+            new Dictionary<string, object?> { ["CreatedAt"] = expected.ToString("O") });
+
+        Assert.NotNull(updated);
+        Assert.Equal(expected, Assert.IsType<DateTime>(updated["CreatedAt"]));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenNullableDateTimeValueIsBlank_StoresNull()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        await dbContext.SaveChangesAsync();
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+
+        await repository.UpdateAsync(
+            Descriptor(),
+            "person-1",
+            new Dictionary<string, object?> { ["UpdatedAt"] = string.Empty });
+
+        var stored = await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").SingleAsync();
+        Assert.Null(stored["UpdatedAt"]);
+    }
+
+    [Fact]
     public void PlatformObjectIdGenerator_NewId_UsesModelNamePrefixAndLowerHex()
     {
         var id = new PlatformObjectIdGenerator().NewId("Person");

@@ -1,3 +1,4 @@
+using System.Globalization;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -107,7 +108,8 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
-        var row = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
+        var modelKey = _dbContext.ResolveModelKey(descriptor.ModelName);
+        var row = await _dbContext.Set<Dictionary<string, object?>>(modelKey)
             .FirstOrDefaultAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
 
         if (row is null)
@@ -117,11 +119,42 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
 
         foreach (var pair in values)
         {
-            row[pair.Key] = pair.Value;
+            row[pair.Key] = NormalizeMappedValue(modelKey, pair.Key, pair.Value);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Project(row, descriptor.FieldSet.DetailFields);
+    }
+
+    // JSON 没有日期标量；在 EF 映射边界恢复 DateTime，避免 shared-type 字典携带字符串进入 ChangeTracker。
+    private object? NormalizeMappedValue(string modelKey, string fieldName, object? value)
+    {
+        if (value is not string text)
+        {
+            return value;
+        }
+
+        var property = _dbContext.Model.FindEntityType(modelKey)?.FindProperty(fieldName);
+        var mappedType = property is null
+            ? null
+            : Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
+        if (mappedType != typeof(DateTime))
+        {
+            return value;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return DateTime.TryParse(
+            text,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var parsed)
+            ? parsed
+            : value;
     }
 
     /// <summary>

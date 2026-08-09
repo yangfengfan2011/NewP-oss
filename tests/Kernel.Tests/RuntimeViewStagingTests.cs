@@ -71,6 +71,20 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetDetail.view.json")));
         Assert.False(Directory.Exists(Path.Combine(_installRoot, "public", "Partner.AssetCatalog")));
 
+        using var listView = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetList.view.json")));
+        var rowActions = listView.RootElement
+            .GetProperty("view")
+            .GetProperty("rowActions")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Equal(
+            ["view", "edit", "disable", "enable"],
+            rowActions.Select(static action => action.GetProperty("key").GetString()));
+        Assert.DoesNotContain(rowActions, static action => action.GetProperty("key").GetString() == "delete");
+        AssertStateAction(rowActions, "disable", expectedEnabledValue: true);
+        AssertStateAction(rowActions, "enable", expectedEnabledValue: false);
+
         using var catalog = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(_installRoot, "runtime", "active-module-runtime.json")));
         var frontend = catalog.RootElement.GetProperty("modules")[0].GetProperty("frontend");
@@ -82,6 +96,20 @@ public sealed class RuntimeViewStagingTests : IDisposable
             "/plugins/runtime/modules/Partner.AssetCatalog/authoring/newp.plugin.json",
             frontend.GetProperty("blueprintUrl").GetString());
         Assert.False(frontend.TryGetProperty("url", out _));
+    }
+
+    private static void AssertStateAction(
+        IReadOnlyList<JsonElement> rowActions,
+        string key,
+        bool expectedEnabledValue)
+    {
+        var action = Assert.Single(rowActions, item => item.GetProperty("key").GetString() == key);
+        Assert.Equal(key, action.GetProperty("standardAction").GetString());
+        Assert.Equal("Partner.AssetCatalog.Asset.Update", action.GetProperty("permissions")[0].GetString());
+        var visibility = action.GetProperty("visibleWhen");
+        Assert.Equal("IsEnabled", visibility.GetProperty("field").GetString());
+        Assert.Equal("equals", visibility.GetProperty("operator").GetString());
+        Assert.Equal(expectedEnabledValue, visibility.GetProperty("value").GetBoolean());
     }
 
     public void Dispose()

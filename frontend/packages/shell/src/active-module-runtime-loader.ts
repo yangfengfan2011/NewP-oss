@@ -1,6 +1,8 @@
-import type {
-  FrontendBehaviorBindings,
-  FrontendModule,
+import {
+  createStandardCrudClient,
+  type FrontendBehaviorBindings,
+  type FrontendModule,
+  type StandardCrudActionHandler,
 } from '@icp-platform/sdk';
 import internalModuleRegistry from 'virtual:newp-frontend-entry-registry';
 
@@ -112,6 +114,28 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function createStandardDataStateActionHandlers(apiRoute: string): Record<string, StandardCrudActionHandler> {
+  const client = createStandardCrudClient(apiRoute);
+  const requireId = (id: string | undefined, action: string): string => {
+    if (!id) {
+      throw new Error(`缺少资源标识，无法${action}。`);
+    }
+
+    return id;
+  };
+
+  return {
+    disable: async ({ id, refresh }) => {
+      await client.disable(requireId(id, '停用'));
+      refresh();
+    },
+    enable: async ({ id, refresh }) => {
+      await client.update(requireId(id, '启用'), { IsEnabled: true });
+      refresh();
+    },
+  };
+}
+
 async function projectStandardDataModule(
   entry: ActiveModuleRuntimeEntry,
   frontend: ActiveModuleFrontendEntry,
@@ -168,6 +192,9 @@ async function projectStandardDataModule(
         trim: field.type === 'string',
         emptyAsNull: !field.required,
       })),
+      actionHandlers: resource.fields.some((field) => field.name === 'IsEnabled')
+        ? createStandardDataStateActionHandlers(projected.apiRoute)
+        : undefined,
       createEmptyFilters: () => ({}),
       buildListQuery: (filters: Record<string, string>) => filters,
       mapListItem: asRecord,

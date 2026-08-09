@@ -385,11 +385,16 @@ public class RuntimeViewMaterializer
             var viewPermission = permissionCodes.Single(code => code.EndsWith(".View", StringComparison.Ordinal));
             var createPermission = permissionCodes.Single(code => code.EndsWith(".Create", StringComparison.Ordinal));
             var updatePermission = permissionCodes.Single(code => code.EndsWith(".Update", StringComparison.Ordinal));
-            var deletePermission = permissionCodes.Single(code => code.EndsWith(".Delete", StringComparison.Ordinal));
             var listViewKey = $"{moduleSlug}.{resourceSlug}.list";
             var detailViewKey = $"{moduleSlug}.{resourceSlug}.detail";
             var fields = resource["fields"]?.AsArray()
                 ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' is missing fields.");
+            var hasEnabledField = fields
+                .Select(static fieldNode => fieldNode?.AsObject())
+                .Any(static field => string.Equals(
+                    field?["name"]?.GetValue<string>(),
+                    "IsEnabled",
+                    StringComparison.Ordinal));
 
             navigationItems.Add(new
             {
@@ -418,6 +423,34 @@ public class RuntimeViewMaterializer
                     sortable = true
                 };
             }).ToArray();
+            var rowActions = new List<object>
+            {
+                new { key = "view", labelKey = "Action_View", standardAction = "view", variant = (string?)null, permissions = Array.Empty<string>() },
+                new { key = "edit", labelKey = "Action_Edit", standardAction = "edit", variant = (string?)null, permissions = new[] { updatePermission } }
+            };
+            if (hasEnabledField)
+            {
+                // standard-data.v1 没有删除策略声明；这里只投影描述符已支持的停启能力，
+                // 避免页面暴露一个必然被 DeletePolicy.None 拒绝的删除动作。
+                rowActions.Add(new
+                {
+                    key = "disable",
+                    labelKey = "Action_Disable",
+                    standardAction = "disable",
+                    variant = "danger",
+                    permissions = new[] { updatePermission },
+                    visibleWhen = new { field = "IsEnabled", @operator = "equals", value = true }
+                });
+                rowActions.Add(new
+                {
+                    key = "enable",
+                    labelKey = "Action_Enable",
+                    standardAction = "enable",
+                    variant = (string?)null,
+                    permissions = new[] { updatePermission },
+                    visibleWhen = new { field = "IsEnabled", @operator = "equals", value = false }
+                });
+            }
 
             WriteJson(
                 Path.Combine(metadataRoot, "views", $"{resourceKey}List.view.json"),
@@ -440,12 +473,7 @@ public class RuntimeViewMaterializer
                             new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary", permissions = new[] { createPermission } },
                             new { key = "refresh", labelKey = "Action_Refresh", standardAction = "refresh", variant = (string?)null, permissions = Array.Empty<string>() }
                         },
-                        rowActions = new object[]
-                        {
-                            new { key = "view", labelKey = "Action_View", standardAction = "view", variant = (string?)null, permissions = Array.Empty<string>() },
-                            new { key = "edit", labelKey = "Action_Edit", standardAction = "edit", variant = (string?)null, permissions = new[] { updatePermission } },
-                            new { key = "delete", labelKey = "Action_Delete", standardAction = "delete", variant = "danger", permissions = new[] { deletePermission } }
-                        }
+                        rowActions
                     }
                 });
             WriteJson(

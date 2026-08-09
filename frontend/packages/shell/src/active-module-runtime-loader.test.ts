@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FrontendBehaviorBindings, FrontendModule } from '@icp-platform/sdk';
 import {
   ACTIVE_MODULE_RUNTIME_URL,
@@ -6,6 +6,10 @@ import {
 } from './active-module-runtime-loader';
 
 describe('active-module-runtime-loader', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('loads every required frontend entry and binds behavior implementations to canonical identity', async () => {
     const organizationBindings: FrontendBehaviorBindings = {
       behaviorKey: 'organization.frontend',
@@ -127,6 +131,12 @@ describe('active-module-runtime-loader', () => {
   });
 
   it('projects a standard-data entry without importing plugin runtime code', async () => {
+    const fetchStandardCrud = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ fields: { EID: 'asset-1' } }),
+    } as Response));
+    vi.stubGlobal('fetch', fetchStandardCrud);
     const fetchCatalog = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -217,6 +227,25 @@ describe('active-module-runtime-loader', () => {
       expect.objectContaining({ key: 'IsEnabled', modelField: 'IsEnabled', kind: 'boolean', required: false }),
     ]);
     expect(resource?.getRowId({ EID: 'asset-1' })).toBe('asset-1');
+    expect(Object.keys(resource?.actionHandlers ?? {})).toEqual(['disable', 'enable']);
+    const refresh = vi.fn();
+    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {}, refresh });
+    expect(fetchStandardCrud).toHaveBeenNthCalledWith(
+      1,
+      '/api/standard/partner-asset-catalog/assets/asset-1/disable',
+      { method: 'POST' },
+    );
+    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {}, refresh });
+    expect(fetchStandardCrud).toHaveBeenNthCalledWith(
+      2,
+      '/api/standard/partner-asset-catalog/assets/asset-1',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ IsEnabled: true }),
+      },
+    );
+    expect(refresh).toHaveBeenCalledTimes(2);
     expect(module.permissions?.map((permission) => permission.code)).toEqual([
       'Partner.AssetCatalog.Asset.View',
       'Partner.AssetCatalog.Asset.Create',

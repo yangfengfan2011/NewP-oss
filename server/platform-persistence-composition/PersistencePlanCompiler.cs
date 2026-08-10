@@ -510,6 +510,27 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         string relativePath,
         List<PersistencePlanDiagnostic> diagnostics)
     {
+        var trustedSource = module.Provenance.GetAuthenticatedBuiltInSource(module);
+        if (trustedSource is not null)
+        {
+            try
+            {
+                // 计划只冻结声明事实；model、manifest 与 assembly 每次真正读取前仍须
+                // 通过同一个 Host capability 复验整棵模块树，不能只依赖词法 containment。
+                return trustedSource.ValidateModuleFileForConsumption(module, relativePath);
+            }
+            catch (Exception exception)
+            {
+                diagnostics.Add(new PersistencePlanDiagnostic(
+                    "PERSISTENCE_ARTIFACT_PATH_INVALID",
+                    module.ModuleId,
+                    relativePath,
+                    module.Provenance.SourcePath,
+                    exception.Message));
+                return null;
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
         {
             diagnostics.Add(new PersistencePlanDiagnostic(

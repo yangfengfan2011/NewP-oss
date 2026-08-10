@@ -146,6 +146,7 @@ public sealed class ModuleCapsuleCandidateReader
                 ? ModulePlanProvenance.CreateTrustedBuiltInRoot(
                     moduleId,
                     moduleRoot,
+                    trustedSource,
                     manifestPath,
                     "/")
                 : new ModulePlanProvenance(

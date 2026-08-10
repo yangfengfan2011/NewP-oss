@@ -81,16 +81,22 @@ public sealed class ModulePlanProvenance
     internal static ModulePlanProvenance CreateTrustedBuiltInRoot(
         string moduleId,
         string packageRoot,
+        TrustedBuiltInModuleSource trustedSource,
         string sourcePath,
-        string jsonPointer) =>
-        new(
+        string jsonPointer)
+    {
+        ArgumentNullException.ThrowIfNull(trustedSource);
+        trustedSource.ValidateModuleTree(packageRoot);
+        return new ModulePlanProvenance(
             "built-in",
             Path.GetFullPath(sourcePath),
             jsonPointer,
             new BuiltInRootTrust(
                 moduleId,
-                Path.GetFullPath(packageRoot)),
+                Path.GetFullPath(packageRoot),
+                trustedSource),
             boundBuiltInTrust: null);
+    }
 
     internal ModulePlanProvenance BindToCanonicalCandidate(ModuleCapsuleCandidate candidate)
     {
@@ -115,7 +121,7 @@ public sealed class ModulePlanProvenance
             SourcePath,
             JsonPointer,
             builtInRootTrust: null,
-            new BoundBuiltInTrust(trust.ModuleId, trust.PackageRoot, fingerprint));
+            new BoundBuiltInTrust(trust.ModuleId, trust.PackageRoot, fingerprint, trust.Source));
     }
 
     internal bool AuthenticatesBuiltIn(CanonicalModulePlanModule module) =>
@@ -127,6 +133,9 @@ public sealed class ModulePlanProvenance
             trust.CanonicalFingerprint,
             ComputeCanonicalFingerprint(module),
             StringComparison.Ordinal);
+
+    internal TrustedBuiltInModuleSource? GetAuthenticatedBuiltInSource(CanonicalModulePlanModule module) =>
+        AuthenticatesBuiltIn(module) ? _boundBuiltInTrust?.Source : null;
 
     private static string ComputeCanonicalFingerprint(ModuleCapsuleCandidate candidate) =>
         ComputeCanonicalFingerprint(
@@ -233,13 +242,18 @@ public sealed class ModulePlanProvenance
             Path.GetFullPath(right),
             StringComparison.OrdinalIgnoreCase);
 
-    private sealed class BuiltInRootTrust(string moduleId, string packageRoot)
+    private sealed class BuiltInRootTrust(
+        string moduleId,
+        string packageRoot,
+        TrustedBuiltInModuleSource source)
     {
         private int _consumed;
 
         internal string ModuleId { get; } = moduleId;
 
         internal string PackageRoot { get; } = packageRoot;
+
+        internal TrustedBuiltInModuleSource Source { get; } = source;
 
         // 绑定是 capability 的线性化点；并发编译同一 root 时只能有一个胜者。
         internal bool TryConsume() => Interlocked.CompareExchange(ref _consumed, 1, 0) == 0;
@@ -248,7 +262,8 @@ public sealed class ModulePlanProvenance
     private sealed record BoundBuiltInTrust(
         string ModuleId,
         string PackageRoot,
-        string CanonicalFingerprint);
+        string CanonicalFingerprint,
+        TrustedBuiltInModuleSource Source);
 }
 
 /// <summary>

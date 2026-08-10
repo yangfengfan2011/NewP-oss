@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -729,6 +730,40 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_AuthenticatedBuiltInModelDirectoryReplacedWithJunctionAfterPlanIssued_RejectsBeforeRead()
+    {
+        using var package = TestPackage.Create("Identity", "User");
+        var plan = BuildCanonicalPlan(package.BuildBuiltInModule());
+        var sentinelPath = package.ReplaceDirectoryWithExternalJunction(package.ModelDirectory);
+
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            plan,
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_ARTIFACT_PATH_INVALID");
+        Assert.True(File.Exists(sentinelPath));
+    }
+
+    [Fact]
+    public void Compile_AuthenticatedBuiltInMigrationDirectoryReplacedWithJunctionAfterPlanIssued_RejectsBeforeRead()
+    {
+        using var package = TestPackage.Create("Identity", "User");
+        var plan = BuildCanonicalPlan(package.BuildBuiltInModule());
+        var sentinelPath = package.ReplaceDirectoryWithExternalJunction(package.MigrationDirectory);
+
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            plan,
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_ARTIFACT_PATH_INVALID");
+        Assert.True(File.Exists(sentinelPath));
+    }
+
+    [Fact]
     public void Compile_BuiltInModuleOwnedStreams_ExcludeModelsFromLegacyAndFollowDependencies()
     {
         using var identity = TestPackage.Create("Identity", "User");
@@ -849,6 +884,7 @@ public sealed class PersistencePlanCompilerTests
 
     private sealed class TestPackage : IDisposable
     {
+        private readonly List<string> _links = [];
         private readonly string _moduleId;
         private readonly string _modelKey;
         private readonly string _cleanupRoot;
@@ -875,6 +911,10 @@ public sealed class PersistencePlanCompilerTests
             "backend",
             "Partner.AssetCatalog.SqlServerMigrations.dll");
 
+        public string ModelDirectory => Path.GetDirectoryName(Path.Combine(Root, _modelRelativePath))!;
+
+        public string MigrationDirectory => Path.Combine(Root, "backend");
+
         private string ManifestPath => Path.Combine(
             Root,
             "backend",
@@ -891,7 +931,7 @@ public sealed class PersistencePlanCompilerTests
             var cleanupRoot = Path.Combine(Path.GetTempPath(), "newp-b9-tests", Guid.NewGuid().ToString("N"));
             var root = installedLayout
                 ? Path.Combine(cleanupRoot, "packages", moduleId, "1.0.0")
-                : cleanupRoot;
+                : Path.Combine(cleanupRoot, "modules-root", moduleId);
             var modelRelativePath = installedLayout
                 ? Path.Combine("metadata", "models", $"{modelKey}.model.json")
                 : Path.Combine("modules", moduleId, "metadata", "models", $"{modelKey}.model.json");
@@ -1012,6 +1052,9 @@ public sealed class PersistencePlanCompilerTests
                 Provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
                     _moduleId,
                     Root,
+                    TrustedBuiltInModuleSource.CreateForHost(
+                        _cleanupRoot,
+                        Path.Combine(_cleanupRoot, "modules-root")),
                     Path.Combine(Root, "plugin.json"),
                     "/")
             };
@@ -1065,12 +1108,59 @@ public sealed class PersistencePlanCompilerTests
             });
         }
 
+        public string ReplaceDirectoryWithExternalJunction(string directoryPath)
+        {
+            var externalRoot = Path.Combine(_cleanupRoot, $"external-{Guid.NewGuid():N}");
+            Directory.Move(directoryPath, externalRoot);
+            CreateDirectoryLink(directoryPath, externalRoot);
+            var sentinelPath = Path.Combine(externalRoot, "external-sentinel.txt");
+            File.WriteAllText(sentinelPath, "must remain untouched");
+            return sentinelPath;
+        }
+
         public void Dispose()
         {
+            foreach (var link in _links.Where(path => File.Exists(path) || Directory.Exists(path)))
+            {
+                if (Directory.Exists(link))
+                {
+                    Directory.Delete(link);
+                }
+                else
+                {
+                    File.Delete(link);
+                }
+            }
+
             if (Directory.Exists(_cleanupRoot))
             {
                 Directory.Delete(_cleanupRoot, recursive: true);
             }
+        }
+
+        private void CreateDirectoryLink(string linkPath, string targetPath)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                Directory.CreateSymbolicLink(linkPath, targetPath);
+                _links.Add(linkPath);
+                return;
+            }
+
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                ArgumentList = { "/c", "mklink", "/J", linkPath, targetPath }
+            }) ?? throw new InvalidOperationException("无法启动 junction 创建进程。");
+            process.WaitForExit();
+            Assert.True(
+                process.ExitCode == 0,
+                $"junction 创建失败：{process.StandardOutput.ReadToEnd()} {process.StandardError.ReadToEnd()}");
+            _links.Add(linkPath);
         }
     }
 }

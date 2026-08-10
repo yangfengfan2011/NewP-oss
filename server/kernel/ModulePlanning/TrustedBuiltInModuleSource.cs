@@ -61,6 +61,48 @@ internal sealed class TrustedBuiltInModuleSource
         ValidateTree(resolvedModuleRoot);
     }
 
+    /// <summary>
+    /// 在已签发计划实际消费内建模块前，重新验证 capability 绑定与完整模块树。
+    /// </summary>
+    internal void ValidateForConsumption(CanonicalModulePlanModule module)
+    {
+        ArgumentNullException.ThrowIfNull(module);
+        if (!ReferenceEquals(module.Provenance.GetAuthenticatedBuiltInSource(module), this))
+        {
+            throw new InvalidOperationException(
+                $"Built-in module '{module.ModuleId}' is not authenticated by this Host trust source.");
+        }
+
+        ValidateModuleTree(module.PackageRoot);
+    }
+
+    /// <summary>
+    /// 在读取模块内文件的同一消费入口复验整树、路径边界与最终文件路径链。
+    /// </summary>
+    internal string ValidateModuleFileForConsumption(
+        CanonicalModulePlanModule module,
+        string relativePath)
+    {
+        ValidateForConsumption(module);
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            throw new InvalidOperationException(
+                $"Built-in module artifact path '{relativePath}' must be package-relative.");
+        }
+
+        var moduleRoot = Path.GetFullPath(module.PackageRoot);
+        var resolvedPath = Path.GetFullPath(Path.Combine(moduleRoot, relativePath));
+        if (!PathContainment.Contains(moduleRoot, resolvedPath) || !File.Exists(resolvedPath))
+        {
+            throw new FileNotFoundException(
+                "Built-in module artifact is missing or outside the trusted module root.",
+                resolvedPath);
+        }
+
+        PathContainment.RejectReparsePoints(resolvedPath);
+        return resolvedPath;
+    }
+
     internal string ValidateDistributionFile(string path)
     {
         var resolvedPath = Path.GetFullPath(path);

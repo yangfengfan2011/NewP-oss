@@ -155,6 +155,19 @@ public class RuntimeViewMaterializer
 
             foreach (var module in plan.Modules)
             {
+                if (module.Provenance.AuthenticatesBuiltIn(module))
+                {
+                    if (_builtInModuleSource is null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Authenticated built-in module '{module.ModuleId}' requires its Host trust source.");
+                    }
+
+                    // Backend 为空的内建模块仍会消费 frontend、metadata 或 resources；
+                    // 因此必须在任何投影读取发生前统一复验 capability 与完整模块树。
+                    _builtInModuleSource.ValidateForConsumption(module);
+                }
+
                 MaterializeBackendView(stagedBackendViewRoot, module);
                 StageFrontendAssets(stagedPublicRoot, module);
                 StageModuleMetadata(stagedRuntimeRoot, module);
@@ -240,7 +253,6 @@ public class RuntimeViewMaterializer
                 $"Authenticated built-in module '{module.ModuleId}' requires its Host trust source.");
         }
 
-        _builtInModuleSource.ValidateModuleTree(module.PackageRoot);
         var sourceManifestPath = _builtInModuleSource.ValidateDistributionFile(
             Path.Combine(module.PackageRoot, "plugin.json"));
         var entryAssemblyPath = _builtInModuleSource.ValidateDistributionFile(

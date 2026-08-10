@@ -251,7 +251,8 @@ public sealed class SqlServerPersistenceSmokeTests
                 (N'legacy-link', N'legacy-person', N'legacy-user', SYSUTCDATETIME(), N'legacy-actor', N'legacy-actor', SYSUTCDATETIME(), N'legacy-actor', SYSUTCDATETIME());
             """);
 
-        await using var provider = BuildProvider(applicationConnectionString, identity, BuildOrganizationPlan());
+        using var organizationFixture = BuildOrganizationPlan();
+        await using var provider = BuildProvider(applicationConnectionString, identity, organizationFixture.Plan);
 
         Assert.False(await RunMigrationsAsync(provider));
 
@@ -583,41 +584,55 @@ public sealed class SqlServerPersistenceSmokeTests
             [stream]);
     }
 
-    private static CompiledPersistencePlan BuildOrganizationPlan()
+    private static OrganizationPlanFixture BuildOrganizationPlan()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var assemblyPath = typeof(OrganizationPermanentUserBinding).Assembly.Location;
+        var fixtureRoot = Path.Combine(
+            Path.GetTempPath(),
+            "newp-organization-plan",
+            Guid.NewGuid().ToString("N"));
+        var modulesRoot = Path.Combine(fixtureRoot, "modules");
+        var moduleRoot = Path.Combine(modulesRoot, "Organization");
+        var modelRoot = Path.Combine(moduleRoot, "metadata", "models");
+        var migrationRoot = Path.Combine(moduleRoot, "migrations");
+        Directory.CreateDirectory(modelRoot);
+        Directory.CreateDirectory(migrationRoot);
+        foreach (var modelName in new[] { "Company", "Department", "Person", "Position" })
+        {
+            File.Copy(
+                Path.Combine(repositoryRoot, "modules", "Organization", "metadata", "models", $"{modelName}.model.json"),
+                Path.Combine(modelRoot, $"{modelName}.model.json"));
+        }
+
+        var assemblyPath = Path.Combine(migrationRoot, "Organization.SqlServerMigrations.dll");
+        File.Copy(typeof(OrganizationPermanentUserBinding).Assembly.Location, assemblyPath);
         var manifestSourcePath = Path.Combine(
             repositoryRoot,
             "modules",
             "Organization",
             "migrations",
             "Organization.SqlServerMigrations.json");
-        var temporaryManifestPath = Path.Combine(
-            repositoryRoot,
-            ".codex-temp",
-            "persistence-smoke",
-            $"Organization.SqlServerMigrations.{Guid.NewGuid():N}.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(temporaryManifestPath)!);
+        var temporaryManifestPath = Path.Combine(migrationRoot, "Organization.SqlServerMigrations.json");
         var manifest = JsonNode.Parse(File.ReadAllText(manifestSourcePath))?.AsObject()
             ?? throw new InvalidOperationException("Organization migration manifest is invalid.");
         manifest["bundleChecksum"] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath)));
         File.WriteAllText(temporaryManifestPath, manifest.ToJsonString());
 
-        CompiledPersistencePlan organizationPlan;
         try
         {
+            var trustedSource = TrustedBuiltInModuleSource.CreateForHost(fixtureRoot, modulesRoot);
             var provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
                 "Organization",
-                repositoryRoot,
-                Path.Combine(repositoryRoot, "modules", "Organization", "newp.plugin.json"),
+                moduleRoot,
+                trustedSource,
+                Path.Combine(moduleRoot, "plugin.json"),
                 "/");
             var module = new CanonicalModulePlanModule(
                 "Organization",
                 "1.0.0",
                 "Organization",
                 null,
-                repositoryRoot,
+                moduleRoot,
                 null,
                 null,
                 null,
@@ -633,15 +648,15 @@ public sealed class SqlServerPersistenceSmokeTests
                 provenance,
                 new ModulePersistenceContribution(
                     [
-                        "modules/Organization/metadata/models/Company.model.json",
-                        "modules/Organization/metadata/models/Department.model.json",
-                        "modules/Organization/metadata/models/Person.model.json",
-                        "modules/Organization/metadata/models/Position.model.json"
+                        "metadata/models/Company.model.json",
+                        "metadata/models/Department.model.json",
+                        "metadata/models/Person.model.json",
+                        "metadata/models/Position.model.json"
                     ],
                     [new ModuleMigrationBundleReference(
                         "SqlServer",
-                        Path.GetRelativePath(repositoryRoot, assemblyPath),
-                        Path.GetRelativePath(repositoryRoot, temporaryManifestPath))]));
+                        "migrations/Organization.SqlServerMigrations.dll",
+                        "migrations/Organization.SqlServerMigrations.json")]));
             var candidate = new ModuleCapsuleCandidate(
                 module.ModuleId,
                 module.Version,
@@ -681,46 +696,64 @@ public sealed class SqlServerPersistenceSmokeTests
                 "storage-types.json")).Compile(
                 canonicalPlan,
                 PersistenceProvider.SqlServer);
-            organizationPlan = result.Plan
+            var organizationPlan = result.Plan
                 ?? throw new InvalidOperationException(string.Join(
                     Environment.NewLine,
                     result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
-        }
-        finally
-        {
-            File.Delete(temporaryManifestPath);
-        }
 
-        var organizationModels = organizationPlan.Models;
-        var organizationDigest = PersistenceModelDigest.Compute(organizationModels);
-        var coreModels = TestPersistencePlan.Create().Models
-            .Where(static model => model.Name is not ("Company" or "Department" or "Person" or "Position"))
-            .ToArray();
-        var models = coreModels.Concat(organizationModels).ToArray();
-        var coreDigest = PersistenceModelDigest.Compute(coreModels);
-        var streams = new[]
+            var organizationModels = organizationPlan.Models;
+            var organizationDigest = PersistenceModelDigest.Compute(organizationModels);
+            var coreModels = TestPersistencePlan.Create().Models
+                .Where(static model => model.Name is not ("Company" or "Department" or "Person" or "Position"))
+                .ToArray();
+            var models = coreModels.Concat(organizationModels).ToArray();
+            var coreDigest = PersistenceModelDigest.Compute(coreModels);
+            var streams = new[]
+            {
+                new ModuleMigrationStream(
+                    "platform.core",
+                    PersistenceProvider.SqlServer,
+                    EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
+                    "platform.core:legacy-baseline",
+                    coreDigest,
+                    coreDigest,
+                    PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline,
+                    IsLegacyBaseline: true,
+                    []),
+                Assert.Single(organizationPlan.Streams)
+            };
+            return new OrganizationPlanFixture(
+                new CompiledPersistencePlan(
+                    "organization-migration-test",
+                    organizationDigest,
+                    organizationDigest,
+                    PersistenceProvider.SqlServer,
+                    organizationDigest,
+                    [],
+                    models,
+                    streams),
+                fixtureRoot);
+        }
+        catch
         {
-            new ModuleMigrationStream(
-                "platform.core",
-                PersistenceProvider.SqlServer,
-                EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
-                "platform.core:legacy-baseline",
-                coreDigest,
-                coreDigest,
-                PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline,
-                IsLegacyBaseline: true,
-                []),
-            Assert.Single(organizationPlan.Streams)
-        };
-        return new CompiledPersistencePlan(
-            "organization-migration-test",
-            organizationDigest,
-            organizationDigest,
-            PersistenceProvider.SqlServer,
-            organizationDigest,
-            [],
-            models,
-            streams);
+            Directory.Delete(fixtureRoot, recursive: true);
+            throw;
+        }
+    }
+
+    private sealed class OrganizationPlanFixture(
+        CompiledPersistencePlan plan,
+        string fixtureRoot) : IDisposable
+    {
+        public CompiledPersistencePlan Plan { get; } = plan;
+
+        public void Dispose()
+        {
+            if (Directory.Exists(fixtureRoot))
+            {
+                Directory.Delete(fixtureRoot, recursive: true);
+            }
+        }
     }
 
     private static async Task<string> CreateCatalogAsync(

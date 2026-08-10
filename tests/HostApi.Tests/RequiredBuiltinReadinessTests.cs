@@ -9,8 +9,13 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class RequiredBuiltinReadinessTests
+public sealed class RequiredBuiltinReadinessTests : IDisposable
 {
+    private readonly string _root = Path.Combine(
+        Path.GetTempPath(),
+        "newp-required-builtin-readiness",
+        Guid.NewGuid().ToString("N"));
+
     [Fact]
     public async Task Contributor_IsReadyOnlyWhenRequiredBuiltinsModelsAndMigrationExist()
     {
@@ -99,7 +104,7 @@ public sealed class RequiredBuiltinReadinessTests
         Assert.Equal(RequiredBuiltinReadinessFailureCodes.MigrationMissing, outdatedResult.FailureCode);
     }
 
-    private static CanonicalModulePlan ModulePlan(params string[] moduleIds) =>
+    private CanonicalModulePlan ModulePlan(params string[] moduleIds) =>
         new(
             "candidate",
             "1.0",
@@ -108,19 +113,26 @@ public sealed class RequiredBuiltinReadinessTests
             [],
             moduleIds.Select(Module).ToArray());
 
-    private static CanonicalModulePlanModule Module(string moduleId)
+    private CanonicalModulePlanModule Module(string moduleId)
     {
+        var modulesRoot = Path.Combine(_root, "modules");
+        var moduleRoot = Path.Combine(modulesRoot, moduleId);
+        Directory.CreateDirectory(moduleRoot);
+        var sourcePath = Path.Combine(moduleRoot, "plugin.json");
+        File.WriteAllText(sourcePath, "{}");
+        var trustedSource = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
         var provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
             moduleId,
-            moduleId,
-            Path.Combine(moduleId, "plugin.json"),
+            moduleRoot,
+            trustedSource,
+            sourcePath,
             "/");
         var module = new CanonicalModulePlanModule(
             moduleId,
             "1.0.0",
             moduleId,
             null,
-            moduleId,
+            moduleRoot,
             $"../../{moduleId}Module.dll",
             $"{moduleId.ToLowerInvariant()}.backend",
             null,
@@ -155,6 +167,14 @@ public sealed class RequiredBuiltinReadinessTests
             module.Provenance,
             module.Persistence);
         return module with { Provenance = provenance.BindToCanonicalCandidate(candidate) };
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
     }
 
     private static CompiledPersistencePlan PersistencePlan(

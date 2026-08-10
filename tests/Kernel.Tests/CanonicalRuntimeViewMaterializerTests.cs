@@ -81,6 +81,56 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void Stage_AuthenticatedBackendlessBuiltInReplacedWithJunctionAfterPlanIssued_RejectsBeforeConsumption()
+    {
+        var modulesRoot = Path.Combine(_root, "modules");
+        var moduleRoot = Path.Combine(modulesRoot, "PluginOps");
+        var metadataRoot = Path.Combine(moduleRoot, "metadata", "models");
+        Directory.CreateDirectory(metadataRoot);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "plugin.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "moduleId": "PluginOps",
+              "displayName": "插件运维",
+              "version": "1.0.0",
+              "dependencies": []
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(metadataRoot, "PluginRegistration.model.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "model",
+              "PluginRegistration": { "kind": "Entity" }
+            }
+            """);
+        var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+        var compilation = new CanonicalModulePlanCompiler().Compile("issued-before-swap", [candidate]);
+        var plan = Assert.IsType<CanonicalModulePlan>(compilation.Plan);
+
+        var externalModuleRoot = Path.Combine(_root, "external-PluginOps");
+        Directory.Move(moduleRoot, externalModuleRoot);
+        var sentinelPath = Path.Combine(externalModuleRoot, "external-sentinel.txt");
+        File.WriteAllText(sentinelPath, "must remain untouched");
+        CreateDirectoryLink(moduleRoot, externalModuleRoot);
+
+        var installRoot = Path.Combine(_root, "install");
+        var materializer = new RuntimeViewMaterializer(
+            new InstalledPluginStateStore(installRoot),
+            new FrontendRuntimeManifestBuilder(),
+            source);
+
+        var error = Assert.Throws<InvalidOperationException>(() => materializer.Stage(installRoot, plan));
+
+        Assert.Contains("reparse point", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(sentinelPath));
+    }
+
+    [Fact]
     public void Stage_PublicBuiltInLabel_DoesNotSelectPrivilegedMetadataLayout()
     {
         var packageRoot = Path.Combine(_root, "package");

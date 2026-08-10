@@ -16,7 +16,7 @@ public sealed class PersonCrudValidator(
     public string ResourceKey => "organization.person";
 
     /// <summary>
-    /// 创建人员时要求公司、部门都存在且启用，并校验部门归属公司。
+    /// 人员可以暂不建立组织归属；一旦填写，则要求公司、部门成对出现、存在且启用，并校验部门归属公司。
     /// </summary>
     public Task<StandardCrudError?> ValidateCreateAsync(
         StandardCrudDescriptor descriptor,
@@ -25,7 +25,7 @@ public sealed class PersonCrudValidator(
         ValidateAffiliationAsync(values, cancellationToken);
 
     /// <summary>
-    /// 更新阶段先与持久化现状合并，再校验完整组织归属，避免局部更新把未提交字段误判为空。
+    /// 更新阶段先与持久化现状合并，再校验可选的完整组织归属，避免局部更新绕过成对约束。
     /// </summary>
     public Task<StandardCrudError?> ValidateUpdateAsync(
         StandardCrudDescriptor descriptor,
@@ -60,13 +60,19 @@ public sealed class PersonCrudValidator(
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken)
     {
-        var companyId = ReadRequiredId(values, "CompanyId");
+        var companyId = ReadOptionalId(values, "CompanyId");
+        var departmentId = ReadOptionalId(values, "DepartmentId");
+
+        if (companyId is null && departmentId is null)
+        {
+            return null;
+        }
+
         if (companyId is null)
         {
             return FieldError("CompanyId", "Organization.Person.CompanyRequired", "所属公司不能为空。", "organization.person.companyRequired");
         }
 
-        var departmentId = ReadRequiredId(values, "DepartmentId");
         if (departmentId is null)
         {
             return FieldError("DepartmentId", "Organization.Person.DepartmentRequired", "所属部门不能为空。", "organization.person.departmentRequired");
@@ -99,7 +105,7 @@ public sealed class PersonCrudValidator(
             : null;
     }
 
-    private static string? ReadRequiredId(IReadOnlyDictionary<string, object?> values, string field) =>
+    private static string? ReadOptionalId(IReadOnlyDictionary<string, object?> values, string field) =>
         values.TryGetValue(field, out var value) && value is string text && !string.IsNullOrWhiteSpace(text)
             ? text
             : null;

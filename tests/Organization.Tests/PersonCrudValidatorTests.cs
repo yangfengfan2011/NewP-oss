@@ -30,6 +30,40 @@ public sealed class PersonCrudValidatorTests
         Assert.Null(error);
     }
 
+    [Fact]
+    public async Task ValidateCreateAsync_WithoutAffiliation_ReturnsNoError()
+    {
+        var validator = CreateValidator([], []);
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            Values(null, null),
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
+    [Theory]
+    [InlineData(null, DepartmentId, "Organization.Person.CompanyRequired", "CompanyId")]
+    [InlineData(CompanyId, null, "Organization.Person.DepartmentRequired", "DepartmentId")]
+    public async Task ValidateCreateAsync_WithPartialAffiliation_ReturnsStableFieldError(
+        string? companyId,
+        string? departmentId,
+        string expectedCode,
+        string expectedField)
+    {
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: true)],
+            [Department(DepartmentId, CompanyId, enabled: true)]);
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            Values(companyId, departmentId),
+            CancellationToken.None);
+
+        AssertError(error, expectedCode, expectedField);
+    }
+
     [Theory]
     [InlineData("company-missing", "Organization.Person.CompanyNotFound", "CompanyId")]
     [InlineData("company-disabled", "Organization.Person.CompanyDisabled", "CompanyId")]
@@ -121,6 +155,32 @@ public sealed class PersonCrudValidatorTests
         Assert.Equal(1, repository.GetByIdCallCount);
     }
 
+    [Fact]
+    public async Task ValidateUpdateAsync_WhenAffiliationIsClearedTogether_ReturnsNoError()
+    {
+        var existing = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["EID"] = "Person_1",
+            ["CompanyId"] = CompanyId,
+            ["DepartmentId"] = DepartmentId,
+            ["EmploymentStatus"] = "FullTime",
+            ["IsEnabled"] = true
+        };
+        var validator = CreateValidator([], [], existing);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?>
+            {
+                ["CompanyId"] = null,
+                ["DepartmentId"] = null
+            },
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
     private static PersonCrudValidator CreateValidator(
         IEnumerable<Company> companies,
         IEnumerable<Department> departments,
@@ -131,7 +191,7 @@ public sealed class PersonCrudValidatorTests
             new FakeDepartmentRepository(departments),
             repository ?? new FakeStandardCrudRepository(existing));
 
-    private static Dictionary<string, object?> Values(string companyId, string departmentId) => new(StringComparer.Ordinal)
+    private static Dictionary<string, object?> Values(string? companyId, string? departmentId) => new(StringComparer.Ordinal)
     {
         ["PersonNo"] = "WF-P-001",
         ["ENAME"] = "Wayfinder 验收人员",

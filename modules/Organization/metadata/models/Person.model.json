@@ -79,12 +79,10 @@
         "uiType": "lookup",
         "form": {
           "create": {
-            "mode": "editable",
-            "required": true
+            "mode": "editable"
           },
           "edit": {
-            "mode": "editable",
-            "required": true
+            "mode": "editable"
           },
           "view": {
             "mode": "readonly"
@@ -107,12 +105,10 @@
         "uiType": "lookup",
         "form": {
           "create": {
-            "mode": "editable",
-            "required": true
+            "mode": "editable"
           },
           "edit": {
-            "mode": "editable",
-            "required": true
+            "mode": "editable"
           },
           "view": {
             "mode": "readonly"

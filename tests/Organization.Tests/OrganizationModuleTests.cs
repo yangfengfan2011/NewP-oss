@@ -65,7 +65,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void PersonnelMetadata_RequiresAffiliationAndGatesWriteActions()
+    public void PersonnelMetadata_MakesAffiliationOptionalAndGatesWriteActions()
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
@@ -73,8 +73,10 @@ public class OrganizationModuleTests
             Encoding.UTF8));
         var fields = model.RootElement.GetProperty("Person").GetProperty("fields").EnumerateArray().ToArray();
 
-        Assert.True(IsCreateRequired(fields, "CompanyId"));
-        Assert.True(IsCreateRequired(fields, "DepartmentId"));
+        Assert.False(IsCreateRequired(fields, "CompanyId"));
+        Assert.False(IsEditRequired(fields, "CompanyId"));
+        Assert.False(IsCreateRequired(fields, "DepartmentId"));
+        Assert.False(IsEditRequired(fields, "DepartmentId"));
         Assert.True(IsCreateRequired(fields, "EmploymentStatus"));
         Assert.False(IsCreateRequired(fields, "PositionId"));
 
@@ -99,6 +101,13 @@ public class OrganizationModuleTests
         fields.Single(field => field.GetProperty("name").GetString() == fieldName)
             .GetProperty("form")
             .GetProperty("create")
+            .TryGetProperty("required", out var required)
+        && required.GetBoolean();
+
+    private static bool IsEditRequired(JsonElement[] fields, string fieldName) =>
+        fields.Single(field => field.GetProperty("name").GetString() == fieldName)
+            .GetProperty("form")
+            .GetProperty("edit")
             .TryGetProperty("required", out var required)
         && required.GetBoolean();
 

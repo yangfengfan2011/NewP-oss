@@ -224,6 +224,16 @@ internal sealed class PersonnelAcceptanceRunner
         using var admin = CreateClient(_hostPort);
         await LoginAdminAsync(admin, cancellationToken);
 
+        using (var unaffiliated = await admin.PostAsJsonAsync(
+                   "/api/organization/persons",
+                   PersonPayload($"ACC-U-{_runId[..8]}", "Unaffiliated Person", null, null),
+                   cancellationToken))
+        {
+            var unaffiliatedBody = await unaffiliated.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(unaffiliated, HttpStatusCode.Created, unaffiliatedBody, "create person without affiliation");
+            checks.Add(new { check = "create-without-affiliation", status = 201 });
+        }
+
         var secondCompany = await PostAndReadIdAsync(admin, "/api/organization/companies", new
         {
             code = $"ACC-C2-{_runId[..8]}",
@@ -241,16 +251,17 @@ internal sealed class PersonnelAcceptanceRunner
             sortOrder = "20"
         }, cancellationToken);
 
-        await AssertPersonErrorAsync(admin, "required-company", PersonPayload("ACC-E01", "Required Company", null, fixture.DepartmentId), "Organization.Person.CompanyRequired", checks, cancellationToken);
-        await AssertPersonErrorAsync(admin, "company-not-found", PersonPayload("ACC-E02", "Missing Company", "Company_missing", fixture.DepartmentId), "Organization.Person.CompanyNotFound", checks, cancellationToken);
-        await AssertPersonErrorAsync(admin, "department-not-found", PersonPayload("ACC-E03", "Missing Department", fixture.CompanyId, "Department_missing"), "Organization.Person.DepartmentNotFound", checks, cancellationToken);
-        await AssertPersonErrorAsync(admin, "department-company-mismatch", PersonPayload("ACC-E04", "Mismatch Department", fixture.CompanyId, secondDepartment.Id), "Organization.Person.DepartmentCompanyMismatch", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "partial-affiliation-missing-company", PersonPayload("ACC-E01", "Missing Company", null, fixture.DepartmentId), "Organization.Person.CompanyRequired", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "partial-affiliation-missing-department", PersonPayload("ACC-E02", "Missing Department", fixture.CompanyId, null), "Organization.Person.DepartmentRequired", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "company-not-found", PersonPayload("ACC-E03", "Unknown Company", "Company_missing", fixture.DepartmentId), "Organization.Person.CompanyNotFound", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "department-not-found", PersonPayload("ACC-E04", "Unknown Department", fixture.CompanyId, "Department_missing"), "Organization.Person.DepartmentNotFound", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "department-company-mismatch", PersonPayload("ACC-E05", "Mismatch Department", fixture.CompanyId, secondDepartment.Id), "Organization.Person.DepartmentCompanyMismatch", checks, cancellationToken);
 
         await PutCompanyAsync(admin, fixture.CompanyId, fixture.CompanyName, false, cancellationToken);
-        await AssertPersonErrorAsync(admin, "company-disabled", PersonPayload("ACC-E05", "Disabled Company", fixture.CompanyId, fixture.DepartmentId), "Organization.Person.CompanyDisabled", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "company-disabled", PersonPayload("ACC-E06", "Disabled Company", fixture.CompanyId, fixture.DepartmentId), "Organization.Person.CompanyDisabled", checks, cancellationToken);
         await PutCompanyAsync(admin, fixture.CompanyId, fixture.CompanyName, true, cancellationToken);
         await PutDepartmentAsync(admin, fixture.DepartmentId, fixture.CompanyId, fixture.DepartmentName, false, cancellationToken);
-        await AssertPersonErrorAsync(admin, "department-disabled", PersonPayload("ACC-E06", "Disabled Department", fixture.CompanyId, fixture.DepartmentId), "Organization.Person.DepartmentDisabled", checks, cancellationToken);
+        await AssertPersonErrorAsync(admin, "department-disabled", PersonPayload("ACC-E07", "Disabled Department", fixture.CompanyId, fixture.DepartmentId), "Organization.Person.DepartmentDisabled", checks, cancellationToken);
         await PutDepartmentAsync(admin, fixture.DepartmentId, fixture.CompanyId, fixture.DepartmentName, true, cancellationToken);
 
         var personNo = $"ACC-{_runId[..10]}";

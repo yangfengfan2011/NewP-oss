@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Authorization.Abstractions;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Repositories;
@@ -25,6 +26,7 @@ public class AuthorizationModule : ModuleBase, IPermissionProvider, IMenuProvide
         services.AddScoped<IPermissionDecisionSource, AuthorizationPermissionDecisionSource>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPermissionService, PermissionService>();
+        services.AddScoped<ILocalAdministratorRoleAssignment, EfLocalAdministratorRoleAssignment>();
 
         // 注册仓储
         services.AddScoped<IRoleRepository, EfRoleRepository>();

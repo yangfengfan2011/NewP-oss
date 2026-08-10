@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -170,6 +170,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Migrations.SqlServer", "Migrations.SqlServer", "{817C7BC6-BBA2-F038-9CD5-20FB20D6B95C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Authentication.SqlServerMigrations", "server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj", "{D88C70B0-88E3-4F10-A4F7-3500C541097E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Contracts", "Contracts", "{D6A07965-7607-A86F-589E-1AB1D2F904EB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Authorization.Contracts", "server\modules\Authorization\Contracts\Authorization.Contracts.csproj", "{681CFA76-4D7A-41AE-A107-85E0CB449318}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -817,6 +821,18 @@ Global
 		{D88C70B0-88E3-4F10-A4F7-3500C541097E}.Release|x64.Build.0 = Release|Any CPU
 		{D88C70B0-88E3-4F10-A4F7-3500C541097E}.Release|x86.ActiveCfg = Release|Any CPU
 		{D88C70B0-88E3-4F10-A4F7-3500C541097E}.Release|x86.Build.0 = Release|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Debug|x64.Build.0 = Debug|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Debug|x86.Build.0 = Debug|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Release|Any CPU.Build.0 = Release|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Release|x64.ActiveCfg = Release|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Release|x64.Build.0 = Release|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Release|x86.ActiveCfg = Release|Any CPU
+		{681CFA76-4D7A-41AE-A107-85E0CB449318}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -901,5 +917,7 @@ Global
 		{CE818044-C52E-4343-8007-A5CC215D9C58} = {D80630EB-7E97-88E3-B628-84A5E1968471}
 		{817C7BC6-BBA2-F038-9CD5-20FB20D6B95C} = {547D4EDA-C839-139D-88F2-AFEEFB8914AF}
 		{D88C70B0-88E3-4F10-A4F7-3500C541097E} = {817C7BC6-BBA2-F038-9CD5-20FB20D6B95C}
+		{D6A07965-7607-A86F-589E-1AB1D2F904EB} = {8AA8B472-DD17-71E7-FDE2-4F3E142B7451}
+		{681CFA76-4D7A-41AE-A107-85E0CB449318} = {D6A07965-7607-A86F-589E-1AB1D2F904EB}
 	EndGlobalSection
 EndGlobal

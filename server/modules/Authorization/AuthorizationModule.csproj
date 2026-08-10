@@ -8,12 +8,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="Contracts\Authorization.Contracts.csproj" />
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Contracts\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Crud.ObjectIds;
@@ -44,9 +43,9 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var ecode = NormalizeAccountCode(command.ECODE);
+        var ecode = IdentityInputNormalizer.NormalizeAccountCode(command.ECODE);
         var normalizedCode = ecode.ToUpperInvariant();
-        var ename = NormalizeDisplayName(command.ENAME);
+        var ename = IdentityInputNormalizer.NormalizeDisplayName(command.ENAME);
         ValidateActor(command.Actor);
 
         if (await _repository.FindUserByNormalizedCodeAsync(normalizedCode, cancellationToken) is not null)
@@ -110,7 +109,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     {
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
-        var ename = NormalizeDisplayName(command.ENAME);
+        var ename = IdentityInputNormalizer.NormalizeDisplayName(command.ENAME);
         var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
         EnsureNotDeleted(user);
         EnsureExpectedRevision(user, command.ExpectedRevision);
@@ -140,7 +139,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     {
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
-        var reason = NormalizeReason(command.Reason);
+        var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
         if (command.TargetStatus is not IdentityAccountStatus.Enabled and not IdentityAccountStatus.Disabled)
         {
             throw new IdentityApplicationException(IdentityFailureCodes.InvalidTargetStatus);
@@ -193,7 +192,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     {
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
-        var reason = NormalizeReason(command.Reason);
+        var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
         var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
         EnsureNotDeleted(user);
         if (user.IsLocalAdministrator)
@@ -283,7 +282,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     {
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
-        var reason = NormalizeReason(command.Reason);
+        var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
         var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
         if (user.Status == IdentityAccountStatus.Deleted)
         {
@@ -341,60 +340,20 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         string reason,
         IdentityActorContext actor,
         DateTime occurredAt) => new()
-    {
-        EID = _objectIdGenerator.NewId(nameof(IdentitySecurityEvent)),
-        TargetUserEID = targetUserEid,
-        EventType = eventType,
-        Reason = reason,
-        OccurredAt = occurredAt,
-        TraceId = actor.TraceId,
-        ActorKind = actor.ActorKind,
-        ActorUserEID = actor.ActorKind == IdentitySecurityActorKind.User ? actor.ActorId : null,
-        CreatedBy = actor.ActorId,
-        CreatedAt = occurredAt,
-        UpdatedBy = actor.ActorId,
-        UpdatedAt = occurredAt
-    };
-
-    private static string NormalizeAccountCode(string value)
-    {
-        var normalized = (value ?? string.Empty).Trim().Normalize(NormalizationForm.FormKC);
-        var runes = normalized.EnumerateRunes().ToArray();
-        if (runes.Length is < 3 or > 64 || runes.Any(static rune => !IsAllowedAccountCodeRune(rune)))
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.InvalidAccountCode);
-        }
-
-        return normalized;
-    }
-
-    private static bool IsAllowedAccountCodeRune(Rune rune) =>
-        Rune.IsLetterOrDigit(rune)
-        || rune.Value is '.' or '_' or '-' or '@';
-
-    private static string NormalizeDisplayName(string value)
-    {
-        var normalized = (value ?? string.Empty).Trim();
-        var length = normalized.EnumerateRunes().Count();
-        if (length is < 1 or > 128)
-        {
-            throw new IdentityApplicationException(IdentityFailureCodes.InvalidDisplayName);
-        }
-
-        return normalized;
-    }
-
-    private static string NormalizeReason(string value)
-    {
-        var normalized = (value ?? string.Empty).Trim();
-        var length = normalized.EnumerateRunes().Count();
-        if (length is < 1 or > 500)
-        {
-            throw new IdentityApplicationException(IdentityFailureCodes.InvalidReason);
-        }
-
-        return normalized;
-    }
+            EID = _objectIdGenerator.NewId(nameof(IdentitySecurityEvent)),
+            TargetUserEID = targetUserEid,
+            EventType = eventType,
+            Reason = reason,
+            OccurredAt = occurredAt,
+            TraceId = actor.TraceId,
+            ActorKind = actor.ActorKind,
+            ActorUserEID = actor.ActorKind == IdentitySecurityActorKind.User ? actor.ActorId : null,
+            CreatedBy = actor.ActorId,
+            CreatedAt = occurredAt,
+            UpdatedBy = actor.ActorId,
+            UpdatedAt = occurredAt
+        };
 
     private static void ValidatePermanentPassword(string password)
     {

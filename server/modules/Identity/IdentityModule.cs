@@ -1,4 +1,5 @@
 using ICP.Platform.Authentication.Contracts;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Identity.Contracts;
@@ -71,5 +72,16 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
                 serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IIdentityLocalAdministratorMaintenanceService>(serviceProvider =>
+            new IdentityLocalAdministratorMaintenanceService(
+                serviceProvider.GetRequiredService<IIdentityRepository>(),
+                serviceProvider.GetRequiredService<IPlatformTransactionExecutor>(),
+                serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
+                serviceProvider.GetRequiredService<ILocalAdministratorRoleAssignment>(),
+                serviceProvider.GetRequiredService<IPasswordHasher<User>>(),
+                serviceProvider.GetRequiredService<ITemporaryCredentialIssuer>(),
+                serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
+                serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IIdentityLocalAdministratorReadinessProbe, IdentityLocalAdministratorReadinessProbe>();
     }
 }

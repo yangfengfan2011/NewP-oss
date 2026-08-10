@@ -29,6 +29,29 @@ public sealed class LocalAuthSeeder
         IReadOnlyCollection<PermissionDescriptor> activePermissions,
         CancellationToken cancellationToken = default)
     {
+        await SeedCatalogAsync(activePermissions, cancellationToken);
+
+        await _roleService.AssignUserRolesAsync(_options.AdminUserId, new AssignUserRolesRequest
+        {
+            RoleCodes = new List<string> { _options.AdminRoleCode }
+        }, "system", cancellationToken);
+        var assignedRoleCodes = (await _roleService.GetUserRolesAsync(_options.AdminUserId, cancellationToken))
+            .RoleCodes
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (!new[] { _options.AdminRoleCode }.SequenceEqual(assignedRoleCodes, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: local administrator roles did not converge to LocalAdmin only.");
+        }
+
+        _logger.LogInformation("Seeded local auth admin {UserName} with {PermissionCount} permissions.", _options.Username, activePermissions.Count);
+    }
+
+    public async Task SeedCatalogAsync(
+        IReadOnlyCollection<PermissionDescriptor> activePermissions,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(activePermissions);
 
         var permissionCodes = activePermissions
@@ -75,20 +98,6 @@ public sealed class LocalAuthSeeder
                 "AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: LocalAdmin role permissions did not converge to the active catalog.");
         }
 
-        await _roleService.AssignUserRolesAsync(_options.AdminUserId, new AssignUserRolesRequest
-        {
-            RoleCodes = new List<string> { _options.AdminRoleCode }
-        }, "system", cancellationToken);
-        var assignedRoleCodes = (await _roleService.GetUserRolesAsync(_options.AdminUserId, cancellationToken))
-            .RoleCodes
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (!new[] { _options.AdminRoleCode }.SequenceEqual(assignedRoleCodes, StringComparer.Ordinal))
-        {
-            throw new InvalidOperationException(
-                "AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: local administrator roles did not converge to LocalAdmin only.");
-        }
-
-        _logger.LogInformation("Seeded local auth admin {UserName} with {PermissionCount} permissions.", _options.Username, permissionCodes.Count);
+        _logger.LogInformation("Synchronized LocalAdmin role with {PermissionCount} permissions.", permissionCodes.Count);
     }
 }

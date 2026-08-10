@@ -4,6 +4,8 @@ namespace ICP.Platform.Modules.Identity.Repositories;
 
 public interface IIdentityRepository
 {
+    ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default);
+
     ValueTask<User?> FindUserAsync(string userEid, CancellationToken cancellationToken = default);
 
     ValueTask<User?> FindUserByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default);

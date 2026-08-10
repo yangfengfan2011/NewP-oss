@@ -119,6 +119,8 @@ public interface IIdentityAccountApplicationService
 
 public static class IdentitySecurityEventTypes
 {
+    public const string LocalAdministratorBootstrapped = "LocalAdministratorBootstrapped";
+    public const string LocalAdministratorCredentialReset = "LocalAdministratorCredentialReset";
     public const string AccountCreated = "AccountCreated";
     public const string DisplayNameChanged = "DisplayNameChanged";
     public const string AccountEnabled = "AccountEnabled";

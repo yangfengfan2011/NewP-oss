@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\server\modules\Authorization\Contracts\Authorization.Contracts.csproj" />
+    <ProjectReference Include="..\..\server\modules\Authorization\AuthorizationModule.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.1" />
     <PackageReference Include="xunit" Version="2.9.3" />

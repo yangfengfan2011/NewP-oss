@@ -11,6 +11,19 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class LocalAuthSeederTests
 {
     [Fact]
+    public async Task SeedCatalogAsync_ConvergesRoleWithoutAssigningConfiguredLegacyUser()
+    {
+        var permissionService = new RecordingPermissionService(converges: true);
+        var roleService = new RecordingRoleService();
+        var seeder = CreateSeeder(permissionService, roleService);
+
+        await seeder.SeedCatalogAsync([Permission("Organization.Person.View")]);
+
+        Assert.Equal(["Organization.Person.View"], roleService.AssignedPermissionCodes);
+        Assert.Empty(roleService.AssignedRoleCodes);
+    }
+
+    [Fact]
     public async Task SeedAsync_AssignsExactlyTheCompiledActivePermissionCatalog()
     {
         var permissionService = new RecordingPermissionService(converges: true);

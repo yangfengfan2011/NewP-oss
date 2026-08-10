@@ -2,7 +2,9 @@ using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Models;
 using ICP.Platform.Modules.Identity.Repositories;
 using ICP.Platform.Persistence.EfCore;
+using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ICP.Platform.Modules.Identity.Persistence.Ef;
 
@@ -13,6 +15,34 @@ public sealed class EfIdentityRepository : IIdentityRepository
     public EfIdentityRepository(EfPlatformDbContext dbContext)
     {
         _dbContext = dbContext;
+    }
+
+    public async ValueTask AcquireLocalAdministratorBootstrapLockAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!_dbContext.Database.IsRelational())
+        {
+            return;
+        }
+
+        var transaction = _dbContext.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("Identity bootstrap lock requires IPlatformTransactionExecutor.");
+        // Transaction owner 让锁与 User/Credential/Event/角色分配共用提交边界；事务结束后 SQL Server 自动释放。
+        var connection = _dbContext.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction.GetDbTransaction();
+        command.CommandType = CommandType.Text;
+        command.CommandText = "DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource = N'NewP.Identity.LocalAdministratorBootstrap', @LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 15000; SELECT @result;";
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var result = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
+        if (result < 0)
+        {
+            throw new InvalidOperationException("IDENTITY_BOOTSTRAP_LOCK_UNAVAILABLE");
+        }
     }
 
     public async ValueTask<User?> FindUserAsync(

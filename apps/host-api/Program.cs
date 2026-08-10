@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;
@@ -10,6 +10,7 @@ using ICP.Platform.HostApi.Acceptance;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Endpoints;
 using ICP.Platform.HostApi.Extensions;
+using ICP.Platform.HostApi.IdentityMaintenance;
 using ICP.Platform.HostApi.PluginActivation;
 using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.HostApi.Readiness;
@@ -31,7 +32,28 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 
-var builder = WebApplication.CreateBuilder(args);
+var identityMaintenanceCommand = IdentityMaintenanceCommandLine.Parse(args);
+var identityMaintenanceTerminal = new SystemIdentityMaintenanceTerminal();
+if (identityMaintenanceCommand.IsMaintenanceCommand)
+{
+    if (identityMaintenanceCommand.FailureCode is not null)
+    {
+        identityMaintenanceTerminal.WriteError(identityMaintenanceCommand.FailureCode);
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    // 交互性在创建 Host builder 和接触持久化前裁决，重定向场景不能产生 schema 或业务写入。
+    if (!identityMaintenanceTerminal.IsInteractive)
+    {
+        identityMaintenanceTerminal.WriteError(IdentityMaintenanceCommandFailureCodes.InteractiveTerminalRequired);
+        Environment.ExitCode = 2;
+        return;
+    }
+}
+
+var builder = WebApplication.CreateBuilder(
+    identityMaintenanceCommand.IsMaintenanceCommand ? Array.Empty<string>() : args);
 
 var mvcBuilder = builder.Services.AddControllers(options =>
     {
@@ -85,6 +107,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 builder.Services.AddLocalAuthSeeding(builder.Configuration);
+builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
+builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 
 var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
 var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
@@ -218,6 +242,7 @@ builder.Services.AddModuleSystem(options =>
         options.ProjectedModules.Add(new ProjectedStandardDataModule(module));
     }
 });
+builder.Services.AddScoped<IReadinessContributor, IdentityLocalAdministratorReadinessContributor>();
 
 var app = builder.Build();
 
@@ -264,18 +289,33 @@ var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
 var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
 var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancellationToken =>
 {
-    if (skipLocalAuthSeeding)
+    if (skipLocalAuthSeeding && !identityMaintenanceCommand.IsMaintenanceCommand)
     {
         return;
     }
 
     using var scope = app.Services.CreateScope();
     var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
-    await seeder.SeedAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
+    if (identityMaintenanceCommand.IsMaintenanceCommand)
+    {
+        await seeder.SeedCatalogAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
+    }
+    else
+    {
+        await seeder.SeedAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
+    }
 });
 await activationSession.CompleteAsync(
     new HostPluginMigrationExecutor(app, activationSession.PersistencePlan),
     permissionSynchronizer);
+
+if (identityMaintenanceCommand.IsMaintenanceCommand)
+{
+    using var scope = app.Services.CreateScope();
+    var runner = scope.ServiceProvider.GetRequiredService<IdentityMaintenanceCommandRunner>();
+    Environment.ExitCode = await runner.ExecuteAsync(identityMaintenanceCommand.Kind);
+    return;
+}
 
 var runtimeModulesPath = Path.Combine(pluginInstallRoot, "runtime", "modules");
 if (Directory.Exists(runtimeModulesPath))

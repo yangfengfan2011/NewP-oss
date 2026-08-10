@@ -11,7 +11,7 @@ public static class ReadinessServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<IReadinessEvaluator, ReadinessEvaluator>();
+        services.AddScoped<IReadinessEvaluator, ReadinessEvaluator>();
         return services;
     }
 }

@@ -14,6 +14,9 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
 
     public bool FailOnSecurityEvent { get; set; }
 
+    public ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default) =>
+        ValueTask.CompletedTask;
+
     public ValueTask<User?> FindUserAsync(string userEid, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Clone(Users.SingleOrDefault(item => item.EID == userEid)));
 

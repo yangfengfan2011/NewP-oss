@@ -16,16 +16,19 @@
   <entry-assembly>.dll
 ```
 
-当前仓库内建模块在开发期采用过渡形态：
+当前仓库内建模块的可提交 authoring 真源是：
 
-- 清单文件位于 `apps/host-api/modules/<ModuleId>/plugin.json`
-- 构建后复制到 `apps/host-api/bin/<Configuration>/<TFM>/modules/<ModuleId>/plugin.json`
-- 清单中的 `entryAssembly` 允许使用相对路径回指开发期输出目录中的模块 DLL
+- `modules/<ModuleId>/newp.plugin.json`
+- `modules/<ModuleId>/metadata/**`
+
+`apps/host-api/HostApi.csproj` 在开发期把根 Capsule 链接为输出目录中的 `modules/<ModuleId>/plugin.json`，并通过 `ProjectReference` 把模块 DLL 产出到宿主输出目录。`entryAssembly` 允许使用相对路径指向该 DLL。
+
+`apps/host-api/modules/<ModuleId>/plugin.json` 只保留给尚未完成 Capsule cutover 的历史兼容模块，不是新增模块的 authoring 入口。
 
 这意味着：
 
-- 正式装配协议已经切到“插件目录 + 清单”
-- 当前 `ProjectReference` 仅用于开发期将内建模块 DLL 产出到宿主输出目录
+- 正式装配协议已经切到“根 Capsule authoring + 插件目录运行时投影”
+- `ProjectReference` 与 MSBuild `Content` 链接只负责开发期投影，不拥有模块声明
 
 ## `plugin.json` 字段
 

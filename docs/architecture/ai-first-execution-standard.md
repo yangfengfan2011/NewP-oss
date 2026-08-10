@@ -28,7 +28,7 @@
 ### 3.2 契约与设计先行
 
 - 没有详细设计文档时，不进入正式实现。
-- 正常模块接入优先通过 `Contracts / SDK / templates / controlled entry points`。
+- 正常模块接入优先通过 `modules/<ModuleId>/newp.plugin.json`、`modules/<ModuleId>/metadata/**`、后端/前端 behavior bindings 与 Host 受控投影完成。
 - 如果现有契约或受控入口不够用，应先补设计说明，不临场扩口。
 
 ### 3.3 文档必须可执行

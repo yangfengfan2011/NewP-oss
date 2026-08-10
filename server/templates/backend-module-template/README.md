@@ -1,92 +1,39 @@
 # 后端模块模板骨架
 
-这个目录用于提供仓库内可复制的后端模块最小骨架。
+该目录是仓库内建后端模块的最小可构建模板，体现当前 Module Capsule 与 behavior binding 契约。
 
-## 模板包含
+## 模板内容
 
-- `TemplateModule.csproj`
-  最小后端模块项目文件，可直接作为脚手架输入。
-- `TemplateModule.cs`
-  模块入口，负责服务注册、权限声明和配置声明。
-- `Controllers/TemplateController.cs`
-  默认提供 `GET /api/template-module/status` 状态接口。
-- `DTOs/TemplateResponse.cs`
-  状态接口返回对象。
-- `Services/ITemplateService.cs`
-  状态服务抽象。
-- `Services/TemplateService.cs`
-  最小状态服务实现。
+- `capsule/newp.plugin.json`：模板身份、版本、权限和前后端 behavior key 的唯一 owner；
+- `capsule/metadata/**`：最小导航与本地化 authoring；
+- `TemplateModule.cs`：继承 `ModuleCapsuleBindingBase`，只绑定 backend behavior key 与服务注册；
+- `Controllers/TemplateController.cs`：带显式权限要求的轻量接口；
+- `DTOs/TemplateResponse.cs`：稳定响应 DTO；
+- `Services/*`：模块内部服务。
 
-## 必改项
-
-- 模块类名
-- 命名空间
-- `ModuleId`
-- `DisplayName`
-- 路由前缀
-- 权限编码
-- 配置键前缀
+模板中的 `capsule/` 用于保证模板项目可独立构建。`scripts/new-module.ps1` 生成真实模块时会把它移动到 `modules/<ModuleId>/`，并把项目嵌入资源改为该根 Capsule。
 
 ## 推荐方式
 
-优先使用脚手架生成：
-
 ```powershell
-.\scripts\new-module.ps1 -ModuleName ExampleModule
+pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
 ```bash
-./scripts/new-module.sh --module-name ExampleModule
+./scripts/new-module.sh --module-name ExampleModule --display-name "示例模块"
 ```
 
-脚手架会基于当前模板生成完整后端目录，并按需更新 `apps/host-api/HostApi.csproj`。
+## 边界
 
-## 插件打包
+- `*Module.cs` 不声明 module id、显示名、版本、路由、菜单或权限；
+- Controller 只处理协议与授权入口，业务逻辑进入服务；
+- 模块不引用 Host 内部实现，也不依赖其他模块私有实现；
+- 新模块不创建 Host 私有清单或 Shell 静态注册项。
 
-当前后端模块可以通过插件打包脚本产出最小插件目录：
+## 模板验证
 
 ```powershell
-.\scripts\pack-plugin.ps1 -ProjectPath .\server\modules\ExampleModule\ExampleModule.csproj -Force
+dotnet build .\server\templates\backend-module-template\TemplateModule.csproj
 ```
 
-```bash
-./scripts/pack-plugin.sh --project-path server/modules/ExampleModule/ExampleModule.csproj --force
-```
-
-打包结果默认位于：
-
-- `artifacts/plugin-packages/<ModuleId>/`
-
-包内至少包含：
-
-- `plugin.json`
-- 模块程序集
-- `README.md`
-
-可用校验脚本检查产物完整性：
-
-```powershell
-.\scripts\verify-plugin-package.ps1 -PackagePath .\artifacts\plugin-packages\ExampleModule
-```
-
-## 原则
-
-- 模块必须继续继承 `ModuleBase`。
-- 模块公共声明通过 `IPermissionProvider`、`IConfigProvider` 等契约暴露。
-- 业务逻辑不要直接堆进模块入口。
-## Componentization Guardrails
-
-- `*Module.cs` should only handle module declaration, service registration, and shared declarations.
-- `Controllers/*` should stay as thin entry points.
-- `Services/*` should hold module-private logic.
-- Shared declarations that multiple modules rely on should move into `Kernel / SDK / Contracts`, not be copied between modules.
-- Normal module work should not require changing unrelated Host internals.
-
-## Minimum Verification
-
-```powershell
-dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
-dotnet build .\apps\host-api\HostApi.csproj
-```
-
-详细规则见 [Plugin Packaging Guide](../../../docs/guides/plugin-packaging.md)。
+生成模块后至少验证模块项目、HostApi 接线和 Canonical Module Plan 编译。

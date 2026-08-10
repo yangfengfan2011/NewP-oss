@@ -10,10 +10,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="capsule\newp.plugin.json">
+      <LogicalName>ICP.Platform.Templates.BackendModuleTemplate.newp.plugin.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

@@ -2,55 +2,86 @@
 
 ## 目标
 
-- 让新增模块按契约接入
-- 让 AI 与人工都能在小上下文中完成模块新增
-- 不通过模板引入跨模块隐藏依赖
+- 让新增模块从第一天就遵守 Module Capsule 契约；
+- 让 AI 与人工都能在小上下文中生成、验证和继续维护模块；
+- 不通过模板引入身份重复、宿主特判或跨模块隐藏依赖。
 
 ## 标准结构
 
-- `ModuleNameModule.cs`
-- `Controllers/`
-- `DTOs/`
-- `Services/`
-- `Models/`
-- `Repositories/`
-- `README.md`
+一个内建模块由三块共同组成：
 
-## 必选项
+```text
+modules/<ModuleId>/
+├── newp.plugin.json
+└── metadata/
+    ├── navigation/
+    └── dictionaries/
 
-- 模块入口
-- 至少一个服务接口或服务实现
-- README
+server/modules/<ModuleId>/
+├── <ModuleId>Module.cs
+├── <ModuleId>.csproj
+├── Controllers/
+├── DTOs/
+├── Services/
+└── README.md
 
-## 按需启用
+frontend/modules/<module-id>/
+├── src/index.ts
+├── src/pages/
+├── package.json
+└── README.md
+```
 
-- `Models/`
-- `Repositories/`
-- 迁移/导入钩子
+根 Capsule 是模块身份、版本、依赖、权限与 behavior key 的唯一 owner。后端和前端只实现对应 behavior binding。
+
+## 推荐生成方式
+
+```powershell
+pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
+```
+
+只生成 authoring 与实现、暂不接入 HostApi：
+
+```powershell
+pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块" -SkipIntegration
+```
+
+`-SkipIntegration` 不会省略 Capsule 或 behavior binding。
+
+## 模板目录
+
+- 后端模板：`server/templates/backend-module-template/`
+- 前端模板：`frontend/templates/frontend-module-template/`
+
+后端模板中的 `capsule/` 让模板项目可独立构建；脚手架生成模块时会把它移动到仓库根 `modules/<ModuleId>/`，并更新嵌入资源路径。
+
+## 必改项
+
+- Capsule 中的模块身份、显示名、程序集名和 behavior key；
+- navigation 的 route、`targetKey` 与权限引用；
+- 后端命名空间、类名、路由和权限编码；
+- 前端包名、behavior key、page key 与页面实现。
+
+脚手架会完成最小替换；业务模型、服务和页面仍需按已确认设计补齐。
 
 ## 禁止事项
 
-- 控制器直接承载复杂业务规则
-- 模块直接访问 Host 内部实现
-- 隐式启动逻辑执行迁移或导入
-- 保留 `TODO` 注释或空泛占位代码
+- 在 C# 或 TypeScript 中重新声明 Capsule 身份；
+- 在 `FrontendBehaviorBindings` 中维护 routes、menus 或 permissions；
+- 控制器直接承载复杂业务规则；
+- 模块依赖 Host / Shell 内部实现或其他模块私有基础设施；
+- 在模块注册副作用中隐式执行迁移或导入；
+- 新建 `apps/host-api/modules/<ModuleId>/plugin.json` 或 `legacy-module` 接入。
 
-## 模板目录位置
-
-- `server/templates/backend-module-template/`
-
-## 复制方式
-
-1. 复制整个模板目录到目标模块目录。
-2. 重命名 `TemplateModule.cs` 为目标模块入口文件。
-3. 替换命名空间、`ModuleId`、`DisplayName`、路由前缀、权限编码和配置键前缀。
-4. 根据业务需要保留或删除 `Controllers/`、`DTOs/`、`Services/` 等目录。
-5. 按模块实际职责补齐实现，不要把所有逻辑堆进模块入口。
-
-## 验证命令
+## 最小验证
 
 ```powershell
-Get-ChildItem -Recurse server/modules/YourModule
-
-dotnet build server/modules/YourModule/YourModule.csproj
+dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
 ```
+
+```bash
+cd frontend
+pnpm --filter @icp-modules/example-module build
+```
+
+接入 HostApi 后还应构建 Host，并确认生成的 Capsule 可以被 `ModuleCapsuleCandidateReader` 读取且通过 `CanonicalModulePlanCompiler`。

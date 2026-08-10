@@ -2,7 +2,7 @@
 
 ## 概览
 
-当前前端采用模块化结构，Shell 负责装配，SDK 负责定义模块契约，各业务模块通过显式注册接入宿主。
+当前前端采用模块化结构，Shell 负责运行时装配，SDK 定义 behavior binding 契约，各业务模块通过 Capsule 驱动的稳定 key 接入宿主。
 
 ## 目录结构
 
@@ -31,20 +31,21 @@ frontend/
 
 ## 新模块接入
 
-推荐先从仓库模板复制新模块骨架：
+推荐使用脚手架一次生成根 Capsule、metadata 与前后端 behavior binding：
 
 ```powershell
-Copy-Item .\frontend\templates\frontend-module-template .\frontend\modules\example-module -Recurse
+pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-模块的受控接入点是可提交的根 capsule 与 metadata：
+模块的受控 authoring 入口是：
 
 - `modules/<Module>/newp.plugin.json`（身份、版本、依赖与 behavior key）
 - `modules/<Module>/metadata/**`（路由、菜单、权限引用与模型）
+- `frontend/modules/<module>/src/index.ts`（仅绑定稳定实现 key）
 
 Shell 只消费 Host 编译的 `active-module-runtime.json`，常规模块接入不再修改 Shell 内部注册表。
 
-仓库里也提供 `scripts/new-module.ps1` 与 `scripts/new-module.sh` 作为后续自动化便利，但它们是建立在模板契约之上的扩展，不替代模板本身。
+只需要生成文件、暂不接入 HostApi 时使用 `-SkipIntegration`；它不会省略 Capsule 或 behavior binding。
 
 ## 构建验证
 

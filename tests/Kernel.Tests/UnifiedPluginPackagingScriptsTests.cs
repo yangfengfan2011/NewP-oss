@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -19,16 +20,153 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
     }
 
     [Fact]
-    public void NewModule_UsesBuiltInCapsuleInsteadOfDeletedShellRegistry()
+    public void NewModule_GeneratesCanonicalBuiltInCapsule()
     {
         var repoRoot = FindRepositoryRoot();
-        var script = File.ReadAllText(Path.Combine(repoRoot, "scripts", "new-module.ps1"));
-        var shellWrapper = File.ReadAllText(Path.Combine(repoRoot, "scripts", "new-module.sh"));
+        var fixtureRoot = Path.Combine(Path.GetTempPath(), $"newp-new-module-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(fixtureRoot);
+        _tempRoots.Add(fixtureRoot);
 
+        CopyFile(
+            Path.Combine(repoRoot, "scripts", "new-module.ps1"),
+            Path.Combine(fixtureRoot, "scripts", "new-module.ps1"));
+        CopyTemplateTree(
+            Path.Combine(repoRoot, "server", "templates", "backend-module-template"),
+            Path.Combine(fixtureRoot, "server", "templates", "backend-module-template"));
+        CopyTemplateTree(
+            Path.Combine(repoRoot, "frontend", "templates", "frontend-module-template"),
+            Path.Combine(fixtureRoot, "frontend", "templates", "frontend-module-template"));
+
+        var hostProjectPath = Path.Combine(fixtureRoot, "apps", "host-api", "HostApi.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(hostProjectPath)!);
+        File.WriteAllText(
+            hostProjectPath,
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <ItemGroup>
+                <Content Include="..\..\modules\Existing\newp.plugin.json">
+                  <Link>modules\Existing\plugin.json</Link>
+                  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                </Content>
+              </ItemGroup>
+              <ItemGroup>
+                <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var scriptPath = Path.Combine(fixtureRoot, "scripts", "new-module.ps1");
+        var result = RunPowerShellScript(
+            fixtureRoot,
+            scriptPath,
+            [
+                "-ModuleName", "CanonicalSample",
+                "-DisplayName", "规范样例"
+            ]);
+
+        Assert.True(
+            result.ExitCode == 0,
+            $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+
+        var capsuleRoot = Path.Combine(fixtureRoot, "modules", "CanonicalSample");
+        var manifestPath = Path.Combine(capsuleRoot, "newp.plugin.json");
+        var navigationPath = Path.Combine(
+            capsuleRoot,
+            "metadata",
+            "navigation",
+            "CanonicalSample.nav.json");
+        Assert.True(File.Exists(manifestPath));
+        Assert.True(File.Exists(navigationPath));
+        Assert.False(Directory.Exists(Path.Combine(fixtureRoot, "apps", "host-api", "modules", "CanonicalSample")));
+
+        using (var manifestDocument = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+        {
+            var manifest = manifestDocument.RootElement;
+            Assert.Equal("CanonicalSample", manifest.GetProperty("moduleId").GetString());
+            Assert.Equal("../../CanonicalSampleModule.dll", manifest.GetProperty("entryAssembly").GetString());
+            Assert.Equal("canonical-sample.backend", manifest.GetProperty("backend").GetProperty("behaviorKey").GetString());
+            Assert.Equal("canonical-sample.frontend", manifest.GetProperty("frontend").GetProperty("behaviorKey").GetString());
+            Assert.Equal("behavior-bindings", manifest.GetProperty("frontend").GetProperty("bindingMode").GetString());
+            Assert.Equal(
+                "canonical-sample.page",
+                Assert.Single(manifest.GetProperty("frontend").GetProperty("bindings").EnumerateArray()).GetString());
+            Assert.Equal(
+                "CanonicalSample.View",
+                Assert.Single(manifest.GetProperty("security").GetProperty("permissions").EnumerateArray())
+                    .GetProperty("code")
+                    .GetString());
+        }
+
+        using (var navigationDocument = JsonDocument.Parse(File.ReadAllText(navigationPath)))
+        {
+            var item = Assert.Single(
+                navigationDocument.RootElement
+                    .GetProperty("navigation")
+                    .GetProperty("items")
+                    .EnumerateArray());
+            Assert.Equal("canonical-sample.page", item.GetProperty("targetKey").GetString());
+            Assert.Equal(
+                "CanonicalSample.View",
+                Assert.Single(item.GetProperty("permissions").EnumerateArray()).GetString());
+        }
+
+        var runtimeModulesRoot = Path.Combine(fixtureRoot, "runtime", "modules");
+        var runtimeModuleRoot = Path.Combine(runtimeModulesRoot, "CanonicalSample");
+        CopyFile(manifestPath, Path.Combine(runtimeModuleRoot, "plugin.json"));
+        CopyTemplateTree(
+            Path.Combine(capsuleRoot, "metadata"),
+            Path.Combine(runtimeModuleRoot, "metadata"));
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(runtimeModulesRoot);
+        var compilation = new CanonicalModulePlanCompiler().Compile("scaffold-contract", candidates);
+        Assert.True(
+            compilation.IsSuccess,
+            string.Join(Environment.NewLine, compilation.Diagnostics.Select(static item => item.Message)));
+
+        var backendProject = File.ReadAllText(
+            Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSample.csproj"));
+        Assert.Contains(@"..\..\..\modules\CanonicalSample\newp.plugin.json", backendProject, StringComparison.Ordinal);
+        Assert.Contains("ICP.Platform.Modules.CanonicalSample.newp.plugin.json", backendProject, StringComparison.Ordinal);
+        Assert.Contains(@"..\..\platform-authorization\PlatformAuthorization.csproj", backendProject, StringComparison.Ordinal);
+
+        var backendModule = File.ReadAllText(
+            Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSampleModule.cs"));
+        Assert.Contains("class CanonicalSampleModule : ModuleCapsuleBindingBase", backendModule, StringComparison.Ordinal);
+        Assert.Contains("BehaviorKey => \"canonical-sample.backend\"", backendModule, StringComparison.Ordinal);
+        Assert.DoesNotContain("ModuleId =>", backendModule, StringComparison.Ordinal);
+
+        var controller = File.ReadAllText(
+            Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "Controllers", "CanonicalSampleController.cs"));
+        Assert.Contains("[RequirePermission(\"CanonicalSample.View\")]", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("ModuleId =", controller, StringComparison.Ordinal);
+
+        var frontendBinding = File.ReadAllText(
+            Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "index.ts"));
+        Assert.Contains("FrontendBehaviorBindings", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("behaviorKey: 'canonical-sample.frontend'", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("pageKey: 'canonical-sample.page'", frontendBinding, StringComparison.Ordinal);
+        Assert.DoesNotContain("metadata:", frontendBinding, StringComparison.Ordinal);
+        Assert.DoesNotContain("routes:", frontendBinding, StringComparison.Ordinal);
+        Assert.DoesNotContain("menus:", frontendBinding, StringComparison.Ordinal);
+        Assert.DoesNotContain("permissions:", frontendBinding, StringComparison.Ordinal);
+
+        var hostProject = File.ReadAllText(hostProjectPath);
+        Assert.Contains(
+            @"<ProjectReference Include=""..\..\server\modules\CanonicalSample\CanonicalSample.csproj"" />",
+            hostProject,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            @"<Content Include=""..\..\modules\CanonicalSample\newp.plugin.json"">",
+            hostProject,
+            StringComparison.Ordinal);
+        Assert.Contains(@"<Link>modules\CanonicalSample\plugin.json</Link>", hostProject, StringComparison.Ordinal);
+
+        var script = File.ReadAllText(scriptPath);
+        var shellWrapper = File.ReadAllText(Path.Combine(repoRoot, "scripts", "new-module.sh"));
         Assert.DoesNotContain("builtin-runtime-plugins.ts", script, StringComparison.Ordinal);
         Assert.DoesNotContain("builtin-runtime-plugins.ts", shellWrapper, StringComparison.Ordinal);
-        Assert.Contains("apps\\host-api\\modules", script, StringComparison.Ordinal);
-        Assert.Contains("legacy-module", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("apps\\host-api\\modules", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("legacy-module", script, StringComparison.Ordinal);
+        Assert.Contains("modules/<ModuleName>/newp.plugin.json", shellWrapper, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -122,6 +260,32 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         }
 
         throw new DirectoryNotFoundException("Repository root not found.");
+    }
+
+    private static void CopyFile(string sourcePath, string destinationPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        File.Copy(sourcePath, destinationPath);
+    }
+
+    private static void CopyTemplateTree(string sourceRoot, string destinationRoot)
+    {
+        Directory.CreateDirectory(destinationRoot);
+        foreach (var filePath in Directory.GetFiles(sourceRoot))
+        {
+            File.Copy(filePath, Path.Combine(destinationRoot, Path.GetFileName(filePath)));
+        }
+
+        foreach (var directoryPath in Directory.GetDirectories(sourceRoot))
+        {
+            var directoryName = Path.GetFileName(directoryPath);
+            if (directoryName is "bin" or "obj" or "dist" or "node_modules")
+            {
+                continue;
+            }
+
+            CopyTemplateTree(directoryPath, Path.Combine(destinationRoot, directoryName));
+        }
     }
 
     private static ScriptResult RunPowerShellScript(string workingDirectory, string scriptPath, IReadOnlyList<string> arguments)

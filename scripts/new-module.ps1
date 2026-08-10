@@ -47,13 +47,56 @@ function Convert-ToCamelCase {
     $result
 }
 
-function Remove-GeneratedArtifacts {
-    param([Parameter(Mandatory = $true)][string]$RootPath)
+function Copy-TemplateTree {
+    param(
+        [Parameter(Mandatory = $true)][string]$RootPath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath
+    )
 
-    foreach ($directoryName in @('bin', 'obj', 'dist', 'node_modules')) {
-        Get-ChildItem -LiteralPath $RootPath -Directory -Recurse -Force -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -eq $directoryName } |
-            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+    $sourceRoot = (Resolve-Path -LiteralPath $RootPath).Path
+    $sourceItem = Get-Item -LiteralPath $sourceRoot -Force
+    if (-not $sourceItem.PSIsContainer -or (($sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "Unsafe template root: $sourceRoot"
+    }
+
+    if (Test-Path -LiteralPath $DestinationPath) {
+        throw "Template destination already exists: $DestinationPath"
+    }
+
+    New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
+    $excludedDirectories = @('bin', 'obj', 'dist', 'node_modules')
+    $pendingDirectories = [System.Collections.Generic.Stack[string]]::new()
+    $pendingDirectories.Push($sourceRoot)
+
+    while ($pendingDirectories.Count -gt 0) {
+        $currentSource = $pendingDirectories.Pop()
+        $relativeDirectory = [IO.Path]::GetRelativePath($sourceRoot, $currentSource)
+        $currentDestination = if ($relativeDirectory -eq '.') {
+            $DestinationPath
+        } else {
+            Join-Path $DestinationPath $relativeDirectory
+        }
+        New-Item -ItemType Directory -Path $currentDestination -Force | Out-Null
+
+        foreach ($item in Get-ChildItem -LiteralPath $currentSource -Force) {
+            if ($item.PSIsContainer) {
+                if ($excludedDirectories -contains $item.Name) {
+                    continue
+                }
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Template contains an unsupported reparse point: $($item.FullName)"
+                }
+
+                $pendingDirectories.Push($item.FullName)
+                continue
+            }
+
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Template contains an unsupported reparse point: $($item.FullName)"
+            }
+
+            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $currentDestination $item.Name)
+        }
     }
 }
 
@@ -104,10 +147,11 @@ $backendTemplateRoot = Join-Path $repoRoot 'server\templates\backend-module-temp
 $externalTemplateRoot = Join-Path $repoRoot 'server\templates\external-plugin-template'
 $frontendTemplateRoot = Join-Path $frontendRoot 'templates\frontend-module-template'
 $moduleSlug = Convert-ToKebabCase -Value $ModuleName
-$frontendModuleVariable = "$(Convert-ToCamelCase -Value $moduleSlug)Module"
-$frontendPageName = "${ModuleName}Page"
-$frontendServiceName = "${ModuleName}StatusService"
-$frontendServiceFileBase = "$(Convert-ToCamelCase -Value $moduleSlug)Service"
+$frontendBindingsVariable = "$(Convert-ToCamelCase -Value $moduleSlug)Bindings"
+$frontendPageName = "$($ModuleName)Page"
+$backendBehaviorKey = "$moduleSlug.backend"
+$frontendBehaviorKey = "$moduleSlug.frontend"
+$frontendPageKey = "$moduleSlug.page"
 
 if ($ExternalPlugin) {
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -116,9 +160,11 @@ if ($ExternalPlugin) {
         $backendTargetRoot = if ([System.IO.Path]::IsPathRooted($OutputPath)) { $OutputPath } else { Join-Path $repoRoot $OutputPath }
     }
     $frontendTargetRoot = $null
+    $capsuleTargetRoot = $null
 } else {
     $backendTargetRoot = Join-Path $repoRoot "server\modules\$ModuleName"
     $frontendTargetRoot = Join-Path $frontendRoot "modules\$moduleSlug"
+    $capsuleTargetRoot = Join-Path $repoRoot "modules\$ModuleName"
 }
 
 if (-not (Test-Path -LiteralPath $backendTemplateRoot) -and -not $ExternalPlugin) {
@@ -141,32 +187,56 @@ if (-not $ExternalPlugin -and (Test-Path -LiteralPath $frontendTargetRoot)) {
     throw "Frontend target already exists: $frontendTargetRoot"
 }
 
+if (-not $ExternalPlugin -and (Test-Path -LiteralPath $capsuleTargetRoot)) {
+    throw "Capsule target already exists: $capsuleTargetRoot"
+}
+
 Write-Host '=== Generate module scaffold ===' -ForegroundColor Green
 Write-Host "ModuleName: $ModuleName" -ForegroundColor Cyan
 Write-Host "DisplayName: $DisplayName" -ForegroundColor Cyan
 Write-Host "BackendTarget: $backendTargetRoot" -ForegroundColor Cyan
 if (-not $ExternalPlugin) {
     Write-Host "FrontendTarget: frontend/modules/$moduleSlug" -ForegroundColor Cyan
+    Write-Host "CapsuleTarget: modules/$ModuleName" -ForegroundColor Cyan
 }
 
 if ($ExternalPlugin) {
-    Copy-Item -LiteralPath $externalTemplateRoot -Destination $backendTargetRoot -Recurse
+    Copy-TemplateTree -RootPath $externalTemplateRoot -DestinationPath $backendTargetRoot
 } else {
-    Copy-Item -LiteralPath $backendTemplateRoot -Destination $backendTargetRoot -Recurse
-    Copy-Item -LiteralPath $frontendTemplateRoot -Destination $frontendTargetRoot -Recurse
-}
+    Copy-TemplateTree -RootPath $backendTemplateRoot -DestinationPath $backendTargetRoot
+    Copy-TemplateTree -RootPath $frontendTemplateRoot -DestinationPath $frontendTargetRoot
 
-Remove-GeneratedArtifacts -RootPath $backendTargetRoot
-if (-not $ExternalPlugin) {
-    Remove-GeneratedArtifacts -RootPath $frontendTargetRoot
+    $capsuleTemplateRoot = Join-Path $backendTargetRoot 'capsule'
+    if (-not (Test-Path -LiteralPath $capsuleTemplateRoot)) {
+        throw "Backend template capsule not found: $capsuleTemplateRoot"
+    }
+
+    New-Item -ItemType Directory -Path (Split-Path -Parent $capsuleTargetRoot) -Force | Out-Null
+    Move-Item -LiteralPath $capsuleTemplateRoot -Destination $capsuleTargetRoot
 }
 
 $backendProjectPath = Join-Path $backendTargetRoot "$ModuleName.csproj"
-$backendModulePath = Join-Path $backendTargetRoot "${ModuleName}Module.cs"
-$backendControllerPath = if ($ExternalPlugin) { Join-Path $backendTargetRoot "Controllers\${ModuleName}StatusController.cs" } else { Join-Path $backendTargetRoot "Controllers\${ModuleName}Controller.cs" }
-$backendDtoPath = if ($ExternalPlugin) { Join-Path $backendTargetRoot "DTOs\${ModuleName}StatusResponse.cs" } else { Join-Path $backendTargetRoot "DTOs\${ModuleName}Response.cs" }
-$backendInterfacePath = if ($ExternalPlugin) { Join-Path $backendTargetRoot "Services\I${ModuleName}StatusService.cs" } else { Join-Path $backendTargetRoot "Services\I${ModuleName}Service.cs" }
-$backendServicePath = if ($ExternalPlugin) { Join-Path $backendTargetRoot "Services\${ModuleName}StatusService.cs" } else { Join-Path $backendTargetRoot "Services\${ModuleName}Service.cs" }
+$backendModulePath = Join-Path $backendTargetRoot "$($ModuleName)Module.cs"
+$backendControllerPath = if ($ExternalPlugin) {
+    Join-Path $backendTargetRoot "Controllers\$($ModuleName)StatusController.cs"
+} else {
+    Join-Path $backendTargetRoot "Controllers\$($ModuleName)Controller.cs"
+}
+$backendDtoPath = if ($ExternalPlugin) {
+    Join-Path $backendTargetRoot "DTOs\$($ModuleName)StatusResponse.cs"
+} else {
+    Join-Path $backendTargetRoot "DTOs\$($ModuleName)Response.cs"
+}
+$backendInterfacePath = if ($ExternalPlugin) {
+    Join-Path $backendTargetRoot "Services\I$($ModuleName)StatusService.cs"
+} else {
+    Join-Path $backendTargetRoot "Services\I$($ModuleName)Service.cs"
+}
+$backendServicePath = if ($ExternalPlugin) {
+    Join-Path $backendTargetRoot "Services\$($ModuleName)StatusService.cs"
+} else {
+    Join-Path $backendTargetRoot "Services\$($ModuleName)Service.cs"
+}
 
 if ($ExternalPlugin) {
     Rename-IfExists -FromPath (Join-Path $backendTargetRoot 'ExternalPlugin.csproj') -ToPath $backendProjectPath
@@ -184,16 +254,6 @@ if ($ExternalPlugin) {
     Rename-IfExists -FromPath (Join-Path $backendTargetRoot 'Services\TemplateService.cs') -ToPath $backendServicePath
 }
 
-if (-not $ExternalPlugin) {
-    $frontendPackagePath = Join-Path $frontendTargetRoot 'package.json'
-    $frontendIndexPath = Join-Path $frontendTargetRoot 'src\index.ts'
-    $frontendPagePath = Join-Path $frontendTargetRoot "src\pages\${frontendPageName}.tsx"
-    $frontendServicePath = Join-Path $frontendTargetRoot "src\services\${frontendServiceFileBase}.ts"
-
-    Rename-IfExists -FromPath (Join-Path $frontendTargetRoot 'src\pages\TemplatePage.tsx') -ToPath $frontendPagePath
-    Rename-IfExists -FromPath (Join-Path $frontendTargetRoot 'src\services\templateService.ts') -ToPath $frontendServicePath
-}
-
 Update-FileContent -Path $backendProjectPath -Transform {
     param($content)
 
@@ -206,7 +266,7 @@ Update-FileContent -Path $backendProjectPath -Transform {
         )
         $content = $content.Replace(
             '<AssemblyName>ExternalPlugin</AssemblyName>',
-            "<AssemblyName>${ModuleName}Plugin</AssemblyName>"
+            "<AssemblyName>$($ModuleName)Plugin</AssemblyName>"
         )
         $content = $content.Replace('__SDK_PROJECT_PATH__', $relativeSdkPath)
     } else {
@@ -216,7 +276,15 @@ Update-FileContent -Path $backendProjectPath -Transform {
         )
         $content = $content.Replace(
             '<AssemblyName>TemplateModule</AssemblyName>',
-            "<AssemblyName>${ModuleName}Module</AssemblyName>"
+            "<AssemblyName>$($ModuleName)Module</AssemblyName>"
+        )
+        $content = $content.Replace(
+            'capsule\newp.plugin.json',
+            "..\..\..\modules\$ModuleName\newp.plugin.json"
+        )
+        $content = $content.Replace(
+            'ICP.Platform.Templates.BackendModuleTemplate.newp.plugin.json',
+            "ICP.Platform.Modules.$ModuleName.newp.plugin.json"
         )
     }
 
@@ -228,9 +296,9 @@ Update-FileContent -Path $backendModulePath -Transform {
 
     if ($ExternalPlugin) {
         $content = $content.Replace('ICP.Platform.ExternalPluginTemplate', "ICP.Platform.ExternalPlugins.$ModuleName")
-        $content = $content.Replace('IExternalPluginStatusService', "I${ModuleName}StatusService")
-        $content = $content.Replace('ExternalPluginStatusService', "${ModuleName}StatusService")
-        $content = $content.Replace('class ExternalPluginModule', "class ${ModuleName}Module")
+        $content = $content.Replace('IExternalPluginStatusService', "I$($ModuleName)StatusService")
+        $content = $content.Replace('ExternalPluginStatusService', "$($ModuleName)StatusService")
+        $content = $content.Replace('class ExternalPluginModule', "class $($ModuleName)Module")
         $content = [regex]::Replace($content, 'ModuleId\s*=>\s*"[^"]+";', ('ModuleId => "' + $ModuleName + '";'))
         $content = [regex]::Replace($content, 'DisplayName\s*=>\s*"[^"]+";', ('DisplayName => "' + $DisplayName + '";'))
         $content = [regex]::Replace($content, 'Description\s*=>\s*"[^"]+";', ('Description => "' + $DisplayName + ' external plugin";'))
@@ -239,12 +307,10 @@ Update-FileContent -Path $backendModulePath -Transform {
         $content = [regex]::Replace($content, 'Group\s*=\s*"[^"]+"', ('Group = "' + $ModuleName + '"'))
     } else {
         $content = $content.Replace('ICP.Platform.Templates.BackendModuleTemplate', "ICP.Platform.Modules.$ModuleName")
-        $content = $content.Replace('ITemplateService', "I${ModuleName}Service")
-        $content = $content.Replace('TemplateService', "${ModuleName}Service")
-        $content = $content.Replace('class TemplateModule', "class ${ModuleName}Module")
-        $content = $content.Replace('=> "TemplateModule";', ('=> "' + $ModuleName + '";'))
-        $content = $content.Replace('TemplateModule.View', ($ModuleName + '.View'))
-        $content = $content.Replace('TemplateModule.Enabled', ($ModuleName + '.Enabled'))
+        $content = $content.Replace('ITemplateService', "I$($ModuleName)Service")
+        $content = $content.Replace('TemplateService', "$($ModuleName)Service")
+        $content = $content.Replace('class TemplateModule', "class $($ModuleName)Module")
+        $content = $content.Replace('template-module.backend', $backendBehaviorKey)
     }
 
     $content
@@ -255,17 +321,17 @@ Update-FileContent -Path $backendControllerPath -Transform {
 
     if ($ExternalPlugin) {
         $content = $content.Replace('ICP.Platform.ExternalPluginTemplate', "ICP.Platform.ExternalPlugins.$ModuleName")
-        $content = $content.Replace('ExternalPluginStatusResponse', "${ModuleName}StatusResponse")
-        $content = $content.Replace('IExternalPluginStatusService', "I${ModuleName}StatusService")
-        $content = $content.Replace('ExternalPluginStatusController', "${ModuleName}StatusController")
+        $content = $content.Replace('ExternalPluginStatusResponse', "$($ModuleName)StatusResponse")
+        $content = $content.Replace('IExternalPluginStatusService', "I$($ModuleName)StatusService")
+        $content = $content.Replace('ExternalPluginStatusController', "$($ModuleName)StatusController")
         $content = $content.Replace('api/external-plugin/status', "api/$moduleSlug/status")
     } else {
         $content = $content.Replace('ICP.Platform.Templates.BackendModuleTemplate', "ICP.Platform.Modules.$ModuleName")
-        $content = $content.Replace('TemplateResponse', "${ModuleName}Response")
-        $content = $content.Replace('ITemplateService', "I${ModuleName}Service")
-        $content = $content.Replace('TemplateController', "${ModuleName}Controller")
+        $content = $content.Replace('TemplateResponse', "$($ModuleName)Response")
+        $content = $content.Replace('ITemplateService', "I$($ModuleName)Service")
+        $content = $content.Replace('TemplateController', "$($ModuleName)Controller")
         $content = $content.Replace('api/template-module', "api/$moduleSlug")
-        $content = $content.Replace('ModuleId = "TemplateModule"', ('ModuleId = "' + $ModuleName + '"'))
+        $content = $content.Replace('TemplateModule.View', ($ModuleName + '.View'))
     }
 
     $content
@@ -276,10 +342,10 @@ Update-FileContent -Path $backendDtoPath -Transform {
 
     if ($ExternalPlugin) {
         $content = $content.Replace('ICP.Platform.ExternalPluginTemplate', "ICP.Platform.ExternalPlugins.$ModuleName")
-        $content = $content.Replace('ExternalPluginStatusResponse', "${ModuleName}StatusResponse")
+        $content = $content.Replace('ExternalPluginStatusResponse', "$($ModuleName)StatusResponse")
     } else {
         $content = $content.Replace('ICP.Platform.Templates.BackendModuleTemplate', "ICP.Platform.Modules.$ModuleName")
-        $content = $content.Replace('TemplateResponse', "${ModuleName}Response")
+        $content = $content.Replace('TemplateResponse', "$($ModuleName)Response")
     }
 
     $content
@@ -290,11 +356,11 @@ Update-FileContent -Path $backendInterfacePath -Transform {
 
     if ($ExternalPlugin) {
         $content = $content.Replace('ICP.Platform.ExternalPluginTemplate', "ICP.Platform.ExternalPlugins.$ModuleName")
-        $content = $content.Replace('IExternalPluginStatusService', "I${ModuleName}StatusService")
-        $content = $content.Replace('ExternalPluginStatusResponse', "${ModuleName}StatusResponse")
+        $content = $content.Replace('IExternalPluginStatusService', "I$($ModuleName)StatusService")
+        $content = $content.Replace('ExternalPluginStatusResponse', "$($ModuleName)StatusResponse")
     } else {
         $content = $content.Replace('ICP.Platform.Templates.BackendModuleTemplate', "ICP.Platform.Modules.$ModuleName")
-        $content = $content.Replace('ITemplateService', "I${ModuleName}Service")
+        $content = $content.Replace('ITemplateService', "I$($ModuleName)Service")
     }
 
     $content
@@ -305,15 +371,16 @@ Update-FileContent -Path $backendServicePath -Transform {
 
     if ($ExternalPlugin) {
         $content = $content.Replace('ICP.Platform.ExternalPluginTemplate', "ICP.Platform.ExternalPlugins.$ModuleName")
-        $content = $content.Replace('ExternalPluginStatusService', "${ModuleName}StatusService")
-        $content = $content.Replace('IExternalPluginStatusService', "I${ModuleName}StatusService")
-        $content = $content.Replace('ExternalPluginStatusResponse', "${ModuleName}StatusResponse")
+        $content = $content.Replace('ExternalPluginStatusService', "$($ModuleName)StatusService")
+        $content = $content.Replace('IExternalPluginStatusService', "I$($ModuleName)StatusService")
+        $content = $content.Replace('ExternalPluginStatusResponse', "$($ModuleName)StatusResponse")
         $content = $content.Replace('ModuleId = "ExternalPlugin"', ('ModuleId = "' + $ModuleName + '"'))
         $content = $content.Replace('External plugin template is running.', "$DisplayName is running.")
     } else {
         $content = $content.Replace('ICP.Platform.Templates.BackendModuleTemplate', "ICP.Platform.Modules.$ModuleName")
-        $content = $content.Replace('TemplateService', "${ModuleName}Service")
-        $content = $content.Replace('ITemplateService', "I${ModuleName}Service")
+        $content = $content.Replace('TemplateService', "$($ModuleName)Service")
+        $content = $content.Replace('ITemplateService', "I$($ModuleName)Service")
+        $content = $content.Replace('Template module is ready.', "$DisplayName is ready.")
     }
 
     $content
@@ -331,6 +398,44 @@ if ($ExternalPlugin) {
         $content
     }
 } else {
+    $capsuleManifestPath = Join-Path $capsuleTargetRoot 'newp.plugin.json'
+    $capsuleNavigationPath = Join-Path $capsuleTargetRoot "metadata\navigation\$ModuleName.nav.json"
+    $capsuleDictionaryPath = Join-Path $capsuleTargetRoot 'metadata\dictionaries\Navigation.dic.json'
+    Rename-IfExists -FromPath (Join-Path $capsuleTargetRoot 'metadata\navigation\TemplateModule.nav.json') -ToPath $capsuleNavigationPath
+
+    Update-FileContent -Path $capsuleManifestPath -Transform {
+        param($content)
+
+        $content = $content.Replace('TemplateModule', $ModuleName)
+        $content = $content.Replace("../../$ModuleName.dll", "../../$($ModuleName)Module.dll")
+        $content = $content.Replace('template-module', $moduleSlug)
+        $content = $content.Replace('模板模块', $DisplayName)
+        $content = $content.Replace('后端模块模板骨架', "$DisplayName 模块")
+        $content
+    }
+
+    Update-FileContent -Path $capsuleNavigationPath -Transform {
+        param($content)
+
+        $content = $content.Replace('TemplateModule', $ModuleName)
+        $content = $content.Replace('template-module', $moduleSlug)
+        $content
+    }
+
+    Update-FileContent -Path $capsuleDictionaryPath -Transform {
+        param($content)
+
+        $content = $content.Replace('TemplateModule', $ModuleName)
+        $content = $content.Replace('Template Module', $DisplayName)
+        $content = $content.Replace('模板模块', $DisplayName)
+        $content
+    }
+
+    $frontendPackagePath = Join-Path $frontendTargetRoot 'package.json'
+    $frontendIndexPath = Join-Path $frontendTargetRoot 'src\index.ts'
+    $frontendPagePath = Join-Path $frontendTargetRoot "src\pages\$frontendPageName.tsx"
+    Rename-IfExists -FromPath (Join-Path $frontendTargetRoot 'src\pages\TemplatePage.tsx') -ToPath $frontendPagePath
+
     Update-FileContent -Path $frontendPackagePath -Transform {
         param($content)
 
@@ -341,22 +446,9 @@ if ($ExternalPlugin) {
         param($content)
 
         $content = $content.Replace('TemplatePage', $frontendPageName)
-        $content = $content.Replace('templateModule', $frontendModuleVariable)
-        $content = $content.Replace("moduleId: 'TemplateModule'", "moduleId: '$moduleSlug'")
-        $content = $content.Replace('TemplateModule.View', ($ModuleName + '.View'))
-        $content = $content.Replace("path: '/template-module'", "path: '/$moduleSlug'")
-        $content = $content.Replace("id: 'template-module'", "id: '$moduleSlug'")
-
-        $content
-    }
-
-    Update-FileContent -Path $frontendServicePath -Transform {
-        param($content)
-
-        $content = $content.Replace('TemplateStatus', $frontendServiceName)
-        $content = $content.Replace('fetchTemplateStatus', "fetch${ModuleName}Status")
-        $content = $content.Replace('/api/template-module/status', "/api/$moduleSlug/status")
-
+        $content = $content.Replace('templateModuleBindings', $frontendBindingsVariable)
+        $content = $content.Replace('template-module.frontend', $frontendBehaviorKey)
+        $content = $content.Replace('template-module.page', $frontendPageKey)
         $content
     }
 
@@ -364,247 +456,80 @@ if ($ExternalPlugin) {
         param($content)
 
         $content = $content.Replace('TemplatePage', $frontendPageName)
-        $content = $content.Replace('../services/templateService', "../services/$frontendServiceFileBase")
-        $content = $content.Replace('TemplateStatus', $frontendServiceName)
-        $content = $content.Replace('fetchTemplateStatus', "fetch${ModuleName}Status")
-        $content = $content.Replace('/api/template-module/status', "/api/$moduleSlug/status")
-
+        $content = $content.Replace('模板模块', $DisplayName)
         $content
     }
-}
 
-if (-not $ExternalPlugin) {
-    $frontendPackageContent = @"
-{
-  "name": "@icp-modules/$moduleSlug",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
-  },
-  "dependencies": {
-    "@icp-platform/sdk": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.1",
-    "react": "^18.3.1",
-    "typescript": "^5.4.2"
-  }
-}
-"@
+    foreach ($readmePath in @(
+        (Join-Path $backendTargetRoot 'README.md'),
+        (Join-Path $frontendTargetRoot 'README.md')
+    )) {
+        Update-FileContent -Path $readmePath -Transform {
+            param($content)
 
-$frontendServiceContent = @"
-export interface ModuleStatus {
-  moduleId: string;
-  message: string;
-}
-
-export async function fetchModuleStatus(): Promise<ModuleStatus> {
-  const response = await fetch('/api/$moduleSlug/status');
-
-  if (!response.ok) {
-    throw new Error('Status request failed: ' + response.status);
-  }
-
-  return response.json();
-}
-"@
-
-$frontendPageContent = @"
-import { useEffect, useState } from 'react';
-import { fetchModuleStatus, ModuleStatus } from '../services/$frontendServiceFileBase';
-
-export default function $frontendPageName() {
-  const [status, setStatus] = useState<ModuleStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    void loadStatus();
-  }, []);
-
-  const loadStatus = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await fetchModuleStatus();
-      setStatus(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '发生未知错误');
-    } finally {
-      setLoading(false);
+            $content = $content.Replace('TemplateModule', $ModuleName)
+            $content = $content.Replace('template-module', $moduleSlug)
+            $content = $content.Replace('模板模块', $DisplayName)
+            $content
+        }
     }
-  };
-
-  return (
-    <div className="sh-page">
-      <section className="sh-page-header">
-        <div className="sh-page-header-main">
-          <span className="sh-page-eyebrow">$DisplayName</span>
-          <h1 className="sh-page-title">$DisplayName Page</h1>
-          <p className="sh-page-description">
-            This scaffold-generated page connects to `/api/$moduleSlug/status` by default.
-          </p>
-        </div>
-      </section>
-
-      <div className="sh-section-grid">
-        <div className="sh-summary-card">
-          <span className="sh-summary-card-label">Status</span>
-          <span className="sh-summary-card-value">
-            {loading ? 'Loading...' : status?.message ?? 'No data'}
-          </span>
-          <span className="sh-summary-card-meta">{status?.moduleId ?? '$ModuleName'}</span>
-        </div>
-        <div className="sh-summary-card">
-          <span className="sh-summary-card-label">Endpoint</span>
-          <span className="sh-summary-card-value">/api/$moduleSlug/status</span>
-          <span className="sh-summary-card-meta">Minimal end-to-end status check</span>
-        </div>
-      </div>
-
-      {error && (
-        <div className="sh-helper-block" style={{ borderColor: '#ef4444' }}>
-          <h3 className="sh-helper-block-title">Request Failed</h3>
-          <p style={{ color: '#ef4444' }}>{error}</p>
-        </div>
-      )}
-
-      <div className="sh-helper-block">
-        <h3 className="sh-helper-block-title">Next Steps</h3>
-        <p>Add business queries, forms, and actions on top of this scaffolded page.</p>
-        <button
-          onClick={() => {
-            void loadStatus();
-          }}
-          style={{
-            marginTop: '1rem',
-            padding: '0.5rem 1rem',
-            background: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Refresh Status
-        </button>
-      </div>
-    </div>
-  );
-}
-"@
-
-$frontendIndexContent = @"
-import { FrontendModule } from '@icp-platform/sdk';
-import $frontendPageName from './pages/$frontendPageName';
-
-export const ${frontendModuleVariable}: FrontendModule = {
-  metadata: {
-    moduleId: '$moduleSlug',
-    displayName: '$DisplayName',
-    version: '0.1.0',
-    description: '$DisplayName 前端模块'
-  },
-
-  routes: [
-    {
-      path: '/$moduleSlug',
-      component: $frontendPageName,
-      permissions: ['${ModuleName}.View']
-    }
-  ],
-
-  menus: [
-    {
-      id: '$moduleSlug',
-      label: '$DisplayName',
-      path: '/$moduleSlug',
-      icon: '🧩',
-      order: 999,
-      permissions: ['${ModuleName}.View']
-    }
-  ],
-
-  permissions: [
-    {
-      code: '${ModuleName}.View',
-      name: 'View $DisplayName',
-      description: 'Allows access to $DisplayName page',
-      category: '$DisplayName'
-    }
-  ],
-
-  i18n: [
-    {
-      locale: 'zh-CN',
-      messages: {
-        '${moduleSlug}.title': '$DisplayName'
-      }
-    },
-    {
-      locale: 'en-US',
-      messages: {
-        '${moduleSlug}.title': '$DisplayName'
-      }
-    }
-  ]
-};
-
-export default ${frontendModuleVariable};
-"@
-
-    Set-Utf8Content -Path $frontendPackagePath -Content $frontendPackageContent
-    Set-Utf8Content -Path $frontendServicePath -Content $frontendServiceContent
-    Set-Utf8Content -Path $frontendPagePath -Content $frontendPageContent
-    Set-Utf8Content -Path $frontendIndexPath -Content $frontendIndexContent
 }
 
 if ((-not $SkipIntegration) -and (-not $ExternalPlugin)) {
     $hostApiPath = Join-Path $repoRoot 'apps\host-api\HostApi.csproj'
-    $hostModuleRoot = Join-Path $repoRoot "apps\host-api\modules\$ModuleName"
-    $hostModuleManifestPath = Join-Path $hostModuleRoot 'plugin.json'
-    $projectReferenceLine = "    <ProjectReference Include=""..\..\server\modules\$ModuleName\$ModuleName.csproj"" />"
+    $projectReferenceInclude = "..\..\server\modules\$ModuleName\$ModuleName.csproj"
+    $capsuleContentInclude = "..\..\modules\$ModuleName\newp.plugin.json"
+    $projectReferenceElement = '<ProjectReference Include="{0}" />' -f $projectReferenceInclude
+    $capsuleContentElement = '<Content Include="{0}">' -f $capsuleContentInclude
 
     Update-FileContent -Path $hostApiPath -Transform {
         param($content)
 
-        if ($content.Contains($projectReferenceLine)) {
+        $newline = if ($content.Contains([Environment]::NewLine)) {
+            [Environment]::NewLine
+        } elseif ($content.Contains([char]10)) {
+            [char]10
+        } else {
+            [Environment]::NewLine
+        }
+        $insertions = [System.Collections.Generic.List[string]]::new()
+
+        if (-not $content.Contains($projectReferenceElement)) {
+            $insertions.Add(
+                '  <ItemGroup>' + $newline +
+                '    ' + $projectReferenceElement + $newline +
+                '  </ItemGroup>'
+            )
+        }
+
+        if (-not $content.Contains($capsuleContentElement)) {
+            $insertions.Add(
+                '  <ItemGroup>' + $newline +
+                '    ' + $capsuleContentElement + $newline +
+                "      <Link>modules\$ModuleName\plugin.json</Link>" + $newline +
+                '      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>' + $newline +
+                '    </Content>' + $newline +
+                '  </ItemGroup>'
+            )
+        }
+
+        if ($insertions.Count -eq 0) {
             return $content
         }
 
-        $pattern = '<ItemGroup>\s*(?<body>(?:\s*<ProjectReference Include="[^"]+" />\s*)+)</ItemGroup>'
-        $match = [regex]::Match($content, $pattern)
-        if (-not $match.Success) {
-            throw 'ProjectReference block not found.'
+        $closingProjectIndex = $content.LastIndexOf('</Project>', [StringComparison]::Ordinal)
+        if ($closingProjectIndex -lt 0) {
+            throw 'HostApi.csproj closing Project element not found.'
         }
 
-        $newBlock = $match.Value.Replace('</ItemGroup>', "$projectReferenceLine`r`n  </ItemGroup>")
-        $content.Replace($match.Value, $newBlock)
-    }
-
-    New-Item -ItemType Directory -Path $hostModuleRoot -Force | Out-Null
-    $hostModuleManifest = [ordered]@{
-        schemaVersion = '1.0'
-        moduleId = $ModuleName
-        displayName = $DisplayName
-        version = '1.0.0'
-        description = "$DisplayName built-in module"
-        entryAssembly = "../../$ModuleName.dll"
-        dependencies = @()
-        hostVersion = [ordered]@{
-            min = '1.0.0'
-            max = '2.0.0'
+        $prefix = if ($closingProjectIndex -gt 0 -and $content[$closingProjectIndex - 1] -eq [char]10) {
+            ''
+        } else {
+            $newline
         }
-        frontend = [ordered]@{
-            entry = $moduleSlug
-            bindingMode = 'legacy-module'
-        }
+        $insertionText = $prefix + ($insertions -join ($newline + $newline)) + $newline + $newline
+        $content.Insert($closingProjectIndex, $insertionText)
     }
-    Set-Utf8Content -Path $hostModuleManifestPath -Content (($hostModuleManifest | ConvertTo-Json -Depth 4) + [Environment]::NewLine)
 }
 
 Write-Host ''
@@ -615,10 +540,11 @@ if ($ExternalPlugin) {
     Write-Host 'No Host or frontend integration was performed.' -ForegroundColor Yellow
 } else {
     Write-Host "Frontend module: frontend/modules/$moduleSlug" -ForegroundColor Green
-    Write-Host "Allowed integration targets: apps/host-api/HostApi.csproj and apps/host-api/modules/$ModuleName/plugin.json" -ForegroundColor Cyan
+    Write-Host "Authoring capsule: modules/$ModuleName/newp.plugin.json" -ForegroundColor Green
+    Write-Host 'Allowed integration target: apps/host-api/HostApi.csproj' -ForegroundColor Cyan
     Write-Host 'Do not modify other Host/Shell internals for normal module integration unless a separate design approves it.' -ForegroundColor Yellow
 }
 
 if ($SkipIntegration -and -not $ExternalPlugin) {
-    Write-Host 'Integration skipped.' -ForegroundColor Yellow
+    Write-Host 'HostApi integration skipped; the canonical capsule and both behavior bindings were still generated.' -ForegroundColor Yellow
 }

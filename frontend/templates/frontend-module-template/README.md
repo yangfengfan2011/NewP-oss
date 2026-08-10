@@ -1,56 +1,38 @@
 # 前端模块模板
 
-这个模板用于快速创建一个最小、可复制、可构建的前端模块骨架。
+该模板提供一个最小、可复制、可构建的前端 behavior binding。
 
-## 模板包含
+## 模板内容
 
-- `src/index.ts`
-  负责声明模块元数据、菜单、路由和权限。
-- `src/pages/TemplatePage.tsx`
-  提供一个最小页面入口，用于继续拆分真实页面、组件和服务。
-- `package.json`
-  使用 `@icp-platform/sdk` 作为唯一平台依赖。
+- `src/index.ts`：导出 `FrontendBehaviorBindings`，只绑定稳定 behavior key 与 page key；
+- `src/pages/TemplatePage.tsx`：最小页面实现；
+- `package.json`：仅依赖前端 SDK。
 
-## 使用方式
+模块身份、显示名、路由、菜单和权限不在 TypeScript 中声明，它们由 `modules/<ModuleId>/newp.plugin.json` 与 `modules/<ModuleId>/metadata/**` 拥有。
 
-把当前目录复制到 `frontend/modules/<你的模块名>`，然后至少修改以下内容：
+## 推荐方式
 
-- `package.json` 中的包名
-- `src/index.ts` 中的模块 ID、显示名、路由和权限
-- `src/pages/TemplatePage.tsx` 中的页面文案
+```powershell
+pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
+```
 
-如果模块确实需要服务层、内部组件或资源目录，再按需创建 `src/services/`、`src/components/`、`src/assets/`。
+脚手架会同时生成前端 binding、后端 binding 和根 Capsule，避免手工维护三者之间的 key 对应关系。
 
-## 验证命令
+## 按需扩展
+
+只有出现真实需要时才新增：
+
+- `src/components/`；
+- `src/services/`；
+- `src/assets/`；
+- `@icp-platform/ui` 等显式依赖。
+
+不得引用 `frontend/packages/shell/src/*`，也不得把 routes、menus、permissions 或 module metadata 复制到 `src/index.ts`。
+
+## 验证
 
 ```bash
 cd frontend
 pnpm --filter @icp-templates/frontend-module-template build
-pnpm --filter @icp-modules/<你的模块名> build
-pnpm build
-```
-
-## 约束
-
-- 模块 ID 必须唯一。
-- 路由路径不能与现有模块冲突。
-- 权限编码建议使用 `<模块名>.View` 这种统一格式。
-- 新增注释和说明统一使用中文。
-- 模板本身不默认依赖 `@icp-platform/ui`，只有真实模块需要时再显式引入。
-
-## Componentization Guardrails
-
-- `src/index.ts` should only declare the frontend module.
-- `src/pages/*` should contain page entry logic only.
-- `src/services/*` should contain API access only.
-- Normal module integration should declare its root capsule and metadata; the Shell consumes the compiler-owned active catalog.
-- Do not modify other shell internals unless a separate design explicitly approves it.
-- Do not embed live API verification or host page styling into the template unless the target module actually needs them.
-
-## Minimum Verification
-
-```bash
-cd frontend
-pnpm --filter @icp-modules/<your-module-name> build
-pnpm build
+pnpm --filter @icp-modules/<module-name> build
 ```

@@ -1,107 +1,140 @@
 # 组件化护栏
 
-## 目标
+## 目标与适用范围
 
-这份文档用于把“组件化”从架构口号收紧成新增模块默认必须遵守的实现护栏。
+这份文档把组件化边界收紧为新增模块和平台能力默认必须遵守的实现契约，适用于：
 
-适用范围：
+- 新增或调整 Module Capsule、模块 metadata 与 behavior binding；
+- 新增后端模块、前端模块以及 Host / Shell 受控接入；
+- 新增公共 Contracts、SDK、Kernel 或 `platform-*` 能力；
+- 新增持久化迁移、数据导入或兼容适配。
 
-- 新增后端模块
-- 新增前端模块
-- 新增模块接入 Host / Shell
-- 新增迁移或导入链路
+本文不要求一次性重构所有历史模块；但新代码不得继续扩大旧的平行真源或宿主特判。
 
-本轮不要求据此重构所有既有模块，但后续新增内容默认都要遵守这里的规则。
+## 唯一事实源与运行时投影
 
-## 公共能力归属
+每个内建模块的可提交 authoring 真源位于：
 
-### 必须进入 `Kernel / SDK / Contracts`
+- `modules/<ModuleId>/newp.plugin.json`：唯一拥有 module id、显示名、版本、宿主兼容范围、依赖和 backend / frontend behavior key；
+- `modules/<ModuleId>/metadata/**`：拥有导航、路由、视图、模型、权限引用和本地化等静态声明；
+- `server/modules/<ModuleId>/**`：后端行为实现；
+- `frontend/modules/<module-id>/**`：前端行为实现。
 
-- 模块元数据契约
-- 菜单、路由、权限、配置声明契约
-- 迁移或导入钩子契约
-- 模块注册帮助器
-- 可复用的模块接入约束
+C# 和 TypeScript 只把稳定 behavior key 绑定到实现，不得重新声明 Capsule 已拥有的身份，也不得平行维护路由、菜单或权限。`ModuleCapsuleBindingBase` 与 `FrontendBehaviorBindings` 是当前标准绑定入口。
 
-### 可以留在模块内部
+Host 编译出的 Canonical Module Plan、`active-module-runtime.json`、backend load view、权限索引和其他 runtime 目录都只是当前生效投影。投影不得反向成为 authoring 真源，也不得手工维护。
 
-- 模块私有 DTO
-- 模块私有服务
-- 模块私有页面与页面状态
-- 模块私有映射规则
-- 模块私有查询或命令逻辑
+冲突、引用缺失或 behavior key 不一致时必须拒绝整份 candidate；不得依赖加载顺序覆盖、warning 后跳过或部分提交。
 
-### 禁止直接进入 `Host / Shell`
+## 公共能力的放置规则
 
-- 模块私有业务规则
-- 模块私有状态管理
-- 模块私有数据访问实现
-- 临时迁移逻辑
-- 为单个模块特制的宿主内部改造
+### Contracts
+
+放稳定、跨边界的数据形状、协议和最小接口，例如插件契约、DTO 或可序列化描述。Contracts 不负责装载、状态切换、持久化实现或模块私有业务。
+
+### SDK
+
+放面向模块开发者的薄适配、基类和注册帮助器，例如 behavior binding 基类。SDK 降低接入成本，但不拥有模块身份、运行时目录或冲突裁决。
+
+### Kernel
+
+放必须全局一致的机制：Capsule 读取、静态校验、依赖排序、冲突处理、Canonical Module Plan 编译、原子切换与回滚。Kernel 不吸收具体模块的业务规则。
+
+### `platform-*`
+
+放被多个模块复用、具有独立边界的基础能力和基础设施实现，例如授权、CRUD、建模和持久化组合。平台能力通过稳定抽象暴露，不根据业务模块 ID 特判。
+
+### 模块内部
+
+以下内容默认留在所属模块：
+
+- 模块私有 DTO、应用服务、领域服务和数据访问实现；
+- 模块私有页面、组件、页面状态和 API client；
+- 模块私有模型、映射、查询、命令和校验规则；
+- 只服务于该模块的迁移、导入映射和兼容代码。
+
+一个模块不得直接依赖另一个模块的具体基础设施实现。确需跨模块协作时，先提炼稳定契约，并由能力拥有者实现。
 
 ## Host / Shell 护栏
 
 ### Host 只负责
 
-- 启动
-- 组装
-- 模块加载
-- 全局中间件
-- 统一认证与宿主级接入
+- 启动、依赖注入组合和宿主级配置；
+- 认证接入、全局中间件和宿主级横切能力；
+- 模块候选读取、计划编译、装载和运行时投影；
+- 受控的内建模块开发期 `ProjectReference` 与 Capsule 输出链接。
+
+Host 不承载模块私有业务规则、数据访问、临时迁移或 module id 分支。
 
 ### Shell 只负责
 
-- 布局
-- 全局 Provider
-- 菜单聚合
-- 路由聚合
-- 模块受控注册
+- 布局、全局 Provider 和认证上下文；
+- 消费 `active-module-runtime.json`；
+- 菜单、路由和实现绑定的聚合；
+- 在完整候选通过后原子提交模块注册。
 
-### 禁止行为
+Shell 不维护业务模块清单，不通过源码目录推断活动模块，也不为单个模块添加静态 import 列表或 module id 特判。
 
-- 不要把模块私有业务流程直接放进 Host / Shell。
-- 不要为了接一个模块，直接修改 Shell 内部结构实现。
-- 不要让迁移期临时方案固化成长期宿主结构。
+当现有受控入口不足时，应先通过设计门禁决定新增契约或扩展点，而不是直接修改 Host / Shell 内部结构。
 
-## 前端受控接入点
+## 后端模块护栏
 
-Shell 不维护业务模块清单。内建与外部模块都由 `GET /plugins/active-module-runtime.json` 选择，Shell 只提供受控 import implementation registry，并在全部入口通过后一次提交 `ModuleRegistry`。
+- `*Module.cs` 只声明稳定 backend behavior key 并注册服务。
+- Capsule 身份通过嵌入的 `newp.plugin.json` 适配到现有模块接口。
+- Controller 保持轻薄，授权入口使用平台授权契约，业务逻辑进入应用服务或领域服务。
+- 对外返回稳定 DTO；不要为重复 Capsule 身份而在响应中增加 `ModuleId`。
+- 模块项目只引用实际需要的 SDK、Contracts 与 `platform-*` 抽象，不引用 Host 内部实现。
 
-迁移期内建模块在 `apps/host-api/modules/<ModuleId>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `modules/<ModuleId>/newp.plugin.json` 为根 authoring owner。模块实现仍位于 `frontend/modules/<module>/src/index.ts`，但该源码目录不能反向决定活动模块集合。
+## 前端模块护栏
 
-新增模块需要修改 Shell 内部文件时，先满足 `AGENTS.md` 的设计门禁，并在已确认的设计工件中说明 Active Module Runtime Catalog 与 behavior binding seam 为什么不足。
+- `src/index.ts` 只导出 `FrontendBehaviorBindings`。
+- `behaviorKey` 必须与根 Capsule 一致。
+- 页面、renderer 或 action 通过稳定 key 注册；metadata 中的 `targetKey` 必须存在对应 binding。
+- 路由、菜单、权限和模块身份只写在 Capsule / metadata，不在 TypeScript 中复制。
+- 模块不得引用 `frontend/packages/shell/src/*`；共享 UI 放在 `frontend/packages/ui`。
+- 状态优先局部、显式；兼容入口要隔离并记录退出条件。
 
-## 模板要求
+## 持久化、迁移与导入
 
-### 后端模板默认应满足
+- 模型 owner 和 migration bundle 由模块 Capsule / metadata 显式声明。
+- provider 选择、迁移计划编译、锁、执行与失败恢复属于平台持久化内核。
+- 模块只提供自己的迁移产物或导入映射，不直接控制 Host 启动流程。
+- 数据导入不是 schema migration；两者使用不同入口、状态和回滚语义。
+- 禁止在 DI 注册、Controller 构造或模块装载副作用中隐式迁移或导入。
 
-- `*Module.cs` 只做模块声明与服务注册。
-- `Controllers/*` 只做轻量接口入口。
-- `Services/*` 只做模块内部服务。
-- README 必须说明边界、禁改区和最小验证路径。
+## 模板与脚手架契约
 
-### 前端模板默认应满足
+`server/templates/backend-module-template` 与 `frontend/templates/frontend-module-template` 必须始终保持可独立构建，并体现当前标准边界。
 
-- `src/index.ts` 只做模块声明。
-- `src/pages/*` 只做页面入口与最小加载逻辑。
-- `src/services/*` 只做接口访问。
-- README 必须说明边界、禁改区和最小验证路径。
+内建模块脚手架必须生成：
 
-## 脚手架要求
+- `modules/<ModuleId>/newp.plugin.json` 与最小 metadata；
+- 继承 `ModuleCapsuleBindingBase` 的后端 behavior binding；
+- `FrontendBehaviorBindings` 前端实现；
+- HostApi 中受控的项目引用和 Capsule 输出链接。
 
-`new-module` 脚手架在内建模块模式下只自动更新以下受控接入点：
+脚手架不得生成新的 `apps/host-api/modules/<ModuleId>/plugin.json`、`legacy-module` 前端声明或 Shell 内部注册表。该 Host 目录只允许承载尚未完成 Capsule cutover 的历史兼容清单。
 
-- `apps/host-api/HostApi.csproj`
-- `apps/host-api/modules/<ModuleId>/plugin.json`
+`-SkipIntegration` 只跳过 HostApi 接线，仍应生成完整 authoring Capsule 和两侧 behavior binding。外部插件模式不修改 Host 或 Shell。
 
-外部插件模式不修改 Host 或 Shell。脚手架不引导开发者修改 Shell 内部结构；后续 capsule adopter 应把 legacy transport 迁移为根 `newp.plugin.json` 与 behavior bindings。
+## 设计门禁与失败信号
 
-## 实施前检查
+新增公共 Contracts / SDK、Host / Shell 受控入口、metadata 协议、持久化语义、安全边界或难以回退的装载机制前，必须有已确认的设计工件。
 
-执行新增模块任务前，逐项确认：
+出现以下任一信号时停止实现并回到边界设计：
 
-1. 接入类型是内建模块还是外部插件，改动是否限于对应的受控接入点？
-2. 这次新增能力是否能通过现有 `Contracts / SDK / 模板` 完成？
-3. 如果不能，是否已经按 `AGENTS.md` 的设计门禁形成并确认设计工件？
+- 同一 module id、路由、菜单或权限需要在两个位置同步修改；
+- 新模块必须修改 Shell 内部列表或 Host module id 分支才能出现；
+- 模块需要依赖其他模块的 EF 实现、私有服务或内部目录；
+- runtime 投影需要人工编辑才能生效；
+- Capsule、metadata 与 behavior binding 无法通过 Canonical Module Plan 编译。
 
-任一答案不明确时，先完成代码定位或设计确认，再开始实现。
+## 实施检查清单
+
+1. 是否只有根 Capsule 拥有模块身份、版本、依赖和 behavior key？
+2. metadata 的每个 `targetKey` 和权限引用是否都有唯一 owner？
+3. C# / TypeScript 是否只绑定行为，没有复制身份、路由、菜单和权限？
+4. 新的共享能力是否放在正确的 Contracts、SDK、Kernel 或 `platform-*` 边界？
+5. Host / Shell 改动是否仅限已确认的受控入口？
+6. 持久化迁移和数据导入是否具有显式入口、失败信号与回滚思路？
+7. 模板、生成结果、Canonical Module Plan 和受影响 Host / Shell smoke 是否都有可复跑验证？

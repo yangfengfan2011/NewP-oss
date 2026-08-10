@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "template-module",
+        "titleKey": "Navigation.TemplateModule",
+        "icon": "module",
+        "path": "/template-module",
+        "order": 999,
+        "entryType": "custom",
+        "targetKey": "template-module.page",
+        "permissions": [
+          "TemplateModule.View"
+        ]
+      }
+    ]
+  }
+}

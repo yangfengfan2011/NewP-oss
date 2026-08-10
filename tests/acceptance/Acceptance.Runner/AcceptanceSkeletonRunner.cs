@@ -8,6 +8,18 @@ public sealed class AcceptanceSkeletonRunner
     private static readonly AcceptanceGateDefinition[] Definitions =
     [
         new(
+            AcceptanceGateKind.IdentityFoundation,
+            IsImplemented: true,
+            RequiredScenarios:
+            [
+                IdentityFoundationAcceptanceRunner.PreflightScenario,
+                IdentityFoundationAcceptanceRunner.ApiScenario,
+                IdentityFoundationAcceptanceRunner.BrowserScenario,
+                IdentityFoundationAcceptanceRunner.RestartScenario,
+                IdentityFoundationAcceptanceRunner.SecurityScenario,
+                IdentityFoundationAcceptanceRunner.PersistenceScenario
+            ]),
+        new(
             AcceptanceGateKind.Personnel,
             IsImplemented: true,
             RequiredScenarios:
@@ -64,6 +76,16 @@ public sealed class AcceptanceSkeletonRunner
         foreach (var gate in requestedGates)
         {
             await recorder.RecordAsync(gate, AcceptanceEventType.RunStarted, cancellationToken: cancellationToken);
+            if (gate is AcceptanceGateKind.IdentityFoundation)
+            {
+                var execution = await new IdentityFoundationAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
+                    .RunAsync(trackedTreeBefore, cancellationToken);
+                databaseFingerprint = execution.DatabaseFingerprint;
+                processIdentities.AddRange(execution.ProcessIdentities);
+                artifactRefs.AddRange(execution.ArtifactRefs);
+                cleanup = execution.Cleanup;
+                continue;
+            }
             if (gate is AcceptanceGateKind.Personnel)
             {
                 var execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)

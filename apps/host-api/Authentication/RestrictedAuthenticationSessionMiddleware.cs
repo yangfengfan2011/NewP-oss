@@ -44,13 +44,12 @@ public sealed class RestrictedAuthenticationSessionMiddleware
             && !allowedShellRuntimeRead)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            context.Response.ContentType = "application/problem+json";
             await context.Response.WriteAsJsonAsync(new
             {
                 status = 403,
                 code = "AUTH_PASSWORD_CHANGE_REQUIRED",
                 traceId = context.TraceIdentifier
-            });
+            }, options: null, contentType: "application/problem+json", cancellationToken: context.RequestAborted);
             return;
         }
 

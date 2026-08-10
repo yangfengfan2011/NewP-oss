@@ -96,7 +96,15 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
 
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName)).Add(row);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return Project(row, descriptor.FieldSet.DetailFields);
+
+        // shared-type 字典只包含调用方显式写入的键；由模型默认值初始化的受管字段
+        // （例如 Revision）不会自动回填到原字典。创建后从正式持久化视图重读，
+        // 使响应与后续详情读取保持同一份字段事实。
+        var createdId = ReadString(row, descriptor.IdField);
+        var created = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
+            .AsNoTracking()
+            .SingleAsync(item => EF.Property<string>(item, descriptor.IdField) == createdId, cancellationToken);
+        return Project(created, descriptor.FieldSet.DetailFields);
     }
 
     /// <summary>

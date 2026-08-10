@@ -98,6 +98,26 @@ public class ModelDtoGeneratorTests
         Assert.Contains("public bool IsEnabled { get; init; } = true;", code);
     }
 
+    [Theory]
+    [InlineData("int", "int")]
+    [InlineData("long", "long")]
+    public void Generate_ForIntegerField_UsesDeclaredClrStorageType(string storeType, string expectedClrType)
+    {
+        var definition = new ModelDefinition(
+            "Person",
+            "Person",
+            ModelKind.Entity,
+            new[]
+            {
+                new FieldDefinition("Revision", "Revision", FieldKind.Scalar, FieldValueType.Integer, storeType, true, false, false)
+            },
+            Array.Empty<IndexDefinition>());
+
+        var code = GenerateCode(definition);
+
+        Assert.Contains($"public {expectedClrType} Revision {{ get; init; }}", code);
+    }
+
     [Fact]
     public void Generate_ForEmploymentStatusEnumField_KeepsFullTimeDefault()
     {

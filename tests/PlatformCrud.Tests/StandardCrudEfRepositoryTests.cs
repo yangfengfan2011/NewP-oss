@@ -118,6 +118,25 @@ public sealed class StandardCrudEfRepositoryTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenRequiredLongFieldUsesClrDefault_ProjectsTheManagedValue()
+    {
+        await using var dbContext = BuildDbContext();
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var descriptor = Descriptor();
+
+        var created = await repository.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?>
+            {
+                ["PersonNo"] = "P901",
+                ["ENAME"] = "Revision 人员",
+                ["IsEnabled"] = true
+            });
+
+        Assert.Equal(0L, Assert.IsType<long>(created["Revision"]));
+    }
+
+    [Fact]
     public async Task UpdateAsync_WhenDateTimeValueIsRoundTripText_ConvertsToMappedClrType()
     {
         await using var dbContext = BuildDbContext();
@@ -203,7 +222,7 @@ public sealed class StandardCrudEfRepositoryTests
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled", "EffectiveAt", "CreatedAt"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled", "Revision", "EffectiveAt", "CreatedAt"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"]),
         OptionLabelFields = ["PersonNo", "ENAME"]

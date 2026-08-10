@@ -6,6 +6,15 @@ namespace ICP.Platform.Acceptance.Tests;
 public class AcceptanceReducerTests
 {
     [Fact]
+    public void IdentityFoundationSelection_RequestsOnlyTheIdentityFoundationGate()
+    {
+        Assert.Equal(
+            [AcceptanceGateKind.IdentityFoundation],
+            AcceptanceReducer.GetRequestedGates(AcceptanceGateSelection.IdentityFoundation));
+        Assert.Equal("identity-foundation", AcceptanceReducer.ToGateName(AcceptanceGateKind.IdentityFoundation));
+    }
+
+    [Fact]
     public void Reduce_WhenRequestedGateIsNotImplemented_CannotBecomePass()
     {
         var definition = new AcceptanceGateDefinition(

@@ -37,15 +37,17 @@ public static class AcceptanceReducer
     public static IReadOnlyList<AcceptanceGateKind> GetRequestedGates(AcceptanceGateSelection selection) =>
         selection switch
         {
+            AcceptanceGateSelection.IdentityFoundation => [AcceptanceGateKind.IdentityFoundation],
             AcceptanceGateSelection.Personnel => [AcceptanceGateKind.Personnel],
             AcceptanceGateSelection.Plugin => [AcceptanceGateKind.Plugin],
-            AcceptanceGateSelection.All => [AcceptanceGateKind.Personnel, AcceptanceGateKind.Plugin],
+            AcceptanceGateSelection.All => [AcceptanceGateKind.IdentityFoundation, AcceptanceGateKind.Personnel, AcceptanceGateKind.Plugin],
             _ => throw new ArgumentOutOfRangeException(nameof(selection), selection, "未知验收闸门。")
         };
 
     public static string ToGateName(AcceptanceGateKind gate) =>
         gate switch
         {
+            AcceptanceGateKind.IdentityFoundation => "identity-foundation",
             AcceptanceGateKind.Personnel => "personnel",
             AcceptanceGateKind.Plugin => "plugin",
             _ => throw new ArgumentOutOfRangeException(nameof(gate), gate, "未知验收闸门。")

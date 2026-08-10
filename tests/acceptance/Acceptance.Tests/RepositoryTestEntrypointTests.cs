@@ -107,6 +107,42 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("ReloadAsync", runner, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void IdentityFoundationAcceptanceRunner_UsesOnlyFormalBootstrapAndApplicationSurfaces()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "IdentityFoundationAcceptanceRunner.cs"));
+
+        Assert.Contains("bootstrap-local-admin", runner, StringComparison.Ordinal);
+        Assert.Contains("/api/identity/users", runner, StringComparison.Ordinal);
+        Assert.Contains("/api/organization/persons", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("/api/acceptance", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("INSERT INTO", runner, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE [", runner, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM", runner, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IdentityFoundationStartupDtos_IncludePersonLifecycleRevision()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var personDto = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Organization",
+            "DTOs",
+            "Generated",
+            "PersonDto.g.cs"));
+
+        Assert.Contains("public long Revision { get; init; }", personDto, StringComparison.Ordinal);
+    }
+
     private static string GetRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

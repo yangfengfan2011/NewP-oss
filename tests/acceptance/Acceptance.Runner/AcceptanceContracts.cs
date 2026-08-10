@@ -5,12 +5,14 @@ namespace ICP.Platform.Acceptance;
 
 public enum AcceptanceGateKind
 {
+    IdentityFoundation,
     Personnel,
     Plugin
 }
 
 public enum AcceptanceGateSelection
 {
+    IdentityFoundation,
     Personnel,
     Plugin,
     All
@@ -57,6 +59,12 @@ public static class AcceptanceFailureCodes
     public const string PersonnelApiFailed = "ACC_PERSONNEL_API_FAILED";
     public const string PersonnelBrowserFailed = "ACC_PERSONNEL_BROWSER_FAILED";
     public const string PersonnelRestartFailed = "ACC_PERSONNEL_RESTART_FAILED";
+    public const string IdentityFoundationPreflightFailed = "ACC_IDENTITY_FOUNDATION_PREFLIGHT_FAILED";
+    public const string IdentityFoundationApiFailed = "ACC_IDENTITY_FOUNDATION_API_FAILED";
+    public const string IdentityFoundationBrowserFailed = "ACC_IDENTITY_FOUNDATION_BROWSER_FAILED";
+    public const string IdentityFoundationRestartFailed = "ACC_IDENTITY_FOUNDATION_RESTART_FAILED";
+    public const string IdentityFoundationSecurityFailed = "ACC_IDENTITY_FOUNDATION_SECURITY_FAILED";
+    public const string IdentityFoundationPersistenceFailed = "ACC_IDENTITY_FOUNDATION_PERSISTENCE_FAILED";
 }
 
 public sealed record AcceptanceGateDefinition(

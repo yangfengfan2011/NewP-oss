@@ -20,5 +20,5 @@ public sealed class UserDto
     public bool IsLocalAdministrator { get; init; }
     public bool IsPersonnelBound { get; init; }
     public bool PersonnelDisableHold { get; init; }
-    public string Revision { get; init; }
+    public long Revision { get; init; }
 }

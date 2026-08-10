@@ -40,7 +40,7 @@ static RunnerOptions ParseArguments(string[] arguments)
     var gateText = values.GetValueOrDefault("--gate", "All");
     if (!Enum.TryParse<AcceptanceGateSelection>(gateText, ignoreCase: true, out var gate))
     {
-        throw new ArgumentException("--gate 只能是 Personnel、Plugin 或 All。");
+        throw new ArgumentException("--gate 只能是 IdentityFoundation、Personnel、Plugin 或 All。");
     }
 
     return new RunnerOptions(Path.GetFullPath(repositoryRoot), Path.GetFullPath(outputRoot), gate);

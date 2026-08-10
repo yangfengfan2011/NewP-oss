@@ -110,6 +110,7 @@ public sealed class ModelDtoGenerator
         {
             FieldValueType.Boolean => "bool",
             FieldValueType.DateTime => "DateTime",
+            FieldValueType.Integer => ResolveIntegerType(field.StoreType),
             FieldValueType.ObjectId => ResolveObjectIdType(field.StoreType),
             FieldValueType.Enum => ResolveEnumType(field, enumClrTypeMap),
             _ => "string"
@@ -163,5 +164,13 @@ public sealed class ModelDtoGenerator
             || storeType.Equals("uniqueidentifier", StringComparison.OrdinalIgnoreCase)
             ? "Guid"
             : "string";
+    }
+
+    private static string ResolveIntegerType(string storeType)
+    {
+        return storeType.Equals("int", StringComparison.OrdinalIgnoreCase)
+               || storeType.Equals("integer", StringComparison.OrdinalIgnoreCase)
+            ? "int"
+            : "long";
     }
 }

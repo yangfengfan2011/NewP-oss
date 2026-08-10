@@ -274,6 +274,7 @@ public sealed class HostAuthenticationSecurityTests
 
         Assert.False(nextCalled);
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        Assert.Equal("application/problem+json", context.Response.ContentType);
     }
 
     [Fact]

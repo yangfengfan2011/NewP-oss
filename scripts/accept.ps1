@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("Personnel", "Plugin", "All")]
+    [ValidateSet("IdentityFoundation", "Personnel", "Plugin", "All")]
     [string]$Gate = "All"
 )
 

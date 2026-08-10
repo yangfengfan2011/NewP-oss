@@ -23,4 +23,9 @@ public sealed class PersonDto
     public EmploymentStatus? EmploymentStatus { get; init; }
     public string? EmploymentStatus_DisplayValue { get; init; }
     public bool IsEnabled { get; init; } = true;
+    public long Revision { get; init; }
+    public string? UserEID { get; init; }
+    public DateTime? UserBoundAt { get; init; }
+    public string? UserBoundBy { get; init; }
+    public string? UserBindingReason { get; init; }
 }

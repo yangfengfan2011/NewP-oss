@@ -27,7 +27,13 @@ public enum AuthenticationSessionValidationStatus
     Revoked,
 
     /// <summary>会话已经超过固定有效期。</summary>
-    Expired
+    Expired,
+
+    /// <summary>会话所属账号不存在或当前不允许认证。</summary>
+    AccountUnavailable,
+
+    /// <summary>注册表或账号目录当前无法完成可信校验。</summary>
+    StoreUnavailable
 }
 
 /// <summary>
@@ -38,17 +44,23 @@ public sealed record AuthenticationSessionRegistration
     /// <summary>会话所属 User EID。</summary>
     public required string UserEid { get; init; }
 
-    /// <summary>不可逆的会话凭据摘要，不是客户端持有的原始令牌。</summary>
-    public required string CredentialDigest { get; init; }
-
     /// <summary>会话类型。</summary>
     public AuthenticationSessionType Type { get; init; }
 
-    /// <summary>固定过期 UTC 时间。</summary>
-    public DateTime ExpiresAtUtc { get; init; }
-
     /// <summary>服务端解析的非空操作者标识。</summary>
     public required string ActorId { get; init; }
+}
+
+/// <summary>
+/// 新认证会话的一次性签发结果；Credential 只能交付给当前调用者，不得持久化或记录日志。
+/// </summary>
+public sealed record AuthenticationSessionIssuance
+{
+    /// <summary>仅本次签发返回的 256-bit 不透明凭据。</summary>
+    public required string Credential { get; init; }
+
+    /// <summary>不包含凭据的会话快照。</summary>
+    public required AuthenticationSessionSnapshot Session { get; init; }
 }
 
 /// <summary>
@@ -85,6 +97,16 @@ public sealed record AuthenticationSessionValidation
 
     /// <summary>命中注册表时返回的不含凭据快照。</summary>
     public AuthenticationSessionSnapshot? Session { get; init; }
+
+    /// <summary>存储故障时供 Host 稳定映射的失败码。</summary>
+    public string? FailureCode { get; init; }
+}
+
+/// <summary>Authentication 会话能力对外暴露的稳定失败码。</summary>
+public static class AuthenticationSessionFailureCodes
+{
+    /// <summary>会话注册表或账号目录当前不可用。</summary>
+    public const string StoreUnavailable = "AUTH_SESSION_STORE_UNAVAILABLE";
 }
 
 /// <summary>
@@ -124,17 +146,17 @@ public sealed record UserAuthenticationSessionsRevocation
 public interface IAuthenticationSessionRegistry
 {
     /// <summary>
-    /// 登记一个使用不可逆凭据摘要的新认证会话。
+    /// 生成一次性 256-bit 凭据，并只登记其不可逆摘要。
     /// </summary>
-    ValueTask<AuthenticationSessionSnapshot> RegisterAsync(
+    ValueTask<AuthenticationSessionIssuance> RegisterAsync(
         AuthenticationSessionRegistration registration,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 使用不可逆凭据摘要读取当前会话有效性。
+    /// 使用调用方持有的一次性凭据读取当前会话有效性。
     /// </summary>
     ValueTask<AuthenticationSessionValidation> ValidateAsync(
-        string credentialDigest,
+        string credential,
         CancellationToken cancellationToken = default);
 
     /// <summary>

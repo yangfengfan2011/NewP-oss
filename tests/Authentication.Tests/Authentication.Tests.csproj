@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -21,6 +22,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\server\modules\Authentication\Contracts\Authentication.Contracts.csproj" />
     <ProjectReference Include="..\..\server\modules\Authentication\AuthenticationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Identity\Contracts\Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\server\modules\Identity\IdentityModule.csproj" />
+    <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
   </ItemGroup>
 
 </Project>

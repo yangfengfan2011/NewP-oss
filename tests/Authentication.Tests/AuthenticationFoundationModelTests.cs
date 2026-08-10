@@ -1,7 +1,12 @@
+using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modules.Authentication;
+using ICP.Platform.Modules.Authentication.Application;
 using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
 using ICP.Platform.Sdk;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ICP.Platform.Authentication.Tests;
@@ -15,6 +20,34 @@ public sealed class AuthenticationFoundationModelTests
 
         Assert.Equal("Authentication", module.ModuleId);
         Assert.Equal("authentication.backend", Assert.IsAssignableFrom<IModuleBehaviorBinding>(module).BehaviorKey);
+    }
+
+    [Fact]
+    public void Module_RegistersSessionRegistryAndPurgeCapability()
+    {
+        var services = new ServiceCollection();
+
+        new AuthenticationModule().ConfigureServices(services);
+
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IAuthenticationSessionRegistry));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IAuthenticationSessionPurgeService));
+    }
+
+    [Fact]
+    public void Module_BindsConfigurableFixedLifetime()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AuthenticationSessionOptions.SectionName}:Lifetime"] = "02:00:00"
+            })
+            .Build());
+        new AuthenticationModule().ConfigureServices(services);
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal(TimeSpan.FromHours(2), provider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value.Lifetime);
     }
 
     [Fact]

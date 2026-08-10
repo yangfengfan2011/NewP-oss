@@ -653,7 +653,7 @@ public sealed class IdentityAccountApplicationServiceTests
             Revocations.AddRange((UserAuthenticationSessionsRevocation[])snapshot);
         }
 
-        public ValueTask<AuthenticationSessionSnapshot> RegisterAsync(
+        public ValueTask<AuthenticationSessionIssuance> RegisterAsync(
             AuthenticationSessionRegistration registration,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

@@ -7,12 +7,14 @@ namespace ICP.Platform.Authentication.Tests;
 public sealed class AuthenticationContractsArchitectureTests
 {
     [Fact]
-    public void SessionRegistry_DoesNotExposeRawTokenOrPersistenceTypes()
+    public void SessionRegistry_ExposesCredentialOnlyOnOneTimeIssuanceAndNoPersistenceTypes()
     {
         var assembly = typeof(IAuthenticationSessionRegistry).Assembly;
         var publicTypes = assembly.GetExportedTypes();
 
         Assert.Contains(typeof(IAuthenticationSessionRegistry), publicTypes);
+        Assert.Contains(typeof(AuthenticationSessionIssuance).GetProperties(), property => property.Name == "Credential");
+        Assert.DoesNotContain(typeof(AuthenticationSessionSnapshot).GetProperties(), property => property.Name == "Credential");
         Assert.DoesNotContain(publicTypes, type => type.Name.Contains("RawToken", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(publicTypes, type => ContainsPersistenceLeak(type));
         Assert.DoesNotContain(publicTypes.SelectMany(PublicPropertyNames), name =>

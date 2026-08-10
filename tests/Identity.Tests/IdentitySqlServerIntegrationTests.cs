@@ -316,7 +316,7 @@ public sealed class IdentitySqlServerIntegrationTests
 
     private sealed class NoOpSessionRegistry : IAuthenticationSessionRegistry
     {
-        public ValueTask<AuthenticationSessionSnapshot> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credentialDigest, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => ValueTask.FromResult(0);

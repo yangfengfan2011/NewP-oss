@@ -46,6 +46,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IWebHostEnvironment>().EnvironmentName));
         services.AddScoped<IIdentityRepository, EfIdentityRepository>();
         services.AddScoped<IIdentityAccountDirectory, IdentityAccountDirectory>();
+        services.AddScoped<IIdentityManagementQueryService, IdentityManagementQueryService>();
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<ILocalCredentialAuthenticator, LocalCredentialAuthenticator>();
         services.AddSingleton<ITemporaryCredentialIssuer>(serviceProvider =>

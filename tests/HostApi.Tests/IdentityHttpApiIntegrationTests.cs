@@ -1,0 +1,143 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using ICP.Platform.Authentication.Contracts;
+using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Application;
+using ICP.Platform.Modules.Identity.Controllers;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Xunit;
+
+namespace ICP.Platform.HostApi.Tests;
+
+public sealed class IdentityHttpApiIntegrationTests
+{
+    [Fact]
+    public async Task IdentityRoutes_EnforceAdminBoundaryAndRotateAuthenticatedSelfServiceCookie()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddControllers(options => options.Filters.Add<AuthenticationSessionCookieResultFilter>())
+            .AddApplicationPart(typeof(IdentityUsersController).Assembly);
+        builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
+        builder.Services.AddAuthorization(options =>
+            options.AddPolicy("AdminOnly", policy => policy.RequireRole("LocalAdmin")));
+        builder.Services.AddSingleton<IIdentityManagementQueryService, EmptyQueries>();
+        builder.Services.AddSingleton<IIdentityAccountApplicationService, PasswordChangingAccounts>();
+        var cookie = new RecordingCookie();
+        builder.Services.AddSingleton<IHostAuthenticationCookie>(cookie);
+
+        await using var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/identity/users")).StatusCode);
+        using var ordinary = new HttpRequestMessage(HttpMethod.Get, "/api/identity/users");
+        ordinary.Headers.Add("X-Test-User", "user-1");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(ordinary)).StatusCode);
+        using var administrator = new HttpRequestMessage(HttpMethod.Get, "/api/identity/users");
+        administrator.Headers.Add("X-Test-User", "admin-1");
+        administrator.Headers.Add("X-Test-Role", "LocalAdmin");
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(administrator)).StatusCode);
+
+        using var passwordChange = new HttpRequestMessage(HttpMethod.Post, "/api/identity/me/password-change")
+        {
+            Content = JsonContent.Create(new ChangeIdentityPasswordRequest("old-password", "new-password", 1))
+        };
+        passwordChange.Headers.Add("X-Test-User", "user-1");
+        var changed = await client.SendAsync(passwordChange);
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        Assert.Equal("rotated-session-secret", cookie.Credential);
+        Assert.DoesNotContain("rotated-session-secret", await changed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    private sealed class EmptyQueries : IIdentityManagementQueryService
+    {
+        public ValueTask<IdentityManagementUserPage> SearchAsync(IdentityManagementUserSearch search, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new IdentityManagementUserPage([], search.Page, search.PageSize, 0));
+
+        public ValueTask<IdentityManagementUserDetail?> FindAsync(string userEid, int eventPage, int eventPageSize, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IdentityManagementUserDetail?>(null);
+    }
+
+    private sealed class PasswordChangingAccounts : IIdentityAccountApplicationService
+    {
+        public ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(ChangeIdentityPasswordCommand command, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new IdentityPasswordChangeResult(
+                Account(command.UserEid),
+                new AuthenticationSessionIssuance
+                {
+                    Credential = "rotated-session-secret",
+                    Session = new AuthenticationSessionSnapshot
+                    {
+                        SessionEid = "session-2",
+                        UserEid = command.UserEid,
+                        Type = AuthenticationSessionType.Regular,
+                        ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
+                    }
+                }));
+
+        public ValueTask<IdentityAccountCreationResult> CreateAsync(CreateIdentityAccountCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<IdentityAccountSnapshot> UpdateNameAsync(UpdateIdentityAccountNameCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<IdentityAccountSnapshot> SetStatusAsync(SetIdentityAccountStatusCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<IdentityCredentialResetResult> ResetCredentialAsync(ResetIdentityCredentialCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<IdentityAccountSnapshot> DeleteAsync(DeleteIdentityAccountCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        private static IdentityAccountSnapshot Account(string userEid) => new()
+        {
+            UserEid = userEid,
+            ECODE = "alice",
+            ENAME = "Alice",
+            Status = IdentityAccountStatus.Enabled,
+            Revision = 2
+        };
+    }
+
+    private sealed class RecordingCookie : IHostAuthenticationCookie
+    {
+        public string? Credential { get; private set; }
+        public string? Read(HttpContext context) => null;
+        public bool TryUnprotect(string protectedValue, out string credential) => throw new NotSupportedException();
+        public void Append(HttpContext context, string credential, DateTime expiresAtUtc) => Credential = credential;
+        public void Delete(HttpContext context) => throw new NotSupportedException();
+    }
+
+    private sealed class TestAuthenticationHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        public const string SchemeName = "IdentityApiTest";
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            if (!Request.Headers.TryGetValue("X-Test-User", out var userEid))
+            {
+                return Task.FromResult(AuthenticateResult.NoResult());
+            }
+
+            var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userEid.ToString()) };
+            if (Request.Headers.TryGetValue("X-Test-Role", out var role))
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role.ToString()));
+            }
+
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
+        }
+    }
+}

@@ -1,5 +1,8 @@
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Authentication.Contracts;
+using ICP.Platform.Modules.Authentication.Application;
+using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
+using ICP.Platform.Modules.Authentication.Persistence.Ef;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
@@ -252,6 +255,125 @@ public sealed class IdentitySqlServerIntegrationTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task SqlServer_PasswordChangeRotatesSessionPagesEventsAndRollsBackFailedResign()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var catalog = $"NewPIdentity37_{Guid.NewGuid():N}";
+        var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
+            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
+        var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
+        {
+            InitialCatalog = catalog
+        }.ConnectionString;
+
+        await CreateCatalogAsync(adminConnectionString, catalog);
+        try
+        {
+            AuthenticationSessionIssuance oldSession;
+            var passwordHasher = new PasswordHasher<User>();
+            await using (var setup = CreateIdentityAndAuthenticationContext(applicationConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                var repository = new EfIdentityRepository(setup);
+                var transaction = new EfPlatformTransactionExecutor(setup);
+                var user = UserAtRevision(1, "Alice", new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc));
+                oldSession = await transaction.ExecuteAsync(async token =>
+                {
+                    repository.AddUser(user);
+                    repository.AddCredential(new LocalCredential
+                    {
+                        EID = "LocalCredential_1",
+                        UserEID = user.EID,
+                        PasswordHash = passwordHasher.HashPassword(user, "initial-secret"),
+                        IsTemporary = true,
+                        CreatedBy = user.EID,
+                        CreatedAt = user.CreatedAt,
+                        UpdatedBy = user.EID,
+                        UpdatedAt = user.CreatedAt
+                    });
+                    repository.AddSecurityEvent(Event("IdentitySecurityEvent_1", "AccountCreated", user.CreatedAt));
+                    return await CreateSessionRegistry(setup, repository).RegisterAsync(
+                        new AuthenticationSessionRegistration
+                        {
+                            UserEid = user.EID,
+                            Type = AuthenticationSessionType.Restricted,
+                            ActorId = user.EID
+                        },
+                        token);
+                });
+            }
+
+            IdentityPasswordChangeResult changed;
+            await using (var change = CreateIdentityAndAuthenticationContext(applicationConnectionString))
+            {
+                var repository = new EfIdentityRepository(change);
+                var registry = CreateSessionRegistry(change, repository);
+                changed = await CreateAccountService(change, repository, registry, passwordHasher)
+                    .ChangePasswordAsync(new ChangeIdentityPasswordCommand(
+                        "User_1",
+                        "initial-secret",
+                        "replacement-secret",
+                        1,
+                        new IdentityActorContext("User_1", IdentitySecurityActorKind.User, "trace-change")));
+            }
+
+            await using (var verification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
+            {
+                var repository = new EfIdentityRepository(verification);
+                var registry = CreateSessionRegistry(verification, repository);
+                Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await registry.ValidateAsync(oldSession.Credential)).Status);
+                Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(changed.Session.Credential)).Status);
+                var user = Assert.IsType<User>(await repository.FindUserAsync("User_1"));
+                var credential = Assert.IsType<LocalCredential>(await repository.FindCredentialAsync("User_1"));
+                Assert.Equal(2, user.Revision);
+                Assert.False(credential.IsTemporary);
+                Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, "replacement-secret"));
+                var detail = await new IdentityManagementQueryService(repository).FindAsync("User_1", 1, 1);
+                Assert.Equal(2, detail?.Events.TotalCount);
+                Assert.Equal(IdentitySecurityEventTypes.PasswordChanged, Assert.Single(detail!.Events.Items).EventType);
+            }
+
+            await using (var failing = CreateIdentityAndAuthenticationContext(applicationConnectionString))
+            {
+                var repository = new EfIdentityRepository(failing);
+                var registry = new FailAfterRegisterSessionRegistry(CreateSessionRegistry(failing, repository));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => CreateAccountService(
+                    failing,
+                    repository,
+                    registry,
+                    passwordHasher).ChangePasswordAsync(new ChangeIdentityPasswordCommand(
+                        "User_1",
+                        "replacement-secret",
+                        "second-replacement",
+                        2,
+                        new IdentityActorContext("User_1", IdentitySecurityActorKind.User, "trace-rollback"))).AsTask());
+            }
+
+            await using (var rollbackVerification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
+            {
+                var repository = new EfIdentityRepository(rollbackVerification);
+                var registry = CreateSessionRegistry(rollbackVerification, repository);
+                var user = Assert.IsType<User>(await repository.FindUserAsync("User_1"));
+                var credential = Assert.IsType<LocalCredential>(await repository.FindCredentialAsync("User_1"));
+                Assert.Equal(2, user.Revision);
+                Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, "replacement-secret"));
+                Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(changed.Session.Credential)).Status);
+                Assert.Equal(2, (await repository.SearchSecurityEventsAsync("User_1")).Count);
+            }
+        }
+        finally
+        {
+            SqlConnection.ClearAllPools();
+            await DropCatalogAsync(adminConnectionString, catalog);
+        }
+    }
+
     private static EfPlatformDbContext CreateContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -271,6 +393,40 @@ public sealed class IdentitySqlServerIntegrationTests
             options,
             IdentityModelDefinitions.All.Concat(AuthorizationModelDefinitions.All).ToArray());
     }
+
+    private static EfPlatformDbContext CreateIdentityAndAuthenticationContext(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlServer(connectionString)
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .Options;
+        return new EfPlatformDbContext(
+            options,
+            IdentityModelDefinitions.All.Concat(AuthenticationModelDefinitions.All).ToArray());
+    }
+
+    private static AuthenticationSessionRegistry CreateSessionRegistry(
+        EfPlatformDbContext context,
+        EfIdentityRepository identityRepository) => new(
+            new EfAuthenticationSessionRepository(context),
+            new IdentityAccountDirectory(identityRepository),
+            new GuidObjectIdGenerator(),
+            new DefaultAuthenticationSessionCredentialGenerator(),
+            TimeProvider.System,
+            new AuthenticationSessionOptions());
+
+    private static IdentityAccountApplicationService CreateAccountService(
+        EfPlatformDbContext context,
+        EfIdentityRepository repository,
+        IAuthenticationSessionRegistry sessionRegistry,
+        IPasswordHasher<User> passwordHasher) => new(
+            repository,
+            new EfPlatformTransactionExecutor(context),
+            sessionRegistry,
+            passwordHasher,
+            new FixedCredentialIssuer(),
+            new GuidObjectIdGenerator(),
+            TimeProvider.System);
 
     private static async Task<string> BootstrapAsync(string connectionString, string ecode)
     {
@@ -320,6 +476,26 @@ public sealed class IdentitySqlServerIntegrationTests
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credentialDigest, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => ValueTask.FromResult(0);
+    }
+
+    private sealed class FailAfterRegisterSessionRegistry(IAuthenticationSessionRegistry inner) : IAuthenticationSessionRegistry
+    {
+        public async ValueTask<AuthenticationSessionIssuance> RegisterAsync(
+            AuthenticationSessionRegistration registration,
+            CancellationToken cancellationToken = default)
+        {
+            _ = await inner.RegisterAsync(registration, cancellationToken);
+            throw new InvalidOperationException("injected after session registration");
+        }
+
+        public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credential, CancellationToken cancellationToken = default) =>
+            inner.ValidateAsync(credential, cancellationToken);
+
+        public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) =>
+            inner.RevokeCurrentAsync(revocation, cancellationToken);
+
+        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) =>
+            inner.RevokeAllAsync(revocation, cancellationToken);
     }
 
     private static User UserAtRevision(long revision, string name, DateTime updatedAt) => new()

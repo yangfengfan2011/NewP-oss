@@ -344,10 +344,14 @@ public sealed class IdentityAccountApplicationServiceTests
             created.Account.Revision,
             fixture.Actor));
 
-        Assert.Equal(2, updated.Revision);
+        Assert.Equal(2, updated.Account.Revision);
         Assert.False(fixture.Repository.Credentials.Single().IsTemporary);
         Assert.True(fixture.Repository.VerifyPassword(created.Account.UserEid, "密码🔐Abc123"));
         Assert.Single(fixture.Sessions.Revocations);
+        var rotation = Assert.Single(fixture.Sessions.Registrations);
+        Assert.Equal(created.Account.UserEid, rotation.UserEid);
+        Assert.Equal(AuthenticationSessionType.Regular, rotation.Type);
+        Assert.Equal("session-credential", updated.Session.Credential);
     }
 
     [Fact]
@@ -364,8 +368,8 @@ public sealed class IdentityAccountApplicationServiceTests
             acceptedAccount.Account.Revision,
             acceptedFixture.Actor));
 
-        Assert.Equal(2, changed.Revision);
-        Assert.True(acceptedFixture.Repository.VerifyPassword(changed.UserEid, acceptedPassword));
+        Assert.Equal(2, changed.Account.Revision);
+        Assert.True(acceptedFixture.Repository.VerifyPassword(changed.Account.UserEid, acceptedPassword));
 
         var rejectedFixture = new Fixture("initial-secret");
         var rejectedAccount = await rejectedFixture.CreateAsync();
@@ -377,6 +381,28 @@ public sealed class IdentityAccountApplicationServiceTests
                 rejectedAccount.Account.Revision,
                 rejectedFixture.Actor)).AsTask());
         Assert.Equal(IdentityFailureCodes.InvalidPassword, error.FailureCode);
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_WhenNewSessionRegistrationFails_RollsBackCredentialRevisionAndEvent()
+    {
+        var fixture = new Fixture("initial-secret");
+        var created = await fixture.CreateAsync();
+        fixture.Sessions.FailOnRegister = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.ChangePasswordAsync(
+            new ChangeIdentityPasswordCommand(
+                created.Account.UserEid,
+                "initial-secret",
+                "replacement-secret",
+                created.Account.Revision,
+                fixture.Actor)).AsTask());
+
+        Assert.True(fixture.Repository.VerifyPassword(created.Account.UserEid, "initial-secret"));
+        Assert.Equal(1, fixture.Repository.Users.Single().Revision);
+        Assert.Single(fixture.Repository.SecurityEvents);
+        Assert.Empty(fixture.Sessions.Revocations);
+        Assert.Empty(fixture.Sessions.Registrations);
     }
 
     [Fact]
@@ -643,19 +669,45 @@ public sealed class IdentityAccountApplicationServiceTests
     {
         public List<UserAuthenticationSessionsRevocation> Revocations { get; } = [];
 
+        public List<AuthenticationSessionRegistration> Registrations { get; } = [];
+
         public bool FailOnRevoke { get; set; }
 
-        public object CreateSnapshot() => Revocations.ToArray();
+        public bool FailOnRegister { get; set; }
+
+        public object CreateSnapshot() => new SessionSnapshot(Revocations.ToArray(), Registrations.ToArray());
 
         public void Restore(object snapshot)
         {
+            var state = (SessionSnapshot)snapshot;
             Revocations.Clear();
-            Revocations.AddRange((UserAuthenticationSessionsRevocation[])snapshot);
+            Revocations.AddRange(state.Revocations);
+            Registrations.Clear();
+            Registrations.AddRange(state.Registrations);
         }
 
         public ValueTask<AuthenticationSessionIssuance> RegisterAsync(
             AuthenticationSessionRegistration registration,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default)
+        {
+            if (FailOnRegister)
+            {
+                throw new InvalidOperationException("injected session registration failure");
+            }
+
+            Registrations.Add(registration);
+            return ValueTask.FromResult(new AuthenticationSessionIssuance
+            {
+                Credential = "session-credential",
+                Session = new AuthenticationSessionSnapshot
+                {
+                    SessionEid = "session-0001",
+                    UserEid = registration.UserEid,
+                    Type = registration.Type,
+                    ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
+                }
+            });
+        }
 
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(
             string credentialDigest,
@@ -677,5 +729,9 @@ public sealed class IdentityAccountApplicationServiceTests
             Revocations.Add(revocation);
             return ValueTask.FromResult(1);
         }
+
+        private sealed record SessionSnapshot(
+            UserAuthenticationSessionsRevocation[] Revocations,
+            AuthenticationSessionRegistration[] Registrations);
     }
 }

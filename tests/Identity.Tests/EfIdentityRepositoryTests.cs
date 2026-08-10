@@ -110,7 +110,11 @@ public sealed class EfIdentityRepositoryTests
 
         Assert.Null(await repository.FindCredentialAsync("User_1"));
         Assert.NotNull(await repository.FindUserAsync("User_1"));
-        Assert.Single(await context.Set<Dictionary<string, object?>>("Identity/IdentitySecurityEvent").ToListAsync());
+        var securityEvent = Assert.Single(await repository.SearchSecurityEventsAsync("User_1"));
+        Assert.Equal("AccountDeleted", securityEvent.EventType);
+        Assert.Equal("retired", securityEvent.Reason);
+        Assert.Equal(IdentitySecurityActorKind.User, securityEvent.ActorKind);
+        Assert.DoesNotContain("never-a-secret", securityEvent.Reason, StringComparison.Ordinal);
     }
 
     private static DbContextOptions<EfPlatformDbContext> CreateOptions() =>

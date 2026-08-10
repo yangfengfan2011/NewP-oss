@@ -14,6 +14,10 @@ public interface IIdentityRepository
 
     ValueTask<LocalCredential?> FindCredentialAsync(string userEid, CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
+        string targetUserEid,
+        CancellationToken cancellationToken = default);
+
     void AddUser(User user);
 
     void AddCredential(LocalCredential credential);

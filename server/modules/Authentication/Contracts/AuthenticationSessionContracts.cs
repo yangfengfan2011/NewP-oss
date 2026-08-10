@@ -64,6 +64,19 @@ public sealed record AuthenticationSessionIssuance
 }
 
 /// <summary>
+/// 标记一个成功 HTTP 结果需要由 Host 交付新的认证会话 Cookie。
+/// 会话凭据只供 Host 集成读取，不得进入序列化响应、日志或持久化查询。
+/// </summary>
+public interface IAuthenticationSessionCookieResponse
+{
+    /// <summary>取得仅供 Host 写入受保护 Cookie 的一次性会话凭据。</summary>
+    string GetSessionCredential();
+
+    /// <summary>取得新会话的固定过期 UTC 时间。</summary>
+    DateTime GetSessionExpiresAtUtc();
+}
+
+/// <summary>
 /// 不包含会话凭据的注册表快照。
 /// </summary>
 public sealed record AuthenticationSessionSnapshot

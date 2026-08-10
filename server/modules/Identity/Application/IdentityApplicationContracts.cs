@@ -1,3 +1,4 @@
+using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Models;
 
@@ -52,6 +53,10 @@ public sealed record IdentityAccountCreationResult(
 public sealed record IdentityCredentialResetResult(
     IdentityAccountSnapshot Account,
     string TemporaryCredential);
+
+public sealed record IdentityPasswordChangeResult(
+    IdentityAccountSnapshot Account,
+    AuthenticationSessionIssuance Session);
 
 public static class IdentityFailureCodes
 {
@@ -108,7 +113,7 @@ public interface IIdentityAccountApplicationService
         ResetIdentityCredentialCommand command,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IdentityAccountSnapshot> ChangePasswordAsync(
+    ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(
         ChangeIdentityPasswordCommand command,
         CancellationToken cancellationToken = default);
 

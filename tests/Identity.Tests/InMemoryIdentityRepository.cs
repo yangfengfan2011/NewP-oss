@@ -29,6 +29,14 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
     public ValueTask<LocalCredential?> FindCredentialAsync(string userEid, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Clone(Credentials.SingleOrDefault(item => item.UserEID == userEid)));
 
+    public ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
+        string targetUserEid,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(SecurityEvents
+            .Where(item => item.TargetUserEID == targetUserEid)
+            .Select(Clone)
+            .ToArray());
+
     public void AddUser(User user)
     {
         if (Users.Any(item => item.NormalizedECODE == user.NormalizedECODE))

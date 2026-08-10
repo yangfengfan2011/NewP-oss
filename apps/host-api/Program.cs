@@ -59,6 +59,7 @@ var mvcBuilder = builder.Services.AddControllers(options =>
     {
         // 生成 DTO 同时承载 create/update/response；Id 等服务端生成字段不能因为 C# 非空标注被请求模型绑定强制必填。
         options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+        options.Filters.Add<AuthenticationSessionCookieResultFilter>();
     })
     .AddJsonOptions(options =>
     {

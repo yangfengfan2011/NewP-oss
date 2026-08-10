@@ -228,7 +228,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             cancellationToken);
     }
 
-    public async ValueTask<IdentityAccountSnapshot> ChangePasswordAsync(
+    public async ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(
         ChangeIdentityPasswordCommand command,
         CancellationToken cancellationToken = default)
     {
@@ -265,13 +265,21 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
                 await ReplaceUserOrThrowConflictAsync(user, expectedRevision, token);
                 await _repository.ReplaceCredentialAsync(credential, token);
                 await RevokeAllSessionsAsync(user.EID, "password-changed", command.Actor.ActorId, token);
+                var session = await _sessionRegistry.RegisterAsync(
+                    new AuthenticationSessionRegistration
+                    {
+                        UserEid = user.EID,
+                        Type = AuthenticationSessionType.Regular,
+                        ActorId = command.Actor.ActorId
+                    },
+                    token);
                 _repository.AddSecurityEvent(CreateEvent(
                     user.EID,
                     IdentitySecurityEventTypes.PasswordChanged,
                     "用户修改密码",
                     command.Actor,
                     now));
-                return ToSnapshot(user);
+                return new IdentityPasswordChangeResult(ToSnapshot(user), session);
             },
             cancellationToken);
     }

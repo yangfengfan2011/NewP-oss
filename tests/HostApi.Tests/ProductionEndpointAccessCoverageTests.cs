@@ -14,6 +14,8 @@ using ICP.Platform.Modules.Files;
 using ICP.Platform.Modules.Files.Controllers;
 using ICP.Platform.Modules.MetadataConfigCenter;
 using ICP.Platform.Modules.MetadataConfigCenter.Controllers;
+using ICP.Platform.Modules.Identity;
+using ICP.Platform.Modules.Identity.Controllers;
 using ICP.Platform.Modules.ModuleTemplateSample;
 using ICP.Platform.Modules.ModuleTemplateSample.Controllers;
 using ICP.Platform.Modules.Organization;
@@ -41,6 +43,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(FilesController).Assembly)
             .AddApplicationPart(typeof(MetadataModulesController).Assembly)
             .AddApplicationPart(typeof(SampleStatusController).Assembly)
+            .AddApplicationPart(typeof(IdentityUsersController).Assembly)
             .AddApplicationPart(typeof(CompaniesController).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
@@ -56,6 +59,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         registry.RegisterModule(new DemoModule());
         registry.RegisterModule(new FilesModule());
         registry.RegisterModule(new MetadataConfigCenterModule());
+        registry.RegisterModule(new IdentityModule());
         registry.RegisterModule(new ModuleTemplateSampleModule());
         registry.RegisterModule(new OrganizationModule());
 

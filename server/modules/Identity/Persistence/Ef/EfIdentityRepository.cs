@@ -84,6 +84,16 @@ public sealed class EfIdentityRepository : IIdentityRepository
         return entity is null ? null : MapCredential(entity);
     }
 
+    public async ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
+        string targetUserEid,
+        CancellationToken cancellationToken = default) =>
+        (await SecurityEvents
+            .AsNoTracking()
+            .Where(row => EF.Property<string>(row, "TargetUserEID") == targetUserEid)
+            .ToListAsync(cancellationToken))
+        .Select(MapSecurityEvent)
+        .ToArray();
+
     public void AddUser(User user) => Users.Add(ToEntity(user));
 
     public void AddCredential(LocalCredential credential) => Credentials.Add(ToEntity(credential));
@@ -201,6 +211,22 @@ public sealed class EfIdentityRepository : IIdentityRepository
         UpdatedAt = GetDateTime(entity, "UpdatedAt")
     };
 
+    private static IdentitySecurityEvent MapSecurityEvent(IReadOnlyDictionary<string, object?> entity) => new()
+    {
+        EID = GetString(entity, "EID"),
+        TargetUserEID = GetString(entity, "TargetUserEID"),
+        EventType = GetString(entity, "EventType"),
+        Reason = GetString(entity, "Reason"),
+        OccurredAt = GetDateTime(entity, "OccurredAt"),
+        TraceId = GetString(entity, "TraceId"),
+        ActorKind = Enum.Parse<IdentitySecurityActorKind>(GetString(entity, "ActorKind"), ignoreCase: false),
+        ActorUserEID = GetNullableString(entity, "ActorUserEID"),
+        CreatedBy = GetString(entity, "CreatedBy"),
+        CreatedAt = GetDateTime(entity, "CreatedAt"),
+        UpdatedBy = GetString(entity, "UpdatedBy"),
+        UpdatedAt = GetDateTime(entity, "UpdatedAt")
+    };
+
     private static Dictionary<string, object?> ToEntity(User user)
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -262,6 +288,9 @@ public sealed class EfIdentityRepository : IIdentityRepository
 
     private static string GetString(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is string text ? text : string.Empty;
+
+    private static string? GetNullableString(IReadOnlyDictionary<string, object?> entity, string key) =>
+        entity.TryGetValue(key, out var value) ? value as string : null;
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;

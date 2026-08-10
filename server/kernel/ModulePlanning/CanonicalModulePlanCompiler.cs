@@ -341,6 +341,7 @@ public sealed class CanonicalModulePlanCompiler
     private static CanonicalModulePlanModule Normalize(ModuleCapsuleCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+        var provenance = candidate.Provenance.BindToCanonicalCandidate(candidate);
 
         return new CanonicalModulePlanModule(
             candidate.ModuleId,
@@ -360,7 +361,7 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.PermissionCodes),
             Sort(candidate.PermissionReferences),
             Sort(candidate.ModelKeys),
-            candidate.Provenance,
+            provenance,
             NormalizePersistence(candidate.Persistence));
     }
 

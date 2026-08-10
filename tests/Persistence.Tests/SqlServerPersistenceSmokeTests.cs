@@ -607,6 +607,11 @@ public sealed class SqlServerPersistenceSmokeTests
         CompiledPersistencePlan organizationPlan;
         try
         {
+            var provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
+                "Organization",
+                repositoryRoot,
+                Path.Combine(repositoryRoot, "modules", "Organization", "newp.plugin.json"),
+                "/");
             var module = new CanonicalModulePlanModule(
                 "Organization",
                 "1.0.0",
@@ -625,10 +630,7 @@ public sealed class SqlServerPersistenceSmokeTests
                 [],
                 [],
                 ["Company", "Department", "Person", "Position"],
-                new ModulePlanProvenance(
-                    "built-in",
-                    Path.Combine(repositoryRoot, "modules", "Organization", "newp.plugin.json"),
-                    "/"),
+                provenance,
                 new ModulePersistenceContribution(
                     [
                         "modules/Organization/metadata/models/Company.model.json",
@@ -640,6 +642,30 @@ public sealed class SqlServerPersistenceSmokeTests
                         "SqlServer",
                         Path.GetRelativePath(repositoryRoot, assemblyPath),
                         Path.GetRelativePath(repositoryRoot, temporaryManifestPath))]));
+            var candidate = new ModuleCapsuleCandidate(
+                module.ModuleId,
+                module.Version,
+                module.DisplayName,
+                module.Description,
+                module.PackageRoot,
+                module.BackendEntry,
+                module.BackendBehaviorKey,
+                module.FrontendEntry,
+                module.FrontendBehaviorKey,
+                module.FrontendBindingMode,
+                module.Dependencies,
+                module.Routes,
+                module.FrontendBindings,
+                module.FrontendBindingReferences,
+                module.PermissionCodes,
+                module.PermissionReferences,
+                module.ModelKeys,
+                module.Provenance,
+                module.Persistence);
+            module = module with
+            {
+                Provenance = provenance.BindToCanonicalCandidate(candidate)
+            };
             var canonicalPlan = new CanonicalModulePlan(
                 "organization-sql-smoke",
                 "test",

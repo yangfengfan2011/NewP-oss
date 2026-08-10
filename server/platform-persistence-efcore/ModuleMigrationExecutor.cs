@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
@@ -463,7 +464,7 @@ internal sealed class ModuleMigrationExecutor(
 
         // EF 的目标模型还包含外键约定生成的索引；执行端必须与最终 provider
         // 模型精确比对，不能只看 authoring 中显式声明的 IndexDefinition。
-        var targetEntity = dbContext.Model.GetEntityTypes().SingleOrDefault(entity =>
+        var targetEntity = dbContext.GetService<IDesignTimeModel>().Model.GetEntityTypes().SingleOrDefault(entity =>
             string.Equals(entity.GetTableName(), operation.Table, StringComparison.OrdinalIgnoreCase)
             && string.Equals(
                 entity.GetSchema() ?? "dbo",
@@ -471,7 +472,10 @@ internal sealed class ModuleMigrationExecutor(
                 StringComparison.OrdinalIgnoreCase));
         var expected = targetEntity?.GetIndexes().SingleOrDefault(index =>
             string.Equals(index.GetDatabaseName(), operation.Name, StringComparison.Ordinal));
-        if (expected is null || expected.IsUnique != operation.IsUnique)
+        if (expected is null
+            || expected.IsUnique != operation.IsUnique
+            || !NullableSequenceEqual(operation.IsDescending, expected.IsDescending)
+            || !SqlServerAnnotationsMatch(operation, expected))
         {
             return false;
         }
@@ -488,6 +492,44 @@ internal sealed class ModuleMigrationExecutor(
 
         return string.Equals(operation.Filter, expected.GetFilter(), StringComparison.Ordinal);
     }
+
+    private static bool SqlServerAnnotationsMatch(
+        CreateIndexOperation operation,
+        IReadOnlyIndex expected)
+    {
+        var actualAnnotations = operation.GetAnnotations()
+            .Where(static annotation => annotation.Name.StartsWith("SqlServer:", StringComparison.Ordinal))
+            .ToDictionary(static annotation => annotation.Name, static annotation => annotation.Value, StringComparer.Ordinal);
+        var expectedAnnotations = expected.GetAnnotations()
+            .Where(static annotation => annotation.Name.StartsWith("SqlServer:", StringComparison.Ordinal))
+            .ToDictionary(static annotation => annotation.Name, static annotation => annotation.Value, StringComparer.Ordinal);
+        return actualAnnotations.Count == expectedAnnotations.Count
+            && actualAnnotations.All(pair =>
+                expectedAnnotations.TryGetValue(pair.Key, out var expectedValue)
+                && AnnotationValueEquals(pair.Value, expectedValue));
+    }
+
+    private static bool AnnotationValueEquals(object? actual, object? expected)
+    {
+        if (actual is string || expected is string)
+        {
+            return Equals(actual, expected);
+        }
+
+        if (actual is IEnumerable actualValues && expected is IEnumerable expectedValues)
+        {
+            return actualValues.Cast<object?>().SequenceEqual(expectedValues.Cast<object?>());
+        }
+
+        return Equals(actual, expected);
+    }
+
+    private static bool NullableSequenceEqual<T>(
+        IReadOnlyList<T>? actual,
+        IReadOnlyList<T>? expected) =>
+        actual is null
+            ? expected is null
+            : expected is not null && actual.SequenceEqual(expected);
 
     private bool ForeignKeysMatch(CreateTableOperation operation, ModelDefinition model)
     {

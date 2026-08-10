@@ -349,6 +349,69 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_PublicBuiltInProvenanceCannotClaimLegacyCutover_IsRejected()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var module = package.BuildBuiltInModule() with
+        {
+            Provenance = new ModulePlanProvenance(
+                "built-in",
+                Path.Combine(package.Root, "plugin.json"),
+                "/")
+        };
+        package.WriteLegacyCutover(
+            "20260810102141_Organization_000001_PermanentUserBinding",
+            OrganizationInitialFromModelDigest,
+            "dbo.PersonUserLink");
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
+            migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
+            migration["compatibility"] = "backup-restore-only";
+        });
+
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void Compile_TrustedBuiltInProvenanceCannotBeReusedAfterCanonicalModuleTampering()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        package.WriteLegacyCutover(
+            "20260810102141_Organization_000001_PermanentUserBinding",
+            OrganizationInitialFromModelDigest,
+            "dbo.PersonUserLink");
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
+            migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
+            migration["compatibility"] = "backup-restore-only";
+        });
+        var trustedPlan = BuildCanonicalPlan(package.BuildBuiltInModule());
+        var trustedModule = Assert.Single(trustedPlan.Modules);
+        var tamperedPlan = trustedPlan with
+        {
+            Modules = [trustedModule with { DisplayName = "Forged Organization" }]
+        };
+
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            tamperedPlan,
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
     public void Compile_BuiltInLegacyDigestWithoutOwnedCutoverAuthoring_IsRejected()
     {
         using var package = TestPackage.Create("Organization", "Asset");
@@ -627,14 +690,43 @@ public sealed class PersistencePlanCompilerTests
             && item.CanonicalKey == provider.ToString());
     }
 
-    private static CanonicalModulePlan BuildCanonicalPlan(params CanonicalModulePlanModule[] modules) =>
-        new(
+    private static CanonicalModulePlan BuildCanonicalPlan(params CanonicalModulePlanModule[] modules)
+    {
+        var boundModules = modules.Select(module =>
+        {
+            var candidate = new ModuleCapsuleCandidate(
+                module.ModuleId,
+                module.Version,
+                module.DisplayName,
+                module.Description,
+                module.PackageRoot,
+                module.BackendEntry,
+                module.BackendBehaviorKey,
+                module.FrontendEntry,
+                module.FrontendBehaviorKey,
+                module.FrontendBindingMode,
+                module.Dependencies,
+                module.Routes,
+                module.FrontendBindings,
+                module.FrontendBindingReferences,
+                module.PermissionCodes,
+                module.PermissionReferences,
+                module.ModelKeys,
+                module.Provenance,
+                module.Persistence);
+            return module with
+            {
+                Provenance = module.Provenance.BindToCanonicalCandidate(candidate)
+            };
+        }).ToArray();
+        return new CanonicalModulePlan(
             CandidateId: "candidate-s1",
             CompilerContractVersion: "1.0",
             PlanHash: new string('a', 64),
             SnapshotId: new string('a', 64),
             CanonicalBytes: Encoding.UTF8.GetBytes("candidate-s1"),
-            Modules: modules);
+            Modules: boundModules);
+    }
 
     private static string FindStorageTypeMap()
     {
@@ -815,7 +907,11 @@ public sealed class PersistencePlanCompilerTests
             return module with
             {
                 Dependencies = dependencies ?? [],
-                Provenance = new ModulePlanProvenance("built-in", Path.Combine(Root, "plugin.json"), "/")
+                Provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
+                    _moduleId,
+                    Root,
+                    Path.Combine(Root, "plugin.json"),
+                    "/")
             };
         }
 

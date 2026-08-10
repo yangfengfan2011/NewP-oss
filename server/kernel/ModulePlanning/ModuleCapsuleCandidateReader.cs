@@ -9,9 +9,19 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 public sealed class ModuleCapsuleCandidateReader
 {
     /// <summary>
-    /// 读取构建输出中的内建模块胶囊。目录枚举顺序不进入编译语义。
+    /// 读取构建输出中的内建模块胶囊。公开读取只返回来源描述，不授予 destructive migration 权限。
     /// </summary>
     public IReadOnlyList<ModuleCapsuleCandidate> ReadBuiltIn(string modulesRoot)
+        => ReadBuiltIn(modulesRoot, trustedRoot: false);
+
+    // 只有受控 Host/activation 路径可把配置的 distribution root 提升为 capability；
+    // 任意公共调用方即使复制完全相同的 SourceKind 字符串也只能得到普通来源描述。
+    internal IReadOnlyList<ModuleCapsuleCandidate> ReadTrustedBuiltIn(string modulesRoot)
+        => ReadBuiltIn(modulesRoot, trustedRoot: true);
+
+    private static IReadOnlyList<ModuleCapsuleCandidate> ReadBuiltIn(
+        string modulesRoot,
+        bool trustedRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modulesRoot);
         if (!Directory.Exists(modulesRoot))
@@ -21,7 +31,7 @@ public sealed class ModuleCapsuleCandidateReader
 
         return Directory.GetDirectories(modulesRoot)
             .OrderBy(static path => path, StringComparer.Ordinal)
-            .Select(ReadBuiltInModule)
+            .Select(path => ReadBuiltInModule(path, trustedRoot))
             .ToArray();
     }
 
@@ -39,7 +49,7 @@ public sealed class ModuleCapsuleCandidateReader
             .ToArray();
     }
 
-    private static ModuleCapsuleCandidate ReadBuiltInModule(string moduleRoot)
+    private static ModuleCapsuleCandidate ReadBuiltInModule(string moduleRoot, bool trustedRoot)
     {
         var manifestPath = Path.Combine(moduleRoot, "plugin.json");
         if (!File.Exists(manifestPath))
@@ -119,10 +129,16 @@ public sealed class ModuleCapsuleCandidateReader
             permissionCodes,
             metadata.PermissionReferences,
             metadata.ModelKeys,
-            new ModulePlanProvenance(
-                "built-in",
-                Path.GetFullPath(manifestPath),
-                "/"),
+            trustedRoot
+                ? ModulePlanProvenance.CreateTrustedBuiltInRoot(
+                    moduleId,
+                    moduleRoot,
+                    manifestPath,
+                    "/")
+                : new ModulePlanProvenance(
+                    "built-in",
+                    Path.GetFullPath(manifestPath),
+                    "/"),
             ReadPersistence(root, manifestPath));
     }
 

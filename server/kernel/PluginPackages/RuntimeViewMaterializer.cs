@@ -113,7 +113,7 @@ public class RuntimeViewMaterializer
                 .ToHashSet(StringComparer.Ordinal);
             // B11 之前由 compatibility resolver 选择同 ID 的已安装版本；编译器仍负责拒绝大小写折叠碰撞。
             candidates = candidates.Concat(
-                _candidateReader.ReadBuiltIn(_builtInModulesRoot)
+                _candidateReader.ReadTrustedBuiltIn(_builtInModulesRoot)
                     .Where(candidate => !installedModuleIds.Contains(candidate.ModuleId)));
         }
 

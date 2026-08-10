@@ -147,6 +147,27 @@ public sealed class PersistenceMigrationRunnerTests
             exception.ToString());
     }
 
+    [Theory]
+    [InlineData(DescendingIndexMigration.MigrationId)]
+    [InlineData(ClusteredIndexMigration.MigrationId)]
+    [InlineData(IncludedColumnsIndexMigration.MigrationId)]
+    public async Task MigrateAsync_IndexWithUndeclaredSqlProducingFacet_FailsBeforeOpeningConnection(
+        string migrationId)
+    {
+        var plan = BuildPlan(
+            migrationId,
+            [new IndexDefinition("IX_Asset_Unfiltered", ["Id"], IsUnique: false)]);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+        Assert.Equal(migrationId, exception.MigrationId);
+    }
+
     [Fact]
     public async Task MigrateAsync_DeclaredOwnedForeignKey_PassesStaticValidation()
     {
@@ -429,6 +450,63 @@ public sealed class UnfilteredUniqueIndexMigration : Migration
             table: "Asset",
             column: "Id",
             unique: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class DescendingIndexMigration : Migration
+{
+    public const string MigrationId = "20260809999300_DescendingIndex";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.CreateIndex(
+            name: "IX_Asset_Unfiltered",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            column: "Id",
+            descending: [true]);
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class ClusteredIndexMigration : Migration
+{
+    public const string MigrationId = "20260809999200_ClusteredIndex";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.CreateIndex(
+                name: "IX_Asset_Unfiltered",
+                schema: "np_partner_assetcatalog",
+                table: "Asset",
+                column: "Id")
+            .Annotation("SqlServer:Clustered", true);
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class IncludedColumnsIndexMigration : Migration
+{
+    public const string MigrationId = "20260809999100_IncludedColumnsIndex";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.CreateIndex(
+                name: "IX_Asset_Unfiltered",
+                schema: "np_partner_assetcatalog",
+                table: "Asset",
+                column: "Id")
+            .Annotation("SqlServer:Include", new[] { "ENAME" });
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {

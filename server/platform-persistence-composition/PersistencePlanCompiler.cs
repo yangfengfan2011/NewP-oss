@@ -152,6 +152,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         List<PersistencePlanDiagnostic> diagnostics)
     {
         var contribution = module.Persistence;
+        var isTrustedBuiltIn = module.Provenance.AuthenticatesBuiltIn(module);
         if (contribution is null || contribution.ModelPaths.Count == 0)
         {
             return;
@@ -232,7 +233,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var matchingBundles = contribution.MigrationBundles
             .Where(bundle => string.Equals(bundle.Provider, provider.ToString(), StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        if (matchingBundles.Length == 0 && module.Provenance.SourceKind == "built-in")
+        if (matchingBundles.Length == 0 && isTrustedBuiltIn)
         {
             // 现有统一 migrations 作为显式 platform.core baseline 承接所有存量内建表；
             // 新外部模块不得复用该退出路径。
@@ -260,7 +261,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         List<ModuleMigrationStream> streams)
     {
         var builtInOwners = modules.Modules
-            .Where(static module => module.Provenance.SourceKind == "built-in")
+            .Where(static module => module.Provenance.AuthenticatesBuiltIn(module))
             .Select(static module => module.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
         var moduleOwnedMigrationStreams = streams
@@ -422,7 +423,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var firstMigration = migrations[0];
         var declaredCutover = manifest.LegacyCutover;
         var isTrustedLegacyCutover = declaredCutover is not null
-            && string.Equals(module.Provenance.SourceKind, "built-in", StringComparison.Ordinal)
+            && module.Provenance.AuthenticatesBuiltIn(module)
             && string.Equals(declaredCutover.MigrationId, firstMigration.MigrationId, StringComparison.Ordinal)
             && string.Equals(declaredCutover.Compatibility, firstMigration.Compatibility, StringComparison.Ordinal)
             && string.Equals(declaredCutover.FromModelDigest, firstMigration.FromModelDigest, StringComparison.Ordinal)

@@ -16,6 +16,7 @@ export function buildMenusFromNavDocuments(
     path: item.path || undefined,
     order: item.order,
     permissions: item.permissions,
+    localAdministratorOnly: item.localAdministratorOnly,
     children: [],
     _parentKey: item.parentKey,
   }));
@@ -51,6 +52,7 @@ function stripInternalFields(menu: RuntimeMenuNode): MenuConfig {
     icon: menu.icon,
     order: menu.order,
     permissions: menu.permissions,
+    localAdministratorOnly: menu.localAdministratorOnly,
     children: menu.children?.map((child) => stripInternalFields(child as RuntimeMenuNode)),
   };
 }

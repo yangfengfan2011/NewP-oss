@@ -12,6 +12,7 @@ export function buildPageEntriesFromNavDocuments(
       entryType: item.entryType,
       targetKey: item.targetKey,
       permissions: item.permissions,
+      ...(item.localAdministratorOnly ? { localAdministratorOnly: true } : {}),
     })),
   );
 }
@@ -45,11 +46,13 @@ export function resolveRouteableMetadataEntries(
     const inheritedPermissions = entry.permissions && entry.permissions.length > 0
       ? entry.permissions
       : moduleRoute?.permissions;
+    const localAdministratorOnly = entry.localAdministratorOnly || moduleRoute?.localAdministratorOnly;
+    const access = localAdministratorOnly ? { localAdministratorOnly: true } : {};
 
     resolvedEntries.push(
       inheritedPermissions && inheritedPermissions.length > 0
-        ? { ...entry, permissions: inheritedPermissions }
-        : { ...entry, permissions: undefined },
+        ? { ...entry, permissions: inheritedPermissions, ...access }
+        : { ...entry, permissions: undefined, ...access },
     );
   }
 

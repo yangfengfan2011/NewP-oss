@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
-import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
+import {
+  AuthorizationProvider,
+  FirstPasswordChangePage,
+  LocalizationProvider,
+  resolveAuthenticationDestination,
+} from '@icp-platform/core';
 import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
 import Layout from './components/Layout';
@@ -44,7 +49,45 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  return auth.isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!auth.isAuthenticated || !auth.user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const destination = resolveAuthenticationDestination(auth.user.mustChangePassword, '/');
+  return destination === '/' ? <>{children}</> : <Navigate to={destination} replace />;
+}
+
+function PasswordChangeRoute() {
+  const auth = useAuth();
+  if (!auth.isInitialized) return null;
+  if (!auth.isAuthenticated || !auth.user) return <Navigate to="/login" replace />;
+  const destination = resolveAuthenticationDestination(auth.user.mustChangePassword, '/account/change-password');
+  return destination === '/account/change-password'
+    ? <FirstPasswordChangePage auth={auth} />
+    : <Navigate to={destination} replace />;
+}
+
+function LocalAdministratorGuard({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  return auth.user?.isLocalAdministrator ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+function RouteAccess({
+  children,
+  permissions,
+  localAdministratorOnly,
+}: {
+  children: React.ReactNode;
+  permissions?: string[];
+  localAdministratorOnly?: boolean;
+}) {
+  let content = <>{children}</>;
+  if (permissions && permissions.length > 0) {
+    content = <PermissionGuard permissions={permissions}>{content}</PermissionGuard>;
+  }
+  return localAdministratorOnly
+    ? <LocalAdministratorGuard>{content}</LocalAdministratorGuard>
+    : content;
 }
 
 function AuthorizationGate({ children }: { children: React.ReactNode }) {
@@ -87,6 +130,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/account/change-password" element={<PasswordChangeRoute />} />
       <Route
         path="/"
         element={(
@@ -101,12 +145,13 @@ function AppRoutes() {
           <Route
             key={entry.path}
             path={entry.path}
-            element={entry.permissions && entry.permissions.length > 0 ? (
-              <PermissionGuard permissions={entry.permissions}>
+            element={(
+              <RouteAccess
+                permissions={entry.permissions}
+                localAdministratorOnly={entry.localAdministratorOnly}
+              >
                 {renderPageEntry(entry)}
-              </PermissionGuard>
-            ) : (
-              renderPageEntry(entry)
+              </RouteAccess>
             )}
           />
         ))}
@@ -130,12 +175,13 @@ function AppRoutes() {
           <Route
             key={route.path}
             path={route.path}
-            element={route.permissions && route.permissions.length > 0 ? (
-              <PermissionGuard permissions={route.permissions}>
+            element={(
+              <RouteAccess
+                permissions={route.permissions}
+                localAdministratorOnly={route.localAdministratorOnly}
+              >
                 <route.component />
-              </PermissionGuard>
-            ) : (
-              <route.component />
+              </RouteAccess>
             )}
           />
         ))}

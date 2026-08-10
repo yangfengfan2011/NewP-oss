@@ -14,6 +14,7 @@ export interface RouteConfig {
   exact?: boolean;
   requireAuth?: boolean;
   permissions?: string[];
+  localAdministratorOnly?: boolean;
 }
 
 export interface MenuConfig {
@@ -23,6 +24,7 @@ export interface MenuConfig {
   icon?: string;
   order?: number;
   permissions?: string[];
+  localAdministratorOnly?: boolean;
   children?: MenuConfig[];
 }
 
@@ -168,6 +170,16 @@ export interface UiConfig {
 
 export type ShellView = 'business' | 'platform';
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  displayName: string;
+  permissions: string[];
+  mustChangePassword: boolean;
+  revision: number;
+  isLocalAdministrator: boolean;
+}
+
 export class ModuleRegistry {
   private static modules: Map<string, FrontendModule> = new Map();
   private static initialized = false;
@@ -286,14 +298,10 @@ export class ModuleRegistry {
 export interface AuthContext {
   isAuthenticated: boolean;
   isInitialized: boolean;
-  user?: {
-    id: string;
-    username: string;
-    displayName: string;
-    permissions: string[];
-  };
+  user?: AuthUser;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
   hasAllPermissions: (permissions: string[]) => boolean;

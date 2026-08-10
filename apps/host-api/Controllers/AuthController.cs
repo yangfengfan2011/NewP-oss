@@ -138,7 +138,28 @@ public sealed class AuthController : ControllerBase
             User.FindFirstValue(HostSessionAuthenticationHandler.SessionTypeClaim),
             AuthenticationSessionType.Restricted.ToString(),
             StringComparison.Ordinal);
-        return Ok(new AuthUserResponse(userId, accountCode, displayName, permissions, restricted));
+        if (!long.TryParse(
+                User.FindFirstValue(HostSessionAuthenticationHandler.AccountRevisionClaim),
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var revision))
+        {
+            _cookie.Delete(HttpContext);
+            return ProblemResult(401, "AUTH_SESSION_INVALID");
+        }
+
+        var isLocalAdministrator = string.Equals(
+            User.FindFirstValue("is_local_administrator"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        return Ok(new AuthUserResponse(
+            userId,
+            accountCode,
+            displayName,
+            permissions,
+            restricted,
+            revision,
+            isLocalAdministrator));
     }
 
     private ObjectResult ProblemResult(int status, string code)
@@ -159,7 +180,14 @@ public sealed class AuthController : ControllerBase
         IdentityAccountSnapshot account,
         IReadOnlyList<string> permissions,
         bool mustChangePassword) =>
-        new(account.UserEid, account.ECODE, account.ENAME, permissions, mustChangePassword);
+        new(
+            account.UserEid,
+            account.ECODE,
+            account.ENAME,
+            permissions,
+            mustChangePassword,
+            account.Revision,
+            account.IsLocalAdministrator);
 }
 
 public sealed record LoginRequest(string Username, string Password);
@@ -171,4 +199,6 @@ public sealed record AuthUserResponse(
     string Username,
     string DisplayName,
     IReadOnlyList<string> Permissions,
-    bool MustChangePassword);
+    bool MustChangePassword,
+    long Revision,
+    bool IsLocalAdministrator);

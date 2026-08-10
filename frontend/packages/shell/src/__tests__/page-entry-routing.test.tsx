@@ -42,6 +42,7 @@ describe('page entry routing', () => {
               path: '/organization/tree',
               entryType: 'custom',
               targetKey: 'organization.tree.page',
+              localAdministratorOnly: true,
             },
           ],
         },
@@ -59,6 +60,7 @@ describe('page entry routing', () => {
         path: '/organization/tree',
         entryType: 'custom',
         targetKey: 'organization.tree.page',
+        localAdministratorOnly: true,
       },
     ]);
   });

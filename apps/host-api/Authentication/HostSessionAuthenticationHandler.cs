@@ -15,6 +15,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
     public const string SchemeName = "HostSession";
     public const string SessionEidClaim = "authentication_session_eid";
     public const string SessionTypeClaim = "authentication_session_type";
+    public const string AccountRevisionClaim = "identity_account_revision";
     private const string StoreUnavailableItem = "HostSession.StoreUnavailable";
 
     private readonly IHostAuthenticationCookie _cookie;
@@ -81,6 +82,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
                 new("display_name", account.ENAME),
                 new(SessionEidClaim, validation.Session.SessionEid),
                 new(SessionTypeClaim, validation.Session.Type.ToString()),
+                new(AccountRevisionClaim, account.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("is_local_administrator", account.IsLocalAdministrator ? "true" : "false")
             };
             foreach (var role in await _authorizationService.GetUserRolesAsync(account.UserEid, Context.RequestAborted))

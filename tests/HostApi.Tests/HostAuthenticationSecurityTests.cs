@@ -276,6 +276,53 @@ public sealed class HostAuthenticationSecurityTests
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
     }
 
+    [Fact]
+    public async Task RestrictedSession_AllowsAntiforgeryTokenRequiredByPasswordChange()
+    {
+        var nextCalled = false;
+        var middleware = new RestrictedAuthenticationSessionMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/auth/antiforgery-token";
+        context.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+        [
+            new(HostSessionAuthenticationHandler.SessionTypeClaim, AuthenticationSessionType.Restricted.ToString())
+        ], HostSessionAuthenticationHandler.SchemeName));
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(nextCalled);
+    }
+
+    [Theory]
+    [InlineData("/plugins/active-module-runtime.json")]
+    [InlineData("/plugins/localization-manifest.json")]
+    [InlineData("/plugins/metadata-runtime-manifest.json")]
+    [InlineData("/plugins/runtime/Identity/metadata/navigation/Identity.nav.json")]
+    public async Task RestrictedSession_AllowsReadOnlyShellRuntimeAssets(string path)
+    {
+        var nextCalled = false;
+        var middleware = new RestrictedAuthenticationSessionMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = path;
+        context.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+        [
+            new(HostSessionAuthenticationHandler.SessionTypeClaim, AuthenticationSessionType.Restricted.ToString())
+        ], HostSessionAuthenticationHandler.SchemeName));
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(nextCalled);
+    }
+
     private static HostAuthenticationCookie Cookie(
         IDataProtectionProvider provider,
         IOptions<HostAuthenticationOptions> options,

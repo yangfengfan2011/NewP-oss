@@ -33,6 +33,9 @@ export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
   const chrome = resolvePageChrome(navigationMenus, location.pathname);
   const defaultOpenKeys = Array.from(new Set([...collectExpandableKeys(navigationMenus), ...chrome.openKeys]));
   const menuItems = projectMenusToAntdItems(navigationMenus, (menu) => {
+    if (menu.localAdministratorOnly && !auth.user?.isLocalAdministrator) {
+      return false;
+    }
     if (!menu.permissions || menu.permissions.length === 0) {
       return true;
     }

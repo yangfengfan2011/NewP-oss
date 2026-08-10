@@ -12,7 +12,10 @@ vi.mock('../contexts/PlatformContext', () => ({
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
-  useAuth: () => ({ hasAnyPermission: () => true }),
+  useAuth: () => ({
+    hasAnyPermission: () => true,
+    user: { isLocalAdministrator: false },
+  }),
 }));
 
 describe('metadata navigation', () => {
@@ -126,5 +129,26 @@ describe('metadata navigation', () => {
 
     expect(navItems).toHaveLength(2);
     expect(navItems.map((item) => item.entryType)).toEqual(['standard-list', 'custom']);
+  });
+
+  it('hides a local-administrator navigation entry from other authenticated users', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const menus = buildMenusFromNavDocuments([{
+      type: 'nav',
+      navigation: { items: [{
+        key: 'identity.users',
+        titleKey: 'Navigation.IdentityUsers',
+        path: '/identity/users',
+        localAdministratorOnly: true,
+      }] },
+    }], () => '账号管理');
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<MemoryRouter><Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} /></MemoryRouter>);
+    });
+
+    expect(container.textContent).not.toContain('账号管理');
   });
 });

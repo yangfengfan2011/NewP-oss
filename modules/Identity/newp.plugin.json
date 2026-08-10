@@ -14,7 +14,12 @@
     "behaviorKey": "identity.backend"
   },
   "frontend": {
-    "enabled": false
+    "behaviorKey": "identity.frontend",
+    "entry": "identity",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "identity.users.page"
+    ]
   },
   "security": {
     "permissions": []

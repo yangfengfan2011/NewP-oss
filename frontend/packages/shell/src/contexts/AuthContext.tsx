@@ -1,123 +1,23 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthContext as IAuthContext } from '@icp-platform/sdk';
-import { invalidatePlatformAntiforgeryToken, platformFetch } from '@icp-platform/core';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useAuthenticationState } from '@icp-platform/core';
+import type { AuthContext as IAuthContext } from '@icp-platform/sdk';
 
 const AuthContext = createContext<IAuthContext | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<IAuthContext['user']>();
-  const [isInitialized, setIsInitialized] = useState(false);
+  const authentication = useAuthenticationState();
 
-  useEffect(() => {
-    // 页面刷新后恢复登录态
-    const checkCurrentUser = async () => {
-      try {
-        const response = await platformFetch('/api/auth/current-user', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include' // 确保携带 cookie
-        });
-
-        if (response.ok) {
-          const userData = await response.json();
-          setUser(userData);
-          setIsAuthenticated(true);
-        } else {
-          setUser(undefined);
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error('Failed to fetch current user', error);
-        setUser(undefined);
-        setIsAuthenticated(false);
-      } finally {
-        setIsInitialized(true);
-      }
-    };
-
-    checkCurrentUser();
-  }, []);
-
-  const login = async (username: string, password: string) => {
-    const response = await platformFetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username, password }),
-      credentials: 'include' // 确保携带 cookie 和跨域可用
-    });
-
-    if (!response.ok) {
-      throw new Error('Login failed');
-    }
-
-    // 登录改变了防伪 token 绑定的认证主体，旧匿名 token 不得跨主体复用。
-    invalidatePlatformAntiforgeryToken();
-
-    // 登录成功后拉取最新用户信息
-    const userRes = await platformFetch('/api/auth/current-user', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include'
-    });
-
-    if (userRes.ok) {
-      const userData = await userRes.json();
-      setUser(userData);
-      setIsAuthenticated(true);
-    } else {
-      throw new Error('Failed to get user info after login');
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await platformFetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include'
-      });
-    } catch (error) {
-      console.error('Logout failed', error);
-    } finally {
-      // 响应丢失时服务端是否已退出未知，客户端仍必须丢弃当前主体的 token。
-      invalidatePlatformAntiforgeryToken();
-      setIsAuthenticated(false);
-      setUser(undefined);
-    }
-  };
-
-  const hasPermission = (permission: string): boolean => {
-    if (!user) return false;
-    return user.permissions.includes(permission);
-  };
-
-  const hasAnyPermission = (permissions: string[]): boolean => {
-    return permissions.some(p => hasPermission(p));
-  };
-
-  const hasAllPermissions = (permissions: string[]): boolean => {
-    return permissions.every(p => hasPermission(p));
-  };
+  const hasPermission = (permission: string): boolean =>
+    Boolean(authentication.user?.permissions.includes(permission));
+  const hasAnyPermission = (permissions: string[]): boolean => permissions.some(hasPermission);
+  const hasAllPermissions = (permissions: string[]): boolean => permissions.every(hasPermission);
 
   return (
     <AuthContext.Provider value={{
-      isAuthenticated,
-      isInitialized,
-      user,
-      login,
-      logout,
+      ...authentication,
       hasPermission,
       hasAnyPermission,
-      hasAllPermissions
+      hasAllPermissions,
     }}>
       {children}
     </AuthContext.Provider>
@@ -126,8 +26,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 }

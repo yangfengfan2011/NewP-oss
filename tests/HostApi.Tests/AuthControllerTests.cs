@@ -33,9 +33,35 @@ public sealed class AuthControllerTests
         var result = await controller.Login(new LoginRequest("admin", "secret"), CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.True(Assert.IsType<AuthUserResponse>(response.Value).MustChangePassword);
+        var user = Assert.IsType<AuthUserResponse>(response.Value);
+        Assert.True(user.MustChangePassword);
+        Assert.True(user.IsLocalAdministrator);
+        Assert.Equal(1, user.Revision);
         Assert.Equal(AuthenticationSessionType.Restricted, sessions.Registration?.Type);
         Assert.Equal("issued-credential", cookie.AppendedCredential);
+    }
+
+    [Fact]
+    public async Task CurrentUser_ProjectsRestrictedSessionRevisionAndLocalAdministratorStatus()
+    {
+        var controller = Controller(new StubAuthenticator(), new RecordingSessionRegistry(), new RecordingCookie());
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new(ClaimTypes.NameIdentifier, "user-1"),
+            new(ClaimTypes.Name, "admin"),
+            new("display_name", "Administrator"),
+            new(HostSessionAuthenticationHandler.SessionTypeClaim, AuthenticationSessionType.Restricted.ToString()),
+            new(HostSessionAuthenticationHandler.AccountRevisionClaim, "7"),
+            new("is_local_administrator", "true")
+        ], HostSessionAuthenticationHandler.SchemeName));
+
+        var result = await controller.GetCurrentUser(CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result);
+        var user = Assert.IsType<AuthUserResponse>(response.Value);
+        Assert.True(user.MustChangePassword);
+        Assert.True(user.IsLocalAdministrator);
+        Assert.Equal(7, user.Revision);
     }
 
     [Fact]

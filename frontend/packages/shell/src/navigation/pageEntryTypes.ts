@@ -7,6 +7,7 @@ export interface RuntimePageEntry {
   entryType: RuntimePageEntryType;
   targetKey: string;
   permissions?: string[];
+  localAdministratorOnly?: boolean;
 }
 
 export function isRuntimePageEntryType(value: unknown): value is RuntimePageEntryType {

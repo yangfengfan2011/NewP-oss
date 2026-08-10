@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "identity",
+        "titleKey": "Navigation.Identity",
+        "icon": "identity",
+        "order": 80,
+        "localAdministratorOnly": true
+      },
+      {
+        "key": "identity.users",
+        "titleKey": "Navigation.IdentityUsers",
+        "icon": "user-group",
+        "parentKey": "identity",
+        "path": "/identity/users",
+        "order": 90,
+        "entryType": "custom",
+        "targetKey": "identity.users.page",
+        "localAdministratorOnly": true
+      }
+    ]
+  }
+}

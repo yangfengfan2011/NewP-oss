@@ -51,3 +51,7 @@ _Avoid_: 插件接口、Host 分支、通用 SQL 生成器
 **Legacy Baseline**：
 现有统一 migrations assembly 和 `dbo` 映射形成的受保护历史起点。它可以通过显式、一次性的兼容适配接入新计划，但不得被静默重写或作为新外部模块的默认路径。
 _Avoid_: 清空 history、重新生成初始迁移、永久兼容模式
+
+**已验证旧基线切换（Verified Legacy Cutover）**：
+内建模块在自己拥有的 migration manifest 中冻结一次性 legacy 摘要、首迁移和允许丢弃的旧物理表；平台只定义通用协议，并仅在 built-in provenance 完整匹配时把该事实编译为执行器不可由公共调用方伪造的决策。外部模块或普通 `CompiledPersistencePlan` 自报相同字段不能获得破坏性迁移权限。
+_Avoid_: 平台内核硬编码模块私有表、外部插件自报 Drop 权限、仅凭 migration id 放行

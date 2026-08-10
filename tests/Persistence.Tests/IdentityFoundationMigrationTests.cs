@@ -170,7 +170,12 @@ public sealed class IdentityFoundationMigrationTests
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
+        var legacyCutover = root.GetProperty("legacyCutover");
         Assert.Equal(2, migrations.Length);
+        Assert.Equal(migrations[0].GetProperty("migrationId").GetString(), legacyCutover.GetProperty("migrationId").GetString());
+        Assert.Equal(migrations[0].GetProperty("fromModelDigest").GetString(), legacyCutover.GetProperty("fromModelDigest").GetString());
+        Assert.Equal("backup-restore-only", legacyCutover.GetProperty("compatibility").GetString());
+        Assert.Equal("dbo.PersonUserLink", Assert.Single(legacyCutover.GetProperty("droppedPhysicalTables").EnumerateArray()).GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(OrganizationPermanentUserBinding).Assembly.Location))));

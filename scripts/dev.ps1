@@ -247,7 +247,7 @@ function Invoke-ShellAcceptance {
         throw "DEV_ANTIFORGERY_TOKEN_INVALID: token endpoint returned an empty request token."
     }
 
-    $loginBody = @{ username = $Credentials.Username; password = REDACTED_FOR_OPEN_SOURCE } | ConvertTo-Json -Compress
+    $loginBody = @{ ecode = $Credentials.Ecode; password = REDACTED_FOR_OPEN_SOURCE } | ConvertTo-Json -Compress
     $loginResponse = Invoke-WebRequest `
         -Uri "$baseUri/api/auth/login" `
         -Method Post `
@@ -273,25 +273,25 @@ function Invoke-ShellAcceptance {
     }
 
     $currentUser = $currentUserResponse.Content | ConvertFrom-Json
-    if (-not [string]::Equals([string]$currentUser.username, [string]$Credentials.Username, [StringComparison]::Ordinal)) {
+    if (-not [string]::Equals([string]$currentUser.ecode, [string]$Credentials.Ecode, [StringComparison]::Ordinal)) {
         throw "DEV_CURRENT_USER_MISMATCH: current-user did not match the Identity-backed login."
     }
 }
 
 function Get-DevelopmentSmokeCredentials {
-    $username = [string]$env:NEWP_DEV_ADMIN_USERNAME
+    $ecode = [string]$env:NEWP_DEV_ADMIN_ECODE
     $password = [string]$env:NEWP_DEV_ADMIN_PASSWORD
-    $hasUsername = -not [string]::IsNullOrWhiteSpace($username)
+    $hasEcode = -not [string]::IsNullOrWhiteSpace($ecode)
     $hasPassword = -not [string]::IsNullOrWhiteSpace($password)
-    if (-not $hasUsername -and -not $hasPassword) {
+    if (-not $hasEcode -and -not $hasPassword) {
         return $null
     }
 
-    if (-not $hasUsername -or -not $hasPassword) {
-        throw "DEV_AUTH_SMOKE_CREDENTIALS_INCOMPLETE: set both NEWP_DEV_ADMIN_USERNAME and NEWP_DEV_ADMIN_PASSWORD or neither."
+    if (-not $hasEcode -or -not $hasPassword) {
+        throw "DEV_AUTH_SMOKE_CREDENTIALS_INCOMPLETE: set both NEWP_DEV_ADMIN_ECODE and NEWP_DEV_ADMIN_PASSWORD or neither."
     }
 
-    return [pscustomobject]@{ Username = $username; Password = REDACTED_FOR_OPEN_SOURCE }
+    return [pscustomobject]@{ Ecode = $ecode; Password = REDACTED_FOR_OPEN_SOURCE }
 }
 
 function Assert-Toolchain {

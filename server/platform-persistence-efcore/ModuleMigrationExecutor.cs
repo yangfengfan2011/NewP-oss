@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
+using System.Security.Cryptography;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
@@ -308,6 +309,16 @@ internal sealed class ModuleMigrationExecutor(
             throw Failure(PersistenceMigrationFailureCodes.ProviderUnsupported, stream);
         }
 
+        var mismatchedCutover = stream.Migrations.FirstOrDefault(step =>
+            step.LegacyCutover is not null && !step.LegacyCutover.Matches(stream, step));
+        if (mismatchedCutover is not null)
+        {
+            throw Failure(
+                PersistenceMigrationFailureCodes.OperationForbidden,
+                stream,
+                mismatchedCutover.MigrationId);
+        }
+
         var assembly = LoadMigrationAssembly(stream);
         IReadOnlyDictionary<string, Type> migrationTypes;
         try
@@ -416,13 +427,11 @@ internal sealed class ModuleMigrationExecutor(
                     && IsSafeColumnDefinition(addColumn)
                     && (addColumn.IsNullable || addColumn.DefaultValue is not null),
                 DropTableOperation dropTable =>
-                    step.Compatibility == "backup-restore-only"
-                    && LegacyMigrationCutoverPlan.AllowsDrop(
-                        stream.ModuleId,
-                        stream.Provider,
-                        step.MigrationId,
+                    step.LegacyCutover?.AllowsDrop(
+                        stream,
+                        step,
                         dropTable.Schema ?? "dbo",
-                        dropTable.Name)
+                        dropTable.Name) == true
                     && !currentTables.Contains(PhysicalKey(dropTable.Schema, dropTable.Name)),
                 _ => false
             };
@@ -451,31 +460,27 @@ internal sealed class ModuleMigrationExecutor(
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(operation.Filter) && !operation.IsUnique)
-        {
-            return true;
-        }
-
-        // 唯一性或过滤谓词都会改变数据约束，必须先精确匹配当前模型声明。
         var expected = model.Indexes.SingleOrDefault(index =>
             string.Equals(index.Name, operation.Name, StringComparison.Ordinal));
-        if (expected is null
-            || expected.IsUnique != operation.IsUnique
-            || !operation.Columns.SequenceEqual(
-                expected.Fields.Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName),
-                StringComparer.Ordinal))
+        if (expected is null || expected.IsUnique != operation.IsUnique)
         {
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(operation.Filter))
+        var expectedColumns = expected.Fields
+            .Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName)
+            .ToArray();
+        if (!operation.Columns.SequenceEqual(expectedColumns, StringComparer.Ordinal))
         {
-            return true;
+            return false;
         }
 
-        return operation.Columns.Length == 1
-            && model.Fields.Single(field => field.StoreName == operation.Columns[0]).Required is false
-            && string.Equals(operation.Filter, $"[{operation.Columns[0]}] IS NOT NULL", StringComparison.Ordinal);
+        var expectedFilter = expected.IsUnique
+            && expectedColumns.Length == 1
+            && model.Fields.Single(field => field.StoreName == expectedColumns[0]).Required is false
+                ? $"[{expectedColumns[0]}] IS NOT NULL"
+                : null;
+        return string.Equals(operation.Filter, expectedFilter, StringComparison.Ordinal);
     }
 
     private bool ForeignKeysMatch(CreateTableOperation operation, ModelDefinition model)
@@ -538,6 +543,12 @@ internal sealed class ModuleMigrationExecutor(
             if (!File.Exists(assemblyPath))
             {
                 throw new FileNotFoundException("Migration assembly not found.", assemblyPath);
+            }
+
+            var checksum = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath)));
+            if (!string.Equals(checksum, stream.BundleChecksum, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("Migration assembly checksum does not match the compiled plan.");
             }
 
             var existing = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(assembly =>

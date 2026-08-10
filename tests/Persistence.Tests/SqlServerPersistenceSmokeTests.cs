@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
@@ -157,13 +159,49 @@ public sealed class SqlServerPersistenceSmokeTests
         var devSyncResult = await DevelopmentSchemaSyncCoordinator.Create(devSyncOptions).PrepareAsync();
         Assert.True(devSyncResult.StartupAllowed, devSyncResult.BuildMessage());
         var reportedOperations = devSyncResult.Plan?.Operations ?? [];
-        Assert.Equal(11, reportedOperations.Count);
-        Assert.All(reportedOperations, static operation =>
+        var expectedOperations = new[]
         {
-            Assert.Equal("AlterNullability", operation.Kind);
-            Assert.Equal("UpdatedAt", operation.ColumnName);
-            Assert.Equal("Confirm", operation.RiskLevel);
-        });
+            "AddColumn:Person:Revision",
+            "AddColumn:Person:UserBindingReason",
+            "AddColumn:Person:UserBoundAt",
+            "AddColumn:Person:UserBoundBy",
+            "AddColumn:Person:UserEID",
+            "CreateTable:AuthenticationSession:",
+            "CreateTable:IdentitySecurityEvent:",
+            "CreateTable:LocalCredential:",
+            "CreateTable:User:"
+        }
+            .Concat(new[]
+            {
+                "Company",
+                "ConfigItem",
+                "Department",
+                "Permission",
+                "Person",
+                "Position",
+                "Role",
+                "RolePermission",
+                "UserRole",
+                "ValueListItem"
+            }.SelectMany(static table => new[]
+            {
+                $"AlterNullability:{table}:CreatedBy",
+                $"AlterNullability:{table}:UpdatedBy"
+            }))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            expectedOperations,
+            reportedOperations
+                .Select(static operation => $"{operation.Kind}:{operation.TableName}:{operation.ColumnName}")
+                .Order(StringComparer.Ordinal)
+                .ToArray());
+        Assert.All(
+            reportedOperations.Where(static operation => operation.Kind == "AlterNullability"),
+            static operation => Assert.Equal("Confirm", operation.RiskLevel));
+        Assert.All(
+            reportedOperations.Where(static operation => operation.Kind is "AddColumn" or "CreateTable"),
+            static operation => Assert.Equal("Safe", operation.RiskLevel));
         Assert.Contains("dbo.__NewPDatabaseOwnership", devSyncResult.Plan?.UnmanagedTables ?? []);
 
         var historyBeforeWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
@@ -488,12 +526,13 @@ public sealed class SqlServerPersistenceSmokeTests
                 "safe-expand"));
         }
 
+        var assemblyPath = typeof(CreateAssetCatalogMigration).Assembly.Location;
         var stream = new ModuleMigrationStream(
             "Partner.AssetCatalog",
             PersistenceProvider.SqlServer,
-            typeof(CreateAssetCatalogMigration).Assembly.Location,
+            assemblyPath,
             "test-manifest.json",
-            new string('a', 64),
+            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath))),
             modelDigest,
             migrations[^1].MigrationId,
             IsLegacyBaseline: false,
@@ -546,34 +585,93 @@ public sealed class SqlServerPersistenceSmokeTests
 
     private static CompiledPersistencePlan BuildOrganizationPlan()
     {
-        var organizationModels = new OrganizationModelMetadataProvider().GetDefinitions()
-            .Select(static model => model with { OwnerModuleId = "Organization", SchemaName = "dbo" })
-            .ToArray();
+        var repositoryRoot = FindRepositoryRoot();
+        var assemblyPath = typeof(OrganizationPermanentUserBinding).Assembly.Location;
+        var manifestSourcePath = Path.Combine(
+            repositoryRoot,
+            "modules",
+            "Organization",
+            "migrations",
+            "Organization.SqlServerMigrations.json");
+        var temporaryManifestPath = Path.Combine(
+            repositoryRoot,
+            ".codex-temp",
+            "persistence-smoke",
+            $"Organization.SqlServerMigrations.{Guid.NewGuid():N}.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(temporaryManifestPath)!);
+        var manifest = JsonNode.Parse(File.ReadAllText(manifestSourcePath))?.AsObject()
+            ?? throw new InvalidOperationException("Organization migration manifest is invalid.");
+        manifest["bundleChecksum"] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath)));
+        File.WriteAllText(temporaryManifestPath, manifest.ToJsonString());
+
+        CompiledPersistencePlan organizationPlan;
+        try
+        {
+            var module = new CanonicalModulePlanModule(
+                "Organization",
+                "1.0.0",
+                "Organization",
+                null,
+                repositoryRoot,
+                null,
+                null,
+                null,
+                null,
+                "behavior-bindings",
+                ["Identity", "Authentication"],
+                [],
+                [],
+                [],
+                [],
+                [],
+                ["Company", "Department", "Person", "Position"],
+                new ModulePlanProvenance(
+                    "built-in",
+                    Path.Combine(repositoryRoot, "modules", "Organization", "newp.plugin.json"),
+                    "/"),
+                new ModulePersistenceContribution(
+                    [
+                        "modules/Organization/metadata/models/Company.model.json",
+                        "modules/Organization/metadata/models/Department.model.json",
+                        "modules/Organization/metadata/models/Person.model.json",
+                        "modules/Organization/metadata/models/Position.model.json"
+                    ],
+                    [new ModuleMigrationBundleReference(
+                        "SqlServer",
+                        Path.GetRelativePath(repositoryRoot, assemblyPath),
+                        Path.GetRelativePath(repositoryRoot, temporaryManifestPath))]));
+            var canonicalPlan = new CanonicalModulePlan(
+                "organization-sql-smoke",
+                "test",
+                new string('a', 64),
+                new string('b', 64),
+                [],
+                [module]);
+            var result = new PersistencePlanCompiler(Path.Combine(
+                repositoryRoot,
+                "server",
+                "platform-modeling",
+                "metadata",
+                "storage-types.json")).Compile(
+                canonicalPlan,
+                PersistenceProvider.SqlServer);
+            organizationPlan = result.Plan
+                ?? throw new InvalidOperationException(string.Join(
+                    Environment.NewLine,
+                    result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        }
+        finally
+        {
+            File.Delete(temporaryManifestPath);
+        }
+
+        var organizationModels = organizationPlan.Models;
         var organizationDigest = PersistenceModelDigest.Compute(organizationModels);
         var coreModels = TestPersistencePlan.Create().Models
             .Where(static model => model.Name is not ("Company" or "Department" or "Person" or "Position"))
             .ToArray();
         var models = coreModels.Concat(organizationModels).ToArray();
         var coreDigest = PersistenceModelDigest.Compute(coreModels);
-        var migrations = new[]
-        {
-            new CompiledMigrationStep(
-                "000001",
-                PersonPermanentBindingMigration,
-                null,
-                new string('1', 64),
-                new string('0', 64),
-                new string('2', 64),
-                "backup-restore-only"),
-            new CompiledMigrationStep(
-                "000002",
-                PersonLifecycleRevisionMigration,
-                new string('1', 64),
-                new string('3', 64),
-                new string('2', 64),
-                organizationDigest,
-                "safe-expand")
-        };
         var streams = new[]
         {
             new ModuleMigrationStream(
@@ -586,16 +684,7 @@ public sealed class SqlServerPersistenceSmokeTests
                 PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline,
                 IsLegacyBaseline: true,
                 []),
-            new ModuleMigrationStream(
-                "Organization",
-                PersistenceProvider.SqlServer,
-                typeof(OrganizationPermanentUserBinding).Assembly.Location,
-                "Organization.SqlServerMigrations.json",
-                new string('4', 64),
-                organizationDigest,
-                PersonLifecycleRevisionMigration,
-                IsLegacyBaseline: false,
-                migrations)
+            Assert.Single(organizationPlan.Streams)
         };
         return new CompiledPersistencePlan(
             "organization-migration-test",

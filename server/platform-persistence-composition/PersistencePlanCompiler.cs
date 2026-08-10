@@ -324,18 +324,28 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 File.ReadAllText(manifestPath),
                 ManifestJsonOptions)
                 ?? throw new InvalidOperationException("Migration manifest is empty.");
-            ValidateManifest(module, provider, manifest, assemblyPath, manifestPath, modelDigest);
+            var legacyCutover = ValidateManifest(
+                module,
+                provider,
+                manifest,
+                assemblyPath,
+                manifestPath,
+                modelDigest);
 
             var migrations = manifest.Migrations
                 .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
-                .Select(static migration => new CompiledMigrationStep(
+                .Select((migration, index) => new CompiledMigrationStep(
                     migration.Sequence,
                     migration.MigrationId,
                     migration.PreviousContentDigest,
                     migration.ContentDigest,
                     migration.FromModelDigest,
                     migration.ToModelDigest,
-                    migration.Compatibility))
+                    migration.Compatibility)
+                {
+                    LegacyCutover = index == 0 ? legacyCutover : null,
+                    LegacyCutoverDigest = index == 0 ? legacyCutover?.DecisionDigest : null
+                })
                 .ToArray();
             streams.Add(new ModuleMigrationStream(
                 module.ModuleId,
@@ -368,7 +378,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
     }
 
-    private static void ValidateManifest(
+    private static VerifiedLegacyCutoverDecision? ValidateManifest(
         CanonicalModulePlanModule module,
         PersistenceProvider provider,
         MigrationManifest manifest,
@@ -410,13 +420,17 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
 
         var firstMigration = migrations[0];
-        var isTrustedLegacyCutover = LegacyMigrationCutoverPlan.IsTrustedInitialMigration(
-            module.ModuleId,
-            provider,
-            module.Provenance.SourceKind,
-            firstMigration.MigrationId,
-            firstMigration.Compatibility,
-            firstMigration.FromModelDigest);
+        var declaredCutover = manifest.LegacyCutover;
+        var isTrustedLegacyCutover = declaredCutover is not null
+            && string.Equals(module.Provenance.SourceKind, "built-in", StringComparison.Ordinal)
+            && string.Equals(declaredCutover.MigrationId, firstMigration.MigrationId, StringComparison.Ordinal)
+            && string.Equals(declaredCutover.Compatibility, firstMigration.Compatibility, StringComparison.Ordinal)
+            && string.Equals(declaredCutover.FromModelDigest, firstMigration.FromModelDigest, StringComparison.Ordinal)
+            && string.Equals(declaredCutover.Compatibility, "backup-restore-only", StringComparison.Ordinal)
+            && declaredCutover.DroppedPhysicalTables.Count > 0
+            && declaredCutover.DroppedPhysicalTables.All(static table => PhysicalObjectPattern().IsMatch(table))
+            && declaredCutover.DroppedPhysicalTables.Distinct(StringComparer.OrdinalIgnoreCase).Count()
+                == declaredCutover.DroppedPhysicalTables.Count;
         var startsFromZeroDigest = string.Equals(
             firstMigration.FromModelDigest,
             new string('0', 64),
@@ -424,7 +438,8 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var backupRestoreMigrations = migrations
             .Where(static migration => migration.Compatibility == "backup-restore-only")
             .ToArray();
-        if ((!startsFromZeroDigest && !isTrustedLegacyCutover)
+        if ((declaredCutover is not null && !isTrustedLegacyCutover)
+            || (!startsFromZeroDigest && !isTrustedLegacyCutover)
             || (backupRestoreMigrations.Length > 0
                 && (!isTrustedLegacyCutover || backupRestoreMigrations.Length != 1)))
         {
@@ -464,6 +479,29 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 "PERSISTENCE_MODEL_MISMATCH",
                 $"Migration frontier does not target the compiled model digest for '{module.ModuleId}'.");
         }
+
+        if (!isTrustedLegacyCutover)
+        {
+            return null;
+        }
+
+        // 破坏性权限来自内建模块自有 manifest，但只有受信编译器能够把它签入运行计划。
+        return new VerifiedLegacyCutoverDecision(
+            module.Provenance.SourceKind,
+            module.ModuleId,
+            provider,
+            assemblyPath,
+            manifestPath,
+            manifest.BundleChecksum,
+            modelDigest,
+            firstMigration.Sequence,
+            firstMigration.MigrationId,
+            firstMigration.PreviousContentDigest,
+            firstMigration.ContentDigest,
+            firstMigration.FromModelDigest,
+            firstMigration.ToModelDigest,
+            firstMigration.Compatibility,
+            declaredCutover!.DroppedPhysicalTables);
     }
 
     private static string? ResolveContainedPath(
@@ -613,13 +651,23 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.CultureInvariant)]
     private static partial Regex NonSchemaCharacterPattern();
 
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]
+    private static partial Regex PhysicalObjectPattern();
+
     private sealed record MigrationManifest(
         string SchemaVersion,
         string Provider,
         string ModuleId,
         string ModelDigest,
         string BundleChecksum,
-        IReadOnlyList<MigrationManifestStep> Migrations);
+        IReadOnlyList<MigrationManifestStep> Migrations,
+        LegacyMigrationCutoverManifest? LegacyCutover = null);
+
+    private sealed record LegacyMigrationCutoverManifest(
+        string MigrationId,
+        string FromModelDigest,
+        string Compatibility,
+        IReadOnlyList<string> DroppedPhysicalTables);
 
     private sealed record MigrationManifestStep(
         string Sequence,

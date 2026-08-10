@@ -80,9 +80,25 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
-    public async Task MigrateAsync_UnfilteredIndexOnOwnedTable_PassesStaticValidation()
+    public async Task MigrateAsync_UndeclaredUnfilteredIndex_FailsBeforeOpeningConnection()
     {
         var plan = BuildPlan(UnfilteredIndexMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_DeclaredUnfilteredIndex_PassesStaticValidation()
+    {
+        var plan = BuildPlan(
+            UnfilteredIndexMigration.MigrationId,
+            [new IndexDefinition("IX_Asset_Unfiltered", ["Id"], IsUnique: false)]);
         var runner = CreateRunner(plan, out var provider, out var scope);
         await using var providerScope = provider;
         await using var migrationScope = scope;
@@ -180,7 +196,7 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
-    public async Task MigrateAsync_TrustedOrganizationLegacyDrop_PassesStaticValidation()
+    public async Task MigrateAsync_PublicPlanCannotForgeTrustedOrganizationLegacyDrop()
     {
         var plan = BuildPlan(
             TrustedOrganizationLegacyDropMigration.MigrationId,
@@ -191,14 +207,10 @@ public sealed class PersistenceMigrationRunnerTests
         await using var providerScope = provider;
         await using var migrationScope = scope;
 
-        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
 
-        Assert.False(
-            exception is PersistencePlanExecutionException
-            {
-                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
-            },
-            exception.ToString());
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
     }
 
     private static IPersistenceMigrationRunner CreateRunner(
@@ -254,12 +266,13 @@ public sealed class PersistenceMigrationRunnerTests
                 SchemaName: schema))
             .ToArray();
         var modelDigest = PersistenceModelDigest.Compute(models);
+        var assemblyPath = typeof(ForbiddenSqlMigration).Assembly.Location;
         var stream = new ModuleMigrationStream(
             owner,
             PersistenceProvider.SqlServer,
-            typeof(ForbiddenSqlMigration).Assembly.Location,
+            assemblyPath,
             "test-manifest.json",
-            new string('b', 64),
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assemblyPath))),
             modelDigest,
             migrationId,
             IsLegacyBaseline: false,
@@ -320,12 +333,13 @@ public sealed class PersistenceMigrationRunnerTests
                     : [])
         };
         var modelDigest = PersistenceModelDigest.Compute(models);
+        var assemblyPath = typeof(DeclaredForeignKeyMigration).Assembly.Location;
         var stream = new ModuleMigrationStream(
             owner,
             PersistenceProvider.SqlServer,
-            typeof(DeclaredForeignKeyMigration).Assembly.Location,
+            assemblyPath,
             "test-manifest.json",
-            new string('b', 64),
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assemblyPath))),
             modelDigest,
             migrationId,
             IsLegacyBaseline: false,

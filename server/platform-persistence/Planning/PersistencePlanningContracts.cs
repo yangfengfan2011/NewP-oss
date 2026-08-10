@@ -1,4 +1,5 @@
 using ICP.Platform.Modeling.Definitions;
+using System.Text.Json.Serialization;
 
 namespace ICP.Platform.Persistence.Planning;
 
@@ -12,7 +13,19 @@ public sealed record CompiledMigrationStep(
     string ContentDigest,
     string FromModelDigest,
     string ToModelDigest,
-    string Compatibility);
+    string Compatibility)
+{
+    /// <summary>
+    /// 由受信计划编译器签发的 legacy cutover 决策；普通迁移恒为空。
+    /// </summary>
+    [JsonIgnore]
+    public VerifiedLegacyCutoverDecision? LegacyCutover { get; internal init; }
+
+    /// <summary>
+    /// 进入计划内容身份的稳定 cutover 决策摘要；普通迁移恒为空。
+    /// </summary>
+    public string? LegacyCutoverDigest { get; internal init; }
+}
 
 /// <summary>
 /// 一个模块在一个 provider 下的线性迁移流。

@@ -4,6 +4,14 @@
   "moduleId": "Organization",
   "modelDigest": "0aa9f2e2956c6f4e094224d65b65ca182c980278cfcf95ff368d9f4f67b9de58",
   "bundleChecksum": "0c668fbc9709a41eab02da94fc174b0e31c15f3881fa5ee3564c8be96627754b",
+  "legacyCutover": {
+    "migrationId": "20260810102141_Organization_000001_PermanentUserBinding",
+    "fromModelDigest": "a0d7b6421f280436e2b3726504c3b64a7eaf04dec7fb967faae2046546b3cb2c",
+    "compatibility": "backup-restore-only",
+    "droppedPhysicalTables": [
+      "dbo.PersonUserLink"
+    ]
+  },
   "migrations": [
     {
       "sequence": "000001",

@@ -36,8 +36,8 @@ public sealed class ModuleCapsuleCandidateReader
             .OrderBy(static path => path, StringComparer.Ordinal)
             .Select(path =>
             {
-                trustedSource?.ValidateModuleTree(path);
-                return ReadBuiltInModule(path, trustedSource);
+                var snapshot = trustedSource?.CaptureModuleSnapshot(path);
+                return ReadBuiltInModule(path, trustedSource, snapshot);
             })
             .ToArray();
     }
@@ -58,7 +58,8 @@ public sealed class ModuleCapsuleCandidateReader
 
     private static ModuleCapsuleCandidate ReadBuiltInModule(
         string moduleRoot,
-        TrustedBuiltInModuleSource? trustedSource)
+        TrustedBuiltInModuleSource? trustedSource,
+        VerifiedModuleArtifactSnapshot? snapshot)
     {
         var manifestPath = Path.Combine(moduleRoot, "plugin.json");
         if (!File.Exists(manifestPath))
@@ -66,7 +67,8 @@ public sealed class ModuleCapsuleCandidateReader
             throw new FileNotFoundException("Built-in module capsule root is missing.", manifestPath);
         }
 
-        using var manifestDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        using var manifestDocument = JsonDocument.Parse(
+            snapshot?.ReadFile("plugin.json") ?? File.ReadAllBytes(manifestPath));
         var root = manifestDocument.RootElement;
         var moduleId = RequiredString(root, "moduleId", manifestPath);
         var version = RequiredString(root, "version", manifestPath);
@@ -75,7 +77,9 @@ public sealed class ModuleCapsuleCandidateReader
         var backendEntry = OptionalString(root, "entryAssembly");
         if (backendEntry is not null && trustedSource is not null)
         {
-            trustedSource.ValidateDistributionFile(Path.Combine(moduleRoot, backendEntry));
+            snapshot = snapshot!.WithDistributionFile(
+                backendEntry,
+                trustedSource.CaptureDistributionFile(Path.Combine(moduleRoot, backendEntry)));
         }
         var dependencies = ReadStringArray(root, "dependencies");
 
@@ -109,7 +113,9 @@ public sealed class ModuleCapsuleCandidateReader
                     .ToArray()
                 : Array.Empty<string>();
 
-        var metadata = ReadMetadata(Path.Combine(moduleRoot, "metadata"), moduleId);
+        var metadata = snapshot is null
+            ? ReadMetadata(Path.Combine(moduleRoot, "metadata"), moduleId)
+            : ReadMetadata(snapshot, moduleId);
         if (permissionCodes.Length == 0)
         {
             // 未完成 capsule cutover 的内建模块通过显式 legacy adapter 保持现有权限引用可编译；
@@ -147,6 +153,7 @@ public sealed class ModuleCapsuleCandidateReader
                     moduleId,
                     moduleRoot,
                     trustedSource,
+                    snapshot!,
                     manifestPath,
                     "/")
                 : new ModulePlanProvenance(
@@ -305,6 +312,68 @@ public sealed class ModuleCapsuleCandidateReader
                         ? property.Name
                         : $"{moduleId}.{property.Name}");
                 }
+            }
+        }
+
+        return new MetadataFacts(
+            routes.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            bindingReferences.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            permissionReferences.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            modelKeys.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray());
+    }
+
+    private static MetadataFacts ReadMetadata(
+        VerifiedModuleArtifactSnapshot snapshot,
+        string moduleId)
+    {
+        var routes = new List<string>();
+        var bindingReferences = new List<string>();
+        var permissionReferences = new List<string>();
+        foreach (var path in snapshot.EnumerateFiles("metadata/navigation")
+                     .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var document = JsonDocument.Parse(snapshot.ReadFile(path));
+            if (!TryGetObject(document.RootElement, "navigation", out var navigation)
+                || !navigation.TryGetProperty("items", out var items)
+                || items.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var item in items.EnumerateArray())
+            {
+                AddOptionalString(item, "path", routes);
+                AddOptionalString(item, "targetKey", bindingReferences);
+                CollectStringArrayProperties(item, "permissions", permissionReferences);
+            }
+        }
+
+        foreach (var path in snapshot.EnumerateFiles("metadata/views")
+                     .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var document = JsonDocument.Parse(snapshot.ReadFile(path));
+            if (TryGetObject(document.RootElement, "view", out var view))
+            {
+                AddOptionalString(view, "key", bindingReferences);
+                CollectStringArrayProperties(view, "permissions", permissionReferences);
+            }
+        }
+
+        var modelKeys = new List<string>();
+        foreach (var path in snapshot.EnumerateFiles("metadata/models")
+                     .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var document = JsonDocument.Parse(snapshot.ReadFile(path));
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (property.NameEquals("schemaVersion") || property.NameEquals("type"))
+                {
+                    continue;
+                }
+
+                modelKeys.Add(property.Name.Contains('.', StringComparison.Ordinal)
+                    ? property.Name
+                    : $"{moduleId}.{property.Name}");
             }
         }
 

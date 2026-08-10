@@ -5,10 +5,16 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 /// </summary>
 internal sealed class TrustedBuiltInModuleSource
 {
-    private TrustedBuiltInModuleSource(string modulesRoot, string installationRoot)
+    private readonly Action<string>? _beforeArtifactOpen;
+
+    private TrustedBuiltInModuleSource(
+        string modulesRoot,
+        string installationRoot,
+        Action<string>? beforeArtifactOpen)
     {
         ModulesRoot = modulesRoot;
         DistributionRoot = installationRoot;
+        _beforeArtifactOpen = beforeArtifactOpen;
     }
 
     internal string ModulesRoot { get; }
@@ -17,7 +23,13 @@ internal sealed class TrustedBuiltInModuleSource
 
     internal static TrustedBuiltInModuleSource CreateForHost(
         string installationRoot,
-        string validatedModulesRoot)
+        string validatedModulesRoot) =>
+        CreateForHost(installationRoot, validatedModulesRoot, beforeArtifactOpen: null);
+
+    internal static TrustedBuiltInModuleSource CreateForHost(
+        string installationRoot,
+        string validatedModulesRoot,
+        Action<string>? beforeArtifactOpen)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(installationRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(validatedModulesRoot);
@@ -43,7 +55,25 @@ internal sealed class TrustedBuiltInModuleSource
         PathContainment.RejectReparsePoints(resolvedInstallationRoot);
         PathContainment.RejectReparsePoints(resolvedModulesRoot);
         ValidateTree(resolvedModulesRoot);
-        return new TrustedBuiltInModuleSource(resolvedModulesRoot, resolvedInstallationRoot);
+        return new TrustedBuiltInModuleSource(
+            resolvedModulesRoot,
+            resolvedInstallationRoot,
+            beforeArtifactOpen);
+    }
+
+    internal VerifiedModuleArtifactSnapshot CaptureModuleSnapshot(string moduleRoot)
+    {
+        ValidateModuleTree(moduleRoot);
+        return VerifiedModuleArtifactSnapshot.Capture(
+            moduleRoot,
+            relativePath => _beforeArtifactOpen?.Invoke($"module:{relativePath}"));
+    }
+
+    internal byte[] CaptureDistributionFile(string path)
+    {
+        var resolvedPath = Path.GetFullPath(path);
+        _beforeArtifactOpen?.Invoke($"distribution:{resolvedPath}");
+        return PathContainment.ReadContainedFile(DistributionRoot, resolvedPath);
     }
 
     internal void ValidateModuleTree(string moduleRoot)
@@ -61,46 +91,17 @@ internal sealed class TrustedBuiltInModuleSource
         ValidateTree(resolvedModuleRoot);
     }
 
-    /// <summary>
-    /// 在已签发计划实际消费内建模块前，重新验证 capability 绑定与完整模块树。
-    /// </summary>
-    internal void ValidateForConsumption(CanonicalModulePlanModule module)
+    internal VerifiedModuleArtifactSnapshot GetSnapshotForConsumption(CanonicalModulePlanModule module)
     {
         ArgumentNullException.ThrowIfNull(module);
-        if (!ReferenceEquals(module.Provenance.GetAuthenticatedBuiltInSource(module), this))
+        if (!ReferenceEquals(module.Provenance.GetAuthenticatedBuiltInSource(module), this)
+            || module.Provenance.GetAuthenticatedBuiltInSnapshot(module) is not { } snapshot)
         {
             throw new InvalidOperationException(
                 $"Built-in module '{module.ModuleId}' is not authenticated by this Host trust source.");
         }
 
-        ValidateModuleTree(module.PackageRoot);
-    }
-
-    /// <summary>
-    /// 在读取模块内文件的同一消费入口复验整树、路径边界与最终文件路径链。
-    /// </summary>
-    internal string ValidateModuleFileForConsumption(
-        CanonicalModulePlanModule module,
-        string relativePath)
-    {
-        ValidateForConsumption(module);
-        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
-        {
-            throw new InvalidOperationException(
-                $"Built-in module artifact path '{relativePath}' must be package-relative.");
-        }
-
-        var moduleRoot = Path.GetFullPath(module.PackageRoot);
-        var resolvedPath = Path.GetFullPath(Path.Combine(moduleRoot, relativePath));
-        if (!PathContainment.Contains(moduleRoot, resolvedPath) || !File.Exists(resolvedPath))
-        {
-            throw new FileNotFoundException(
-                "Built-in module artifact is missing or outside the trusted module root.",
-                resolvedPath);
-        }
-
-        PathContainment.RejectReparsePoints(resolvedPath);
-        return resolvedPath;
+        return snapshot;
     }
 
     internal string ValidateDistributionFile(string path)

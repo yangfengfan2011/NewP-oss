@@ -2,6 +2,8 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
@@ -587,25 +589,31 @@ internal sealed class ModuleMigrationExecutor(
     {
         try
         {
-            var assemblyPath = Path.GetFullPath(stream.AssemblyPath);
-            if (!File.Exists(assemblyPath))
+            if (stream.AssemblyImage is not { } image)
             {
-                throw new FileNotFoundException("Migration assembly not found.", assemblyPath);
+                throw new InvalidDataException(
+                    "Migration assembly is absent from the compiled verified artifact image.");
             }
 
-            var checksum = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath)));
+            var verifiedBytes = image.CopyBytes();
+            var checksum = Convert.ToHexStringLower(SHA256.HashData(verifiedBytes));
             if (!string.Equals(checksum, stream.BundleChecksum, StringComparison.Ordinal))
             {
                 throw new InvalidDataException("Migration assembly checksum does not match the compiled plan.");
             }
 
-            var existing = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(assembly =>
-                !string.IsNullOrWhiteSpace(assembly.Location)
-                && string.Equals(
-                    Path.GetFullPath(assembly.Location),
-                    assemblyPath,
-                    StringComparison.OrdinalIgnoreCase));
-            return existing ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
+            var expectedIdentity = ReadIdentity(verifiedBytes);
+            using var streamImage = new MemoryStream(verifiedBytes, writable: false);
+            var context = new VerifiedMigrationAssemblyLoadContext();
+            var assembly = context.LoadFromStream(streamImage);
+            if (!AssemblyName.ReferenceMatchesDefinition(assembly.GetName(), expectedIdentity.AssemblyName)
+                || assembly.ManifestModule.ModuleVersionId != expectedIdentity.Mvid)
+            {
+                throw new InvalidDataException(
+                    "Loaded migration assembly identity differs from its verified artifact image.");
+            }
+
+            return assembly;
         }
         catch (Exception exception)
         {
@@ -615,6 +623,38 @@ internal sealed class ModuleMigrationExecutor(
                 innerException: exception);
         }
     }
+
+    private static VerifiedAssemblyIdentity ReadIdentity(ReadOnlyMemory<byte> image)
+    {
+        using var stream = new MemoryStream(image.ToArray(), writable: false);
+        using var peReader = new PEReader(stream);
+        var metadata = peReader.GetMetadataReader();
+        var definition = metadata.GetAssemblyDefinition();
+        var assemblyName = new AssemblyName
+        {
+            Name = metadata.GetString(definition.Name),
+            Version = definition.Version,
+            CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
+        };
+        if (!definition.PublicKey.IsNil)
+        {
+            assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
+        }
+
+        return new VerifiedAssemblyIdentity(
+            assemblyName,
+            metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
+    }
+
+    private sealed class VerifiedMigrationAssemblyLoadContext()
+        : AssemblyLoadContext(isCollectible: false)
+    {
+        protected override Assembly? Load(AssemblyName assemblyName) =>
+            Default.Assemblies.FirstOrDefault(candidate =>
+                AssemblyName.ReferenceMatchesDefinition(candidate.GetName(), assemblyName));
+    }
+
+    private sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
 
     private static PersistencePlanExecutionException Failure(
         string failureCode,

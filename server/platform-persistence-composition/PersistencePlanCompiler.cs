@@ -172,22 +172,22 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var moduleModels = new List<ModelDefinition>();
         foreach (var relativePath in contribution.ModelPaths.OrderBy(static path => path, StringComparer.Ordinal))
         {
-            var fullPath = ResolveContainedPath(module, relativePath, diagnostics);
-            if (fullPath is null)
+            var artifact = ResolveContainedArtifact(module, relativePath, diagnostics);
+            if (artifact is null)
             {
                 continue;
             }
 
             try
             {
-                var document = _modelLoader.LoadFromFile(fullPath);
+                var document = _modelLoader.Load(artifact.Bytes.Span, artifact.DisplayPath);
                 if (!string.Equals(document.ModuleId, module.ModuleId, StringComparison.Ordinal))
                 {
                     diagnostics.Add(new PersistencePlanDiagnostic(
                         "PERSISTENCE_MODEL_OWNER_MISMATCH",
                         module.ModuleId,
                         document.Model.Name,
-                        fullPath,
+                        artifact.DisplayPath,
                         $"Model '{document.Model.Name}' declares owner '{document.ModuleId}' instead of '{module.ModuleId}'."));
                     continue;
                 }
@@ -199,7 +199,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                         "PERSISTENCE_MODEL_KEY_UNDECLARED",
                         module.ModuleId,
                         document.Model.Name,
-                        fullPath,
+                        artifact.DisplayPath,
                         $"Model '{document.Model.Name}' is absent from the Canonical Module Plan facts for '{module.ModuleId}'."));
                     continue;
                 }
@@ -218,7 +218,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                     "PERSISTENCE_MODEL_INVALID",
                     module.ModuleId,
                     relativePath,
-                    fullPath,
+                    artifact.DisplayPath,
                     exception.Message));
             }
         }
@@ -312,9 +312,9 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         List<ModuleMigrationStream> streams,
         List<PersistencePlanDiagnostic> diagnostics)
     {
-        var assemblyPath = ResolveContainedPath(module, bundle.AssemblyPath, diagnostics);
-        var manifestPath = ResolveContainedPath(module, bundle.ManifestPath, diagnostics);
-        if (assemblyPath is null || manifestPath is null)
+        var assemblyArtifact = ResolveContainedArtifact(module, bundle.AssemblyPath, diagnostics);
+        var manifestArtifact = ResolveContainedArtifact(module, bundle.ManifestPath, diagnostics);
+        if (assemblyArtifact is null || manifestArtifact is null)
         {
             return;
         }
@@ -322,15 +322,15 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         try
         {
             var manifest = JsonSerializer.Deserialize<MigrationManifest>(
-                File.ReadAllText(manifestPath),
+                manifestArtifact.Bytes.Span,
                 ManifestJsonOptions)
                 ?? throw new InvalidOperationException("Migration manifest is empty.");
             var legacyCutover = ValidateManifest(
                 module,
                 provider,
                 manifest,
-                assemblyPath,
-                manifestPath,
+                assemblyArtifact,
+                manifestArtifact.DisplayPath,
                 modelDigest);
 
             var migrations = manifest.Migrations
@@ -351,13 +351,16 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             streams.Add(new ModuleMigrationStream(
                 module.ModuleId,
                 provider,
-                assemblyPath,
-                manifestPath,
+                assemblyArtifact.DisplayPath,
+                manifestArtifact.DisplayPath,
                 manifest.BundleChecksum,
                 modelDigest,
                 migrations[^1].MigrationId,
                 IsLegacyBaseline: false,
-                migrations));
+                migrations)
+            {
+                AssemblyImage = new VerifiedArtifactImage(assemblyArtifact.Bytes.Span)
+            });
         }
         catch (PersistencePlanValidationException exception)
         {
@@ -365,7 +368,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 exception.Code,
                 module.ModuleId,
                 provider.ToString(),
-                manifestPath,
+                manifestArtifact.DisplayPath,
                 exception.Message));
         }
         catch (Exception exception)
@@ -374,7 +377,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 "PERSISTENCE_MIGRATION_MANIFEST_INVALID",
                 module.ModuleId,
                 provider.ToString(),
-                manifestPath,
+                manifestArtifact.DisplayPath,
                 exception.Message));
         }
     }
@@ -383,7 +386,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         CanonicalModulePlanModule module,
         PersistenceProvider provider,
         MigrationManifest manifest,
-        string assemblyPath,
+        ResolvedArtifact assemblyArtifact,
         string manifestPath,
         string modelDigest)
     {
@@ -395,7 +398,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 $"Migration manifest '{manifestPath}' does not match {module.ModuleId}/{provider}.");
         }
 
-        var checksum = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath)));
+        var checksum = Convert.ToHexStringLower(SHA256.HashData(assemblyArtifact.Bytes.Span));
         if (!string.Equals(checksum, manifest.BundleChecksum, StringComparison.Ordinal))
         {
             throw new PersistencePlanValidationException(
@@ -491,7 +494,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             module.Provenance.SourceKind,
             module.ModuleId,
             provider,
-            assemblyPath,
+            assemblyArtifact.DisplayPath,
             manifestPath,
             manifest.BundleChecksum,
             modelDigest,
@@ -505,7 +508,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             declaredCutover!.DroppedPhysicalTables);
     }
 
-    private static string? ResolveContainedPath(
+    private static ResolvedArtifact? ResolveContainedArtifact(
         CanonicalModulePlanModule module,
         string relativePath,
         List<PersistencePlanDiagnostic> diagnostics)
@@ -515,9 +518,10 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         {
             try
             {
-                // 计划只冻结声明事实；model、manifest 与 assembly 每次真正读取前仍须
-                // 通过同一个 Host capability 复验整棵模块树，不能只依赖词法 containment。
-                return trustedSource.ValidateModuleFileForConsumption(module, relativePath);
+                var snapshot = trustedSource.GetSnapshotForConsumption(module);
+                return new ResolvedArtifact(
+                    Path.GetFullPath(Path.Combine(module.PackageRoot, relativePath)),
+                    snapshot.ReadFile(relativePath));
             }
             catch (Exception exception)
             {
@@ -556,8 +560,25 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             return null;
         }
 
-        return fullPath;
+        try
+        {
+            return new ResolvedArtifact(
+                fullPath,
+                PathContainment.ReadContainedFile(root, fullPath));
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Add(new PersistencePlanDiagnostic(
+                "PERSISTENCE_ARTIFACT_PATH_INVALID",
+                module.ModuleId,
+                relativePath,
+                fullPath,
+                exception.Message));
+            return null;
+        }
     }
+
+    private sealed record ResolvedArtifact(string DisplayPath, ReadOnlyMemory<byte> Bytes);
 
     private static string ResolveSchemaName(CanonicalModulePlanModule module)
     {

@@ -1,4 +1,7 @@
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
+using System.Runtime.Loader;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Kernel.ModulePlanning;
@@ -161,14 +164,18 @@ public sealed class CanonicalModuleAssemblyLoader
 
     public IReadOnlyList<Assembly> Load(CanonicalModulePlan plan)
     {
-        return plan.Modules
+        var images = plan.Modules
             .Where(static module => !string.IsNullOrWhiteSpace(module.BackendEntry))
-            .Select(LoadModule)
+            .Select(ReadModuleImage)
+            .ToArray();
+        var context = new VerifiedModuleAssemblyLoadContext(images);
+        return images
+            .Select(image => LoadModule(image.Module, image.Bytes, context))
             .DistinctBy(static assembly => assembly.FullName, StringComparer.Ordinal)
             .ToArray();
     }
 
-    private Assembly LoadModule(CanonicalModulePlanModule module)
+    private VerifiedModuleImage ReadModuleImage(CanonicalModulePlanModule module)
     {
         var isBuiltIn = module.Provenance.AuthenticatesBuiltIn(module);
         var boundary = isBuiltIn
@@ -178,15 +185,26 @@ public sealed class CanonicalModuleAssemblyLoader
             isBuiltIn ? module.PackageRoot : boundary,
             module.BackendEntry!));
         if (!PathContainment.Contains(boundary, path)
-            || !File.Exists(path))
+            || (!isBuiltIn && !File.Exists(path)))
         {
             throw new FileNotFoundException(
                 $"Canonical backend entry for '{module.ModuleId}' is missing or outside its load boundary.",
                 path);
         }
 
-        PathContainment.RejectReparsePoints(path);
-        var assembly = Assembly.LoadFrom(path);
+        var image = isBuiltIn
+            ? module.Provenance.GetAuthenticatedBuiltInSnapshot(module)!
+                .ReadDistributionFile(module.BackendEntry!)
+            : PathContainment.ReadContainedFile(boundary, path);
+        return new VerifiedModuleImage(module, image);
+    }
+
+    private static Assembly LoadModule(
+        CanonicalModulePlanModule module,
+        byte[] image,
+        VerifiedModuleAssemblyLoadContext context)
+    {
+        var assembly = context.LoadVerifiedImage(module.ModuleId, image);
         ValidateModuleContract(module, assembly);
         return assembly;
     }
@@ -212,6 +230,113 @@ public sealed class CanonicalModuleAssemblyLoader
                 $"Canonical backend assembly identity '{actual.ModuleId}@{actual.Version}' does not match '{planned.ModuleId}@{planned.Version}'.");
         }
 
+    }
+
+    private sealed class VerifiedModuleAssemblyLoadContext
+        : AssemblyLoadContext
+    {
+        private readonly IReadOnlyDictionary<string, byte[]> _verifiedImages;
+
+        internal VerifiedModuleAssemblyLoadContext(IReadOnlyList<VerifiedModuleImage> images)
+            : base(isCollectible: false)
+        {
+            _verifiedImages = images
+                .Select(image => new
+                {
+                    Name = ReadIdentity(image.Bytes).AssemblyName.Name!,
+                    image.Bytes
+                })
+                .GroupBy(static image => image.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    static group => group.Key,
+                    group => group.Select(static image => image.Bytes)
+                        .Distinct(ByteArrayComparer.Instance)
+                        .Single(),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal Assembly LoadVerifiedImage(string owner, byte[] image)
+        {
+            var identity = ReadIdentity(image);
+            var existing = Assemblies.FirstOrDefault(assembly =>
+                MatchesIdentity(assembly, identity));
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            // Host 可能已通过静态引用把内建模块装入默认上下文。只有签发映像中的程序集
+            // 身份与 MVID 都一致时才复用，以维持模块公共契约的类型身份；同名的其他预加载
+            // 程序集不能越过已验证字节，仍由当前上下文从签发映像加载。
+            var verifiedDefault = Default.Assemblies.FirstOrDefault(assembly =>
+                MatchesIdentity(assembly, identity));
+            if (verifiedDefault is not null)
+            {
+                return verifiedDefault;
+            }
+
+            using var loadStream = new MemoryStream(image, writable: false);
+            var assembly = LoadFromStream(loadStream);
+            if (!MatchesIdentity(assembly, identity))
+            {
+                throw new InvalidDataException(
+                    $"Canonical backend assembly for '{owner}' differs from its verified artifact image.");
+            }
+
+            return assembly;
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (assemblyName.Name is { } name && _verifiedImages.TryGetValue(name, out var image))
+            {
+                return LoadVerifiedImage(name, image);
+            }
+
+            return Default.Assemblies.FirstOrDefault(candidate =>
+                AssemblyName.ReferenceMatchesDefinition(candidate.GetName(), assemblyName));
+        }
+
+        private static bool MatchesIdentity(Assembly assembly, VerifiedAssemblyIdentity expected) =>
+            AssemblyName.ReferenceMatchesDefinition(assembly.GetName(), expected.AssemblyName)
+            && assembly.ManifestModule.ModuleVersionId == expected.Mvid;
+
+        private static VerifiedAssemblyIdentity ReadIdentity(byte[] image)
+        {
+            using var metadataStream = new MemoryStream(image, writable: false);
+            using var peReader = new PEReader(metadataStream);
+            var metadata = peReader.GetMetadataReader();
+            var definition = metadata.GetAssemblyDefinition();
+            var assemblyName = new AssemblyName
+            {
+                Name = metadata.GetString(definition.Name),
+                Version = definition.Version,
+                CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
+            };
+            if (!definition.PublicKey.IsNil)
+            {
+                assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
+            }
+
+            return new VerifiedAssemblyIdentity(
+                assemblyName,
+                metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
+        }
+    }
+
+    private sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
+
+    private sealed record VerifiedModuleImage(CanonicalModulePlanModule Module, byte[] Bytes);
+
+    private sealed class ByteArrayComparer : IEqualityComparer<byte[]>
+    {
+        internal static ByteArrayComparer Instance { get; } = new();
+
+        public bool Equals(byte[]? left, byte[]? right) =>
+            left is not null && right is not null && left.AsSpan().SequenceEqual(right);
+
+        public int GetHashCode(byte[] value) =>
+            value.Length == 0 ? 0 : HashCode.Combine(value.Length, value[0], value[^1]);
     }
 
 }

@@ -39,7 +39,14 @@ public sealed record ModuleMigrationStream(
     string ModelDigest,
     string ExpectedFrontier,
     bool IsLegacyBaseline,
-    IReadOnlyList<CompiledMigrationStep> Migrations);
+    IReadOnlyList<CompiledMigrationStep> Migrations)
+{
+    /// <summary>
+    /// 计划编译时已验证的程序集映像；迁移执行不得再从 AssemblyPath 打开文件。
+    /// </summary>
+    [JsonIgnore]
+    public VerifiedArtifactImage? AssemblyImage { get; init; }
+}
 
 /// <summary>
 /// 共享运行时模型与迁移执行共同消费的不可变持久化计划。

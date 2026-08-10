@@ -91,6 +91,41 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
             new CanonicalModuleAssemblyLoader(_root).Load(plan));
     }
 
+    [Fact]
+    public void Load_AuthenticatedBuiltInEntryReplacedByPreloadedAssembly_UsesSignedImage()
+    {
+        var modulesRoot = Path.Combine(_root, "modules");
+        var packageRoot = Path.Combine(modulesRoot, "Audit");
+        Directory.CreateDirectory(packageRoot);
+        var entryPath = Path.Combine(_root, "AuditModule.dll");
+        File.Copy(typeof(AuditModule).Assembly.Location, entryPath);
+        File.WriteAllText(
+            Path.Combine(packageRoot, "plugin.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "moduleId": "Audit",
+              "displayName": "审计日志",
+              "version": "1.0.0",
+              "entryAssembly": "../../AuditModule.dll",
+              "dependencies": []
+            }
+            """);
+        var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+        var compilation = new CanonicalModulePlanCompiler().Compile("signed-audit", [candidate]);
+        var plan = Assert.IsType<CanonicalModulePlan>(compilation.Plan);
+
+        // HostApi.Tests 已在默认 ALC 中预加载；同路径替换不能影响已签发映像。
+        File.Copy(typeof(CanonicalModuleAssemblyLoaderTests).Assembly.Location, entryPath, overwrite: true);
+
+        var assembly = Assert.Single(new CanonicalModuleAssemblyLoader(_root).Load(plan));
+
+        Assert.Same(typeof(AuditModule).Assembly, assembly);
+        Assert.Equal(typeof(AuditModule).Assembly.ManifestModule.ModuleVersionId, assembly.ManifestModule.ModuleVersionId);
+        Assert.Contains(assembly.GetTypes(), type => type.Name == nameof(AuditModule));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

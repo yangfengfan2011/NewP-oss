@@ -12,8 +12,17 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
     public ModelMetadataDocument LoadFromFile(string path)
     {
         var fullPath = Path.GetFullPath(path);
-        var json = File.ReadAllText(fullPath);
-        using var document = JsonDocument.Parse(json);
+        return Load(File.ReadAllBytes(fullPath), fullPath);
+    }
+
+    /// <summary>
+    /// 从调用方已固定的 UTF-8 工件字节加载模型，避免验证后重新打开路径。
+    /// </summary>
+    public ModelMetadataDocument Load(ReadOnlySpan<byte> utf8Json, string sourcePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        var fullPath = Path.GetFullPath(sourcePath);
+        using var document = JsonDocument.Parse(utf8Json.ToArray());
 
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
@@ -24,7 +33,7 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
         // 兼容旧式整文档形状，避免存量测试与工具链在本轮收口期间一起失稳。
         if (root.TryGetProperty("moduleId", out _) && root.TryGetProperty("model", out _))
         {
-            return JsonSerializer.Deserialize<ModelMetadataDocument>(json, Options)
+            return JsonSerializer.Deserialize<ModelMetadataDocument>(utf8Json, Options)
                 ?? throw new InvalidOperationException($"Failed to deserialize model metadata: {fullPath}");
         }
 

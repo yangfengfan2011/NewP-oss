@@ -155,6 +155,7 @@ public class RuntimeViewMaterializer
 
             foreach (var module in plan.Modules)
             {
+                VerifiedModuleArtifactSnapshot? builtInSnapshot = null;
                 if (module.Provenance.AuthenticatesBuiltIn(module))
                 {
                     if (_builtInModuleSource is null)
@@ -163,15 +164,14 @@ public class RuntimeViewMaterializer
                             $"Authenticated built-in module '{module.ModuleId}' requires its Host trust source.");
                     }
 
-                    // Backend 为空的内建模块仍会消费 frontend、metadata 或 resources；
-                    // 因此必须在任何投影读取发生前统一复验 capability 与完整模块树。
-                    _builtInModuleSource.ValidateForConsumption(module);
+                    // capability 只签发一次不可变工件快照；投影阶段不得重新枚举 authoring 路径。
+                    builtInSnapshot = _builtInModuleSource.GetSnapshotForConsumption(module);
                 }
 
-                MaterializeBackendView(stagedBackendViewRoot, module);
-                StageFrontendAssets(stagedPublicRoot, module);
-                StageModuleMetadata(stagedRuntimeRoot, module);
-                StagePlatformResources(stagedRuntimeRoot, module);
+                MaterializeBackendView(stagedBackendViewRoot, module, builtInSnapshot);
+                StageFrontendAssets(stagedPublicRoot, module, builtInSnapshot);
+                StageModuleMetadata(stagedRuntimeRoot, module, builtInSnapshot);
+                StagePlatformResources(stagedRuntimeRoot, module, builtInSnapshot);
             }
 
             var frontendManifestPath = Path.Combine(stagedRuntimeRoot, "frontend-plugin-manifest.json");
@@ -210,7 +210,10 @@ public class RuntimeViewMaterializer
         }
     }
 
-    private void MaterializeBackendView(string backendViewRoot, CanonicalModulePlanModule module)
+    private void MaterializeBackendView(
+        string backendViewRoot,
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot? builtInSnapshot)
     {
         if (string.IsNullOrWhiteSpace(module.BackendEntry))
         {
@@ -219,7 +222,7 @@ public class RuntimeViewMaterializer
 
         if (module.Provenance.AuthenticatesBuiltIn(module))
         {
-            MaterializeBuiltInBackendView(backendViewRoot, module);
+            MaterializeBuiltInBackendView(backendViewRoot, module, builtInSnapshot!);
             return;
         }
 
@@ -245,7 +248,8 @@ public class RuntimeViewMaterializer
 
     private void MaterializeBuiltInBackendView(
         string backendViewRoot,
-        CanonicalModulePlanModule module)
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot snapshot)
     {
         if (_builtInModuleSource is null)
         {
@@ -253,26 +257,32 @@ public class RuntimeViewMaterializer
                 $"Authenticated built-in module '{module.ModuleId}' requires its Host trust source.");
         }
 
-        var sourceManifestPath = _builtInModuleSource.ValidateDistributionFile(
-            Path.Combine(module.PackageRoot, "plugin.json"));
-        var entryAssemblyPath = _builtInModuleSource.ValidateDistributionFile(
-            Path.Combine(module.PackageRoot, module.BackendEntry!));
-
         var targetDirectory = Path.Combine(backendViewRoot, module.ModuleId);
         Directory.CreateDirectory(targetDirectory);
-        var targetEntryName = Path.GetFileName(entryAssemblyPath);
-        File.Copy(entryAssemblyPath, Path.Combine(targetDirectory, targetEntryName), overwrite: true);
+        var targetEntryName = Path.GetFileName(module.BackendEntry!);
+        File.WriteAllBytes(
+            Path.Combine(targetDirectory, targetEntryName),
+            snapshot.ReadDistributionFile(module.BackendEntry!));
 
-        var manifest = JsonNode.Parse(File.ReadAllText(sourceManifestPath))?.AsObject()
-            ?? throw new JsonException($"Built-in module manifest '{sourceManifestPath}' deserialized to null.");
+        var manifest = JsonNode.Parse(snapshot.ReadText("plugin.json"))?.AsObject()
+            ?? throw new JsonException($"Built-in module manifest for '{module.ModuleId}' deserialized to null.");
         manifest["entryAssembly"] = targetEntryName;
         File.WriteAllText(
             Path.Combine(targetDirectory, "plugin.json"),
             manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
     }
 
-    private static void StageFrontendAssets(string publicRoot, CanonicalModulePlanModule module)
+    private static void StageFrontendAssets(
+        string publicRoot,
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot? snapshot)
     {
+        if (snapshot is not null)
+        {
+            StageBuiltInFrontendAssets(publicRoot, module, snapshot);
+            return;
+        }
+
         var frontendRoot = Path.GetFullPath(Path.Combine(module.PackageRoot, "frontend"));
         var frontendManifestPath = Path.Combine(frontendRoot, "plugin.frontend.json");
         if (!File.Exists(frontendManifestPath))
@@ -299,50 +309,126 @@ public class RuntimeViewMaterializer
             overwrite: true);
     }
 
-    private static void StageModuleMetadata(string runtimeRoot, CanonicalModulePlanModule module)
+    private static void StageBuiltInFrontendAssets(
+        string publicRoot,
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot snapshot)
+    {
+        const string frontendManifestPath = "frontend/plugin.frontend.json";
+        if (!snapshot.ContainsFile(frontendManifestPath))
+        {
+            return;
+        }
+
+        var frontendManifest = JsonSerializer.Deserialize<FrontendPackageManifest>(
+            snapshot.ReadFile(frontendManifestPath),
+            ManifestJsonOptions)
+            ?? throw new JsonException($"Frontend manifest for '{module.ModuleId}' deserialized to null.");
+        var assetRootPath = ResolveSnapshotPath("frontend", frontendManifest.AssetRoot, "AssetRoot");
+        var entryManifestPath = ResolveSnapshotPath("frontend", frontendManifest.EntryManifest, "EntryManifest");
+        var entryManifest = JsonSerializer.Deserialize<FrontendEntryManifest>(
+            snapshot.ReadFile(entryManifestPath),
+            ManifestJsonOptions)
+            ?? throw new JsonException($"Frontend runtime manifest for '{module.ModuleId}' deserialized to null.");
+        var entryPath = ResolveSnapshotPath("frontend", entryManifest.Entry, "Entry");
+        if (!snapshot.ContainsFile(entryPath))
+        {
+            throw new FileNotFoundException("Frontend manifest Entry file not found.", entryPath);
+        }
+
+        var targetRoot = Path.Combine(publicRoot, module.ModuleId, module.Version);
+        var assetRootName = assetRootPath.Split('/').Last();
+        WriteSnapshotDirectory(snapshot, assetRootPath, Path.Combine(targetRoot, assetRootName));
+        File.WriteAllBytes(
+            Path.Combine(targetRoot, Path.GetFileName(entryManifestPath)),
+            snapshot.ReadFile(entryManifestPath));
+    }
+
+    private static void StageModuleMetadata(
+        string runtimeRoot,
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot? snapshot)
     {
         if (string.Equals(module.FrontendBindingMode, "standard-data", StringComparison.Ordinal))
         {
-            StageStandardDataModule(runtimeRoot, module);
+            StageStandardDataModule(runtimeRoot, module, snapshot);
             return;
         }
 
         var packageMetadataRoot = module.Provenance.AuthenticatesBuiltIn(module)
             ? Path.Combine(module.PackageRoot, "metadata")
             : Path.Combine(module.PackageRoot, "modules", module.ModuleId, "metadata");
-        if (!Directory.Exists(packageMetadataRoot))
+        if (snapshot is null && !Directory.Exists(packageMetadataRoot))
         {
             return;
         }
 
         var targetMetadataRoot = Path.Combine(runtimeRoot, "modules", module.ModuleId, "metadata");
-        CopyDirectory(packageMetadataRoot, targetMetadataRoot);
-    }
-
-    private static void StageStandardDataModule(string runtimeRoot, CanonicalModulePlanModule module)
-    {
-        var moduleRuntimeRoot = Path.Combine(runtimeRoot, "modules", module.ModuleId);
-        var targetMetadataRoot = Path.Combine(moduleRuntimeRoot, "metadata");
-        var packageMetadataRoot = Path.Combine(module.PackageRoot, "metadata");
-        if (Directory.Exists(packageMetadataRoot))
+        if (snapshot is not null)
+        {
+            WriteSnapshotDirectory(snapshot, "metadata", targetMetadataRoot);
+        }
+        else
         {
             CopyDirectory(packageMetadataRoot, targetMetadataRoot);
         }
+    }
 
-        var manifest = ReadPackageObject(module.PackageRoot, "plugin.json");
+    private static void StageStandardDataModule(
+        string runtimeRoot,
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot? snapshot)
+    {
+        var moduleRuntimeRoot = Path.Combine(runtimeRoot, "modules", module.ModuleId);
+        var targetMetadataRoot = Path.Combine(moduleRuntimeRoot, "metadata");
+        if (snapshot is not null)
+        {
+            WriteSnapshotDirectory(snapshot, "metadata", targetMetadataRoot);
+        }
+        else
+        {
+            var packageMetadataRoot = Path.Combine(module.PackageRoot, "metadata");
+            if (Directory.Exists(packageMetadataRoot))
+            {
+                CopyDirectory(packageMetadataRoot, targetMetadataRoot);
+            }
+        }
+
+        var manifest = snapshot is null
+            ? ReadPackageObject(module.PackageRoot, "plugin.json")
+            : JsonNode.Parse(snapshot.ReadFile("plugin.json"))?.AsObject()
+                ?? throw new JsonException($"Standard data package '{module.ModuleId}' deserialized to null.");
         var artifacts = manifest["artifacts"]?.AsObject()
             ?? throw new JsonException($"Standard data package '{module.ModuleId}' is missing artifacts.");
         var blueprintRelativePath = RequiredString(artifacts, "blueprint", module.ModuleId);
         var projectionRelativePath = RequiredString(artifacts, "standardProjection", module.ModuleId);
-        var blueprintPath = ResolveContainedFilePath(module.PackageRoot, blueprintRelativePath, "Blueprint");
-        var projectionPath = ResolveContainedFilePath(module.PackageRoot, projectionRelativePath, "StandardProjection");
+        var blueprintBytes = snapshot?.ReadFile(ResolveSnapshotPackagePath(blueprintRelativePath, "Blueprint"));
+        var projectionBytes = snapshot?.ReadFile(ResolveSnapshotPackagePath(projectionRelativePath, "StandardProjection"));
+        var blueprintPath = snapshot is null
+            ? ResolveContainedFilePath(module.PackageRoot, blueprintRelativePath, "Blueprint")
+            : blueprintRelativePath;
+        var projectionPath = snapshot is null
+            ? ResolveContainedFilePath(module.PackageRoot, projectionRelativePath, "StandardProjection")
+            : projectionRelativePath;
+        var targetBlueprintPath = Path.Combine(moduleRuntimeRoot, "authoring", "newp.plugin.json");
+        var targetProjectionPath = Path.Combine(moduleRuntimeRoot, "projections", "standard-data.json");
 
-        CopyContract(blueprintPath, Path.Combine(moduleRuntimeRoot, "authoring", "newp.plugin.json"));
-        CopyContract(projectionPath, Path.Combine(moduleRuntimeRoot, "projections", "standard-data.json"));
+        if (snapshot is null)
+        {
+            CopyContract(blueprintPath, targetBlueprintPath);
+            CopyContract(projectionPath, targetProjectionPath);
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(targetBlueprintPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetProjectionPath)!);
+            File.WriteAllBytes(targetBlueprintPath, blueprintBytes!);
+            File.WriteAllBytes(targetProjectionPath, projectionBytes!);
+        }
 
-        var blueprint = JsonNode.Parse(File.ReadAllText(blueprintPath))?.AsObject()
+        var blueprint = JsonNode.Parse(blueprintBytes ?? File.ReadAllBytes(blueprintPath))?.AsObject()
             ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' deserialized to null.");
-        var projection = JsonNode.Parse(File.ReadAllText(projectionPath))?.AsObject()
+        var projection = JsonNode.Parse(projectionBytes ?? File.ReadAllBytes(projectionPath))?.AsObject()
             ?? throw new JsonException($"Standard data projection for '{module.ModuleId}' deserialized to null.");
         WriteStandardDataMetadata(targetMetadataRoot, module, blueprint, projection);
     }
@@ -542,8 +628,22 @@ public class RuntimeViewMaterializer
         File.WriteAllText(path, JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
     }
 
-    private static void StagePlatformResources(string runtimeRoot, CanonicalModulePlanModule module)
+    private static void StagePlatformResources(
+        string runtimeRoot,
+        CanonicalModulePlanModule module,
+        VerifiedModuleArtifactSnapshot? snapshot)
     {
+        if (snapshot is not null)
+        {
+            var snapshotTargetResourcesRoot = Path.Combine(runtimeRoot, "resources");
+            WriteSnapshotDirectoryRejectingConflicts(
+                snapshot,
+                "resources",
+                snapshotTargetResourcesRoot,
+                module.ModuleId);
+            return;
+        }
+
         var packageResourcesRoot = Path.Combine(module.PackageRoot, "resources");
         if (!Directory.Exists(packageResourcesRoot))
         {
@@ -554,6 +654,118 @@ public class RuntimeViewMaterializer
         // 冲突时直接失败，而不是依赖复制顺序做隐式覆盖。
         var targetResourcesRoot = Path.Combine(runtimeRoot, "resources");
         CopyDirectoryRejectingConflicts(packageResourcesRoot, targetResourcesRoot, module.ModuleId);
+    }
+
+    private static string ResolveSnapshotPath(string root, string? relativePath, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            throw new JsonException($"Frontend manifest {propertyName} resolves to an unsafe path.");
+        }
+
+        var combined = $"{root.TrimEnd('/', '\\')}/{relativePath.Replace('\\', '/')}";
+        var segments = new List<string>();
+        foreach (var segment in combined.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                if (segments.Count <= 1)
+                {
+                    throw new JsonException($"Frontend manifest {propertyName} resolves to an unsafe path.");
+                }
+
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+
+            segments.Add(segment);
+        }
+
+        var resolved = string.Join('/', segments);
+        if (!resolved.StartsWith(root.TrimEnd('/', '\\') + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new JsonException($"Frontend manifest {propertyName} resolves to an unsafe path.");
+        }
+
+        return resolved;
+    }
+
+    private static string ResolveSnapshotPackagePath(string relativePath, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            throw new JsonException($"Standard data {propertyName} resolves to an unsafe path.");
+        }
+
+        var segments = new List<string>();
+        foreach (var segment in relativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                if (segments.Count == 0)
+                {
+                    throw new JsonException($"Standard data {propertyName} resolves to an unsafe path.");
+                }
+
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+
+            segments.Add(segment);
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static void WriteSnapshotDirectory(
+        VerifiedModuleArtifactSnapshot snapshot,
+        string sourceRoot,
+        string destinationRoot)
+    {
+        foreach (var sourcePath in snapshot.EnumerateFiles(sourceRoot))
+        {
+            var relativePath = sourcePath[(sourceRoot.TrimEnd('/', '\\').Length + 1)..];
+            var destinationPath = Path.Combine(destinationRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.WriteAllBytes(destinationPath, snapshot.ReadFile(sourcePath));
+        }
+    }
+
+    private static void WriteSnapshotDirectoryRejectingConflicts(
+        VerifiedModuleArtifactSnapshot snapshot,
+        string sourceRoot,
+        string destinationRoot,
+        string moduleId)
+    {
+        foreach (var sourcePath in snapshot.EnumerateFiles(sourceRoot))
+        {
+            var relativePath = sourcePath[(sourceRoot.TrimEnd('/', '\\').Length + 1)..];
+            var destinationPath = Path.Combine(destinationRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            var bytes = snapshot.ReadFile(sourcePath);
+            if (File.Exists(destinationPath))
+            {
+                if (File.ReadAllBytes(destinationPath).AsSpan().SequenceEqual(bytes))
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    $"Platform resource conflict detected for '{relativePath}' while materializing module '{moduleId}'.");
+            }
+
+            File.WriteAllBytes(destinationPath, bytes);
+        }
     }
 
     private static string ResolveContainedPath(string rootPath, string? relativePath, string propertyName)

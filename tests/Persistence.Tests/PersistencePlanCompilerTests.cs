@@ -282,6 +282,7 @@ public sealed class PersistencePlanCompilerTests
                 ["compatibility"] = "backup-restore-only"
             });
         });
+        module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(
@@ -304,6 +305,7 @@ public sealed class PersistencePlanCompilerTests
             migration["fromModelDigest"] = new string('f', 64);
             migration["compatibility"] = "backup-restore-only";
         });
+        module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(
@@ -330,6 +332,7 @@ public sealed class PersistencePlanCompilerTests
             migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
             migration["compatibility"] = "backup-restore-only";
         });
+        module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(
@@ -504,6 +507,7 @@ public sealed class PersistencePlanCompilerTests
             migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
             migration["compatibility"] = "backup-restore-only";
         });
+        module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(BuildCanonicalPlan(module), PersistenceProvider.SqlServer);
@@ -528,6 +532,7 @@ public sealed class PersistencePlanCompilerTests
             migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
             migration["compatibility"] = "backup-restore-only";
         });
+        module = package.ResignBuiltInModule(module);
         var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
             BuildCanonicalPlan(module),
             PersistenceProvider.SqlServer);
@@ -581,6 +586,7 @@ public sealed class PersistencePlanCompilerTests
             migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
             migration["compatibility"] = "backup-restore-only";
         });
+        module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(
@@ -603,6 +609,7 @@ public sealed class PersistencePlanCompilerTests
             migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
             migration["compatibility"] = "safe-expand";
         });
+        module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(
@@ -730,7 +737,7 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
-    public void Compile_AuthenticatedBuiltInModelDirectoryReplacedWithJunctionAfterPlanIssued_RejectsBeforeRead()
+    public void Compile_AuthenticatedBuiltInModelDirectoryReplacedWithJunctionAfterPlanIssued_UsesSignedSnapshot()
     {
         using var package = TestPackage.Create("Identity", "User");
         var plan = BuildCanonicalPlan(package.BuildBuiltInModule());
@@ -740,14 +747,13 @@ public sealed class PersistencePlanCompilerTests
             plan,
             PersistenceProvider.SqlServer);
 
-        Assert.False(result.IsSuccess);
-        Assert.Null(result.Plan);
-        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_ARTIFACT_PATH_INVALID");
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        Assert.NotNull(result.Plan);
         Assert.True(File.Exists(sentinelPath));
     }
 
     [Fact]
-    public void Compile_AuthenticatedBuiltInMigrationDirectoryReplacedWithJunctionAfterPlanIssued_RejectsBeforeRead()
+    public void Compile_AuthenticatedBuiltInMigrationDirectoryReplacedWithJunctionAfterPlanIssued_UsesSignedSnapshot()
     {
         using var package = TestPackage.Create("Identity", "User");
         var plan = BuildCanonicalPlan(package.BuildBuiltInModule());
@@ -757,10 +763,45 @@ public sealed class PersistencePlanCompilerTests
             plan,
             PersistenceProvider.SqlServer);
 
-        Assert.False(result.IsSuccess);
-        Assert.Null(result.Plan);
-        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_ARTIFACT_PATH_INVALID");
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        Assert.NotNull(Assert.Single(result.Plan!.Streams).AssemblyImage);
         Assert.True(File.Exists(sentinelPath));
+    }
+
+    [Fact]
+    public async Task Execute_CompiledAssemblyPathReplacedByPreloadedImage_UsesVerifiedPlanImage()
+    {
+        using var package = TestPackage.Create("Identity", "User");
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(package.BuildBuiltInModule()),
+            PersistenceProvider.SqlServer);
+        var plan = Assert.IsType<CompiledPersistencePlan>(result.Plan);
+        Assert.NotNull(Assert.Single(plan.Streams).AssemblyImage);
+
+        // Kernel 已在默认 ALC 中加载；磁盘同路径被该映像替换也不能改变执行字节。
+        File.Copy(typeof(ModuleCapsuleCandidateReader).Assembly.Location, package.BundlePath, overwrite: true);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["Persistence:AutoMigrate"] = "true",
+                ["ConnectionStrings:SqlServer"] =
+                    "Server=invalid.invalid,1;Database=never-connect;Integrated Security=True;Connect Timeout=1;TrustServerCertificate=True;"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddEfCorePersistence(
+            configuration,
+            plan,
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() =>
+            scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>().MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.MigrationMissing, exception.FailureCode);
     }
 
     [Fact]
@@ -1059,6 +1100,19 @@ public sealed class PersistencePlanCompilerTests
                     "/")
             };
         }
+
+        public CanonicalModulePlanModule ResignBuiltInModule(CanonicalModulePlanModule module) =>
+            module with
+            {
+                Provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
+                    _moduleId,
+                    Root,
+                    TrustedBuiltInModuleSource.CreateForHost(
+                        _cleanupRoot,
+                        Path.Combine(_cleanupRoot, "modules-root")),
+                    Path.Combine(Root, "plugin.json"),
+                    "/")
+            };
 
         public void RewriteManifest(Action<JsonObject> rewrite)
         {

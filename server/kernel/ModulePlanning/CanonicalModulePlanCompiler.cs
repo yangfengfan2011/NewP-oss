@@ -56,7 +56,16 @@ public sealed class CanonicalModulePlanCompiler
             schemaVersion = "1.0",
             candidateId,
             compilerContractVersion = ContractVersion,
-            modules
+            modules,
+            verifiedArtifactDigests = modules
+                .Select(module => new
+                {
+                    module.ModuleId,
+                    digest = module.Provenance.GetAuthenticatedBuiltInArtifactDigest(module)
+                })
+                .Where(static artifact => artifact.digest is not null)
+                .OrderBy(static artifact => artifact.ModuleId, StringComparer.Ordinal)
+                .ToArray()
         };
         var canonicalBytes = JsonSerializer.SerializeToUtf8Bytes(canonicalDocument, CanonicalJsonOptions);
         var planHash = Convert.ToHexStringLower(SHA256.HashData(canonicalBytes));

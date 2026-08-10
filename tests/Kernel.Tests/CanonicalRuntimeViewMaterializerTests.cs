@@ -81,12 +81,72 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
-    public void Stage_AuthenticatedBackendlessBuiltInReplacedWithJunctionAfterPlanIssued_RejectsBeforeConsumption()
+    public void ReadTrustedBuiltIn_WhenMetadataBecomesJunctionDuringSnapshot_RejectsExternalFacts()
+    {
+        var modulesRoot = Path.Combine(_root, "modules-capture-race");
+        var moduleRoot = Path.Combine(modulesRoot, "Organization");
+        var metadataRoot = Path.Combine(moduleRoot, "metadata");
+        var modelsRoot = Path.Combine(metadataRoot, "models");
+        Directory.CreateDirectory(modelsRoot);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "plugin.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "moduleId": "Organization",
+              "displayName": "组织结构",
+              "version": "1.0.0",
+              "dependencies": []
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(modelsRoot, "Person.model.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "model",
+              "Person": { "kind": "Entity" }
+            }
+            """);
+        var swapped = false;
+        var externalMetadataRoot = Path.Combine(_root, "external-capture-metadata");
+        var sentinelPath = Path.Combine(externalMetadataRoot, "external-sentinel.txt");
+        var source = TrustedBuiltInModuleSource.CreateForHost(
+            _root,
+            modulesRoot,
+            artifact =>
+            {
+                if (swapped || !artifact.EndsWith("Person.model.json", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                swapped = true;
+                Directory.Move(metadataRoot, externalMetadataRoot);
+                File.WriteAllText(sentinelPath, "must remain untrusted");
+                CreateDirectoryLink(metadataRoot, externalMetadataRoot);
+            });
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+
+        Assert.True(swapped);
+        Assert.Contains("reparse point", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(sentinelPath));
+    }
+
+    [Fact]
+    public void Stage_AuthenticatedBackendlessBuiltInReplacedWithJunctionAfterPlanIssued_UsesSignedSnapshot()
     {
         var modulesRoot = Path.Combine(_root, "modules");
         var moduleRoot = Path.Combine(modulesRoot, "PluginOps");
         var metadataRoot = Path.Combine(moduleRoot, "metadata", "models");
+        var frontendRoot = Path.Combine(moduleRoot, "frontend");
+        var assetRoot = Path.Combine(frontendRoot, "assets");
+        var resourcesRoot = Path.Combine(moduleRoot, "resources");
         Directory.CreateDirectory(metadataRoot);
+        Directory.CreateDirectory(assetRoot);
+        Directory.CreateDirectory(resourcesRoot);
         File.WriteAllText(
             Path.Combine(moduleRoot, "plugin.json"),
             """
@@ -107,6 +167,14 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
               "PluginRegistration": { "kind": "Entity" }
             }
             """);
+        File.WriteAllText(
+            Path.Combine(frontendRoot, "plugin.frontend.json"),
+            """{"entryManifest":"entry-manifest.json","assetRoot":"assets"}""");
+        File.WriteAllText(
+            Path.Combine(frontendRoot, "entry-manifest.json"),
+            """{"entry":"assets/entry.js"}""");
+        File.WriteAllText(Path.Combine(assetRoot, "entry.js"), "signed frontend");
+        File.WriteAllText(Path.Combine(resourcesRoot, "shared.txt"), "signed resource");
         var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
         var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
         var compilation = new CanonicalModulePlanCompiler().Compile("issued-before-swap", [candidate]);
@@ -116,6 +184,8 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
         Directory.Move(moduleRoot, externalModuleRoot);
         var sentinelPath = Path.Combine(externalModuleRoot, "external-sentinel.txt");
         File.WriteAllText(sentinelPath, "must remain untouched");
+        File.WriteAllText(Path.Combine(assetRoot.Replace(moduleRoot, externalModuleRoot), "entry.js"), "replaced frontend");
+        File.WriteAllText(Path.Combine(resourcesRoot.Replace(moduleRoot, externalModuleRoot), "shared.txt"), "replaced resource");
         CreateDirectoryLink(moduleRoot, externalModuleRoot);
 
         var installRoot = Path.Combine(_root, "install");
@@ -124,10 +194,66 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
             new FrontendRuntimeManifestBuilder(),
             source);
 
-        var error = Assert.Throws<InvalidOperationException>(() => materializer.Stage(installRoot, plan));
+        using var stage = materializer.Stage(installRoot, plan);
 
-        Assert.Contains("reparse point", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(
+            stage.StagedRuntimeRoot,
+            "modules",
+            "PluginOps",
+            "metadata",
+            "models",
+            "PluginRegistration.model.json")));
+        Assert.False(File.Exists(Path.Combine(
+            stage.StagedRuntimeRoot,
+            "modules",
+            "PluginOps",
+            "external-sentinel.txt")));
+        Assert.Equal(
+            "signed frontend",
+            File.ReadAllText(Path.Combine(stage.StagedPublicRoot, "PluginOps", "1.0.0", "assets", "entry.js")));
+        Assert.Equal(
+            "signed resource",
+            File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "resources", "shared.txt")));
         Assert.True(File.Exists(sentinelPath));
+    }
+
+    [Fact]
+    public void Compile_AuthenticatedMetadataBytesChangeWithoutFactChange_ChangesPlanHash()
+    {
+        var modulesRoot = Path.Combine(_root, "modules-plan-hash");
+        var moduleRoot = Path.Combine(modulesRoot, "PluginOps");
+        var modelsRoot = Path.Combine(moduleRoot, "metadata", "models");
+        Directory.CreateDirectory(modelsRoot);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "plugin.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "moduleId": "PluginOps",
+              "displayName": "插件运维",
+              "version": "1.0.0",
+              "dependencies": []
+            }
+            """);
+        var modelPath = Path.Combine(modelsRoot, "PluginRegistration.model.json");
+        File.WriteAllText(
+            modelPath,
+            """{"schemaVersion":"1.0","type":"model","PluginRegistration":{"kind":"Entity","label":"before"}}""");
+        var firstSource = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var firstCandidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(firstSource));
+        var first = Assert.IsType<CanonicalModulePlan>(
+            new CanonicalModulePlanCompiler().Compile("same-facts", [firstCandidate]).Plan);
+
+        File.WriteAllText(
+            modelPath,
+            """{"schemaVersion":"1.0","type":"model","PluginRegistration":{"kind":"Entity","label":"after"}}""");
+        var secondSource = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var secondCandidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(secondSource));
+        var second = Assert.IsType<CanonicalModulePlan>(
+            new CanonicalModulePlanCompiler().Compile("same-facts", [secondCandidate]).Plan);
+
+        Assert.Equal(first.Modules[0].ModelKeys, second.Modules[0].ModelKeys);
+        Assert.NotEqual(first.PlanHash, second.PlanHash);
     }
 
     [Fact]

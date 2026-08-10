@@ -83,6 +83,21 @@ public sealed class ModulePlanProvenance
         string packageRoot,
         TrustedBuiltInModuleSource trustedSource,
         string sourcePath,
+        string jsonPointer) =>
+        CreateTrustedBuiltInRoot(
+            moduleId,
+            packageRoot,
+            trustedSource,
+            trustedSource.CaptureModuleSnapshot(packageRoot),
+            sourcePath,
+            jsonPointer);
+
+    internal static ModulePlanProvenance CreateTrustedBuiltInRoot(
+        string moduleId,
+        string packageRoot,
+        TrustedBuiltInModuleSource trustedSource,
+        VerifiedModuleArtifactSnapshot snapshot,
+        string sourcePath,
         string jsonPointer)
     {
         ArgumentNullException.ThrowIfNull(trustedSource);
@@ -94,7 +109,8 @@ public sealed class ModulePlanProvenance
             new BuiltInRootTrust(
                 moduleId,
                 Path.GetFullPath(packageRoot),
-                trustedSource),
+                trustedSource,
+                snapshot),
             boundBuiltInTrust: null);
     }
 
@@ -110,7 +126,9 @@ public sealed class ModulePlanProvenance
             return this;
         }
 
-        var fingerprint = ComputeCanonicalFingerprint(candidate);
+        var fingerprint = ComputeBoundFingerprint(
+            ComputeCanonicalFingerprint(candidate),
+            trust.Snapshot.ContentDigest);
         if (!trust.TryConsume())
         {
             return this;
@@ -121,7 +139,12 @@ public sealed class ModulePlanProvenance
             SourcePath,
             JsonPointer,
             builtInRootTrust: null,
-            new BoundBuiltInTrust(trust.ModuleId, trust.PackageRoot, fingerprint, trust.Source));
+            new BoundBuiltInTrust(
+                trust.ModuleId,
+                trust.PackageRoot,
+                fingerprint,
+                trust.Source,
+                trust.Snapshot));
     }
 
     internal bool AuthenticatesBuiltIn(CanonicalModulePlanModule module) =>
@@ -129,13 +152,28 @@ public sealed class ModulePlanProvenance
         && string.Equals(SourceKind, "built-in", StringComparison.Ordinal)
         && string.Equals(trust.ModuleId, module.ModuleId, StringComparison.Ordinal)
         && PathsEqual(trust.PackageRoot, module.PackageRoot)
-        && string.Equals(
-            trust.CanonicalFingerprint,
-            ComputeCanonicalFingerprint(module),
-            StringComparison.Ordinal);
+            && string.Equals(
+                trust.CanonicalFingerprint,
+                ComputeBoundFingerprint(
+                    ComputeCanonicalFingerprint(module),
+                    trust.Snapshot.ContentDigest),
+                StringComparison.Ordinal);
 
     internal TrustedBuiltInModuleSource? GetAuthenticatedBuiltInSource(CanonicalModulePlanModule module) =>
         AuthenticatesBuiltIn(module) ? _boundBuiltInTrust?.Source : null;
+
+    internal VerifiedModuleArtifactSnapshot? GetAuthenticatedBuiltInSnapshot(CanonicalModulePlanModule module) =>
+        AuthenticatesBuiltIn(module) ? _boundBuiltInTrust?.Snapshot : null;
+
+    internal string? GetAuthenticatedBuiltInArtifactDigest(CanonicalModulePlanModule module) =>
+        GetAuthenticatedBuiltInSnapshot(module)?.ContentDigest;
+
+    private static string ComputeBoundFingerprint(string canonicalFingerprint, string artifactDigest) =>
+        Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            canonicalFingerprint,
+            artifactDigest
+        })));
 
     private static string ComputeCanonicalFingerprint(ModuleCapsuleCandidate candidate) =>
         ComputeCanonicalFingerprint(
@@ -245,7 +283,8 @@ public sealed class ModulePlanProvenance
     private sealed class BuiltInRootTrust(
         string moduleId,
         string packageRoot,
-        TrustedBuiltInModuleSource source)
+        TrustedBuiltInModuleSource source,
+        VerifiedModuleArtifactSnapshot snapshot)
     {
         private int _consumed;
 
@@ -255,6 +294,8 @@ public sealed class ModulePlanProvenance
 
         internal TrustedBuiltInModuleSource Source { get; } = source;
 
+        internal VerifiedModuleArtifactSnapshot Snapshot { get; } = snapshot;
+
         // 绑定是 capability 的线性化点；并发编译同一 root 时只能有一个胜者。
         internal bool TryConsume() => Interlocked.CompareExchange(ref _consumed, 1, 0) == 0;
     }
@@ -263,7 +304,8 @@ public sealed class ModulePlanProvenance
         string ModuleId,
         string PackageRoot,
         string CanonicalFingerprint,
-        TrustedBuiltInModuleSource Source);
+        TrustedBuiltInModuleSource Source,
+        VerifiedModuleArtifactSnapshot Snapshot);
 }
 
 /// <summary>

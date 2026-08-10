@@ -306,7 +306,10 @@ public sealed class PersistenceMigrationRunnerTests
                     new string('d', 64),
                     modelDigest,
                     compatibility)
-            ]);
+            ])
+        {
+            AssemblyImage = new VerifiedArtifactImage(File.ReadAllBytes(assemblyPath))
+        };
         return new CompiledPersistencePlan(
             "test-candidate",
             new string('a', 64),
@@ -373,7 +376,10 @@ public sealed class PersistenceMigrationRunnerTests
                     new string('d', 64),
                     modelDigest,
                     "safe-expand")
-            ]);
+            ])
+        {
+            AssemblyImage = new VerifiedArtifactImage(File.ReadAllBytes(assemblyPath))
+        };
         return new CompiledPersistencePlan(
             "test-candidate",
             new string('a', 64),

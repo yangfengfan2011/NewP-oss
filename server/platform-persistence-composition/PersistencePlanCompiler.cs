@@ -506,6 +506,56 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 $"Logical model key '{group.Key}' has multiple definitions."));
         }
 
+        var modelsByLogicalKey = models.ToLookup(static model => model.LogicalKey, StringComparer.OrdinalIgnoreCase);
+        foreach (var model in models)
+        {
+            foreach (var foreignKey in model.ForeignKeys)
+            {
+                var principalModel = modelsByLogicalKey[foreignKey.PrincipalModelKey].FirstOrDefault();
+                if (principalModel is null)
+                {
+                    diagnostics.Add(new PersistencePlanDiagnostic(
+                        "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_MISSING",
+                        model.OwnerModuleId,
+                        $"{model.LogicalKey}/{foreignKey.Name}",
+                        string.Empty,
+                        $"Foreign key '{foreignKey.Name}' references missing principal model '{foreignKey.PrincipalModelKey}'."));
+                    continue;
+                }
+
+                var principalFieldNames = principalModel.Fields
+                    .Select(static field => field.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var missingPrincipalFields = foreignKey.PrincipalFields
+                    .Where(field => !principalFieldNames.Contains(field))
+                    .ToArray();
+                if (missingPrincipalFields.Length > 0)
+                {
+                    diagnostics.Add(new PersistencePlanDiagnostic(
+                        "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_FIELD_MISSING",
+                        model.OwnerModuleId,
+                        $"{model.LogicalKey}/{foreignKey.Name}",
+                        string.Empty,
+                        $"Foreign key '{foreignKey.Name}' references undefined principal field(s) '{string.Join(", ", missingPrincipalFields)}'."));
+                }
+            }
+        }
+
+        foreach (var group in models
+                     .SelectMany(model => model.ForeignKeys.Select(foreignKey => new { Model = model, ForeignKey = foreignKey }))
+                     .GroupBy(
+                         static item => $"{item.Model.SchemaName}.{item.ForeignKey.Name}",
+                         StringComparer.OrdinalIgnoreCase)
+                     .Where(static group => group.Count() > 1))
+        {
+            diagnostics.Add(new PersistencePlanDiagnostic(
+                "PERSISTENCE_FOREIGN_KEY_NAME_CONFLICT",
+                group.First().Model.OwnerModuleId,
+                group.Key,
+                string.Empty,
+                $"Foreign key name '{group.Key}' is declared more than once in the same schema."));
+        }
+
         foreach (var group in models.GroupBy(
                      static model => $"{model.SchemaName}.{model.TableName}",
                      StringComparer.OrdinalIgnoreCase)

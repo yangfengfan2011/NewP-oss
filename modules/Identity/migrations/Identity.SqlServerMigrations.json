@@ -3,7 +3,7 @@
   "provider": "SqlServer",
   "moduleId": "Identity",
   "modelDigest": "65539dfd4d1631fe3cef2eaa154f4663bd005b6191dc8d69e312b078eb825ac6",
-  "bundleChecksum": "8f5c24f32fbcc214f103a1b2ad0da606ec176601ceb4489c3ef308c9a748ef0a",
+  "bundleChecksum": "0b63bfb201da8128a20b098829ff8568ef852fab89a4e1b6c589b409c5eade0b",
   "migrations": [
     {
       "sequence": "000001",

@@ -3,7 +3,7 @@
   "provider": "SqlServer",
   "moduleId": "Authentication",
   "modelDigest": "8b7a0d3a86eb2b60ed3df260502f508acf2de198874ce84ceb30c14f180d5a80",
-  "bundleChecksum": "bbc125e22dbd31577d3db6c438523dac8a4ade805afd2ce572688cbfd7e9bcc4",
+  "bundleChecksum": "6fdcf814a430687ce59ce074c922fd43161610811f193b4ace33267105e93854",
   "migrations": [
     {
       "sequence": "000001",

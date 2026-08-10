@@ -70,6 +70,101 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_ForeignKeyPrincipalModelIsMissing_RejectsWholeCandidate()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteModel(model =>
+            model["foreignKeys"] = JsonNode.Parse("""
+                [
+                  {
+                    "name": "FK_Asset_Missing",
+                    "fields": ["Code"],
+                    "principalModuleId": "Partner.Missing",
+                    "principalModel": "Missing",
+                    "principalFields": ["EID"],
+                    "onDelete": "Restrict"
+                  }
+                ]
+                """));
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item =>
+            item.Code == "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_MISSING"
+            && item.ModuleId == "Partner.AssetCatalog"
+            && item.CanonicalKey == "Partner.AssetCatalog/Asset/FK_Asset_Missing");
+    }
+
+    [Fact]
+    public void Compile_ForeignKeyPrincipalFieldIsMissing_RejectsWholeCandidate()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteModel(model =>
+            model["foreignKeys"] = JsonNode.Parse("""
+                [
+                  {
+                    "name": "FK_Asset_Self",
+                    "fields": ["Code"],
+                    "principalModuleId": "Partner.AssetCatalog",
+                    "principalModel": "Asset",
+                    "principalFields": ["MissingEID"],
+                    "onDelete": "Restrict"
+                  }
+                ]
+                """));
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item =>
+            item.Code == "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_FIELD_MISSING"
+            && item.ModuleId == "Partner.AssetCatalog"
+            && item.CanonicalKey == "Partner.AssetCatalog/Asset/FK_Asset_Self");
+    }
+
+    [Fact]
+    public void Compile_ForeignKeyNamesConflictInSchema_RejectsWholeCandidate()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteModel(model =>
+            model["foreignKeys"] = JsonNode.Parse("""
+                [
+                  {
+                    "name": "FK_Asset_Self",
+                    "fields": ["Code"],
+                    "principalModuleId": "Partner.AssetCatalog",
+                    "principalModel": "Asset",
+                    "principalFields": ["EID"],
+                    "onDelete": "Restrict"
+                  },
+                  {
+                    "name": "FK_Asset_Self",
+                    "fields": ["ENAME"],
+                    "principalModuleId": "Partner.AssetCatalog",
+                    "principalModel": "Asset",
+                    "principalFields": ["EID"],
+                    "onDelete": "Restrict"
+                  }
+                ]
+                """));
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item =>
+            item.Code == "PERSISTENCE_FOREIGN_KEY_NAME_CONFLICT"
+            && item.ModuleId == "Partner.AssetCatalog"
+            && item.CanonicalKey == "np_partner_assetcatalog.FK_Asset_Self");
+    }
+
+    [Fact]
     public void Compile_ModuleStreamsShareMigrationId_RejectsWholeCandidate()
     {
         using var firstPackage = TestPackage.Create("Partner.AssetCatalog", "Asset");
@@ -434,6 +529,31 @@ public sealed class PersistencePlanCompilerTests
                 ?? throw new InvalidOperationException("测试 migration manifest 无法读取。");
             rewrite(manifest);
             File.WriteAllText(ManifestPath, manifest.ToJsonString());
+        }
+
+        public void RewriteModel(Action<JsonObject> rewrite)
+        {
+            ArgumentNullException.ThrowIfNull(rewrite);
+            var modelPath = Path.Combine(Root, _modelRelativePath);
+            var document = JsonNode.Parse(File.ReadAllText(modelPath))?.AsObject()
+                ?? throw new InvalidOperationException("测试模型 metadata 无法读取。");
+            rewrite(document[_modelKey]?.AsObject()
+                ?? throw new InvalidOperationException("测试模型 metadata 缺少目标模型。"));
+            File.WriteAllText(modelPath, document.ToJsonString());
+
+            var metadata = new JsonModelMetadataDocumentLoader().LoadFromFile(modelPath);
+            var typeMap = new JsonStorageTypeMapLoader().LoadFromFile(FindStorageTypeMap());
+            var projected = new ModelMetadataProjector().Project(metadata, typeMap, "SqlServer") with
+            {
+                OwnerModuleId = _moduleId,
+                SchemaName = $"np_{_moduleId.ToLowerInvariant().Replace('.', '_')}"
+            };
+            var modelDigest = PersistenceModelDigest.Compute([projected]);
+            RewriteManifest(manifest =>
+            {
+                manifest["modelDigest"] = modelDigest;
+                manifest["migrations"]!.AsArray()[0]!["toModelDigest"] = modelDigest;
+            });
         }
 
         public void Dispose()

@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\\kernel\\Kernel.csproj" />
     <ProjectReference Include="..\\platform-modeling\\PlatformModeling.csproj" />
     <ProjectReference Include="..\\platform-persistence\\PlatformPersistence.csproj" />
   </ItemGroup>

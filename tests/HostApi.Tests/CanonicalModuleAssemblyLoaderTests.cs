@@ -1,4 +1,5 @@
 using ICP.Platform.HostApi.PluginActivation;
+using ICP.Platform.Kernel.ModuleLoading;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Audit;
 using Xunit;
@@ -124,6 +125,102 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
         Assert.Same(typeof(AuditModule).Assembly, assembly);
         Assert.Equal(typeof(AuditModule).Assembly.ManifestModule.ModuleVersionId, assembly.ManifestModule.ModuleVersionId);
         Assert.Contains(assembly.GetTypes(), type => type.Name == nameof(AuditModule));
+    }
+
+    [Fact]
+    public void Load_VerifiedImageWithSameIdentityAndMvidButDifferentIl_CannotReuseDefaultAssembly()
+    {
+        var modulesRoot = Path.Combine(_root, "modules");
+        var packageRoot = Path.Combine(modulesRoot, "Audit");
+        Directory.CreateDirectory(packageRoot);
+        var entryPath = Path.Combine(_root, "AuditModule.dll");
+        var alteredImage = File.ReadAllBytes(typeof(AuditModule).Assembly.Location);
+        ReplaceAllUtf16(alteredImage, "1.0.0", "9.0.0");
+        File.WriteAllBytes(entryPath, alteredImage);
+        File.WriteAllText(
+            Path.Combine(packageRoot, "plugin.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "moduleId": "Audit",
+              "displayName": "审计日志",
+              "version": "1.0.0",
+              "entryAssembly": "../../AuditModule.dll",
+              "dependencies": []
+            }
+            """);
+        var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+        var plan = Assert.IsType<CanonicalModulePlan>(
+            new CanonicalModulePlanCompiler().Compile("altered-audit", [candidate]).Plan);
+
+        var error = Assert.Throws<InvalidDataException>(() =>
+            new CanonicalModuleAssemblyLoader(_root).Load(plan));
+
+        Assert.Contains("does not match", error.Message, StringComparison.Ordinal);
+    }
+
+    private static void ReplaceAllUtf16(byte[] image, string oldValue, string newValue)
+    {
+        var oldBytes = System.Text.Encoding.Unicode.GetBytes(oldValue);
+        var newBytes = System.Text.Encoding.Unicode.GetBytes(newValue);
+        Assert.Equal(oldBytes.Length, newBytes.Length);
+        var replaced = 0;
+        for (var offset = 0; offset <= image.Length - oldBytes.Length; offset++)
+        {
+            if (!image.AsSpan(offset, oldBytes.Length).SequenceEqual(oldBytes))
+            {
+                continue;
+            }
+
+            newBytes.CopyTo(image.AsSpan(offset, newBytes.Length));
+            replaced++;
+        }
+
+        Assert.True(replaced > 0, $"Test fixture did not contain '{oldValue}'.");
+    }
+
+    [Fact]
+    public void SharedDependencyPolicy_RejectsSameNameWithWrongVersionCultureOrToken()
+    {
+        var expected = new System.Reflection.AssemblyName(
+            "PlatformShared, Version=1.2.3.4, Culture=en-US, PublicKeyToken=0011223344556677");
+        var wrongIdentities = new[]
+        {
+            new System.Reflection.AssemblyName(
+                "PlatformShared, Version=9.2.3.4, Culture=en-US, PublicKeyToken=0011223344556677"),
+            new System.Reflection.AssemblyName(
+                "PlatformShared, Version=1.2.3.4, Culture=fr-FR, PublicKeyToken=0011223344556677"),
+            new System.Reflection.AssemblyName(
+                "PlatformShared, Version=1.2.3.4, Culture=en-US, PublicKeyToken=8899aabbccddeeff")
+        };
+
+        Assert.All(wrongIdentities, actual =>
+            Assert.False(VerifiedAssemblyIdentityPolicy.MatchesExact(actual, expected)));
+        Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
+            new System.Reflection.AssemblyName("AuditModule, Version=1.0.0.0")));
+        Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(expected));
+        Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
+            new System.Reflection.AssemblyName("PlatformPersistence, Version=1.0.0.0")));
+        Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
+            new System.Reflection.AssemblyName("Microsoft.Evil, Version=1.0.0.0, PublicKeyToken=null")));
+
+#pragma warning disable SYSLIB0037
+        var expectedArchitecture = new System.Reflection.AssemblyName(expected.FullName)
+        {
+            ProcessorArchitecture = System.Reflection.ProcessorArchitecture.MSIL
+        };
+        var wrongArchitecture = new System.Reflection.AssemblyName(expected.FullName)
+        {
+            ProcessorArchitecture = System.Reflection.ProcessorArchitecture.Amd64
+        };
+#pragma warning restore SYSLIB0037
+        var wrongContentType = new System.Reflection.AssemblyName(expected.FullName)
+        {
+            ContentType = System.Reflection.AssemblyContentType.WindowsRuntime
+        };
+        Assert.False(VerifiedAssemblyIdentityPolicy.MatchesExact(wrongArchitecture, expectedArchitecture));
+        Assert.False(VerifiedAssemblyIdentityPolicy.MatchesExact(wrongContentType, expected));
     }
 
     public void Dispose()

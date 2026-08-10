@@ -41,10 +41,34 @@ public sealed class RequiredBuiltinReadinessTests : IDisposable
     }
 
     [Fact]
+    public async Task Contributor_WhenAuthenticationIsMissing_ReturnsStableNotReadySignal()
+    {
+        var contributor = new RequiredBuiltinReadinessContributor(ModulePlan("Identity"), PersistencePlan());
+
+        var result = await contributor.CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ReadinessState.Failed, result.State);
+        Assert.Equal(RequiredBuiltinReadinessFailureCodes.ModuleMissing, result.FailureCode);
+    }
+
+    [Fact]
     public async Task Contributor_WhenIdentityIsDuplicated_ReturnsStableNotReadySignal()
     {
         var contributor = new RequiredBuiltinReadinessContributor(
             ModulePlan("Identity", "Identity", "Authentication"),
+            PersistencePlan());
+
+        var result = await contributor.CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ReadinessState.Failed, result.State);
+        Assert.Equal(RequiredBuiltinReadinessFailureCodes.ModuleDuplicate, result.FailureCode);
+    }
+
+    [Fact]
+    public async Task Contributor_WhenAuthenticationIsDuplicated_ReturnsStableNotReadySignal()
+    {
+        var contributor = new RequiredBuiltinReadinessContributor(
+            ModulePlan("Identity", "Authentication", "Authentication"),
             PersistencePlan());
 
         var result = await contributor.CheckAsync(CancellationToken.None);

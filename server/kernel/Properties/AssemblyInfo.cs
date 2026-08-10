@@ -6,3 +6,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("HostApi")]
 [assembly: InternalsVisibleTo("HostApi.Tests")]
 [assembly: InternalsVisibleTo("Kernel.Tests")]
+[assembly: InternalsVisibleTo("PlatformPersistence.EfCore")]

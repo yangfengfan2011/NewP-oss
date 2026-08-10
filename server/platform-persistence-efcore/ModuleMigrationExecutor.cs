@@ -7,6 +7,8 @@ using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
+using ICP.Platform.Kernel.ModuleLoading;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
@@ -64,8 +66,9 @@ internal sealed class ModuleMigrationExecutor(
                 stream);
         }
 
+        var assemblyContext = new VerifiedMigrationAssemblyLoadContext(externalStreams);
         var validatedStreams = externalStreams
-            .Select(ValidateStream)
+            .Select(stream => ValidateStream(stream, assemblyContext))
             .ToArray();
         return GenerateSqlCommands(validatedStreams);
     }
@@ -306,7 +309,9 @@ internal sealed class ModuleMigrationExecutor(
         command.Parameters.Add(parameter);
     }
 
-    private ValidatedMigrationStream ValidateStream(ModuleMigrationStream stream)
+    private ValidatedMigrationStream ValidateStream(
+        ModuleMigrationStream stream,
+        VerifiedMigrationAssemblyLoadContext assemblyContext)
     {
         if (stream.Provider != plan.Provider)
         {
@@ -323,7 +328,7 @@ internal sealed class ModuleMigrationExecutor(
                 mismatchedCutover.MigrationId);
         }
 
-        var assembly = LoadMigrationAssembly(stream);
+        var assembly = LoadMigrationAssembly(stream, assemblyContext);
         IReadOnlyDictionary<string, Type> migrationTypes;
         try
         {
@@ -585,7 +590,9 @@ internal sealed class ModuleMigrationExecutor(
     private static string PhysicalKey(string? schema, string table) =>
         $"{schema ?? "dbo"}.{table}";
 
-    private static Assembly LoadMigrationAssembly(ModuleMigrationStream stream)
+    private static Assembly LoadMigrationAssembly(
+        ModuleMigrationStream stream,
+        VerifiedMigrationAssemblyLoadContext context)
     {
         try
         {
@@ -603,10 +610,8 @@ internal sealed class ModuleMigrationExecutor(
             }
 
             var expectedIdentity = ReadIdentity(verifiedBytes);
-            using var streamImage = new MemoryStream(verifiedBytes, writable: false);
-            var context = new VerifiedMigrationAssemblyLoadContext();
-            var assembly = context.LoadFromStream(streamImage);
-            if (!AssemblyName.ReferenceMatchesDefinition(assembly.GetName(), expectedIdentity.AssemblyName)
+            var assembly = context.LoadVerifiedImage(stream.ModuleId, verifiedBytes);
+            if (!VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expectedIdentity.AssemblyName)
                 || assembly.ManifestModule.ModuleVersionId != expectedIdentity.Mvid)
             {
                 throw new InvalidDataException(
@@ -636,9 +641,20 @@ internal sealed class ModuleMigrationExecutor(
             Version = definition.Version,
             CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
         };
+#pragma warning disable SYSLIB0037
+        assemblyName.ProcessorArchitecture = ReadProcessorArchitecture(peReader.PEHeaders);
+#pragma warning restore SYSLIB0037
         if (!definition.PublicKey.IsNil)
         {
             assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
+        }
+        if (definition.Flags.HasFlag(AssemblyFlags.Retargetable))
+        {
+            assemblyName.Flags |= AssemblyNameFlags.Retargetable;
+        }
+        if (definition.Flags.HasFlag(AssemblyFlags.WindowsRuntime))
+        {
+            assemblyName.ContentType = AssemblyContentType.WindowsRuntime;
         }
 
         return new VerifiedAssemblyIdentity(
@@ -646,15 +662,137 @@ internal sealed class ModuleMigrationExecutor(
             metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
     }
 
-    private sealed class VerifiedMigrationAssemblyLoadContext()
-        : AssemblyLoadContext(isCollectible: false)
+    private sealed class VerifiedMigrationAssemblyLoadContext
+        : AssemblyLoadContext
     {
-        protected override Assembly? Load(AssemblyName assemblyName) =>
-            Default.Assemblies.FirstOrDefault(candidate =>
-                AssemblyName.ReferenceMatchesDefinition(candidate.GetName(), assemblyName));
+        private readonly IReadOnlyDictionary<string, VerifiedMigrationImage> _verifiedImages;
+
+        internal VerifiedMigrationAssemblyLoadContext(IReadOnlyCollection<ModuleMigrationStream> streams)
+            : base(isCollectible: false)
+        {
+            _verifiedImages = streams
+                .Where(static stream => stream.AssemblyImage is not null)
+                .Select(stream =>
+                {
+                    var bytes = stream.AssemblyImage!.CopyBytes();
+                    return new VerifiedMigrationImage(ReadIdentity(bytes), bytes);
+                })
+                .GroupBy(static image => image.Identity.AssemblyName.Name!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => group.Single(),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal Assembly LoadVerifiedImage(string owner, byte[] image)
+        {
+            var expected = ReadIdentity(image);
+            var existing = Assemblies.FirstOrDefault(assembly =>
+                VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expected.AssemblyName)
+                && assembly.ManifestModule.ModuleVersionId == expected.Mvid);
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            using var stream = new MemoryStream(image, writable: false);
+            var assembly = LoadFromStream(stream);
+            if (!VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expected.AssemblyName)
+                || assembly.ManifestModule.ModuleVersionId != expected.Mvid)
+            {
+                throw new InvalidDataException(
+                    $"Migration assembly for '{owner}' differs from its verified artifact image.");
+            }
+
+            return assembly;
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (assemblyName.Name is { } name && _verifiedImages.TryGetValue(name, out var image))
+            {
+                if (!VerifiedAssemblyIdentityPolicy.MatchesExact(image.Identity.AssemblyName, assemblyName))
+                {
+                    throw new FileLoadException($"Verified migration dependency '{assemblyName.FullName}' does not match the planned image identity.");
+                }
+
+                return LoadVerifiedImage(name, image.Bytes);
+            }
+
+            if (!VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(assemblyName))
+            {
+                throw new FileLoadException($"Migration dependency '{assemblyName.FullName}' is outside the Host/platform shared dependency boundary.");
+            }
+
+            return ResolveSharedDependency(assemblyName);
+        }
+
+        private static Assembly ResolveSharedDependency(AssemblyName assemblyName)
+        {
+            var loaded = Default.Assemblies.FirstOrDefault(candidate =>
+                VerifiedAssemblyIdentityPolicy.MatchesExact(candidate.GetName(), assemblyName));
+            if (loaded is not null)
+            {
+                return loaded;
+            }
+
+            try
+            {
+                var resolved = Default.LoadFromAssemblyName(assemblyName);
+                if (!VerifiedAssemblyIdentityPolicy.MatchesExact(resolved.GetName(), assemblyName))
+                {
+                    throw new FileLoadException($"Resolved Host/platform shared dependency '{assemblyName.FullName}' has a different identity.");
+                }
+
+                return resolved;
+            }
+            catch (FileNotFoundException)
+            {
+                // 非 shared-framework 平台程序集继续从受控应用目录的字节装载。
+            }
+
+            var root = Path.GetFullPath(AppContext.BaseDirectory);
+            var path = Path.GetFullPath(Path.Combine(root, $"{assemblyName.Name}.dll"));
+            if (!PathContainment.Contains(root, path) || !File.Exists(path))
+            {
+                throw new FileLoadException($"Exact Host/platform shared dependency '{assemblyName.FullName}' is unavailable.");
+            }
+
+            var bytes = PathContainment.ReadContainedFile(root, path);
+            var identity = ReadIdentity(bytes);
+            if (!VerifiedAssemblyIdentityPolicy.MatchesExact(identity.AssemblyName, assemblyName))
+            {
+                throw new FileLoadException($"Host/platform shared dependency '{assemblyName.FullName}' differs from its distribution image.");
+            }
+
+            using var stream = new MemoryStream(bytes, writable: false);
+            var assembly = Default.LoadFromStream(stream);
+            if (!VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), assemblyName)
+                || assembly.ManifestModule.ModuleVersionId != identity.Mvid)
+            {
+                throw new FileLoadException($"Loaded Host/platform shared dependency '{assemblyName.FullName}' differs from its distribution image.");
+            }
+
+            return assembly;
+        }
     }
 
+#pragma warning disable SYSLIB0037
+    private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>
+        headers.CoffHeader.Machine switch
+        {
+            Machine.I386 when headers.CorHeader?.Flags.HasFlag(CorFlags.Requires32Bit) == true => ProcessorArchitecture.X86,
+            Machine.I386 => ProcessorArchitecture.MSIL,
+            Machine.Amd64 => ProcessorArchitecture.Amd64,
+            Machine.IA64 => ProcessorArchitecture.IA64,
+            Machine.Arm or Machine.ArmThumb2 or Machine.Arm64 => ProcessorArchitecture.Arm,
+            _ => ProcessorArchitecture.None
+        };
+#pragma warning restore SYSLIB0037
+
     private sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
+
+    private sealed record VerifiedMigrationImage(VerifiedAssemblyIdentity Identity, byte[] Bytes);
 
     private static PersistencePlanExecutionException Failure(
         string failureCode,

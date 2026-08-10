@@ -602,6 +602,14 @@ internal sealed class IdentityFoundationAcceptanceRunner
             ],
             null,
             cancellationToken);
+        var requiredBuiltinsTests = await RunCheckedProcessAsync(
+            "dotnet",
+            [
+                "test", "tests/HostApi.Tests/HostApi.Tests.csproj", "--no-restore", "--nologo",
+                "--filter", "FullyQualifiedName~RequiredBuiltinReadinessTests"
+            ],
+            null,
+            cancellationToken);
         var staticScan = ScanLegacyRuntimeChains();
         if (staticScan.Count != 0)
         {
@@ -617,12 +625,16 @@ internal sealed class IdentityFoundationAcceptanceRunner
                 "platform-fetch-single-safe-retry-and-no-unknown-result-replay",
                 "login-fixed-window-and-untrusted-forwarded-for",
                 "cookie-key-ring-and-store-outage-contract-tests",
-                "required-builtins-and-legacy-runtime-chains-unreachable"
+                "identity-and-authentication-are-unique-required-builtins",
+                "required-builtin-models-and-migrations-are-available",
+                "required-builtin-readiness-rejects-missing-or-invalid-inputs",
+                "legacy-runtime-chains-unreachable"
             },
             commands = new[]
             {
                 ProcessSummary("corepack pnpm --dir frontend --filter @icp-platform/core test", coreTests),
-                ProcessSummary("dotnet test HostApi.Tests --filter HostAntiforgeryTests|HostAuthenticationSecurityTests", hostTests)
+                ProcessSummary("dotnet test HostApi.Tests --filter HostAntiforgeryTests|HostAuthenticationSecurityTests", hostTests),
+                ProcessSummary("dotnet test HostApi.Tests --filter FullyQualifiedName~RequiredBuiltinReadinessTests", requiredBuiltinsTests)
             },
             legacyRuntimeMatches = staticScan.Count
         }, cancellationToken);

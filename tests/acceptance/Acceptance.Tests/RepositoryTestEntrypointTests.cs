@@ -149,6 +149,25 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void IdentityFoundationAcceptanceRunner_ExecutesRequiredBuiltinReadinessFixturesBeforeRecordingSecurityEvidence()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "IdentityFoundationAcceptanceRunner.cs"));
+
+        Assert.Contains("FullyQualifiedName~RequiredBuiltinReadinessTests", runner, StringComparison.Ordinal);
+        Assert.Contains("requiredBuiltinsTests", runner, StringComparison.Ordinal);
+        Assert.Contains("ProcessSummary", runner, StringComparison.Ordinal);
+        Assert.True(
+            runner.IndexOf("FullyQualifiedName~RequiredBuiltinReadinessTests", StringComparison.Ordinal)
+            < runner.IndexOf("RecordScenarioSuccessAsync(SecurityScenario", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void IdentityFoundationStartupDtos_IncludePersonLifecycleRevision()
     {
         var repositoryRoot = GetRepositoryRoot();

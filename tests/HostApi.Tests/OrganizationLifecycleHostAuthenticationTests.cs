@@ -38,7 +38,8 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         var lifecycle = new PersonLifecycleService(
             person,
             directory,
-            new IdentityLifecycleParticipant(identity, sessions, new PlatformObjectIdGenerator(), new FixedTimeProvider(now)),
+            new IdentityLifecycleParticipant(identity, new PlatformObjectIdGenerator(), new FixedTimeProvider(now)),
+            sessions,
             transaction,
             new FixedTimeProvider(now));
         var accounts = new IdentityAccountApplicationService(

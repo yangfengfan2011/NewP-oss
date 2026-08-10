@@ -5,8 +5,8 @@ namespace ICP.Platform.Persistence.Composition;
 /// </summary>
 public static class PlatformCoreMigrationFrontiers
 {
-    /// <summary>platform.core SQL Server 在人员生命周期并发版本落库后的前沿。</summary>
-    public const string SqlServerLegacyBaseline = "20260810111523_Organization_PersonLifecycleRevision";
+    /// <summary>冻结的 platform.core SQL Server legacy baseline 前沿。</summary>
+    public const string SqlServerLegacyBaseline = "20260808054041_AlignOrganizationSchemaDrift";
 
     /// <summary>Identity 模块 SQL Server 基础 schema 前沿。</summary>
     public const string IdentitySqlServerFoundation = "20260810033908_Identity_000001_Foundation";

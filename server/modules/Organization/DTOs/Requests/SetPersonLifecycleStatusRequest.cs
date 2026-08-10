@@ -1,6 +1,9 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ICP.Platform.Modules.Organization.DTOs.Requests;
 
 public sealed record SetPersonLifecycleStatusRequest(
     bool IsEnabled,
+    [Range(0, long.MaxValue)]
     long ExpectedRevision,
     string Reason);

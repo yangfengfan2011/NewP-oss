@@ -34,12 +34,20 @@
       <Link>modules\Identity\migrations\Identity.SqlServerMigrations.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\modules\Organization\migrations\Organization.SqlServerMigrations.json">
+      <Link>modules\Organization\migrations\Organization.SqlServerMigrations.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="..\..\modules\Authentication\migrations\Authentication.SqlServerMigrations.json">
       <Link>modules\Authentication\migrations\Authentication.SqlServerMigrations.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\server\modules\Identity\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Identity.SqlServerMigrations.dll">
       <Link>modules\Identity\migrations\Identity.SqlServerMigrations.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\server\modules\Organization\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Organization.SqlServerMigrations.dll">
+      <Link>modules\Organization\migrations\Organization.SqlServerMigrations.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\server\modules\Authentication\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Authentication.SqlServerMigrations.dll">
@@ -93,6 +101,7 @@
     <ProjectReference Include="..\..\server\modules\Identity\IdentityModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Authentication\AuthenticationModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj" />
   </ItemGroup>
 

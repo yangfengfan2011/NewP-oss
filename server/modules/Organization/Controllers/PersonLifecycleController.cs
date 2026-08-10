@@ -3,6 +3,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Sdk.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +12,7 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 [ApiController]
 [Route("api/organization/persons")]
 [EndpointModule("Organization")]
+[PlatformRequestValidation]
 public sealed class PersonLifecycleController(IPersonLifecycleService lifecycleService) : ControllerBase
 {
     [HttpPut("{personEid}/status")]

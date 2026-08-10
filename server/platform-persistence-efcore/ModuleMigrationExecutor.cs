@@ -392,6 +392,9 @@ internal sealed class ModuleMigrationExecutor(
         var tables = ownedModels
             .Select(static model => PhysicalKey(model.SchemaName, model.TableName))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var currentTables = plan.Models
+            .Select(static model => PhysicalKey(model.SchemaName, model.TableName))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var operation in migration.UpOperations)
         {
@@ -407,13 +410,18 @@ internal sealed class ModuleMigrationExecutor(
                     && ForeignKeysMatch(createTable, ownedModel)
                     && createTable.CheckConstraints.Count == 0
                     && createTable.Columns.All(IsSafeColumnDefinition),
-                CreateIndexOperation createIndex =>
-                    tables.Contains(PhysicalKey(createIndex.Schema, createIndex.Table))
-                    && string.IsNullOrWhiteSpace(createIndex.Filter),
+                CreateIndexOperation createIndex => IsOwnedIndex(createIndex, ownedModels),
                 AddColumnOperation addColumn =>
                     tables.Contains(PhysicalKey(addColumn.Schema, addColumn.Table))
                     && IsSafeColumnDefinition(addColumn)
                     && (addColumn.IsNullable || addColumn.DefaultValue is not null),
+                DropTableOperation dropTable =>
+                    step.Compatibility == "backup-restore-only"
+                    && string.Equals(
+                        dropTable.FindAnnotation("NewP:OwnerModuleId")?.Value as string,
+                        stream.ModuleId,
+                        StringComparison.Ordinal)
+                    && !currentTables.Contains(PhysicalKey(dropTable.Schema, dropTable.Name)),
                 _ => false
             };
 
@@ -425,6 +433,37 @@ internal sealed class ModuleMigrationExecutor(
                     step.MigrationId);
             }
         }
+    }
+
+    private static bool IsOwnedIndex(
+        CreateIndexOperation operation,
+        IReadOnlyList<ModelDefinition> ownedModels)
+    {
+        var model = ownedModels.SingleOrDefault(candidate =>
+            string.Equals(
+                PhysicalKey(candidate.SchemaName, candidate.TableName),
+                PhysicalKey(operation.Schema, operation.Table),
+                StringComparison.OrdinalIgnoreCase));
+        var expected = model?.Indexes.SingleOrDefault(index =>
+            string.Equals(index.Name, operation.Name, StringComparison.Ordinal));
+        if (model is null
+            || expected is null
+            || expected.IsUnique != operation.IsUnique
+            || !operation.Columns.SequenceEqual(
+                expected.Fields.Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName),
+                StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(operation.Filter))
+        {
+            return true;
+        }
+
+        return operation.Columns.Length == 1
+            && model.Fields.Single(field => field.StoreName == operation.Columns[0]).Required is false
+            && string.Equals(operation.Filter, $"[{operation.Columns[0]}] IS NOT NULL", StringComparison.Ordinal);
     }
 
     private bool ForeignKeysMatch(CreateTableOperation operation, ModelDefinition model)

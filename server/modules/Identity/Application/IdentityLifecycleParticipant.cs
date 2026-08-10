@@ -1,5 +1,4 @@
 using System.Text;
-using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Models;
@@ -10,18 +9,15 @@ namespace ICP.Platform.Modules.Identity.Application;
 public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
 {
     private readonly IIdentityRepository _repository;
-    private readonly IAuthenticationSessionRegistry _sessionRegistry;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
     private readonly TimeProvider _timeProvider;
 
     public IdentityLifecycleParticipant(
         IIdentityRepository repository,
-        IAuthenticationSessionRegistry sessionRegistry,
         IPlatformObjectIdGenerator objectIdGenerator,
         TimeProvider timeProvider)
     {
         _repository = repository;
-        _sessionRegistry = sessionRegistry;
         _objectIdGenerator = objectIdGenerator;
         _timeProvider = timeProvider;
     }
@@ -116,14 +112,6 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         user.PersonnelDisableHold = true;
         Stamp(user, registration.ActorId, now);
         await ReplaceUserOrThrowConflictAsync(user, expectedRevision, cancellationToken);
-        _ = await _sessionRegistry.RevokeAllAsync(
-            new UserAuthenticationSessionsRevocation
-            {
-                UserEid = user.EID,
-                Reason = reason,
-                ActorId = registration.ActorId
-            },
-            cancellationToken);
         _repository.AddSecurityEvent(CreateEvent(
             user.EID,
             IdentitySecurityEventTypes.PersonnelDisabled,

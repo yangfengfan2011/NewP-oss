@@ -402,6 +402,13 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var migrations = manifest.Migrations
             .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
             .ToArray();
+        if (migrations.Any(static migration => migration.Compatibility == "backup-restore-only")
+            && !string.Equals(module.Provenance.SourceKind, "built-in", StringComparison.Ordinal))
+        {
+            throw new PersistencePlanValidationException(
+                "PERSISTENCE_MIGRATION_CHAIN_INVALID",
+                $"Migration stream '{module.ModuleId}' may use backup-restore-only only for a built-in module.");
+        }
         if (migrations.Length == 0)
         {
             throw new PersistencePlanValidationException(
@@ -424,7 +431,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 || !DigestPattern().IsMatch(migration.ContentDigest)
                 || !DigestPattern().IsMatch(migration.FromModelDigest)
                 || !DigestPattern().IsMatch(migration.ToModelDigest)
-                || !string.Equals(migration.Compatibility, "safe-expand", StringComparison.Ordinal))
+                || (migration.Compatibility is not "safe-expand" and not "backup-restore-only"))
             {
                 throw new PersistencePlanValidationException(
                     "PERSISTENCE_MIGRATION_CHAIN_INVALID",

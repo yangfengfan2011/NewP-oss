@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using System.Text.Encodings.Web;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Abstractions;
@@ -28,6 +29,23 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class OrganizationPermissionPipelineTests
 {
+    [Fact]
+    public async Task BindingRoute_WhenPermissionDecisionUnavailable_ReturnsStableProblemDetails()
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Indeterminate);
+        await using var scenario = await Scenario.StartAsync(source);
+        using var request = Request(HttpMethod.Get, "/api/organization/persons/Person_1", "subject");
+
+        using var response = await scenario.Client.SendAsync(request);
+        var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(PermissionGateFailureCodes.DecisionUnavailable, document.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("traceId").GetString()));
+        Assert.DoesNotContain("subject", document.RootElement.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, scenario.CrudService.CallCount);
+    }
     [Theory]
     [InlineData(null, PermissionDecision.Granted, HttpStatusCode.Unauthorized, 0)]
     [InlineData("subject", PermissionDecision.Denied, HttpStatusCode.Forbidden, 0)]

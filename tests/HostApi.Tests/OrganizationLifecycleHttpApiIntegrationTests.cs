@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using System.Text.Encodings.Web;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.DTOs;
@@ -56,6 +58,53 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
         Assert.Equal(HttpStatusCode.OK, authenticated.StatusCode);
         Assert.Equal("User_Admin", service.Actor?.ActorId);
         Assert.False(string.IsNullOrWhiteSpace(service.Actor?.TraceId));
+    }
+
+    [Theory]
+    [InlineData("{", "$")]
+    [InlineData("{\"isEnabled\":\"not-a-boolean\",\"expectedRevision\":4,\"reason\":\"停用\"}", "$.isEnabled")]
+    [InlineData("{\"isEnabled\":false,\"expectedRevision\":-1,\"reason\":\"停用\"}", "ExpectedRevision")]
+    public async Task FormalStatusRoute_InvalidPayloadUsesPlatformValidationProblem(
+        string payload,
+        string expectedErrorField)
+    {
+        var service = new RecordingLifecycleService();
+        await using var app = await BuildApplicationAsync(service);
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_1/status")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("X-Test-User", "User_Admin");
+
+        using var response = await app.GetTestClient().SendAsync(request);
+        var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("REQUEST_VALIDATION_FAILED", document.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("traceId").GetString()));
+        Assert.True(document.RootElement.GetProperty("errors").TryGetProperty(expectedErrorField, out _));
+        Assert.Equal(0, service.CallCount);
+    }
+
+    private static async Task<WebApplication> BuildApplicationAsync(RecordingLifecycleService service)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddControllers().AddApplicationPart(typeof(PersonLifecycleController).Assembly);
+        builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
+        builder.Services.AddAuthorization(options => options.AddPolicy(
+            "Permission:Organization.Person.Update",
+            policy => policy.RequireAuthenticatedUser()));
+        builder.Services.AddSingleton<IPersonLifecycleService>(service);
+
+        var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+        await app.StartAsync();
+        return app;
     }
 
     private sealed class RecordingLifecycleService : IPersonLifecycleService

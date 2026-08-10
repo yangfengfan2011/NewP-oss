@@ -228,12 +228,9 @@ public class EfOrganizationRepositoryTests
         }
 
         var sqlServerPerson = ExtractPersonSection(sqlServerSnapshot);
-        Assert.DoesNotContain("modelBuilder.Entity(\"PersonUserLink\"", sqlServerSnapshot, StringComparison.Ordinal);
-        Assert.Contains("b.Property<string>(\"UserEID\")", sqlServerPerson, StringComparison.Ordinal);
-        Assert.Contains("b.Property<DateTime?>(\"UserBoundAt\")", sqlServerPerson, StringComparison.Ordinal);
-        Assert.Contains("b.Property<string>(\"UserBoundBy\")", sqlServerPerson, StringComparison.Ordinal);
-        Assert.Contains("b.Property<string>(\"UserBindingReason\")", sqlServerPerson, StringComparison.Ordinal);
-        Assert.Contains(".HasDatabaseName(\"UX_Person_UserEID\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains("modelBuilder.Entity(\"PersonUserLink\"", sqlServerSnapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.Property<string>(\"UserEID\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.Property<long>(\"Revision\")", sqlServerPerson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -304,10 +301,10 @@ public class EfOrganizationRepositoryTests
     {
         var migration = ReadMigration(
             GetRepositoryRoot(),
-            "platform-persistence-efcore.migrations.sqlserver",
-            "Organization_PermanentUserBinding");
+            Path.Combine("modules", "Organization", "Migrations.SqlServer"),
+            "Organization_000001_PermanentUserBinding");
 
-        Assert.Contains("DropTable(\r\n                name: \"PersonUserLink\")", migration, StringComparison.Ordinal);
+        Assert.Contains("DropTable(name: \"PersonUserLink\")", migration, StringComparison.Ordinal);
         Assert.Contains("name: \"UserEID\"", migration, StringComparison.Ordinal);
         Assert.Contains("name: \"UX_Person_UserEID\"", migration, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT", migration, StringComparison.OrdinalIgnoreCase);

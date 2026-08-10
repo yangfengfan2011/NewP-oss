@@ -8,6 +8,7 @@ using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
+using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Modules.Organization.Services;
@@ -19,6 +20,7 @@ using ICP.Platform.Persistence.EfCore.Transactions;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
@@ -37,15 +39,20 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         var fixture = await SqlFixture.CreateAsync("Migration");
         await using (fixture)
         {
-            await using var context = CreateMigrationContext(fixture.ConnectionString);
-            var migrator = context.Database.GetService<IMigrator>();
-            await migrator.MigrateAsync("20260808054041_AlignOrganizationSchemaDrift");
-            await context.Database.ExecuteSqlRawAsync("""
-                INSERT INTO [PersonUserLink] ([EID], [PersonId], [UserId], [LinkedAt], [LinkedBy], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy])
-                VALUES (N'LegacyLink_1', N'LegacyPerson_1', N'LegacyUser_1', SYSUTCDATETIME(), N'legacy', SYSUTCDATETIME(), N'legacy', SYSUTCDATETIME(), N'legacy');
-                """);
+            await using (var context = CreateMigrationContext(fixture.ConnectionString))
+            {
+                var migrator = context.Database.GetService<IMigrator>();
+                await migrator.MigrateAsync(PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline);
+                await context.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO [PersonUserLink] ([EID], [PersonId], [UserId], [LinkedAt], [LinkedBy], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy])
+                    VALUES (N'LegacyLink_1', N'LegacyPerson_1', N'LegacyUser_1', SYSUTCDATETIME(), N'legacy', SYSUTCDATETIME(), N'legacy', SYSUTCDATETIME(), N'legacy');
+                    """);
+            }
 
-            await migrator.MigrateAsync();
+            await using (var context = CreateOrganizationMigrationContext(fixture.ConnectionString))
+            {
+                await context.Database.GetService<IMigrator>().MigrateAsync();
+            }
 
             Assert.Equal(0, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.tables WHERE [name] = N'PersonUserLink'"));
             Assert.Equal(4, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] IN (N'UserEID', N'UserBoundAt', N'UserBoundBy', N'UserBindingReason')"));
@@ -78,7 +85,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 var identityRepository = new EfIdentityRepository(context);
                 var participant = new IdentityLifecycleParticipant(
                     identityRepository,
-                    new UnusedSessionRegistry(),
                     new PlatformObjectIdGenerator(),
                     TimeProvider.System);
                 var service = new PersonUserBindingService(
@@ -101,7 +107,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 var identityRepository = new EfIdentityRepository(context);
                 var failing = new RegisterThenFailParticipant(new IdentityLifecycleParticipant(
                     identityRepository,
-                    new UnusedSessionRegistry(),
                     new PlatformObjectIdGenerator(),
                     TimeProvider.System));
                 var service = new PersonUserBindingService(
@@ -161,7 +166,8 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 var service = new PersonLifecycleService(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
-                    new IdentityLifecycleParticipant(identityRepository, sessions, new PlatformObjectIdGenerator(), TimeProvider.System),
+                    new IdentityLifecycleParticipant(identityRepository, new PlatformObjectIdGenerator(), TimeProvider.System),
+                    sessions,
                     new EfPlatformTransactionExecutor(context),
                     TimeProvider.System);
 
@@ -187,7 +193,8 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 var service = new PersonLifecycleService(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
-                    new IdentityLifecycleParticipant(identityRepository, sessions, new PlatformObjectIdGenerator(), TimeProvider.System),
+                    new IdentityLifecycleParticipant(identityRepository, new PlatformObjectIdGenerator(), TimeProvider.System),
+                    sessions,
                     new EfPlatformTransactionExecutor(context),
                     TimeProvider.System);
 
@@ -206,13 +213,13 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 var sessions = SessionRegistry(context);
                 var failing = new RegisterThenFailLifecycleParticipant(new IdentityLifecycleParticipant(
                     identityRepository,
-                    sessions,
                     new PlatformObjectIdGenerator(),
                     TimeProvider.System));
                 var service = new PersonLifecycleService(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
                     failing,
+                    sessions,
                     new EfPlatformTransactionExecutor(context),
                     TimeProvider.System);
 
@@ -303,10 +310,24 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseSqlServer(connectionString, sql => sql.MigrationsAssembly(typeof(SqlServerDesignTimeDbContextFactory).Assembly.GetName().Name))
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
         return new EfPlatformDbContext(
             options,
             PlatformPersistenceModelCatalog.AdaptSqlServerMigrationBaseline(PlatformCoreLegacyModelSource.GetDefinitions()));
+    }
+
+    private static EfPlatformDbContext CreateOrganizationMigrationContext(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlServer(connectionString, sql => sql.MigrationsAssembly(typeof(OrganizationPermanentUserBinding).Assembly.GetName().Name))
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        var definitions = new ICP.Platform.Modules.Organization.Persistence.Descriptors.OrganizationModelMetadataProvider().GetDefinitions()
+            .Select(static model => model with { OwnerModuleId = "Organization", SchemaName = "dbo" })
+            .ToArray();
+        return new EfPlatformDbContext(options, definitions);
     }
 
     private static EfPlatformDbContext CreateRuntimeContext(string connectionString)

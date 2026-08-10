@@ -270,7 +270,8 @@ public sealed class StandardCrudService : IStandardCrudService
             });
         }
 
-        if (_conditionalDeleteExecutors.TryGetValue(descriptor.ResourceKey, out var conditionalDeleteExecutor))
+        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Conditional
+            && _conditionalDeleteExecutors.TryGetValue(descriptor.ResourceKey, out var conditionalDeleteExecutor))
         {
             return await conditionalDeleteExecutor.DeleteAsync(descriptor, id, cancellationToken);
         }

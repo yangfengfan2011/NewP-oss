@@ -71,7 +71,6 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
         services.AddScoped<IIdentityLifecycleParticipant>(serviceProvider =>
             new IdentityLifecycleParticipant(
                 serviceProvider.GetRequiredService<IIdentityRepository>(),
-                serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
                 serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IIdentityLocalAdministratorMaintenanceService>(serviceProvider =>

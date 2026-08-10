@@ -12,6 +12,7 @@ namespace ICP.Platform.Modules.Identity.Application;
 
 public sealed class IdentityAccountApplicationService : IIdentityAccountApplicationService
 {
+    // 账号与会话撤销仅在平台事务回调内登记；Identity 与 Authentication 的实现都不得在阶段中自行 SaveChanges。
     private readonly IIdentityRepository _repository;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
     private readonly IAuthenticationSessionRegistry _sessionRegistry;

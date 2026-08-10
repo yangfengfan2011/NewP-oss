@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Authorization.Http;
 
@@ -25,11 +27,18 @@ public sealed class PermissionAuthorizationMiddlewareResultHandler
                 StringComparison.Ordinal)))
         {
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await context.Response.WriteAsJsonAsync(new
+            context.Response.ContentType = "application/problem+json";
+            var problem = new ProblemDetails
             {
-                code = PermissionGateFailureCodes.DecisionUnavailable,
-                message = "Authorization decision is unavailable."
-            });
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = PermissionGateFailureCodes.DecisionUnavailable
+            };
+            problem.Extensions["code"] = PermissionGateFailureCodes.DecisionUnavailable;
+            problem.Extensions["traceId"] = context.TraceIdentifier;
+            await JsonSerializer.SerializeAsync(
+                context.Response.Body,
+                problem,
+                cancellationToken: context.RequestAborted);
             return;
         }
 

@@ -1,4 +1,5 @@
 using System.Text;
+using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
@@ -12,6 +13,7 @@ public sealed class PersonLifecycleService(
     IPersonUserBindingRepository repository,
     IIdentityAccountDirectory accountDirectory,
     IIdentityLifecycleParticipant identityParticipant,
+    IAuthenticationSessionRegistry sessionRegistry,
     IPlatformTransactionExecutor transactionExecutor,
     TimeProvider timeProvider) : IPersonLifecycleService
 {
@@ -44,6 +46,7 @@ public sealed class PersonLifecycleService(
         var changedAt = timeProvider.GetUtcNow().UtcDateTime;
         try
         {
+            // Organization 负责人员生命周期编排；Person、Identity 与 Authentication 都只在此共享事务内登记变化，禁止参与者自行 SaveChanges。
             return await transactionExecutor.ExecuteAsync(
                 async transactionCancellationToken =>
                 {
@@ -75,8 +78,9 @@ public sealed class PersonLifecycleService(
                     IdentityAccountSnapshot? changedAccount = account;
                     if (person.UserEid is not null)
                     {
-                        changedAccount = request.IsEnabled
-                            ? (await identityParticipant.RegisterPersonnelDisableHoldReleaseAsync(
+                        if (request.IsEnabled)
+                        {
+                            changedAccount = (await identityParticipant.RegisterPersonnelDisableHoldReleaseAsync(
                                 new PersonnelDisableHoldReleaseRegistration
                                 {
                                     UserEid = person.UserEid,
@@ -84,8 +88,11 @@ public sealed class PersonLifecycleService(
                                     ActorId = actor.ActorId,
                                     TraceId = actor.TraceId
                                 },
-                                transactionCancellationToken)).Account
-                            : (await identityParticipant.RegisterPersonnelDisableAsync(
+                                transactionCancellationToken)).Account;
+                        }
+                        else
+                        {
+                            var identityResult = await identityParticipant.RegisterPersonnelDisableAsync(
                                 new PersonnelAccountDisableRegistration
                                 {
                                     UserEid = person.UserEid,
@@ -94,7 +101,20 @@ public sealed class PersonLifecycleService(
                                     ActorId = actor.ActorId,
                                     TraceId = actor.TraceId
                                 },
-                                transactionCancellationToken)).Account;
+                                transactionCancellationToken);
+                            changedAccount = identityResult.Account;
+                            if (identityResult.Changed)
+                            {
+                                _ = await sessionRegistry.RevokeAllAsync(
+                                    new UserAuthenticationSessionsRevocation
+                                    {
+                                        UserEid = person.UserEid,
+                                        Reason = reason,
+                                        ActorId = actor.ActorId
+                                    },
+                                    transactionCancellationToken);
+                            }
+                        }
                     }
 
                     return new PersonLifecycleDto(

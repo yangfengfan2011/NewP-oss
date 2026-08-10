@@ -317,6 +317,34 @@ public sealed class StandardCrudServiceWriteTests
         Assert.Equal("Organization.Person.DeleteBlockedByUserBinding", result.Error.Code);
     }
 
+    [Fact]
+    public async Task DeleteAsync_WhenPolicyIsHard_IgnoresRegisteredConditionalExecutor()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
+        ]);
+        var executor = new RecordingConditionalDeleteExecutor();
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [executor]);
+
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0, executor.CallCount);
+        var repeated = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
+        Assert.False(repeated.Succeeded);
+        Assert.Equal(404, repeated.Error?.StatusCode);
+    }
+
     private static StandardCrudService Service(InMemoryStandardCrudRepository? repository = null) =>
         new(repository ?? new InMemoryStandardCrudRepository([]), EmptyQueryExecutor(), [], [], [], [], [], []);
 
@@ -461,6 +489,22 @@ public sealed class StandardCrudServiceWriteTests
                 Message = "当前人员已绑定账号，不能删除。",
                 ReasonKey = "organization.person.deleteBlockedByUserBinding"
             });
+        }
+    }
+
+    private sealed class RecordingConditionalDeleteExecutor : IStandardCrudConditionalDeleteExecutor
+    {
+        public string ResourceKey => "organization.person";
+
+        public int CallCount { get; private set; }
+
+        public Task<StandardCrudMutationResult> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(StandardCrudMutationResult.Success());
         }
     }
 

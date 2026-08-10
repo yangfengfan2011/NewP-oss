@@ -5,7 +5,10 @@
   "version": "1.0.0",
   "description": "组织结构管理模块",
   "entryAssembly": "../../OrganizationModule.dll",
-  "dependencies": [],
+  "dependencies": [
+    "Identity",
+    "Authentication"
+  ],
   "hostVersion": {
     "min": "1.0.0",
     "max": "2.0.0"
@@ -118,6 +121,12 @@
       "metadata/models/Department.model.json",
       "metadata/models/Person.model.json",
       "metadata/models/Position.model.json"
-    ]
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Organization.SqlServerMigrations.dll",
+        "manifest": "migrations/Organization.SqlServerMigrations.json"
+      }
+    }
   }
 }

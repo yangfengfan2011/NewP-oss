@@ -14,6 +14,13 @@ namespace ICP.Platform.Authentication.Tests;
 public sealed class AuthenticationFoundationModelTests
 {
     [Fact]
+    public void AuthenticationModule_DoesNotCompileGeneratedPrivateModelDtos()
+    {
+        var assembly = typeof(AuthenticationModule).Assembly;
+
+        Assert.Null(assembly.GetType("ICP.Platform.Modules.Authentication.DTOs.AuthenticationSessionDto"));
+    }
+    [Fact]
     public void Module_UsesRequiredAuthenticationCapsule()
     {
         var module = new AuthenticationModule();

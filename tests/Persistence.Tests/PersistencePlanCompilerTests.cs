@@ -222,6 +222,20 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_InstalledModuleBackupRestoreOnlyMigration_IsRejected()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteManifest(manifest =>
+            manifest["migrations"]!.AsArray()[0]!["compatibility"] = "backup-restore-only");
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
     public void Compile_MigrationModelChainBreak_RejectsWholeCandidate()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");

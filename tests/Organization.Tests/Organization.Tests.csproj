@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\server\modules\Organization\OrganizationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\modules\Identity\IdentityModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Authentication\AuthenticationModule.csproj" />
     <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />

@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <Compile Remove="Contracts\**\*.cs" />
+    <Compile Remove="DTOs\Generated\**\*.cs" />
     <Compile Remove="Migrations.SqlServer\**\*.cs" />
     <EmbeddedResource Include="..\..\..\modules\Identity\newp.plugin.json">
       <LogicalName>ICP.Platform.Modules.Identity.newp.plugin.json</LogicalName>

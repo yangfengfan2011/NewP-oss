@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
+using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
@@ -26,8 +28,9 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string RunEnvironmentVariable = "NEWP_RUN_SQLSERVER_SMOKE";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION";
     private const string PreviousMigration = "20260428145214_AlignModelMetadataEntityKeys";
-    private const string PersonPermanentBindingMigration = "20260810102141_Organization_PermanentUserBinding";
-    private const string LatestMigration = "20260810111523_Organization_PersonLifecycleRevision";
+    private const string PersonPermanentBindingMigration = "20260810102141_Organization_000001_PermanentUserBinding";
+    private const string PersonLifecycleRevisionMigration = "20260810111523_Organization_000002_PersonLifecycleRevision";
+    private const string LatestMigration = "20260808054041_AlignOrganizationSchemaDrift";
     private const string ModuleMigrationOne = "20260809001000_CreateAssetCatalog";
     private const string ModuleMigrationTwo = "20260809002000_AddUniqueAssetCode";
     private const string ModuleSchema = "np_partner_assetcatalog";
@@ -59,7 +62,7 @@ public sealed class SqlServerPersistenceSmokeTests
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
-    public Task SqlServerLegacyFrontier_UpgradesPermanentBindingToPersonRevision() =>
+    public Task SqlServerLegacyFrontier_AppliesOrganizationOwnedPermanentBindingAndRevision() =>
         RunCatalogScenarioAsync("revision", VerifyPersonRevisionUpgradeAsync);
 
     private static async Task RunCatalogScenarioAsync(
@@ -195,27 +198,34 @@ public sealed class SqlServerPersistenceSmokeTests
         WorktreeDatabaseIdentity identity)
     {
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
-        await using var provider = BuildProvider(
-            applicationConnectionString,
-            identity,
-            BuildLegacyFrontierPlan(PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline));
-
-        await using (var scope = provider.CreateAsyncScope())
+        await using (var legacyProvider = BuildProvider(
+                         applicationConnectionString,
+                         identity,
+                         BuildLegacyFrontierPlan(PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline)))
         {
-            var guard = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationGuard>();
-            await guard.VerifyAsync();
-            var context = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            await context.GetService<IMigrator>().MigrateAsync(PersonPermanentBindingMigration);
+            Assert.False(await RunMigrationsAsync(legacyProvider));
         }
 
-        Assert.DoesNotContain(LatestMigration, await ReadAppliedMigrationsAsync(applicationConnectionString));
+        await ExecuteNonQueryAsync(applicationConnectionString, """
+            INSERT INTO [dbo].[PersonUserLink]
+                ([EID], [PersonId], [UserId], [LinkedAt], [LinkedBy], [CreatedBy], [CreatedAt], [UpdatedBy], [UpdatedAt])
+            VALUES
+                (N'legacy-link', N'legacy-person', N'legacy-user', SYSUTCDATETIME(), N'legacy-actor', N'legacy-actor', SYSUTCDATETIME(), N'legacy-actor', SYSUTCDATETIME());
+            """);
+
+        await using var provider = BuildProvider(applicationConnectionString, identity, BuildOrganizationPlan());
 
         Assert.False(await RunMigrationsAsync(provider));
 
-        Assert.Contains(LatestMigration, await ReadAppliedMigrationsAsync(applicationConnectionString));
+        var history = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        Assert.Contains(LatestMigration, history);
+        Assert.Contains(PersonPermanentBindingMigration, history);
+        Assert.Contains(PersonLifecycleRevisionMigration, history);
+        Assert.False(await TableExistsAsync(applicationConnectionString, "PersonUserLink"));
         await ExecuteNonQueryAsync(
             applicationConnectionString,
-            "SELECT TOP (0) [Revision] FROM [dbo].[Person];");
+            "SELECT TOP (0) [UserEID], [UserBoundAt], [UserBoundBy], [UserBindingReason], [Revision] FROM [dbo].[Person];");
+        Assert.True(await IndexExistsAsync(applicationConnectionString, "dbo", "Person", "UX_Person_UserEID"));
     }
 
     private static async Task VerifyNonEmptyUnownedCatalogIsRejectedAsync(
@@ -532,6 +542,70 @@ public sealed class SqlServerPersistenceSmokeTests
             [],
             models,
             [stream]);
+    }
+
+    private static CompiledPersistencePlan BuildOrganizationPlan()
+    {
+        var organizationModels = new OrganizationModelMetadataProvider().GetDefinitions()
+            .Select(static model => model with { OwnerModuleId = "Organization", SchemaName = "dbo" })
+            .ToArray();
+        var organizationDigest = PersistenceModelDigest.Compute(organizationModels);
+        var coreModels = TestPersistencePlan.Create().Models
+            .Where(static model => model.Name is not ("Company" or "Department" or "Person" or "Position"))
+            .ToArray();
+        var models = coreModels.Concat(organizationModels).ToArray();
+        var coreDigest = PersistenceModelDigest.Compute(coreModels);
+        var migrations = new[]
+        {
+            new CompiledMigrationStep(
+                "000001",
+                PersonPermanentBindingMigration,
+                null,
+                new string('1', 64),
+                new string('0', 64),
+                new string('2', 64),
+                "backup-restore-only"),
+            new CompiledMigrationStep(
+                "000002",
+                PersonLifecycleRevisionMigration,
+                new string('1', 64),
+                new string('3', 64),
+                new string('2', 64),
+                organizationDigest,
+                "safe-expand")
+        };
+        var streams = new[]
+        {
+            new ModuleMigrationStream(
+                "platform.core",
+                PersistenceProvider.SqlServer,
+                EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
+                "platform.core:legacy-baseline",
+                coreDigest,
+                coreDigest,
+                PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline,
+                IsLegacyBaseline: true,
+                []),
+            new ModuleMigrationStream(
+                "Organization",
+                PersistenceProvider.SqlServer,
+                typeof(OrganizationPermanentUserBinding).Assembly.Location,
+                "Organization.SqlServerMigrations.json",
+                new string('4', 64),
+                organizationDigest,
+                PersonLifecycleRevisionMigration,
+                IsLegacyBaseline: false,
+                migrations)
+        };
+        return new CompiledPersistencePlan(
+            "organization-migration-test",
+            organizationDigest,
+            organizationDigest,
+            PersistenceProvider.SqlServer,
+            organizationDigest,
+            [],
+            models,
+            streams);
     }
 
     private static async Task<string> CreateCatalogAsync(

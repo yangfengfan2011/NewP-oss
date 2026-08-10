@@ -1,3 +1,4 @@
+using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
@@ -35,6 +36,7 @@ public sealed class PersonLifecycleServiceTests
         Assert.True(fixture.Identity.Account.PersonnelDisableHold);
         Assert.Equal(1, fixture.Identity.SessionRevocations);
         Assert.Single(fixture.Identity.Events, "人员离职");
+        Assert.Equal(["person", "identity", "authentication", "commit"], fixture.Stages);
     }
 
     [Fact]
@@ -189,8 +191,9 @@ public sealed class PersonLifecycleServiceTests
         int existingSessionRevocations = 0,
         IReadOnlyList<string>? existingEvents = null)
     {
-        var repository = new RecordingRepository(person ?? Person(), failureStage);
-        var identity = new RecordingIdentityParticipant(account ?? Account(), failureStage)
+        var stages = new List<string>();
+        var repository = new RecordingRepository(person ?? Person(), failureStage, stages);
+        var identity = new RecordingIdentityParticipant(account ?? Account(), failureStage, stages)
         {
             SessionRevocations = existingSessionRevocations
         };
@@ -200,9 +203,10 @@ public sealed class PersonLifecycleServiceTests
             repository,
             new RecordingAccountDirectory(identity, directoryUnavailable),
             identity,
+            identity,
             transaction,
             new FixedTimeProvider(ChangedAt));
-        return new TestFixture(service, repository, identity, transaction);
+        return new TestFixture(service, repository, identity, transaction, stages);
     }
 
     public enum LifecycleFailureStage
@@ -245,9 +249,10 @@ public sealed class PersonLifecycleServiceTests
         PersonLifecycleService Service,
         RecordingRepository Repository,
         RecordingIdentityParticipant Identity,
-        SnapshotTransactionExecutor Transaction);
+        SnapshotTransactionExecutor Transaction,
+        List<string> Stages);
 
-    private sealed class RecordingRepository(PersonUserBindingState initial, LifecycleFailureStage? failureStage) : IPersonUserBindingRepository
+    private sealed class RecordingRepository(PersonUserBindingState initial, LifecycleFailureStage? failureStage, List<string> stages) : IPersonUserBindingRepository
     {
         public PersonUserBindingState Current { get; set; } = initial;
 
@@ -282,6 +287,7 @@ public sealed class PersonLifecycleServiceTests
                 UpdatedBy = actorId,
                 UpdatedAt = changedAt
             };
+            stages.Add("person");
             return ValueTask.FromResult(true);
         }
     }
@@ -302,11 +308,14 @@ public sealed class PersonLifecycleServiceTests
             throw new NotSupportedException();
     }
 
-    private sealed class RecordingIdentityParticipant(IdentityAccountSnapshot initial, LifecycleFailureStage? failureStage) : IIdentityLifecycleParticipant
+    private sealed class RecordingIdentityParticipant(IdentityAccountSnapshot initial, LifecycleFailureStage? failureStage, List<string> stages)
+        : IIdentityLifecycleParticipant, IAuthenticationSessionRegistry
     {
         public IdentityAccountSnapshot Account { get; set; } = initial;
         public int SessionRevocations { get; set; }
         public List<string> Events { get; } = [];
+
+        public void StagesForCommit() => stages.Add("commit");
 
         public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelBindingAsync(PersonnelBindingRegistration registration, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -334,18 +343,13 @@ public sealed class PersonLifecycleServiceTests
                 throw new InvalidOperationException("hold-stage-failed");
             }
 
-            SessionRevocations++;
-            if (failureStage == LifecycleFailureStage.Session)
-            {
-                throw new InvalidOperationException("session-stage-failed");
-            }
-
             Events.Add(registration.Reason);
             if (failureStage == LifecycleFailureStage.Event)
             {
                 throw new InvalidOperationException("event-stage-failed");
             }
 
+            stages.Add("identity");
             return ValueTask.FromResult(new IdentityLifecycleRegistrationResult { Account = Account, Changed = true });
         }
 
@@ -354,6 +358,27 @@ public sealed class PersonLifecycleServiceTests
             Account = Account with { PersonnelDisableHold = false, Revision = Account.Revision + 1 };
             Events.Add("人员恢复并解除停用阻断");
             return ValueTask.FromResult(new IdentityLifecycleRegistrationResult { Account = Account, Changed = true });
+        }
+
+        public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credential, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
+        {
+            SessionRevocations++;
+            stages.Add("authentication");
+            if (failureStage == LifecycleFailureStage.Session)
+            {
+                throw new InvalidOperationException("session-stage-failed");
+            }
+
+            return ValueTask.FromResult(1);
         }
     }
 
@@ -381,6 +406,7 @@ public sealed class PersonLifecycleServiceTests
                 }
 
                 SaveCount++;
+                identity.StagesForCommit();
                 return result;
             }
             catch

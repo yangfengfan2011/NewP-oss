@@ -32,13 +32,7 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return new StandardCrudError
-            {
-                StatusCode = 400,
-                Code = "Organization.Person.InvalidId",
-                Message = "人员标识不能为空。",
-                ReasonKey = "organization.person.invalidId"
-            };
+            return InvalidIdError();
         }
 
         var person = await _bindingRepository.FindAsync(id, cancellationToken);

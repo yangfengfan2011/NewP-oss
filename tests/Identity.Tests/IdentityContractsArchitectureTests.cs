@@ -1,5 +1,6 @@
 using System.Reflection;
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity;
 using Xunit;
 
 namespace ICP.Platform.Identity.Tests;
@@ -29,6 +30,15 @@ public sealed class IdentityContractsArchitectureTests
         {
             Assert.Contains($"name=\"M:{method.DeclaringType!.FullName}.{method.Name}", documentation, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void IdentityModule_DoesNotCompileGeneratedPrivateModelDtos()
+    {
+        var assembly = typeof(IdentityModule).Assembly;
+
+        Assert.Null(assembly.GetType("ICP.Platform.Modules.Identity.DTOs.UserDto"));
+        Assert.Null(assembly.GetType("ICP.Platform.Modules.Identity.DTOs.LocalCredentialDto"));
     }
 
     private static bool ContainsPersistenceLeak(Type type) =>

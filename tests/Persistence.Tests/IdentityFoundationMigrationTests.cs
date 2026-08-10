@@ -3,7 +3,10 @@ using System.Text;
 using System.Text.Json;
 using ICP.Platform.Modules.Authentication.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Identity.Migrations.SqlServer.Migrations;
+using ICP.Platform.Modules.Organization.Persistence.Descriptors;
+using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Persistence.Planning;
 using Xunit;
 
 namespace ICP.Platform.Persistence.Tests;
@@ -11,11 +14,27 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class IdentityFoundationMigrationTests
 {
     [Fact]
-    public void SqlServerLegacyFrontier_IncludesPersonLifecycleRevision()
+    public void SqlServerLegacyFrontier_RemainsFrozenBeforeOrganizationOwnedMigrations()
     {
         Assert.Equal(
-            "20260810111523_Organization_PersonLifecycleRevision",
+            "20260808054041_AlignOrganizationSchemaDrift",
             PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline);
+    }
+
+    [Fact]
+    public void OrganizationMigrationModelDigests_ArePinnedToOwnedMetadataStages()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions()
+            .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
+            .ToArray();
+        var finalDigest = PersistenceModelDigest.Compute(definitions);
+        var intermediateDigest = PersistenceModelDigest.Compute(definitions.Select(static definition =>
+            definition.Name == "Person"
+                ? definition with { Fields = definition.Fields.Where(static field => field.Name != "Revision").ToArray() }
+                : definition));
+
+        Assert.Equal("0aa9f2e2956c6f4e094224d65b65ca182c980278cfcf95ff368d9f4f67b9de58", finalDigest);
+        Assert.Equal("967cfb3295a645bf6d85d90a9e25523297e75171176732263f437fd27cb3e6b3", intermediateDigest);
     }
 
     [Fact]
@@ -95,6 +114,7 @@ public sealed class IdentityFoundationMigrationTests
             "Authentication.SqlServerMigrations.json",
             typeof(AuthenticationFoundation).Assembly.Location,
             "20260810033909_Authentication_000001_Foundation.cs");
+        AssertOrganizationManifest(repositoryRoot);
     }
 
     [Fact]
@@ -110,13 +130,78 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "Authentication",
             "$(MSBuildProjectDirectory)=/_/Authentication.SqlServerMigrations");
+        AssertPathMap(
+            repositoryRoot,
+            "Organization",
+            "$(MSBuildProjectDirectory)=/_/Organization.SqlServerMigrations");
         AssertSourceRevisionIsExcluded(repositoryRoot, "Identity");
         AssertSourceRevisionIsExcluded(repositoryRoot, "Authentication");
+        AssertSourceRevisionIsExcluded(repositoryRoot, "Organization");
         Assert.True(File.Exists(Path.Combine(
             repositoryRoot,
             "tests",
             "integration",
             "verify-migration-bundle-determinism.ps1")));
+    }
+
+    [Fact]
+    public void OrganizationMigrations_AreOwnedByModuleAndUseBackupOnlyRollback()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var coreDirectory = Path.Combine(repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver", "Migrations");
+        var organizationDirectory = Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations");
+
+        Assert.Empty(Directory.GetFiles(coreDirectory, "*_Organization_*.cs"));
+        var sources = Directory.GetFiles(organizationDirectory, "*.cs").OrderBy(static path => path, StringComparer.Ordinal).ToArray();
+        Assert.Equal(2, sources.Length);
+        var source = string.Join('\n', sources.Select(File.ReadAllText));
+        Assert.Contains("DropTable(name: \"PersonUserLink\")", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, Count(source, "protected override void Down"));
+        Assert.DoesNotContain("DropColumn", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateTable", source, StringComparison.Ordinal);
+    }
+
+    private static void AssertOrganizationManifest(string repositoryRoot)
+    {
+        var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = document.RootElement;
+        var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
+        Assert.Equal(2, migrations.Length);
+        Assert.Equal(
+            root.GetProperty("bundleChecksum").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(OrganizationPermanentUserBinding).Assembly.Location))));
+
+        var sourceNames = new[]
+        {
+            "20260810102141_Organization_000001_PermanentUserBinding.cs",
+            "20260810111523_Organization_000002_PersonLifecycleRevision.cs"
+        };
+        for (var index = 0; index < migrations.Length; index++)
+        {
+            var sourcePath = Path.Combine(
+                repositoryRoot,
+                "server",
+                "modules",
+                "Organization",
+                "Migrations.SqlServer",
+                "Migrations",
+                sourceNames[index]);
+            Assert.Equal(
+                migrations[index].GetProperty("contentDigest").GetString(),
+                Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+        }
+
+        Assert.Equal(
+            migrations[0].GetProperty("contentDigest").GetString(),
+            migrations[1].GetProperty("previousContentDigest").GetString());
+        Assert.Equal(
+            migrations[0].GetProperty("toModelDigest").GetString(),
+            migrations[1].GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), migrations[1].GetProperty("toModelDigest").GetString());
     }
 
     private static void AssertManifest(

@@ -542,7 +542,7 @@ public sealed class IdentityAccountApplicationServiceTests
     }
 
     [Fact]
-    public async Task LifecycleParticipant_DisablesWithHoldThenReleasesHoldWithoutEnabling()
+    public async Task LifecycleParticipant_DisablesWithHoldWithoutImplicitlyOrchestratingAuthentication()
     {
         var fixture = new Fixture();
         var created = await fixture.CreateAsync();
@@ -567,7 +567,7 @@ public sealed class IdentityAccountApplicationServiceTests
 
         Assert.Equal(IdentityAccountStatus.Disabled, disabled.Account.Status);
         Assert.True(disabled.Account.PersonnelDisableHold);
-        Assert.Single(fixture.Sessions.Revocations);
+        Assert.Empty(fixture.Sessions.Revocations);
         Assert.Equal(IdentityAccountStatus.Disabled, released.Account.Status);
         Assert.False(released.Account.PersonnelDisableHold);
         Assert.Equal(3, released.Account.Revision);
@@ -591,7 +591,6 @@ public sealed class IdentityAccountApplicationServiceTests
                 new FixedTimeProvider(new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero)));
             Participant = new IdentityLifecycleParticipant(
                 Repository,
-                Sessions,
                 new SequenceObjectIdGenerator(),
                 new FixedTimeProvider(new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero)));
         }

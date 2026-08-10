@@ -65,6 +65,7 @@ public sealed class PlatformRequestValidationHttpApiIntegrationTests
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(IdentityUsersController), typeof(PlatformRequestValidationAttribute)));
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(IdentitySelfServiceController), typeof(PlatformRequestValidationAttribute)));
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(PersonUserBindingsController), typeof(PlatformRequestValidationAttribute)));
+        Assert.NotNull(Attribute.GetCustomAttribute(typeof(PersonLifecycleController), typeof(PlatformRequestValidationAttribute)));
     }
 
     [Fact]

@@ -23,6 +23,12 @@ $primaryRevisionArgument = "-p:SourceRevisionId=$revision"
 $copyRevisionArgument = '-p:SourceRevisionId=0000000000000000000000000000000000000000'
 $projects = @(
     @{
+        Name = 'Organization'
+        Project = 'server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj'
+        Dll = 'server\modules\Organization\Migrations.SqlServer\bin\Debug\net10.0\Organization.SqlServerMigrations.dll'
+        Manifest = 'modules\Organization\migrations\Organization.SqlServerMigrations.json'
+    },
+    @{
         Name = 'Identity'
         Project = 'server\modules\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj'
         Dll = 'server\modules\Identity\Migrations.SqlServer\bin\Debug\net10.0\Identity.SqlServerMigrations.dll'

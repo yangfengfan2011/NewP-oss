@@ -363,9 +363,55 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("PositionId");
 
-                    b.Property<long>("Revision")
-                        .HasColumnType("bigint")
-                        .HasColumnName("Revision");
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Person_EID");
+
+                    b.ToTable("Person", (string)null);
+                });
+
+            modelBuilder.Entity("PersonUserLink", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<DateTime>("LinkedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("LinkedAt");
+
+                    b.Property<string>("LinkedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("LinkedBy");
+
+                    b.Property<string>("PersonId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("PersonId");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -376,36 +422,27 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
 
-                    b.Property<string>("UserBindingReason")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("UserBindingReason");
-
-                    b.Property<DateTime?>("UserBoundAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("UserBoundAt");
-
-                    b.Property<string>("UserBoundBy")
+                    b.Property<string>("UserId")
+                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("UserBoundBy");
-
-                    b.Property<string>("UserEID")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("UserEID");
+                        .HasColumnName("UserId");
 
                     b.HasKey("EID");
 
                     b.HasIndex("EID")
                         .IsUnique()
-                        .HasDatabaseName("UX_Person_EID");
+                        .HasDatabaseName("UX_PersonUserLink_EID");
 
-                    b.HasIndex("UserEID")
+                    b.HasIndex("PersonId")
                         .IsUnique()
-                        .HasDatabaseName("UX_Person_UserEID")
-                        .HasFilter("[UserEID] IS NOT NULL");
+                        .HasDatabaseName("UX_PersonUserLink_Person");
 
-                    b.ToTable("Person", (string)null);
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PersonUserLink_User");
+
+                    b.ToTable("PersonUserLink", (string)null);
                 });
 
             modelBuilder.Entity("Position", b =>

@@ -19,4 +19,6 @@ public sealed class ModelMetadataModel
     public List<ModelMetadataLinkedType> LinkedTypes { get; init; } = [];
 
     public List<ModelMetadataIndex> Indexes { get; init; } = [];
+
+    public List<ModelMetadataForeignKey> ForeignKeys { get; init; } = [];
 }

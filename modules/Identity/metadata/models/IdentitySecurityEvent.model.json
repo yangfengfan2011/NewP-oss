@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "IdentitySecurityEvent": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "TargetUserEID",
+        "storage": { "type": "guid" }
+      },
+      {
+        "name": "EventType",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "Reason",
+        "storage": { "type": "text" }
+      },
+      {
+        "name": "OccurredAt",
+        "storage": { "type": "datetime" }
+      },
+      {
+        "name": "TraceId",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "ActorKind",
+        "storage": { "type": "string" },
+        "contract": { "valueType": "enum", "clrType": "IdentitySecurityActorKind" }
+      },
+      {
+        "name": "ActorUserEID",
+        "storage": { "type": "guid", "nullable": true }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_IdentitySecurityEvent_TargetUser_OccurredAt",
+        "fields": ["TargetUserEID", "OccurredAt"],
+        "unique": false
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_IdentitySecurityEvent_TargetUser",
+        "fields": ["TargetUserEID"],
+        "principalModuleId": "Identity",
+        "principalModel": "User",
+        "principalFields": ["EID"],
+        "onDelete": "Restrict"
+      },
+      {
+        "name": "FK_IdentitySecurityEvent_ActorUser",
+        "fields": ["ActorUserEID"],
+        "principalModuleId": "Identity",
+        "principalModel": "User",
+        "principalFields": ["EID"],
+        "onDelete": "Restrict"
+      }
+    ]
+  }
+}

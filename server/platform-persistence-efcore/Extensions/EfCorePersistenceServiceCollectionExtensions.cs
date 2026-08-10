@@ -3,6 +3,7 @@ using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore.Ownership;
 using ICP.Platform.Persistence.EfCore.Sql;
+using ICP.Platform.Persistence.EfCore.Transactions;
 using ICP.Platform.Persistence.Extensions;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
@@ -55,6 +56,7 @@ public static class EfCorePersistenceServiceCollectionExtensions
         });
 
         services.AddScoped<ISqlQueryExecutor, EfSqlQueryExecutor>();
+        services.AddScoped<IPlatformTransactionExecutor, EfPlatformTransactionExecutor>();
         if (Enum.TryParse<PersistenceProvider>(configuration["Persistence:Provider"], true, out var provider)
             && provider is PersistenceProvider.SqlServer)
         {

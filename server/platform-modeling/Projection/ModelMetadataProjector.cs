@@ -68,13 +68,15 @@ public sealed class ModelMetadataProjector
         }
 
         var indexes = BuildIndexes(document);
+        var foreignKeys = BuildForeignKeys(document);
 
         return new ModelDefinition(
             document.Model.Name,
             document.Model.Name,
             Enum.Parse<ModelKind>(document.Model.Kind, ignoreCase: true),
             fields,
-            indexes);
+            indexes,
+            ForeignKeys: foreignKeys);
     }
 
     private static FieldDefinition ProjectField(
@@ -169,6 +171,7 @@ public sealed class ModelMetadataProjector
             return contractValueType.Trim().ToLowerInvariant() switch
             {
                 "enum" => FieldValueType.Enum,
+                "integer" => FieldValueType.Integer,
                 "objectid" => FieldValueType.ObjectId,
                 "bool" => FieldValueType.Boolean,
                 "datetime" => FieldValueType.DateTime,
@@ -191,6 +194,8 @@ public sealed class ModelMetadataProjector
             "bool" => FieldValueType.Boolean,
             "date" => FieldValueType.DateTime,
             "datetime" => FieldValueType.DateTime,
+            "int" => FieldValueType.Integer,
+            "long" => FieldValueType.Integer,
             "guid" => FieldValueType.ObjectId,
             _ => FieldValueType.Text
         };
@@ -216,4 +221,21 @@ public sealed class ModelMetadataProjector
 
         return indexes;
     }
+
+    private static IReadOnlyList<ForeignKeyDefinition> BuildForeignKeys(ModelMetadataDocument document) =>
+        document.Model.ForeignKeys
+            .Select(foreignKey => new ForeignKeyDefinition(
+                foreignKey.Name,
+                foreignKey.Fields,
+                $"{ResolvePrincipalModuleId(document, foreignKey)}/{foreignKey.PrincipalModel}",
+                foreignKey.PrincipalFields,
+                Enum.Parse<ForeignKeyDeleteBehavior>(foreignKey.OnDelete, ignoreCase: true)))
+            .ToArray();
+
+    private static string ResolvePrincipalModuleId(
+        ModelMetadataDocument document,
+        ModelMetadataForeignKey foreignKey) =>
+        string.IsNullOrWhiteSpace(foreignKey.PrincipalModuleId)
+            ? document.ModuleId
+            : foreignKey.PrincipalModuleId;
 }

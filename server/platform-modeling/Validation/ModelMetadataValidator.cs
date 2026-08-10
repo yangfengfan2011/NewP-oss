@@ -1,3 +1,4 @@
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
 
 namespace ICP.Platform.Modeling.Validation;
@@ -83,6 +84,7 @@ public sealed class ModelMetadataValidator
 
         ValidateFieldContracts(document, allowedBuiltinFields);
         ValidateIndexContracts(document);
+        ValidateForeignKeyContracts(document);
 
         if (typeMap is null)
         {
@@ -140,6 +142,25 @@ public sealed class ModelMetadataValidator
                     throw new InvalidOperationException(
                         $"Index '{index.Name}' references unknown field '{fieldName}'.");
                 }
+            }
+        }
+    }
+
+    private static void ValidateForeignKeyContracts(ModelMetadataDocument document)
+    {
+        var availableFields = CollectAvailableFieldNames(document);
+        foreach (var foreignKey in document.Model.ForeignKeys)
+        {
+            if (string.IsNullOrWhiteSpace(foreignKey.Name)
+                || foreignKey.Fields.Count == 0
+                || foreignKey.Fields.Any(field => !availableFields.Contains(field))
+                || string.IsNullOrWhiteSpace(foreignKey.PrincipalModel)
+                || foreignKey.PrincipalFields.Count == 0
+                || foreignKey.Fields.Count != foreignKey.PrincipalFields.Count
+                || !Enum.TryParse<ForeignKeyDeleteBehavior>(foreignKey.OnDelete, true, out _))
+            {
+                throw new InvalidOperationException(
+                    $"Model '{document.Model.Name}' contains invalid foreign key '{foreignKey.Name}'.");
             }
         }
     }

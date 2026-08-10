@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Modules.Identity</RootNamespace>
+    <AssemblyName>IdentityModule</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Contracts\Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Contracts\**\*.cs" />
+    <EmbeddedResource Include="..\..\..\modules\Identity\newp.plugin.json">
+      <LogicalName>ICP.Platform.Modules.Identity.newp.plugin.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

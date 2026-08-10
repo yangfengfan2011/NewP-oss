@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "User": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ECODE",
+      "ENAME"
+    ],
+    "fields": [
+      {
+        "name": "NormalizedECODE",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "Status",
+        "storage": { "type": "string" },
+        "contract": { "valueType": "enum", "clrType": "IdentityAccountStatus" }
+      },
+      {
+        "name": "IsLocalAdministrator",
+        "storage": { "type": "bool" }
+      },
+      {
+        "name": "IsPersonnelBound",
+        "storage": { "type": "bool" }
+      },
+      {
+        "name": "PersonnelDisableHold",
+        "storage": { "type": "bool" }
+      },
+      {
+        "name": "Revision",
+        "storage": { "type": "long" },
+        "contract": { "valueType": "integer" }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_User_NormalizedECODE",
+        "fields": ["NormalizedECODE"],
+        "unique": true
+      }
+    ]
+  }
+}

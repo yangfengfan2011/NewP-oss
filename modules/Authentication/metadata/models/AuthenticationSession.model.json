@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "AuthenticationSession": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "UserEID",
+        "storage": { "type": "guid" }
+      },
+      {
+        "name": "TokenHash",
+        "storage": { "type": "string" }
+      },
+      {
+        "name": "SessionType",
+        "storage": { "type": "string" },
+        "contract": { "valueType": "enum", "clrType": "AuthenticationSessionType" }
+      },
+      {
+        "name": "ExpiresAt",
+        "storage": { "type": "datetime" }
+      },
+      {
+        "name": "RevokedAt",
+        "storage": { "type": "datetime", "nullable": true }
+      },
+      {
+        "name": "RevocationReason",
+        "storage": { "type": "text", "nullable": true }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_AuthenticationSession_TokenHash",
+        "fields": ["TokenHash"],
+        "unique": true
+      },
+      {
+        "name": "IX_AuthenticationSession_UserEID",
+        "fields": ["UserEID"],
+        "unique": false
+      },
+      {
+        "name": "IX_AuthenticationSession_ExpiresAt",
+        "fields": ["ExpiresAt"],
+        "unique": false
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_AuthenticationSession_User",
+        "fields": ["UserEID"],
+        "principalModuleId": "Identity",
+        "principalModel": "User",
+        "principalFields": ["EID"],
+        "onDelete": "Restrict"
+      }
+    ]
+  }
+}

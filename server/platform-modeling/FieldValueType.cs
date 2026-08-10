@@ -6,6 +6,7 @@ public enum FieldValueType
     Description,
     Boolean,
     DateTime,
+    Integer,
     ObjectId,
     Enum,
     User,

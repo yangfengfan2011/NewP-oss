@@ -239,7 +239,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         {
             PersistenceProvider.SqlServer => (
                 "PlatformPersistence.EfCore.SqlServerMigrations",
-                "20260808054041_AlignOrganizationSchemaDrift"),
+                PlatformCoreMigrationFrontiers.SqlServerIdentityFoundation),
             PersistenceProvider.Oracle => (
                 "PlatformPersistence.EfCore.OracleMigrations",
                 "20260428145243_AlignModelMetadataEntityKeys"),

@@ -10,8 +10,10 @@ public sealed class EfModelProjector
     {
         foreach (var definition in definitions)
         {
-            var entity = modelBuilder.SharedTypeEntity(definition.LogicalKey, typeof(Dictionary<string, object?>));
-            entity.ToTable(definition.TableName, definition.SchemaName);
+            var entity = modelBuilder.SharedTypeEntity(GetEntityName(definition), typeof(Dictionary<string, object?>));
+            entity.ToTable(
+                definition.TableName,
+                string.IsNullOrWhiteSpace(definition.SchemaName) ? null : definition.SchemaName);
 
             foreach (var field in definition.Fields)
             {
@@ -47,15 +49,54 @@ public sealed class EfModelProjector
                 }
             }
         }
+
+        // 关系必须在全部 shared-type entity 已建立后投影，避免跨模块外键因输入顺序
+        // 隐式创建一个错误 CLR 类型的 principal entity。
+        foreach (var definition in definitions)
+        {
+            var entity = modelBuilder.SharedTypeEntity(GetEntityName(definition), typeof(Dictionary<string, object?>));
+            foreach (var foreignKey in definition.ForeignKeys)
+            {
+                entity
+                    .HasOne(foreignKey.PrincipalModelKey, navigationName: null)
+                    .WithMany()
+                    .HasForeignKey(foreignKey.Fields.ToArray())
+                    .HasPrincipalKey(foreignKey.PrincipalFields.ToArray())
+                    .OnDelete(MapDeleteBehavior(foreignKey.DeleteBehavior))
+                    .HasConstraintName(foreignKey.Name);
+            }
+        }
     }
 
-    private static Type MapClrType(FieldDefinition field) =>
-        field.ValueType switch
+    private static Type MapClrType(FieldDefinition field)
+    {
+        var clrType = field.ValueType switch
         {
             FieldValueType.Boolean => typeof(bool),
             FieldValueType.DateTime => typeof(DateTime),
+            FieldValueType.Integer => typeof(long),
             _ => typeof(string)
         };
+
+        return field.Required || !clrType.IsValueType
+            ? clrType
+            : typeof(Nullable<>).MakeGenericType(clrType);
+    }
+
+    private static DeleteBehavior MapDeleteBehavior(ForeignKeyDeleteBehavior behavior) =>
+        behavior switch
+        {
+            ForeignKeyDeleteBehavior.Restrict => DeleteBehavior.Restrict,
+            ForeignKeyDeleteBehavior.Cascade => DeleteBehavior.Cascade,
+            ForeignKeyDeleteBehavior.SetNull => DeleteBehavior.SetNull,
+            ForeignKeyDeleteBehavior.NoAction => DeleteBehavior.NoAction,
+            _ => throw new InvalidOperationException($"Unsupported foreign key delete behavior: {behavior}")
+        };
+
+    private static string GetEntityName(ModelDefinition definition) =>
+        string.IsNullOrWhiteSpace(definition.OwnerModuleId)
+            ? definition.Name
+            : definition.LogicalKey;
 
     private static bool ShouldApplyMaxLength(FieldDefinition field) =>
         MapClrType(field) == typeof(string) && field.ValueType != FieldValueType.Description;

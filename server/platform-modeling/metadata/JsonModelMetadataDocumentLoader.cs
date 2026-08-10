@@ -72,7 +72,8 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
                 BuiltinFields = model.BuiltinFields,
                 Fields = model.Fields,
                 LinkedTypes = model.LinkedTypes,
-                Indexes = model.Indexes
+                Indexes = model.Indexes,
+                ForeignKeys = model.ForeignKeys
             }
         };
     }

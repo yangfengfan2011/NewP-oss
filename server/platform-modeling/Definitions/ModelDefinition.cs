@@ -7,8 +7,11 @@ public sealed record ModelDefinition(
     IReadOnlyList<FieldDefinition> Fields,
     IReadOnlyList<IndexDefinition> Indexes,
     string OwnerModuleId = "platform.core",
-    string SchemaName = "dbo")
+    string SchemaName = "dbo",
+    IReadOnlyList<ForeignKeyDefinition>? ForeignKeys = null)
 {
+    public IReadOnlyList<ForeignKeyDefinition> ForeignKeys { get; init; } = ForeignKeys ?? [];
+
     /// <summary>
     /// 获取跨模块唯一的稳定逻辑模型键。
     /// </summary>

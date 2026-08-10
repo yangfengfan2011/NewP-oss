@@ -31,5 +31,18 @@ public sealed class ModelDefinitionValidator
         {
             throw new InvalidOperationException($"Model '{definition.Name}' index '{invalidIndex.Name}' references undefined field.");
         }
+
+        var invalidForeignKey = definition.ForeignKeys.FirstOrDefault(foreignKey =>
+            string.IsNullOrWhiteSpace(foreignKey.Name)
+            || foreignKey.Fields.Count == 0
+            || foreignKey.Fields.Any(field => !fieldNames.Contains(field))
+            || string.IsNullOrWhiteSpace(foreignKey.PrincipalModelKey)
+            || foreignKey.PrincipalFields.Count == 0
+            || foreignKey.Fields.Count != foreignKey.PrincipalFields.Count);
+        if (invalidForeignKey is not null)
+        {
+            throw new InvalidOperationException(
+                $"Model '{definition.Name}' foreign key '{invalidForeignKey.Name}' is invalid.");
+        }
     }
 }

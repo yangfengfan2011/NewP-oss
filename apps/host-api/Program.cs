@@ -174,6 +174,7 @@ var canonicalModulePlan = activationSession.ModulePlan;
 
 // Build 前所有持久化服务都绑定到激活会话编译出的同一个计划实例。
 builder.Services.AddPlatformPersistence(builder.Configuration, activationSession.PersistencePlan);
+builder.Services.AddRequiredBuiltinReadiness(canonicalModulePlan, activationSession.PersistencePlan);
 
 var standardDataDescriptors = new StandardDataCrudDescriptorProjector().Project(canonicalModulePlan);
 if (standardDataDescriptors.Count > 0)

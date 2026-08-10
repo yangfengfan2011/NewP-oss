@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Authentication",
+  "displayName": "认证会话",
+  "version": "1.0.0",
+  "description": "平台服务端认证会话注册表模块",
+  "entryAssembly": "../../AuthenticationModule.dll",
+  "dependencies": [
+    "Identity"
+  ],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "authentication.backend"
+  },
+  "frontend": {
+    "enabled": false
+  },
+  "security": {
+    "permissions": []
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/AuthenticationSession.model.json"
+    ]
+  }
+}

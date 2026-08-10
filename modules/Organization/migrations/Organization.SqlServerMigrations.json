@@ -10,7 +10,7 @@
       "migrationId": "20260810102141_Organization_000001_PermanentUserBinding",
       "previousContentDigest": null,
       "contentDigest": "bcbab0ee1f5ce38368753839ca302008c482a2de59e23a7f9d3997d1f7bba0a8",
-      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "fromModelDigest": "a0d7b6421f280436e2b3726504c3b64a7eaf04dec7fb967faae2046546b3cb2c",
       "toModelDigest": "967cfb3295a645bf6d85d90a9e25523297e75171176732263f437fd27cb3e6b3",
       "compatibility": "backup-restore-only"
     },

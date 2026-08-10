@@ -21,6 +21,7 @@ internal sealed class PersonnelAcceptanceRunner
     internal const string BrowserScenario = "personnel.browser";
     internal const string RestartScenario = "personnel.restart";
 
+    private const string AuthenticationCookieName = "ICP.Platform.PersonnelAcceptance";
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _repositoryRoot;
     private readonly string _runDirectory;
@@ -34,6 +35,7 @@ internal sealed class PersonnelAcceptanceRunner
     private string? _applicationConnectionString;
     private string? _catalog;
     private string? _pluginRoot;
+    private string? _keyRingRoot;
     private string? _lastDevRunId;
     private int _hostPort;
     private int _shellPort;
@@ -41,7 +43,9 @@ internal sealed class PersonnelAcceptanceRunner
     private string _activeScenario = PreflightScenario;
     private FixtureData? _fixture;
     private PersonData? _person;
-    private LocalCredentials? _credentials;
+    private string? _adminPassword;
+    private string? _readOnlyECode;
+    private string? _readOnlyPassword;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
 
     public PersonnelAcceptanceRunner(
@@ -141,19 +145,26 @@ internal sealed class PersonnelAcceptanceRunner
         _applicationConnectionString = appBuilder.ConnectionString;
 
         _pluginRoot = Path.Combine(_runDirectory, "resources", "plugins");
+        _keyRingRoot = Path.Combine(_runDirectory, "resources", "key-ring");
         Directory.CreateDirectory(_pluginRoot);
+        Directory.CreateDirectory(_keyRingRoot);
         if (Directory.EnumerateFileSystemEntries(_pluginRoot).Any())
         {
             throw new InvalidOperationException("Personnel gate plugin root was not empty before startup.");
         }
 
-        _credentials = ReadLocalCredentials();
-        _secretTokens.Add(_credentials.Password);
         var fixtureSecret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
             .ToLowerInvariant();
         _secretTokens.Add(fixtureSecret);
         _devEnvironment["NEWP_DEV_SQLSERVER_CONNECTION_STRING"] = _applicationConnectionString;
+        _devEnvironment["ConnectionStrings__SqlServer"] = _applicationConnectionString;
         _devEnvironment["Platform__PluginInstallRoot"] = _pluginRoot;
+        _devEnvironment["Authentication__Host__KeyRingPath"] = _keyRingRoot;
+        _devEnvironment["Authentication__Host__CookieName"] = AuthenticationCookieName;
+        _devEnvironment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
+        _devEnvironment["Identity__LocalAdministrator__ECODE"] = "admin";
+        _devEnvironment["Identity__LocalAdministrator__ENAME"] = "Personnel Acceptance Administrator";
+        _devEnvironment["ASPNETCORE_ENVIRONMENT"] = "Development";
         _devEnvironment["Acceptance__Enabled"] = "true";
         _devEnvironment["Acceptance__RunId"] = _runId;
         _devEnvironment["Acceptance__Secret"] = fixtureSecret;
@@ -161,8 +172,89 @@ internal sealed class PersonnelAcceptanceRunner
 
         await RunDevScriptAsync("stop-dev.ps1", "personnel/preflight-stop-existing.json", cancellationToken, allowAlreadyStopped: true);
         await CreateCatalogAsync(cancellationToken);
+        var build = await AcceptanceInfrastructure.RunProcessAsync(
+            "dotnet",
+            ["build", "apps/host-api/HostApi.csproj", "--configuration", "Release", "--no-restore", "--nologo"],
+            _repositoryRoot,
+            cancellationToken: cancellationToken);
+        if (build.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"HostApi release build failed: {Sanitize(build.StandardError)}");
+        }
+        await WriteEvidenceAsync(
+            "personnel/preflight-build.json",
+            new { command = "dotnet build HostApi", exitCode = build.ExitCode },
+            cancellationToken);
+        await ObserveBootstrapRequiredDevAsync(cancellationToken);
+        var bootstrap = await FormalIdentityBootstrap.RunAsync(
+            _repositoryRoot,
+            Path.Combine(_runDirectory, "resources"),
+            _devEnvironment,
+            cancellationToken);
+        _secretTokens.Add(bootstrap.TemporaryCredential);
         await StartDevAsync("personnel/preflight-dev-start.json", cancellationToken);
         _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+
+        using var administrator = CreateClient(_hostPort);
+        using (var restrictedLogin = await LoginAsync(
+                   administrator,
+                   "admin",
+                   bootstrap.TemporaryCredential,
+                   cancellationToken))
+        {
+            var revision = ReadLong(restrictedLogin.RootElement, "revision");
+            _adminPassword = $"Adm-{_runId}-Pass";
+            _secretTokens.Add(_adminPassword);
+            await ChangePasswordAsync(
+                administrator,
+                bootstrap.TemporaryCredential,
+                _adminPassword,
+                revision,
+                cancellationToken);
+        }
+
+        _readOnlyECode = $"acceptance.readonly.{_runId[..8]}";
+        using (var created = await SendJsonWithAntiforgeryAsync(
+                   administrator,
+                   HttpMethod.Post,
+                   "/api/identity/users",
+                   new { ecode = _readOnlyECode, ename = "Personnel Acceptance Read Only" },
+                   cancellationToken))
+        {
+            var createdBody = await created.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(created, HttpStatusCode.Created, createdBody, "create read-only identity account");
+            using var createdJson = JsonDocument.Parse(createdBody);
+            var account = ReadObject(createdJson.RootElement, "account");
+            var readOnlyUserEid = ReadString(account, "eid");
+            var temporaryCredential = ReadString(createdJson.RootElement, "temporaryCredential");
+            _secretTokens.Add(temporaryCredential);
+            using var readOnly = CreateClient(_hostPort);
+            using var restrictedReadOnlyLogin = await LoginAsync(
+                readOnly,
+                _readOnlyECode,
+                temporaryCredential,
+                cancellationToken);
+            _readOnlyPassword = $"Read-{_runId}-Pass";
+            _secretTokens.Add(_readOnlyPassword);
+            await ChangePasswordAsync(
+                readOnly,
+                temporaryCredential,
+                _readOnlyPassword,
+                ReadLong(restrictedReadOnlyLogin.RootElement, "revision"),
+                cancellationToken);
+
+            using var response = await SendJsonWithAntiforgeryAsync(
+                administrator,
+                HttpMethod.Post,
+                "/api/acceptance/personnel/prepare",
+                new { readOnlyUserEid },
+                cancellationToken,
+                request => request.Headers.Add("X-NewP-Acceptance-Secret", fixtureSecret));
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(response, HttpStatusCode.OK, body, "fixture prepare");
+            _fixture = JsonSerializer.Deserialize<FixtureData>(body, WebJsonOptions)
+                ?? throw new InvalidOperationException("Personnel fixture response was empty.");
+        }
         await WriteEvidenceAsync("resource-ownership.json", new
         {
             schemaVersion = "1.0",
@@ -175,17 +267,6 @@ internal sealed class PersonnelAcceptanceRunner
             catalogFingerprint = _ownershipSnapshot.CatalogFingerprint
         }, cancellationToken);
 
-        using var fixtureClient = CreateClient(_hostPort);
-        using var prepare = new HttpRequestMessage(HttpMethod.Post, "/api/acceptance/personnel/prepare")
-        {
-            Content = JsonContent.Create(new { })
-        };
-        prepare.Headers.Add("X-NewP-Acceptance-Secret", fixtureSecret);
-        using var response = await fixtureClient.SendAsync(prepare, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureStatus(response, HttpStatusCode.OK, body, "fixture prepare");
-        _fixture = JsonSerializer.Deserialize<FixtureData>(body, WebJsonOptions)
-            ?? throw new InvalidOperationException("Personnel fixture response was empty.");
         if (!string.Equals(_fixture.RunId, _runId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Personnel fixture run identity did not match the acceptance run.");
@@ -206,14 +287,14 @@ internal sealed class PersonnelAcceptanceRunner
 
         using (var readOnly = CreateClient(_hostPort))
         {
-            using var login = new HttpRequestMessage(HttpMethod.Post, "/api/acceptance/personnel/read-only-login")
-            {
-                Content = JsonContent.Create(new { })
-            };
-            login.Headers.Add("X-NewP-Acceptance-Secret", _devEnvironment["Acceptance__Secret"]!);
-            using var loginResponse = await readOnly.SendAsync(login, cancellationToken);
-            EnsureStatus(loginResponse, HttpStatusCode.OK, await loginResponse.Content.ReadAsStringAsync(cancellationToken), "read-only login");
-            using var denied = await readOnly.PostAsJsonAsync(
+            using var login = await LoginAsync(
+                readOnly,
+                _readOnlyECode ?? throw new InvalidOperationException("Read-only ECODE was not prepared."),
+                _readOnlyPassword ?? throw new InvalidOperationException("Read-only password was not prepared."),
+                cancellationToken);
+            using var denied = await SendJsonWithAntiforgeryAsync(
+                readOnly,
+                HttpMethod.Post,
                 "/api/organization/persons",
                 PersonPayload("ACC-DENIED", "Denied Person", fixture.CompanyId, fixture.DepartmentId),
                 cancellationToken);
@@ -224,7 +305,9 @@ internal sealed class PersonnelAcceptanceRunner
         using var admin = CreateClient(_hostPort);
         await LoginAdminAsync(admin, cancellationToken);
 
-        using (var unaffiliated = await admin.PostAsJsonAsync(
+        using (var unaffiliated = await SendJsonWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Post,
                    "/api/organization/persons",
                    PersonPayload($"ACC-U-{_runId[..8]}", "Unaffiliated Person", null, null),
                    cancellationToken))
@@ -266,7 +349,9 @@ internal sealed class PersonnelAcceptanceRunner
 
         var personNo = $"ACC-{_runId[..10]}";
         var personName = $"Personnel Gate Person {_runId[..8]}";
-        using var created = await admin.PostAsJsonAsync(
+        using var created = await SendJsonWithAntiforgeryAsync(
+            admin,
+            HttpMethod.Post,
             "/api/organization/persons",
             PersonPayload(personNo, personName, fixture.CompanyId, fixture.DepartmentId),
             cancellationToken);
@@ -302,7 +387,7 @@ internal sealed class PersonnelAcceptanceRunner
     {
         var person = _person ?? throw new InvalidOperationException("Personnel API scenario did not create a person.");
         var fixture = _fixture ?? throw new InvalidOperationException("Personnel fixture was not prepared.");
-        var credentials = _credentials ?? throw new InvalidOperationException("Local credentials were not loaded.");
+        var adminPassword = _adminPassword ?? throw new InvalidOperationException("Administrator password was not prepared.");
         var chromePath = ResolveChromePath();
         var screenshotPath = Path.Combine(_runDirectory, "personnel", $"browser-{phase}.png");
         Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
@@ -325,8 +410,8 @@ internal sealed class PersonnelAcceptanceRunner
         {
             WaitUntil = WaitUntilState.DOMContentLoaded
         });
-        await page.Locator("#username").FillAsync(credentials.Username);
-        await page.Locator("#password").FillAsync(credentials.Password);
+        await page.Locator("#ecode").FillAsync("admin");
+        await page.Locator("#password").FillAsync(adminPassword);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await page.WaitForFunctionAsync("() => window.location.pathname !== '/login'");
         await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons", new PageGotoOptions
@@ -684,6 +769,66 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
+    private async Task ObserveBootstrapRequiredDevAsync(CancellationToken cancellationToken)
+    {
+        var arguments = new List<string>
+        {
+            "-NoLogo",
+            "-NoProfile",
+            "-File",
+            Path.Combine(_repositoryRoot, "scripts", "dev.ps1"),
+            "-HostStartupTimeoutSeconds",
+            "600",
+            "-ShellStartupTimeoutSeconds",
+            "180",
+            "-ShellRequestTimeoutSeconds",
+            "60",
+            "-HostEnvironmentName",
+            "Acceptance",
+            "-SkipDependencyInstall"
+        };
+        var result = await AcceptanceInfrastructure.RunProcessAsync(
+            "pwsh.exe",
+            arguments,
+            _repositoryRoot,
+            _devEnvironment,
+            redirectOutput: false,
+            cancellationToken);
+        CaptureFailedDevRunIdentity();
+        var resultPath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "current-result.json");
+        if (!File.Exists(resultPath))
+        {
+            throw new InvalidOperationException("Failed bootstrap-required startup did not write current-result.json.");
+        }
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(resultPath, cancellationToken));
+        var status = ReadString(json.RootElement, "status");
+        var failureCode = ReadString(json.RootElement, "failureCode");
+        var diagnostic = ReadString(json.RootElement, "diagnostic");
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+        if (result.ExitCode == 0
+            || !string.Equals(status, "failed", StringComparison.Ordinal)
+            || !string.Equals(failureCode, "DEV_HOST_READINESS_FAILED", StringComparison.Ordinal)
+            || !diagnostic.Contains("IDENTITY_BOOTSTRAP_REQUIRED", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Empty Personnel catalog startup returned exit={result.ExitCode}, status={status}, failure={failureCode}.");
+        }
+
+        await WriteEvidenceAsync("personnel/bootstrap-required.json", new
+        {
+            status = 503,
+            failureCode = "IDENTITY_BOOTSTRAP_REQUIRED",
+            supervisorFailureCode = failureCode,
+            endpoint = "/api/health/ready"
+        }, cancellationToken);
+        await RunDevScriptAsync(
+            "stop-dev.ps1",
+            "personnel/bootstrap-required-stop.json",
+            cancellationToken,
+            allowAlreadyStopped: true);
+    }
+
     private async Task RunDevScriptAsync(
         string scriptName,
         string evidencePath,
@@ -822,13 +967,65 @@ internal sealed class PersonnelAcceptanceRunner
 
     private async Task LoginAdminAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        var credentials = _credentials ?? throw new InvalidOperationException("Local credentials were not loaded.");
-        using var response = await SendJsonWithAntiforgeryAsync(client, HttpMethod.Post, "/api/auth/login", new
+        using var _ = await LoginAsync(
+            client,
+            "admin",
+            _adminPassword ?? throw new InvalidOperationException("Administrator password was not prepared."),
+            cancellationToken);
+    }
+
+    private static async Task<JsonDocument> LoginAsync(
+        HttpClient client,
+        string ecode,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Post,
+            "/api/auth/login",
+            new { ecode, password },
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "identity login");
+        CaptureAuthenticationCookie(client, response);
+        return JsonDocument.Parse(body);
+    }
+
+    private static async Task ChangePasswordAsync(
+        HttpClient client,
+        string currentPassword,
+        string newPassword,
+        long expectedRevision,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Post,
+            "/api/identity/me/password-change",
+            new { currentPassword, newPassword, expectedRevision },
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "change identity password");
+        CaptureAuthenticationCookie(client, response);
+    }
+
+    private static void CaptureAuthenticationCookie(HttpClient client, HttpResponseMessage response)
+    {
+        var cookiePrefix = $"{AuthenticationCookieName}=";
+        var cookie = response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.Select(static value => value.Split(';', 2)[0])
+                .SingleOrDefault(value => value.StartsWith(cookiePrefix, StringComparison.Ordinal))
+            : null;
+        if (string.IsNullOrWhiteSpace(cookie))
         {
-            username = credentials.Username,
-            password = credentials.Password
-        }, cancellationToken);
-        EnsureStatus(response, HttpStatusCode.OK, await response.Content.ReadAsStringAsync(cancellationToken), "admin login");
+            throw new InvalidOperationException("Identity response did not issue the expected authentication cookie.");
+        }
+
+        // Acceptance 环境必须保持 Secure cookie；门禁的 loopback HTTP client 显式回放该一次性会话，
+        // 不放宽 Host 的生产/验收 cookie 安全策略。
+        client.DefaultRequestHeaders.Remove("Cookie");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", cookie);
     }
 
     private async Task<EntityId> PostAndReadIdAsync(
@@ -919,7 +1116,8 @@ internal sealed class PersonnelAcceptanceRunner
         HttpMethod method,
         string path,
         object payload,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<HttpRequestMessage>? configure = null)
     {
         using var tokenResponse = await client.GetAsync("/api/auth/antiforgery-token", cancellationToken);
         var tokenBody = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -931,6 +1129,7 @@ internal sealed class PersonnelAcceptanceRunner
             Content = JsonContent.Create(payload)
         };
         request.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", requestToken);
+        configure?.Invoke(request);
         return await client.SendAsync(request, cancellationToken);
     }
 
@@ -983,6 +1182,32 @@ internal sealed class PersonnelAcceptanceRunner
         throw new InvalidOperationException($"JSON property {property} was missing.");
     }
 
+    private static JsonElement ReadObject(JsonElement element, string property)
+    {
+        foreach (var item in element.EnumerateObject())
+        {
+            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
+                && item.Value.ValueKind == JsonValueKind.Object)
+            {
+                return item.Value;
+            }
+        }
+        throw new InvalidOperationException($"JSON object {property} was missing.");
+    }
+
+    private static long ReadLong(JsonElement element, string property)
+    {
+        foreach (var item in element.EnumerateObject())
+        {
+            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
+                && item.Value.TryGetInt64(out var value))
+            {
+                return value;
+            }
+        }
+        throw new InvalidOperationException($"JSON integer {property} was missing.");
+    }
+
     private static string ReadNestedString(JsonElement element, string parent, string property)
     {
         foreach (var item in element.EnumerateObject())
@@ -993,16 +1218,6 @@ internal sealed class PersonnelAcceptanceRunner
             }
         }
         throw new InvalidOperationException($"JSON property {parent}.{property} was missing.");
-    }
-
-    private LocalCredentials ReadLocalCredentials()
-    {
-        var path = Path.Combine(_repositoryRoot, "apps", "host-api", "appsettings.json");
-        using var json = JsonDocument.Parse(File.ReadAllText(path));
-        var localAuth = json.RootElement.GetProperty("LocalAuth");
-        return new LocalCredentials(
-            localAuth.GetProperty("Username").GetString()!,
-            localAuth.GetProperty("Password").GetString()!);
     }
 
     private void AddConnectionSecrets(string rawConnectionString, string password)
@@ -1081,7 +1296,6 @@ internal sealed class PersonnelAcceptanceRunner
             _ => AcceptanceFailureCodes.ObserverFailed
         };
 
-    private sealed record LocalCredentials(string Username, string Password);
     private sealed record FixtureData(
         string RunId,
         string AdminUserId,

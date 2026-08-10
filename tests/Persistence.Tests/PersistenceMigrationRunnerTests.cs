@@ -98,6 +98,40 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
+    public async Task MigrateAsync_UndeclaredUnfilteredUniqueIndex_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildPlan(UnfilteredUniqueIndexMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_DeclaredUnfilteredUniqueIndex_PassesStaticValidation()
+    {
+        var plan = BuildPlan(
+            UnfilteredUniqueIndexMigration.MigrationId,
+            [new IndexDefinition("UX_Asset_Id", ["Id"], IsUnique: true)]);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+
+        Assert.False(
+            exception is PersistencePlanExecutionException
+            {
+                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
+            },
+            exception.ToString());
+    }
+
+    [Fact]
     public async Task MigrateAsync_DeclaredOwnedForeignKey_PassesStaticValidation()
     {
         var plan = BuildForeignKeyPlan(DeclaredForeignKeyMigration.MigrationId, declareForeignKey: true);
@@ -129,6 +163,44 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
     }
 
+    [Fact]
+    public async Task MigrateAsync_OtherModuleSelfReportedLegacyDrop_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildPlan(
+            SelfReportedLegacyDropMigration.MigrationId,
+            compatibility: "backup-restore-only");
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_TrustedOrganizationLegacyDrop_PassesStaticValidation()
+    {
+        var plan = BuildPlan(
+            TrustedOrganizationLegacyDropMigration.MigrationId,
+            compatibility: "backup-restore-only",
+            owner: "Organization",
+            schema: "dbo");
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+
+        Assert.False(
+            exception is PersistencePlanExecutionException
+            {
+                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
+            },
+            exception.ToString());
+    }
+
     private static IPersistenceMigrationRunner CreateRunner(
         CompiledPersistencePlan plan,
         out ServiceProvider provider,
@@ -154,7 +226,12 @@ public sealed class PersistenceMigrationRunnerTests
         return scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
     }
 
-    private static CompiledPersistencePlan BuildPlan(string migrationId)
+    private static CompiledPersistencePlan BuildPlan(
+        string migrationId,
+        IReadOnlyList<IndexDefinition>? indexes = null,
+        string compatibility = "safe-expand",
+        string owner = "Partner.AssetCatalog",
+        string schema = "np_partner_assetcatalog")
     {
         var models = TestPersistencePlan.Create().Models
             .Append(new ModelDefinition(
@@ -172,13 +249,13 @@ public sealed class PersistenceMigrationRunnerTests
                         IsPrimaryKey: true,
                         IsAuditField: false)
                 ],
-                [],
-                OwnerModuleId: "Partner.AssetCatalog",
-                SchemaName: "np_partner_assetcatalog"))
+                indexes ?? [],
+                OwnerModuleId: owner,
+                SchemaName: schema))
             .ToArray();
         var modelDigest = PersistenceModelDigest.Compute(models);
         var stream = new ModuleMigrationStream(
-            "Partner.AssetCatalog",
+            owner,
             PersistenceProvider.SqlServer,
             typeof(ForbiddenSqlMigration).Assembly.Location,
             "test-manifest.json",
@@ -194,7 +271,7 @@ public sealed class PersistenceMigrationRunnerTests
                     new string('c', 64),
                     new string('d', 64),
                     modelDigest,
-                    "safe-expand")
+                    compatibility)
             ]);
         return new CompiledPersistencePlan(
             "test-candidate",
@@ -319,6 +396,54 @@ public sealed class UnfilteredIndexMigration : Migration
             schema: "np_partner_assetcatalog",
             table: "Asset",
             column: "Id");
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class UnfilteredUniqueIndexMigration : Migration
+{
+    public const string MigrationId = "20260809999500_UnfilteredUniqueIndex";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.CreateIndex(
+            name: "UX_Asset_Id",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            column: "Id",
+            unique: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class SelfReportedLegacyDropMigration : Migration
+{
+    public const string MigrationId = "20260809999400_SelfReportedLegacyDrop";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.DropTable(name: "LegacyAsset", schema: "np_partner_assetcatalog")
+            .Annotation("NewP:OwnerModuleId", "Partner.AssetCatalog");
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class TrustedOrganizationLegacyDropMigration : Migration
+{
+    public const string MigrationId = "20260810102141_Organization_000001_PermanentUserBinding";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.DropTable(name: "PersonUserLink");
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {

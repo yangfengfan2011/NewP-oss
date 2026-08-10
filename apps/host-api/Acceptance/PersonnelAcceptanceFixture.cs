@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
@@ -33,15 +34,23 @@ public static class PersonnelAcceptanceFixture
 
         group.MapPost("/prepare", async (
             HttpContext context,
+            PersonnelAcceptanceFixtureRequest request,
             IRoleService roleService,
             ICompanyService companyService,
             IDepartmentService departmentService,
+            IIdentityAccountDirectory accountDirectory,
             IIdentityLocalAdministratorReadinessProbe localAdministrator,
             CancellationToken cancellationToken) =>
         {
             if (!HasExpectedSecret(context, options.Secret))
             {
                 return Results.NotFound();
+            }
+
+            var readOnlyAccount = await accountDirectory.FindAsync(request.ReadOnlyUserEid, cancellationToken);
+            if (readOnlyAccount is null || readOnlyAccount.IsLocalAdministrator)
+            {
+                return Results.Problem(statusCode: 400, title: "ACCEPTANCE_READ_ONLY_ACCOUNT_INVALID");
             }
 
             var role = await roleService.GetRoleByCodeAsync(options.ReadOnlyRoleCode, cancellationToken)
@@ -55,7 +64,7 @@ public static class PersonnelAcceptanceFixture
             {
                 PermissionCodes = []
             }, "acceptance", cancellationToken);
-            await roleService.AssignUserRolesAsync(options.ReadOnlyUserId, new AssignUserRolesRequest
+            await roleService.AssignUserRolesAsync(readOnlyAccount.UserEid, new AssignUserRolesRequest
             {
                 RoleCodes = [role.Code]
             }, "acceptance", cancellationToken);
@@ -90,7 +99,7 @@ public static class PersonnelAcceptanceFixture
             return Results.Ok(new PersonnelAcceptanceFixtureResponse(
                 options.RunId,
                 administrator.UserEid,
-                options.ReadOnlyUserId,
+                readOnlyAccount.UserEid,
                 company.Id,
                 company.DisplayName,
                 department.Id,
@@ -115,8 +124,6 @@ public static class PersonnelAcceptanceFixture
 internal sealed record PersonnelAcceptanceFixtureOptions(
     string RunId,
     string Secret,
-    string ReadOnlyUserId,
-    string ReadOnlyUsername,
     string ReadOnlyRoleCode,
     string CompanyCode,
     string CompanyName,
@@ -131,8 +138,6 @@ internal sealed record PersonnelAcceptanceFixtureOptions(
         return new PersonnelAcceptanceFixtureOptions(
             runId,
             secret,
-            $"acceptance-readonly-{runId}",
-            $"acceptance-readonly-{suffix}",
             $"AcceptanceReadOnly{suffix}",
             $"ACC-C-{suffix}",
             $"Personnel Gate Company {suffix}",
@@ -154,3 +159,5 @@ public sealed record PersonnelAcceptanceFixtureResponse(
     string CompanyName,
     string DepartmentId,
     string DepartmentName);
+
+public sealed record PersonnelAcceptanceFixtureRequest(string ReadOnlyUserEid);

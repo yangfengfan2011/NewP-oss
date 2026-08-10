@@ -402,8 +402,15 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var migrations = manifest.Migrations
             .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
             .ToArray();
-        if (migrations.Any(static migration => migration.Compatibility == "backup-restore-only")
-            && !string.Equals(module.Provenance.SourceKind, "built-in", StringComparison.Ordinal))
+        var legacyCutover = LegacyMigrationCutoverPlan.Find(module.ModuleId, provider);
+        var backupRestoreMigrations = migrations
+            .Where(static migration => migration.Compatibility == "backup-restore-only")
+            .ToArray();
+        if (backupRestoreMigrations.Any(migration =>
+                !string.Equals(module.Provenance.SourceKind, "built-in", StringComparison.Ordinal)
+                || legacyCutover is null
+                || !string.Equals(migration.MigrationId, legacyCutover.MigrationId, StringComparison.Ordinal)
+                || !string.Equals(migration.Sequence, "000001", StringComparison.Ordinal)))
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MIGRATION_CHAIN_INVALID",
@@ -414,6 +421,19 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MIGRATION_REQUIRED",
                 $"Migration stream '{module.ModuleId}' is empty.");
+        }
+        var expectedInitialDigest = legacyCutover?.InitialFromModelDigest ?? new string('0', 64);
+        if (!string.Equals(migrations[0].FromModelDigest, expectedInitialDigest, StringComparison.Ordinal)
+            || (migrations[0].Compatibility == "backup-restore-only"
+                && (legacyCutover is null
+                    || !string.Equals(
+                        migrations[0].MigrationId,
+                        legacyCutover.MigrationId,
+                        StringComparison.Ordinal))))
+        {
+            throw new PersistencePlanValidationException(
+                "PERSISTENCE_MIGRATION_CHAIN_INVALID",
+                $"Migration stream '{module.ModuleId}' does not start from its trusted initial model digest.");
         }
 
         string? previousDigest = null;

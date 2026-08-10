@@ -417,10 +417,12 @@ internal sealed class ModuleMigrationExecutor(
                     && (addColumn.IsNullable || addColumn.DefaultValue is not null),
                 DropTableOperation dropTable =>
                     step.Compatibility == "backup-restore-only"
-                    && string.Equals(
-                        dropTable.FindAnnotation("NewP:OwnerModuleId")?.Value as string,
+                    && LegacyMigrationCutoverPlan.AllowsDrop(
                         stream.ModuleId,
-                        StringComparison.Ordinal)
+                        stream.Provider,
+                        step.MigrationId,
+                        dropTable.Schema ?? "dbo",
+                        dropTable.Name)
                     && !currentTables.Contains(PhysicalKey(dropTable.Schema, dropTable.Name)),
                 _ => false
             };
@@ -449,12 +451,12 @@ internal sealed class ModuleMigrationExecutor(
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(operation.Filter))
+        if (string.IsNullOrWhiteSpace(operation.Filter) && !operation.IsUnique)
         {
             return true;
         }
 
-        // 过滤谓词会改变唯一性语义，必须精确匹配当前模型的 nullable 单列唯一索引。
+        // 唯一性或过滤谓词都会改变数据约束，必须先精确匹配当前模型声明。
         var expected = model.Indexes.SingleOrDefault(index =>
             string.Equals(index.Name, operation.Name, StringComparison.Ordinal));
         if (expected is null
@@ -464,6 +466,11 @@ internal sealed class ModuleMigrationExecutor(
                 StringComparer.Ordinal))
         {
             return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(operation.Filter))
+        {
+            return true;
         }
 
         return operation.Columns.Length == 1

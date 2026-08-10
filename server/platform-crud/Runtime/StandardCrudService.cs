@@ -270,9 +270,19 @@ public sealed class StandardCrudService : IStandardCrudService
             });
         }
 
-        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Conditional
-            && _conditionalDeleteExecutors.TryGetValue(descriptor.ResourceKey, out var conditionalDeleteExecutor))
+        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Conditional)
         {
+            if (!_conditionalDeleteExecutors.TryGetValue(descriptor.ResourceKey, out var conditionalDeleteExecutor))
+            {
+                return StandardCrudMutationResult.Failure(new StandardCrudError
+                {
+                    StatusCode = 409,
+                    Code = "StandardCrud.ConditionalDeleteExecutorMissing",
+                    Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 使用条件删除但未注册原子条件删除执行器。",
+                    ReasonKey = "standardCrud.conditionalDeleteExecutorMissing"
+                });
+            }
+
             return await conditionalDeleteExecutor.DeleteAsync(descriptor, id, cancellationToken);
         }
 

@@ -1,4 +1,3 @@
-using System.Text;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Models;
@@ -50,7 +49,7 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
             throw new IdentityApplicationException(IdentityFailureCodes.InvalidPersonReference);
         }
 
-        var reason = NormalizeReason(registration.Reason);
+        var reason = IdentityInputNormalizer.NormalizeReason(registration.Reason);
         var user = await GetRequiredUserAsync(registration.UserEid, cancellationToken);
         EnsureAvailableOrdinaryUser(user);
         if (user.IsPersonnelBound)
@@ -97,7 +96,7 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
     {
         ArgumentNullException.ThrowIfNull(registration);
         ValidateCaller(registration.ActorId, registration.TraceId);
-        var reason = NormalizeReason(registration.Reason);
+        var reason = IdentityInputNormalizer.NormalizeReason(registration.Reason);
         var user = await GetRequiredUserAsync(registration.UserEid, cancellationToken);
         EnsureAvailableOrdinaryUser(user);
         if (user.Status == IdentityAccountStatus.Disabled && user.PersonnelDisableHold)
@@ -219,18 +218,6 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         throw new IdentityApplicationException(
             IdentityFailureCodes.RevisionConflict,
             latest is null ? null : IdentityAccountApplicationService.ToSnapshot(latest));
-    }
-
-    private static string NormalizeReason(string reason)
-    {
-        var normalized = (reason ?? string.Empty).Trim();
-        var length = normalized.EnumerateRunes().Count();
-        if (length is < 1 or > 500)
-        {
-            throw new IdentityApplicationException(IdentityFailureCodes.InvalidReason);
-        }
-
-        return normalized;
     }
 
     private static void ValidateCaller(string actorId, string traceId)

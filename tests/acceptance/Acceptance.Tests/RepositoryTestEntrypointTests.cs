@@ -108,6 +108,27 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void PersonnelAcceptanceRunner_UsesFormalIdentityChainOnly()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runnerRoot = Path.Combine(repositoryRoot, "tests", "acceptance", "Acceptance.Runner");
+        var runner = File.ReadAllText(Path.Combine(runnerRoot, "PersonnelAcceptanceRunner.cs"));
+        var bootstrap = File.ReadAllText(Path.Combine(runnerRoot, "FormalIdentityBootstrap.cs"));
+
+        Assert.Contains("FormalIdentityBootstrap.RunAsync", runner, StringComparison.Ordinal);
+        Assert.Contains("bootstrap-local-admin", bootstrap, StringComparison.Ordinal);
+        Assert.Contains("\"-HostEnvironmentName\", \"Acceptance\"", runner, StringComparison.Ordinal);
+        Assert.Contains("CaptureAuthenticationCookie(client, response)", runner, StringComparison.Ordinal);
+        Assert.Contains("new { ecode, password }", runner, StringComparison.Ordinal);
+        Assert.Contains("#ecode", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalAuth", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("read-only-login", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("username", runner, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#username", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("UseSharedDevelopmentCredential", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IdentityFoundationAcceptanceRunner_UsesOnlyFormalBootstrapAndApplicationSurfaces()
     {
         var repositoryRoot = GetRepositoryRoot();

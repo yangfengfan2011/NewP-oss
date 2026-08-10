@@ -173,33 +173,12 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }
 
         _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
-        var hostDll = Path.Combine(
-            _repositoryRoot,
-            "apps",
-            "host-api",
-            "bin",
-            "Release",
-            "net10.0",
-            "HostApi.dll");
-        var bootstrap = await WindowsInteractiveConsole.RunAsync(
-            "dotnet.exe",
-            [hostDll, "identity", "bootstrap-local-admin"],
+        var bootstrap = await FormalIdentityBootstrap.RunAsync(
             _repositoryRoot,
             Path.Combine(_runDirectory, "resources"),
             _hostEnvironment,
             cancellationToken);
-        var bootstrapOutput = StripTerminalSequences(bootstrap.Output);
-        var credentials = Regex.Matches(
-                bootstrapOutput,
-                "Temporary credential:\\s*(?<secret>[^\\s]+)",
-                RegexOptions.CultureInvariant)
-            .Select(match => match.Groups["secret"].Value)
-            .ToArray();
-        if (bootstrap.ExitCode != 0 || credentials.Length != 1)
-        {
-            throw new InvalidOperationException($"Formal bootstrap failed with exit code {bootstrap.ExitCode}: {Sanitize(bootstrapOutput)}");
-        }
-        _adminTemporaryPassword = credentials[0];
+        _adminTemporaryPassword = bootstrap.TemporaryCredential;
         _secretTokens.Add(_adminTemporaryPassword);
 
         await StartDevAsync("identity-foundation/preflight-dev-start.json", cancellationToken);
@@ -220,7 +199,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
             bootstrap = new
             {
                 command = "dotnet ICP.Platform.HostApi.dll identity bootstrap-local-admin",
-                exitCode = bootstrap.ExitCode,
+                exitCode = 0,
                 interactiveTerminal = "Windows console fixture",
                 fixtureProcessId = bootstrap.ProcessId,
                 temporaryCredentialOccurrences = 1

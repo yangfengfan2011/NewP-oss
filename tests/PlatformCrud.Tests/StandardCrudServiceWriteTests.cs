@@ -291,6 +291,31 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task DeleteAsync_WhenConditionalExecutorIsMissing_FailsClosedWithoutRepositoryDelete()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
+        ]);
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [new AllowingDeleteGuard()]);
+
+        var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.ConditionalDeleteExecutorMissing", result.Error.Code);
+        Assert.NotNull(await repository.GetByIdAsync(Descriptor(), "person-1"));
+    }
+
+    [Fact]
     public async Task DeleteAsync_WhenAuditablePolicyHasNoAuditKernel_FailsClosed()
     {
         var service = Service();
@@ -302,13 +327,23 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
-    public async Task DeleteAsync_WhenGuardBlocks_ReturnsConflict()
+    public async Task DeleteAsync_WhenConditionalExecutorBlocks_ReturnsConflict()
     {
         var repository = new InMemoryStandardCrudRepository(
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], [new BlockingDeleteGuard()]);
+        var executor = new BlockingDeleteGuard();
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [executor],
+            [executor]);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -476,7 +511,7 @@ public sealed class StandardCrudServiceWriteTests
         };
     }
 
-    private sealed class BlockingDeleteGuard : IStandardCrudDeleteGuard
+    private sealed class BlockingDeleteGuard : IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
     {
         public string ResourceKey => "organization.person";
 
@@ -490,6 +525,29 @@ public sealed class StandardCrudServiceWriteTests
                 ReasonKey = "organization.person.deleteBlockedByUserBinding"
             });
         }
+
+        public Task<StandardCrudMutationResult> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "Organization.Person.DeleteBlockedByUserBinding",
+                Message = "当前人员已绑定账号，不能删除。",
+                ReasonKey = "organization.person.deleteBlockedByUserBinding"
+            }));
+    }
+
+    private sealed class AllowingDeleteGuard : IStandardCrudDeleteGuard
+    {
+        public string ResourceKey => "organization.person";
+
+        public Task<StandardCrudError?> CanDeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<StandardCrudError?>(null);
     }
 
     private sealed class RecordingConditionalDeleteExecutor : IStandardCrudConditionalDeleteExecutor

@@ -236,6 +236,105 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_OtherBuiltInSelfReportsBackupRestoreOnlyMigration_IsRejected()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteManifest(manifest =>
+            manifest["migrations"]!.AsArray()[0]!["compatibility"] = "backup-restore-only");
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(package.BuildBuiltInModule()),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void Compile_OtherBuiltInAddsLaterBackupRestoreOnlyMigration_IsRejected()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        var module = package.BuildBuiltInModule();
+        package.RewriteManifest(manifest =>
+        {
+            var migrations = manifest["migrations"]!.AsArray();
+            var first = migrations[0]!;
+            var finalModelDigest = manifest["modelDigest"]!.GetValue<string>();
+            first["toModelDigest"] = new string('e', 64);
+            migrations.Add(new JsonObject
+            {
+                ["sequence"] = "000002",
+                ["migrationId"] = "20260809000001_partner_assetcatalog_000002_cutover_22222222",
+                ["previousContentDigest"] = first["contentDigest"]!.GetValue<string>(),
+                ["contentDigest"] = new string('2', 64),
+                ["fromModelDigest"] = new string('e', 64),
+                ["toModelDigest"] = finalModelDigest,
+                ["compatibility"] = "backup-restore-only"
+            });
+        });
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void Compile_OrganizationInitialMigrationFromWrongLegacyDigest_IsRejected()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(package.BuildBuiltInModule()),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void Compile_OrganizationInitialMigrationFromPinnedLegacyDigest_IsAccepted()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var module = package.BuildBuiltInModule();
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
+            migration["fromModelDigest"] = LegacyMigrationCutoverPlan.OrganizationInitialFromModelDigest;
+            migration["compatibility"] = "backup-restore-only";
+        });
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.SqlServer);
+
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+    }
+
+    [Fact]
+    public void Compile_ExternalInitialMigrationFromNonZeroDigest_IsRejected()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteManifest(manifest =>
+            manifest["migrations"]!.AsArray()[0]!["fromModelDigest"] = new string('a', 64));
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(package.BuildModule()),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
     public void Compile_MigrationModelChainBreak_RejectsWholeCandidate()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");

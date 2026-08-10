@@ -84,11 +84,12 @@ internal sealed class ModuleMigrationExecutor(
         // 误判为该程序集缺失的 migration；外部模型只由其自己的编译迁移流推进。
         if (legacyStream is null || !appliedMigrations.Contains(legacyStream.ExpectedFrontier))
         {
+            var moduleOwnedMigrationIds = plan.Streams
+                .Where(static stream => !stream.IsLegacyBaseline)
+                .Select(static stream => stream.ModuleId)
+                .ToHashSet(StringComparer.Ordinal);
             var coreModels = plan.Models
-                .Where(static model => string.Equals(
-                    model.OwnerModuleId,
-                    "platform.core",
-                    StringComparison.Ordinal))
+                .Where(model => !moduleOwnedMigrationIds.Contains(model.OwnerModuleId))
                 .ToArray();
             var coreDigest = PersistenceModelDigest.Compute(coreModels);
             var corePlan = plan with
@@ -398,8 +399,12 @@ internal sealed class ModuleMigrationExecutor(
             {
                 EnsureSchemaOperation ensureSchema => schemas.Contains(ensureSchema.Name),
                 CreateTableOperation createTable =>
-                    tables.Contains(PhysicalKey(createTable.Schema, createTable.Name))
-                    && createTable.ForeignKeys.Count == 0
+                    ownedModels.SingleOrDefault(model =>
+                        string.Equals(
+                            PhysicalKey(model.SchemaName, model.TableName),
+                            PhysicalKey(createTable.Schema, createTable.Name),
+                            StringComparison.OrdinalIgnoreCase)) is { } ownedModel
+                    && ForeignKeysMatch(createTable, ownedModel)
                     && createTable.CheckConstraints.Count == 0
                     && createTable.Columns.All(IsSafeColumnDefinition),
                 CreateIndexOperation createIndex =>
@@ -421,6 +426,51 @@ internal sealed class ModuleMigrationExecutor(
             }
         }
     }
+
+    private bool ForeignKeysMatch(CreateTableOperation operation, ModelDefinition model)
+    {
+        if (operation.ForeignKeys.Count != model.ForeignKeys.Count)
+        {
+            return false;
+        }
+
+        foreach (var actual in operation.ForeignKeys)
+        {
+            var expected = model.ForeignKeys.SingleOrDefault(foreignKey =>
+                string.Equals(foreignKey.Name, actual.Name, StringComparison.Ordinal));
+            var principal = expected is null
+                ? null
+                : plan.Models.SingleOrDefault(candidate =>
+                    string.Equals(candidate.LogicalKey, expected.PrincipalModelKey, StringComparison.Ordinal));
+            if (expected is null
+                || principal is null
+                || !actual.Columns.SequenceEqual(
+                    expected.Fields.Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName),
+                    StringComparer.Ordinal)
+                || !string.Equals(
+                    PhysicalKey(actual.PrincipalSchema, actual.PrincipalTable),
+                    PhysicalKey(principal.SchemaName, principal.TableName),
+                    StringComparison.OrdinalIgnoreCase)
+                || !(actual.PrincipalColumns ?? []).SequenceEqual(
+                    expected.PrincipalFields.Select(field => principal.Fields.Single(candidate => candidate.Name == field).StoreName),
+                    StringComparer.Ordinal)
+                || actual.OnDelete != MapDeleteBehavior(expected.DeleteBehavior))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static ReferentialAction MapDeleteBehavior(ForeignKeyDeleteBehavior behavior) => behavior switch
+    {
+        ForeignKeyDeleteBehavior.Restrict => ReferentialAction.Restrict,
+        ForeignKeyDeleteBehavior.Cascade => ReferentialAction.Cascade,
+        ForeignKeyDeleteBehavior.SetNull => ReferentialAction.SetNull,
+        ForeignKeyDeleteBehavior.NoAction => ReferentialAction.NoAction,
+        _ => throw new ArgumentOutOfRangeException(nameof(behavior), behavior, null)
+    };
 
     private static bool IsSafeColumnDefinition(ColumnOperation column) =>
         string.IsNullOrWhiteSpace(column.ComputedColumnSql)

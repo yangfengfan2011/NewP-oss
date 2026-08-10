@@ -24,6 +24,12 @@
   "persistence": {
     "models": [
       "metadata/models/AuthenticationSession.model.json"
-    ]
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Authentication.SqlServerMigrations.dll",
+        "manifest": "migrations/Authentication.SqlServerMigrations.json"
+      }
+    }
   }
 }

@@ -54,19 +54,24 @@ public sealed class RequiredBuiltinReadinessTests
         var modelsMissing = new RequiredBuiltinReadinessContributor(
             ModulePlan("Identity", "Authentication"),
             PersistencePlan(includeAuthenticationModel: false));
-        var migrationMissing = new RequiredBuiltinReadinessContributor(
+        var identityMigrationMissing = new RequiredBuiltinReadinessContributor(
             ModulePlan("Identity", "Authentication"),
-            PersistencePlan(includeMigration: false));
+            PersistencePlan(includeIdentityMigration: false));
+        var authenticationMigrationMissing = new RequiredBuiltinReadinessContributor(
+            ModulePlan("Identity", "Authentication"),
+            PersistencePlan(includeAuthenticationMigration: false));
         var migrationOutdated = new RequiredBuiltinReadinessContributor(
             ModulePlan("Identity", "Authentication"),
-            PersistencePlan(migrationFrontier: "20260808054041_AlignOrganizationSchemaDrift"));
+            PersistencePlan(identityMigrationFrontier: "20260810000000_Outdated"));
 
         var modelResult = await modelsMissing.CheckAsync(CancellationToken.None);
-        var migrationResult = await migrationMissing.CheckAsync(CancellationToken.None);
+        var identityMigrationResult = await identityMigrationMissing.CheckAsync(CancellationToken.None);
+        var authenticationMigrationResult = await authenticationMigrationMissing.CheckAsync(CancellationToken.None);
         var outdatedResult = await migrationOutdated.CheckAsync(CancellationToken.None);
 
         Assert.Equal(RequiredBuiltinReadinessFailureCodes.ModelMissing, modelResult.FailureCode);
-        Assert.Equal(RequiredBuiltinReadinessFailureCodes.MigrationMissing, migrationResult.FailureCode);
+        Assert.Equal(RequiredBuiltinReadinessFailureCodes.MigrationMissing, identityMigrationResult.FailureCode);
+        Assert.Equal(RequiredBuiltinReadinessFailureCodes.MigrationMissing, authenticationMigrationResult.FailureCode);
         Assert.Equal(RequiredBuiltinReadinessFailureCodes.MigrationMissing, outdatedResult.FailureCode);
     }
 
@@ -102,8 +107,9 @@ public sealed class RequiredBuiltinReadinessTests
 
     private static CompiledPersistencePlan PersistencePlan(
         bool includeAuthenticationModel = true,
-        bool includeMigration = true,
-        string migrationFrontier = PlatformCoreMigrationFrontiers.SqlServerIdentityFoundation)
+        bool includeIdentityMigration = true,
+        bool includeAuthenticationMigration = true,
+        string identityMigrationFrontier = PlatformCoreMigrationFrontiers.IdentitySqlServerFoundation)
     {
         var models = new List<ModelDefinition>
         {
@@ -116,6 +122,35 @@ public sealed class RequiredBuiltinReadinessTests
             models.Add(Model("Authentication", "AuthenticationSession"));
         }
 
+        var streams = new List<ModuleMigrationStream>();
+        if (includeIdentityMigration)
+        {
+            streams.Add(new ModuleMigrationStream(
+                "Identity",
+                PersistenceProvider.SqlServer,
+                "identity-migration.dll",
+                "identity-manifest.json",
+                "checksum",
+                "model",
+                identityMigrationFrontier,
+                false,
+                []));
+        }
+
+        if (includeAuthenticationMigration)
+        {
+            streams.Add(new ModuleMigrationStream(
+                "Authentication",
+                PersistenceProvider.SqlServer,
+                "authentication-migration.dll",
+                "authentication-manifest.json",
+                "checksum",
+                "model",
+                PlatformCoreMigrationFrontiers.AuthenticationSqlServerFoundation,
+                false,
+                []));
+        }
+
         return new CompiledPersistencePlan(
             "candidate",
             "snapshot",
@@ -124,21 +159,7 @@ public sealed class RequiredBuiltinReadinessTests
             "digest",
             [],
             models,
-            includeMigration
-                ?
-                [
-                    new ModuleMigrationStream(
-                        "platform.core",
-                        PersistenceProvider.SqlServer,
-                        "migration.dll",
-                        "legacy",
-                        "checksum",
-                        "model",
-                        migrationFrontier,
-                        true,
-                        [])
-                ]
-                : []);
+            streams);
     }
 
     private static ModelDefinition Model(string owner, string name) =>

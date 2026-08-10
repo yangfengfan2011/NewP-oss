@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Authentication",
+  "modelDigest": "8b7a0d3a86eb2b60ed3df260502f508acf2de198874ce84ceb30c14f180d5a80",
+  "bundleChecksum": "bbc125e22dbd31577d3db6c438523dac8a4ade805afd2ce572688cbfd7e9bcc4",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20260810033909_Authentication_000001_Foundation",
+      "previousContentDigest": null,
+      "contentDigest": "3b81eaade86814bd4e8a0269560cec782c4208669d1f1315663c801966ef5dc4",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "8b7a0d3a86eb2b60ed3df260502f508acf2de198874ce84ceb30c14f180d5a80",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

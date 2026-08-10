@@ -1,8 +1,6 @@
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
-using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
 using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
-using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 
 namespace ICP.Platform.Persistence.Composition;
@@ -20,9 +18,7 @@ public static class PlatformCoreLegacyModelSource
         {
             new ConfigCenterModelMetadataProvider(),
             new AuthorizationModelMetadataProvider(),
-            new OrganizationModelMetadataProvider(),
-            new IdentityModelMetadataProvider(),
-            new AuthenticationModelMetadataProvider()
+            new OrganizationModelMetadataProvider()
         }
             .SelectMany(static provider => provider.GetDefinitions())
             .ToArray();

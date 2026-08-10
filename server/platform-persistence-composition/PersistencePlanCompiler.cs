@@ -68,8 +68,10 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         var orderedModels = models
             .OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
             .ToArray();
+        var dependencyDepths = BuildDependencyDepths(modules);
         var orderedStreams = streams
             .OrderBy(static stream => stream.IsLegacyBaseline ? 0 : 1)
+            .ThenBy(stream => dependencyDepths.GetValueOrDefault(stream.ModuleId, int.MaxValue))
             .ThenBy(static stream => stream.ModuleId, StringComparer.Ordinal)
             .ToArray();
         var canonicalDocument = new
@@ -105,6 +107,41 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 orderedModels,
                 orderedStreams),
             Array.Empty<PersistencePlanDiagnostic>());
+    }
+
+    private static IReadOnlyDictionary<string, int> BuildDependencyDepths(CanonicalModulePlan modules)
+    {
+        var byId = modules.Modules.ToDictionary(static module => module.ModuleId, StringComparer.Ordinal);
+        var depths = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        int Resolve(string moduleId, HashSet<string> visiting)
+        {
+            if (depths.TryGetValue(moduleId, out var depth))
+            {
+                return depth;
+            }
+
+            if (!byId.TryGetValue(moduleId, out var module) || !visiting.Add(moduleId))
+            {
+                return 0;
+            }
+
+            depth = module.Dependencies
+                .Where(byId.ContainsKey)
+                .Select(dependency => Resolve(dependency, visiting) + 1)
+                .DefaultIfEmpty(0)
+                .Max();
+            visiting.Remove(moduleId);
+            depths[moduleId] = depth;
+            return depth;
+        }
+
+        foreach (var moduleId in byId.Keys)
+        {
+            Resolve(moduleId, new HashSet<string>(StringComparer.Ordinal));
+        }
+
+        return depths;
     }
 
     private void CompileModule(
@@ -226,8 +263,14 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             .Where(static module => module.Provenance.SourceKind == "built-in")
             .Select(static module => module.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
+        var moduleOwnedMigrationStreams = streams
+            .Where(static stream => !stream.IsLegacyBaseline)
+            .Select(static stream => stream.ModuleId)
+            .ToHashSet(StringComparer.Ordinal);
         var legacyModels = models
-            .Where(model => builtInOwners.Contains(model.OwnerModuleId))
+            .Where(model =>
+                builtInOwners.Contains(model.OwnerModuleId)
+                && !moduleOwnedMigrationStreams.Contains(model.OwnerModuleId))
             .ToArray();
         if (legacyModels.Length == 0)
         {
@@ -239,7 +282,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         {
             PersistenceProvider.SqlServer => (
                 "PlatformPersistence.EfCore.SqlServerMigrations",
-                PlatformCoreMigrationFrontiers.SqlServerIdentityFoundation),
+                PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline),
             PersistenceProvider.Oracle => (
                 "PlatformPersistence.EfCore.OracleMigrations",
                 "20260428145243_AlignModelMetadataEntityKeys"),

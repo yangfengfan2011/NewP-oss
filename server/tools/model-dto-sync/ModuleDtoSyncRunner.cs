@@ -1,5 +1,4 @@
 using ICP.Platform.Modeling.Dto;
-using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Persistence.Composition;
 
@@ -21,7 +20,7 @@ public static class ModuleDtoSyncRunner
         var signaturesByModule = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
         var metadataRepositoryRoot = ResolveMetadataRepositoryRoot(repositoryRoot);
 
-        foreach (var definition in PlatformCoreLegacyModelSource.GetDefinitions().Where(IsDtoSyncModel))
+        foreach (var definition in PlatformCoreLegacyModelSource.GetDefinitions())
         {
             var moduleId = ResolveModuleId(definition.Name);
             var outputDirectory = Path.Combine(repositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
@@ -135,10 +134,4 @@ public static class ModuleDtoSyncRunner
             _ => throw new InvalidOperationException($"模型 {modelName} 尚未配置 DTO 输出模块。")
         };
     }
-
-    private static bool IsDtoSyncModel(ModelDefinition definition) =>
-        definition.Name is
-            "Role" or "Permission" or "RolePermission" or "UserRole"
-            or "ConfigItem" or "ValueListItem"
-            or "Company" or "Department" or "Position" or "Person" or "PersonUserLink";
 }

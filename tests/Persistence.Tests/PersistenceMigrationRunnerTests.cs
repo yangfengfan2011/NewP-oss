@@ -79,6 +79,63 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(migrationId, exception.MigrationId);
     }
 
+    [Fact]
+    public async Task MigrateAsync_DeclaredOwnedForeignKey_PassesStaticValidation()
+    {
+        var plan = BuildForeignKeyPlan(DeclaredForeignKeyMigration.MigrationId, declareForeignKey: true);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+
+        Assert.False(
+            exception is PersistencePlanExecutionException
+            {
+                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
+            },
+            exception.ToString());
+    }
+
+    [Fact]
+    public async Task MigrateAsync_UndeclaredForeignKey_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildForeignKeyPlan(DeclaredForeignKeyMigration.MigrationId, declareForeignKey: false);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+    }
+
+    private static IPersistenceMigrationRunner CreateRunner(
+        CompiledPersistencePlan plan,
+        out ServiceProvider provider,
+        out AsyncServiceScope scope)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["Persistence:AutoMigrate"] = "true",
+                ["ConnectionStrings:SqlServer"] =
+                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddEfCorePersistence(
+            configuration,
+            plan,
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
+        provider = services.BuildServiceProvider();
+        scope = provider.CreateAsyncScope();
+        return scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
+    }
+
     private static CompiledPersistencePlan BuildPlan(string migrationId)
     {
         var models = TestPersistencePlan.Create().Models
@@ -106,6 +163,72 @@ public sealed class PersistenceMigrationRunnerTests
             "Partner.AssetCatalog",
             PersistenceProvider.SqlServer,
             typeof(ForbiddenSqlMigration).Assembly.Location,
+            "test-manifest.json",
+            new string('b', 64),
+            modelDigest,
+            migrationId,
+            IsLegacyBaseline: false,
+            [
+                new CompiledMigrationStep(
+                    "000001",
+                    migrationId,
+                    null,
+                    new string('c', 64),
+                    new string('d', 64),
+                    modelDigest,
+                    "safe-expand")
+            ]);
+        return new CompiledPersistencePlan(
+            "test-candidate",
+            new string('a', 64),
+            new string('a', 64),
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            models,
+            [stream]);
+    }
+
+    private static CompiledPersistencePlan BuildForeignKeyPlan(string migrationId, bool declareForeignKey)
+    {
+        const string owner = "Partner.AssetCatalog";
+        const string schema = "np_partner_assetcatalog";
+        var id = new FieldDefinition(
+            "Id",
+            "Id",
+            FieldKind.Scalar,
+            FieldValueType.ObjectId,
+            "string",
+            Required: true,
+            IsPrimaryKey: true,
+            IsAuditField: false);
+        var parentId = id with { Name = "ParentId", StoreName = "ParentId", IsPrimaryKey = false };
+        var models = new[]
+        {
+            new ModelDefinition("Parent", "Parent", ModelKind.Entity, [id], [], owner, schema),
+            new ModelDefinition(
+                "Child",
+                "Child",
+                ModelKind.Entity,
+                [id, parentId],
+                [],
+                owner,
+                schema,
+                declareForeignKey
+                    ?
+                    [new ForeignKeyDefinition(
+                        "FK_Child_Parent",
+                        ["ParentId"],
+                        $"{owner}/Parent",
+                        ["Id"],
+                        ForeignKeyDeleteBehavior.Restrict)]
+                    : [])
+        };
+        var modelDigest = PersistenceModelDigest.Compute(models);
+        var stream = new ModuleMigrationStream(
+            owner,
+            PersistenceProvider.SqlServer,
+            typeof(DeclaredForeignKeyMigration).Assembly.Location,
             "test-manifest.json",
             new string('b', 64),
             modelDigest,
@@ -160,6 +283,48 @@ public sealed class FilteredIndexMigration : Migration
             table: "Asset",
             column: "Id",
             filter: "[Id] <> N''");
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class DeclaredForeignKeyMigration : Migration
+{
+    public const string MigrationId = "20260809999700_DeclaredForeignKey";
+
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.CreateTable(
+            name: "Parent",
+            schema: "np_partner_assetcatalog",
+            columns: table => new
+            {
+                Id = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+            },
+            constraints: table => table.PrimaryKey("PK_Parent", x => x.Id));
+        migrationBuilder.CreateTable(
+            name: "Child",
+            schema: "np_partner_assetcatalog",
+            columns: table => new
+            {
+                Id = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                ParentId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("PK_Child", x => x.Id);
+                table.ForeignKey(
+                    name: "FK_Child_Parent",
+                    column: x => x.ParentId,
+                    principalSchema: "np_partner_assetcatalog",
+                    principalTable: "Parent",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+            });
+    }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {

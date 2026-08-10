@@ -1,3 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using ICP.Platform.Modules.Authentication.Migrations.SqlServer.Migrations;
+using ICP.Platform.Modules.Identity.Migrations.SqlServer.Migrations;
 using ICP.Platform.Persistence.Composition;
 using Xunit;
 
@@ -6,14 +11,11 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class IdentityFoundationMigrationTests
 {
     [Fact]
-    public void LegacyDesignModel_IncludesAllRequiredIdentityFoundationModels()
+    public void LegacyDesignModel_ExcludesModuleOwnedIdentityFoundationModels()
     {
         var definitions = PlatformCoreLegacyModelSource.GetDefinitions();
 
-        Assert.Contains(definitions, static model => model is { OwnerModuleId: "Identity", Name: "User" });
-        Assert.Contains(definitions, static model => model is { OwnerModuleId: "Identity", Name: "LocalCredential" });
-        Assert.Contains(definitions, static model => model is { OwnerModuleId: "Identity", Name: "IdentitySecurityEvent" });
-        Assert.Contains(definitions, static model => model is { OwnerModuleId: "Authentication", Name: "AuthenticationSession" });
+        Assert.DoesNotContain(definitions, static model => model.OwnerModuleId is "Identity" or "Authentication");
 
         var adapted = PlatformPersistenceModelCatalog.AdaptPlatformCore(definitions);
         Assert.All(
@@ -22,7 +24,7 @@ public sealed class IdentityFoundationMigrationTests
     }
 
     [Fact]
-    public void SqlServerMigrationDesignModel_PreservesFrozenLegacyShapeAndKeepsNewAuditsStrict()
+    public void SqlServerMigrationDesignModel_PreservesFrozenLegacyShape()
     {
         var adapted = PlatformPersistenceModelCatalog.AdaptSqlServerMigrationBaseline(
             PlatformCoreLegacyModelSource.GetDefinitions());
@@ -33,11 +35,6 @@ public sealed class IdentityFoundationMigrationTests
         Assert.False(Assert.Single(legacyModel.Fields, static field => field.Name == "CreatedBy").Required);
         Assert.False(Assert.Single(legacyModel.Fields, static field => field.Name == "UpdatedBy").Required);
 
-        var newModel = Assert.Single(adapted, static model => model.Name == "User");
-        Assert.Equal("dbo", newModel.SchemaName);
-        Assert.All(
-            newModel.Fields.Where(static field => field.IsAuditField),
-            static field => Assert.True(field.Required));
         Assert.All(
             adapted.SelectMany(static model => model.ForeignKeys),
             static foreignKey => Assert.StartsWith("platform.core/", foreignKey.PrincipalModelKey, StringComparison.Ordinal));
@@ -46,13 +43,14 @@ public sealed class IdentityFoundationMigrationTests
     [Fact]
     public void SqlServerMigration_CreatesRequiredTablesIndexesForeignKeysAndNonNullAuditColumns()
     {
-        var migrationDirectory = Path.Combine(
-            FindRepositoryRoot(),
-            "server",
-            "platform-persistence-efcore.migrations.sqlserver",
-            "Migrations");
-        var migrationPath = Assert.Single(Directory.GetFiles(migrationDirectory, "*_AddIdentityFoundation.cs"));
-        var source = File.ReadAllText(migrationPath);
+        var repositoryRoot = FindRepositoryRoot();
+        var identityPath = Assert.Single(Directory.GetFiles(
+            Path.Combine(repositoryRoot, "server", "modules", "Identity", "Migrations.SqlServer", "Migrations"),
+            "*_Foundation.cs"));
+        var authenticationPath = Assert.Single(Directory.GetFiles(
+            Path.Combine(repositoryRoot, "server", "modules", "Authentication", "Migrations.SqlServer", "Migrations"),
+            "*_Foundation.cs"));
+        var source = File.ReadAllText(identityPath) + File.ReadAllText(authenticationPath);
 
         foreach (var table in new[] { "User", "LocalCredential", "IdentitySecurityEvent", "AuthenticationSession" })
         {
@@ -71,6 +69,60 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(4, Count(source, "UpdatedBy = table.Column<string>(type: \"nvarchar(128)\", maxLength: 128, nullable: false)"));
         Assert.Equal(4, Count(source, "CreatedAt = table.Column<DateTime>(type: \"datetime2\", nullable: false)"));
         Assert.Equal(4, Count(source, "UpdatedAt = table.Column<DateTime>(type: \"datetime2\", nullable: false)"));
+    }
+
+    [Fact]
+    public void SqlServerMigrationManifests_PinBuiltBundleAndSourceDigests()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        AssertManifest(
+            repositoryRoot,
+            "Identity",
+            "Identity.SqlServerMigrations.json",
+            typeof(IdentityFoundation).Assembly.Location,
+            "20260810033908_Identity_000001_Foundation.cs");
+        AssertManifest(
+            repositoryRoot,
+            "Authentication",
+            "Authentication.SqlServerMigrations.json",
+            typeof(AuthenticationFoundation).Assembly.Location,
+            "20260810033909_Authentication_000001_Foundation.cs");
+    }
+
+    private static void AssertManifest(
+        string repositoryRoot,
+        string moduleId,
+        string manifestName,
+        string assemblyPath,
+        string migrationSourceName)
+    {
+        var manifestPath = Path.Combine(repositoryRoot, "modules", moduleId, "migrations", manifestName);
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = document.RootElement;
+        var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            moduleId,
+            "Migrations.SqlServer",
+            "Migrations",
+            migrationSourceName);
+
+        Assert.Equal(
+            root.GetProperty("bundleChecksum").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath))));
+        Assert.Equal(
+            migration.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+    }
+
+    private static byte[] ReadCanonicalSourceBytes(string sourcePath)
+    {
+        var source = File.ReadAllText(sourcePath)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+        return Encoding.UTF8.GetBytes(source);
     }
 
     private static int Count(string source, string value)

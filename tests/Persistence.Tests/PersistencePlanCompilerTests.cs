@@ -193,6 +193,29 @@ public sealed class PersistencePlanCompilerTests
             && item.ModuleId == "Partner.AssetCatalog");
     }
 
+    [Fact]
+    public void Compile_BuiltInModuleOwnedStreams_ExcludeModelsFromLegacyAndFollowDependencies()
+    {
+        using var identity = TestPackage.Create("Identity", "User");
+        using var authentication = TestPackage.Create("Authentication", "AuthenticationSession");
+        authentication.RewriteManifest(manifest =>
+            manifest["migrations"]!.AsArray()[0]!["migrationId"] =
+                "20260810000001_authentication_000001_foundation_22222222");
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(
+                identity.BuildBuiltInModule(),
+                authentication.BuildBuiltInModule(["Identity"])),
+            PersistenceProvider.SqlServer);
+
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        Assert.Equal(
+            ["Identity", "Authentication"],
+            result.Plan!.Streams.Select(static stream => stream.ModuleId));
+        Assert.DoesNotContain(result.Plan.Streams, static stream => stream.IsLegacyBaseline);
+    }
+
     [Theory]
     [InlineData(PersistenceProvider.Oracle)]
     [InlineData(PersistenceProvider.MySql)]
@@ -293,9 +316,7 @@ public sealed class PersistencePlanCompilerTests
             Directory.CreateDirectory(backendRoot);
 
             var modelPath = Path.Combine(metadataRoot, $"{modelKey}.model.json");
-            File.WriteAllText(
-                modelPath,
-                """
+            var modelJson = """
                 {
                   "schemaVersion": "1.0",
                   "type": "model",
@@ -310,7 +331,8 @@ public sealed class PersistencePlanCompilerTests
                     ]
                   }
                 }
-                """);
+                """.Replace("\"Asset\":", $"\"{modelKey}\":", StringComparison.Ordinal);
+            File.WriteAllText(modelPath, modelJson);
 
             var bundlePath = Path.Combine(backendRoot, "Partner.AssetCatalog.SqlServerMigrations.dll");
             File.Copy(typeof(PersistencePlanCompilerTests).Assembly.Location, bundlePath);
@@ -379,6 +401,31 @@ public sealed class PersistencePlanCompilerTests
                         "SqlServer",
                         Path.Combine("backend", "Partner.AssetCatalog.SqlServerMigrations.dll"),
                         Path.Combine("backend", "Partner.AssetCatalog.SqlServerMigrations.json"))]));
+
+        public CanonicalModulePlanModule BuildBuiltInModule(IReadOnlyList<string>? dependencies = null)
+        {
+            var modelPath = Path.Combine(Root, _modelRelativePath);
+            var document = new JsonModelMetadataDocumentLoader().LoadFromFile(modelPath);
+            var typeMap = new JsonStorageTypeMapLoader().LoadFromFile(FindStorageTypeMap());
+            var projected = new ModelMetadataProjector().Project(document, typeMap, "SqlServer") with
+            {
+                OwnerModuleId = _moduleId,
+                SchemaName = "dbo"
+            };
+            var modelDigest = PersistenceModelDigest.Compute([projected]);
+            RewriteManifest(manifest =>
+            {
+                manifest["modelDigest"] = modelDigest;
+                manifest["migrations"]!.AsArray()[0]!["toModelDigest"] = modelDigest;
+            });
+
+            var module = BuildModule();
+            return module with
+            {
+                Dependencies = dependencies ?? [],
+                Provenance = new ModulePlanProvenance("built-in", Path.Combine(Root, "plugin.json"), "/")
+            };
+        }
 
         public void RewriteManifest(Action<JsonObject> rewrite)
         {

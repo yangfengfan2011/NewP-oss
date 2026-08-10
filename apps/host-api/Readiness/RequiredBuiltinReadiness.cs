@@ -86,14 +86,8 @@ public sealed class RequiredBuiltinReadinessContributor : IReadinessContributor
         }
 
         if (_persistencePlan.Provider != PersistenceProvider.SqlServer
-            || !_persistencePlan.Streams.Any(stream =>
-                stream.IsLegacyBaseline
-                && string.Equals(stream.ModuleId, "platform.core", StringComparison.Ordinal)
-                && stream.Provider == PersistenceProvider.SqlServer
-                && string.Equals(
-                    stream.ExpectedFrontier,
-                    PlatformCoreMigrationFrontiers.SqlServerIdentityFoundation,
-                    StringComparison.Ordinal)))
+            || !HasRequiredMigration("Identity", PlatformCoreMigrationFrontiers.IdentitySqlServerFoundation)
+            || !HasRequiredMigration("Authentication", PlatformCoreMigrationFrontiers.AuthenticationSqlServerFoundation))
         {
             return Failed(
                 RequiredBuiltinReadinessFailureCodes.MigrationMissing,
@@ -102,6 +96,13 @@ public sealed class RequiredBuiltinReadinessContributor : IReadinessContributor
 
         return ValueTask.FromResult(ReadinessContribution.Ready("Identity foundation schema is available."));
     }
+
+    private bool HasRequiredMigration(string moduleId, string expectedFrontier) =>
+        _persistencePlan.Streams.Any(stream =>
+            !stream.IsLegacyBaseline
+            && string.Equals(stream.ModuleId, moduleId, StringComparison.Ordinal)
+            && stream.Provider == PersistenceProvider.SqlServer
+            && string.Equals(stream.ExpectedFrontier, expectedFrontier, StringComparison.Ordinal));
 
     private static ValueTask<ReadinessContribution> Failed(string code, string diagnostic) =>
         ValueTask.FromResult(new ReadinessContribution(ReadinessState.Failed, code, diagnostic));

@@ -24,6 +24,12 @@
       "metadata/models/User.model.json",
       "metadata/models/LocalCredential.model.json",
       "metadata/models/IdentitySecurityEvent.model.json"
-    ]
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Identity.SqlServerMigrations.dll",
+        "manifest": "migrations/Identity.SqlServerMigrations.json"
+      }
+    }
   }
 }

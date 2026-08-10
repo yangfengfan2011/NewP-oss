@@ -444,14 +444,7 @@ internal sealed class ModuleMigrationExecutor(
                 PhysicalKey(candidate.SchemaName, candidate.TableName),
                 PhysicalKey(operation.Schema, operation.Table),
                 StringComparison.OrdinalIgnoreCase));
-        var expected = model?.Indexes.SingleOrDefault(index =>
-            string.Equals(index.Name, operation.Name, StringComparison.Ordinal));
-        if (model is null
-            || expected is null
-            || expected.IsUnique != operation.IsUnique
-            || !operation.Columns.SequenceEqual(
-                expected.Fields.Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName),
-                StringComparer.Ordinal))
+        if (model is null)
         {
             return false;
         }
@@ -459,6 +452,18 @@ internal sealed class ModuleMigrationExecutor(
         if (string.IsNullOrWhiteSpace(operation.Filter))
         {
             return true;
+        }
+
+        // 过滤谓词会改变唯一性语义，必须精确匹配当前模型的 nullable 单列唯一索引。
+        var expected = model.Indexes.SingleOrDefault(index =>
+            string.Equals(index.Name, operation.Name, StringComparison.Ordinal));
+        if (expected is null
+            || expected.IsUnique != operation.IsUnique
+            || !operation.Columns.SequenceEqual(
+                expected.Fields.Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName),
+                StringComparer.Ordinal))
+        {
+            return false;
         }
 
         return operation.Columns.Length == 1

@@ -80,6 +80,24 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
+    public async Task MigrateAsync_UnfilteredIndexOnOwnedTable_PassesStaticValidation()
+    {
+        var plan = BuildPlan(UnfilteredIndexMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+
+        Assert.False(
+            exception is PersistencePlanExecutionException
+            {
+                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
+            },
+            exception.ToString());
+    }
+
+    [Fact]
     public async Task MigrateAsync_DeclaredOwnedForeignKey_PassesStaticValidation()
     {
         var plan = BuildForeignKeyPlan(DeclaredForeignKeyMigration.MigrationId, declareForeignKey: true);
@@ -283,6 +301,24 @@ public sealed class FilteredIndexMigration : Migration
             table: "Asset",
             column: "Id",
             filter: "[Id] <> N''");
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+    }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class UnfilteredIndexMigration : Migration
+{
+    public const string MigrationId = "20260809999600_UnfilteredIndex";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.CreateIndex(
+            name: "IX_Asset_Unfiltered",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            column: "Id");
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {

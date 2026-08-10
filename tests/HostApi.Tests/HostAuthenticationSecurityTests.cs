@@ -18,6 +18,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
+using System.Text.Json;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -270,6 +271,11 @@ public sealed class HostAuthenticationSecurityTests
             var rejected = await client.PostAsync("/api/auth/login", null);
             Assert.Equal(StatusCodes.Status429TooManyRequests, (int)rejected.StatusCode);
             Assert.Equal("60", Assert.Single(rejected.Headers.GetValues("Retry-After")));
+            Assert.Equal("application/problem+json", rejected.Content.Headers.ContentType?.MediaType);
+            using var problem = JsonDocument.Parse(await rejected.Content.ReadAsStringAsync());
+            Assert.Equal("AUTH_RATE_LIMITED", problem.RootElement.GetProperty("code").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("traceId").GetString()));
+            Assert.DoesNotContain("password", problem.RootElement.GetRawText(), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -5,6 +5,7 @@ using ICP.Platform.HostApi.Antiforgery;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Sdk.Http;
 using PlatformAuthorizationService = ICP.Platform.Modules.Authorization.Services.IAuthorizationService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Antiforgery;
@@ -16,6 +17,7 @@ namespace ICP.Platform.HostApi.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[PlatformRequestValidation]
 public sealed class AuthController : ControllerBase
 {
     public static readonly EventId LoginFailedEventId = new(4101, "AuthenticationLoginFailed");

@@ -122,6 +122,32 @@ public sealed class IdentityManagementControllerTests
     }
 
     [Fact]
+    public async Task PasswordChange_InvalidCurrentCredentialKeepsStableFieldProblemContract()
+    {
+        var accounts = new RecordingAccountApplicationService
+        {
+            Failure = new IdentityApplicationException(IdentityFailureCodes.InvalidCurrentCredential)
+        };
+        var controller = new IdentitySelfServiceController(accounts)
+        {
+            ControllerContext = Context()
+        };
+
+        var result = await controller.ChangePassword(
+            new ChangeIdentityPasswordRequest("wrong-password", "new-password", 1),
+            CancellationToken.None);
+
+        var response = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", Assert.Single(response.ContentTypes));
+        var problem = Assert.IsType<ProblemDetails>(response.Value);
+        Assert.Equal(IdentityFailureCodes.InvalidCurrentCredential, problem.Extensions["code"]);
+        Assert.Equal("trace-1", problem.Extensions["traceId"]);
+        var errors = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string[]>>(problem.Extensions["errors"]);
+        Assert.Equal([IdentityFailureCodes.InvalidCurrentCredential], errors["CurrentPassword"]);
+    }
+
+    [Fact]
     public void Routes_SeparateLocalAdministratorManagementFromAuthenticatedSelfService()
     {
         var usersPolicy = Assert.Single(typeof(IdentityUsersController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>());
@@ -256,7 +282,9 @@ public sealed class IdentityManagementControllerTests
         public ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(ChangeIdentityPasswordCommand command, CancellationToken cancellationToken = default)
         {
             LastPasswordChange = command;
-            return ValueTask.FromResult(ChangePasswordResult ?? throw new NotSupportedException());
+            return Failure is not null
+                ? ValueTask.FromException<IdentityPasswordChangeResult>(Failure)
+                : ValueTask.FromResult(ChangePasswordResult ?? throw new NotSupportedException());
         }
 
         public ValueTask<IdentityAccountSnapshot> DeleteAsync(DeleteIdentityAccountCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();

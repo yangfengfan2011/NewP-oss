@@ -15,6 +15,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -63,6 +65,24 @@ public sealed class IdentityHttpApiIntegrationTests
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         Assert.Equal("rotated-session-secret", cookie.Credential);
         Assert.DoesNotContain("rotated-session-secret", await changed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var invalidStatus = new HttpRequestMessage(HttpMethod.Put, "/api/identity/users/user-1/status")
+        {
+            Content = new StringContent(
+                """{"targetStatus":"Archived","expectedRevision":1,"reason":"invalid enum"}""",
+                Encoding.UTF8,
+                "application/json")
+        };
+        invalidStatus.Headers.Add("X-Test-User", "admin-1");
+        invalidStatus.Headers.Add("X-Test-Role", "LocalAdmin");
+        var invalidStatusResponse = await client.SendAsync(invalidStatus);
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidStatusResponse.StatusCode);
+        Assert.Equal("application/problem+json", invalidStatusResponse.Content.Headers.ContentType?.MediaType);
+        using var invalidStatusProblem = JsonDocument.Parse(await invalidStatusResponse.Content.ReadAsStringAsync());
+        Assert.Equal("REQUEST_VALIDATION_FAILED", invalidStatusProblem.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(invalidStatusProblem.RootElement.GetProperty("traceId").GetString()));
+        Assert.True(invalidStatusProblem.RootElement.GetProperty("errors").EnumerateObject().Any());
     }
 
     private sealed class EmptyQueries : IIdentityManagementQueryService

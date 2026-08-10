@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Models;
+using ICP.Platform.Sdk.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +15,7 @@ namespace ICP.Platform.Modules.Identity.Controllers;
 [ApiController]
 [Route("api/identity/me")]
 [AuthenticatedOnly]
+[PlatformRequestValidation]
 public sealed class IdentitySelfServiceController : ControllerBase
 {
     private readonly IIdentityAccountApplicationService _accounts;
@@ -60,46 +63,18 @@ public sealed class IdentitySelfServiceController : ControllerBase
                 IdentityFailureCodes.RevisionConflict => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status400BadRequest
             };
-            var response = ProblemResult(status, exception.FailureCode);
-            if (FieldErrors(exception.FailureCode) is { } errors)
-            {
-                ((ProblemDetails)response.Value!).Extensions["errors"] = errors;
-            }
-            if (exception.LatestAccount is not null)
-            {
-                ((ProblemDetails)response.Value!).Extensions["current"] = IdentityAccountResponse.From(exception.LatestAccount);
-            }
-
-            return response;
+            return IdentityControllerProblemDetails.FromApplicationException(this, status, exception);
         }
     }
 
     private ObjectResult ProblemResult(int status, string code)
-    {
-        var problem = new ProblemDetails { Status = status, Title = code };
-        problem.Extensions["code"] = code;
-        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
-        var result = StatusCode(status, problem);
-        result.ContentTypes.Add("application/problem+json");
-        return result;
-    }
-
-    private static IReadOnlyDictionary<string, string[]>? FieldErrors(string code) => code switch
-    {
-        IdentityFailureCodes.InvalidPassword => Error("NewPassword", code),
-        IdentityFailureCodes.InvalidCurrentCredential => Error("CurrentPassword", code),
-        IdentityFailureCodes.CredentialUnchanged => Error("NewPassword", code),
-        _ => null
-    };
-
-    private static IReadOnlyDictionary<string, string[]> Error(string field, string code) =>
-        new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [code] };
+        => IdentityControllerProblemDetails.Create(this, status, code);
 }
 
 public sealed record ChangeIdentityPasswordRequest(
     string CurrentPassword,
     string NewPassword,
-    long ExpectedRevision);
+    [Range(0, long.MaxValue)] long ExpectedRevision);
 
 public sealed record IdentityPasswordChangeResponse(
     IdentityAccountResponse Account,

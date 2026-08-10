@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Models;
+using ICP.Platform.Sdk.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +14,7 @@ namespace ICP.Platform.Modules.Identity.Controllers;
 [ApiController]
 [Route("api/identity/users")]
 [Authorize(Policy = "AdminOnly")]
+[PlatformRequestValidation]
 public sealed class IdentityUsersController : ControllerBase
 {
     private readonly IIdentityManagementQueryService _queries;
@@ -181,14 +184,7 @@ public sealed class IdentityUsersController : ControllerBase
     }
 
     private ObjectResult ProblemResult(int status, string code)
-    {
-        var problem = new ProblemDetails { Status = status, Title = code };
-        problem.Extensions["code"] = code;
-        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
-        var result = StatusCode(status, problem);
-        result.ContentTypes.Add("application/problem+json");
-        return result;
-    }
+        => IdentityControllerProblemDetails.Create(this, status, code);
 
     private ObjectResult ApplicationProblem(IdentityApplicationException exception)
     {
@@ -202,33 +198,8 @@ public sealed class IdentityUsersController : ControllerBase
                 or IdentityFailureCodes.PersonnelDisableHold => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };
-        var result = ProblemResult(status, exception.FailureCode);
-        if (FieldErrors(exception.FailureCode) is { } errors)
-        {
-            ((ProblemDetails)result.Value!).Extensions["errors"] = errors;
-        }
-        if (exception.LatestAccount is not null)
-        {
-            ((ProblemDetails)result.Value!).Extensions["current"] = IdentityAccountResponse.From(exception.LatestAccount);
-        }
-
-        return result;
+        return IdentityControllerProblemDetails.FromApplicationException(this, status, exception);
     }
-
-    private static IReadOnlyDictionary<string, string[]>? FieldErrors(string code) => code switch
-    {
-        IdentityFailureCodes.InvalidAccountCode => Error("ECODE", code),
-        IdentityFailureCodes.InvalidDisplayName => Error("ENAME", code),
-        IdentityFailureCodes.InvalidReason => Error("Reason", code),
-        IdentityFailureCodes.InvalidTargetStatus => Error("TargetStatus", code),
-        IdentityFailureCodes.InvalidPassword => Error("NewPassword", code),
-        IdentityFailureCodes.InvalidCurrentCredential => Error("CurrentPassword", code),
-        IdentityFailureCodes.CredentialUnchanged => Error("NewPassword", code),
-        _ => null
-    };
-
-    private static IReadOnlyDictionary<string, string[]> Error(string field, string code) =>
-        new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [code] };
 
     private IdentityActorContext Actor()
     {
@@ -244,14 +215,18 @@ public sealed class IdentityUsersController : ControllerBase
 
 public sealed record CreateIdentityUserRequest(string ECODE, string ENAME);
 
-public sealed record UpdateIdentityUserRequest(string ENAME, long ExpectedRevision);
+public sealed record UpdateIdentityUserRequest(
+    string ENAME,
+    [Range(0, long.MaxValue)] long ExpectedRevision);
 
 public sealed record SetIdentityUserStatusRequest(
     IdentityAccountStatus TargetStatus,
-    long ExpectedRevision,
+    [Range(0, long.MaxValue)] long ExpectedRevision,
     string Reason);
 
-public sealed record IdentityUserSecurityCommandRequest(long ExpectedRevision, string Reason);
+public sealed record IdentityUserSecurityCommandRequest(
+    [Range(0, long.MaxValue)] long ExpectedRevision,
+    string Reason);
 
 public sealed record IdentityAccountResponse(
     string EID,

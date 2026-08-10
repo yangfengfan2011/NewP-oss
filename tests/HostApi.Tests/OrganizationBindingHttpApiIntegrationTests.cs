@@ -14,6 +14,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -65,6 +67,23 @@ public sealed class OrganizationBindingHttpApiIntegrationTests
         Assert.Equal("User_1", binding?.UserEid);
         Assert.Equal("User_Admin", service.Actor?.ActorId);
         Assert.False(string.IsNullOrWhiteSpace(service.Actor?.TraceId));
+
+        using var invalidRevision = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_2/user-binding")
+        {
+            Content = new StringContent(
+                """{"userEid":"User_2","expectedRevision":-1,"reason":"invalid revision"}""",
+                Encoding.UTF8,
+                "application/json")
+        };
+        invalidRevision.Headers.Add("X-Test-User", "User_Admin");
+        var invalidRevisionResponse = await client.SendAsync(invalidRevision);
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidRevisionResponse.StatusCode);
+        Assert.Equal("application/problem+json", invalidRevisionResponse.Content.Headers.ContentType?.MediaType);
+        using var invalidRevisionProblem = JsonDocument.Parse(await invalidRevisionResponse.Content.ReadAsStringAsync());
+        Assert.Equal("REQUEST_VALIDATION_FAILED", invalidRevisionProblem.RootElement.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(invalidRevisionProblem.RootElement.GetProperty("traceId").GetString()));
+        Assert.True(invalidRevisionProblem.RootElement.GetProperty("errors").TryGetProperty("ExpectedRevision", out _));
     }
 
     private sealed class RecordingBindingService : IPersonUserBindingService

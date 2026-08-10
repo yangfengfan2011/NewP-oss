@@ -85,10 +85,17 @@ public static class HostAuthenticationServiceCollectionExtensions
         services.AddRateLimiter(rateLimiter =>
         {
             rateLimiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            rateLimiter.OnRejected = static (context, _) =>
+            rateLimiter.OnRejected = static async (context, _) =>
             {
                 context.HttpContext.Response.Headers.RetryAfter = "60";
-                return ValueTask.CompletedTask;
+                await Results.Problem(
+                    statusCode: StatusCodes.Status429TooManyRequests,
+                    title: "AUTH_RATE_LIMITED",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "AUTH_RATE_LIMITED",
+                        ["traceId"] = context.HttpContext.TraceIdentifier
+                    }).ExecuteAsync(context.HttpContext);
             };
             rateLimiter.AddPolicy("authentication-login", context =>
                 RateLimitPartition.GetFixedWindowLimiter(

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;

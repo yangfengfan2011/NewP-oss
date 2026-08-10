@@ -89,6 +89,28 @@ public sealed class IdentityFoundationMigrationTests
             "20260810033909_Authentication_000001_Foundation.cs");
     }
 
+    [Fact]
+    public void SqlServerMigrationProjects_MapAbsoluteSourcePathsToStableVirtualRoots()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        AssertPathMap(
+            repositoryRoot,
+            "Identity",
+            "$(MSBuildProjectDirectory)=/_/Identity.SqlServerMigrations");
+        AssertPathMap(
+            repositoryRoot,
+            "Authentication",
+            "$(MSBuildProjectDirectory)=/_/Authentication.SqlServerMigrations");
+        AssertSourceRevisionIsExcluded(repositoryRoot, "Identity");
+        AssertSourceRevisionIsExcluded(repositoryRoot, "Authentication");
+        Assert.True(File.Exists(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "integration",
+            "verify-migration-bundle-determinism.ps1")));
+    }
+
     private static void AssertManifest(
         string repositoryRoot,
         string moduleId,
@@ -115,6 +137,37 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             migration.GetProperty("contentDigest").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+    }
+
+    private static void AssertPathMap(string repositoryRoot, string moduleId, string expectedPathMap)
+    {
+        var projectPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            moduleId,
+            "Migrations.SqlServer",
+            $"{moduleId}.SqlServerMigrations.csproj");
+        var project = File.ReadAllText(projectPath);
+
+        Assert.Contains($"<PathMap>{expectedPathMap}</PathMap>", project, StringComparison.Ordinal);
+    }
+
+    private static void AssertSourceRevisionIsExcluded(string repositoryRoot, string moduleId)
+    {
+        var projectPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            moduleId,
+            "Migrations.SqlServer",
+            $"{moduleId}.SqlServerMigrations.csproj");
+        var project = File.ReadAllText(projectPath);
+
+        Assert.Contains(
+            "<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>",
+            project,
+            StringComparison.Ordinal);
     }
 
     private static byte[] ReadCanonicalSourceBytes(string sourcePath)

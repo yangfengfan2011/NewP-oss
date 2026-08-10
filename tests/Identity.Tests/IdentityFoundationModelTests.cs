@@ -3,6 +3,14 @@ using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Identity;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Sdk;
+using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Application;
+using ICP.Platform.Modules.Identity.Repositories;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ICP.Platform.Identity.Tests;
@@ -16,6 +24,37 @@ public sealed class IdentityFoundationModelTests
 
         Assert.Equal("Identity", module.ModuleId);
         Assert.Equal("identity.backend", Assert.IsAssignableFrom<IModuleBehaviorBinding>(module).BehaviorKey);
+    }
+
+    [Fact]
+    public void Module_RegistersIdentityApplicationKernelAndStableContracts()
+    {
+        var services = new ServiceCollection();
+
+        new IdentityModule().ConfigureServices(services);
+
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityRepository));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityAccountDirectory));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityLifecycleParticipant));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityAccountApplicationService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IValidateOptions<IdentityCredentialOptions>));
+    }
+
+    [Fact]
+    public void Module_BindsExplicitDevelopmentSharedCredentialConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Identity:Credentials:UseSharedDevelopmentCredential"] = "true"
+            })
+            .Build());
+        services.AddSingleton<IWebHostEnvironment>(new TestWebHostEnvironment("Development"));
+        new IdentityModule().ConfigureServices(services);
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Equal("123456", provider.GetRequiredService<ITemporaryCredentialIssuer>().Issue());
     }
 
     [Fact]
@@ -51,5 +90,15 @@ public sealed class IdentityFoundationModelTests
         Assert.Contains(definition.Fields, static field => field is { Name: "CreatedAt", Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static field => field is { Name: "UpdatedBy", Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static field => field is { Name: "UpdatedAt", Required: true, IsAuditField: true });
+    }
+
+    private sealed class TestWebHostEnvironment(string environmentName) : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "Identity.Tests";
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = string.Empty;
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ContentRootPath { get; set; } = string.Empty;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

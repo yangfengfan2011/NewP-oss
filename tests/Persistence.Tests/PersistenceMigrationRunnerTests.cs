@@ -499,6 +499,11 @@ public sealed class DeclaredForeignKeyMigration : Migration
                     principalColumn: "Id",
                     onDelete: ReferentialAction.Restrict);
             });
+        migrationBuilder.CreateIndex(
+            name: "IX_Child_ParentId",
+            schema: "np_partner_assetcatalog",
+            table: "Child",
+            column: "ParentId");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

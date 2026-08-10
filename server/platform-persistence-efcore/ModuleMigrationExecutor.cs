@@ -9,6 +9,7 @@ using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
@@ -446,41 +447,46 @@ internal sealed class ModuleMigrationExecutor(
         }
     }
 
-    private static bool IsOwnedIndex(
+    private bool IsOwnedIndex(
         CreateIndexOperation operation,
         IReadOnlyList<ModelDefinition> ownedModels)
     {
-        var model = ownedModels.SingleOrDefault(candidate =>
+        var ownedModel = ownedModels.SingleOrDefault(candidate =>
             string.Equals(
                 PhysicalKey(candidate.SchemaName, candidate.TableName),
                 PhysicalKey(operation.Schema, operation.Table),
                 StringComparison.OrdinalIgnoreCase));
-        if (model is null)
+        if (ownedModel is null)
         {
             return false;
         }
 
-        var expected = model.Indexes.SingleOrDefault(index =>
-            string.Equals(index.Name, operation.Name, StringComparison.Ordinal));
+        // EF 的目标模型还包含外键约定生成的索引；执行端必须与最终 provider
+        // 模型精确比对，不能只看 authoring 中显式声明的 IndexDefinition。
+        var targetEntity = dbContext.Model.GetEntityTypes().SingleOrDefault(entity =>
+            string.Equals(entity.GetTableName(), operation.Table, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                entity.GetSchema() ?? "dbo",
+                operation.Schema ?? "dbo",
+                StringComparison.OrdinalIgnoreCase));
+        var expected = targetEntity?.GetIndexes().SingleOrDefault(index =>
+            string.Equals(index.GetDatabaseName(), operation.Name, StringComparison.Ordinal));
         if (expected is null || expected.IsUnique != operation.IsUnique)
         {
             return false;
         }
 
-        var expectedColumns = expected.Fields
-            .Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName)
+        var storeObject = StoreObjectIdentifier.Table(operation.Table, operation.Schema ?? "dbo");
+        var expectedColumns = expected.Properties
+            .Select(property => property.GetColumnName(storeObject))
             .ToArray();
-        if (!operation.Columns.SequenceEqual(expectedColumns, StringComparer.Ordinal))
+        if (expectedColumns.Any(static column => column is null)
+            || !operation.Columns.SequenceEqual(expectedColumns!, StringComparer.Ordinal))
         {
             return false;
         }
 
-        var expectedFilter = expected.IsUnique
-            && expectedColumns.Length == 1
-            && model.Fields.Single(field => field.StoreName == expectedColumns[0]).Required is false
-                ? $"[{expectedColumns[0]}] IS NOT NULL"
-                : null;
-        return string.Equals(operation.Filter, expectedFilter, StringComparison.Ordinal);
+        return string.Equals(operation.Filter, expected.GetFilter(), StringComparison.Ordinal);
     }
 
     private bool ForeignKeysMatch(CreateTableOperation operation, ModelDefinition model)

@@ -54,6 +54,43 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
         Assert.Contains("does not match", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Load_PublicBuiltInLabel_CannotUseDistributionWideAssemblyBoundary()
+    {
+        var packageRoot = Path.Combine(_root, "modules", "Audit");
+        Directory.CreateDirectory(packageRoot);
+        File.Copy(typeof(AuditModule).Assembly.Location, Path.Combine(_root, "AuditModule.dll"));
+        var module = new CanonicalModulePlanModule(
+            "Audit",
+            "1.0.0",
+            "审计日志",
+            null,
+            packageRoot,
+            "../../AuditModule.dll",
+            null,
+            null,
+            null,
+            "legacy-module",
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            new ModulePlanProvenance("built-in", Path.Combine(packageRoot, "plugin.json"), "/"));
+        var plan = new CanonicalModulePlan(
+            "candidate",
+            "1.0",
+            new string('a', 64),
+            new string('b', 64),
+            [],
+            [module]);
+
+        Assert.Throws<FileNotFoundException>(() =>
+            new CanonicalModuleAssemblyLoader(_root).Load(plan));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

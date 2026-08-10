@@ -377,7 +377,48 @@ public sealed class PersistencePlanCompilerTests
 
         Assert.False(result.IsSuccess);
         Assert.Null(result.Plan);
-        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MODEL_MISMATCH");
+    }
+
+    [Fact]
+    public void Compile_PublicBuiltInLabel_UsesExternalSchemaBoundary()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        var module = package.BuildModule() with
+        {
+            Provenance = new ModulePlanProvenance(
+                "built-in",
+                Path.Combine(package.Root, "plugin.json"),
+                "/")
+        };
+
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.SqlServer);
+
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        Assert.Equal("np_partner_assetcatalog", Assert.Single(result.Plan!.Models).SchemaName);
+    }
+
+    [Fact]
+    public void Compile_PublicBuiltInLabel_CannotBypassExternalProviderBoundary()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        var module = package.BuildModule() with
+        {
+            Provenance = new ModulePlanProvenance(
+                "built-in",
+                Path.Combine(package.Root, "plugin.json"),
+                "/")
+        };
+
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.Oracle);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_PROVIDER_UNSUPPORTED");
+        Assert.DoesNotContain(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_REQUIRED");
     }
 
     [Fact]
@@ -408,7 +449,7 @@ public sealed class PersistencePlanCompilerTests
 
         Assert.False(result.IsSuccess);
         Assert.Null(result.Plan);
-        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MODEL_MISMATCH");
     }
 
     [Fact]

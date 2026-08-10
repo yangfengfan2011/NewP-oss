@@ -99,8 +99,8 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
 
         return new
         {
-            moduleId = module.Provenance.SourceKind == "built-in" ? module.FrontendEntry : null,
-            url = module.Provenance.SourceKind == "built-in"
+            moduleId = module.Provenance.AuthenticatesBuiltIn(module) ? module.FrontendEntry : null,
+            url = module.Provenance.AuthenticatesBuiltIn(module)
                 ? null
                 : CombinePublicPath(_publicBaseUrl, module.ModuleId, module.Version, module.FrontendEntry),
             behaviorKey = module.FrontendBehaviorKey,

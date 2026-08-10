@@ -62,7 +62,7 @@ public class FrontendRuntimeManifestBuilder
                         bindingMode = module.FrontendBindingMode,
                         bindings = module.FrontendBindings
                     }
-                    : module.Provenance.SourceKind == "built-in"
+                    : module.Provenance.AuthenticatesBuiltIn(module)
                     ? (object)new
                     {
                         moduleId = module.FrontendEntry,
@@ -128,8 +128,7 @@ public class FrontendRuntimeManifestBuilder
 
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
-        if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(fullRootPath, fullCandidatePath))
         {
             throw new JsonException($"Frontend manifest {propertyName} resolves to an unsafe path.");
         }

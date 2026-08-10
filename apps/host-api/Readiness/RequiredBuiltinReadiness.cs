@@ -66,7 +66,7 @@ public sealed class RequiredBuiltinReadinessContributor : IReadinessContributor
                 return Failed(RequiredBuiltinReadinessFailureCodes.ModuleDuplicate, $"Required built-in '{requiredModuleId}' is duplicated.");
             }
 
-            if (!string.Equals(matches[0].Provenance.SourceKind, "built-in", StringComparison.Ordinal))
+            if (!matches[0].Provenance.AuthenticatesBuiltIn(matches[0]))
             {
                 return Failed(RequiredBuiltinReadinessFailureCodes.ModuleInvalidSource, $"Required built-in '{requiredModuleId}' has an invalid source.");
             }

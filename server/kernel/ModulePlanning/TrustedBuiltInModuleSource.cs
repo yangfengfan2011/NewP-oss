@@ -5,10 +5,10 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 /// </summary>
 internal sealed class TrustedBuiltInModuleSource
 {
-    private TrustedBuiltInModuleSource(string modulesRoot, string distributionRoot)
+    private TrustedBuiltInModuleSource(string modulesRoot, string installationRoot)
     {
         ModulesRoot = modulesRoot;
-        DistributionRoot = distributionRoot;
+        DistributionRoot = installationRoot;
     }
 
     internal string ModulesRoot { get; }
@@ -34,22 +34,64 @@ internal sealed class TrustedBuiltInModuleSource
             throw new DirectoryNotFoundException($"Built-in module root not found: {resolvedModulesRoot}");
         }
 
-        RejectReparsePoint(resolvedModulesRoot);
-        foreach (var moduleRoot in Directory.EnumerateDirectories(resolvedModulesRoot))
+        if (!PathContainment.Contains(resolvedInstallationRoot, resolvedModulesRoot, allowRoot: false))
         {
-            RejectReparsePoint(moduleRoot);
+            throw new InvalidOperationException(
+                $"Built-in module root must be contained by the Host installation root: {resolvedModulesRoot}");
         }
 
-        var distributionRoot = Path.GetDirectoryName(resolvedModulesRoot)
-            ?? throw new InvalidOperationException("Built-in module root must have a distribution parent.");
-        return new TrustedBuiltInModuleSource(resolvedModulesRoot, distributionRoot);
+        PathContainment.RejectReparsePoints(resolvedInstallationRoot);
+        PathContainment.RejectReparsePoints(resolvedModulesRoot);
+        ValidateTree(resolvedModulesRoot);
+        return new TrustedBuiltInModuleSource(resolvedModulesRoot, resolvedInstallationRoot);
     }
 
-    private static void RejectReparsePoint(string path)
+    internal void ValidateModuleTree(string moduleRoot)
     {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+        var resolvedModuleRoot = Path.GetFullPath(moduleRoot);
+        if (!PathContainment.Contains(ModulesRoot, resolvedModuleRoot, allowRoot: false)
+            || !string.Equals(
+                Path.GetDirectoryName(resolvedModuleRoot),
+                ModulesRoot,
+                StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"Built-in module root cannot traverse a reparse point: {path}");
+            throw new InvalidOperationException($"Built-in module capsule is outside the trusted module root: {resolvedModuleRoot}");
+        }
+
+        ValidateTree(resolvedModuleRoot);
+    }
+
+    internal string ValidateDistributionFile(string path)
+    {
+        var resolvedPath = Path.GetFullPath(path);
+        if (!PathContainment.Contains(DistributionRoot, resolvedPath)
+            || !File.Exists(resolvedPath))
+        {
+            throw new FileNotFoundException(
+                "Built-in module file is missing or outside the Host installation root.",
+                resolvedPath);
+        }
+
+        PathContainment.RejectReparsePoints(resolvedPath);
+        return resolvedPath;
+    }
+
+    private static void ValidateTree(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.TryPop(out var current))
+        {
+            PathContainment.RejectReparsePoints(current);
+            foreach (var entry in Directory.EnumerateFileSystemEntries(current))
+            {
+                PathContainment.RejectReparsePoints(entry);
+                if (Directory.Exists(entry))
+                {
+                    pending.Push(entry);
+                }
+            }
         }
     }
+
 }

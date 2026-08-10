@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginDiscovery;
 
 namespace ICP.Platform.Kernel.PluginPackages;
@@ -166,8 +167,7 @@ public class UnifiedPluginPackageScanner
         // 所有相对路径都必须留在包根内，确保包可搬移且不会通过 .. 逃逸到外部目录。
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
-        if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(fullRootPath, fullCandidatePath))
         {
             throw new IOException($"Manifest property {propertyName} resolves to an unsafe path.");
         }

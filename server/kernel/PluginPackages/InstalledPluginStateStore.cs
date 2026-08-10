@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginDiscovery;
 
 namespace ICP.Platform.Kernel.PluginPackages;
@@ -405,7 +406,7 @@ public class InstalledPluginStateStore
 
         var packagesRoot = Path.GetFullPath(Path.Combine(_installRoot, "packages"));
         var candidatePath = Path.GetFullPath(Path.Combine(packagesRoot, moduleId));
-        if (!candidatePath.StartsWith(packagesRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(packagesRoot, candidatePath, allowRoot: false))
         {
             errorMessage = $"Installed plugin package moduleId '{moduleId}' resolves to an unsafe packages path.";
             return false;
@@ -518,7 +519,7 @@ public class InstalledPluginStateStore
 
         var archivedRoot = Path.GetFullPath(Path.Combine(_installRoot, PrunedVersionsRootName, "packages"));
         var candidatePath = Path.GetFullPath(Path.Combine(archivedRoot, moduleId));
-        if (!candidatePath.StartsWith(archivedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(archivedRoot, candidatePath, allowRoot: false))
         {
             errorMessage = $"Archived plugin package moduleId '{moduleId}' resolves to an unsafe path.";
             return false;
@@ -675,7 +676,7 @@ public class InstalledPluginStateStore
         }
 
         var candidatePath = Path.GetFullPath(Path.Combine(_stateRoot, $"{moduleId}.json"));
-        if (!candidatePath.StartsWith(_stateRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(_stateRoot, candidatePath, allowRoot: false))
         {
             errorMessage = $"Installed plugin state moduleId '{moduleId}' resolves to an unsafe state path.";
             return false;
@@ -777,8 +778,7 @@ public class InstalledPluginStateStore
         // 状态和清单中的相对路径都必须收口在包根内；如果文件本身缺失，则直接视为坏包/坏状态。
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
-        if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(fullRootPath, fullCandidatePath))
         {
             throw new JsonException($"Plugin manifest {propertyName} resolves to an unsafe path.");
         }
@@ -810,7 +810,7 @@ public class InstalledPluginStateStore
 
         // PackageRoot 必须精确指向 installRoot/packages/{moduleId}/{version}，否则说明状态和磁盘已经失配。
         var packagesRoot = Path.GetFullPath(Path.Combine(_installRoot, "packages"));
-        if (!fullPackageRoot.StartsWith(packagesRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(packagesRoot, fullPackageRoot, allowRoot: false))
         {
             throw new JsonException("Installed plugin state is corrupt: PackageRoot resolves outside the install packages root.");
         }

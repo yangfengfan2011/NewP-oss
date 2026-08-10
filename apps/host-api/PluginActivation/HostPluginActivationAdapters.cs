@@ -170,14 +170,14 @@ public sealed class CanonicalModuleAssemblyLoader
 
     private Assembly LoadModule(CanonicalModulePlanModule module)
     {
-        var isBuiltIn = string.Equals(module.Provenance.SourceKind, "built-in", StringComparison.Ordinal);
+        var isBuiltIn = module.Provenance.AuthenticatesBuiltIn(module);
         var boundary = isBuiltIn
             ? _distributionRoot
             : Path.GetFullPath(Path.Combine(module.PackageRoot, "backend"));
         var path = Path.GetFullPath(Path.Combine(
             isBuiltIn ? module.PackageRoot : boundary,
             module.BackendEntry!));
-        if (!IsContainedPath(boundary, path)
+        if (!PathContainment.Contains(boundary, path)
             || !File.Exists(path))
         {
             throw new FileNotFoundException(
@@ -185,6 +185,7 @@ public sealed class CanonicalModuleAssemblyLoader
                 path);
         }
 
+        PathContainment.RejectReparsePoints(path);
         var assembly = Assembly.LoadFrom(path);
         ValidateModuleContract(module, assembly);
         return assembly;
@@ -213,14 +214,6 @@ public sealed class CanonicalModuleAssemblyLoader
 
     }
 
-    private static bool IsContainedPath(string root, string path)
-    {
-        var relativePath = Path.GetRelativePath(root, path);
-        return !Path.IsPathRooted(relativePath)
-            && !string.Equals(relativePath, "..", StringComparison.Ordinal)
-            && !relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-            && !relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
-    }
 }
 
 /// <summary>

@@ -49,6 +49,30 @@ public sealed class RequiredBuiltinReadinessTests
     }
 
     [Fact]
+    public async Task Contributor_PublicBuiltInLabel_ReturnsInvalidSourceSignal()
+    {
+        var modules = ModulePlan("Identity", "Authentication");
+        var identity = modules.Modules.Single(static module => module.ModuleId == "Identity");
+        var publicLabel = identity with
+        {
+            Provenance = new ModulePlanProvenance("built-in", identity.PackageRoot, "/")
+        };
+        var contributor = new RequiredBuiltinReadinessContributor(
+            modules with
+            {
+                Modules = modules.Modules
+                    .Select(module => module.ModuleId == "Identity" ? publicLabel : module)
+                    .ToArray()
+            },
+            PersistencePlan());
+
+        var result = await contributor.CheckAsync(CancellationToken.None);
+
+        Assert.Equal(ReadinessState.Failed, result.State);
+        Assert.Equal(RequiredBuiltinReadinessFailureCodes.ModuleInvalidSource, result.FailureCode);
+    }
+
+    [Fact]
     public async Task Contributor_WhenRequiredModelOrMigrationIsMissing_ReturnsStableNotReadySignal()
     {
         var modelsMissing = new RequiredBuiltinReadinessContributor(
@@ -84,8 +108,14 @@ public sealed class RequiredBuiltinReadinessTests
             [],
             moduleIds.Select(Module).ToArray());
 
-    private static CanonicalModulePlanModule Module(string moduleId) =>
-        new(
+    private static CanonicalModulePlanModule Module(string moduleId)
+    {
+        var provenance = ModulePlanProvenance.CreateTrustedBuiltInRoot(
+            moduleId,
+            moduleId,
+            Path.Combine(moduleId, "plugin.json"),
+            "/");
+        var module = new CanonicalModulePlanModule(
             moduleId,
             "1.0.0",
             moduleId,
@@ -103,7 +133,29 @@ public sealed class RequiredBuiltinReadinessTests
             [],
             [],
             [],
-            new ModulePlanProvenance("built-in", moduleId, "/"));
+            provenance);
+        var candidate = new ModuleCapsuleCandidate(
+            module.ModuleId,
+            module.Version,
+            module.DisplayName,
+            module.Description,
+            module.PackageRoot,
+            module.BackendEntry,
+            module.BackendBehaviorKey,
+            module.FrontendEntry,
+            module.FrontendBehaviorKey,
+            module.FrontendBindingMode,
+            module.Dependencies,
+            module.Routes,
+            module.FrontendBindings,
+            module.FrontendBindingReferences,
+            module.PermissionCodes,
+            module.PermissionReferences,
+            module.ModelKeys,
+            module.Provenance,
+            module.Persistence);
+        return module with { Provenance = provenance.BindToCanonicalCandidate(candidate) };
+    }
 
     private static CompiledPersistencePlan PersistencePlan(
         bool includeAuthenticationModel = true,

@@ -12,19 +12,19 @@ public sealed class ModuleCapsuleCandidateReader
     /// 读取构建输出中的内建模块胶囊。公开读取只返回来源描述，不授予 destructive migration 权限。
     /// </summary>
     public IReadOnlyList<ModuleCapsuleCandidate> ReadBuiltIn(string modulesRoot)
-        => ReadBuiltIn(modulesRoot, trustedRoot: false);
+        => ReadBuiltIn(modulesRoot, trustedSource: null);
 
     // 只有受控 Host/activation 路径可把配置的 distribution root 提升为 capability；
     // 任意公共调用方即使复制完全相同的 SourceKind 字符串也只能得到普通来源描述。
     internal IReadOnlyList<ModuleCapsuleCandidate> ReadTrustedBuiltIn(TrustedBuiltInModuleSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return ReadBuiltIn(source.ModulesRoot, trustedRoot: true);
+        return ReadBuiltIn(source.ModulesRoot, source);
     }
 
     private static IReadOnlyList<ModuleCapsuleCandidate> ReadBuiltIn(
         string modulesRoot,
-        bool trustedRoot)
+        TrustedBuiltInModuleSource? trustedSource)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modulesRoot);
         if (!Directory.Exists(modulesRoot))
@@ -34,7 +34,11 @@ public sealed class ModuleCapsuleCandidateReader
 
         return Directory.GetDirectories(modulesRoot)
             .OrderBy(static path => path, StringComparer.Ordinal)
-            .Select(path => ReadBuiltInModule(path, trustedRoot))
+            .Select(path =>
+            {
+                trustedSource?.ValidateModuleTree(path);
+                return ReadBuiltInModule(path, trustedSource);
+            })
             .ToArray();
     }
 
@@ -52,7 +56,9 @@ public sealed class ModuleCapsuleCandidateReader
             .ToArray();
     }
 
-    private static ModuleCapsuleCandidate ReadBuiltInModule(string moduleRoot, bool trustedRoot)
+    private static ModuleCapsuleCandidate ReadBuiltInModule(
+        string moduleRoot,
+        TrustedBuiltInModuleSource? trustedSource)
     {
         var manifestPath = Path.Combine(moduleRoot, "plugin.json");
         if (!File.Exists(manifestPath))
@@ -67,6 +73,10 @@ public sealed class ModuleCapsuleCandidateReader
         var displayName = RequiredString(root, "displayName", manifestPath);
         var description = OptionalString(root, "description");
         var backendEntry = OptionalString(root, "entryAssembly");
+        if (backendEntry is not null && trustedSource is not null)
+        {
+            trustedSource.ValidateDistributionFile(Path.Combine(moduleRoot, backendEntry));
+        }
         var dependencies = ReadStringArray(root, "dependencies");
 
         var backendBehaviorKey = TryGetObject(root, "backend", out var backend)
@@ -132,7 +142,7 @@ public sealed class ModuleCapsuleCandidateReader
             permissionCodes,
             metadata.PermissionReferences,
             metadata.ModelKeys,
-            trustedRoot
+            trustedSource is not null
                 ? ModulePlanProvenance.CreateTrustedBuiltInRoot(
                     moduleId,
                     moduleRoot,
@@ -377,7 +387,7 @@ public sealed class ModuleCapsuleCandidateReader
 
         var fullRoot = Path.GetFullPath(root);
         var candidate = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
-        if (!candidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+        if (!PathContainment.Contains(fullRoot, candidate, allowRoot: false)
             || !File.Exists(candidate))
         {
             throw new FileNotFoundException($"{description} is missing or unsafe.", relativePath);

@@ -204,7 +204,7 @@ public class RuntimeViewMaterializer
             return;
         }
 
-        if (module.Provenance.SourceKind == "built-in")
+        if (module.Provenance.AuthenticatesBuiltIn(module))
         {
             MaterializeBuiltInBackendView(backendViewRoot, module);
             return;
@@ -234,20 +234,17 @@ public class RuntimeViewMaterializer
         string backendViewRoot,
         CanonicalModulePlanModule module)
     {
-        var sourceManifestPath = Path.Combine(module.PackageRoot, "plugin.json");
-        var distributionRoot = _builtInModuleSource is null
-            ? Path.GetDirectoryName(module.PackageRoot)!
-            : _builtInModuleSource.DistributionRoot;
-        var entryAssemblyPath = Path.GetFullPath(Path.Combine(module.PackageRoot, module.BackendEntry!));
-        if (!entryAssemblyPath.StartsWith(
-                Path.GetFullPath(distributionRoot) + Path.DirectorySeparatorChar,
-                StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(entryAssemblyPath))
+        if (_builtInModuleSource is null)
         {
-            throw new FileNotFoundException(
-                $"Built-in backend entry for '{module.ModuleId}' is missing or outside the distribution root.",
-                module.BackendEntry);
+            throw new InvalidOperationException(
+                $"Authenticated built-in module '{module.ModuleId}' requires its Host trust source.");
         }
+
+        _builtInModuleSource.ValidateModuleTree(module.PackageRoot);
+        var sourceManifestPath = _builtInModuleSource.ValidateDistributionFile(
+            Path.Combine(module.PackageRoot, "plugin.json"));
+        var entryAssemblyPath = _builtInModuleSource.ValidateDistributionFile(
+            Path.Combine(module.PackageRoot, module.BackendEntry!));
 
         var targetDirectory = Path.Combine(backendViewRoot, module.ModuleId);
         Directory.CreateDirectory(targetDirectory);
@@ -298,7 +295,7 @@ public class RuntimeViewMaterializer
             return;
         }
 
-        var packageMetadataRoot = module.Provenance.SourceKind == "built-in"
+        var packageMetadataRoot = module.Provenance.AuthenticatesBuiltIn(module)
             ? Path.Combine(module.PackageRoot, "metadata")
             : Path.Combine(module.PackageRoot, "modules", module.ModuleId, "metadata");
         if (!Directory.Exists(packageMetadataRoot))
@@ -562,8 +559,7 @@ public class RuntimeViewMaterializer
         var fullRootPath = Path.GetFullPath(rootPath);
         var fullCandidatePath = Path.GetFullPath(Path.Combine(fullRootPath, relativePath));
         // manifest 中的相对路径必须被约束在插件包目录内，防止通过 ../ 或绝对路径越界读取宿主文件。
-        if (!fullCandidatePath.StartsWith(fullRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(fullCandidatePath, fullRootPath, StringComparison.OrdinalIgnoreCase))
+        if (!PathContainment.Contains(fullRootPath, fullCandidatePath))
         {
             throw new System.Text.Json.JsonException($"Frontend manifest {propertyName} resolves to an unsafe path.");
         }

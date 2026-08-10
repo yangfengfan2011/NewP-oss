@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
@@ -7,10 +8,143 @@ namespace ICP.Platform.Kernel.Tests;
 
 public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
 {
+    private readonly List<string> _links = [];
     private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "icp-platform-tests",
         $"canonical-runtime-{Guid.NewGuid():N}");
+
+    [Fact]
+    public void CreateForHost_WhenModulesRootIsOutsideInstallationRoot_RejectsTrust()
+    {
+        var installationRoot = Path.Combine(_root, "installation");
+        var externalModulesRoot = Path.Combine(_root, "external", "modules");
+        Directory.CreateDirectory(installationRoot);
+        Directory.CreateDirectory(externalModulesRoot);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            TrustedBuiltInModuleSource.CreateForHost(installationRoot, externalModulesRoot));
+
+        Assert.Contains("installation root", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreateForHost_WhenIntermediateDirectoryIsReparsePoint_RejectsTrust()
+    {
+        var installationRoot = Path.Combine(_root, "installation");
+        var externalBundleRoot = Path.Combine(_root, "external-bundle");
+        var modulesRoot = Path.Combine(externalBundleRoot, "modules");
+        Directory.CreateDirectory(installationRoot);
+        Directory.CreateDirectory(modulesRoot);
+        var linkedBundleRoot = Path.Combine(installationRoot, "linked-bundle");
+        CreateDirectoryLink(linkedBundleRoot, externalBundleRoot);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            TrustedBuiltInModuleSource.CreateForHost(
+                installationRoot,
+                Path.Combine(linkedBundleRoot, "modules")));
+
+        Assert.Contains("reparse point", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadTrustedBuiltIn_WhenBackendEntryTraversesReparsePoint_RejectsTrust()
+    {
+        var installationRoot = Path.Combine(_root, "installation");
+        var modulesRoot = Path.Combine(installationRoot, "modules");
+        var moduleRoot = Path.Combine(modulesRoot, "Organization");
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "plugin.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "moduleId": "Organization",
+              "displayName": "组织结构",
+              "version": "1.0.0",
+              "entryAssembly": "../../entries/OrganizationModule.dll",
+              "dependencies": []
+            }
+            """);
+        var source = TrustedBuiltInModuleSource.CreateForHost(installationRoot, modulesRoot);
+        var externalEntries = Path.Combine(_root, "external-entries");
+        Directory.CreateDirectory(externalEntries);
+        var externalEntry = Path.Combine(externalEntries, "OrganizationModule.dll");
+        File.WriteAllText(externalEntry, "fixture");
+        var linkedEntries = Path.Combine(installationRoot, "entries");
+        CreateDirectoryLink(linkedEntries, externalEntries);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+
+        Assert.Contains("reparse point", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_PublicBuiltInLabel_DoesNotSelectPrivilegedMetadataLayout()
+    {
+        var packageRoot = Path.Combine(_root, "package");
+        var privilegedMetadataRoot = Path.Combine(packageRoot, "metadata", "navigation");
+        var installedMetadataRoot = Path.Combine(packageRoot, "modules", "Partner", "metadata", "navigation");
+        Directory.CreateDirectory(privilegedMetadataRoot);
+        Directory.CreateDirectory(installedMetadataRoot);
+        File.WriteAllText(Path.Combine(privilegedMetadataRoot, "privileged.json"), "{}");
+        File.WriteAllText(Path.Combine(installedMetadataRoot, "installed.json"), "{}");
+        var module = CreatePublicBuiltInModule("Partner", packageRoot);
+        var plan = new CanonicalModulePlan(
+            "candidate",
+            "1.0",
+            new string('a', 64),
+            new string('b', 64),
+            [],
+            [module]);
+        var installRoot = Path.Combine(_root, "install");
+
+        using var stage = new RuntimeViewMaterializer(new InstalledPluginStateStore(installRoot))
+            .Stage(installRoot, plan);
+
+        var projectedMetadata = Path.Combine(stage.StagedRuntimeRoot, "modules", "Partner", "metadata", "navigation");
+        Assert.True(File.Exists(Path.Combine(projectedMetadata, "installed.json")));
+        Assert.False(File.Exists(Path.Combine(projectedMetadata, "privileged.json")));
+    }
+
+    [Fact]
+    public void PathContainment_WhenRootIsDriveRoot_HandlesRootCaseAndDirectoryBoundary()
+    {
+        var driveRoot = Path.GetPathRoot(_root)!;
+        var caseVariant = driveRoot.ToLowerInvariant();
+
+        Assert.True(PathContainment.Contains(caseVariant, _root));
+        Assert.True(PathContainment.Contains(driveRoot, driveRoot));
+        Assert.False(PathContainment.Contains(Path.Combine(_root, "module"), Path.Combine(_root, "module-other")));
+    }
+
+    [Fact]
+    public void RuntimeCatalogs_PublicBuiltInLabel_UseExternalFrontendProjection()
+    {
+        var module = CreatePublicBuiltInModule("Partner", Path.Combine(_root, "package")) with
+        {
+            FrontendEntry = "entry.js"
+        };
+        var plan = new CanonicalModulePlan(
+            "candidate",
+            "1.0",
+            new string('a', 64),
+            new string('b', 64),
+            [],
+            [module]);
+
+        using var manifest = JsonDocument.Parse(new FrontendRuntimeManifestBuilder().Build(plan));
+        var manifestEntry = Assert.Single(manifest.RootElement.GetProperty("plugins").EnumerateArray());
+        Assert.Equal("/plugin-assets/Partner/1.0.0/entry.js", manifestEntry.GetProperty("url").GetString());
+        Assert.False(manifestEntry.TryGetProperty("moduleId", out _));
+
+        using var catalog = JsonDocument.Parse(new ActiveModuleRuntimeCatalogBuilder().Build(plan));
+        var frontend = Assert.Single(catalog.RootElement.GetProperty("modules").EnumerateArray())
+            .GetProperty("frontend");
+        Assert.Equal("/plugin-assets/Partner/1.0.0/entry.js", frontend.GetProperty("url").GetString());
+        Assert.Equal(JsonValueKind.Null, frontend.GetProperty("moduleId").ValueKind);
+    }
 
     [Fact]
     public void Materialize_BuiltInCapsule_WritesOneActiveCatalogAndHashBoundCompatibilityProjections()
@@ -119,9 +253,67 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var link in _links.Where(path => File.Exists(path) || Directory.Exists(path)))
+        {
+            if (Directory.Exists(link))
+            {
+                Directory.Delete(link);
+            }
+            else
+            {
+                File.Delete(link);
+            }
+        }
+
         if (Directory.Exists(_root))
         {
             Directory.Delete(_root, recursive: true);
         }
     }
+
+    private void CreateDirectoryLink(string linkPath, string targetPath)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateSymbolicLink(linkPath, targetPath);
+            _links.Add(linkPath);
+            return;
+        }
+
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            ArgumentList = { "/c", "mklink", "/J", linkPath, targetPath }
+        }) ?? throw new InvalidOperationException("无法启动 junction 创建进程。");
+        process.WaitForExit();
+        Assert.True(
+            process.ExitCode == 0,
+            $"junction 创建失败：{process.StandardOutput.ReadToEnd()} {process.StandardError.ReadToEnd()}");
+        _links.Add(linkPath);
+    }
+
+    private static CanonicalModulePlanModule CreatePublicBuiltInModule(string moduleId, string packageRoot) =>
+        new(
+            moduleId,
+            "1.0.0",
+            moduleId,
+            null,
+            packageRoot,
+            null,
+            null,
+            null,
+            null,
+            "legacy-module",
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            new ModulePlanProvenance("built-in", Path.Combine(packageRoot, "plugin.json"), "/"));
 }

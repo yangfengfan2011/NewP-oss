@@ -158,7 +158,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             return;
         }
 
-        if (module.Provenance.SourceKind == "installed-package" && provider is not PersistenceProvider.SqlServer)
+        if (!isTrustedBuiltIn && provider is not PersistenceProvider.SqlServer)
         {
             diagnostics.Add(new PersistencePlanDiagnostic(
                 "PERSISTENCE_PROVIDER_UNSUPPORTED",
@@ -523,9 +523,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
 
         var root = Path.GetFullPath(module.PackageRoot);
         var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
-        var relative = Path.GetRelativePath(root, fullPath);
-        if (relative == ".."
-            || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+        if (!PathContainment.Contains(root, fullPath)
             || !File.Exists(fullPath))
         {
             diagnostics.Add(new PersistencePlanDiagnostic(
@@ -542,7 +540,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
 
     private static string ResolveSchemaName(CanonicalModulePlanModule module)
     {
-        if (module.Provenance.SourceKind == "built-in")
+        if (module.Provenance.AuthenticatesBuiltIn(module))
         {
             return "dbo";
         }

@@ -84,7 +84,7 @@ public class CompanyServiceTests
         Assert.Equal("研发中心（更新）", updated.Name);
         Assert.False(updated.IsEnabled);
         Assert.Equal("20", updated.SortOrder);
-        Assert.NotNull(updated.UpdatedAt);
+        Assert.True(updated.UpdatedAt >= updated.CreatedAt);
     }
 
     private static ICompanyService BuildService() =>

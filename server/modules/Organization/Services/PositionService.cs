@@ -79,7 +79,7 @@ public sealed class PositionService : IPositionService
         IsEnabled = position.IsEnabled,
         SortOrder = position.SortOrder.ToString(CultureInfo.InvariantCulture),
         CreatedAt = position.CreatedAt,
-        UpdatedAt = position.UpdatedAt
+        UpdatedAt = position.UpdatedAt ?? position.CreatedAt
     };
 
     // 平台对象引用按字符串协议流转；服务层只负责空值失败信号。

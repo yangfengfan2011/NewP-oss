@@ -74,7 +74,7 @@ public class PositionServiceTests
         Assert.Equal("高级开发工程师", updated.Name);
         Assert.Equal(DepartmentId2, updated.DepartmentId);
         Assert.False(updated.IsEnabled);
-        Assert.NotNull(updated.UpdatedAt);
+        Assert.True(updated.UpdatedAt >= updated.CreatedAt);
     }
 
     private static PositionService BuildService() =>

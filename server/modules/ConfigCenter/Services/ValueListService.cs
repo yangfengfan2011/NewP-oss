@@ -164,7 +164,7 @@ public class ValueListService : IValueListService
             Description = item.Description,
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,
-            UpdatedBy = item.UpdatedBy
+            UpdatedBy = item.UpdatedBy ?? string.Empty
         };
     }
 }

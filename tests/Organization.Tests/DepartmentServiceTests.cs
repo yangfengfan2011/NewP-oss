@@ -107,7 +107,7 @@ public class DepartmentServiceTests
         Assert.Equal(root.Id, updated.ParentDepartmentId);
         Assert.False(updated.IsEnabled);
         Assert.Equal("3", updated.SortOrder);
-        Assert.NotNull(updated.UpdatedAt);
+        Assert.True(updated.UpdatedAt >= updated.CreatedAt);
     }
 
     private static IDepartmentService BuildService() =>

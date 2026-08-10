@@ -138,7 +138,7 @@ public class ConfigService : IConfigService
             IsSensitive = item.IsSensitive,
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,
-            UpdatedBy = item.UpdatedBy
+            UpdatedBy = item.UpdatedBy ?? string.Empty
         };
     }
 }

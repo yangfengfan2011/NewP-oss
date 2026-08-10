@@ -77,7 +77,7 @@ public sealed class CompanyService : ICompanyService
         IsEnabled = company.IsEnabled,
         SortOrder = company.SortOrder.ToString(CultureInfo.InvariantCulture),
         CreatedAt = company.CreatedAt,
-        UpdatedAt = company.UpdatedAt
+        UpdatedAt = company.UpdatedAt ?? company.CreatedAt
     };
 
     // 生成基础 DTO 以 catalog 字段类型为准；服务入口负责把可提交契约转换回领域模型类型。

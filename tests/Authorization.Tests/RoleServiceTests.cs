@@ -112,7 +112,7 @@ public class RoleServiceTests
         Assert.False(result.IsEnabled);
         Assert.Equal("TestRole", result.Code);
         Assert.Equal("reviewer", result.UpdatedBy);
-        Assert.NotNull(result.UpdatedAt);
+        Assert.True(result.UpdatedAt >= result.CreatedAt);
     }
 
     [Fact]

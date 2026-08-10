@@ -19,8 +19,11 @@ public static class PlatformCrudModelDefinitions
             new FieldDefinition("PositionId", "PositionId", FieldKind.Reference, FieldValueType.ObjectId, "string", false, false, false),
             new FieldDefinition("EmploymentStatus", "EmploymentStatus", FieldKind.Scalar, FieldValueType.Enum, "string", false, false, false),
             new FieldDefinition("IsEnabled", "IsEnabled", FieldKind.Scalar, FieldValueType.Boolean, "bool", true, false, false),
+            new FieldDefinition("EffectiveAt", "EffectiveAt", FieldKind.Scalar, FieldValueType.DateTime, "datetime", false, false, false),
+            new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true),
             new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true),
-            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true)
+            new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true),
+            new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true)
         ],
         Indexes: []);
 }

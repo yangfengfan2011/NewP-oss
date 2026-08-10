@@ -201,10 +201,10 @@ public class RoleService : IRoleService
             Description = role.Description,
             IsEnabled = role.IsEnabled,
             IsBuiltIn = role.IsBuiltIn,
-            CreatedBy = role.CreatedBy,
+            CreatedBy = role.CreatedBy ?? string.Empty,
             CreatedAt = role.CreatedAt,
-            UpdatedBy = role.UpdatedBy,
-            UpdatedAt = role.UpdatedAt
+            UpdatedBy = role.UpdatedBy ?? role.CreatedBy ?? string.Empty,
+            UpdatedAt = role.UpdatedAt ?? role.CreatedAt
         };
     }
 }

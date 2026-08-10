@@ -129,10 +129,10 @@ public sealed class ModelMetadataProjector
     private static void AddEntityFixedFields(List<FieldDefinition> fields, IReadOnlyCollection<string> builtinFields)
     {
         fields.Add(new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
-        fields.Add(new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
+        fields.Add(new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true));
         fields.Add(new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
-        fields.Add(new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", false, false, true));
-        fields.Add(new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", false, false, true));
+        fields.Add(new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true));
+        fields.Add(new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
 
         if (builtinFields.Contains("ENAME", StringComparer.OrdinalIgnoreCase))
         {

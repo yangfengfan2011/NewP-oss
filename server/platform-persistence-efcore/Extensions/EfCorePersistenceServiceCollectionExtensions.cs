@@ -1,4 +1,5 @@
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore.Ownership;
 using ICP.Platform.Persistence.EfCore.Sql;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace ICP.Platform.Persistence.EfCore.Extensions;
@@ -28,6 +30,8 @@ public static class EfCorePersistenceServiceCollectionExtensions
 
         services.AddSingleton(plan);
         services.AddSingleton(databaseIdentity);
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+        services.TryAddScoped<IEntityAuditStampProvider, SystemEntityAuditStampProvider>();
         services.AddOptions<PersistenceOptions>()
             .Bind(configuration.GetSection(PersistenceOptions.SectionName));
 

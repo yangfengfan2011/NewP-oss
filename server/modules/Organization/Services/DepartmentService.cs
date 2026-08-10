@@ -106,7 +106,7 @@ public sealed class DepartmentService : IDepartmentService
         IsEnabled = department.IsEnabled,
         SortOrder = department.SortOrder.ToString(CultureInfo.InvariantCulture),
         CreatedAt = department.CreatedAt,
-        UpdatedAt = department.UpdatedAt
+        UpdatedAt = department.UpdatedAt ?? department.CreatedAt
     };
 
     // 平台对象引用已是协议字符串；这里只拦截空值，避免服务层继续暗含 Guid 解析边界。

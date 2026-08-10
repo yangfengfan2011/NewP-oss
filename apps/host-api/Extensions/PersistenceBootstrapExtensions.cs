@@ -1,10 +1,13 @@
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.HostApi.Readiness;
+using ICP.Platform.HostApi.Persistence;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ICP.Platform.HostApi.Extensions;
 
@@ -19,6 +22,9 @@ public static class PersistenceBootstrapExtensions
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(plan);
 
+        services.AddHttpContextAccessor();
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddScoped<IEntityAuditStampProvider, HttpContextEntityAuditStampProvider>();
         var repositoryRoot = LocateRepositoryRootFromAppBase();
         services.AddEfCorePersistence(
             configuration,

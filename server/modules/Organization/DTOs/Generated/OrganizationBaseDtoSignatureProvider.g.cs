@@ -8,10 +8,10 @@ public sealed class OrganizationBaseDtoSignatureProvider
     public IReadOnlyDictionary<string, string> GetSignatures() =>
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["CompanyDto"] = "sha256:c505e399c41fea2eb54c7d9c54d6a027ad8dce74b8794bccea996d28585cbd7d",
-            ["DepartmentDto"] = "sha256:e765d452c0e3831043a16e2cc014c5f280b9d700982c066126a62e7e09f63529",
-            ["PersonDto"] = "sha256:ec1de3bf402f43fe86d91f725619a99b37d8d8eb43d73deb9a3c04c570f03484",
-            ["PersonUserLinkDto"] = "sha256:35a30904cc26fcbaf0294147491276871b0a4d727700a0ad839b11d1cd6f38ca",
-            ["PositionDto"] = "sha256:aed0e369f82cc69534574b895cd62ecb182b365ae0643726e355610d428ca749",
+            ["CompanyDto"] = "sha256:aae82252f0e340e1806ce213c98fe3da8a94a21280313dbcc461cb296160be43",
+            ["DepartmentDto"] = "sha256:87c3419879411ee139c6f1902865c771261d9f65a9a4530ed64212fa7a87cc6f",
+            ["PersonDto"] = "sha256:3f153257aa1159c1578839051db972f4bae6b84cfee64ebedcf5da99bc1d332d",
+            ["PersonUserLinkDto"] = "sha256:bc44e4770a1dd192d9bb0ae22455a3d1927daa3a630544ca213fd97e63027c29",
+            ["PositionDto"] = "sha256:f2d2fd9035080ce7a782bc74806a9aa7bfd367f521e03d20d5f88c5d2c95dc58",
         };
 }

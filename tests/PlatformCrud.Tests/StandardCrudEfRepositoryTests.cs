@@ -129,10 +129,10 @@ public sealed class StandardCrudEfRepositoryTests
         var updated = await repository.UpdateAsync(
             Descriptor(),
             "person-1",
-            new Dictionary<string, object?> { ["CreatedAt"] = expected.ToString("O") });
+            new Dictionary<string, object?> { ["EffectiveAt"] = expected.ToString("O") });
 
         Assert.NotNull(updated);
-        Assert.Equal(expected, Assert.IsType<DateTime>(updated["CreatedAt"]));
+        Assert.Equal(expected, Assert.IsType<DateTime>(updated["EffectiveAt"]));
     }
 
     [Fact]
@@ -146,10 +146,10 @@ public sealed class StandardCrudEfRepositoryTests
         await repository.UpdateAsync(
             Descriptor(),
             "person-1",
-            new Dictionary<string, object?> { ["UpdatedAt"] = string.Empty });
+            new Dictionary<string, object?> { ["EffectiveAt"] = string.Empty });
 
         var stored = await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").SingleAsync();
-        Assert.Null(stored["UpdatedAt"]);
+        Assert.Null(stored["EffectiveAt"]);
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public sealed class StandardCrudEfRepositoryTests
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled", "CreatedAt"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled", "EffectiveAt", "CreatedAt"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"]),
         OptionLabelFields = ["PersonNo", "ENAME"]

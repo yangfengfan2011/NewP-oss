@@ -84,7 +84,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
-            builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
+            builder.UseSetting("Platform:SkipAuthorizationCatalogInitialization", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>

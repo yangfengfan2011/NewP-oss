@@ -1,23 +1,22 @@
-using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class LocalAuthSeederTests
+public sealed class AuthorizationCatalogInitializerTests
 {
     [Fact]
     public async Task SeedCatalogAsync_ConvergesRoleWithoutAssigningConfiguredLegacyUser()
     {
         var permissionService = new RecordingPermissionService(converges: true);
         var roleService = new RecordingRoleService();
-        var seeder = CreateSeeder(permissionService, roleService);
+        var initializer = CreateInitializer(permissionService, roleService);
 
-        await seeder.SeedCatalogAsync([Permission("Organization.Person.View")]);
+        await initializer.InitializeAsync([Permission("Organization.Person.View")]);
 
         Assert.Equal(["Organization.Person.View"], roleService.AssignedPermissionCodes);
         Assert.Empty(roleService.AssignedRoleCodes);
@@ -28,14 +27,14 @@ public sealed class LocalAuthSeederTests
     {
         var permissionService = new RecordingPermissionService(converges: true);
         var roleService = new RecordingRoleService();
-        var seeder = CreateSeeder(permissionService, roleService);
+        var initializer = CreateInitializer(permissionService, roleService);
         var activePermissions = new[]
         {
             Permission("Organization.Person.View"),
             Permission("Organization.Person.Update")
         };
 
-        await seeder.SeedAsync(activePermissions);
+        await initializer.InitializeAsync(activePermissions);
 
         Assert.Equal(
             activePermissions.Select(static permission => permission.Code),
@@ -43,7 +42,7 @@ public sealed class LocalAuthSeederTests
         Assert.Equal(
             ["Organization.Person.Update", "Organization.Person.View"],
             roleService.AssignedPermissionCodes.Order(StringComparer.Ordinal));
-        Assert.Equal(["LocalAdmin"], roleService.AssignedRoleCodes);
+        Assert.Empty(roleService.AssignedRoleCodes);
     }
 
     [Fact]
@@ -51,10 +50,10 @@ public sealed class LocalAuthSeederTests
     {
         var permissionService = new RecordingPermissionService(converges: false);
         var roleService = new RecordingRoleService();
-        var seeder = CreateSeeder(permissionService, roleService);
+        var initializer = CreateInitializer(permissionService, roleService);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            seeder.SeedAsync(
+            initializer.InitializeAsync(
             [
                 Permission("Organization.Person.View"),
                 Permission("Organization.Person.Update")
@@ -70,10 +69,10 @@ public sealed class LocalAuthSeederTests
     {
         var permissionService = new RecordingPermissionService(converges: true);
         var roleService = new RecordingRoleService(rolePermissionsConverge: false);
-        var seeder = CreateSeeder(permissionService, roleService);
+        var initializer = CreateInitializer(permissionService, roleService);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            seeder.SeedAsync(
+            initializer.InitializeAsync(
             [
                 Permission("Organization.Person.View"),
                 Permission("Organization.Person.Update")
@@ -83,27 +82,13 @@ public sealed class LocalAuthSeederTests
         Assert.Empty(roleService.AssignedRoleCodes);
     }
 
-    [Fact]
-    public async Task SeedAsync_WhenUserRoleAssignmentDoesNotConverge_Fails()
-    {
-        var permissionService = new RecordingPermissionService(converges: true);
-        var roleService = new RecordingRoleService(userRolesConverge: false);
-        var seeder = CreateSeeder(permissionService, roleService);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            seeder.SeedAsync([Permission("Organization.Person.View")]));
-
-        Assert.Contains("AUTH_LOCAL_ADMIN_CATALOG_MISMATCH", exception.Message, StringComparison.Ordinal);
-    }
-
-    private static LocalAuthSeeder CreateSeeder(
+    private static AuthorizationCatalogInitializer CreateInitializer(
         IPermissionService permissionService,
         IRoleService roleService) =>
         new(
             permissionService,
             roleService,
-            Options.Create(new LocalAuthOptions()),
-            NullLogger<LocalAuthSeeder>.Instance);
+            NullLogger<AuthorizationCatalogInitializer>.Instance);
 
     private static PermissionDescriptor Permission(string code) => new()
     {

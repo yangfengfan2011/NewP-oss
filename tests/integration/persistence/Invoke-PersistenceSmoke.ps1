@@ -61,7 +61,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "dotnet-ef database update failed for $Provider" }
 
     $env:Persistence__AutoMigrate = "true"
-    $env:Platform__SkipLocalAuthSeeding = "true"
+    $env:Platform__SkipAuthorizationCatalogInitialization = "true"
     $env:ASPNETCORE_URLS = $hostUrl
 
     $stdout = Join-Path $repoRoot ".codex-temp\host-$($Provider.ToLowerInvariant())-smoke.out.log"

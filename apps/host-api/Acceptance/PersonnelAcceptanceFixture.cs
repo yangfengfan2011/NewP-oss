@@ -1,15 +1,11 @@
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Services;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Options;
 
 namespace ICP.Platform.HostApi.Acceptance;
 
@@ -40,7 +36,7 @@ public static class PersonnelAcceptanceFixture
             IRoleService roleService,
             ICompanyService companyService,
             IDepartmentService departmentService,
-            IOptions<LocalAuthOptions> localAuth,
+            IIdentityLocalAdministratorReadinessProbe localAdministrator,
             CancellationToken cancellationToken) =>
         {
             if (!HasExpectedSecret(context, options.Secret))
@@ -85,9 +81,15 @@ public static class PersonnelAcceptanceFixture
                     SortOrder = "10"
                 }, cancellationToken);
 
+            var administrator = await localAdministrator.InspectAsync(cancellationToken);
+            if (administrator is not { State: LocalAdministratorReadinessState.Ready, UserEid: not null })
+            {
+                return Results.Problem(statusCode: 503, title: "IDENTITY_LOCAL_ADMIN_INVARIANT");
+            }
+
             return Results.Ok(new PersonnelAcceptanceFixtureResponse(
                 options.RunId,
-                localAuth.Value.AdminUserId,
+                administrator.UserEid,
                 options.ReadOnlyUserId,
                 company.Id,
                 company.DisplayName,
@@ -95,26 +97,6 @@ public static class PersonnelAcceptanceFixture
                 department.DisplayName));
         });
 
-        group.MapPost("/read-only-login", async (HttpContext context) =>
-        {
-            if (!HasExpectedSecret(context, options.Secret))
-            {
-                return Results.NotFound();
-            }
-
-            var identity = new ClaimsIdentity(
-                [
-                    new Claim(ClaimTypes.NameIdentifier, options.ReadOnlyUserId),
-                    new Claim(ClaimTypes.Name, options.ReadOnlyUsername),
-                    new Claim("display_name", "Acceptance Read Only")
-                ],
-                CookieAuthenticationDefaults.AuthenticationScheme);
-            await context.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(identity),
-                new AuthenticationProperties { IsPersistent = false });
-            return Results.Ok(new { userId = options.ReadOnlyUserId });
-        });
     }
 
     private static bool HasExpectedSecret(HttpContext context, string expected)

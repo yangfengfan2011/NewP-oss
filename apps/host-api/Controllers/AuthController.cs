@@ -1,12 +1,13 @@
 using System.Security.Claims;
+using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Persistence.Abstractions;
 using PlatformAuthorizationService = ICP.Platform.Modules.Authorization.Services.IAuthorizationService;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ICP.Platform.HostApi.Controllers;
 
@@ -14,63 +15,94 @@ namespace ICP.Platform.HostApi.Controllers;
 [Route("api/auth")]
 public sealed class AuthController : ControllerBase
 {
-    private readonly LocalAuthOptions _options;
+    private readonly ILocalCredentialAuthenticator _credentialAuthenticator;
+    private readonly IAuthenticationSessionRegistry _sessionRegistry;
+    private readonly IPlatformTransactionExecutor _transactionExecutor;
+    private readonly IHostAuthenticationCookie _cookie;
+    private readonly PasswordVerificationGate _passwordVerificationGate;
     private readonly PlatformAuthorizationService _authorizationService;
 
-    public AuthController(IOptions<LocalAuthOptions> options, PlatformAuthorizationService authorizationService)
+    public AuthController(
+        ILocalCredentialAuthenticator credentialAuthenticator,
+        IAuthenticationSessionRegistry sessionRegistry,
+        IPlatformTransactionExecutor transactionExecutor,
+        IHostAuthenticationCookie cookie,
+        PasswordVerificationGate passwordVerificationGate,
+        PlatformAuthorizationService authorizationService)
     {
-        _options = options.Value;
+        _credentialAuthenticator = credentialAuthenticator;
+        _sessionRegistry = sessionRegistry;
+        _transactionExecutor = transactionExecutor;
+        _cookie = cookie;
+        _passwordVerificationGate = passwordVerificationGate;
         _authorizationService = authorizationService;
     }
 
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthUserResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
+    [EnableRateLimiting("authentication-login")]
+    public async Task<ActionResult<AuthUserResponse>> Login(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken)
     {
-        if (!string.Equals(request.Username, _options.Username, StringComparison.Ordinal) ||
-            !string.Equals(request.Password, _options.Password, StringComparison.Ordinal))
+        using var verificationLease = await _passwordVerificationGate.TryEnterAsync(cancellationToken);
+        if (verificationLease is null)
         {
-            return Unauthorized(new { message = "Invalid username or password." });
+            Response.Headers.RetryAfter = "1";
+            return ProblemResult(429, "AUTH_PASSWORD_VERIFICATION_BUSY");
         }
 
-        var permissions = await _authorizationService.GetUserPermissionsAsync(_options.AdminUserId, cancellationToken);
-        var claims = new List<Claim>
+        var authentication = await _credentialAuthenticator.AuthenticateAsync(
+            request.Username,
+            request.Password,
+            cancellationToken);
+        if (authentication.Status == LocalCredentialAuthenticationStatus.StoreUnavailable)
         {
-            new(ClaimTypes.NameIdentifier, _options.AdminUserId),
-            new(ClaimTypes.Name, _options.Username),
-            new("display_name", _options.DisplayName)
-        };
-
-        var roles = await _authorizationService.GetUserRolesAsync(_options.AdminUserId, cancellationToken);
-        foreach (var role in roles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, role));
+            return ProblemResult(503, authentication.FailureCode ?? LocalCredentialAuthenticationFailureCodes.StoreUnavailable);
         }
 
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var principal = new ClaimsPrincipal(identity);
+        if (authentication is not { Status: LocalCredentialAuthenticationStatus.Succeeded, Account: not null })
+        {
+            return ProblemResult(401, "AUTH_INVALID_CREDENTIALS");
+        }
 
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            principal,
-            new AuthenticationProperties
+        var permissions = await _authorizationService.GetUserPermissionsAsync(
+            authentication.Account.UserEid,
+            cancellationToken);
+        var issuance = await _transactionExecutor.ExecuteAsync(
+            token => _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
             {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(7)
-            });
+                UserEid = authentication.Account.UserEid,
+                Type = authentication.IsTemporary
+                    ? AuthenticationSessionType.Restricted
+                    : AuthenticationSessionType.Regular,
+                ActorId = authentication.Account.UserEid
+            }, token),
+            cancellationToken);
+        _cookie.Append(HttpContext, issuance.Credential, issuance.Session.ExpiresAtUtc);
 
-        return Ok(new AuthUserResponse(
-            _options.AdminUserId,
-            _options.Username,
-            _options.DisplayName,
-            permissions));
+        return Ok(ToResponse(authentication.Account, permissions, authentication.IsTemporary));
     }
 
     [HttpPost("logout")]
-    [AllowAnonymous]
-    public async Task<IActionResult> Logout()
+    [AuthenticatedOnly]
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
-        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        var sessionEid = User.FindFirstValue(HostSessionAuthenticationHandler.SessionEidClaim);
+        var userEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(sessionEid) && !string.IsNullOrWhiteSpace(userEid))
+        {
+            await _transactionExecutor.ExecuteAsync(
+                token => _sessionRegistry.RevokeCurrentAsync(new AuthenticationSessionRevocation
+                {
+                    SessionEid = sessionEid,
+                    Reason = "UserLogout",
+                    ActorId = userEid
+                }, token),
+                cancellationToken);
+        }
+
+        _cookie.Delete(HttpContext);
         return NoContent();
     }
 
@@ -79,19 +111,50 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<AuthUserResponse>> GetCurrentUser(CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(userId))
+        var accountCode = User.Identity?.Name;
+        var displayName = User.FindFirstValue("display_name");
+        if (string.IsNullOrWhiteSpace(userId)
+            || string.IsNullOrWhiteSpace(accountCode)
+            || string.IsNullOrWhiteSpace(displayName))
         {
-            return Unauthorized();
+            _cookie.Delete(HttpContext);
+            return ProblemResult(401, "AUTH_SESSION_INVALID");
         }
 
-        var username = User.Identity?.Name ?? _options.Username;
-        var displayName = User.FindFirstValue("display_name") ?? _options.DisplayName;
         var permissions = await _authorizationService.GetUserPermissionsAsync(userId, cancellationToken);
-
-        return Ok(new AuthUserResponse(userId, username, displayName, permissions));
+        var restricted = string.Equals(
+            User.FindFirstValue(HostSessionAuthenticationHandler.SessionTypeClaim),
+            AuthenticationSessionType.Restricted.ToString(),
+            StringComparison.Ordinal);
+        return Ok(new AuthUserResponse(userId, accountCode, displayName, permissions, restricted));
     }
+
+    private ObjectResult ProblemResult(int status, string code)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = code
+        };
+        problem.Extensions["code"] = code;
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        var result = StatusCode(status, problem);
+        result.ContentTypes.Add("application/problem+json");
+        return result;
+    }
+
+    private static AuthUserResponse ToResponse(
+        IdentityAccountSnapshot account,
+        IReadOnlyList<string> permissions,
+        bool mustChangePassword) =>
+        new(account.UserEid, account.ECODE, account.ENAME, permissions, mustChangePassword);
 }
 
 public sealed record LoginRequest(string Username, string Password);
 
-public sealed record AuthUserResponse(string Id, string Username, string DisplayName, IReadOnlyList<string> Permissions);
+public sealed record AuthUserResponse(
+    string Id,
+    string Username,
+    string DisplayName,
+    IReadOnlyList<string> Permissions,
+    bool MustChangePassword);

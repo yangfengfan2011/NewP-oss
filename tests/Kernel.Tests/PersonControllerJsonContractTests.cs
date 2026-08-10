@@ -65,7 +65,7 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
-            builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
+            builder.UseSetting("Platform:SkipAuthorizationCatalogInitialization", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
             builder.UseSetting("DevelopmentSchemaSync:Enabled", "false");
             builder.UseEnvironment("Testing");

@@ -1,4 +1,4 @@
-using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Modules.Authorization;
@@ -48,19 +48,17 @@ public class HostPersistenceBootstrapTests
     }
 
     [Fact]
-    public void AddLocalAuthSeeding_RegistersSeederAsScoped()
+    public void AuthorizationCatalogInitializer_IsRegisteredAsScoped()
     {
         var services = new ServiceCollection();
-        var configuration = BuildConfiguration();
+        services.AddScoped<AuthorizationCatalogInitializer>();
 
-        services.AddLocalAuthSeeding(configuration);
-
-        var descriptor = Assert.Single(services, service => service.ServiceType == typeof(LocalAuthSeeder));
+        var descriptor = Assert.Single(services, service => service.ServiceType == typeof(AuthorizationCatalogInitializer));
         Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Fact]
-    public void AddLocalAuthSeeding_AllowsValidatedProviderBuild()
+    public void AuthorizationCatalogInitializer_AllowsValidatedProviderBuild()
     {
         var services = new ServiceCollection();
         var configuration = BuildConfiguration();
@@ -71,7 +69,7 @@ public class HostPersistenceBootstrapTests
         {
             options.Assemblies.Add(typeof(AuthorizationModule).Assembly);
         });
-        services.AddLocalAuthSeeding(configuration);
+        services.AddScoped<AuthorizationCatalogInitializer>();
 
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {
@@ -80,9 +78,9 @@ public class HostPersistenceBootstrapTests
         });
         using var scope = provider.CreateScope();
 
-        var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
+        var initializer = scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>();
 
-        Assert.NotNull(seeder);
+        Assert.NotNull(initializer);
     }
 
     private static IConfiguration BuildConfiguration() =>
@@ -92,13 +90,7 @@ public class HostPersistenceBootstrapTests
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
                 ["Persistence:AutoMigrate"] = "false",
-                ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;",
-                ["LocalAuth:AdminUserId"] = "local-admin",
-                ["LocalAuth:Username"] = "admin",
-                ["LocalAuth:Password"] = "admin123",
-                ["LocalAuth:DisplayName"] = "Local Administrator",
-                ["LocalAuth:AdminRoleCode"] = "LocalAdmin",
-                ["LocalAuth:AdminRoleName"] = "Local Administrator"
+                ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
             })
             .Build();
 }

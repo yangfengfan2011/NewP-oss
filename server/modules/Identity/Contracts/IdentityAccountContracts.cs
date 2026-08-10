@@ -80,3 +80,57 @@ public interface IIdentityAccountDirectory
         IdentityAccountSearch search,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// 本地凭据验证的稳定结果状态。
+/// </summary>
+public enum LocalCredentialAuthenticationStatus
+{
+    /// <summary>账号与凭据有效。</summary>
+    Succeeded,
+
+    /// <summary>账号或凭据无效；调用方不得区分具体原因。</summary>
+    Invalid,
+
+    /// <summary>账号或凭据存储当前不可用。</summary>
+    StoreUnavailable
+}
+
+/// <summary>
+/// 本地凭据验证结果；不包含凭据或密码哈希。
+/// </summary>
+public sealed record LocalCredentialAuthenticationResult
+{
+    /// <summary>验证状态。</summary>
+    public LocalCredentialAuthenticationStatus Status { get; init; }
+
+    /// <summary>成功时返回的账号快照。</summary>
+    public IdentityAccountSnapshot? Account { get; init; }
+
+    /// <summary>成功凭据是否仍为临时凭据。</summary>
+    public bool IsTemporary { get; init; }
+
+    /// <summary>存储故障时返回的稳定失败码。</summary>
+    public string? FailureCode { get; init; }
+}
+
+/// <summary>
+/// LocalAuth 向 Host 暴露的窄凭据验证 seam。
+/// </summary>
+public interface ILocalCredentialAuthenticator
+{
+    /// <summary>
+    /// 使用 ECODE 与原始密码验证一个允许登录的账号。
+    /// </summary>
+    ValueTask<LocalCredentialAuthenticationResult> AuthenticateAsync(
+        string accountCode,
+        string password,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>LocalAuth 稳定失败码。</summary>
+public static class LocalCredentialAuthenticationFailureCodes
+{
+    /// <summary>Identity 或凭据存储当前不可用。</summary>
+    public const string StoreUnavailable = "AUTH_IDENTITY_STORE_UNAVAILABLE";
+}

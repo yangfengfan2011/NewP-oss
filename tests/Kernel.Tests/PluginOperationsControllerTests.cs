@@ -2,6 +2,8 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.Kernel.Abstractions;
@@ -10,9 +12,12 @@ using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using ICP.Platform.Modules.Audit.Services;
 using ICP.Platform.Modules.Audit.DTOs;
 using ICP.Platform.Modules.Audit.Models;
@@ -562,13 +567,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             AllowAutoRedirect = false
         });
         _factory.StubRoles = roles ?? new List<string> { "LocalAdmin" };
-        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
-        {
-            Username = "admin",
-            Password = "admin123"
-        });
-        Assert.True(loginResponse.IsSuccessStatusCode,
-            string.Format("Login failed with status {0}: {1}", loginResponse.StatusCode, await loginResponse.Content.ReadAsStringAsync()));
+        client.DefaultRequestHeaders.Add("X-NewP-Test-Authentication", "authenticated");
         return client;
     }
 
@@ -579,13 +578,7 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             AllowAutoRedirect = false
         });
         factory.StubRoles = roles ?? new List<string> { "LocalAdmin" };
-        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
-        {
-            Username = "admin",
-            Password = "admin123"
-        });
-        Assert.True(loginResponse.IsSuccessStatusCode,
-            string.Format("Login failed with status {0}: {1}", loginResponse.StatusCode, await loginResponse.Content.ReadAsStringAsync()));
+        client.DefaultRequestHeaders.Add("X-NewP-Test-Authentication", "authenticated");
         return client;
     }
 
@@ -627,14 +620,16 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
             builder.UseSetting("Platform:ExternalPluginsEnabled", _externalPluginsEnabled ? "true" : "false");
-            builder.UseSetting("Platform:SkipLocalAuthSeeding", "true");
+            builder.UseSetting("Platform:SkipAuthorizationCatalogInitialization", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
-                var seederDesc = services.FirstOrDefault(d =>
-                    d.ServiceType == typeof(ICP.Platform.HostApi.Authentication.LocalAuthSeeder));
-                if (seederDesc is not null) services.Remove(seederDesc);
+                services.AddSingleton(new TestAuthenticationState(() => StubRoles));
+                services.AddAuthentication(TestAuthenticationHandler.SchemeName)
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
+                        TestAuthenticationHandler.SchemeName,
+                        static _ => { });
                 services.AddSingleton<IAuthorizationService>(_ =>
                     new StubAuthorizationService(() => StubRoles));
                 services.TryAddSingleton<IPermissionService, StubPermissionService>();
@@ -685,6 +680,41 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             if (Directory.Exists(_installRoot))
                 Directory.Delete(_installRoot, recursive: true);
             base.Dispose();
+        }
+    }
+
+    private sealed record TestAuthenticationState(Func<IReadOnlyList<string>> Roles);
+
+    private sealed class TestAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+    {
+        public const string SchemeName = "PluginOperationsTests";
+        private readonly TestAuthenticationState _state;
+
+        public TestAuthenticationHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder,
+            TestAuthenticationState state)
+            : base(options, logger, encoder)
+        {
+            _state = state;
+        }
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            if (!Request.Headers.ContainsKey("X-NewP-Test-Authentication"))
+            {
+                return Task.FromResult(AuthenticateResult.NoResult());
+            }
+
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, "plugin-test-user"),
+                new(ClaimTypes.Name, "plugin-test-user")
+            };
+            claims.AddRange(_state.Roles().Select(role => new Claim(ClaimTypes.Role, role)));
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
         }
     }
 

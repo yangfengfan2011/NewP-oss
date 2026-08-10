@@ -23,7 +23,6 @@ using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.StandardData;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
@@ -81,32 +80,7 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddPlatformAuthorization();
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
-    {
-        options.Cookie.Name = builder.Configuration["LocalAuth:CookieName"] ?? "ICP.Platform.Auth";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.SlidingExpiration = true;
-        options.ExpireTimeSpan = TimeSpan.FromDays(7);
-        options.LoginPath = "/api/auth/login";
-        options.LogoutPath = "/api/auth/logout";
-        options.Events = new CookieAuthenticationEvents
-        {
-            OnRedirectToLogin = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return Task.CompletedTask;
-            },
-            OnRedirectToAccessDenied = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return Task.CompletedTask;
-            }
-        };
-    });
-builder.Services.AddLocalAuthSeeding(builder.Configuration);
+builder.Services.AddHostAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
 builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 
@@ -286,24 +260,17 @@ var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
     ((IEndpointRouteBuilder)app).DataSources,
     registry);
 
-var skipLocalAuthSeeding = builder.Configuration.GetValue<bool>("Platform:SkipLocalAuthSeeding");
+var skipAuthorizationCatalogInitialization = builder.Configuration.GetValue<bool>("Platform:SkipAuthorizationCatalogInitialization");
 var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancellationToken =>
 {
-    if (skipLocalAuthSeeding && !identityMaintenanceCommand.IsMaintenanceCommand)
+    if (skipAuthorizationCatalogInitialization && !identityMaintenanceCommand.IsMaintenanceCommand)
     {
         return;
     }
 
     using var scope = app.Services.CreateScope();
-    var seeder = scope.ServiceProvider.GetRequiredService<LocalAuthSeeder>();
-    if (identityMaintenanceCommand.IsMaintenanceCommand)
-    {
-        await seeder.SeedCatalogAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
-    }
-    else
-    {
-        await seeder.SeedAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
-    }
+    var initializer = scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>();
+    await initializer.InitializeAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
 });
 await activationSession.CompleteAsync(
     new HostPluginMigrationExecutor(app, activationSession.PersistencePlan),
@@ -338,7 +305,10 @@ if (Directory.Exists(publicAssetsPath))
     });
 }
 
+app.UseForwardedHeaders();
+app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();
 if (registeredServices?.IsService(typeof(IAuditService)) is true)
 {
     // Audit 插件被跳过时不能留下依赖其 scoped service 的宿主中间件。

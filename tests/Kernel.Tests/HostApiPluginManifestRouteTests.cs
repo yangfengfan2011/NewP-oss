@@ -535,7 +535,10 @@ public class HostApiPluginManifestRouteTests : IDisposable
             }
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
             process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
-            process.StartInfo.Environment["Platform__SkipLocalAuthSeeding"] = skipLocalAuthSeeding ? "true" : "false";
+            process.StartInfo.Environment["Platform__SkipAuthorizationCatalogInitialization"] = skipLocalAuthSeeding ? "true" : "false";
+            process.StartInfo.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(installRoot, ".host-auth-key-ring");
+            process.StartInfo.Environment["Authentication__Host__CookieName"] = "__Host-ICP.Platform.Auth";
+            process.StartInfo.Environment["Authentication__Host__ProtectKeysAtRest"] = "true";
             process.StartInfo.Environment["Persistence__AutoMigrate"] = "false";
             process.StartInfo.Environment["ConnectionStrings__SqlServer"] = "Server=localhost;Database=icp_platform_route_tests;Trusted_Connection=True;TrustServerCertificate=True;";
 

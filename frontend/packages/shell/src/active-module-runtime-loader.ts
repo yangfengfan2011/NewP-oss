@@ -4,6 +4,7 @@ import {
   type FrontendModule,
   type StandardCrudActionHandler,
 } from '@icp-platform/sdk';
+import { platformFetch } from '@icp-platform/core';
 import internalModuleRegistry from 'virtual:newp-frontend-entry-registry';
 
 export const ACTIVE_MODULE_RUNTIME_URL = '/plugins/active-module-runtime.json';
@@ -115,7 +116,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function createStandardDataStateActionHandlers(apiRoute: string): Record<string, StandardCrudActionHandler> {
-  const client = createStandardCrudClient(apiRoute);
+  const client = createStandardCrudClient(apiRoute, platformFetch);
   const requireId = (id: string | undefined, action: string): string => {
     if (!id) {
       throw new Error(`缺少资源标识，无法${action}。`);

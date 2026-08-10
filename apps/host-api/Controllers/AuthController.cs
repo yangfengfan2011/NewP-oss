@@ -1,11 +1,13 @@
 using System.Security.Claims;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.HostApi.Antiforgery;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Persistence.Abstractions;
 using PlatformAuthorizationService = ICP.Platform.Modules.Authorization.Services.IAuthorizationService;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -15,6 +17,16 @@ namespace ICP.Platform.HostApi.Controllers;
 [Route("api/auth")]
 public sealed class AuthController : ControllerBase
 {
+    [HttpGet("antiforgery-token")]
+    [AllowAnonymous]
+    public ActionResult<AntiforgeryTokenResponse> GetAntiforgeryToken(
+        [FromServices] IAntiforgery antiforgery)
+    {
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+        Response.Headers.CacheControl = "no-store";
+        return Ok(new AntiforgeryTokenResponse(tokens.RequestToken!));
+    }
+
     private readonly ILocalCredentialAuthenticator _credentialAuthenticator;
     private readonly IAuthenticationSessionRegistry _sessionRegistry;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
@@ -151,6 +163,8 @@ public sealed class AuthController : ControllerBase
 }
 
 public sealed record LoginRequest(string Username, string Password);
+
+public sealed record AntiforgeryTokenResponse(string RequestToken);
 
 public sealed record AuthUserResponse(
     string Id,

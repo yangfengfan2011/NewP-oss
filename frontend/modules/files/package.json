@@ -9,6 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
+    "@icp-platform/core": "workspace:*",
     "@icp-platform/sdk": "workspace:*",
     "@icp-platform/ui": "workspace:*"
   },

@@ -1,6 +1,7 @@
 using ICP.Platform.Modeling.Dto;
 using ICP.Platform.Modeling.Metadata;
-using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Modeling.Projection;
+using ICP.Platform.Modeling.Validation;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -20,27 +21,52 @@ public static class ModuleDtoSyncRunner
         var signaturesByModule = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
         var metadataRepositoryRoot = ResolveMetadataRepositoryRoot(repositoryRoot);
 
-        foreach (var definition in PlatformCoreLegacyModelSource.GetDefinitions())
+        var modelLoader = new JsonModelMetadataDocumentLoader();
+        var typeMap = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(
+            metadataRepositoryRoot,
+            "server",
+            "platform-modeling",
+            "metadata",
+            "storage-types.json"));
+        var validator = new ModelMetadataValidator();
+        var projector = new ModelMetadataProjector();
+        var modulesRoot = Path.Combine(metadataRepositoryRoot, "modules");
+
+        foreach (var moduleRoot in Directory.EnumerateDirectories(modulesRoot)
+                     .OrderBy(static path => path, StringComparer.Ordinal))
         {
-            var moduleId = ResolveModuleId(definition.Name);
-            var outputDirectory = Path.Combine(repositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
-            var outputPath = Path.Combine(outputDirectory, definition.Name + "Dto.g.cs");
-            var enumClrTypeMap = LoadEnumClrTypeMap(metadataRepositoryRoot, moduleId, definition.Name);
-            var sourceCode = GeneratedCodeWriter.WrapInNamespace(
-                generator.Generate(definition, enumClrTypeMap),
-                $"ICP.Platform.Modules.{moduleId}.DTOs",
-                ResolveUsingNamespaces(moduleId, enumClrTypeMap));
-
-            var writtenSourceCode = codeWriter.Write(outputPath, sourceCode);
-            writtenFiles.Add(outputPath);
-
-            if (!signaturesByModule.TryGetValue(moduleId, out var moduleSignatures))
+            var moduleId = Path.GetFileName(moduleRoot);
+            var modelDirectory = Path.Combine(moduleRoot, "metadata", "models");
+            if (!Directory.Exists(modelDirectory))
             {
-                moduleSignatures = new Dictionary<string, string>(StringComparer.Ordinal);
-                signaturesByModule[moduleId] = moduleSignatures;
+                continue;
             }
 
-            moduleSignatures[definition.Name + "Dto"] = DtoSignatureWriter.ComputeSignature(writtenSourceCode);
+            foreach (var modelPath in Directory.EnumerateFiles(modelDirectory, "*.model.json")
+                         .OrderBy(static path => path, StringComparer.Ordinal))
+            {
+                var document = modelLoader.LoadFromFile(modelPath);
+                validator.Validate(document, typeMap);
+                var definition = projector.Project(document, typeMap, "SqlServer");
+                var outputDirectory = Path.Combine(repositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
+                var outputPath = Path.Combine(outputDirectory, definition.Name + "Dto.g.cs");
+                var enumClrTypeMap = LoadEnumClrTypeMap(metadataRepositoryRoot, moduleId, definition.Name);
+                var sourceCode = GeneratedCodeWriter.WrapInNamespace(
+                    generator.Generate(definition, enumClrTypeMap),
+                    $"ICP.Platform.Modules.{moduleId}.DTOs",
+                    ResolveUsingNamespaces(moduleId, enumClrTypeMap));
+
+                var writtenSourceCode = codeWriter.Write(outputPath, sourceCode);
+                writtenFiles.Add(outputPath);
+
+                if (!signaturesByModule.TryGetValue(moduleId, out var moduleSignatures))
+                {
+                    moduleSignatures = new Dictionary<string, string>(StringComparer.Ordinal);
+                    signaturesByModule[moduleId] = moduleSignatures;
+                }
+
+                moduleSignatures[definition.Name + "Dto"] = DtoSignatureWriter.ComputeSignature(writtenSourceCode);
+            }
         }
 
         foreach (var module in signaturesByModule.OrderBy(static item => item.Key, StringComparer.Ordinal))
@@ -123,15 +149,4 @@ public static class ModuleDtoSyncRunner
         throw new InvalidOperationException("无法定位模型元数据所在的仓库根目录。");
     }
 
-    // 任务 5 只为已纳入 catalog 的内建模块建立受控映射，避免把模块归属推给元数据解释层。
-    private static string ResolveModuleId(string modelName)
-    {
-        return modelName switch
-        {
-            "Role" or "Permission" or "RolePermission" or "UserRole" => "Authorization",
-            "ConfigItem" or "ValueListItem" => "ConfigCenter",
-            "Company" or "Department" or "Position" or "Person" or "PersonUserLink" => "Organization",
-            _ => throw new InvalidOperationException($"模型 {modelName} 尚未配置 DTO 输出模块。")
-        };
-    }
 }

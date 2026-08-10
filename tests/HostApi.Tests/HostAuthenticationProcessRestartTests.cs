@@ -7,6 +7,7 @@ using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.HostApi.Controllers;
+using ICP.Platform.HostApi.Antiforgery;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using ICP.Platform.Modules.Authorization.Services;
@@ -76,7 +77,14 @@ public sealed class HostAuthenticationProcessRestartTests
             };
             process = StartHost(root, keyRing, plugins, applicationConnectionString, port, "authenticated");
             await WaitForHostAsync(process, port);
-            var login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin", "restart-secret-123"));
+            var tokenResponse = await client.GetFromJsonAsync<AntiforgeryTokenResponse>(HostAntiforgeryDefaults.TokenPath)
+                ?? throw new InvalidOperationException("Antiforgery token response was empty.");
+            using var loginRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+            {
+                Content = JsonContent.Create(new LoginRequest("admin", "restart-secret-123"))
+            };
+            loginRequest.Headers.TryAddWithoutValidation(HostAntiforgeryDefaults.HeaderName, tokenResponse.RequestToken);
+            var login = await client.SendAsync(loginRequest);
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
             var beforeRestart = await client.GetAsync("/api/auth/current-user");
             Assert.Equal(HttpStatusCode.OK, beforeRestart.StatusCode);

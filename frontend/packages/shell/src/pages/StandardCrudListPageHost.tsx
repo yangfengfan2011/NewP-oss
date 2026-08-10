@@ -1,6 +1,6 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuthorization, useLocalization } from '@icp-platform/core';
+import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
 import { DownloadOutlined, UserOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
@@ -513,7 +513,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
-  const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
+  const client = useMemo(() => createStandardCrudClient(schema.apiRoute, platformFetch), [schema.apiRoute]);
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
   const createFormSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
     mode: 'create',

@@ -7,7 +7,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "vitest --run"
   },
   "dependencies": {
     "@icp-platform/sdk": "workspace:*",
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^1.6.1"
   }
 }

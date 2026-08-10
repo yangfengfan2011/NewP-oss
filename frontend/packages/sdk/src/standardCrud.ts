@@ -714,7 +714,7 @@ async function requestBlob(
 }
 
 /** 创建标准 CRUD fetch 客户端；调用方可注入 fetcher 用于测试、鉴权包装或 Host 级横切处理。 */
-export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch = fetch): StandardCrudClient {
+export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch): StandardCrudClient {
   return {
     list: (query) => requestJson<unknown>(fetcher, buildStandardCrudPath(apiRoute, query), { method: 'GET' }, '加载标准列表失败'),
     exportList: (request) =>

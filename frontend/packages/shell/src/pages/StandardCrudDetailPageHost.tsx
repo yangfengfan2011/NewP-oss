@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
-import { useAuthorization, useLocalization } from '@icp-platform/core';
+import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -147,7 +147,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
-  const client = useMemo(() => createStandardCrudClient(schema.apiRoute), [schema.apiRoute]);
+  const client = useMemo(() => createStandardCrudClient(schema.apiRoute, platformFetch), [schema.apiRoute]);
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
   const formSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
     mode: 'edit',

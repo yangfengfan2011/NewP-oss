@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { usePermission } from '@icp-platform/core';
+import { platformFetch, usePermission } from '@icp-platform/core';
 import { PageHeader, SummaryCard, Panel, Badge, Button, LoadingState, ErrorState, EmptyState } from '@icp-platform/ui';
 
 interface ConfigItem {
@@ -66,7 +66,7 @@ export default function ConfigManagement() {
     try {
       // 这里不做复杂前端推导，直接提交用户当前输入；
       // 真正的类型约束和格式校验仍由后端配置写入接口兜底。
-      const response = await fetch(`/api/config/${editingItem.id}`, {
+      const response = await platformFetch(`/api/config/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: newValue }),

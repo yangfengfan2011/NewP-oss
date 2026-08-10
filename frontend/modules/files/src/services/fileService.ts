@@ -31,7 +31,7 @@ export class FileService {
     if (entityType) formData.append('entityType', entityType);
     if (entityId) formData.append('entityId', entityId);
 
-    const response = await fetch(`${this.baseUrl}/upload`, {
+    const response = await platformFetch(`${this.baseUrl}/upload`, {
       method: 'POST',
       body: formData
     });
@@ -96,7 +96,7 @@ export class FileService {
   }
 
   async delete(fileId: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/${fileId}`, {
+    const response = await platformFetch(`${this.baseUrl}/${fileId}`, {
       method: 'DELETE'
     });
 
@@ -106,7 +106,7 @@ export class FileService {
   }
 
   async permanentDelete(fileId: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/${fileId}/permanent`, {
+    const response = await platformFetch(`${this.baseUrl}/${fileId}/permanent`, {
       method: 'DELETE'
     });
 
@@ -125,3 +125,4 @@ export class FileService {
 }
 
 export const fileService = new FileService();
+import { platformFetch } from '@icp-platform/core';

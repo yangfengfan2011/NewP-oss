@@ -15,7 +15,7 @@
       {
         "name": "SessionType",
         "storage": { "type": "string" },
-        "contract": { "valueType": "enum", "clrType": "AuthenticationSessionType" }
+        "contract": { "valueType": "enum", "clrType": "ICP.Platform.Authentication.Contracts.AuthenticationSessionType" }
       },
       {
         "name": "ExpiresAt",

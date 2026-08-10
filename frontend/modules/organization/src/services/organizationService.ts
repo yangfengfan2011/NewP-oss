@@ -11,6 +11,7 @@ import {
   type StandardCrudMutationValues,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
+import { platformFetch } from '@icp-platform/core';
 
 export interface CompanyDto {
   id: string;
@@ -154,7 +155,7 @@ async function readResponseErrorMessage(response: Response, fallback: string): P
 }
 
 async function requestJson<T>(path: string, init: RequestInit, errorMessage: string): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await platformFetch(path, init);
   if (!response.ok) {
     throw new Error(await readResponseErrorMessage(response, errorMessage));
   }
@@ -362,7 +363,7 @@ export async function searchIdentityUsers(keyword: string): Promise<IdentityUser
 }
 
 export async function linkPersonUser(personId: string, userId: string): Promise<PersonUserLinkDto> {
-  const response = await fetch(`/api/organization/persons/${personId}/user-link`, {
+  const response = await platformFetch(`/api/organization/persons/${personId}/user-link`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',

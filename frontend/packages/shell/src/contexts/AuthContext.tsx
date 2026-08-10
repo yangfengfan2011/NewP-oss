@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthContext as IAuthContext } from '@icp-platform/sdk';
+import { invalidatePlatformAntiforgeryToken, platformFetch } from '@icp-platform/core';
 
 const AuthContext = createContext<IAuthContext | null>(null);
 
@@ -12,7 +13,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 页面刷新后恢复登录态
     const checkCurrentUser = async () => {
       try {
-        const response = await fetch('/api/auth/current-user', {
+        const response = await platformFetch('/api/auth/current-user', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
+    const response = await platformFetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,8 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Login failed');
     }
 
+    // 登录改变了防伪 token 绑定的认证主体，旧匿名 token 不得跨主体复用。
+    invalidatePlatformAntiforgeryToken();
+
     // 登录成功后拉取最新用户信息
-    const userRes = await fetch('/api/auth/current-user', {
+    const userRes = await platformFetch('/api/auth/current-user', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -74,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', {
+      await platformFetch('/api/auth/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout failed', error);
     } finally {
+      // 响应丢失时服务端是否已退出未知，客户端仍必须丢弃当前主体的 token。
+      invalidatePlatformAntiforgeryToken();
       setIsAuthenticated(false);
       setUser(undefined);
     }

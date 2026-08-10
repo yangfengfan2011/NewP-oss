@@ -70,7 +70,7 @@ export async function saveSettings(
   moduleId: string,
   payload: SaveSettingDefinitionsRequest,
 ): Promise<SaveSettingDefinitionsResult> {
-  const response = await fetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings`, {
+  const response = await platformFetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -82,9 +82,10 @@ export async function saveSettings(
 }
 
 export async function applySettings(moduleId: string): Promise<ApplySettingDefinitionsResult> {
-  const response = await fetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings/apply`, {
+  const response = await platformFetch(`/api/metadata-config/modules/${encodeURIComponent(moduleId)}/settings/apply`, {
     method: 'POST',
   });
 
   return readJson<ApplySettingDefinitionsResult>(response);
 }
+import { platformFetch } from '@icp-platform/core';

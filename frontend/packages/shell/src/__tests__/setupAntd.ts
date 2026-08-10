@@ -1,3 +1,14 @@
+import { vi } from 'vitest';
+
+vi.mock('@icp-platform/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@icp-platform/core')>();
+
+  return {
+    ...actual,
+    platformFetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init),
+  };
+});
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 if (typeof window !== 'undefined') {

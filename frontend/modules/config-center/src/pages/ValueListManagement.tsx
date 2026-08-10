@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatUserMessage, useLocalization, usePermission } from '@icp-platform/core';
+import { formatUserMessage, platformFetch, useLocalization, usePermission } from '@icp-platform/core';
 import { isUserMessageDto, type UserMessageDto } from '@icp-platform/sdk';
 import {
   PageHeader, SummaryCard, Panel, Button, Input, Textarea,
@@ -135,7 +135,7 @@ export default function ValueListManagement() {
         description: form.description.trim() || undefined
       };
 
-      const response = await fetch(
+      const response = await platformFetch(
         mode === 'create' ? '/api/value-lists' : `/api/value-lists/${selectedItem?.id}`,
         {
           method: mode === 'create' ? 'POST' : 'PUT',
@@ -170,7 +170,7 @@ export default function ValueListManagement() {
       setConfirmOpen(false);
 
       // 删除前先关闭确认弹窗，避免请求进行中继续重复触发删除动作。
-      const response = await fetch(`/api/value-lists/${selectedItem.id}`, {
+      const response = await platformFetch(`/api/value-lists/${selectedItem.id}`, {
         method: 'DELETE'
       });
 

@@ -190,8 +190,7 @@ function Invoke-ShellAcceptance {
     param(
         [Parameter(Mandatory)][int]$Port,
         [Parameter(Mandatory)]$ExpectedEndpoint,
-        [Parameter(Mandatory)][string]$Username,
-        [Parameter(Mandatory)][string]$Password,
+        [AllowNull()]$Credentials,
         [Parameter(Mandatory)][int]$RequestTimeoutSeconds
     )
 
@@ -228,11 +227,31 @@ function Invoke-ShellAcceptance {
         throw "DEV_SHELL_PROXY_IDENTITY_MISMATCH: proxied readiness belongs to another run."
     }
 
+    if ($null -eq $Credentials) {
+        return
+    }
+
     $webSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
-    $loginBody = @{ username = $Username; password = REDACTED_FOR_OPEN_SOURCE } | ConvertTo-Json -Compress
+    $tokenResponse = Invoke-WebRequest `
+        -Uri "$baseUri/api/auth/antiforgery-token" `
+        -WebSession $webSession `
+        -UseBasicParsing `
+        -SkipHttpErrorCheck `
+        -TimeoutSec $RequestTimeoutSeconds
+    if ($tokenResponse.StatusCode -ne 200) {
+        throw "DEV_ANTIFORGERY_TOKEN_FAILED: token endpoint returned $($tokenResponse.StatusCode)."
+    }
+
+    $tokenPayload = $tokenResponse.Content | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace([string]$tokenPayload.requestToken)) {
+        throw "DEV_ANTIFORGERY_TOKEN_INVALID: token endpoint returned an empty request token."
+    }
+
+    $loginBody = @{ username = $Credentials.Username; password = REDACTED_FOR_OPEN_SOURCE } | ConvertTo-Json -Compress
     $loginResponse = Invoke-WebRequest `
         -Uri "$baseUri/api/auth/login" `
         -Method Post `
+        -Headers @{ "X-CSRF-TOKEN" = [string]$tokenPayload.requestToken } `
         -ContentType "application/json" `
         -Body $loginBody `
         -WebSession $webSession `
@@ -240,7 +259,7 @@ function Invoke-ShellAcceptance {
         -SkipHttpErrorCheck `
         -TimeoutSec $RequestTimeoutSeconds
     if ($loginResponse.StatusCode -ne 200) {
-        throw "DEV_LOGIN_FAILED: real LocalAuth login returned $($loginResponse.StatusCode)."
+        throw "DEV_LOGIN_FAILED: Identity-backed login returned $($loginResponse.StatusCode)."
     }
 
     $currentUserResponse = Invoke-WebRequest `
@@ -254,28 +273,22 @@ function Invoke-ShellAcceptance {
     }
 
     $currentUser = $currentUserResponse.Content | ConvertFrom-Json
-    if (-not [string]::Equals([string]$currentUser.username, $Username, [StringComparison]::Ordinal)) {
-        throw "DEV_CURRENT_USER_MISMATCH: current-user did not match the LocalAuth login."
+    if (-not [string]::Equals([string]$currentUser.username, [string]$Credentials.Username, [StringComparison]::Ordinal)) {
+        throw "DEV_CURRENT_USER_MISMATCH: current-user did not match the Identity-backed login."
     }
 }
 
-function Get-LocalAuthCredentials {
-    $settings = Get-Content -LiteralPath (Join-Path $repoRoot "apps\host-api\appsettings.json") -Raw | ConvertFrom-Json
-    $username = if ([string]::IsNullOrWhiteSpace($env:NEWP_DEV_ADMIN_USERNAME)) {
-        [string]$settings.LocalAuth.Username
-    }
-    else {
-        $env:NEWP_DEV_ADMIN_USERNAME
-    }
-    $password = if ([string]::IsNullOrWhiteSpace($env:NEWP_DEV_ADMIN_PASSWORD)) {
-        [string]$settings.LocalAuth.Password
-    }
-    else {
-        $env:NEWP_DEV_ADMIN_PASSWORD
+function Get-DevelopmentSmokeCredentials {
+    $username = [string]$env:NEWP_DEV_ADMIN_USERNAME
+    $password = [string]$env:NEWP_DEV_ADMIN_PASSWORD
+    $hasUsername = -not [string]::IsNullOrWhiteSpace($username)
+    $hasPassword = -not [string]::IsNullOrWhiteSpace($password)
+    if (-not $hasUsername -and -not $hasPassword) {
+        return $null
     }
 
-    if ([string]::IsNullOrWhiteSpace($username) -or [string]::IsNullOrWhiteSpace($password)) {
-        throw "DEV_LOCAL_AUTH_CONFIG_MISSING: LocalAuth credentials are required for the startup smoke check."
+    if (-not $hasUsername -or -not $hasPassword) {
+        throw "DEV_AUTH_SMOKE_CREDENTIALS_INCOMPLETE: set both NEWP_DEV_ADMIN_USERNAME and NEWP_DEV_ADMIN_PASSWORD or neither."
     }
 
     return [pscustomobject]@{ Username = $username; Password = REDACTED_FOR_OPEN_SOURCE }
@@ -419,7 +432,7 @@ try {
         -WorktreeId $identity.WorktreeId `
         -HostPort $HostPort `
         -ShellPort $ShellPort
-    $credentials = Get-LocalAuthCredentials
+    $credentials = Get-DevelopmentSmokeCredentials
 
     $launcherLock = Enter-DevLauncherLock -Path $lockPath -TimeoutMilliseconds 5000
 
@@ -444,8 +457,7 @@ try {
         Invoke-ShellAcceptance `
             -Port $ports.ShellPort `
             -ExpectedEndpoint $existingState.endpointIdentity `
-            -Username $credentials.Username `
-            -Password $credentials.Password `
+            -Credentials $credentials `
             -RequestTimeoutSeconds $ShellRequestTimeoutSeconds
 
         $reuseRunId = "reuse-" + [DateTimeOffset]::UtcNow.ToString("yyyyMMddTHHmmssfff") + "-" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
@@ -512,8 +524,6 @@ try {
         "DevSupervisor__WorktreeId" = $identity.WorktreeId
         "DevSupervisor__RunId" = $runId
         "DevSupervisor__EndpointTokenFingerprint" = $endpointTokenFingerprint
-        "LocalAuth__Username" = $credentials.Username
-        "LocalAuth__Password" = $credentials.Password
     }
     if (-not [string]::IsNullOrWhiteSpace($env:NEWP_DEV_SQLSERVER_CONNECTION_STRING)) {
         $hostEnvironment["ConnectionStrings__SqlServer"] = $env:NEWP_DEV_SQLSERVER_CONNECTION_STRING
@@ -582,8 +592,7 @@ try {
     Invoke-ShellAcceptance `
         -Port $ports.ShellPort `
         -ExpectedEndpoint $endpointIdentity `
-        -Username $credentials.Username `
-        -Password $credentials.Password `
+        -Credentials $credentials `
         -RequestTimeoutSeconds $ShellRequestTimeoutSeconds
     Write-DevStage -Stage "shell-ready" -Status "passed"
 

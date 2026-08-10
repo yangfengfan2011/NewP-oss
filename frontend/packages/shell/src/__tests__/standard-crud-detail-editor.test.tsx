@@ -8,6 +8,13 @@ import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
+const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
+
+vi.mock('@icp-platform/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@icp-platform/core')>(),
+  platformFetch: platformFetchMock,
+}));
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('StandardCrudDetailPageHost editor fallback', () => {

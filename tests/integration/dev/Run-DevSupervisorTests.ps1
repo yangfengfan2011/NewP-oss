@@ -209,6 +209,9 @@ $stopScriptSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\stop-
 $viteSource = Get-Content -LiteralPath (Join-Path $repoRoot "frontend\packages\shell\vite.config.ts") -Raw
 Assert-True ($devScriptSource -match [regex]::Escape("scripts\lib\dev-supervisor.ps1")) "dev.ps1 must use the shared ownership library."
 Assert-True ($stopScriptSource -match [regex]::Escape("scripts\lib\dev-supervisor.ps1")) "stop-dev.ps1 must use the shared ownership library."
+Assert-True ($devScriptSource -notmatch "LocalAuth__") "dev.ps1 must not restore the removed LocalAuth configuration path."
+Assert-True ($devScriptSource -notmatch "settings\.LocalAuth") "dev.ps1 must not read a plaintext password from appsettings."
+Assert-True ($devScriptSource -match "antiforgery-token") "dev.ps1 authenticated smoke must follow the Host antiforgery protocol."
 Assert-True ($viteSource -match "strictPort\s*:\s*true") "Vite must refuse fallback ports."
 Assert-True ($viteSource -match "ICP_DEV_SHELL_PORT") "Vite must accept the supervisor-selected Shell port."
 Assert-True ($viteSource -match "ICP_DEV_HOST_PORT") "Vite proxy must use the supervisor-selected Host port."

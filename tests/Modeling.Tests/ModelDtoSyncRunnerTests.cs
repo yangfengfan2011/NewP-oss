@@ -49,11 +49,31 @@ public class ModelDtoSyncRunnerTests
             "DTOs",
             "Generated",
             "AuthorizationBaseDtoSignatureProvider.g.cs");
+        var authenticationSessionDtoPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Authentication",
+            "DTOs",
+            "Generated",
+            "AuthenticationSessionDto.g.cs");
+        var userDtoPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Identity",
+            "DTOs",
+            "Generated",
+            "UserDto.g.cs");
 
         Assert.Contains(roleDtoPath, writtenFiles);
         Assert.Contains(signaturePath, writtenFiles);
+        Assert.Contains(authenticationSessionDtoPath, writtenFiles);
+        Assert.Contains(userDtoPath, writtenFiles);
         Assert.True(File.Exists(roleDtoPath));
         Assert.True(File.Exists(signaturePath));
+        Assert.True(File.Exists(authenticationSessionDtoPath));
+        Assert.True(File.Exists(userDtoPath));
 
         var roleDtoSource = File.ReadAllText(roleDtoPath);
         var positionDtoSource = File.ReadAllText(positionDtoPath);

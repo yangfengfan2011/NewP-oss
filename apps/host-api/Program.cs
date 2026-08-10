@@ -6,6 +6,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Planning;
 using ICP.Platform.HostApi.Authentication;
+using ICP.Platform.HostApi.Antiforgery;
 using ICP.Platform.HostApi.Acceptance;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Endpoints;
@@ -81,6 +82,7 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.AddPlatformAuthorization();
 builder.Services.AddHostAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddHostAntiforgery(builder.Environment);
 builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
 builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 
@@ -308,6 +310,7 @@ if (Directory.Exists(publicAssetsPath))
 app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseHostAntiforgery();
 app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();
 if (registeredServices?.IsService(typeof(IAuditService)) is true)
 {

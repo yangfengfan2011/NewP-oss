@@ -15,7 +15,7 @@
       {
         "name": "Status",
         "storage": { "type": "string" },
-        "contract": { "valueType": "enum", "clrType": "IdentityAccountStatus" }
+        "contract": { "valueType": "enum", "clrType": "ICP.Platform.Identity.Contracts.IdentityAccountStatus" }
       },
       {
         "name": "IsLocalAdministrator",

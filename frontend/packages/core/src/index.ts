@@ -1,4 +1,5 @@
 export * from './authorization';
+export * from './http';
 export {
   LocalizationProvider,
   useEnumeration,

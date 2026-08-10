@@ -823,7 +823,7 @@ internal sealed class PersonnelAcceptanceRunner
     private async Task LoginAdminAsync(HttpClient client, CancellationToken cancellationToken)
     {
         var credentials = _credentials ?? throw new InvalidOperationException("Local credentials were not loaded.");
-        using var response = await client.PostAsJsonAsync("/api/auth/login", new
+        using var response = await SendJsonWithAntiforgeryAsync(client, HttpMethod.Post, "/api/auth/login", new
         {
             username = credentials.Username,
             password = credentials.Password
@@ -837,7 +837,7 @@ internal sealed class PersonnelAcceptanceRunner
         object payload,
         CancellationToken cancellationToken)
     {
-        using var response = await client.PostAsJsonAsync(path, payload, cancellationToken);
+        using var response = await SendJsonWithAntiforgeryAsync(client, HttpMethod.Post, path, payload, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.Created, body, path);
         using var json = JsonDocument.Parse(body);
@@ -852,7 +852,12 @@ internal sealed class PersonnelAcceptanceRunner
         ICollection<object> checks,
         CancellationToken cancellationToken)
     {
-        using var response = await client.PostAsJsonAsync("/api/organization/persons", payload, cancellationToken);
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Post,
+            "/api/organization/persons",
+            payload,
+            cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.BadRequest, body, check);
         using var json = JsonDocument.Parse(body);
@@ -871,7 +876,11 @@ internal sealed class PersonnelAcceptanceRunner
         bool enabled,
         CancellationToken cancellationToken)
     {
-        using var response = await client.PutAsJsonAsync($"/api/organization/companies/{Uri.EscapeDataString(id)}", new
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Put,
+            $"/api/organization/companies/{Uri.EscapeDataString(id)}",
+            new
         {
             displayName = name,
             isEnabled = enabled,
@@ -889,7 +898,11 @@ internal sealed class PersonnelAcceptanceRunner
         bool enabled,
         CancellationToken cancellationToken)
     {
-        using var response = await client.PutAsJsonAsync($"/api/organization/departments/{Uri.EscapeDataString(id)}", new
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Put,
+            $"/api/organization/departments/{Uri.EscapeDataString(id)}",
+            new
         {
             displayName = name,
             companyId,
@@ -899,6 +912,26 @@ internal sealed class PersonnelAcceptanceRunner
         }, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.OK, body, "update department state");
+    }
+
+    private static async Task<HttpResponseMessage> SendJsonWithAntiforgeryAsync(
+        HttpClient client,
+        HttpMethod method,
+        string path,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var tokenResponse = await client.GetAsync("/api/auth/antiforgery-token", cancellationToken);
+        var tokenBody = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(tokenResponse, HttpStatusCode.OK, tokenBody, "issue antiforgery token");
+        using var tokenJson = JsonDocument.Parse(tokenBody);
+        var requestToken = ReadString(tokenJson.RootElement, "requestToken");
+        using var request = new HttpRequestMessage(method, path)
+        {
+            Content = JsonContent.Create(payload)
+        };
+        request.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", requestToken);
+        return await client.SendAsync(request, cancellationToken);
     }
 
     private static Dictionary<string, object?> PersonPayload(

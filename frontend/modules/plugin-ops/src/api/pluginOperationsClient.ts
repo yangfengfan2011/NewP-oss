@@ -1,10 +1,9 @@
+import { platformFetch } from '@icp-platform/core';
 import type {
   PluginModuleStatus,
   PluginOperationResult,
   PluginUploadVerifyResult,
 } from '../types/pluginOperations';
-
-type Fetcher = typeof fetch;
 
 function buildRequest(init?: RequestInit): RequestInit {
   return {
@@ -61,20 +60,19 @@ async function readActionResult(request: Promise<Response>): Promise<PluginOpera
   return await readJson<PluginOperationResult>(response);
 }
 
-export async function getModules(fetcher: Fetcher = fetch): Promise<PluginModuleStatus[]> {
-  const response = await fetcher('/api/plugin-ops/modules', buildRequest());
+export async function getModules(): Promise<PluginModuleStatus[]> {
+  const response = await platformFetch('/api/plugin-ops/modules', buildRequest());
   await ensureOk(response);
   return await readJson<PluginModuleStatus[]>(response);
 }
 
 export async function verifyUpload(
   file: File,
-  fetcher: Fetcher = fetch,
 ): Promise<PluginUploadVerifyResult> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetcher(
+  const response = await platformFetch(
     '/api/plugin-ops/uploads/verify',
     buildRequest({
       method: 'POST',
@@ -92,10 +90,9 @@ export async function verifyUpload(
 
 export async function installUpload(
   uploadId: string,
-  fetcher: Fetcher = fetch,
 ): Promise<PluginOperationResult> {
   return await readActionResult(
-    fetcher(
+    platformFetch(
       `/api/plugin-ops/uploads/${encodeURIComponent(uploadId)}/install`,
       buildRequest({
         method: 'POST',
@@ -107,10 +104,9 @@ export async function installUpload(
 export async function enableModule(
   moduleId: string,
   version: string,
-  fetcher: Fetcher = fetch,
 ): Promise<PluginOperationResult> {
   return await readActionResult(
-    fetcher(
+    platformFetch(
       `/api/plugin-ops/modules/${encodeURIComponent(moduleId)}/enable`,
       buildRequest({
         method: 'POST',
@@ -125,10 +121,9 @@ export async function enableModule(
 
 export async function disableModule(
   moduleId: string,
-  fetcher: Fetcher = fetch,
 ): Promise<PluginOperationResult> {
   return await readActionResult(
-    fetcher(
+    platformFetch(
       `/api/plugin-ops/modules/${encodeURIComponent(moduleId)}/disable`,
       buildRequest({
         method: 'POST',
@@ -139,10 +134,9 @@ export async function disableModule(
 
 export async function uninstallModule(
   moduleId: string,
-  fetcher: Fetcher = fetch,
 ): Promise<PluginOperationResult> {
   return await readActionResult(
-    fetcher(
+    platformFetch(
       `/api/plugin-ops/modules/${encodeURIComponent(moduleId)}`,
       buildRequest({
         method: 'DELETE',
@@ -153,10 +147,9 @@ export async function uninstallModule(
 
 export async function rollbackModule(
   moduleId: string,
-  fetcher: Fetcher = fetch,
 ): Promise<PluginOperationResult> {
   return await readActionResult(
-    fetcher(
+    platformFetch(
       `/api/plugin-ops/modules/${encodeURIComponent(moduleId)}/rollback`,
       buildRequest({
         method: 'POST',

@@ -18,6 +18,7 @@ vi.mock('@icp-platform/core', async () => {
 
   return {
     ...actual,
+    platformFetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init),
     usePermission: () => true,
   };
 });

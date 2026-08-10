@@ -11,6 +11,14 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class IdentityFoundationMigrationTests
 {
     [Fact]
+    public void SqlServerLegacyFrontier_IncludesPersonLifecycleRevision()
+    {
+        Assert.Equal(
+            "20260810111523_Organization_PersonLifecycleRevision",
+            PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline);
+    }
+
+    [Fact]
     public void LegacyDesignModel_ExcludesModuleOwnedIdentityFoundationModels()
     {
         var definitions = PlatformCoreLegacyModelSource.GetDefinitions();

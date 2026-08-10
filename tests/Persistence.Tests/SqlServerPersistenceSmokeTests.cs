@@ -26,7 +26,8 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string RunEnvironmentVariable = "NEWP_RUN_SQLSERVER_SMOKE";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION";
     private const string PreviousMigration = "20260428145214_AlignModelMetadataEntityKeys";
-    private const string LatestMigration = "20260808054041_AlignOrganizationSchemaDrift";
+    private const string PersonPermanentBindingMigration = "20260810102141_Organization_PermanentUserBinding";
+    private const string LatestMigration = "20260810111523_Organization_PersonLifecycleRevision";
     private const string ModuleMigrationOne = "20260809001000_CreateAssetCatalog";
     private const string ModuleMigrationTwo = "20260809002000_AddUniqueAssetCode";
     private const string ModuleSchema = "np_partner_assetcatalog";
@@ -55,6 +56,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerModuleMigrations_ApplyNoOpFailureRetryAndOldPlanAhead() =>
         RunCatalogScenarioAsync("module", VerifyModuleMigrationLifecycleAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerLegacyFrontier_UpgradesPermanentBindingToPersonRevision() =>
+        RunCatalogScenarioAsync("revision", VerifyPersonRevisionUpgradeAsync);
 
     private static async Task RunCatalogScenarioAsync(
         string purpose,
@@ -181,6 +187,35 @@ public sealed class SqlServerPersistenceSmokeTests
             applicationConnectionString,
             "UPDATE [dbo].[__NewPDatabaseOwnership] SET [Version] = 2 WHERE [MarkerId] = 1;"));
         Assert.Equal(51000, exception.Number);
+    }
+
+    private static async Task VerifyPersonRevisionUpgradeAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        await using var provider = BuildProvider(
+            applicationConnectionString,
+            identity,
+            BuildLegacyFrontierPlan(PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline));
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var guard = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationGuard>();
+            await guard.VerifyAsync();
+            var context = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            await context.GetService<IMigrator>().MigrateAsync(PersonPermanentBindingMigration);
+        }
+
+        Assert.DoesNotContain(LatestMigration, await ReadAppliedMigrationsAsync(applicationConnectionString));
+
+        Assert.False(await RunMigrationsAsync(provider));
+
+        Assert.Contains(LatestMigration, await ReadAppliedMigrationsAsync(applicationConnectionString));
+        await ExecuteNonQueryAsync(
+            applicationConnectionString,
+            "SELECT TOP (0) [Revision] FROM [dbo].[Person];");
     }
 
     private static async Task VerifyNonEmptyUnownedCatalogIsRejectedAsync(
@@ -472,6 +507,31 @@ public sealed class SqlServerPersistenceSmokeTests
             [],
             models,
             [legacyStream, stream]);
+    }
+
+    private static CompiledPersistencePlan BuildLegacyFrontierPlan(string frontier)
+    {
+        var models = TestPersistencePlan.Create().Models;
+        var modelDigest = PersistenceModelDigest.Compute(models);
+        var stream = new ModuleMigrationStream(
+            "platform.core",
+            PersistenceProvider.SqlServer,
+            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
+            "platform.core:legacy-baseline",
+            modelDigest,
+            modelDigest,
+            frontier,
+            IsLegacyBaseline: true,
+            []);
+        return new CompiledPersistencePlan(
+            "legacy-frontier-test",
+            modelDigest,
+            modelDigest,
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            models,
+            [stream]);
     }
 
     private static async Task<string> CreateCatalogAsync(

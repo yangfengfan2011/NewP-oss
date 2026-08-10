@@ -19,7 +19,7 @@ vi.mock('../contexts/PlatformContext', () => ({
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
     isAuthenticated: true,
-    user: { displayName: 'Local Administrator' },
+    user: { ename: 'Local Administrator' },
     hasAnyPermission: () => true,
     logout: vi.fn(),
   }),

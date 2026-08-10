@@ -79,7 +79,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
             {
                 new(ClaimTypes.NameIdentifier, account.UserEid),
                 new(ClaimTypes.Name, account.ECODE),
-                new("display_name", account.ENAME),
+                new("ename", account.ENAME),
                 new(SessionEidClaim, validation.Session.SessionEid),
                 new(SessionTypeClaim, validation.Session.Type.ToString()),
                 new(AccountRevisionClaim, account.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture)),
@@ -108,23 +108,28 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
     {
         if (Context.Items.ContainsKey(StoreUnavailableItem))
         {
-            Context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            Context.Response.ContentType = "application/problem+json";
-            return Context.Response.WriteAsync(JsonSerializer.Serialize(new
-            {
-                status = 503,
-                code = AuthenticationSessionFailureCodes.StoreUnavailable,
-                traceId = Context.TraceIdentifier
-            }));
+            return WriteProblemAsync(
+                StatusCodes.Status503ServiceUnavailable,
+                AuthenticationSessionFailureCodes.StoreUnavailable);
         }
 
-        Context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return Task.CompletedTask;
+        return WriteProblemAsync(StatusCodes.Status401Unauthorized, "AUTH_AUTHENTICATION_REQUIRED");
     }
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
     {
-        Context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return Task.CompletedTask;
+        return WriteProblemAsync(StatusCodes.Status403Forbidden, "AUTH_FORBIDDEN");
+    }
+
+    private Task WriteProblemAsync(int status, string code)
+    {
+        Context.Response.StatusCode = status;
+        Context.Response.ContentType = "application/problem+json";
+        return Context.Response.WriteAsync(JsonSerializer.Serialize(new
+        {
+            status,
+            code,
+            traceId = Context.TraceIdentifier
+        }));
     }
 }

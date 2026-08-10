@@ -93,8 +93,10 @@ public sealed class IdentityLocalAdministratorReadinessProbe(
         }
 
         var administrator = administrators[0];
+        var credential = await repository.FindCredentialAsync(administrator.EID, cancellationToken);
         if (administrator.Status != IdentityAccountStatus.Enabled
-            || await repository.FindCredentialAsync(administrator.EID, cancellationToken) is null)
+            || credential is null
+            || !IsSupportedPasswordHash(credential.PasswordHash))
         {
             return new(LocalAdministratorReadinessState.InvariantInvalid, "local-administrator-credential-invalid", administrator.EID);
         }
@@ -106,6 +108,43 @@ public sealed class IdentityLocalAdministratorReadinessProbe(
         }
 
         return new(LocalAdministratorReadinessState.Ready, "local-administrator-ready", administrator.EID);
+    }
+
+    private static bool IsSupportedPasswordHash(string passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash))
+        {
+            return false;
+        }
+
+        byte[] decoded;
+        try
+        {
+            decoded = Convert.FromBase64String(passwordHash);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        if (decoded.Length == 49 && decoded[0] == 0)
+        {
+            return true;
+        }
+
+        if (decoded.Length < 14 || decoded[0] != 1)
+        {
+            return false;
+        }
+
+        var prf = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(decoded.AsSpan(1, 4));
+        var iterations = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(decoded.AsSpan(5, 4));
+        var saltLength = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(decoded.AsSpan(9, 4));
+        return prf <= 2
+            && iterations > 0
+            && saltLength >= 16
+            && saltLength <= int.MaxValue
+            && decoded.Length >= 13 + (int)saltLength + 16;
     }
 }
 

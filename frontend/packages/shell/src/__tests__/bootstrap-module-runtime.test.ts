@@ -9,7 +9,8 @@ describe('Shell module runtime bootstrap', () => {
     const renderApp = vi.fn();
     const renderFatal = vi.fn();
 
-    await bootstrapShell({ registerModules, initializeModules, renderApp, renderFatal });
+    const readAuthenticationState = vi.fn().mockResolvedValue('regular' as const);
+    await bootstrapShell({ readAuthenticationState, registerModules, initializeModules, renderApp, renderFatal });
 
     expect(initializeModules).not.toHaveBeenCalled();
     expect(renderApp).not.toHaveBeenCalled();
@@ -22,4 +23,27 @@ describe('Shell module runtime bootstrap', () => {
     expect(initializeModules).toHaveBeenCalledTimes(1);
     expect(renderApp).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['anonymous', 'restricted'] as const)(
+    'renders core authentication before loading modules for %s sessions',
+    async (authenticationState) => {
+      const registerModules = vi.fn();
+      const initializeModules = vi.fn();
+      const renderApp = vi.fn();
+      const renderFatal = vi.fn();
+
+      await bootstrapShell({
+        readAuthenticationState: vi.fn().mockResolvedValue(authenticationState),
+        registerModules,
+        initializeModules,
+        renderApp,
+        renderFatal,
+      });
+
+      expect(registerModules).not.toHaveBeenCalled();
+      expect(initializeModules).not.toHaveBeenCalled();
+      expect(renderApp).toHaveBeenCalledOnce();
+      expect(renderFatal).not.toHaveBeenCalled();
+    },
+  );
 });

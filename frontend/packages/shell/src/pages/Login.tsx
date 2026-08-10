@@ -1,22 +1,20 @@
 import { FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
-  const [username, setUsername] = useState('');
+  const [ecode, setEcode] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const auth = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      await auth.login(username, password);
-      navigate('/');
+      await auth.login(ecode, password);
+      window.location.assign('/');
     } catch (loginError) {
       console.error('Login failed:', loginError);
       setError('登录失败，请检查用户名和密码。');
@@ -43,17 +41,17 @@ export default function Login() {
           <p>请使用现有账号凭据登录统一 Shell。</p>
           <form onSubmit={handleSubmit}>
             <div className="sh-form-group">
-              <label className="sh-form-label" htmlFor="username">
-                用户名
+              <label className="sh-form-label" htmlFor="ecode">
+                登录账号（ECODE）
               </label>
               <input
-                id="username"
+                id="ecode"
                 type="text"
                 className="sh-form-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={ecode}
+                onChange={(e) => setEcode(e.target.value)}
                 required
-                placeholder="请输入用户名"
+                placeholder="请输入登录账号"
               />
             </div>
             <div className="sh-form-group sh-form-group-lg">

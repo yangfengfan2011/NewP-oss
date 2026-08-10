@@ -131,6 +131,28 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
         Assert.Equal("local-administrator-credential-invalid", result.Diagnostic);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-password-hash")]
+    [InlineData("AA==")]
+    [InlineData("AQAAAAEAAYagAAAAEAAAAAAAAAAAAAAAAAAAAAAB")]
+    public async Task InspectAsync_WhenAdministratorCredentialHashIsUnsupported_ReportsStableInvariantDiagnostic(
+        string passwordHash)
+    {
+        var fixture = new Fixture();
+        await fixture.Service.BootstrapAsync(new BootstrapLocalAdministratorCommand(
+            "admin",
+            "Local Administrator",
+            "首次初始化",
+            fixture.Actor));
+        fixture.Repository.Credentials.Single().PasswordHash = passwordHash;
+
+        var result = await fixture.Probe.InspectAsync();
+
+        Assert.Equal(LocalAdministratorReadinessState.InvariantInvalid, result.State);
+        Assert.Equal("local-administrator-credential-invalid", result.Diagnostic);
+    }
+
     [Fact]
     public async Task InspectAsync_WhenTwoProtectedAdministratorsExist_ReportsStableInvariantDiagnostic()
     {

@@ -16,6 +16,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IReadOnlyDictionary<string, IStandardCrudValidator> _validators;
     private readonly IReadOnlyDictionary<(string ResourceKey, string ActionKey), IStandardCrudActionHandler> _actionHandlers;
     private readonly IReadOnlyDictionary<string, IStandardCrudDeleteGuard> _deleteGuards;
+    private readonly IReadOnlyDictionary<string, IStandardCrudConditionalDeleteExecutor> _conditionalDeleteExecutors;
 
     public StandardCrudService(
         IStandardCrudRepository repository,
@@ -25,7 +26,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
         IEnumerable<IStandardCrudValidator> validators,
         IEnumerable<IStandardCrudActionHandler> actionHandlers,
-        IEnumerable<IStandardCrudDeleteGuard> deleteGuards)
+        IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
+        IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -35,6 +37,8 @@ public sealed class StandardCrudService : IStandardCrudService
         _validators = validators.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _actionHandlers = actionHandlers.ToDictionary(item => (item.ResourceKey, item.ActionKey));
         _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
+        _conditionalDeleteExecutors = (conditionalDeleteExecutors ?? [])
+            .ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -264,6 +268,11 @@ public sealed class StandardCrudService : IStandardCrudService
                 Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 使用条件删除但未注册删除守卫。",
                 ReasonKey = "standardCrud.deleteGuardMissing"
             });
+        }
+
+        if (_conditionalDeleteExecutors.TryGetValue(descriptor.ResourceKey, out var conditionalDeleteExecutor))
+        {
+            return await conditionalDeleteExecutor.DeleteAsync(descriptor, id, cancellationToken);
         }
 
         if (_deleteGuards.TryGetValue(descriptor.ResourceKey, out var deleteGuard))

@@ -13,16 +13,6 @@ public sealed class RestrictedAuthenticationSessionMiddleware
         new("/api/identity/me/password-change")
     ];
 
-    private static readonly PathString[] ShellRuntimeManifestPaths =
-    [
-        new("/plugins/active-module-runtime.json"),
-        new("/plugins/frontend-plugin-manifest.json"),
-        new("/plugins/localization-manifest.json"),
-        new("/plugins/metadata-runtime-manifest.json")
-    ];
-
-    private static readonly PathString ShellRuntimeAssetsPrefix = new("/plugins/runtime");
-
     private readonly RequestDelegate _next;
 
     public RestrictedAuthenticationSessionMiddleware(RequestDelegate next)
@@ -36,12 +26,8 @@ public sealed class RestrictedAuthenticationSessionMiddleware
             context.User.FindFirst(HostSessionAuthenticationHandler.SessionTypeClaim)?.Value,
             AuthenticationSessionType.Restricted.ToString(),
             StringComparison.Ordinal);
-        var allowedShellRuntimeRead = HttpMethods.IsGet(context.Request.Method)
-            && (ShellRuntimeManifestPaths.Any(path => context.Request.Path.Equals(path))
-                || context.Request.Path.StartsWithSegments(ShellRuntimeAssetsPrefix));
         if (restricted
-            && !AllowedPaths.Any(path => context.Request.Path.Equals(path))
-            && !allowedShellRuntimeRead)
+            && !AllowedPaths.Any(path => context.Request.Path.Equals(path)))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new

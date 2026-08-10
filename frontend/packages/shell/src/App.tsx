@@ -67,6 +67,38 @@ function PasswordChangeRoute() {
     : <Navigate to={destination} replace />;
 }
 
+function AuthenticationOnlyRoutes() {
+  const auth = useAuth();
+  if (!auth.isInitialized) return null;
+  if (!auth.isAuthenticated || !auth.user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/account/change-password" element={<PasswordChangeRoute />} />
+      <Route path="*" element={<Navigate to="/account/change-password" replace />} />
+    </Routes>
+  );
+}
+
+export function AuthenticationOnlyApp() {
+  return (
+    <ConfigProvider theme={shellAntdTheme}>
+      <BrowserRouter>
+        <AuthProvider>
+          <AuthenticationOnlyRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </ConfigProvider>
+  );
+}
+
 function LocalAdministratorGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   return auth.user?.isLocalAdministrator ? <>{children}</> : <Navigate to="/" replace />;

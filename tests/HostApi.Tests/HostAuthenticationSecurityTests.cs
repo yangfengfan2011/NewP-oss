@@ -119,6 +119,42 @@ public sealed class HostAuthenticationSecurityTests
         Assert.False(cookie.WasDeleted);
     }
 
+    [Theory]
+    [InlineData(false, 401, "AUTH_AUTHENTICATION_REQUIRED")]
+    [InlineData(true, 403, "AUTH_FORBIDDEN")]
+    public async Task SessionChallengeAndForbidden_ReturnProblemContractWithoutSecrets(
+        bool forbidden,
+        int expectedStatus,
+        string expectedCode)
+    {
+        var builder = new WebHostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddAuthentication(HostSessionAuthenticationHandler.SchemeName)
+                    .AddScheme<AuthenticationSchemeOptions, HostSessionAuthenticationHandler>(
+                        HostSessionAuthenticationHandler.SchemeName,
+                        static _ => { });
+                services.AddSingleton<IHostAuthenticationCookie>(new RecordingCookie(readValue: null));
+                services.AddScoped<IAuthenticationSessionRegistry, StoreUnavailableRegistry>();
+                services.AddScoped<IIdentityAccountDirectory, UnusedAccountDirectory>();
+                services.AddScoped<IAuthorizationService, UnusedAuthorizationService>();
+            })
+            .Configure(app => app.Run(context => forbidden
+                ? context.ForbidAsync(HostSessionAuthenticationHandler.SchemeName)
+                : context.ChallengeAsync(HostSessionAuthenticationHandler.SchemeName)));
+        using var server = new TestServer(builder);
+
+        var response = await server.CreateClient().GetAsync("/");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(expectedStatus, (int)response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains($"\"code\":\"{expectedCode}\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"traceId\":", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("credential", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("cookie", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task PasswordVerificationGate_RejectsTwentyFirstConcurrentVerificationWithoutQueueing()
     {
@@ -132,6 +168,34 @@ public sealed class HostAuthenticationSecurityTests
         Assert.Null(await gate.TryEnterAsync(CancellationToken.None));
 
         leases.ForEach(static lease => lease.Dispose());
+    }
+
+    [Fact]
+    public async Task PasswordVerificationGate_UsesConfiguredNonDefaultConcurrency()
+    {
+        using var gate = new PasswordVerificationGate(Options.Create(new HostAuthenticationOptions
+        {
+            MaximumConcurrentPasswordVerifications = 2
+        }));
+        using var first = Assert.IsAssignableFrom<IDisposable>(await gate.TryEnterAsync(CancellationToken.None));
+        using var second = Assert.IsAssignableFrom<IDisposable>(await gate.TryEnterAsync(CancellationToken.None));
+
+        Assert.Null(await gate.TryEnterAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public void AuthenticationOptions_InvalidCapacityUsesAccurateStableCode()
+    {
+        var validator = new HostAuthenticationOptionsValidator(new TestEnvironment("Development"));
+
+        var result = validator.Validate(null, new HostAuthenticationOptions
+        {
+            LoginAttemptsPerMinute = 0
+        });
+
+        Assert.True(result.Failed);
+        Assert.Contains(HostAuthenticationOptionsValidator.OptionsInvalid, result.FailureMessage ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(HostAuthenticationOptionsValidator.KeyRingInvalid, result.FailureMessage ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -206,6 +270,42 @@ public sealed class HostAuthenticationSecurityTests
             var rejected = await client.PostAsync("/api/auth/login", null);
             Assert.Equal(StatusCodes.Status429TooManyRequests, (int)rejected.StatusCode);
             Assert.Equal("60", Assert.Single(rejected.Headers.GetValues("Retry-After")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoginFixedWindow_UsesConfiguredNonDefaultLimit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"newp-auth-rate-custom-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+            builder.WebHost.UseTestServer();
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Authentication:Host:KeyRingPath"] = root,
+                ["Authentication:Host:LoginAttemptsPerMinute"] = "2"
+            });
+            builder.Services.AddHostAuthentication(builder.Configuration, builder.Environment);
+            builder.Services.AddScoped<IAuthenticationSessionPurgeService, NoOpPurge>();
+            builder.Services.AddScoped<IAuthenticationSessionRegistry, StoreUnavailableRegistry>();
+            builder.Services.AddScoped<IIdentityAccountDirectory, UnusedAccountDirectory>();
+            builder.Services.AddScoped<IAuthorizationService, UnusedAuthorizationService>();
+            builder.Services.RemoveAll<AuthorizationCatalogInitializer>();
+            await using var app = builder.Build();
+            app.UseRateLimiter();
+            app.MapPost("/api/auth/login", () => Results.NoContent()).RequireRateLimiting("authentication-login");
+            await app.StartAsync();
+            var client = app.GetTestClient();
+
+            Assert.Equal(StatusCodes.Status204NoContent, (int)(await client.PostAsync("/api/auth/login", null)).StatusCode);
+            Assert.Equal(StatusCodes.Status204NoContent, (int)(await client.PostAsync("/api/auth/login", null)).StatusCode);
+            Assert.Equal(StatusCodes.Status429TooManyRequests, (int)(await client.PostAsync("/api/auth/login", null)).StatusCode);
         }
         finally
         {
@@ -303,7 +403,7 @@ public sealed class HostAuthenticationSecurityTests
     [InlineData("/plugins/localization-manifest.json")]
     [InlineData("/plugins/metadata-runtime-manifest.json")]
     [InlineData("/plugins/runtime/Identity/metadata/navigation/Identity.nav.json")]
-    public async Task RestrictedSession_AllowsReadOnlyShellRuntimeAssets(string path)
+    public async Task RestrictedSession_RejectsBusinessModuleRuntimeAssets(string path)
     {
         var nextCalled = false;
         var middleware = new RestrictedAuthenticationSessionMiddleware(_ =>
@@ -321,7 +421,9 @@ public sealed class HostAuthenticationSecurityTests
 
         await middleware.InvokeAsync(context);
 
-        Assert.True(nextCalled);
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        Assert.Equal("application/problem+json", context.Response.ContentType);
     }
 
     private static HostAuthenticationCookie Cookie(
@@ -342,11 +444,11 @@ public sealed class HostAuthenticationSecurityTests
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
-    private sealed class RecordingCookie : IHostAuthenticationCookie
+    private sealed class RecordingCookie(string? readValue = "protected-cookie") : IHostAuthenticationCookie
     {
         public bool WasDeleted { get; private set; }
 
-        public string? Read(HttpContext context) => "protected-cookie";
+        public string? Read(HttpContext context) => readValue;
 
         public bool TryUnprotect(string protectedValue, out string credential)
         {

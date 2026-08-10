@@ -8,6 +8,7 @@ using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
+using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Composition;
@@ -228,6 +229,69 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             Assert.Equal("Enabled", await ScalarAsync<string>(fixture.ConnectionString, "SELECT [Status] FROM [User] WHERE [EID] = N'User_2'"));
             Assert.False(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [PersonnelDisableHold] FROM [User] WHERE [EID] = N'User_2'"));
             Assert.Equal(0, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM [IdentitySecurityEvent] WHERE [TargetUserEID] = N'User_2'"));
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task SqlServer_ConcurrentBindingAndConditionalDeleteNeverDeletesBoundPerson()
+    {
+        if (!ShouldRun()) return;
+        var fixture = await SqlFixture.CreateAsync("DeleteRace");
+        await using (fixture)
+        {
+            await using (var setup = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddPerson(setup, "Person_Race");
+                AddUser(setup, "User_Race", 1);
+                await setup.SaveChangesAsync();
+            }
+
+            using var start = new Barrier(2);
+            var bindTask = Task.Run(async () =>
+            {
+                await using var context = CreateRuntimeContext(fixture.ConnectionString);
+                var repository = new EfPersonUserBindingRepository(context);
+                start.SignalAndWait();
+                return await new EfPlatformTransactionExecutor(context).ExecuteAsync(
+                    token => repository.TryBindAsync(
+                        "Person_Race",
+                        "User_Race",
+                        DateTime.UtcNow,
+                        "User_Admin",
+                        "并发绑定",
+                        token));
+            });
+            var deleteTask = Task.Run(async () =>
+            {
+                await using var context = CreateRuntimeContext(fixture.ConnectionString);
+                var repository = new EfPersonUserBindingRepository(context);
+                var executor = new PersonCrudDeleteGuard(repository, context);
+                start.SignalAndWait();
+                return await executor.DeleteAsync(PersonCrudDescriptorFactory.Create(), "Person_Race");
+            });
+
+            var bound = await bindTask;
+            var delete = await deleteTask;
+            var count = await ScalarAsync<int>(
+                fixture.ConnectionString,
+                "SELECT COUNT(*) FROM [Person] WHERE [EID] = N'Person_Race';");
+
+            if (bound)
+            {
+                Assert.Equal(1, count);
+                Assert.Equal("User_Race", await ScalarAsync<string>(
+                    fixture.ConnectionString,
+                    "SELECT [UserEID] FROM [Person] WHERE [EID] = N'Person_Race';"));
+                Assert.False(delete.Succeeded);
+                Assert.Equal("Organization.Person.DeleteBlockedByUserBinding", delete.Error?.Code);
+            }
+            else
+            {
+                Assert.Equal(0, count);
+                Assert.True(delete.Succeeded);
+            }
         }
     }
 

@@ -32,7 +32,7 @@ describe('authentication components', () => {
       isAuthenticated: true,
       isInitialized: true,
       user: {
-        id: 'User_1', username: 'alice', displayName: 'Alice', permissions: [], mustChangePassword: true,
+        id: 'User_1', ecode: 'alice', ename: 'Alice', permissions: [], mustChangePassword: true,
         revision: 1, isLocalAdministrator: false,
       },
       login: vi.fn(),

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 
 namespace ICP.Platform.HostApi.Controllers;
 
@@ -17,6 +18,12 @@ namespace ICP.Platform.HostApi.Controllers;
 [Route("api/auth")]
 public sealed class AuthController : ControllerBase
 {
+    public static readonly EventId LoginFailedEventId = new(4101, "AuthenticationLoginFailed");
+    private static readonly Action<ILogger, string, Exception?> LogLoginFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            LoginFailedEventId,
+            "Authentication login failed with result category {ResultCategory}.");
     [HttpGet("antiforgery-token")]
     [AllowAnonymous]
     public ActionResult<AntiforgeryTokenResponse> GetAntiforgeryToken(
@@ -33,6 +40,7 @@ public sealed class AuthController : ControllerBase
     private readonly IHostAuthenticationCookie _cookie;
     private readonly PasswordVerificationGate _passwordVerificationGate;
     private readonly PlatformAuthorizationService _authorizationService;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         ILocalCredentialAuthenticator credentialAuthenticator,
@@ -40,7 +48,8 @@ public sealed class AuthController : ControllerBase
         IPlatformTransactionExecutor transactionExecutor,
         IHostAuthenticationCookie cookie,
         PasswordVerificationGate passwordVerificationGate,
-        PlatformAuthorizationService authorizationService)
+        PlatformAuthorizationService authorizationService,
+        ILogger<AuthController> logger)
     {
         _credentialAuthenticator = credentialAuthenticator;
         _sessionRegistry = sessionRegistry;
@@ -48,6 +57,7 @@ public sealed class AuthController : ControllerBase
         _cookie = cookie;
         _passwordVerificationGate = passwordVerificationGate;
         _authorizationService = authorizationService;
+        _logger = logger;
     }
 
     [HttpPost("login")]
@@ -60,21 +70,24 @@ public sealed class AuthController : ControllerBase
         using var verificationLease = await _passwordVerificationGate.TryEnterAsync(cancellationToken);
         if (verificationLease is null)
         {
+            LogLoginFailure(_logger, "PasswordVerificationBusy", null);
             Response.Headers.RetryAfter = "1";
             return ProblemResult(429, "AUTH_PASSWORD_VERIFICATION_BUSY");
         }
 
         var authentication = await _credentialAuthenticator.AuthenticateAsync(
-            request.Username,
+            request.ECODE,
             request.Password,
             cancellationToken);
         if (authentication.Status == LocalCredentialAuthenticationStatus.StoreUnavailable)
         {
+            LogLoginFailure(_logger, "StoreUnavailable", null);
             return ProblemResult(503, authentication.FailureCode ?? LocalCredentialAuthenticationFailureCodes.StoreUnavailable);
         }
 
         if (authentication is not { Status: LocalCredentialAuthenticationStatus.Succeeded, Account: not null })
         {
+            LogLoginFailure(_logger, "InvalidCredentials", null);
             return ProblemResult(401, "AUTH_INVALID_CREDENTIALS");
         }
 
@@ -124,10 +137,10 @@ public sealed class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var accountCode = User.Identity?.Name;
-        var displayName = User.FindFirstValue("display_name");
+        var ename = User.FindFirstValue("ename");
         if (string.IsNullOrWhiteSpace(userId)
             || string.IsNullOrWhiteSpace(accountCode)
-            || string.IsNullOrWhiteSpace(displayName))
+            || string.IsNullOrWhiteSpace(ename))
         {
             _cookie.Delete(HttpContext);
             return ProblemResult(401, "AUTH_SESSION_INVALID");
@@ -155,7 +168,7 @@ public sealed class AuthController : ControllerBase
         return Ok(new AuthUserResponse(
             userId,
             accountCode,
-            displayName,
+            ename,
             permissions,
             restricted,
             revision,
@@ -190,14 +203,14 @@ public sealed class AuthController : ControllerBase
             account.IsLocalAdministrator);
 }
 
-public sealed record LoginRequest(string Username, string Password);
+public sealed record LoginRequest(string ECODE, string Password);
 
 public sealed record AntiforgeryTokenResponse(string RequestToken);
 
 public sealed record AuthUserResponse(
     string Id,
-    string Username,
-    string DisplayName,
+    string ECODE,
+    string ENAME,
     IReadOnlyList<string> Permissions,
     bool MustChangePassword,
     long Revision,

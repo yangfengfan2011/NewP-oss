@@ -17,7 +17,7 @@ export function Header() {
         {auth.isAuthenticated && auth.user && (
           <Space size={12}>
             <Avatar size="small" icon={<UserOutlined />} />
-            <Text className="np-header-user">欢迎，{auth.user.displayName}</Text>
+            <Text className="np-header-user">欢迎，{auth.user.ename}</Text>
             <Button type="text" size="small" icon={<LogoutOutlined />} onClick={() => auth.logout()}>
               退出登录
             </Button>

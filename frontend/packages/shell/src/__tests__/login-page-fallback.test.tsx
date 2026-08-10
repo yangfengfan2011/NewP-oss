@@ -80,7 +80,7 @@ describe('login page fallback', () => {
     });
 
     expect(container.textContent).toContain('登录平台');
-    expect(container.textContent).toContain('用户名');
+    expect(container.textContent).toContain('登录账号（ECODE）');
     expect(container.textContent).toContain('密码');
   });
 });

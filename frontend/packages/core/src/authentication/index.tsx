@@ -19,12 +19,12 @@ export interface AuthenticationState {
   isAuthenticated: boolean;
   isInitialized: boolean;
   user?: AuthUser;
-  login: (username: string, password: string) => Promise<void>;
+  login: (ecode: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
-async function readCurrentUser(): Promise<AuthUser | undefined> {
+export async function readCurrentUser(): Promise<AuthUser | undefined> {
   const response = await platformFetch('/api/auth/current-user', {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -68,11 +68,11 @@ export function useAuthenticationState(): AuthenticationState {
     };
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (ecode: string, password: string) => {
     const response = await platformFetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ ecode, password }),
     });
     if (!response.ok) throw new Error(await readProblemCode(response));
     invalidatePlatformAntiforgeryToken();
@@ -143,6 +143,7 @@ export function FirstPasswordChangePage({ auth }: { auth: AuthenticationState })
       setCurrentPassword('');
       setNewPassword('');
       setConfirmation('');
+      window.location.assign('/');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '密码修改失败。');
     } finally {

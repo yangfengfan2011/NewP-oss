@@ -4,6 +4,8 @@ namespace ICP.Platform.HostApi.Authentication;
 
 public sealed class HostAuthenticationOptionsValidator : IValidateOptions<HostAuthenticationOptions>
 {
+    public const string OptionsInvalid = "AUTH_OPTIONS_INVALID";
+    public const string KeyRingInvalid = "AUTH_KEY_RING_INVALID";
     private readonly IWebHostEnvironment _environment;
 
     public HostAuthenticationOptionsValidator(IWebHostEnvironment environment)
@@ -14,10 +16,10 @@ public sealed class HostAuthenticationOptionsValidator : IValidateOptions<HostAu
     public ValidateOptionsResult Validate(string? name, HostAuthenticationOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.ApplicationName)
-            || options.LoginAttemptsPerMinute != 10
-            || options.MaximumConcurrentPasswordVerifications != 20)
+            || options.LoginAttemptsPerMinute is < 1 or > 10_000
+            || options.MaximumConcurrentPasswordVerifications is < 1 or > 1_000)
         {
-            return ValidateOptionsResult.Fail("AUTH_KEY_RING_INVALID");
+            return ValidateOptionsResult.Fail(OptionsInvalid);
         }
 
         if (!_environment.IsProduction())
@@ -34,12 +36,12 @@ public sealed class HostAuthenticationOptionsValidator : IValidateOptions<HostAu
                 || !OperatingSystem.IsWindows()
                 || !string.Equals(options.CookieName, "__Host-ICP.Platform.Auth", StringComparison.Ordinal))
             {
-                return ValidateOptionsResult.Fail("AUTH_KEY_RING_INVALID");
+                return ValidateOptionsResult.Fail(KeyRingInvalid);
             }
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
         {
-            return ValidateOptionsResult.Fail("AUTH_KEY_RING_INVALID");
+            return ValidateOptionsResult.Fail(KeyRingInvalid);
         }
 
         return ValidateOptionsResult.Success;

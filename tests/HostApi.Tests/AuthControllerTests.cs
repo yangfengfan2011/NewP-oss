@@ -8,12 +8,31 @@ using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
 public sealed class AuthControllerTests
 {
+    [Fact]
+    public void AuthenticationHttpContract_UsesOnlyEcodeAndEname()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var request = JsonSerializer.Deserialize<LoginRequest>("""{"ecode":"admin","password":"secret"}""", options);
+        var response = JsonSerializer.Serialize(
+            new AuthUserResponse("User_1", "admin", "Administrator", [], false, 1, true),
+            options);
+
+        Assert.Equal("admin", request?.ECODE);
+        Assert.Contains("\"ecode\":", response, StringComparison.Ordinal);
+        Assert.Contains("\"ename\":", response, StringComparison.Ordinal);
+        Assert.DoesNotContain("username", response, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("displayName", response, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Login_TemporaryCredentialCreatesRestrictedServerSessionAndProtectedCookie()
     {
@@ -49,7 +68,7 @@ public sealed class AuthControllerTests
         [
             new(ClaimTypes.NameIdentifier, "user-1"),
             new(ClaimTypes.Name, "admin"),
-            new("display_name", "Administrator"),
+            new("ename", "Administrator"),
             new(HostSessionAuthenticationHandler.SessionTypeClaim, AuthenticationSessionType.Restricted.ToString()),
             new(HostSessionAuthenticationHandler.AccountRevisionClaim, "7"),
             new("is_local_administrator", "true")
@@ -86,6 +105,28 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task Login_InvalidCredentialWritesCategorizedOperationalEventWithoutAccountOrPassword()
+    {
+        var logger = new RecordingLogger<AuthController>();
+        var controller = Controller(
+            new StubAuthenticator
+            {
+                Result = new LocalCredentialAuthenticationResult { Status = LocalCredentialAuthenticationStatus.Invalid }
+            },
+            new RecordingSessionRegistry(),
+            new RecordingCookie(),
+            logger);
+
+        await controller.Login(new LoginRequest("sensitive-ecode", "sensitive-password"), CancellationToken.None);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(AuthController.LoginFailedEventId, entry.EventId);
+        Assert.Contains("InvalidCredentials", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("sensitive-ecode", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("sensitive-password", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Logout_RevokesOnlyCurrentSessionAndClearsCookie()
     {
         var sessions = new RecordingSessionRegistry();
@@ -107,7 +148,8 @@ public sealed class AuthControllerTests
     private static AuthController Controller(
         ILocalCredentialAuthenticator authenticator,
         RecordingSessionRegistry sessions,
-        RecordingCookie cookie)
+        RecordingCookie cookie,
+        ILogger<AuthController>? logger = null)
     {
         var controller = new AuthController(
             authenticator,
@@ -115,11 +157,29 @@ public sealed class AuthControllerTests
             new InlineTransactionExecutor(),
             cookie,
             new PasswordVerificationGate(Options.Create(new HostAuthenticationOptions())),
-            new StubAuthorizationService())
+            new StubAuthorizationService(),
+            logger ?? NullLogger<AuthController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
         return controller;
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<(EventId EventId, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((eventId, formatter(state, exception)));
     }
 
     private static IdentityAccountSnapshot Account() => new()

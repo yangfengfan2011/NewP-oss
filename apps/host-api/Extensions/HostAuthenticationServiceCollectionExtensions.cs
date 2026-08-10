@@ -26,9 +26,9 @@ public static class HostAuthenticationServiceCollectionExtensions
         var options = configuration.GetSection(HostAuthenticationOptions.SectionName)
             .Get<HostAuthenticationOptions>() ?? new HostAuthenticationOptions();
         var validation = new HostAuthenticationOptionsValidator(environment).Validate(null, options);
-        if (validation.Failed && environment.IsProduction())
+        if (validation.Failed)
         {
-            throw new InvalidOperationException("AUTH_KEY_RING_INVALID");
+            throw new InvalidOperationException(validation.FailureMessage);
         }
 
         var keyRingPath = options.KeyRingPath;
@@ -95,7 +95,7 @@ public static class HostAuthenticationServiceCollectionExtensions
                     context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 10,
+                        PermitLimit = options.LoginAttemptsPerMinute,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         AutoReplenishment = true

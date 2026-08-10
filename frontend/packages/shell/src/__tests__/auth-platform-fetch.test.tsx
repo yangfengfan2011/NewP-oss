@@ -10,8 +10,8 @@ const coreAuthentication = vi.hoisted(() => ({
   isInitialized: true,
   user: {
     id: 'User_1',
-    username: 'admin',
-    displayName: 'Administrator',
+    ecode: 'admin',
+    ename: 'Administrator',
     permissions: ['Identity.Users.Manage'],
     mustChangePassword: false,
     revision: 4,

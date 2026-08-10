@@ -172,8 +172,8 @@ export type ShellView = 'business' | 'platform';
 
 export interface AuthUser {
   id: string;
-  username: string;
-  displayName: string;
+  ecode: string;
+  ename: string;
   permissions: string[];
   mustChangePassword: boolean;
   revision: number;
@@ -299,7 +299,7 @@ export interface AuthContext {
   isAuthenticated: boolean;
   isInitialized: boolean;
   user?: AuthUser;
-  login: (username: string, password: string) => Promise<void>;
+  login: (ecode: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;

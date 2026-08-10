@@ -574,7 +574,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         using var anonymous = CreateSession(_hostPort);
         using (var invalidAntiforgery = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
                {
-                   Content = JsonContent.Create(new { username = "missing", password = "invalid" })
+                   Content = JsonContent.Create(new { ecode = "missing", password = "invalid" })
                })
         {
             invalidAntiforgery.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", "invalid");
@@ -593,7 +593,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
                 limiter,
                 HttpMethod.Post,
                 "/api/auth/login",
-                new { username = $"missing-{index}", password = "invalid-password" },
+                new { ecode = $"missing-{index}", password = "invalid-password" },
                 cancellationToken,
                 request => request.Headers.TryAddWithoutValidation("X-Forwarded-For", $"203.0.113.{index + 1}"));
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
@@ -914,7 +914,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
             session,
             HttpMethod.Post,
             "/api/auth/login",
-            new { username = ecode, password },
+            new { ecode, password },
             cancellationToken,
             request => request.Headers.TryAddWithoutValidation(
                 "X-Forwarded-For",
@@ -1340,7 +1340,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         {
             await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login");
         }
-        await page.Locator("#username").FillAsync(ecode);
+        await page.Locator("#ecode").FillAsync(ecode);
         await page.Locator("#password").FillAsync(password);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await page.WaitForFunctionAsync("() => window.location.pathname !== '/login'");

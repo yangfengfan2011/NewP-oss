@@ -13,20 +13,24 @@ namespace ICP.Platform.PluginPlatform.StandardData;
 /// </summary>
 public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanCompiler
 {
-    private readonly string? _builtInModulesRoot;
+    private readonly TrustedBuiltInModuleSource? _builtInModuleSource;
     private readonly StandardDataPackageInspector _inspector;
     private readonly IReadOnlySet<string> _excludedBuiltInModuleIds;
     private readonly ModuleCapsuleCandidateReader _candidateReader = new();
     private readonly CanonicalModulePlanCompiler _compiler = new();
 
     public StandardDataCandidatePlanCompiler(
-        string? builtInModulesRoot,
+        StandardDataPackageInspector inspector)
+        : this(builtInModuleSource: null, inspector, excludedBuiltInModuleIds: null)
+    {
+    }
+
+    internal StandardDataCandidatePlanCompiler(
+        TrustedBuiltInModuleSource? builtInModuleSource,
         StandardDataPackageInspector inspector,
         IEnumerable<string>? excludedBuiltInModuleIds = null)
     {
-        _builtInModulesRoot = string.IsNullOrWhiteSpace(builtInModulesRoot)
-            ? null
-            : Path.GetFullPath(builtInModulesRoot);
+        _builtInModuleSource = builtInModuleSource;
         _inspector = inspector;
         _excludedBuiltInModuleIds = (excludedBuiltInModuleIds ?? [])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -41,11 +45,11 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
             .Where(static item => item.Enabled)
             .Select(static item => item.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
-        if (_builtInModulesRoot is not null)
+        if (_builtInModuleSource is not null)
         {
             // 同 ID 的已安装 desired 版本是内建模块的显式升级候选；
             // 仅排除大小写完全一致的内建项，大小写折叠冲突仍交给 Canonical 编译器拒绝。
-            candidates.AddRange(_candidateReader.ReadTrustedBuiltIn(_builtInModulesRoot)
+            candidates.AddRange(_candidateReader.ReadTrustedBuiltIn(_builtInModuleSource)
                 .Where(candidate => !_excludedBuiltInModuleIds.Contains(candidate.ModuleId))
                 .Where(candidate => !enabledDesiredModuleIds.Contains(candidate.ModuleId)));
         }

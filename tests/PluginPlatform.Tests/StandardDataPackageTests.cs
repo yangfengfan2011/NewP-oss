@@ -74,6 +74,23 @@ public sealed class StandardDataPackageTests : IDisposable
     }
 
     [Fact]
+    public void ProductionCompilers_PublicConstructorsCannotPromoteAnArbitraryDirectoryToBuiltInTrust()
+    {
+        var sourceType = typeof(RuntimeViewMaterializer).Assembly.GetType(
+            "ICP.Platform.Kernel.ModulePlanning.TrustedBuiltInModuleSource",
+            throwOnError: true)!;
+
+        Assert.False(sourceType.IsVisible);
+        Assert.Empty(sourceType.GetConstructors());
+        Assert.DoesNotContain(
+            typeof(RuntimeViewMaterializer).GetConstructors(),
+            static constructor => constructor.GetParameters().Any(static parameter => parameter.ParameterType == typeof(string)));
+        Assert.DoesNotContain(
+            typeof(StandardDataCandidatePlanCompiler).GetConstructors(),
+            static constructor => constructor.GetParameters().Any(static parameter => parameter.ParameterType == typeof(string)));
+    }
+
+    [Fact]
     public void Compile_DesiredVersion_ProducesStandardDataCandidateWithoutRuntimeCode()
     {
         var v1Root = WritePackage("1.0.0");
@@ -96,7 +113,6 @@ public sealed class StandardDataPackageTests : IDisposable
             null,
             UsesLegacyFallback: false);
         var compiler = new StandardDataCandidatePlanCompiler(
-            builtInModulesRoot: null,
             new StandardDataPackageInspector(CreateHostCatalog()));
 
         var plan = compiler.Compile(inventory, state);

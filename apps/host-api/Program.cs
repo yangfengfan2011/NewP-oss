@@ -17,6 +17,7 @@ using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Modules.Audit.Services;
 using ICP.Platform.Persistence;
@@ -91,6 +92,9 @@ var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "mo
 var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
     ? configuredModulesPath
     : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredModulesPath));
+var builtInModuleSource = TrustedBuiltInModuleSource.CreateForHost(
+    AppContext.BaseDirectory,
+    modulesRootPath);
 
 var configuredPluginInstallRoot = builder.Configuration["Platform:PluginInstallRoot"] ?? "plugins";
 var pluginInstallRoot = Path.IsPathRooted(configuredPluginInstallRoot)
@@ -120,7 +124,7 @@ var standardDataInstaller = new StandardDataPackageInstaller(
     stateStore,
     standardDataInspector);
 var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
-var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, modulesRootPath);
+var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, builtInModuleSource);
 
 builder.Services.AddSingleton(stateStore);
 builder.Services.AddSingleton(lifecycleManager);
@@ -164,7 +168,7 @@ var activationGate = new PluginActivationGate(
     lifecycleManager,
     new StandardDataPackagePreflight(standardDataInspector, hostVersion),
     new StandardDataCandidatePlanCompiler(
-        modulesRootPath,
+        builtInModuleSource,
         standardDataInspector,
         externalPluginsEnabled ? null : ["PluginOps"]),
     new HostPluginPermissionCatalogValidator(),

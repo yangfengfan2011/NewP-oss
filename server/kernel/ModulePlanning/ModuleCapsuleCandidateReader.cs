@@ -16,8 +16,11 @@ public sealed class ModuleCapsuleCandidateReader
 
     // 只有受控 Host/activation 路径可把配置的 distribution root 提升为 capability；
     // 任意公共调用方即使复制完全相同的 SourceKind 字符串也只能得到普通来源描述。
-    internal IReadOnlyList<ModuleCapsuleCandidate> ReadTrustedBuiltIn(string modulesRoot)
-        => ReadBuiltIn(modulesRoot, trustedRoot: true);
+    internal IReadOnlyList<ModuleCapsuleCandidate> ReadTrustedBuiltIn(TrustedBuiltInModuleSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return ReadBuiltIn(source.ModulesRoot, trustedRoot: true);
+    }
 
     private static IReadOnlyList<ModuleCapsuleCandidate> ReadBuiltIn(
         string modulesRoot,

@@ -47,13 +47,14 @@ public sealed record ModuleMigrationBundleReference(
 /// </summary>
 public sealed class ModulePlanProvenance
 {
-    private readonly BuiltInTrust? _builtInTrust;
+    private readonly BuiltInRootTrust? _builtInRootTrust;
+    private readonly BoundBuiltInTrust? _boundBuiltInTrust;
 
     /// <summary>
     /// 创建可公开描述的 authoring 来源。公开构造的来源不携带内建根信任。
     /// </summary>
     public ModulePlanProvenance(string SourceKind, string SourcePath, string JsonPointer)
-        : this(SourceKind, SourcePath, JsonPointer, builtInTrust: null)
+        : this(SourceKind, SourcePath, JsonPointer, builtInRootTrust: null, boundBuiltInTrust: null)
     {
     }
 
@@ -61,12 +62,14 @@ public sealed class ModulePlanProvenance
         string sourceKind,
         string sourcePath,
         string jsonPointer,
-        BuiltInTrust? builtInTrust)
+        BuiltInRootTrust? builtInRootTrust,
+        BoundBuiltInTrust? boundBuiltInTrust)
     {
         SourceKind = sourceKind;
         SourcePath = sourcePath;
         JsonPointer = jsonPointer;
-        _builtInTrust = builtInTrust;
+        _builtInRootTrust = builtInRootTrust;
+        _boundBuiltInTrust = boundBuiltInTrust;
     }
 
     public string SourceKind { get; }
@@ -84,19 +87,25 @@ public sealed class ModulePlanProvenance
             "built-in",
             Path.GetFullPath(sourcePath),
             jsonPointer,
-            new BuiltInTrust(
+            new BuiltInRootTrust(
                 moduleId,
-                Path.GetFullPath(packageRoot),
-                CanonicalFingerprint: null));
+                Path.GetFullPath(packageRoot)),
+            boundBuiltInTrust: null);
 
     internal ModulePlanProvenance BindToCanonicalCandidate(ModuleCapsuleCandidate candidate)
     {
         // root capability 只可消费一次，并绑定完整规范化模块事实；计划公开后即使复用
         // 同一个 provenance 实例修改外层 record，fingerprint 也不再匹配。
-        if (_builtInTrust is not { CanonicalFingerprint: null } trust
+        if (_builtInRootTrust is not { } trust
             || !string.Equals(SourceKind, "built-in", StringComparison.Ordinal)
             || !string.Equals(trust.ModuleId, candidate.ModuleId, StringComparison.Ordinal)
             || !PathsEqual(trust.PackageRoot, candidate.PackageRoot))
+        {
+            return this;
+        }
+
+        var fingerprint = ComputeCanonicalFingerprint(candidate);
+        if (!trust.TryConsume())
         {
             return this;
         }
@@ -105,11 +114,12 @@ public sealed class ModulePlanProvenance
             SourceKind,
             SourcePath,
             JsonPointer,
-            trust with { CanonicalFingerprint = ComputeCanonicalFingerprint(candidate) });
+            builtInRootTrust: null,
+            new BoundBuiltInTrust(trust.ModuleId, trust.PackageRoot, fingerprint));
     }
 
     internal bool AuthenticatesBuiltIn(CanonicalModulePlanModule module) =>
-        _builtInTrust is { CanonicalFingerprint: not null } trust
+        _boundBuiltInTrust is { } trust
         && string.Equals(SourceKind, "built-in", StringComparison.Ordinal)
         && string.Equals(trust.ModuleId, module.ModuleId, StringComparison.Ordinal)
         && PathsEqual(trust.PackageRoot, module.PackageRoot)
@@ -223,10 +233,22 @@ public sealed class ModulePlanProvenance
             Path.GetFullPath(right),
             StringComparison.OrdinalIgnoreCase);
 
-    private sealed record BuiltInTrust(
+    private sealed class BuiltInRootTrust(string moduleId, string packageRoot)
+    {
+        private int _consumed;
+
+        internal string ModuleId { get; } = moduleId;
+
+        internal string PackageRoot { get; } = packageRoot;
+
+        // 绑定是 capability 的线性化点；并发编译同一 root 时只能有一个胜者。
+        internal bool TryConsume() => Interlocked.CompareExchange(ref _consumed, 1, 0) == 0;
+    }
+
+    private sealed record BoundBuiltInTrust(
         string ModuleId,
         string PackageRoot,
-        string? CanonicalFingerprint);
+        string CanonicalFingerprint);
 }
 
 /// <summary>

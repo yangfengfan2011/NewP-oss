@@ -412,6 +412,45 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void BindToCanonicalCandidate_RootCapabilityCannotBindTwoDifferentCandidates()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var firstModule = package.BuildBuiltInModule();
+        var secondModule = firstModule with { Version = "2.0.0" };
+        var firstCandidate = ToCandidate(firstModule);
+        var secondCandidate = ToCandidate(secondModule);
+
+        var firstBound = firstModule.Provenance.BindToCanonicalCandidate(firstCandidate);
+        var secondBound = firstModule.Provenance.BindToCanonicalCandidate(secondCandidate);
+
+        Assert.True(firstBound.AuthenticatesBuiltIn(firstModule with { Provenance = firstBound }));
+        Assert.False(secondBound.AuthenticatesBuiltIn(secondModule with { Provenance = secondBound }));
+    }
+
+    [Fact]
+    public async Task BindToCanonicalCandidate_RootCapabilityHasExactlyOneConcurrentWinner()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var module = package.BuildBuiltInModule();
+        var candidate = ToCandidate(module);
+        using var start = new ManualResetEventSlim(initialState: false);
+        var bindings = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(() =>
+            {
+                start.Wait();
+                return module.Provenance.BindToCanonicalCandidate(candidate);
+            }))
+            .ToArray();
+
+        start.Set();
+        var provenances = await Task.WhenAll(bindings);
+
+        Assert.Single(
+            provenances,
+            provenance => provenance.AuthenticatesBuiltIn(module with { Provenance = provenance }));
+    }
+
+    [Fact]
     public void Compile_BuiltInLegacyDigestWithoutOwnedCutoverAuthoring_IsRejected()
     {
         using var package = TestPackage.Create("Organization", "Asset");
@@ -727,6 +766,28 @@ public sealed class PersistencePlanCompilerTests
             CanonicalBytes: Encoding.UTF8.GetBytes("candidate-s1"),
             Modules: boundModules);
     }
+
+    private static ModuleCapsuleCandidate ToCandidate(CanonicalModulePlanModule module) =>
+        new(
+            module.ModuleId,
+            module.Version,
+            module.DisplayName,
+            module.Description,
+            module.PackageRoot,
+            module.BackendEntry,
+            module.BackendBehaviorKey,
+            module.FrontendEntry,
+            module.FrontendBehaviorKey,
+            module.FrontendBindingMode,
+            module.Dependencies,
+            module.Routes,
+            module.FrontendBindings,
+            module.FrontendBindingReferences,
+            module.PermissionCodes,
+            module.PermissionReferences,
+            module.ModelKeys,
+            module.Provenance,
+            module.Persistence);
 
     private static string FindStorageTypeMap()
     {

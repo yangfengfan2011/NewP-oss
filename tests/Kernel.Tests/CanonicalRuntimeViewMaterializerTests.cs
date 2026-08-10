@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
 using Xunit;
 
@@ -75,10 +76,11 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
 
         var installRoot = Path.Combine(_root, "install");
         var stateStore = new InstalledPluginStateStore(installRoot);
+        var builtInModuleSource = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
         var materializer = new RuntimeViewMaterializer(
             stateStore,
             new FrontendRuntimeManifestBuilder(),
-            modulesRoot);
+            builtInModuleSource);
 
         materializer.Materialize(installRoot);
 

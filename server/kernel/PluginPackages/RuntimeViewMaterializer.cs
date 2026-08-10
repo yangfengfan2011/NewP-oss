@@ -21,7 +21,7 @@ public class RuntimeViewMaterializer
     private readonly LocalizationRuntimeManifestBuilder _localizationManifestBuilder;
     private readonly MetadataRuntimeManifestBuilder _metadataRuntimeManifestBuilder;
     private readonly Action<string, string> _moveDirectory;
-    private readonly string? _builtInModulesRoot;
+    private readonly TrustedBuiltInModuleSource? _builtInModuleSource;
     private readonly ModuleCapsuleCandidateReader _candidateReader = new();
     private readonly CanonicalModulePlanCompiler _compiler = new();
 
@@ -40,17 +40,17 @@ public class RuntimeViewMaterializer
     {
     }
 
-    public RuntimeViewMaterializer(
+    internal RuntimeViewMaterializer(
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
-        string builtInModulesRoot)
+        TrustedBuiltInModuleSource builtInModuleSource)
         : this(
             stateStore,
             frontendManifestBuilder,
             new LocalizationRuntimeManifestBuilder(),
             new MetadataRuntimeManifestBuilder(),
             Directory.Move,
-            builtInModulesRoot)
+            builtInModuleSource)
     {
     }
 
@@ -89,16 +89,14 @@ public class RuntimeViewMaterializer
         LocalizationRuntimeManifestBuilder localizationManifestBuilder,
         MetadataRuntimeManifestBuilder metadataRuntimeManifestBuilder,
         Action<string, string> moveDirectory,
-        string? builtInModulesRoot)
+        TrustedBuiltInModuleSource? builtInModuleSource)
     {
         _stateStore = stateStore;
         _frontendManifestBuilder = frontendManifestBuilder;
         _localizationManifestBuilder = localizationManifestBuilder;
         _metadataRuntimeManifestBuilder = metadataRuntimeManifestBuilder;
         _moveDirectory = moveDirectory;
-        _builtInModulesRoot = string.IsNullOrWhiteSpace(builtInModulesRoot)
-            ? null
-            : Path.GetFullPath(builtInModulesRoot);
+        _builtInModuleSource = builtInModuleSource;
     }
 
     public CanonicalModulePlan Materialize(string installRoot)
@@ -106,14 +104,14 @@ public class RuntimeViewMaterializer
         var enabledRecords = _stateStore.LoadAllEnabled();
         var installedCandidates = _candidateReader.ReadInstalled(enabledRecords);
         var candidates = installedCandidates.AsEnumerable();
-        if (_builtInModulesRoot is not null)
+        if (_builtInModuleSource is not null)
         {
             var installedModuleIds = installedCandidates
                 .Select(static candidate => candidate.ModuleId)
                 .ToHashSet(StringComparer.Ordinal);
             // B11 之前由 compatibility resolver 选择同 ID 的已安装版本；编译器仍负责拒绝大小写折叠碰撞。
             candidates = candidates.Concat(
-                _candidateReader.ReadTrustedBuiltIn(_builtInModulesRoot)
+                _candidateReader.ReadTrustedBuiltIn(_builtInModuleSource)
                     .Where(candidate => !installedModuleIds.Contains(candidate.ModuleId)));
         }
 
@@ -237,9 +235,9 @@ public class RuntimeViewMaterializer
         CanonicalModulePlanModule module)
     {
         var sourceManifestPath = Path.Combine(module.PackageRoot, "plugin.json");
-        var distributionRoot = _builtInModulesRoot is null
+        var distributionRoot = _builtInModuleSource is null
             ? Path.GetDirectoryName(module.PackageRoot)!
-            : Path.GetDirectoryName(_builtInModulesRoot)!;
+            : _builtInModuleSource.DistributionRoot;
         var entryAssemblyPath = Path.GetFullPath(Path.Combine(module.PackageRoot, module.BackendEntry!));
         if (!entryAssemblyPath.StartsWith(
                 Path.GetFullPath(distributionRoot) + Path.DirectorySeparatorChar,

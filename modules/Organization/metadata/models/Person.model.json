@@ -208,6 +208,43 @@
         "view": {
           "visible": true
         }
+      },
+      {
+        "name": "UserEID",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "UserBoundAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": true
+        }
+      },
+      {
+        "name": "UserBoundBy",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "UserBindingReason",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Person_UserEID",
+        "fields": [
+          "UserEID"
+        ],
+        "unique": true
       }
     ]
   }

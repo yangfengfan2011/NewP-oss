@@ -16,7 +16,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'organization.departments',
       'organization.positions',
     ]);
-    expect(Object.keys(personStandardCrudResource.summaryRenderers ?? {})).toEqual(['userLink', 'authorizationSummary']);
+    expect(Object.keys(personStandardCrudResource.summaryRenderers ?? {})).toEqual(['userBinding', 'authorizationSummary']);
     expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['refresh', 'delete', 'disable', 'enable']);
   });
 

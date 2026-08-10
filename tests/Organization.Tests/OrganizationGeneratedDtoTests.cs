@@ -47,7 +47,7 @@ public class OrganizationGeneratedDtoTests
     private static void AssertMatchesGeneratedFileSignatures(string moduleId, IReadOnlyDictionary<string, string> signatures)
     {
         var generatedDirectory = Path.Combine(GetRepositoryRoot(), "server", "modules", moduleId, "DTOs", "Generated");
-        var expectedKeys = new[] { "CompanyDto", "DepartmentDto", "PersonDto", "PersonUserLinkDto", "PositionDto" };
+        var expectedKeys = new[] { "CompanyDto", "DepartmentDto", "PersonDto", "PositionDto" };
 
         foreach (var key in expectedKeys)
         {

@@ -45,7 +45,7 @@ public sealed class OrganizationModelMetadataProvider : IModelDefinitionProvider
     }
 
     /// <summary>
-    /// 一次性读取 Organization 的五个模型真源并返回运行时定义。
+    /// 一次性读取 Organization 的四个模型真源并返回运行时定义。
     /// 外部只消费聚合后的 definitions，避免继续依赖单模型入口形成新的分叉契约。
     /// </summary>
     public IReadOnlyList<ModelDefinition> GetDefinitions()
@@ -57,8 +57,7 @@ public sealed class OrganizationModelMetadataProvider : IModelDefinitionProvider
             LoadModel("Company.model.json", storageTypeMap),
             LoadModel("Department.model.json", storageTypeMap),
             LoadModel("Position.model.json", storageTypeMap),
-            LoadModel("Person.model.json", storageTypeMap),
-            LoadModel("PersonUserLink.model.json", storageTypeMap)
+            LoadModel("Person.model.json", storageTypeMap)
         };
     }
 

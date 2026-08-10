@@ -4,7 +4,7 @@ import {
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
-import PersonUserLinkCard from '../components/PersonUserLinkCard';
+import PersonUserBindingCard from '../components/PersonUserBindingCard';
 import {
   deletePerson,
   disablePerson,
@@ -17,7 +17,7 @@ import {
   mapPersonListItem,
   type PersonDetailView,
   type PersonListRow,
-  type PersonUserLinkSummaryData,
+  type PersonUserBindingSummaryData,
 } from '../services/organizationService';
 
 interface PersonListFilters {
@@ -74,8 +74,8 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
 ];
 
 const personSummaryRenderers = {
-  userLink: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
-    <PersonUserLinkCard summary={block as StandardCrudSummaryBlock<PersonUserLinkSummaryData>} title={title} />
+  userBinding: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
+    <PersonUserBindingCard summary={block as StandardCrudSummaryBlock<PersonUserBindingSummaryData>} title={title} />
   ),
   authorizationSummary: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
     <AuthorizationSummaryCard summary={block as StandardCrudSummaryBlock<string[]>} title={title} />

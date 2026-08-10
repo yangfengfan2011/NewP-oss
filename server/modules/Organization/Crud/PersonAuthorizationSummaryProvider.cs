@@ -8,14 +8,14 @@ namespace ICP.Platform.Modules.Organization.Crud;
 
 public sealed class PersonAuthorizationSummaryProvider : IStandardCrudSummaryProvider
 {
-    private readonly IPersonUserLinkRepository _userLinkRepository;
+    private readonly IPersonUserBindingRepository _bindingRepository;
     private readonly IAuthorizationSummaryReader _authorizationSummaryReader;
 
     public PersonAuthorizationSummaryProvider(
-        IPersonUserLinkRepository userLinkRepository,
+        IPersonUserBindingRepository bindingRepository,
         IAuthorizationSummaryReader authorizationSummaryReader)
     {
-        _userLinkRepository = userLinkRepository;
+        _bindingRepository = bindingRepository;
         _authorizationSummaryReader = authorizationSummaryReader;
     }
 
@@ -31,13 +31,13 @@ public sealed class PersonAuthorizationSummaryProvider : IStandardCrudSummaryPro
         CancellationToken cancellationToken = default)
     {
         var personId = detail[descriptor.IdField]?.ToString() ?? string.Empty;
-        var link = await _userLinkRepository.GetByPersonIdAsync(personId, cancellationToken);
-        if (link is null)
+        var person = await _bindingRepository.FindAsync(personId, cancellationToken);
+        if (person?.UserEid is null)
         {
             return new StandardCrudSummaryBlock { Status = "notConfigured" };
         }
 
-        var roles = await _authorizationSummaryReader.GetRoleNamesAsync(link.UserId, cancellationToken);
+        var roles = await _authorizationSummaryReader.GetRoleNamesAsync(person.UserEid, cancellationToken);
         return new StandardCrudSummaryBlock { Status = "ready", Data = roles };
     }
 }

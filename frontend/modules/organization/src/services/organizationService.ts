@@ -45,23 +45,38 @@ export interface PositionDto {
   createdAt: string;
 }
 
-export interface PersonUserLinkDto {
-  personId: string;
-  userId: string;
-  linkedAt: string;
-  linkedBy: string;
+export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
+
+export interface PersonUserBindingAccountDto {
+  userEid: string;
+  ecode: string;
+  ename: string;
+  status: IdentityAccountStatus;
+  revision: number;
 }
 
-export interface IdentityUserOptionDto {
-  userId: string;
-  displayName: string;
+export interface PersonUserBindingCandidateDto extends PersonUserBindingAccountDto {
 }
 
-export interface PersonUserLinkSummaryData {
-  personId: string;
-  userId: string;
-  linkedAt: string;
-  linkedBy: string;
+export interface PersonUserBindingDto {
+  personEid: string;
+  userEid: string;
+  boundAt: string;
+  boundBy: string;
+  reason: string;
+  account: PersonUserBindingAccountDto | null;
+}
+
+export interface PersonUserBindingSummaryData {
+  personEid: string;
+  personName: string;
+  isPersonEnabled: boolean;
+  userEid: string | null;
+  boundAt: string | null;
+  boundBy: string | null;
+  reason: string | null;
+  account: PersonUserBindingAccountDto | null;
+  isAccountAvailable: boolean;
 }
 
 export interface PersonListRow {
@@ -100,7 +115,7 @@ export interface PersonDetailView {
   companyName?: string | null;
   departmentName?: string | null;
   positionName?: string | null;
-  userLinkSummary: StandardCrudSummaryBlock<PersonUserLinkSummaryData>;
+  userBindingSummary: StandardCrudSummaryBlock<PersonUserBindingSummaryData>;
   authorizationSummary: StandardCrudSummaryBlock<string[]>;
 }
 
@@ -229,13 +244,27 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
     companyName: readStandardCrudNullableString(fields, ['CompanyName']),
     departmentName: readStandardCrudNullableString(fields, ['DepartmentName']),
     positionName: readStandardCrudNullableString(fields, ['PositionName']),
-    userLinkSummary: normalizeStandardCrudSummaryBlock(summaries['userLink'], (data) => {
-      const link = isStandardCrudRecord(data) ? data : {};
+    userBindingSummary: normalizeStandardCrudSummaryBlock(summaries['userBinding'], (data) => {
+      const binding = isStandardCrudRecord(data) ? data : {};
+      const rawAccount = isStandardCrudRecord(binding.Account ?? binding.account)
+        ? (binding.Account ?? binding.account) as Record<string, unknown>
+        : null;
       return {
-        personId: readStandardCrudString(link, ['PersonId', 'personId']),
-        userId: readStandardCrudString(link, ['UserId', 'userId']),
-        linkedAt: readStandardCrudString(link, ['LinkedAt', 'linkedAt']),
-        linkedBy: readStandardCrudString(link, ['LinkedBy', 'linkedBy']),
+        personEid: readStandardCrudString(binding, ['PersonEid', 'personEid']),
+        personName: readStandardCrudString(binding, ['PersonName', 'personName']),
+        isPersonEnabled: readStandardCrudBoolean(binding, ['IsPersonEnabled', 'isPersonEnabled'], false),
+        userEid: readStandardCrudNullableString(binding, ['UserEid', 'userEid']),
+        boundAt: readStandardCrudNullableString(binding, ['BoundAt', 'boundAt']),
+        boundBy: readStandardCrudNullableString(binding, ['BoundBy', 'boundBy']),
+        reason: readStandardCrudNullableString(binding, ['Reason', 'reason']),
+        account: rawAccount ? {
+          userEid: readStandardCrudString(rawAccount, ['UserEid', 'userEid']),
+          ecode: readStandardCrudString(rawAccount, ['ECODE', 'ecode']),
+          ename: readStandardCrudString(rawAccount, ['ENAME', 'ename']),
+          status: readStandardCrudString(rawAccount, ['Status', 'status']) as IdentityAccountStatus,
+          revision: Number(rawAccount.Revision ?? rawAccount.revision ?? 0),
+        } : null,
+        isAccountAvailable: readStandardCrudBoolean(binding, ['IsAccountAvailable', 'isAccountAvailable'], false),
       };
     }),
     authorizationSummary: normalizeStandardCrudSummaryBlock(summaries['authorizationSummary'], (data) => {
@@ -355,25 +384,27 @@ export async function enablePerson(personId: string): Promise<PersonDetailView> 
   return updatePerson(personId, { IsEnabled: true });
 }
 
-export async function searchIdentityUsers(keyword: string): Promise<IdentityUserOptionDto[]> {
-  return fetchJson<IdentityUserOptionDto[]>(
-    `/api/organization/persons/user-options?keyword=${encodeURIComponent(keyword)}`,
+export async function searchPersonUserBindingCandidates(
+  personEid: string,
+  query: string,
+): Promise<PersonUserBindingCandidateDto[]> {
+  return fetchJson<PersonUserBindingCandidateDto[]>(
+    `/api/organization/persons/${encodeURIComponent(personEid)}/user-binding/candidates?query=${encodeURIComponent(query)}`,
     '加载可绑定账号失败',
   );
 }
 
-export async function linkPersonUser(personId: string, userId: string): Promise<PersonUserLinkDto> {
-  const response = await platformFetch(`/api/organization/persons/${personId}/user-link`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
+export async function bindPersonUser(
+  personEid: string,
+  input: { userEid: string; expectedRevision: number; reason: string },
+): Promise<PersonUserBindingDto> {
+  return requestJson<PersonUserBindingDto>(
+    `/api/organization/persons/${encodeURIComponent(personEid)}/user-binding`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify({ userId }),
-  });
-
-  if (!response.ok) {
-    throw new Error('绑定账号失败');
-  }
-
-  return response.json() as Promise<PersonUserLinkDto>;
+    '绑定账号失败',
+  );
 }

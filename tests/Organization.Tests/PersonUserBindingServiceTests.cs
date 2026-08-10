@@ -1,0 +1,326 @@
+using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Organization.DTOs.Requests;
+using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Persistence.Abstractions;
+using Xunit;
+
+namespace ICP.Platform.Modules.Organization.Tests;
+
+public sealed class PersonUserBindingServiceTests
+{
+    private static readonly DateTime BoundAt = new(2026, 8, 10, 10, 30, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task SearchCandidatesAsync_ReturnsAtMostTwentyEligibleEnabledOrDisabledAccounts()
+    {
+        var accounts = Enumerable.Range(1, 24)
+            .Select(index => Account(
+                $"User_{index:00}",
+                index == 1 ? IdentityAccountStatus.Deleted : index % 2 == 0 ? IdentityAccountStatus.Disabled : IdentityAccountStatus.Enabled,
+                isLocalAdministrator: index == 2,
+                isPersonnelBound: index == 3))
+            .ToArray();
+        var fixture = Fixture(accounts: accounts);
+
+        var result = await fixture.Service.SearchCandidatesAsync("Person_1", " user ");
+
+        Assert.Equal(20, result.Count);
+        Assert.All(result, candidate => Assert.Contains(candidate.Status, new[] { "Enabled", "Disabled" }));
+        Assert.DoesNotContain(result, candidate => candidate.UserEid is "User_01" or "User_02" or "User_03");
+        Assert.Equal("user", fixture.Directory.LastSearch?.Query);
+        Assert.Equal(false, fixture.Directory.LastSearch?.IsPersonnelBound);
+        Assert.Equal(20, fixture.Directory.LastSearch?.Limit);
+    }
+
+    [Fact]
+    public async Task BindAsync_RegistersPermanentPersonAndIdentityFactsInOneTransaction()
+    {
+        var fixture = Fixture();
+
+        var result = await fixture.Service.BindAsync(
+            "Person_1",
+            new BindPersonUserRequest("User_1", 7, "  入职账号绑定  "),
+            new PersonUserBindingActor("User_Admin", "trace-39"));
+
+        Assert.Equal("User_1", result.UserEid);
+        Assert.Equal(BoundAt, result.BoundAt);
+        Assert.Equal("User_Admin", result.BoundBy);
+        Assert.Equal("入职账号绑定", result.Reason);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
+        Assert.Equal(8, fixture.Identity.Account.Revision);
+        Assert.True(fixture.Identity.Account.IsPersonnelBound);
+        Assert.Equal("User_1", fixture.Repository.Current.UserEid);
+        Assert.Equal("张三", fixture.Repository.Current.PersonName);
+    }
+
+    [Fact]
+    public async Task BindAsync_SameCombinationIsIdempotentButDifferentCombinationConflicts()
+    {
+        var fixture = Fixture(person: Person(userEid: "User_1"));
+
+        var idempotent = await fixture.Service.BindAsync(
+            "Person_1",
+            new BindPersonUserRequest("User_1", 0, "不会覆盖既有原因"),
+            new PersonUserBindingActor("User_Other", "trace-repeat"));
+
+        Assert.Equal("首次绑定", idempotent.Reason);
+        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(7, fixture.Identity.Account.Revision);
+
+        var conflict = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
+            await fixture.Service.BindAsync(
+                "Person_1",
+                new BindPersonUserRequest("User_2", 7, "改绑"),
+                new PersonUserBindingActor("User_Admin", "trace-conflict")));
+        Assert.Equal(PersonUserBindingFailureCodes.PersonAlreadyBound, conflict.FailureCode);
+    }
+
+    [Fact]
+    public async Task BindAsync_DisabledPersonIsRejectedBeforeIdentityMutation()
+    {
+        var fixture = Fixture(person: Person(isEnabled: false));
+
+        var exception = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
+            await fixture.Service.BindAsync(
+                "Person_1",
+                new BindPersonUserRequest("User_1", 7, "停用人员绑定"),
+                new PersonUserBindingActor("User_Admin", "trace-disabled")));
+
+        Assert.Equal(PersonUserBindingFailureCodes.PersonDisabled, exception.FailureCode);
+        Assert.False(fixture.Identity.Account.IsPersonnelBound);
+        Assert.Null(fixture.Repository.Current.UserEid);
+    }
+
+    [Fact]
+    public async Task BindAsync_MapsStableIdentityLifecycleConflictWithoutDependingOnIdentityImplementation()
+    {
+        var fixture = Fixture(failureStage: BindingFailureStage.IdentityRevisionConflict);
+
+        var exception = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
+            await fixture.Service.BindAsync(
+                "Person_1",
+                new BindPersonUserRequest("User_1", 7, "并发绑定"),
+                new PersonUserBindingActor("User_Admin", "trace-contract-conflict")));
+
+        Assert.Equal(PersonUserBindingFailureCodes.RevisionConflict, exception.FailureCode);
+        Assert.Null(fixture.Repository.Current.UserEid);
+    }
+
+    [Theory]
+    [InlineData(BindingFailureStage.PersonWrite)]
+    [InlineData(BindingFailureStage.IdentityRegistration)]
+    [InlineData(BindingFailureStage.Commit)]
+    public async Task BindAsync_WhenAnyStageFails_RollsBackPersonIdentityEventAndAudit(BindingFailureStage stage)
+    {
+        var fixture = Fixture(failureStage: stage);
+        var personBefore = fixture.Repository.Current with { };
+        var accountBefore = fixture.Identity.Account with { };
+
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+            await fixture.Service.BindAsync(
+                "Person_1",
+                new BindPersonUserRequest("User_1", 7, "故障回滚"),
+                new PersonUserBindingActor("User_Admin", "trace-rollback")));
+
+        Assert.Equal(personBefore, fixture.Repository.Current);
+        Assert.Equal(accountBefore, fixture.Identity.Account);
+        Assert.Empty(fixture.Identity.Events);
+    }
+
+    private static TestFixture Fixture(
+        PersonUserBindingState? person = null,
+        IReadOnlyList<IdentityAccountSnapshot>? accounts = null,
+        BindingFailureStage? failureStage = null)
+    {
+        var repository = new InMemoryPersonUserBindingRepository(person ?? Person(), failureStage);
+        var directory = new RecordingAccountDirectory(accounts ?? [Account("User_1")]);
+        var identity = new RecordingIdentityParticipant(Account("User_1"), failureStage);
+        var transaction = new SnapshotTransactionExecutor(repository, identity, failureStage);
+        var service = new PersonUserBindingService(
+            repository,
+            directory,
+            identity,
+            transaction,
+            new FixedTimeProvider(BoundAt));
+        return new TestFixture(service, repository, directory, identity, transaction);
+    }
+
+    private static PersonUserBindingState Person(bool isEnabled = true, string? userEid = null) => new()
+    {
+        PersonEid = "Person_1",
+        PersonName = "张三",
+        IsEnabled = isEnabled,
+        UserEid = userEid,
+        BoundAt = userEid is null ? null : BoundAt,
+        BoundBy = userEid is null ? null : "User_Admin",
+        BindingReason = userEid is null ? null : "首次绑定",
+        UpdatedBy = "User_Creator",
+        UpdatedAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+    };
+
+    private static IdentityAccountSnapshot Account(
+        string userEid,
+        IdentityAccountStatus status = IdentityAccountStatus.Enabled,
+        bool isLocalAdministrator = false,
+        bool isPersonnelBound = false) => new()
+    {
+        UserEid = userEid,
+        ECODE = userEid.ToLowerInvariant(),
+        ENAME = $"账号 {userEid}",
+        Status = status,
+        Revision = 7,
+        IsLocalAdministrator = isLocalAdministrator,
+        IsPersonnelBound = isPersonnelBound
+    };
+
+    public enum BindingFailureStage
+    {
+        PersonWrite,
+        IdentityRegistration,
+        IdentityRevisionConflict,
+        Commit
+    }
+
+    private sealed record TestFixture(
+        PersonUserBindingService Service,
+        InMemoryPersonUserBindingRepository Repository,
+        RecordingAccountDirectory Directory,
+        RecordingIdentityParticipant Identity,
+        SnapshotTransactionExecutor Transaction);
+
+    private sealed class RecordingAccountDirectory(IReadOnlyList<IdentityAccountSnapshot> accounts) : IIdentityAccountDirectory
+    {
+        public IdentityAccountSearch? LastSearch { get; private set; }
+
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(accounts.FirstOrDefault(account => account.UserEid == userEid));
+
+        public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(
+            IdentityAccountSearch search,
+            CancellationToken cancellationToken = default)
+        {
+            LastSearch = search;
+            return ValueTask.FromResult(accounts);
+        }
+    }
+
+    private sealed class RecordingIdentityParticipant(
+        IdentityAccountSnapshot account,
+        BindingFailureStage? failureStage) : IIdentityLifecycleParticipant
+    {
+        public IdentityAccountSnapshot Account { get; set; } = account;
+        public List<string> Events { get; } = [];
+
+        public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelBindingAsync(
+            PersonnelBindingRegistration registration,
+            CancellationToken cancellationToken = default)
+        {
+            if (failureStage == BindingFailureStage.IdentityRegistration)
+            {
+                throw new InvalidOperationException("identity-registration-failed");
+            }
+
+            if (failureStage == BindingFailureStage.IdentityRevisionConflict)
+            {
+                throw new IdentityLifecycleException(
+                    IdentityLifecycleFailureCodes.RevisionConflict,
+                    Account);
+            }
+
+            Account = Account with { IsPersonnelBound = true, Revision = Account.Revision + 1 };
+            Events.Add(registration.Reason);
+            return ValueTask.FromResult(new IdentityLifecycleRegistrationResult { Account = Account, Changed = true });
+        }
+
+        public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableAsync(
+            PersonnelAccountDisableRegistration registration,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableHoldReleaseAsync(
+            PersonnelDisableHoldReleaseRegistration registration,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class InMemoryPersonUserBindingRepository(
+        PersonUserBindingState person,
+        BindingFailureStage? failureStage) : IPersonUserBindingRepository
+    {
+        public PersonUserBindingState Current { get; set; } = person;
+
+        public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
+
+        public ValueTask<bool> TryBindAsync(
+            string personEid,
+            string userEid,
+            DateTime boundAt,
+            string actorId,
+            string reason,
+            CancellationToken cancellationToken = default)
+        {
+            if (failureStage == BindingFailureStage.PersonWrite)
+            {
+                throw new InvalidOperationException("person-write-failed");
+            }
+
+            if (Current.PersonEid != personEid || !Current.IsEnabled || Current.UserEid is not null)
+            {
+                return ValueTask.FromResult(false);
+            }
+
+            Current = Current with
+            {
+                UserEid = userEid,
+                BoundAt = boundAt,
+                BoundBy = actorId,
+                BindingReason = reason,
+                UpdatedBy = actorId,
+                UpdatedAt = boundAt
+            };
+            return ValueTask.FromResult(true);
+        }
+    }
+
+    private sealed class SnapshotTransactionExecutor(
+        InMemoryPersonUserBindingRepository repository,
+        RecordingIdentityParticipant identity,
+        BindingFailureStage? failureStage) : IPlatformTransactionExecutor
+    {
+        public int ExecutionCount { get; private set; }
+
+        public async ValueTask<TResult> ExecuteAsync<TResult>(
+            Func<CancellationToken, ValueTask<TResult>> registerChanges,
+            CancellationToken cancellationToken = default)
+        {
+            ExecutionCount++;
+            var person = repository.Current with { };
+            var account = identity.Account with { };
+            var events = identity.Events.ToArray();
+            try
+            {
+                var result = await registerChanges(cancellationToken);
+                if (failureStage == BindingFailureStage.Commit)
+                {
+                    throw new InvalidOperationException("commit-failed");
+                }
+
+                return result;
+            }
+            catch
+            {
+                repository.Current = person;
+                identity.Account = account;
+                identity.Events.Clear();
+                identity.Events.AddRange(events);
+                throw;
+            }
+        }
+    }
+
+    private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(utcNow, TimeSpan.Zero);
+    }
+}

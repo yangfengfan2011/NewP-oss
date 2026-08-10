@@ -18,9 +18,9 @@
       "zhs": "组织信息",
       "en": "Organization"
     },
-    "Block_UserLink": {
+    "Block_UserBinding": {
       "zhs": "账号绑定",
-      "en": "User Link"
+      "en": "User Binding"
     },
     "Block_AuthorizationSummary": {
       "zhs": "授权摘要",

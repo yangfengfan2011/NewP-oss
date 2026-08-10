@@ -527,7 +527,7 @@ public sealed class IdentityAccountApplicationServiceTests
         var created = await fixture.CreateAsync();
         fixture.Repository.Users.Single().IsLocalAdministrator = true;
 
-        var error = await Assert.ThrowsAsync<IdentityApplicationException>(() => fixture.Transaction.ExecuteAsync(token =>
+        var error = await Assert.ThrowsAsync<IdentityLifecycleException>(() => fixture.Transaction.ExecuteAsync(token =>
             fixture.Participant.RegisterPersonnelBindingAsync(new PersonnelBindingRegistration
             {
                 PersonEid = "Person_1",
@@ -538,7 +538,7 @@ public sealed class IdentityAccountApplicationServiceTests
                 TraceId = fixture.Actor.TraceId
             }, token)).AsTask());
 
-        Assert.Equal(IdentityFailureCodes.LocalAdministratorProtected, error.FailureCode);
+        Assert.Equal(IdentityLifecycleFailureCodes.LocalAdministratorProtected, error.FailureCode);
     }
 
     [Fact]

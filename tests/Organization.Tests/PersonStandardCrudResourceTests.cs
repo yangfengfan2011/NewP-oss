@@ -39,7 +39,7 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "CompanyName");
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "DepartmentName");
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
-        Assert.Contains("userLink", descriptor.SummaryBlockKeys);
+        Assert.Contains("userBinding", descriptor.SummaryBlockKeys);
         Assert.Contains("authorizationSummary", descriptor.SummaryBlockKeys);
         var constraint = Assert.Single(descriptor.UniqueConstraints);
         Assert.Equal("personNo", constraint.Key);
@@ -123,7 +123,7 @@ public sealed class PersonStandardCrudResourceTests
             "ICP.Platform.Modules.Organization.Controllers.Persons" + "Controller");
 
         Assert.Null(legacyType);
-        Assert.NotNull(typeof(PersonUserLinksController));
+        Assert.NotNull(typeof(PersonUserBindingsController));
     }
 
     [Fact]

@@ -76,6 +76,47 @@ public sealed record IdentityLifecycleRegistrationResult
 }
 
 /// <summary>
+/// 跨模块生命周期登记可观察的稳定失败码。
+/// </summary>
+public static class IdentityLifecycleFailureCodes
+{
+    /// <summary>账号不存在。</summary>
+    public const string AccountNotFound = "IDENTITY_ACCOUNT_NOT_FOUND";
+
+    /// <summary>账号已删除。</summary>
+    public const string DeletedAccount = "IDENTITY_ACCOUNT_DELETED";
+
+    /// <summary>本地管理员账号不可参与人员生命周期。</summary>
+    public const string LocalAdministratorProtected = "IDENTITY_LOCAL_ADMIN_PROTECTED";
+
+    /// <summary>账号 Revision 已变化。</summary>
+    public const string RevisionConflict = "IDENTITY_REVISION_CONFLICT";
+}
+
+/// <summary>
+/// Identity 生命周期参与者向跨模块调用方暴露的稳定失败，不泄露 Identity 应用层实现类型。
+/// </summary>
+public sealed class IdentityLifecycleException : InvalidOperationException
+{
+    /// <summary>创建生命周期登记失败。</summary>
+    public IdentityLifecycleException(
+        string failureCode,
+        IdentityAccountSnapshot? latestAccount = null,
+        Exception? innerException = null)
+        : base(failureCode, innerException)
+    {
+        FailureCode = failureCode;
+        LatestAccount = latestAccount;
+    }
+
+    /// <summary>稳定失败码。</summary>
+    public string FailureCode { get; }
+
+    /// <summary>发生并发冲突时可返回的最新账号快照。</summary>
+    public IdentityAccountSnapshot? LatestAccount { get; }
+}
+
+/// <summary>
 /// 供 Organization 在共享事务内登记 Identity 生命周期变化的深命令 seam。
 /// 该接口不保存事务，也不暴露仓储或 EF 实体。
 /// </summary>

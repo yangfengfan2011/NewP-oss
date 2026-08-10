@@ -30,6 +30,23 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         PersonnelBindingRegistration registration,
         CancellationToken cancellationToken = default)
     {
+        try
+        {
+            return await RegisterPersonnelBindingCoreAsync(registration, cancellationToken);
+        }
+        catch (IdentityApplicationException exception)
+        {
+            throw new IdentityLifecycleException(
+                exception.FailureCode,
+                exception.LatestAccount,
+                exception);
+        }
+    }
+
+    private async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelBindingCoreAsync(
+        PersonnelBindingRegistration registration,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(registration);
         ValidateCaller(registration.ActorId, registration.TraceId);
         if (string.IsNullOrWhiteSpace(registration.PersonEid))

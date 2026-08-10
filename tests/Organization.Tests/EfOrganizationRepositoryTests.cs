@@ -187,7 +187,7 @@ public class EfOrganizationRepositoryTests
         Assert.Contains(definitions, definition => definition.Name == "Department");
         Assert.Contains(definitions, definition => definition.Name == "Position");
         Assert.Contains(definitions, definition => definition.Name == "Person");
-        Assert.Contains(definitions, definition => definition.Name == "PersonUserLink");
+        Assert.DoesNotContain(definitions, definition => definition.Name == "PersonUserLink");
     }
 
     [Fact]
@@ -219,15 +219,21 @@ public class EfOrganizationRepositoryTests
             Assert.Contains("b.ToTable(\"Department\"", snapshot, StringComparison.Ordinal);
             Assert.Contains("b.ToTable(\"Position\"", snapshot, StringComparison.Ordinal);
             Assert.Contains("b.ToTable(\"Person\"", snapshot, StringComparison.Ordinal);
-            Assert.Contains("b.ToTable(\"PersonUserLink\"", snapshot, StringComparison.Ordinal);
             Assert.Contains(".HasColumnName(\"CompanyId\")", snapshot, StringComparison.Ordinal);
             Assert.Contains(".HasColumnName(\"EmploymentStatus\")", snapshot, StringComparison.Ordinal);
             AssertModelPrimaryKey(snapshot, "Company", "EID");
             AssertModelPrimaryKey(snapshot, "Department", "EID");
             AssertModelPrimaryKey(snapshot, "Position", "EID");
             AssertModelPrimaryKey(snapshot, "Person", "EID");
-            AssertModelPrimaryKey(snapshot, "PersonUserLink", "EID");
         }
+
+        var sqlServerPerson = ExtractPersonSection(sqlServerSnapshot);
+        Assert.DoesNotContain("modelBuilder.Entity(\"PersonUserLink\"", sqlServerSnapshot, StringComparison.Ordinal);
+        Assert.Contains("b.Property<string>(\"UserEID\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains("b.Property<DateTime?>(\"UserBoundAt\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains("b.Property<string>(\"UserBoundBy\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains("b.Property<string>(\"UserBindingReason\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains(".HasDatabaseName(\"UX_Person_UserEID\")", sqlServerPerson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -291,6 +297,24 @@ public class EfOrganizationRepositoryTests
         AssertPersonUserLinkBackfillPrecedesKeySwitch(sqlServerMigration, "SET [EID] = [PersonId]");
         AssertPersonUserLinkBackfillPrecedesKeySwitch(mySqlMigration, "SET `EID` = `PersonId`");
         AssertPersonUserLinkBackfillPrecedesKeySwitch(oracleMigration, @"SET \""EID\"" = \""PersonId\""");
+    }
+
+    [Fact]
+    public void PermanentBindingMigration_DropsLegacyTableWithoutReadingOrMigratingRows()
+    {
+        var migration = ReadMigration(
+            GetRepositoryRoot(),
+            "platform-persistence-efcore.migrations.sqlserver",
+            "Organization_PermanentUserBinding");
+
+        Assert.Contains("DropTable(\r\n                name: \"PersonUserLink\")", migration, StringComparison.Ordinal);
+        Assert.Contains("name: \"UserEID\"", migration, StringComparison.Ordinal);
+        Assert.Contains("name: \"UX_Person_UserEID\"", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", migration, StringComparison.OrdinalIgnoreCase);
+        var down = migration[migration.IndexOf("protected override void Down", StringComparison.Ordinal)..];
+        Assert.DoesNotContain("CreateTable", down, StringComparison.Ordinal);
     }
 
     private static EfPlatformDbContext CreateDbContext()

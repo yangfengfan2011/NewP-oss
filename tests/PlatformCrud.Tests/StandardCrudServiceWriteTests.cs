@@ -314,7 +314,7 @@ public sealed class StandardCrudServiceWriteTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error!.StatusCode);
-        Assert.Equal("Organization.Person.DeleteBlockedByUserLink", result.Error.Code);
+        Assert.Equal("Organization.Person.DeleteBlockedByUserBinding", result.Error.Code);
     }
 
     private static StandardCrudService Service(InMemoryStandardCrudRepository? repository = null) =>
@@ -457,9 +457,9 @@ public sealed class StandardCrudServiceWriteTests
             return Task.FromResult<StandardCrudError?>(new StandardCrudError
             {
                 StatusCode = 409,
-                Code = "Organization.Person.DeleteBlockedByUserLink",
+                Code = "Organization.Person.DeleteBlockedByUserBinding",
                 Message = "当前人员已绑定账号，不能删除。",
-                ReasonKey = "organization.person.deleteBlockedByUserLink"
+                ReasonKey = "organization.person.deleteBlockedByUserBinding"
             });
         }
     }

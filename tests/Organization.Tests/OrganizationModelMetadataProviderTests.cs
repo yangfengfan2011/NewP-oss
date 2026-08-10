@@ -16,7 +16,7 @@ public class OrganizationModelMetadataProviderTests
         var definitions = provider.GetDefinitions();
 
         Assert.Equal(
-            ["Company", "Department", "Position", "Person", "PersonUserLink"],
+            ["Company", "Department", "Position", "Person"],
             definitions.Select(definition => definition.Name).ToArray());
 
         var validator = new ModelDefinitionValidator();
@@ -46,15 +46,19 @@ public class OrganizationModelMetadataProviderTests
     }
 
     [Fact]
-    public void PersonUserLink_IsProjectedAsEntity()
+    public void Person_OwnsPermanentUserBindingFieldsAndUniqueUserConstraint()
     {
         var provider = new OrganizationModelMetadataProvider();
 
         var definitions = provider.GetDefinitions();
 
-        var personUserLink = Assert.Single(definitions, definition => definition.Name == "PersonUserLink");
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
 
-        Assert.Equal(ModelKind.Entity, personUserLink.Kind);
+        Assert.Contains(person.Fields, static field => field.Name == "UserEID" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "UserBoundAt" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "UserBoundBy" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "UserBindingReason" && !field.Required);
+        Assert.Contains(person.Indexes, static index => index.Name == "UX_Person_UserEID" && index.IsUnique);
     }
 
     [Fact]

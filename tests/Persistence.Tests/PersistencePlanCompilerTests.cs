@@ -287,10 +287,18 @@ public sealed class PersistencePlanCompilerTests
     public void Compile_OrganizationInitialMigrationFromWrongLegacyDigest_IsRejected()
     {
         using var package = TestPackage.Create("Organization", "Asset");
+        var module = package.BuildBuiltInModule();
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
+            migration["fromModelDigest"] = new string('f', 64);
+            migration["compatibility"] = "backup-restore-only";
+        });
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(
-            BuildCanonicalPlan(package.BuildBuiltInModule()),
+            BuildCanonicalPlan(module),
             PersistenceProvider.SqlServer);
 
         Assert.False(result.IsSuccess);
@@ -316,6 +324,85 @@ public sealed class PersistencePlanCompilerTests
             PersistenceProvider.SqlServer);
 
         Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+    }
+
+    [Fact]
+    public void Compile_OrganizationLegacyDigestWithWrongMigrationId_IsRejected()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var module = package.BuildBuiltInModule();
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102142_Organization_000001_UntrustedCutover";
+            migration["fromModelDigest"] = LegacyMigrationCutoverPlan.OrganizationInitialFromModelDigest;
+            migration["compatibility"] = "backup-restore-only";
+        });
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void Compile_OrganizationLegacyDigestWithSafeExpandCompatibility_IsRejected()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        var module = package.BuildBuiltInModule();
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
+            migration["fromModelDigest"] = LegacyMigrationCutoverPlan.OrganizationInitialFromModelDigest;
+            migration["compatibility"] = "safe-expand";
+        });
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(module),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void Compile_InstalledOrganizationCannotClaimLegacyCutover_IsRejected()
+    {
+        using var package = TestPackage.Create("Organization", "Asset");
+        package.RewriteManifest(manifest =>
+        {
+            var migration = manifest["migrations"]!.AsArray()[0]!;
+            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
+            migration["fromModelDigest"] = LegacyMigrationCutoverPlan.OrganizationInitialFromModelDigest;
+            migration["compatibility"] = "backup-restore-only";
+        });
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(
+            BuildCanonicalPlan(package.BuildModule()),
+            PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+    }
+
+    [Fact]
+    public void LegacyMigrationCutoverPlan_DoesNotExposeMutableDescriptor()
+    {
+        var publicFind = typeof(LegacyMigrationCutoverPlan).GetMethod(
+            "Find",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        var exportedDescriptor = typeof(LegacyMigrationCutoverPlan).Assembly
+            .GetExportedTypes()
+            .SingleOrDefault(static type => type.Name == "LegacyMigrationCutoverDescriptor");
+
+        Assert.Null(publicFind);
+        Assert.Null(exportedDescriptor);
     }
 
     [Fact]

@@ -7,14 +7,13 @@ import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserBindingCard from '../components/PersonUserBindingCard';
 import {
   deletePerson,
-  disablePerson,
-  enablePerson,
   employmentStatusOptions,
   getCompanies,
   getDepartments,
   getPositions,
   mapPersonDetailView,
   mapPersonListItem,
+  setPersonLifecycleStatus,
   type PersonDetailView,
   type PersonListRow,
   type PersonUserBindingSummaryData,
@@ -108,20 +107,28 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       await deletePerson(id);
       refresh();
     },
-    disable: async ({ id, refresh }) => {
+    disable: async ({ id, detail, row, refresh }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法停用。');
       }
 
-      await disablePerson(id);
+      await setPersonLifecycleStatus(id, {
+        isEnabled: false,
+        expectedRevision: detail?.revision ?? row?.revision ?? 0,
+        reason: '人员中心停用人员',
+      });
       refresh();
     },
-    enable: async ({ id, refresh }) => {
+    enable: async ({ id, detail, row, refresh }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法启用。');
       }
 
-      await enablePerson(id);
+      await setPersonLifecycleStatus(id, {
+        isEnabled: true,
+        expectedRevision: detail?.revision ?? row?.revision ?? 0,
+        reason: '人员中心恢复人员',
+      });
       refresh();
     },
   },

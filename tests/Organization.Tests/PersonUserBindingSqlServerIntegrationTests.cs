@@ -1,6 +1,9 @@
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Authentication.Application;
+using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
+using ICP.Platform.Modules.Authentication.Persistence.Ef;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Ef;
@@ -45,6 +48,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
             Assert.Equal(0, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.tables WHERE [name] = N'PersonUserLink'"));
             Assert.Equal(4, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] IN (N'UserEID', N'UserBoundAt', N'UserBoundBy', N'UserBindingReason')"));
+            Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] = N'Revision' AND [is_nullable] = 0"));
             Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] = N'UX_Person_UserEID' AND [is_unique] = 1"));
         }
     }
@@ -120,6 +124,113 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task SqlServer_LifecycleCommitsAtomicallyAndRestoreNeverRevivesOldSession()
+    {
+        if (!ShouldRun()) return;
+        var fixture = await SqlFixture.CreateAsync("Lifecycle");
+        await using (fixture)
+        {
+            string credential;
+            await using (var setup = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddPerson(setup, "Person_1", "User_1", revision: 4);
+                AddPerson(setup, "Person_2", "User_2", revision: 4);
+                AddUser(setup, "User_1", 7, isPersonnelBound: true);
+                AddUser(setup, "User_2", 7, isPersonnelBound: true);
+                AddUser(setup, "User_Admin", 1);
+                await setup.SaveChangesAsync();
+
+                var sessions = SessionRegistry(setup);
+                credential = (await new EfPlatformTransactionExecutor(setup).ExecuteAsync(
+                    token => sessions.RegisterAsync(new AuthenticationSessionRegistration
+                    {
+                        UserEid = "User_1",
+                        Type = AuthenticationSessionType.Regular,
+                        ActorId = "User_1"
+                    }, token))).Credential;
+            }
+
+            await using (var context = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                var identityRepository = new EfIdentityRepository(context);
+                var sessions = SessionRegistry(context);
+                var service = new PersonLifecycleService(
+                    new EfPersonUserBindingRepository(context),
+                    new IdentityAccountDirectory(identityRepository),
+                    new IdentityLifecycleParticipant(identityRepository, sessions, new PlatformObjectIdGenerator(), TimeProvider.System),
+                    new EfPlatformTransactionExecutor(context),
+                    TimeProvider.System);
+
+                var disabled = await service.SetStatusAsync(
+                    "Person_1",
+                    new SetPersonLifecycleStatusRequest(false, 4, "SQL Server 人员停用"),
+                    new PersonLifecycleActor("User_Admin", "trace-sql-disable"));
+                Assert.Equal(5, disabled.Revision);
+                Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await sessions.ValidateAsync(credential)).Status);
+            }
+
+            Assert.False(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [IsEnabled] FROM [Person] WHERE [EID] = N'Person_1'"));
+            Assert.Equal(5L, await ScalarAsync<long>(fixture.ConnectionString, "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_1'"));
+            Assert.Equal("Disabled", await ScalarAsync<string>(fixture.ConnectionString, "SELECT [Status] FROM [User] WHERE [EID] = N'User_1'"));
+            Assert.True(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [PersonnelDisableHold] FROM [User] WHERE [EID] = N'User_1'"));
+            Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM [AuthenticationSession] WHERE [UserEID] = N'User_1' AND [RevokedAt] IS NOT NULL"));
+            Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM [IdentitySecurityEvent] WHERE [TargetUserEID] = N'User_1' AND [EventType] = N'PersonnelDisabled'"));
+
+            await using (var context = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                var identityRepository = new EfIdentityRepository(context);
+                var sessions = SessionRegistry(context);
+                var service = new PersonLifecycleService(
+                    new EfPersonUserBindingRepository(context),
+                    new IdentityAccountDirectory(identityRepository),
+                    new IdentityLifecycleParticipant(identityRepository, sessions, new PlatformObjectIdGenerator(), TimeProvider.System),
+                    new EfPlatformTransactionExecutor(context),
+                    TimeProvider.System);
+
+                var restored = await service.SetStatusAsync(
+                    "Person_1",
+                    new SetPersonLifecycleStatusRequest(true, 5, "SQL Server 人员恢复"),
+                    new PersonLifecycleActor("User_Admin", "trace-sql-restore"));
+                Assert.Equal("Disabled", restored.Account?.Status);
+                Assert.False(restored.Account?.PersonnelDisableHold);
+                Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await sessions.ValidateAsync(credential)).Status);
+            }
+
+            await using (var context = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                var identityRepository = new EfIdentityRepository(context);
+                var sessions = SessionRegistry(context);
+                var failing = new RegisterThenFailLifecycleParticipant(new IdentityLifecycleParticipant(
+                    identityRepository,
+                    sessions,
+                    new PlatformObjectIdGenerator(),
+                    TimeProvider.System));
+                var service = new PersonLifecycleService(
+                    new EfPersonUserBindingRepository(context),
+                    new IdentityAccountDirectory(identityRepository),
+                    failing,
+                    new EfPlatformTransactionExecutor(context),
+                    TimeProvider.System);
+
+                var failure = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
+                    await service.SetStatusAsync(
+                        "Person_2",
+                        new SetPersonLifecycleStatusRequest(false, 4, "SQL Server 故障回滚"),
+                        new PersonLifecycleActor("User_Admin", "trace-sql-rollback")));
+                Assert.Equal(PersonLifecycleFailureCodes.DependencyUnavailable, failure.FailureCode);
+            }
+
+            Assert.True(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [IsEnabled] FROM [Person] WHERE [EID] = N'Person_2'"));
+            Assert.Equal(4L, await ScalarAsync<long>(fixture.ConnectionString, "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_2'"));
+            Assert.Equal("Enabled", await ScalarAsync<string>(fixture.ConnectionString, "SELECT [Status] FROM [User] WHERE [EID] = N'User_2'"));
+            Assert.False(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [PersonnelDisableHold] FROM [User] WHERE [EID] = N'User_2'"));
+            Assert.Equal(0, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM [IdentitySecurityEvent] WHERE [TargetUserEID] = N'User_2'"));
+        }
+    }
+
     private static bool ShouldRun() =>
         string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal);
 
@@ -142,11 +253,17 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             .Options;
         var definitions = PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions())
             .Concat(IdentityModelDefinitions.All)
+            .Concat(AuthenticationModelDefinitions.All)
             .ToArray();
         return new EfPlatformDbContext(options, definitions);
     }
 
-    private static void AddPerson(EfPlatformDbContext context, string eid) =>
+    private static void AddPerson(
+        EfPlatformDbContext context,
+        string eid,
+        string? userEid = null,
+        long revision = 0,
+        bool isEnabled = true) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Person")).Add(new Dictionary<string, object?>
         {
             ["EID"] = eid,
@@ -156,28 +273,35 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             ["DepartmentId"] = null,
             ["PositionId"] = null,
             ["EmploymentStatus"] = "FullTime",
-            ["IsEnabled"] = true,
-            ["UserEID"] = null,
-            ["UserBoundAt"] = null,
-            ["UserBoundBy"] = null,
-            ["UserBindingReason"] = null,
+            ["IsEnabled"] = isEnabled,
+            ["Revision"] = revision,
+            ["UserEID"] = userEid,
+            ["UserBoundAt"] = userEid is null ? null : DateTime.UtcNow,
+            ["UserBoundBy"] = userEid is null ? null : "User_Admin",
+            ["UserBindingReason"] = userEid is null ? null : "SQL Server 绑定",
             ["CreatedBy"] = "User_Admin",
             ["CreatedAt"] = DateTime.UtcNow,
             ["UpdatedBy"] = "User_Admin",
             ["UpdatedAt"] = DateTime.UtcNow
         });
 
-    private static void AddUser(EfPlatformDbContext context, string eid, long revision) =>
+    private static void AddUser(
+        EfPlatformDbContext context,
+        string eid,
+        long revision,
+        bool isPersonnelBound = false,
+        bool personnelDisableHold = false,
+        string status = "Enabled") =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Identity/User")).Add(new Dictionary<string, object?>
         {
             ["EID"] = eid,
             ["ECODE"] = eid.ToLowerInvariant(),
             ["NormalizedECODE"] = eid.ToUpperInvariant(),
             ["ENAME"] = eid,
-            ["Status"] = "Enabled",
+            ["Status"] = status,
             ["IsLocalAdministrator"] = false,
-            ["IsPersonnelBound"] = false,
-            ["PersonnelDisableHold"] = false,
+            ["IsPersonnelBound"] = isPersonnelBound,
+            ["PersonnelDisableHold"] = personnelDisableHold,
             ["Revision"] = revision,
             ["CreatedBy"] = "User_Admin",
             ["CreatedAt"] = DateTime.UtcNow,
@@ -188,6 +312,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
     private static async Task AssertCommittedAsync(string connectionString)
     {
         Assert.Equal("User_1", await ScalarAsync<string>(connectionString, "SELECT [UserEID] FROM [Person] WHERE [EID] = N'Person_1'"));
+        Assert.Equal(1L, await ScalarAsync<long>(connectionString, "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_1'"));
         Assert.Equal("User_Admin", await ScalarAsync<string>(connectionString, "SELECT [UserBoundBy] FROM [Person] WHERE [EID] = N'Person_1'"));
         Assert.Equal(8L, await ScalarAsync<long>(connectionString, "SELECT [Revision] FROM [User] WHERE [EID] = N'User_1'"));
         Assert.True(await ScalarAsync<bool>(connectionString, "SELECT [IsPersonnelBound] FROM [User] WHERE [EID] = N'User_1'"));
@@ -217,6 +342,29 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableAsync(PersonnelAccountDisableRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableHoldReleaseAsync(PersonnelDisableHoldReleaseRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
+
+    private sealed class RegisterThenFailLifecycleParticipant(IIdentityLifecycleParticipant inner) : IIdentityLifecycleParticipant
+    {
+        public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelBindingAsync(PersonnelBindingRegistration registration, CancellationToken cancellationToken = default) =>
+            inner.RegisterPersonnelBindingAsync(registration, cancellationToken);
+
+        public async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableAsync(PersonnelAccountDisableRegistration registration, CancellationToken cancellationToken = default)
+        {
+            _ = await inner.RegisterPersonnelDisableAsync(registration, cancellationToken);
+            throw new InvalidOperationException("failure-after-lifecycle-registration");
+        }
+
+        public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableHoldReleaseAsync(PersonnelDisableHoldReleaseRegistration registration, CancellationToken cancellationToken = default) =>
+            inner.RegisterPersonnelDisableHoldReleaseAsync(registration, cancellationToken);
+    }
+
+    private static AuthenticationSessionRegistry SessionRegistry(EfPlatformDbContext context) => new(
+        new EfAuthenticationSessionRepository(context),
+        new IdentityAccountDirectory(new EfIdentityRepository(context)),
+        new PlatformObjectIdGenerator(),
+        new DefaultAuthenticationSessionCredentialGenerator(),
+        TimeProvider.System,
+        new AuthenticationSessionOptions());
 
     private sealed class UnusedSessionRegistry : IAuthenticationSessionRegistry
     {

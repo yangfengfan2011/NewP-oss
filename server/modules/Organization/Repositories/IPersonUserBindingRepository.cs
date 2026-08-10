@@ -18,4 +18,15 @@ public interface IPersonUserBindingRepository
         string actorId,
         string reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 仅在 Person Revision 与调用方观察一致且目标状态尚未达到时登记启停变化；不保存或提交外层事务。
+    /// </summary>
+    ValueTask<bool> TrySetEnablementAsync(
+        string personEid,
+        bool isEnabled,
+        long expectedRevision,
+        string actorId,
+        DateTime changedAt,
+        CancellationToken cancellationToken = default);
 }

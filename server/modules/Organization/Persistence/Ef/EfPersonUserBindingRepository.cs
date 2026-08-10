@@ -42,8 +42,36 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UserBoundAt"), boundAt)
                     .SetProperty(row => EF.Property<string?>(row, "UserBoundBy"), actorId)
                     .SetProperty(row => EF.Property<string?>(row, "UserBindingReason"), reason)
+                    .SetProperty(row => EF.Property<long>(row, "Revision"), row => EF.Property<long>(row, "Revision") + 1)
                     .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), boundAt),
+                cancellationToken);
+        return affected == 1;
+    }
+
+    public async ValueTask<bool> TrySetEnablementAsync(
+        string personEid,
+        bool isEnabled,
+        long expectedRevision,
+        string actorId,
+        DateTime changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("Person lifecycle writes require IPlatformTransactionExecutor.");
+        }
+
+        var affected = await Persons
+            .Where(row => EF.Property<string>(row, "EID") == personEid
+                && EF.Property<long>(row, "Revision") == expectedRevision
+                && EF.Property<bool>(row, "IsEnabled") != isEnabled)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(row => EF.Property<bool>(row, "IsEnabled"), isEnabled)
+                    .SetProperty(row => EF.Property<long>(row, "Revision"), row => EF.Property<long>(row, "Revision") + 1)
+                    .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
+                    .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), changedAt),
                 cancellationToken);
         return affected == 1;
     }
@@ -56,6 +84,7 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
         PersonEid = GetString(entity, "EID") ?? string.Empty,
         PersonName = GetString(entity, "ENAME") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
+        Revision = GetLong(entity, "Revision"),
         UserEid = GetString(entity, "UserEID"),
         BoundAt = GetDateTime(entity, "UserBoundAt"),
         BoundBy = GetString(entity, "UserBoundBy"),
@@ -69,6 +98,9 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;
+
+    private static long GetLong(IReadOnlyDictionary<string, object?> entity, string key) =>
+        entity.TryGetValue(key, out var value) && value is long number ? number : 0;
 
     private static DateTime? GetDateTime(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : null;

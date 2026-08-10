@@ -85,6 +85,7 @@ export interface PersonListRow {
   ENAME: string;
   EmploymentStatus: string;
   IsEnabled: boolean;
+  Revision: number;
   CompanyName: string;
   DepartmentName: string;
   PositionName?: string | null;
@@ -99,6 +100,7 @@ export interface PersonListRow {
   employmentStatus: string;
   employmentStatusLabel: string;
   isEnabled: boolean;
+  revision: number;
 }
 
 export interface PersonDetailView {
@@ -111,6 +113,7 @@ export interface PersonDetailView {
   employmentStatus: string;
   employmentStatusLabel: string;
   isEnabled: boolean;
+  revision: number;
   createdAt: string;
   companyName?: string | null;
   departmentName?: string | null;
@@ -199,6 +202,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
   const companyName = readStandardCrudString(row, ['CompanyName']);
   const departmentName = readStandardCrudString(row, ['DepartmentName']);
   const positionName = readStandardCrudNullableString(row, ['PositionName']);
+  const revision = Number(row.Revision ?? row.revision ?? 0);
 
   return {
     id: readStandardCrudString(row, ['EID']),
@@ -207,6 +211,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     ENAME: name,
     EmploymentStatus: employmentStatus,
     IsEnabled: isEnabled,
+    Revision: revision,
     CompanyName: companyName,
     DepartmentName: departmentName,
     PositionName: positionName,
@@ -221,6 +226,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled,
+    revision,
   };
 }
 
@@ -240,6 +246,7 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled: readStandardCrudBoolean(fields, ['IsEnabled'], true),
+    revision: Number(fields.Revision ?? fields.revision ?? 0),
     createdAt: readDateString(fields, ['CreatedAt']),
     companyName: readStandardCrudNullableString(fields, ['CompanyName']),
     departmentName: readStandardCrudNullableString(fields, ['DepartmentName']),
@@ -368,20 +375,19 @@ export async function deletePerson(personId: string): Promise<void> {
   );
 }
 
-export async function disablePerson(personId: string): Promise<PersonDetailView> {
-  return mapPersonDetailView(
-    await requestJson<unknown>(
-      `/api/organization/persons/${personId}/disable`,
-      {
-        method: 'POST',
-      },
-      '停用人员失败',
-    ),
+export async function setPersonLifecycleStatus(
+  personId: string,
+  input: { isEnabled: boolean; expectedRevision: number; reason: string },
+): Promise<void> {
+  await requestJson<unknown>(
+    `/api/organization/persons/${encodeURIComponent(personId)}/status`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
+    },
+    input.isEnabled ? '恢复人员失败' : '停用人员失败',
   );
-}
-
-export async function enablePerson(personId: string): Promise<PersonDetailView> {
-  return updatePerson(personId, { IsEnabled: true });
 }
 
 export async function searchPersonUserBindingCandidates(

@@ -199,7 +199,7 @@
             "defaultValue": true
           },
           "edit": {
-            "mode": "editable"
+            "mode": "readonly"
           },
           "view": {
             "mode": "readonly"
@@ -207,6 +207,15 @@
         },
         "view": {
           "visible": true
+        }
+      },
+      {
+        "name": "Revision",
+        "storage": {
+          "type": "long"
+        },
+        "contract": {
+          "valueType": "integer"
         }
       },
       {

@@ -26,6 +26,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IPositionService, PositionService>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
         services.AddScoped<IPersonUserBindingService, PersonUserBindingService>();
+        services.AddScoped<IPersonLifecycleService, PersonLifecycleService>();
         services.AddScoped<IStandardCrudQueryCustomizer, PersonCrudQueryCustomizer>();
         services.AddScoped<IStandardCrudDisplayValueResolver, PersonCrudDisplayValueResolver>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonUserBindingSummaryProvider>();

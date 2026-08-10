@@ -82,6 +82,23 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         PersonnelAccountDisableRegistration registration,
         CancellationToken cancellationToken = default)
     {
+        try
+        {
+            return await RegisterPersonnelDisableCoreAsync(registration, cancellationToken);
+        }
+        catch (IdentityApplicationException exception)
+        {
+            throw new IdentityLifecycleException(
+                exception.FailureCode,
+                exception.LatestAccount,
+                exception);
+        }
+    }
+
+    private async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableCoreAsync(
+        PersonnelAccountDisableRegistration registration,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(registration);
         ValidateCaller(registration.ActorId, registration.TraceId);
         var reason = NormalizeReason(registration.Reason);
@@ -120,6 +137,23 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
     public async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableHoldReleaseAsync(
         PersonnelDisableHoldReleaseRegistration registration,
         CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await RegisterPersonnelDisableHoldReleaseCoreAsync(registration, cancellationToken);
+        }
+        catch (IdentityApplicationException exception)
+        {
+            throw new IdentityLifecycleException(
+                exception.FailureCode,
+                exception.LatestAccount,
+                exception);
+        }
+    }
+
+    private async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableHoldReleaseCoreAsync(
+        PersonnelDisableHoldReleaseRegistration registration,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ValidateCaller(registration.ActorId, registration.TraceId);

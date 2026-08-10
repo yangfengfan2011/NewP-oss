@@ -87,8 +87,9 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("Organization.Person.PersonNoRequired", required["PersonNo"].ErrorCode);
         Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["ENAME"].Scope);
         Assert.Equal("Organization.Person.NameRequired", required["ENAME"].ErrorCode);
-        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["IsEnabled"].Scope);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateOnly, required["IsEnabled"].Scope);
         Assert.Equal("Organization.Person.EnabledRequired", required["IsEnabled"].ErrorCode);
+        Assert.DoesNotContain("IsEnabled", descriptor.FieldSet.UpdateFields);
         Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, required["EmploymentStatus"].Scope);
         Assert.Equal("Organization.Person.EmploymentStatusRequired", required["EmploymentStatus"].ErrorCode);
         Assert.DoesNotContain("CompanyId", required.Keys);

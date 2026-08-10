@@ -30,8 +30,7 @@ async function flushProTableRequest(): Promise<void> {
 }
 
 const serviceMocks = vi.hoisted(() => ({
-  disablePerson: vi.fn(),
-  enablePerson: vi.fn(),
+  setPersonLifecycleStatus: vi.fn(),
 }));
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -39,8 +38,7 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
 
   return {
     ...actual,
-    disablePerson: serviceMocks.disablePerson,
-    enablePerson: serviceMocks.enablePerson,
+    setPersonLifecycleStatus: serviceMocks.setPersonLifecycleStatus,
     getCompanies: async () => [],
     getDepartments: async () => [],
     getEmploymentStatusLabel: (value: string) => value,
@@ -188,6 +186,7 @@ describe('organization person center list layout', () => {
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
+            Revision: 4,
           }, {
             EID: 'person-2',
             PersonNo: 'P0002',
@@ -360,6 +359,7 @@ describe('organization person center list layout', () => {
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
+            Revision: 4,
           }],
           total: 1,
           page: 1,
@@ -368,7 +368,7 @@ describe('organization person center list layout', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     );
-    serviceMocks.disablePerson.mockRejectedValue(new Error('停用人员失败'));
+    serviceMocks.setPersonLifecycleStatus.mockRejectedValue(new Error('停用人员失败'));
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -394,7 +394,11 @@ describe('organization person center list layout', () => {
       confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(serviceMocks.disablePerson).toHaveBeenCalledWith('person-1');
+    expect(serviceMocks.setPersonLifecycleStatus).toHaveBeenCalledWith('person-1', {
+      isEnabled: false,
+      expectedRevision: 4,
+      reason: '人员中心停用人员',
+    });
     expect(container.textContent).toContain('停用人员失败');
   });
 });

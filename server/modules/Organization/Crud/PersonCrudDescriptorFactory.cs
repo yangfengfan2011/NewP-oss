@@ -19,10 +19,10 @@ public static class PersonCrudDescriptorFactory
         Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PersonStem),
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "CreatedAt", "UpdatedAt", "UserEID", "UserBoundAt", "UserBoundBy", "UserBindingReason"],
+            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "CreatedAt", "UpdatedAt", "UserEID", "UserBoundAt", "UserBoundBy", "UserBindingReason"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],
-            UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "UpdatedAt"]),
+            UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "UpdatedAt"]),
         OptionLabelFields = ["PersonNo", "ENAME"],
         SummaryBlockKeys = ["userBinding", "authorizationSummary"],
         DisplayValueFields =
@@ -53,7 +53,7 @@ public static class PersonCrudDescriptorFactory
             new StandardCrudRequiredField
             {
                 Field = "IsEnabled",
-                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                Scope = StandardCrudRequiredFieldScope.CreateOnly,
                 ErrorCode = "Organization.Person.EnabledRequired",
                 Message = "人员启用状态不能为空。",
                 ReasonKey = "organization.person.enabledRequired"

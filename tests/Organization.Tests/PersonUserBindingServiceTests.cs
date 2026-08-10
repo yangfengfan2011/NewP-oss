@@ -281,6 +281,14 @@ public sealed class PersonUserBindingServiceTests
             };
             return ValueTask.FromResult(true);
         }
+
+        public ValueTask<bool> TrySetEnablementAsync(
+            string personEid,
+            bool isEnabled,
+            long expectedRevision,
+            string actorId,
+            DateTime changedAt,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class SnapshotTransactionExecutor(

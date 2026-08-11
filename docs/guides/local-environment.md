@@ -33,13 +33,13 @@ Acceptance 只复用服务器与登录身份，将 catalog 强制切换到 `mast
 
 ## 本地管理员
 
-全新数据库不会获得固定明文密码。先停止开发服务，再在交互式终端执行离线 bootstrap：
+全新数据库不会获得固定明文密码。目标空数据库必须已经存在；先停止开发服务，再在交互式终端执行离线 bootstrap：
 
 ```powershell
-dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-admin
+.\scripts\bootstrap-local-admin.ps1
 ```
 
-命令只显示一次随机临时凭据；首次登录后必须修改。已有数据库继续使用其中现存的本地管理员凭据。
+脚本会为维护进程设置 Development 环境，并把 `NEWP_DEV_SQLSERVER_CONNECTION_STRING` 映射到 Host 标准连接配置；不会输出连接值。命令只显示一次随机临时凭据；首次登录后必须修改。已有数据库继续使用其中现存的本地管理员凭据。
 
 ## 验证入口
 

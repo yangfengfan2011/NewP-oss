@@ -1,8 +1,10 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { useAuthenticationState } from '@icp-platform/core';
+import { useAuthenticationState, type AuthenticationState } from '@icp-platform/core';
 import type { AuthContext as IAuthContext } from '@icp-platform/sdk';
 
-const AuthContext = createContext<IAuthContext | null>(null);
+type ShellAuthContext = IAuthContext & Pick<AuthenticationState, 'sessionError' | 'retrySessionValidation'>;
+
+const AuthContext = createContext<ShellAuthContext | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const authentication = useAuthenticationState();

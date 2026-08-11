@@ -18,7 +18,7 @@ export function Header() {
           <Space size={12}>
             <Avatar size="small" icon={<UserOutlined />} />
             <Text className="np-header-user">欢迎，{auth.user.ename}</Text>
-            <Button type="text" size="small" icon={<LogoutOutlined />} onClick={() => auth.logout()}>
+            <Button type="text" size="small" icon={<LogoutOutlined />} onClick={() => void auth.logout().catch(() => undefined)}>
               退出登录
             </Button>
           </Space>

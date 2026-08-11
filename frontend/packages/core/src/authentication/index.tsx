@@ -18,18 +18,45 @@ export function resolveAuthenticationDestination(
 export interface AuthenticationState {
   isAuthenticated: boolean;
   isInitialized: boolean;
+  sessionError?: string;
   user?: AuthUser;
   login: (ecode: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  retrySessionValidation: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 export async function readCurrentUser(): Promise<AuthUser | undefined> {
-  const response = await platformFetch('/api/auth/current-user', {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-  return response.ok ? await response.json() as AuthUser : undefined;
+  let response: Response;
+  try {
+    response = await platformFetch('/api/auth/current-user', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (cause) {
+    throw normalizeSessionError(cause);
+  }
+
+  if (response.status === 401) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new AuthenticationSessionError(await readProblemCode(response));
+  }
+  return await response.json() as AuthUser;
+}
+
+export class AuthenticationSessionError extends Error {
+  constructor(code: string) {
+    super(code);
+    this.name = 'AuthenticationSessionError';
+  }
+}
+
+function normalizeSessionError(cause: unknown): AuthenticationSessionError {
+  return cause instanceof AuthenticationSessionError
+    ? cause
+    : new AuthenticationSessionError('AUTH_NETWORK_UNAVAILABLE');
 }
 
 async function readProblemCode(response: Response): Promise<string> {
@@ -44,21 +71,34 @@ async function readProblemCode(response: Response): Promise<string> {
 export function useAuthenticationState(): AuthenticationState {
   const [user, setUser] = useState<AuthUser>();
   const [isInitialized, setIsInitialized] = useState(false);
+  const [sessionError, setSessionError] = useState<string>();
 
   const refresh = useCallback(async () => {
-    const current = await readCurrentUser();
-    setUser(current);
-    return current;
+    try {
+      const current = await readCurrentUser();
+      setUser(current);
+      setSessionError(undefined);
+      if (!current) invalidatePlatformAntiforgeryToken();
+      return current;
+    } catch (cause) {
+      const error = normalizeSessionError(cause);
+      setSessionError(error.message);
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
     let active = true;
     void readCurrentUser()
       .then((current) => {
-        if (active) setUser(current);
+        if (active) {
+          setUser(current);
+          setSessionError(undefined);
+          if (!current) invalidatePlatformAntiforgeryToken();
+        }
       })
-      .catch(() => {
-        if (active) setUser(undefined);
+      .catch((cause) => {
+        if (active) setSessionError(normalizeSessionError(cause).message);
       })
       .finally(() => {
         if (active) setIsInitialized(true);
@@ -80,13 +120,29 @@ export function useAuthenticationState(): AuthenticationState {
   }, [refresh]);
 
   const logout = useCallback(async () => {
+    let response: Response;
     try {
-      await platformFetch('/api/auth/logout', { method: 'POST' });
-    } finally {
-      invalidatePlatformAntiforgeryToken();
-      setUser(undefined);
+      response = await platformFetch('/api/auth/logout', { method: 'POST' });
+    } catch (cause) {
+      const error = normalizeSessionError(cause);
+      setSessionError(error.message);
+      throw error;
     }
+
+    if (!response.ok && response.status !== 401) {
+      const error = new AuthenticationSessionError(await readProblemCode(response));
+      setSessionError(error.message);
+      throw error;
+    }
+
+    invalidatePlatformAntiforgeryToken();
+    setUser(undefined);
+    setSessionError(undefined);
   }, []);
+
+  const retrySessionValidation = useCallback(async () => {
+    await refresh();
+  }, [refresh]);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     if (!user) throw new Error('AUTH_SESSION_INVALID');
@@ -104,9 +160,11 @@ export function useAuthenticationState(): AuthenticationState {
   return {
     isAuthenticated: Boolean(user),
     isInitialized,
+    sessionError,
     user,
     login,
     logout,
+    retrySessionValidation,
     changePassword,
   };
 }
@@ -170,7 +228,7 @@ export function FirstPasswordChangePage({ auth }: { auth: AuthenticationState })
             <button className="sh-btn sh-btn-primary sh-form-submit" type="submit" disabled={submitting}>
               {submitting ? '正在更新…' : '完成改密'}
             </button>
-            <button className="sh-btn sh-form-submit" type="button" onClick={() => void auth.logout()} disabled={submitting}>
+            <button className="sh-btn sh-form-submit" type="button" onClick={() => void auth.logout().catch(() => undefined)} disabled={submitting}>
               退出登录
             </button>
           </form>

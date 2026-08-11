@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const coreAuthentication = vi.hoisted(() => ({
   isAuthenticated: true,
   isInitialized: true,
+  sessionError: undefined,
   user: {
     id: 'User_1',
     ecode: 'admin',
@@ -19,6 +20,7 @@ const coreAuthentication = vi.hoisted(() => ({
   },
   login: vi.fn(),
   logout: vi.fn(),
+  retrySessionValidation: vi.fn(),
   changePassword: vi.fn(),
 }));
 

@@ -318,6 +318,17 @@ internal sealed class ModuleMigrationExecutor(
             throw Failure(PersistenceMigrationFailureCodes.ProviderUnsupported, stream);
         }
 
+        var duplicateMigrationId = stream.Migrations
+            .GroupBy(static migration => migration.MigrationId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1)?.Key;
+        if (duplicateMigrationId is not null)
+        {
+            throw Failure(
+                PersistenceMigrationFailureCodes.MigrationIdConflict,
+                stream,
+                duplicateMigrationId);
+        }
+
         var mismatchedCutover = stream.Migrations.FirstOrDefault(step =>
             step.LegacyCutover is not null && !step.LegacyCutover.Matches(stream, step));
         if (mismatchedCutover is not null)

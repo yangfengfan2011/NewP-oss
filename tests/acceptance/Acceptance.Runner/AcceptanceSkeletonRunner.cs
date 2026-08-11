@@ -45,10 +45,10 @@ public sealed class AcceptanceSkeletonRunner
         var startedAtUtc = DateTimeOffset.UtcNow;
         var runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
         var runDirectory = Path.Combine(outputRoot, "runs", $"{startedAtUtc:yyyyMMddTHHmmssfffZ}-{runId}");
-        Directory.CreateDirectory(runDirectory);
         await using var repositoryGuard = await AcceptanceRepositoryGuard.StartAsync(
             repositoryRoot,
             cancellationToken: cancellationToken);
+        Directory.CreateDirectory(runDirectory);
 
         var requestedGates = AcceptanceReducer.GetRequestedGates(selection);
         var eventLogPath = Path.Combine(runDirectory, "events.jsonl");

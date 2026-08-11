@@ -367,7 +367,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             diagnostics.Add(new PersistencePlanDiagnostic(
                 exception.Code,
                 module.ModuleId,
-                provider.ToString(),
+                exception.CanonicalKey ?? provider.ToString(),
                 manifestArtifact.DisplayPath,
                 exception.Message));
         }
@@ -421,6 +421,17 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MIGRATION_REQUIRED",
                 $"Migration stream '{module.ModuleId}' is empty.");
+        }
+
+        var duplicateMigrationId = migrations
+            .GroupBy(static migration => migration.MigrationId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1)?.Key;
+        if (duplicateMigrationId is not null)
+        {
+            throw new PersistencePlanValidationException(
+                PersistenceMigrationFailureCodes.MigrationIdConflict,
+                $"Migration id '{duplicateMigrationId}' is repeated in module stream '{module.ModuleId}'.",
+                duplicateMigrationId);
         }
 
         var firstMigration = migrations[0];
@@ -721,12 +732,15 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
 
     private sealed class PersistencePlanValidationException : Exception
     {
-        public PersistencePlanValidationException(string code, string message)
+        public PersistencePlanValidationException(string code, string message, string? canonicalKey = null)
             : base(message)
         {
             Code = code;
+            CanonicalKey = canonicalKey;
         }
 
         public string Code { get; }
+
+        public string? CanonicalKey { get; }
     }
 }

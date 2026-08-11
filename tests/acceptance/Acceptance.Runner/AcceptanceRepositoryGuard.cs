@@ -7,8 +7,12 @@ internal sealed record AcceptanceRepositorySnapshot(
     string HeadCommit,
     string HeadTree,
     string TrackedStateDigest,
-    string UntrackedBuildInputDigest)
+    string UntrackedBuildInputDigest,
+    bool HasTrackedChanges,
+    bool HasUntrackedBuildInputs)
 {
+    internal bool IsClean => !HasTrackedChanges && !HasUntrackedBuildInputs;
+
     private static readonly IReadOnlySet<string> BuildInputExtensions = new HashSet<string>(
         [
             ".cs", ".fs", ".vb", ".csproj", ".fsproj", ".vbproj", ".sln", ".slnx",
@@ -53,14 +57,16 @@ internal sealed record AcceptanceRepositorySnapshot(
             headCommit,
             headTree,
             Digest($"{trackedStatus}\0{trackedDiff}"),
-            await DigestBuildInputsAsync(repositoryRoot, buildInputs, cancellationToken));
+            await DigestBuildInputsAsync(repositoryRoot, buildInputs, cancellationToken),
+            trackedStatus.Length != 0 || trackedDiff.Length != 0,
+            buildInputs.Length != 0);
     }
 
     private static bool IsBuildInput(string relativePath)
     {
         var normalizedPath = relativePath.Replace('\\', '/');
         // CodeGraph 会在索引查询期间短暂创建运行态 lock；它不参与构建，不能把索引器活动误报为源码漂移。
-        if (normalizedPath.StartsWith(".codegraph/", StringComparison.OrdinalIgnoreCase))
+        if (normalizedPath.Equals(".codegraph/codegraph.lock", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -152,6 +158,12 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
     {
         repositoryRoot = Path.GetFullPath(repositoryRoot);
         var baseline = await AcceptanceRepositorySnapshot.CaptureAsync(repositoryRoot, cancellationToken);
+        if (!baseline.IsClean)
+        {
+            throw new InvalidOperationException(
+                "ACC_REPOSITORY_NOT_CLEAN: acceptance requires no tracked changes or untracked build inputs.");
+        }
+
         return new AcceptanceRepositoryGuard(
             repositoryRoot,
             baseline,

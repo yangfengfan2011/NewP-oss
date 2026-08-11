@@ -9,6 +9,7 @@ import {
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
+import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
 import Layout from './components/Layout';
 import { shellAntdTheme } from './config/antdTheme';
 import { shellUiConfig } from './config/uiConfig';
@@ -69,7 +70,9 @@ function PasswordChangeRoute() {
 
 function AuthenticationOnlyRoutes() {
   const auth = useAuth();
-  if (!auth.isInitialized) return null;
+  if (!auth.isInitialized || auth.sessionError) {
+    return <AuthenticationSessionBoundary authentication={auth}>{null}</AuthenticationSessionBoundary>;
+  }
   if (!auth.isAuthenticated || !auth.user) {
     return (
       <Routes>
@@ -134,6 +137,7 @@ function StandardCrudDetailRoute({ viewKey }: { viewKey: string }) {
 }
 
 function AppRoutes() {
+  const auth = useAuth();
   const runtimeMetadata = useRuntimeMetadata();
   // 路由接管语义统一下沉到 adapter，这里只消费结果，避免 App 自己再分叉出权限或冲突规则。
   const { metadataEntries, standardCrudDetailEntries, standardCrudDrawerRedirects, fallbackRoutes } = useMemo(() => {
@@ -158,6 +162,10 @@ function AppRoutes() {
       ),
     };
   }, [runtimeMetadata]);
+
+  if (!auth.isInitialized || auth.sessionError) {
+    return <AuthenticationSessionBoundary authentication={auth}>{null}</AuthenticationSessionBoundary>;
+  }
 
   return (
     <Routes>

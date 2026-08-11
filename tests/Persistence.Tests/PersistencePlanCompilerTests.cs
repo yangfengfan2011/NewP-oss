@@ -192,6 +192,41 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
+    public void Compile_SameStreamRepeatsMigrationIdAtNonAdjacentPosition_RejectsWholeCandidate()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteManifest(manifest =>
+        {
+            var migrations = manifest["migrations"]!.AsArray();
+            var first = migrations[0]!;
+            var second = first.DeepClone();
+            second["sequence"] = "000002";
+            second["migrationId"] = "20260809000001_partner_assetcatalog_000002_middle_22222222";
+            second["previousContentDigest"] = new string('1', 64);
+            second["contentDigest"] = new string('2', 64);
+            second["fromModelDigest"] = first["toModelDigest"]!.GetValue<string>();
+            migrations.Add(second);
+
+            var repeated = first.DeepClone();
+            repeated["sequence"] = "000003";
+            repeated["previousContentDigest"] = new string('2', 64);
+            repeated["contentDigest"] = new string('3', 64);
+            repeated["fromModelDigest"] = first["toModelDigest"]!.GetValue<string>();
+            migrations.Add(repeated);
+        });
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, static item =>
+            item.Code == "PERSISTENCE_MIGRATION_ID_CONFLICT"
+            && item.ModuleId == "Partner.AssetCatalog"
+            && item.CanonicalKey == "20260809000000_partner_assetcatalog_000001_initial_11111111");
+    }
+
+    [Fact]
     public void Compile_MigrationSequenceGap_RejectsWholeCandidate()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");

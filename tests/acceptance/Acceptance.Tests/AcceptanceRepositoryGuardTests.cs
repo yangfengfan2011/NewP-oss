@@ -21,6 +21,8 @@ public sealed class AcceptanceRepositoryGuardTests
             await RunGitAsync(repository, "commit", "-m", "change tree");
             var nextCommit = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
 
+            Assert.True(clean.IsClean);
+            Assert.False(firstDirty.IsClean);
             Assert.NotEqual(clean.TrackedStateDigest, firstDirty.TrackedStateDigest);
             Assert.NotEqual(firstDirty.TrackedStateDigest, secondDirty.TrackedStateDigest);
             Assert.NotEqual(clean.HeadCommit, nextCommit.HeadCommit);
@@ -49,6 +51,8 @@ public sealed class AcceptanceRepositoryGuardTests
             var withChangedBuildInput = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
 
             Assert.Equal(clean, withIgnoredArtifact);
+            Assert.True(clean.IsClean);
+            Assert.False(withBuildInput.IsClean);
             Assert.NotEqual(clean.UntrackedBuildInputDigest, withBuildInput.UntrackedBuildInputDigest);
             Assert.NotEqual(withBuildInput.UntrackedBuildInputDigest, withChangedBuildInput.UntrackedBuildInputDigest);
         }
@@ -72,6 +76,44 @@ public sealed class AcceptanceRepositoryGuardTests
             var withCodeGraphLock = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
 
             Assert.Equal(clean, withCodeGraphLock);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task CaptureAsync_DoesNotExcludeUnexpectedCodeGraphBuildInput()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            var codeGraphSource = Path.Combine(repository, ".codegraph", "unexpected.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(codeGraphSource)!);
+            await File.WriteAllTextAsync(codeGraphSource, "internal sealed class Unexpected;");
+
+            var snapshot = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
+
+            Assert.False(snapshot.IsClean);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_RejectsDirtyRepository()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(repository, "Program.cs"), "dirty");
+
+            var dirty = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                AcceptanceRepositoryGuard.StartAsync(repository));
+            Assert.StartsWith("ACC_REPOSITORY_NOT_CLEAN:", dirty.Message, StringComparison.Ordinal);
         }
         finally
         {

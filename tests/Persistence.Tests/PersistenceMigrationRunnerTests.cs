@@ -49,6 +49,32 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
+    public async Task MigrateAsync_PublicPlanRepeatsMigrationIdInOneStream_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildPlan(ForbiddenSqlMigration.MigrationId);
+        var stream = plan.Streams.Single();
+        var repeated = stream.Migrations[0] with
+        {
+            Sequence = "000002",
+            PreviousContentDigest = stream.Migrations[0].ContentDigest,
+            ContentDigest = new string('e', 64),
+            FromModelDigest = stream.Migrations[0].ToModelDigest
+        };
+        plan = plan with
+        {
+            Streams = [stream with { Migrations = [stream.Migrations[0], repeated] }]
+        };
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => runner.MigrateAsync());
+
+        Assert.Equal("PERSISTENCE_MIGRATION_ID_CONFLICT", exception.FailureCode);
+        Assert.Equal(ForbiddenSqlMigration.MigrationId, exception.MigrationId);
+    }
+
+    [Fact]
     public async Task MigrateAsync_ForbiddenModuleOperation_FailsBeforeOpeningConnection()
     {
         var migrationId = ForbiddenSqlMigration.MigrationId;

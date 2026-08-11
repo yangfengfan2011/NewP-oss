@@ -59,6 +59,27 @@ public sealed class AcceptanceRepositoryGuardTests
     }
 
     [Fact]
+    public async Task CaptureAsync_ExcludesCodeGraphRuntimeLock()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            var clean = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
+            var codeGraphLock = Path.Combine(repository, ".codegraph", "codegraph.lock");
+            Directory.CreateDirectory(Path.GetDirectoryName(codeGraphLock)!);
+            await File.WriteAllTextAsync(codeGraphLock, "runtime lock");
+
+            var withCodeGraphLock = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
+
+            Assert.Equal(clean, withCodeGraphLock);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
     public async Task Guard_LatchesTransientRepositoryChangeEvenWhenFinalSnapshotMatches()
     {
         var repository = await CreateRepositoryAsync();

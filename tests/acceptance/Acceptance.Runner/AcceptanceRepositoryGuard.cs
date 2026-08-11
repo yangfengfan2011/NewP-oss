@@ -58,6 +58,13 @@ internal sealed record AcceptanceRepositorySnapshot(
 
     private static bool IsBuildInput(string relativePath)
     {
+        var normalizedPath = relativePath.Replace('\\', '/');
+        // CodeGraph 会在索引查询期间短暂创建运行态 lock；它不参与构建，不能把索引器活动误报为源码漂移。
+        if (normalizedPath.StartsWith(".codegraph/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         var fileName = Path.GetFileName(relativePath);
         return BuildInputExtensions.Contains(Path.GetExtension(fileName))
             || fileName.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)

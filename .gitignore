@@ -90,8 +90,6 @@ update_tests.patch
 .codex-temp/dev-frontend.pid
 .codex-temp/dev-host-api.pid
 artifacts/
-!docs/designs/platform/artifacts/
-!docs/designs/platform/artifacts/**
 .codex-temp/dev-frontend.pid
 .codex-temp/dev-host-api.pid
 .codex-temp/model-switch-video-frames/direct-video-page.png

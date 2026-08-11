@@ -8,7 +8,7 @@ namespace ICP.Platform.Tools.ModelDtoSync;
 public static class ModuleDtoSyncRunner
 {
     /// <summary>
-    /// 从平台 catalog 读取当前模型投影，在仓库根下写入模块 Generated DTO 与签名 provider。
+    /// 从 modules/*/metadata/models 读取当前模型投影，在仓库根下写入模块 Generated DTO 与签名 provider。
     /// </summary>
     public static IReadOnlyList<string> Run(string repositoryRoot)
     {

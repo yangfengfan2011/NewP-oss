@@ -13,6 +13,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+if ($ExternalPlugin) {
+    throw 'RETIRED_ENTRY: -ExternalPlugin 已退役。外部插件只支持 standard-data.v1，请使用 docs/developer/external-plugin-development.md 与 PluginTool。'
+}
+
+if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
+    throw '-OutputPath 仅属于已退役的外部代码插件脚手架。内建模块输出目录由 ModuleName 确定。'
+}
+
 function Set-Utf8Content {
     param(
         [Parameter(Mandatory = $true)][string]$Path,

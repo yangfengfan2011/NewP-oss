@@ -5,8 +5,8 @@ Set-Location $repoRoot
 
 Write-Host "=== Running tests ===" -ForegroundColor Green
 
-Write-Host "=== AI-first design checks ===" -ForegroundColor Green
-& (Join-Path $PSScriptRoot "check-ai-first-design-targets.ps1")
+Write-Host "=== Current documentation checks ===" -ForegroundColor Green
+& (Join-Path $PSScriptRoot "check-current-docs.ps1") -Root $repoRoot
 
 Write-Host ""
 Write-Host "=== dic localization checks ===" -ForegroundColor Green

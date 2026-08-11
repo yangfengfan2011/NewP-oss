@@ -32,11 +32,11 @@ SDK 不得引用 Host 内部实现，也不得包含具体模块 ID 分支。
 
 ## 外部插件边界
 
-外部插件模板当前只依赖公开 SDK 及其公开契约，不依赖 Host、Kernel 装配细节或内建模块实现。对外发布前仍需按插件版本与兼容契约单独验证。
+本 SDK 面向仓内模块行为实现，不是外仓插件依赖。当前外部插件只使用精确版本的 `ICP.Platform.Plugin.Contracts`、`ICP.Platform.Plugin.Sdk`、`@icp-platform/plugin-sdk` 和 `ICP.Platform.Plugin.Tool`，并受 `standard-data.v1` 声明式 profile 约束。
 
 ## 推荐入口
 
 - 内建模块：`scripts/new-module.ps1` 或 `scripts/new-module.sh`；
 - 后端模板：`server/templates/backend-module-template`；
-- 外部插件模板：`server/templates/external-plugin-template`；
-- 打包：`scripts/pack-plugin.ps1` / `scripts/pack-plugin.sh`。
+- 外部插件：`docs/developer/external-plugin-development.md`；
+- 外仓可执行基线：`tests/integration/plugin-api/baseline/1.0.0`。

@@ -37,7 +37,7 @@
 - `server/modules/<ModuleId>/`
 - `modules/<ModuleId>/metadata/`
 - 对应的前端注册或页面
-- `docs/modules/` 下的既有边界与实现说明
+- `docs/contexts/<context>/CONTEXT.md` 中已确认的术语与边界（如已建立）
 
 只有当某个区域形成独立术语、职责边界或决策集合时，才在 `docs/contexts/<context>/` 下创建上下文文档。
 

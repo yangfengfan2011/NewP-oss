@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
-
-cd "$repo_root"
-
-echo "=== AI-first design target checks ==="
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$script_dir/check-ai-first-design-targets.ps1"
+echo 'RETIRED_ENTRY: check-ai-first-design-targets 已退役。当前 test/verify/CI 使用 check-current-docs.ps1。' >&2
+exit 2

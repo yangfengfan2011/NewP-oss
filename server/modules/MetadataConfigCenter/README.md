@@ -1,23 +1,13 @@
-# MetadataConfigCenter
+# MetadataConfigCenter 模块
 
-`MetadataConfigCenter` 是独立的元数据配置中心后端模块。
+MetadataConfigCenter 提供元数据定义层的治理入口。它通过模块 metadata manifest 发现可管理定义，并保持 source 保存与 runtime apply 两个动作分离。
 
-## 当前阶段范围
+当前边界：
 
-- 提供独立模块入口
-- 暴露菜单与权限契约
-- 提供基于 manifest 的模块发现
-- 提供 `SettingDefinition` 的读取、保存与显式 `apply` 闭环
+- 读取和保存受支持的 source metadata；
+- 显式 apply，把已保存 source 投影到 runtime；
+- 暴露模块、菜单和权限入口；
+- 不拥有 ConfigCenter 的 `ConfigItem` 运行时值；
+- 不把 Git 同步、插件激活或通用回滚编排吸收到模块内部。
 
-## 设计边界
-
-- 只负责元数据定义层治理入口
-- 不承接 `ConfigCenter` 的 `ConfigItem` 值层职责
-- 保存、应用、Git 同步保持分离
-- 保存只回写 source metadata，`apply` 负责把 source 投影到 runtime
-
-## 本阶段不包含
-
-- `Dictionary / Enumeration` 编辑器
-- 通用化的插件内核 apply / rollback 编排
-- 真实 Git 同步执行链路
+支持的 metadata 类型和 authoring 能力以当前 manifest、Controllers、Services 和测试为事实源，不在 README 维护易过期清单。

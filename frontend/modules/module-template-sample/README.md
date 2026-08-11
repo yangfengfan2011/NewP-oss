@@ -1,37 +1,5 @@
-# module-template-sample
+# module-template-sample 兼容样本
 
-这是当前仓库里用于说明前端组件化开发方式的最小真实示例模块。
+该模块保留早期 `FrontendModule` 声明与示例 API 页面，只用于回归 legacy adapter，不是新增前端模块的复制来源。
 
-## 它演示什么
-
-- 如何在 `src/index.ts` 中声明 `FrontendModule`
-- 如何把页面放在 `src/pages/*`
-- 如何把 API 访问放在 `src/services/*`
-- 如何通过受控入口接入 Shell
-
-## 主要文件
-
-- `src/index.ts`
-  模块声明入口，负责元数据、路由、菜单、权限和 i18n 声明。
-- `src/pages/ModuleTemplateSamplePage.tsx`
-  示例页面，展示加载、成功、失败三种状态。
-- `src/services/moduleTemplateSampleService.ts`
-  示例服务，请求后端 `/api/module-template-sample/status`。
-
-## 这个模块怎么接入
-
-可提交的 authoring 入口是：
-
-- `modules/ModuleTemplateSample/metadata/**`
-- 对应的根 module capsule
-
-开发与正式运行时都由 Host 编译并由 Shell 消费：
-
-- `/plugins/active-module-runtime.json`
-
-## 推荐阅读
-
-- 统一入口文档：
-  [docs/guides/componentized-development.md](../../../docs/guides/componentized-development.md)
-- 详细 Example 走读：
-  [docs/guides/componentized-example-module.md](../../../docs/guides/componentized-example-module.md)
+新增模块使用 `scripts/new-module.ps1` 生成根 Capsule、metadata 和两侧 behavior binding；前端入口应导出 `FrontendBehaviorBindings`。当前规范见 `frontend/docs/module-integration-guide.md` 和 `docs/developer/componentized-development.md`。

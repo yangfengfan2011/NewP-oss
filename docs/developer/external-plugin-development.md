@@ -1,83 +1,40 @@
-# 外部插件开发指南
+# 外部插件开发
 
-本文档说明如何基于公开 SDK 和外部插件模板开发最小后端插件。
+当前公开外部插件能力只支持声明式 `standard-data.v1`。它从 Standard Plugin Blueprint 派生标准 CRUD、页面、菜单、权限、模型和 SQL Server migration bundle；不允许外仓注入任意 Controller、DI callback、程序集入口、React 页面或生命周期代码。
 
-## 目标
+## 唯一可复制样本
 
-外部插件开发路径的目标是：
+使用 `tests/integration/plugin-api/baseline/1.0.0` 作为可执行基线。外部项目必须：
 
-- 不修改宿主源码
-- 不依赖内建模块实现
-- 只依赖公开 SDK / Contracts
-- 产出可被宿主插件目录识别的标准插件包
+- 精确锁定同版 `ICP.Platform.Plugin.Contracts`、`ICP.Platform.Plugin.Sdk`、`@icp-platform/plugin-sdk` 和 `ICP.Platform.Plugin.Tool`；
+- 提交 NuGet 与 pnpm 锁文件；
+- 只依赖公开发布包，不使用 ProjectReference、workspace/file/path/source link 或 NewP 源码路径；
+- 以 `newp.plugin.json` 和 `metadata/**` 作为 authoring 真源；
+- 只携带声明式前端投影和标准 migration bundle，不携带外部可执行前后端代码。
 
-## 推荐模板
+`scripts/new-module.ps1 -ExternalPlugin` 与 `server/templates/external-plugin-template` 属于旧代码型插件实验，不是当前入口。
 
-模板目录：
+## 工具闭环
 
-- `server/templates/external-plugin-template`
-
-脚手架生成：
-
-```powershell
-.\scripts\new-module.ps1 `
-  -ModuleName PartnerSample `
-  -DisplayName "合作方示例插件" `
-  -ExternalPlugin `
-  -OutputPath external-plugins/PartnerSample
-```
-
-```bash
-./scripts/new-module.sh \
-  --module-name PartnerSample \
-  --display-name "合作方示例插件" \
-  --external-plugin \
-  --output-path external-plugins/PartnerSample
-```
-
-## 生成结果
-
-外部模式当前只生成后端插件骨架，包含：
-
-- 模块入口
-- 最小状态服务
-- 最小状态接口
-- 工程文件
-- README
-
-不会做：
-
-- `HostApi.csproj` 接线
-- 前端模块生成
-- Shell 注册
-
-## 开发约束
-
-- 模块必须继续继承 `ModuleBase`
-- 只能通过 `IPermissionProvider`、`IMenuProvider`、`IConfigProvider` 等公开契约声明扩展点
-- 不应直接引用宿主实现或内建模块实现
-- 不应假设自己可以修改宿主内部结构来完成接入
-
-## 本地构建
+取得与公共包同版的 Platform API release manifest 后，在外部项目根目录执行：
 
 ```powershell
-dotnet build .\external-plugins\PartnerSample\PartnerSample.csproj
+dotnet newp plugin validate --root . --release-manifest <platform-api-release.json>
+dotnet newp plugin explain --root . --release-manifest <platform-api-release.json> --output <explain.json>
+dotnet newp plugin pack --root . --release-manifest <platform-api-release.json> --output <plugin-package>
+dotnet newp plugin verify --package <plugin-package> --release-manifest <platform-api-release.json>
 ```
 
-## 打包
+仓库内验证完整公开发布闭环：
 
 ```powershell
-.\scripts\pack-plugin.ps1 -ProjectPath .\external-plugins\PartnerSample\PartnerSample.csproj -Force
+pwsh -NoProfile -File .\tests\integration\plugin-api\Run-PlatformApiReleaseSmoke.ps1
 ```
 
-## 校验
+命令输出是结构化结果；失败时按 diagnostic code、stage 和 source path 修正 authoring，不绕过 release digest、依赖审计或包完整性检查。
 
-```powershell
-.\scripts\verify-plugin-package.ps1 -PackagePath .\artifacts\plugin-packages\PartnerSample
-```
+## 生命周期边界
 
-## 当前限制
+安装只改变已安装库存或期望状态；活动版本在 Host 启动期完成整体验证、迁移和投影后原子提交。migration 成功不等于插件已经激活，禁用也不等于删除数据。
 
-- 当前默认仍使用仓库内 `server/sdk/Sdk.csproj` 作为开发期引用
-- 对外分发的独立 SDK 包、版本治理和签名校验后续补齐
-- 当前只覆盖后端插件，不包含前端资源打包
+完整术语和失败语义见[Plugin Platform Context](../contexts/plugin-platform/CONTEXT.md)与[Platform Persistence Context](../contexts/platform-persistence/CONTEXT.md)。需要代码型外部插件时必须另行设计 profile，不能扩张 `standard-data.v1`。

@@ -99,7 +99,7 @@ src/
 
 ## 升级规则
 
-遵循 [frontend-ui-component-strategy-design.md](../../docs/designs/frontend-ui-component-strategy-design.md)：
+共享控件按真实复用次数演进：
 
 1. **第一次使用**：允许在模块内先实现，命名和结构为后续抽取留空间
 2. **第二次复用**：必须评估并优先迁入本包

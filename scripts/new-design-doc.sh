@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
-
-cd "$repo_root"
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$script_dir/new-design-doc.ps1" "$@"
+echo 'RETIRED_ENTRY: new-design-doc 已退役。新设计使用当前 GitHub issue/spec、用户指定文档或已调用 skill 规定的产物。' >&2
+exit 2

@@ -1,65 +1,37 @@
-# 前端架构说明
+# 前端工作区
 
-## 概览
+前端使用 React、TypeScript、Vite 和 pnpm workspace。Shell 消费 Host 生成的活动模块运行时目录；模块实现通过稳定 behavior key 接入，不在 Shell 中维护业务模块清单。
 
-当前前端采用模块化结构，Shell 负责运行时装配，SDK 定义 behavior binding 契约，各业务模块通过 Capsule 驱动的稳定 key 接入宿主。
-
-## 目录结构
+## 目录
 
 ```text
-frontend/
-├── packages/
-│   ├── shell/      # 前端宿主
-│   ├── sdk/        # 前端模块契约
-│   ├── core/       # 核心前端能力
-│   └── ui/         # 共享 UI 控件与页面模式块
-├── modules/
-│   ├── demo/
-│   ├── files/
-│   └── module-template-sample/
-├── templates/
-│   └── frontend-module-template/
-└── pnpm-workspace.yaml
+packages/shell/      宿主布局、全局 Provider 与活动目录装配
+packages/sdk/        仓内前端 behavior binding 与标准页面契约
+packages/core/       HTTP、认证、授权和本地化基础能力
+packages/ui/         共享 UI 控件与页面模式块
+packages/plugin-sdk/ 外仓 standard-data.v1 build-only SDK
+modules/             内建模块前端实现
+templates/           新内建模块模板
 ```
 
-## 当前阶段能力
+## 新模块
 
-- Shell 可装配多个前端模块。
-- `frontend/templates/frontend-module-template` 提供可构建的前端模块模板。
-- `@icp-platform/ui` 已开始承载真实模块复用的基础控件与结构块。
-- `frontend/modules/module-template-sample` 与 `scripts/new-module.*` 属于后续扩展能力，不是 2026-04-06 原始 Phase 6 模板闭环的核心验收项。
-
-## 新模块接入
-
-推荐使用脚手架一次生成根 Capsule、metadata 与前后端 behavior binding：
+从仓库根目录运行：
 
 ```powershell
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-模块的受控 authoring 入口是：
+`frontend/modules/<module-id>/src/index.ts` 只导出 `FrontendBehaviorBindings`。模块身份、路由、菜单、权限和本地化由根 Capsule 与 metadata 拥有。完整规范见 `frontend/docs/module-integration-guide.md`。
 
-- `modules/<Module>/newp.plugin.json`（身份、版本、依赖与 behavior key）
-- `modules/<Module>/metadata/**`（路由、菜单、权限引用与模型）
-- `frontend/modules/<module>/src/index.ts`（仅绑定稳定实现 key）
+## 验证
 
-Shell 只消费 Host 编译的 `active-module-runtime.json`，常规模块接入不再修改 Shell 内部注册表。
+依赖安装统一走仓库 `scripts/bootstrap.ps1`。定向构建和仓库构建示例：
 
-只需要生成文件、暂不接入 HostApi 时使用 `-SkipIntegration`；它不会省略 Capsule 或 behavior binding。
-
-## 构建验证
-
-```bash
-cd frontend
-pnpm --filter @icp-platform/ui build
-pnpm --filter @icp-templates/frontend-module-template build
-pnpm build
+```powershell
+corepack pnpm --dir frontend --filter @icp-modules/example-module build
+corepack pnpm --dir frontend test
+corepack pnpm --dir frontend build
 ```
 
-## 设计约束
-
-- 模块接入保持 capsule 显式声明，不在 Shell 中维护第二份清单。
-- 模块目录命名使用 kebab-case。
-- 模块说明和新增注释统一使用中文。
-- Phase 6 原始目标是“模板可复用、构建链路可验证、接入边界清晰”。
-- 示例模块、脚手架和更重的自动化能力可以继续演进，但不应反向改写模板阶段的边界定义。
+普通模块不得引用 `packages/shell/src/*`，也不得复制 `FrontendModule` 兼容声明作为新模板。

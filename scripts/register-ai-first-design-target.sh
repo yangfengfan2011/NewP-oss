@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
-
-cd "$repo_root"
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$script_dir/register-ai-first-design-target.ps1" "$@"
+echo 'RETIRED_ENTRY: register-ai-first-design-target 已退役。当前设计入口由 AGENTS.md、GitHub issue/spec 和按需 skill 管理。' >&2
+exit 2

@@ -1,57 +1,26 @@
 # 前端模块接入规范
 
-本文定义新增前端模块的 authoring owner、behavior binding 和最小验证方式。
+新增仓内前端模块只通过 Module Capsule、metadata 和 `FrontendBehaviorBindings` 接入。Shell 从 Host 的 Active Module Runtime Catalog 发现活动模块，不扫描 workspace，也不维护业务模块列表。
 
-## 三个明确边界
+## 所有权
 
-1. `modules/<ModuleId>/newp.plugin.json` 拥有模块身份与 `frontend.behaviorKey`。
-2. `modules/<ModuleId>/metadata/**` 拥有导航、路由、权限引用和本地化。
+1. `modules/<ModuleId>/newp.plugin.json` 拥有 identity、version、dependencies 和 `frontend.behaviorKey`。
+2. `modules/<ModuleId>/metadata/**` 拥有 route、menu、permission reference、model 和 localization。
 3. `frontend/modules/<module-id>/src/index.ts` 只把稳定 key 绑定到页面、renderer 或 action 实现。
-
-Shell 只消费 Host 编译的 `active-module-runtime.json`，不从源码目录推断活动模块。
-
-## 标准 binding
 
 ```typescript
 import { type FrontendBehaviorBindings } from '@icp-platform/sdk';
 import ExamplePage from './pages/ExamplePage';
 
-export const exampleBindings: FrontendBehaviorBindings = {
+const exampleBindings: FrontendBehaviorBindings = {
   behaviorKey: 'example.frontend',
-  customPages: [
-    {
-      pageKey: 'example.page',
-      component: ExamplePage,
-    },
-  ],
+  customPages: [{ pageKey: 'example.page', component: ExamplePage }],
 };
 
 export default exampleBindings;
 ```
 
-Capsule 的 `frontend.bindings` 与 metadata 的 `targetKey` 必须包含同一个 `example.page`；behavior key 必须与 TypeScript 完全一致。
-
-## 标准目录
-
-```text
-frontend/modules/<module-id>/
-├── src/
-│   ├── index.ts
-│   └── pages/
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-`components/`、`services/` 和 `assets/` 只在有真实需求时新增。公共 UI 依赖必须在模块自己的 `package.json` 中显式声明。
-
-## 禁止事项
-
-- 使用旧 `FrontendModule` 在 TypeScript 中重复 module metadata、routes、menus 或 permissions；
-- 直接引用 `frontend/packages/shell/src/*`；
-- 为接入单个模块修改 Shell 静态列表或增加 module id 特判；
-- binding key 与 Capsule / metadata 各自命名、靠运行时猜测匹配；
-- 把 live API 联通或宿主页面样式变成模板必备内容。
+Capsule 的公开 binding、metadata 的 `targetKey` 和 TypeScript 导出必须使用相同稳定 key；编译器会在活动快照提交前拒绝缺失、孤儿和冲突。
 
 ## 推荐生成
 
@@ -59,14 +28,28 @@ frontend/modules/<module-id>/
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-脚手架会生成根 Capsule、metadata 与两侧 behavior binding，并按需增加 HostApi 的受控投影链接。
+脚手架同时生成根 Capsule、metadata 和两侧 behavior binding。普通模块接入不手工编辑 Shell 注册表，也不新建 Host 私有模块清单。
 
-## 最小验证
+## 运行时装配
 
-```bash
-cd frontend
-pnpm --filter @icp-templates/frontend-module-template build
-pnpm --filter @icp-modules/<module-id> build
+```http
+GET /plugins/active-module-runtime.json
 ```
 
-完整接入还必须验证 Capsule 可被 Canonical Module Plan 编译，且 Shell 能从活动运行时目录解析并绑定全部声明入口。
+Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.replaceAll` 原子提交。任一必需入口失败时只显示 fatal/retry，不保留部分菜单、路由或 registry 状态。
+
+`FrontendModule`、逐项 registry 注册和 Host 私有 `plugin.json` 只服务于未完成 cutover 的既有模块。新增模块不得复制这些兼容接口。
+
+## 验证
+
+- 模块构建证明 TypeScript binding 与依赖完整。
+- Canonical Module Plan 测试证明 binding 缺失或 owner 冲突会拒绝整份候选。
+- Shell 测试证明单入口失败不会产生部分提交。
+- Host smoke 证明活动目录包含该模块，并与其他投影共享 `snapshotId` / `planHash`。
+
+```powershell
+corepack pnpm --dir frontend --filter @icp-modules/<module-id> build
+corepack pnpm --dir frontend --filter @icp-platform/shell test
+```
+
+外仓 `standard-data.v1` 插件不携带任意前端运行时代码；它使用独立 build-only plugin SDK 生成声明式标准投影。代码型外部 profile 必须另行设计。

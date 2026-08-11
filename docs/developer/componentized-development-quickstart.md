@@ -1,116 +1,29 @@
-# 组件化开发超短版
+# 内建模块五分钟接入
 
-这是一份给“马上要开始写模块”的超短清单。
-
-如果你没时间先看完整文档，先照这个做。
-
-## 1. 先抄哪个 Example
-
-直接参考这两个目录：
-
-- 后端：`server/modules/ModuleTemplateSample`
-- 前端：`frontend/modules/module-template-sample`
-
-详细解释看：
-
-- [componentized-example-module.md](componentized-example-module.md)
-- [code-commenting-guidelines.md](code-commenting-guidelines.md)
-
-## 2. 后端最少要有哪些文件
-
-```text
-server/modules/YourModule/
-├── YourModule.cs
-├── Controllers/
-├── Services/
-└── DTOs/
-```
-
-### 后端规则
-
-- `YourModule.cs` 只做模块声明、服务注册、权限声明、配置声明
-- `Controllers/*` 保持轻量
-- `Services/*` 放模块内部逻辑
-- 不要把业务逻辑堆进模块入口
-
-## 3. 前端最少要有哪些文件
-
-```text
-frontend/modules/your-module/
-├── src/index.ts
-├── src/pages/
-└── src/services/
-```
-
-### 前端规则
-
-- `src/index.ts` 只做稳定 key 到实现的 behavior binding；legacy adapter 才保留 `FrontendModule`
-- `src/pages/*` 放页面
-- `src/services/*` 放 API 访问
-- 不要直接改 Shell 内部结构
-
-## 4. 默认只允许改哪些接入点
-
-正常新增模块时，默认只改：
-
-- 后端：`apps/host-api/HostApi.csproj`
-- 模块 transport：`apps/host-api/modules/<ModuleId>/plugin.json`；canonical adopter 改用 `modules/<ModuleId>/newp.plugin.json`
-
-如果你发现还要改 Host / Shell 其他内部文件，先停下来，先补设计。
-
-## 5. 现在前端装配怎么理解
-
-把当前前端装配记成两句话就够了：
-
-- Host 从 Canonical Module Plan 生成唯一的 `active-module-runtime.json`
-- Shell 只有整份目录加载成功后才一次提交模块，不存在 workspace fallback
-
-也就是说：
-
-- 开发期加一个内建模块，通常只增加 capsule/transport 声明与行为实现
-- 看正式交付路径时，关注同一活动快照与原子动态装配
-
-## 6. 什么情况下不要直接写代码
-
-遇到下面情况先补设计文档：
-
-- 要改 Host / Shell 内部结构
-- 现有 `Contracts / SDK / 模板` 不够用
-- 要新增新的宿主级接入点
-- 要改变前后端插件装配方式
-
-## 7. 最小验证命令
-
-后端：
+## 1. 生成
 
 ```powershell
+pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
+```
+
+只生成文件、暂不接入 HostApi 时增加 `-SkipIntegration`。
+
+## 2. 修改三个所有者
+
+- `modules/ExampleModule/newp.plugin.json`：身份、版本、依赖和 behavior key。
+- `modules/ExampleModule/metadata/**`：路由、菜单、权限引用、模型和本地化。
+- `server/modules/ExampleModule/` 与 `frontend/modules/example-module/`：只实现对应 behavior binding 和业务能力。
+
+前端 `src/index.ts` 导出 `FrontendBehaviorBindings`，不声明 `FrontendModule`、路由、菜单或权限。
+
+## 3. 验证
+
+```powershell
+dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
 dotnet build .\apps\host-api\HostApi.csproj
-dotnet test .\tests\Kernel.Tests\Kernel.Tests.csproj
+corepack pnpm --dir frontend --filter @icp-modules/example-module build
 ```
 
-前端：
+最后确认 Capsule 能通过 `CanonicalModulePlanCompiler`，且 Shell 能从 `/plugins/active-module-runtime.json` 解析全部 binding。
 
-```bash
-cd frontend
-pnpm --filter @icp-platform/shell build
-```
-
-如果涉及前端插件装配，再补：
-
-```bash
-pnpm --filter @icp-platform/shell test
-```
-
-## 8. 只记住这 5 句话
-
-1. Host / Shell 负责组合，模块负责声明。
-2. 公共能力进 `Kernel / SDK / Contracts`。
-3. 模块私有逻辑留在模块内部。
-4. 正常接模块时，只改受控入口。
-5. 要改宿主内部时，先补设计再实现。
-
-## 9. 推荐阅读顺序
-
-1. 本文档
-2. [componentized-example-module.md](componentized-example-module.md)
-3. [componentized-development.md](componentized-development.md)
+完整边界见[组件化开发指南](componentized-development.md)和[组件化护栏](../architecture/componentization-guardrails.md)。

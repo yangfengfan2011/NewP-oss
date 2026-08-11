@@ -62,4 +62,6 @@ legacy frontend modules 仍由兼容 adapter 装载，但不得作为新增 cano
 
 ## 当前边界
 
-本阶段已经实现确定性 Canonical Module Plan、共同快照投影、Organization behavior binding 和 Shell all-or-nothing 注册。desired/active/LKG 生命周期、外仓公开 SDK 与完整外部插件闸门由后续实施 Issue 承担；不得在 Shell 中提前复制这些职责。
+当前实现已经包含确定性 Canonical Module Plan、共同快照投影、desired/active/LKG 生命周期、Organization behavior binding 和 Shell all-or-nothing 注册。公开外部 authoring 仅支持声明式 `standard-data.v1`；它不向外仓开放任意后端程序集或前端运行时代码。公开包与工具链可用不等于终局外部插件 Gate 已通过，验收结论仍以当前 issue 和 Acceptance 证据为准。
+
+代码型外部 profile 必须另行设计进程隔离、受控 DI、前端共享依赖和失败域，不得在 Shell 中提前复制这些职责。

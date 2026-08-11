@@ -112,9 +112,10 @@ try {
     $currentStage = "diff-check"
     Invoke-VerificationStage -Name $currentStage -FilePath "git" -Arguments @("diff", "--check")
 
-    $currentStage = "ai-first-design"
+    $currentStage = "current-docs"
     Invoke-VerificationStage -Name $currentStage -FilePath $pwshPath -Arguments @(
-        "-NoLogo", "-NoProfile", "-File", (Join-Path $PSScriptRoot "check-ai-first-design-targets.ps1"))
+        "-NoLogo", "-NoProfile", "-File", (Join-Path $PSScriptRoot "check-current-docs.ps1"),
+        "-Root", $repoRoot)
 
     $currentStage = "dic-localization"
     Invoke-VerificationStage -Name $currentStage -FilePath $pwshPath -Arguments @(

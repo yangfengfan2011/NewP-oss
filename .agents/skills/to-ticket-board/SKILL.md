@@ -11,7 +11,7 @@ description: 将 `.scratch/feature-slug/spec.md` 中已确认的规格拆成同�
 
 - 默认读取 `.scratch/<feature-slug>/spec.md`；未指定功能目录时，只在来源唯一且明确时自行定位。
 - 先读取仓库 `AGENTS.md`、`docs/agents/issue-tracker.md` 和与任务直接相关的项目规则。
-- 把结果输出到规格同目录的 `.scratch/<feature-slug>/tickets.md`。除非用户明确指定其他路径，不要写入 `docs/superpowers/specs/`、`docs/superpowers/plans/` 或其他目录。
+- 把结果输出到规格同目录的 `.scratch/<feature-slug>/tickets.md`。除非用户明确指定其他路径，不要写入 `docs/` 或 `docs/_retired/`。
 - 在文件顶部记录规格来源。用户明确以一个既有规格或其他路径为来源时，仍把新票据板写入对应的 `.scratch/<feature-slug>/tickets.md`，不要迁移或改写原规格。
 - 使用 [assets/ticket-board-template.md](assets/ticket-board-template.md) 作为结构起点，并按实际任务删减不需要的字段。
 

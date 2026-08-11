@@ -1,70 +1,38 @@
-# Architecture
+# 架构导航
 
-## Goal
+本文只描述当前稳定边界和进一步阅读入口，不维护阶段状态或模块完成清单。
 
-Build a modular platform kernel that can host reusable public modules and extension modules without editing kernel internals.
+## 组合关系
 
-## Layers
+- Host 负责启动、认证接入、模块加载和宿主级横切能力。
+- Shell 负责布局、全局 Provider，以及从活动模块运行时目录装配菜单、路由和前端实现。
+- Module Capsule 拥有模块身份、版本和依赖；metadata 拥有静态声明；C# 与 TypeScript 只提供 behavior binding。
+- Kernel 编译、校验并投影 Canonical Module Plan；冲突或引用缺失会拒绝整份候选，不按加载顺序覆盖。
+- Plugin Platform 管理外部插件的校验、期望状态、启动期激活和活动快照。
+- Platform Persistence 把同一候选计划编译为共享运行时模型和模块自有 migration streams。
+- 内建模块通过 Contracts、SDK 和平台抽象协作，不依赖其他模块的私有实现。
 
-### Host
-- startup
-- auth integration
-- module discovery
-- route/menu aggregation
-- global middleware
+## 事实入口
 
-### Kernel
-- core abstractions
-- eventing
-- caching
-- storage abstractions
-- auditing abstractions
-- configuration abstractions
+- 领域关系与术语：[CONTEXT-MAP.md](../../CONTEXT-MAP.md)
+- 组件化边界：[componentization-guardrails.md](componentization-guardrails.md)
+- Module Capsule 契约：[module-contract.md](module-contract.md)
+- 模块模板：[module-template.md](module-template.md)
+- 前端装配：[frontend-plugin-loading.md](frontend-plugin-loading.md)
+- ADR：[../adr/](../adr/)
+- 当前开发指南：[../developer/](../developer/)
 
-### Module Contracts
-- module metadata
-- service registration
-- route/menu/permission/config declarations
-- migration/import hook
+源码位置：
 
-### Built-in Modules
-- Authorization
-- ConfigCenter
-- Audit
+```text
+apps/host-api/                       Host 组合与启动
+server/kernel/                       模块计划、包和运行时投影内核
+server/plugin-platform/              外部插件生命周期
+server/platform-persistence*/        持久化计划、EF 与 provider adapter
+modules/<ModuleId>/                  Capsule 与 metadata authoring 真源
+server/modules/<ModuleId>/           后端行为实现
+frontend/packages/shell/             Shell 与活动目录消费
+frontend/modules/<module-id>/        前端行为实现
+```
 
-### SDK
-- server-side module SDK
-- frontend module SDK
-- templates and registration helpers
-
-### Modeling
-- strong-typed model semantics
-- AI-assisted metadata authoring
-- persistence adapters project model semantics into runtime storage
-
-## Migration stance
-
-Old platform assets do not all become modules.
-Each old asset class must first be classified:
-- Retire
-- Rewrite
-- Wrap
-- Import
-- Postpone
-
-## First-wave boundaries
-
-The first wave should not include:
-- workflow redesign
-- report designer redesign
-- studio/winapp rewrite
-- file-service rewrite
-- deep business migration
-
-## Metadata authoring
-
-At the current stage, metadata is authored by AI and reviewed by humans.
-We do not build a human-facing metadata designer first.
-
-Reference:
-- [ai-metadata-authoring-guide.md](ai-metadata-authoring-guide.md)
+架构或公共契约变化必须先有已确认设计工件；实现完成后同步更新唯一对应的 Context 或 ADR，不另写阶段性“现状副本”。

@@ -6,7 +6,6 @@ usage() {
   cat <<'EOF'
 用法：
   ./scripts/new-module.sh --module-name ExampleModule [--display-name "示例模块"] [--skip-integration]
-  ./scripts/new-module.sh --module-name ExternalSample --external-plugin [--output-path external-plugins/ExternalSample]
 EOF
 }
 
@@ -29,12 +28,12 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --external-plugin)
-      ps_args+=("-ExternalPlugin")
-      shift
+      echo "RETIRED_ENTRY: --external-plugin 已退役；外部插件请使用 standard-data.v1 与 PluginTool。" >&2
+      exit 2
       ;;
     --output-path)
-      ps_args+=("-OutputPath" "${2:-}")
-      shift 2
+      echo "--output-path 仅属于已退役的外部代码插件脚手架。" >&2
+      exit 2
       ;;
     -h|--help)
       usage
@@ -60,15 +59,5 @@ if command -v pwsh >/dev/null 2>&1; then
   exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$ps_script" "${ps_args[@]}"
 fi
 
-if command -v powershell.exe >/dev/null 2>&1; then
-  if command -v wslpath >/dev/null 2>&1; then
-    ps_script="$(wslpath -w "$ps_script")"
-  fi
-
-  echo "Built-in modules are authored through modules/<ModuleName>/newp.plugin.json and projected through the active module runtime catalog."
-  echo "Do not modify other Host/Shell internals for normal module integration unless a separate design approves it."
-  exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps_script" "${ps_args[@]}"
-fi
-
-echo "未找到 pwsh 或 powershell.exe，当前环境无法通过 .sh 包装器执行脚手架。" >&2
+echo "未找到 pwsh，当前环境无法通过 .sh 包装器执行脚手架。" >&2
 exit 1

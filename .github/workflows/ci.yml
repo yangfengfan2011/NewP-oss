@@ -22,9 +22,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: AI-first 设计目标校验
+      - name: 当前文档校验
         shell: pwsh
-        run: ./scripts/check-ai-first-design-targets.ps1
+        run: ./scripts/check-current-docs.ps1 -Root .
 
       - name: 字典本地化校验
         shell: pwsh

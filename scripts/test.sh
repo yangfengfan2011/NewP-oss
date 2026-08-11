@@ -7,8 +7,8 @@ cd "$repo_root"
 
 echo "=== 运行测试 ==="
 
-echo "=== AI-first 设计检查 ==="
-"$repo_root/scripts/check-ai-first-design-targets.sh"
+echo "=== 当前文档检查 ==="
+pwsh -NoProfile -File "$repo_root/scripts/check-current-docs.ps1" -Root "$repo_root"
 
 echo ""
 echo "=== dic 本地化检查 ==="

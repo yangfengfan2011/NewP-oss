@@ -4,12 +4,13 @@
 
 ## 运行
 
-先为当前进程提供可创建和删除 catalog 的 SQL Server 管理连接；连接值不会写入证据：
+Runner 会依次读取 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和本地 `apps/host-api/appsettings.Development.json`。连接身份必须具备创建和删除 catalog 的权限；连接值不会写入证据。已配置本地 Development 连接时可直接运行：
 
 ```powershell
-$env:NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION = '<sql-server-admin-connection>'
 pwsh.exe -NoLogo -NoProfile -File scripts/accept.ps1 -Gate IdentityFoundation
 ```
+
+需要临时覆盖时只在当前进程设置 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`，无需修改受跟踪配置。Runner 始终切换到 `master` 并创建本轮唯一的 disposable catalog，不会把配置中的应用 catalog 作为验收数据库。
 
 成功时进程退出码为 `0`，并输出 `ACCEPTANCE_RESULT`。产物位于 `.codex-temp/acceptance/runs/<timestamp>-<run-id>/`；`result.json` 是汇总事实，`events.jsonl` 和 `evidence-index.json` 提供事件与文件索引。
 

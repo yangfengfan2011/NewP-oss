@@ -2,9 +2,35 @@ using ICP.Platform.Tools.ModelDtoSync;
 
 try
 {
-    var repositoryRoot = args.Length > 0
-        ? Path.GetFullPath(args[0])
+    var arguments = args.ToList();
+    var checkOnly = arguments.Remove("--check");
+    if (arguments.Count > 1 || arguments.Any(static argument => argument.StartsWith("--", StringComparison.Ordinal)))
+    {
+        throw new ArgumentException("用法：ModelDtoSync [--check] [repository-root]");
+    }
+
+    var repositoryRoot = arguments.Count == 1
+        ? Path.GetFullPath(arguments[0])
         : FindRepositoryRoot();
+
+    if (checkOnly)
+    {
+        var driftedFiles = ModuleDtoSyncRunner.Check(repositoryRoot);
+        if (driftedFiles.Count == 0)
+        {
+            Console.WriteLine("model-dto-sync check passed.");
+            return 0;
+        }
+
+        Console.Error.WriteLine("model-dto-sync 检测到生成物漂移：");
+        foreach (var path in driftedFiles)
+        {
+            Console.Error.WriteLine(" - " + path);
+        }
+        Console.Error.WriteLine(
+            "请运行：dotnet run --project ./server/tools/model-dto-sync/ModelDtoSync.csproj --no-restore -- .");
+        return 1;
+    }
 
     var writtenFiles = ModuleDtoSyncRunner.Run(repositoryRoot);
     foreach (var path in writtenFiles)

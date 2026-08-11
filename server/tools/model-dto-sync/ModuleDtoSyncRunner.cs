@@ -14,12 +14,62 @@ public static class ModuleDtoSyncRunner
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
 
+        repositoryRoot = Path.GetFullPath(repositoryRoot);
+        return Generate(repositoryRoot, ResolveMetadataRepositoryRoot(repositoryRoot));
+    }
+
+    /// <summary>
+    /// 比较当前 Generated DTO 与模型投影，不修改仓库，并返回发生漂移的仓库相对路径。
+    /// </summary>
+    public static IReadOnlyList<string> Check(string repositoryRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
+
+        repositoryRoot = Path.GetFullPath(repositoryRoot);
+        var temporaryRoot = Path.Combine(
+            Path.GetTempPath(),
+            "newp-model-dto-sync-check",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryRoot);
+
+        try
+        {
+            var expectedFiles = Generate(temporaryRoot, ResolveMetadataRepositoryRoot(repositoryRoot));
+            var expectedByRelativePath = expectedFiles.ToDictionary(
+                path => NormalizeRelativePath(Path.GetRelativePath(temporaryRoot, path)),
+                static path => path,
+                StringComparer.Ordinal);
+            var actualByRelativePath = EnumerateManagedGeneratedFiles(repositoryRoot).ToDictionary(
+                path => NormalizeRelativePath(Path.GetRelativePath(repositoryRoot, path)),
+                static path => path,
+                StringComparer.Ordinal);
+
+            return expectedByRelativePath.Keys
+                .Union(actualByRelativePath.Keys, StringComparer.Ordinal)
+                .Where(relativePath =>
+                    !expectedByRelativePath.TryGetValue(relativePath, out var expectedPath)
+                    || !actualByRelativePath.TryGetValue(relativePath, out var actualPath)
+                    || !File.ReadAllBytes(expectedPath).SequenceEqual(File.ReadAllBytes(actualPath)))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryRoot))
+            {
+                Directory.Delete(temporaryRoot, recursive: true);
+            }
+        }
+    }
+
+    private static IReadOnlyList<string> Generate(string outputRepositoryRoot, string metadataRepositoryRoot)
+    {
+
         var generator = new ModelDtoGenerator();
         var codeWriter = new GeneratedCodeWriter();
         var signatureWriter = new DtoSignatureWriter();
         var writtenFiles = new List<string>();
         var signaturesByModule = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
-        var metadataRepositoryRoot = ResolveMetadataRepositoryRoot(repositoryRoot);
 
         var modelLoader = new JsonModelMetadataDocumentLoader();
         var typeMap = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(
@@ -48,7 +98,7 @@ public static class ModuleDtoSyncRunner
                 var document = modelLoader.LoadFromFile(modelPath);
                 validator.Validate(document, typeMap);
                 var definition = projector.Project(document, typeMap, "SqlServer");
-                var outputDirectory = Path.Combine(repositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
+                var outputDirectory = Path.Combine(outputRepositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
                 var outputPath = Path.Combine(outputDirectory, definition.Name + "Dto.g.cs");
                 var enumClrTypeMap = LoadEnumClrTypeMap(metadataRepositoryRoot, moduleId, definition.Name);
                 var sourceCode = GeneratedCodeWriter.WrapInNamespace(
@@ -71,12 +121,28 @@ public static class ModuleDtoSyncRunner
 
         foreach (var module in signaturesByModule.OrderBy(static item => item.Key, StringComparer.Ordinal))
         {
-            var outputDirectory = Path.Combine(repositoryRoot, "server", "modules", module.Key, "DTOs", "Generated");
+            var outputDirectory = Path.Combine(outputRepositoryRoot, "server", "modules", module.Key, "DTOs", "Generated");
             writtenFiles.Add(signatureWriter.Write(outputDirectory, module.Key, module.Value));
         }
 
         return writtenFiles;
     }
+
+    private static IEnumerable<string> EnumerateManagedGeneratedFiles(string repositoryRoot)
+    {
+        var modulesRoot = Path.Combine(repositoryRoot, "server", "modules");
+        if (!Directory.Exists(modulesRoot))
+        {
+            return Array.Empty<string>();
+        }
+
+        return Directory.EnumerateDirectories(modulesRoot)
+            .Select(moduleRoot => Path.Combine(moduleRoot, "DTOs", "Generated"))
+            .Where(Directory.Exists)
+            .SelectMany(generatedRoot => Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.TopDirectoryOnly));
+    }
+
+    private static string NormalizeRelativePath(string path) => path.Replace('\\', '/');
 
     // DTO 生成必须回读 authoring 元数据中的 contract.clrType，避免 enum 字段退化为 string。
     private static IReadOnlyDictionary<string, string> LoadEnumClrTypeMap(

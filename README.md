@@ -86,9 +86,11 @@ macOS / Linux:
 - Host API: `http://localhost:5000`
 - Frontend Shell: `http://localhost:3000`
 
-默认本地账号：
+本地管理员账号由 `Identity:LocalAdministrator:ECODE` 指定。全新数据库需要先停止开发服务，并在交互式终端执行离线 bootstrap；命令只显示一次随机临时凭据，首次登录后必须修改：
 
-- `admin / admin123`
+```powershell
+dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-admin
+```
 
 ## 常用命令
 
@@ -118,6 +120,18 @@ macOS / Linux:
 
 ```bash
 ./scripts/test.sh
+```
+
+冻结候选的完整验证使用同一个入口；它会执行静态门禁、一次 Release 构建、无重复构建的测试、前端测试与构建，并把阶段结果写入 `.codex-temp/verify/`：
+
+```powershell
+.\scripts\verify.ps1
+```
+
+需要终局验收时，在干净候选上显式选择 Gate；SQL Server 管理连接会优先读取验收覆盖、开发覆盖和本地 Development 配置：
+
+```powershell
+.\scripts\verify.ps1 -AcceptanceGate IdentityFoundation,Personnel
 ```
 
 ## 文档入口

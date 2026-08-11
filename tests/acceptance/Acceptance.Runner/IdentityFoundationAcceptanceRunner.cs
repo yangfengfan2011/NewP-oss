@@ -36,6 +36,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
     private readonly List<string> _secretTokens = [];
     private readonly Dictionary<string, string?> _hostEnvironment = new(StringComparer.OrdinalIgnoreCase);
     private string? _adminConnectionString;
+    private string? _adminConnectionSource;
     private string? _applicationConnectionString;
     private string? _catalog;
     private string? _pluginRoot;
@@ -111,20 +112,11 @@ internal sealed class IdentityFoundationAcceptanceRunner
 
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
     {
-        var configuredAdmin = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION");
-        if (string.IsNullOrWhiteSpace(configuredAdmin))
-        {
-            throw new InvalidOperationException(
-                "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION is required for the Identity Foundation gate.");
-        }
-
-        var adminBuilder = new SqlConnectionStringBuilder(configuredAdmin)
-        {
-            InitialCatalog = "master",
-            Pooling = false
-        };
-        _adminConnectionString = adminBuilder.ConnectionString;
-        AddConnectionSecrets(configuredAdmin, adminBuilder.Password);
+        var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
+        var adminBuilder = new SqlConnectionStringBuilder(adminConnection.AdminConnectionString);
+        _adminConnectionString = adminConnection.AdminConnectionString;
+        _adminConnectionSource = adminConnection.SourceName;
+        AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
         _catalog = $"NewP_identity_acceptance_{_runId}";
         ValidateCatalogName(_catalog);
         _applicationConnectionString = new SqlConnectionStringBuilder(adminBuilder.ConnectionString)
@@ -191,6 +183,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         await RecordScenarioSuccessAsync(PreflightScenario, "identity-foundation/preflight.json", new
         {
             status = "passed",
+            connectionSource = _adminConnectionSource,
             catalogFingerprint = AcceptanceInfrastructure.Sha256(_catalog),
             notReady = new { status = 503, failureCode = notReady.FailureCode },
             bootstrap = new

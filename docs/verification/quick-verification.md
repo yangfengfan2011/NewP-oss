@@ -1,57 +1,39 @@
 # 快速验证
 
-快速验证平台骨架是否正常工作。
+本页区分开发循环、冻结候选和运行时 smoke，避免每张票重复执行全部门禁。
 
-## 验证步骤
+## 开发循环
 
-### 1. 后端验证
+运行当前变更涉及的项目或过滤测试；模型元数据变化时先生成 DTO，再用 `--check` 确认无漂移：
 
-```bash
-# 构建后端
-dotnet build ICP-Platform.sln
-
-# 运行 Host API
-cd apps/host-api
-dotnet run
-
-# 访问健康检查端点
-curl http://localhost:5000/api/health
+```powershell
+dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj --no-restore -- .
+dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj --no-restore -- --check .
+dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 ```
 
-### 2. 前端验证
+## 冻结候选
 
-```bash
-# 构建前端
-cd frontend
-pnpm build
+标准入口按 CI 顺序执行静态门禁、一次 Release 构建、`--no-build` 测试、前端测试与构建：
 
-# 启动开发服务器
-pnpm dev
-
-# 访问 http://localhost:3000
+```powershell
+.\scripts\verify.ps1
 ```
 
-### 3. Phase 2 闭环验证（权限保护流程）
+结果写入 `.codex-temp/verify/runs/<run>/result.json`，`current-result.json` 指向最近一次结果。清单包含总耗时、各阶段耗时和命令；失败时读取 `failureStage`、同名阶段日志，以及 `msbuildDiagnosticPath` 下可能存在的 MSBuild 子节点诊断。
 
-完整验证认证授权闭环：
+需要 Acceptance 时必须显式选择已要求的 Gate，并使用干净候选：
 
-1. **登录** - 访问 http://localhost:3000，使用有效凭据登录系统
-2. **获取当前用户** - 登录后自动调用 `/api/auth/current-user` 获取用户信息和权限
-3. **进入 Shell** - 成功进入主应用 Shell，菜单根据权限动态渲染
-4. **访问受保护页面** - 导航至 Demo 模块的列表页面（需要 `Demo.View` 权限），验证页面正常显示
-5. **登出并验证限制** - 点击登出，清除认证状态后，尝试访问受保护页面应被重定向到登录页
+```powershell
+.\scripts\verify.ps1 -AcceptanceGate IdentityFoundation,Personnel
+```
 
-## 预期结果
+## 运行时 smoke
 
-- 后端构建成功，无错误
-- 前端构建成功，无错误
-- Host API 可以启动并响应健康检查
-- 前端 Shell 可以在浏览器中正常显示
-- 认证授权流程完整闭环：登录 → 权限验证 → 访问控制 → 登出限制
+```powershell
+.\scripts\dev.ps1
+Invoke-WebRequest http://localhost:5000/api/health
+.\scripts\stop-dev.ps1
+```
 
-## 当前状态
-
-- ✅ 后端构建通过
-- ✅ 前端构建通过
-- ✅ Phase 2 认证授权闭环完成
-- ⏳ 运行时验证（需要手动执行）
+开发服务的成功事实以 `.codex-temp/dev/runs/<run>/result.json` 为准；停止操作继续使用仓库脚本，不按进程名终止通用 `dotnet` 或 `node` 进程。

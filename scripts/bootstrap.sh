@@ -54,11 +54,11 @@ echo "pnpm 已就绪（Corepack）: $current_pnpm_version"
 
 echo
 echo "=== 恢复后端依赖 ==="
-dotnet restore
+dotnet restore ICP-Platform.sln
 
 echo
 echo "=== 安装前端依赖 ==="
-(cd "$frontend_root" && corepack pnpm install)
+(cd "$frontend_root" && corepack pnpm install --frozen-lockfile)
 
 echo
 echo "=== 初始化完成 ==="

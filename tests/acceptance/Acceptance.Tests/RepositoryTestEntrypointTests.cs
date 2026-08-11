@@ -5,38 +5,38 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public class RepositoryTestEntrypointTests
 {
-    private static readonly string[] RequiredBackendTestProjects =
-    [
-        "tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj",
-        "tests/Audit.Tests/Audit.Tests.csproj",
-        "tests/Authorization.Tests/Authorization.Tests.csproj",
-        "tests/ConfigCenter.Tests/ConfigCenter.Tests.csproj",
-        "tests/DevSchemaSync.Tests/DevSchemaSync.Tests.csproj",
-        "tests/Files.Tests/Files.Tests.csproj",
-        "tests/HostApi.Tests/HostApi.Tests.csproj",
-        "tests/Kernel.Tests/Kernel.Tests.csproj",
-        "tests/MetadataConfigCenter.Tests/MetadataConfigCenter.Tests.csproj",
-        "tests/Modeling.Tests/Modeling.Tests.csproj",
-        "tests/ModuleTemplateSample.Tests/ModuleTemplateSample.Tests.csproj",
-        "tests/Organization.Tests/Organization.Tests.csproj",
-        "tests/Persistence.Tests/Persistence.Tests.csproj",
-        "tests/PlatformCrud.Tests/PlatformCrud.Tests.csproj"
-    ];
-
     [Fact]
-    public void Solution_CoversEveryRequiredBackendTestProject()
+    public void Solution_CoversEveryDiscoveredBackendTestProject()
     {
         var repositoryRoot = GetRepositoryRoot();
         var solution = File.ReadAllText(Path.Combine(repositoryRoot, "ICP-Platform.sln"))
             .Replace('\\', '/');
+        var testProjects = Directory
+            .EnumerateFiles(Path.Combine(repositoryRoot, "tests"), "*.Tests.csproj", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(repositoryRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
 
-        foreach (var project in RequiredBackendTestProjects)
+        Assert.NotEmpty(testProjects);
+        foreach (var project in testProjects)
         {
-            Assert.True(
-                File.Exists(Path.Combine(repositoryRoot, project.Replace('/', Path.DirectorySeparatorChar))),
-                $"缺少预期后端测试项目：{project}");
-            Assert.Contains($"\"{project}\"", solution, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                $"\"{project}\"",
+                solution,
+                StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void Solution_IncludesModelDtoSyncTool()
+    {
+        var solution = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "ICP-Platform.sln"))
+            .Replace('\\', '/');
+
+        Assert.Contains(
+            "\"server/tools/model-dto-sync/ModelDtoSync.csproj\"",
+            solution,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -73,6 +73,25 @@ public class RepositoryTestEntrypointTests
 
         Assert.Contains("pnpm test", workflow, StringComparison.Ordinal);
         Assert.Contains("pnpm build", workflow, StringComparison.Ordinal);
+        Assert.Contains("validate-dic-localization.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("model-dto-sync/ModelDtoSync.csproj", workflow, StringComparison.Ordinal);
+        Assert.Contains("--check .", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FinalVerification_BuildsOnceThenUsesNoBuildChecksAndWritesResultManifest()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var verification = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "verify.ps1"));
+        var acceptance = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "accept.ps1"));
+
+        Assert.Contains("\"build\", \"ICP-Platform.sln\", \"--configuration\", \"Release\", \"--no-restore\"", verification, StringComparison.Ordinal);
+        Assert.Contains("\"test\", \"ICP-Platform.sln\", \"--configuration\", \"Release\", \"--no-build\", \"--no-restore\"", verification, StringComparison.Ordinal);
+        Assert.Contains("\"--check\", $repoRoot", verification, StringComparison.Ordinal);
+        Assert.Contains("\"-NoBuild\"", verification, StringComparison.Ordinal);
+        Assert.Contains("current-result.json", verification, StringComparison.Ordinal);
+        Assert.Contains("ACCEPT_GATE_REQUIRED", acceptance, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string]$Gate = \"All\"", acceptance, StringComparison.Ordinal);
     }
 
     [Fact]

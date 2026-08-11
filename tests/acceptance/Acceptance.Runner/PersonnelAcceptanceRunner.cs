@@ -32,6 +32,7 @@ internal sealed class PersonnelAcceptanceRunner
     private readonly List<string> _secretTokens = [];
     private readonly Dictionary<string, string?> _devEnvironment = new(StringComparer.OrdinalIgnoreCase);
     private string? _adminConnectionString;
+    private string? _adminConnectionSource;
     private string? _applicationConnectionString;
     private string? _catalog;
     private string? _pluginRoot;
@@ -70,6 +71,7 @@ internal sealed class PersonnelAcceptanceRunner
             await RecordScenarioSuccessAsync(PreflightScenario, "personnel/preflight.json", new
             {
                 status = "passed",
+                connectionSource = _adminConnectionSource,
                 databaseFingerprint = AcceptanceInfrastructure.Sha256(_catalog!),
                 pluginRootFingerprint = AcceptanceInfrastructure.Sha256(_pluginRoot!),
                 hostPort = _hostPort,
@@ -117,20 +119,11 @@ internal sealed class PersonnelAcceptanceRunner
 
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
     {
-        var configuredAdmin = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION");
-        if (string.IsNullOrWhiteSpace(configuredAdmin))
-        {
-            throw new InvalidOperationException(
-                "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION is required for the Personnel gate.");
-        }
-
-        var adminBuilder = new SqlConnectionStringBuilder(configuredAdmin)
-        {
-            InitialCatalog = "master",
-            Pooling = false
-        };
-        _adminConnectionString = adminBuilder.ConnectionString;
-        AddConnectionSecrets(configuredAdmin, adminBuilder.Password);
+        var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
+        var adminBuilder = new SqlConnectionStringBuilder(adminConnection.AdminConnectionString);
+        _adminConnectionString = adminConnection.AdminConnectionString;
+        _adminConnectionSource = adminConnection.SourceName;
+        AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
 
         _catalog = $"NewP_acceptance_{_runId}";
         ValidateCatalogName(_catalog);

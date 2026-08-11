@@ -73,14 +73,18 @@ Write-Host "pnpm 已就绪（Corepack）: $currentPnpmVersion" -ForegroundColor 
 
 Write-Host ""
 Write-Host "=== 恢复后端依赖 ===" -ForegroundColor Green
-dotnet restore
+dotnet restore ICP-Platform.sln
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "错误: 后端依赖恢复失败。" -ForegroundColor Red
+    exit $LASTEXITCODE
+}
 
 Write-Host ""
 Write-Host "=== 安装前端依赖 ===" -ForegroundColor Green
 Push-Location $frontendRoot
 try {
     try {
-        & $corepackPath pnpm install
+        & $corepackPath pnpm install --frozen-lockfile
         $pnpmInstallExitCode = $LASTEXITCODE
     }
     catch {

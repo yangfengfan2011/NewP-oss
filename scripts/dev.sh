@@ -183,7 +183,7 @@ echo
 echo "Host API:  $backend_url"
 echo "Frontend:  $frontend_url"
 echo
-echo "Default login: admin / admin123"
+echo "Identity login uses the configured local administrator; bootstrap an empty catalog with the Host identity maintenance command."
 echo "Stop services: ./scripts/stop-dev.sh"
 
 if [ "$backend_ready" != true ] || [ "$frontend_ready" != true ]; then

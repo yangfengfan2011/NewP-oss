@@ -47,8 +47,8 @@ tests/<ModuleName>.Tests/
 ## 运行测试
 
 ```powershell
-# 运行全部测试
-dotnet test ICP-Platform.sln
+# 运行全部测试与仓库静态门禁
+pwsh ./scripts/test.ps1
 
 # 运行单个模块测试
 dotnet test tests/<ModuleName>.Tests/<ModuleName>.Tests.csproj
@@ -56,4 +56,4 @@ dotnet test tests/<ModuleName>.Tests/<ModuleName>.Tests.csproj
 
 ## 新增模块时
 
-为新模块创建测试项目，加入解决方案，并在 `scripts/test.ps1` 中注册。
+为新模块创建测试项目并加入解决方案；仓库测试会自动发现 `tests/**/*.Tests.csproj` 并检查 solution 覆盖，不维护第二份项目清单。

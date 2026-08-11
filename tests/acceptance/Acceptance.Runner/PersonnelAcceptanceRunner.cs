@@ -60,9 +60,7 @@ internal sealed class PersonnelAcceptanceRunner
         _recorder = recorder;
     }
 
-    public async Task<PersonnelAcceptanceExecution> RunAsync(
-        string trackedTreeBefore,
-        CancellationToken cancellationToken)
+    public async Task<PersonnelAcceptanceExecution> RunAsync(CancellationToken cancellationToken)
     {
         AcceptanceCleanupResult cleanup = new("not-started", AcceptanceFailureCodes.CleanupIncomplete);
 
@@ -106,7 +104,6 @@ internal sealed class PersonnelAcceptanceRunner
         finally
         {
             cleanup = await TeardownAsync(cancellationToken);
-            await VerifyTrackedTreeAsync(trackedTreeBefore, cancellationToken);
             await ValidateEvidenceAsync(cancellationToken);
             await ScanEvidenceForSecretsAsync(cancellationToken);
         }
@@ -642,21 +639,6 @@ internal sealed class PersonnelAcceptanceRunner
         }
 
         return snapshot;
-    }
-
-    private async Task VerifyTrackedTreeAsync(string trackedTreeBefore, CancellationToken cancellationToken)
-    {
-        var after = await AcceptanceInfrastructure.RunGitAsync(
-            _repositoryRoot,
-            ["status", "--porcelain", "--untracked-files=no"],
-            cancellationToken);
-        var matched = string.Equals(trackedTreeBefore, after, StringComparison.Ordinal);
-        await _recorder.RecordAsync(
-            AcceptanceGateKind.Personnel,
-            AcceptanceEventType.TreeVerified,
-            matched ? AcceptanceObservationOutcome.Succeeded : AcceptanceObservationOutcome.Failed,
-            failureCode: matched ? null : AcceptanceFailureCodes.TreeChanged,
-            cancellationToken: cancellationToken);
     }
 
     private async Task ValidateEvidenceAsync(CancellationToken cancellationToken)

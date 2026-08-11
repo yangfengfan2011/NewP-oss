@@ -62,13 +62,22 @@ internal static class AcceptanceInfrastructure
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken = default)
     {
+        var output = await RunGitRawAsync(repositoryRoot, arguments, cancellationToken);
+        return output.Trim();
+    }
+
+    public static async Task<string> RunGitRawAsync(
+        string repositoryRoot,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken = default)
+    {
         var result = await RunProcessAsync("git", arguments, repositoryRoot, cancellationToken: cancellationToken);
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"git {arguments[0]} 失败：{result.StandardError.Trim()}");
         }
 
-        return result.StandardOutput.Trim();
+        return result.StandardOutput;
     }
 
     public static async Task WriteJsonAsync<T>(string path, T value, CancellationToken cancellationToken = default)

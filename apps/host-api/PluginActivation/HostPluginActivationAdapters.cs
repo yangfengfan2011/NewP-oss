@@ -153,14 +153,90 @@ public sealed class HostPluginPermissionSynchronizer : IPluginPermissionSynchron
     }
 }
 
+public sealed class TrustedDefaultModuleAssemblyRegistry
+{
+    private readonly object _gate = new();
+    private readonly Dictionary<string, TrustedDefaultModuleAssembly> _assemblies =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    internal Assembly? LoadAtTrustedComposition(
+        string owner,
+        VerifiedAssemblyIdentity identity,
+        byte[] verifiedImage)
+    {
+        var name = identity.AssemblyName.Name
+            ?? throw new InvalidDataException($"Canonical backend assembly for '{owner}' has no name.");
+        lock (_gate)
+        {
+            if (_assemblies.TryGetValue(name, out var registered))
+            {
+                if (!registered.Image.AsSpan().SequenceEqual(verifiedImage)
+                    || !CanonicalModuleAssemblyLoader.MatchesIdentity(registered.Assembly, identity))
+                {
+                    throw new InvalidDataException(
+                        $"Trusted Default module registry contains conflicting bytes for '{owner}'.");
+                }
+
+                return registered.Assembly;
+            }
+
+            if (AssemblyLoadContext.Default.Assemblies.Any(assembly =>
+                    CanonicalModuleAssemblyLoader.MatchesIdentity(assembly, identity)))
+            {
+                // Registry 没有亲自从当前签发字节装载的 Default 主体没有内存映像证明；
+                // 即使 identity/MVID/Location 都一致也只能退回隔离装载，绝不执行该预载主体。
+                return null;
+            }
+
+            Assembly? observedSubject = null;
+            var loadingThread = Environment.CurrentManagedThreadId;
+            AssemblyLoadEventHandler observer = (_, args) =>
+            {
+                if (Environment.CurrentManagedThreadId == loadingThread
+                    && CanonicalModuleAssemblyLoader.MatchesIdentity(args.LoadedAssembly, identity))
+                {
+                    observedSubject = args.LoadedAssembly;
+                }
+            };
+            AppDomain.CurrentDomain.AssemblyLoad += observer;
+            try
+            {
+                using var stream = new MemoryStream(verifiedImage, writable: false);
+                var assembly = AssemblyLoadContext.Default.LoadFromStream(stream);
+                if (!ReferenceEquals(assembly, observedSubject)
+                    || !CanonicalModuleAssemblyLoader.MatchesIdentity(assembly, identity))
+                {
+                    throw new InvalidDataException(
+                        $"Trusted Default module registry could not prove the loaded image for '{owner}'.");
+                }
+
+                _assemblies.Add(name, new TrustedDefaultModuleAssembly(assembly, verifiedImage.ToArray()));
+                return assembly;
+            }
+            finally
+            {
+                AppDomain.CurrentDomain.AssemblyLoad -= observer;
+            }
+        }
+    }
+
+    private sealed record TrustedDefaultModuleAssembly(Assembly Assembly, byte[] Image);
+}
+
+internal sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
+
 public sealed class CanonicalModuleAssemblyLoader
 {
     private readonly string _distributionRoot;
+    private readonly TrustedDefaultModuleAssemblyRegistry? _trustedDefaultRegistry;
 
-    public CanonicalModuleAssemblyLoader(string distributionRoot)
+    public CanonicalModuleAssemblyLoader(
+        string distributionRoot,
+        TrustedDefaultModuleAssemblyRegistry? trustedDefaultRegistry = null)
     {
         _distributionRoot = Path.GetFullPath(distributionRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        _trustedDefaultRegistry = trustedDefaultRegistry;
     }
 
     public IReadOnlyList<Assembly> Load(CanonicalModulePlan plan)
@@ -171,7 +247,7 @@ public sealed class CanonicalModuleAssemblyLoader
             .ToArray();
         var context = new VerifiedModuleAssemblyLoadContext(images, _distributionRoot);
         return images
-            .Select(image => LoadModule(image.Module, image.Bytes, context))
+            .Select(image => LoadModule(image, context))
             .DistinctBy(static assembly => assembly.FullName, StringComparer.Ordinal)
             .ToArray();
     }
@@ -197,16 +273,22 @@ public sealed class CanonicalModuleAssemblyLoader
             ? module.Provenance.GetAuthenticatedBuiltInSnapshot(module)!
                 .ReadDistributionFile(module.BackendEntry!)
             : PathContainment.ReadContainedFile(boundary, path);
-        return new VerifiedModuleImage(module, image);
+        return new VerifiedModuleImage(module, image, isBuiltIn);
     }
 
-    private static Assembly LoadModule(
-        CanonicalModulePlanModule module,
-        byte[] image,
+    private Assembly LoadModule(
+        VerifiedModuleImage image,
         VerifiedModuleAssemblyLoadContext context)
     {
-        var assembly = context.LoadVerifiedImage(module.ModuleId, image);
-        ValidateModuleContract(module, assembly);
+        var identity = ReadIdentity(image.Bytes);
+        var assembly = image.IsBuiltIn
+            ? _trustedDefaultRegistry?.LoadAtTrustedComposition(
+                image.Module.ModuleId,
+                identity,
+                image.Bytes)
+                ?? context.LoadVerifiedImage(image.Module.ModuleId, image.Bytes)
+            : context.LoadVerifiedImage(image.Module.ModuleId, image.Bytes);
+        ValidateModuleContract(image.Module, assembly);
         return assembly;
     }
 
@@ -271,17 +353,8 @@ public sealed class CanonicalModuleAssemblyLoader
                 return existing;
             }
 
-            // Host 的静态 ProjectReference 可能已把内建模块装入 Default ALC。类型身份只能在
-            // 该已装载主体的锁定来源文件与签发映像逐字节相同时复用；Identity/MVID 本身不足以
-            // 证明 IL 未被替换。同 identity/MVID 的不同映像继续从签发字节隔离装载。
-            var verifiedDefault = Default.Assemblies.FirstOrDefault(assembly =>
-                MatchesIdentity(assembly, identity)
-                && HasExactSourceImage(assembly, image));
-            if (verifiedDefault is not null)
-            {
-                return verifiedDefault;
-            }
-
+            // 主体只从 Canonical Plan 已固定的字节装载。Default ALC 中同 identity/MVID 的主体
+            // 可能来自更早的恶意预载，事后读取 Location 不能证明内存中的实际 IL。
             using var loadStream = new MemoryStream(image, writable: false);
             var assembly = LoadFromStream(loadStream);
             if (!MatchesIdentity(assembly, identity))
@@ -361,83 +434,61 @@ public sealed class CanonicalModuleAssemblyLoader
             return assembly;
         }
 
-        private static bool MatchesIdentity(Assembly assembly, VerifiedAssemblyIdentity expected) =>
-            VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expected.AssemblyName)
-            && assembly.ManifestModule.ModuleVersionId == expected.Mvid;
-
-        private static bool HasExactSourceImage(Assembly assembly, byte[] verifiedImage)
-        {
-            if (assembly.IsDynamic || string.IsNullOrWhiteSpace(assembly.Location))
-            {
-                return false;
-            }
-
-            try
-            {
-                return File.ReadAllBytes(assembly.Location).AsSpan().SequenceEqual(verifiedImage);
-            }
-            catch (IOException)
-            {
-                return false;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return false;
-            }
-        }
-
-        private static VerifiedAssemblyIdentity ReadIdentity(byte[] image)
-        {
-            using var metadataStream = new MemoryStream(image, writable: false);
-            using var peReader = new PEReader(metadataStream);
-            var metadata = peReader.GetMetadataReader();
-            var definition = metadata.GetAssemblyDefinition();
-            var assemblyName = new AssemblyName
-            {
-                Name = metadata.GetString(definition.Name),
-                Version = definition.Version,
-                CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
-            };
-#pragma warning disable SYSLIB0037
-            assemblyName.ProcessorArchitecture = ReadProcessorArchitecture(peReader.PEHeaders);
-#pragma warning restore SYSLIB0037
-            if (!definition.PublicKey.IsNil)
-            {
-                assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
-            }
-            if (definition.Flags.HasFlag(AssemblyFlags.Retargetable))
-            {
-                assemblyName.Flags |= AssemblyNameFlags.Retargetable;
-            }
-            if (definition.Flags.HasFlag(AssemblyFlags.WindowsRuntime))
-            {
-                assemblyName.ContentType = AssemblyContentType.WindowsRuntime;
-            }
-
-            return new VerifiedAssemblyIdentity(
-                assemblyName,
-                metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
-        }
-
-#pragma warning disable SYSLIB0037
-        private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>
-            headers.CoffHeader.Machine switch
-            {
-                Machine.I386 when headers.CorHeader?.Flags.HasFlag(CorFlags.Requires32Bit) == true => ProcessorArchitecture.X86,
-                Machine.I386 => ProcessorArchitecture.MSIL,
-                Machine.Amd64 => ProcessorArchitecture.Amd64,
-                Machine.IA64 => ProcessorArchitecture.IA64,
-                Machine.Arm or Machine.ArmThumb2 or Machine.Arm64 => ProcessorArchitecture.Arm,
-                _ => ProcessorArchitecture.None
-            };
-#pragma warning restore SYSLIB0037
     }
 
-    private sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
+    internal static bool MatchesIdentity(Assembly assembly, VerifiedAssemblyIdentity expected) =>
+        VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expected.AssemblyName)
+        && assembly.ManifestModule.ModuleVersionId == expected.Mvid;
+
+    private static VerifiedAssemblyIdentity ReadIdentity(byte[] image)
+    {
+        using var metadataStream = new MemoryStream(image, writable: false);
+        using var peReader = new PEReader(metadataStream);
+        var metadata = peReader.GetMetadataReader();
+        var definition = metadata.GetAssemblyDefinition();
+        var assemblyName = new AssemblyName
+        {
+            Name = metadata.GetString(definition.Name),
+            Version = definition.Version,
+            CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
+        };
+#pragma warning disable SYSLIB0037
+        assemblyName.ProcessorArchitecture = ReadProcessorArchitecture(peReader.PEHeaders);
+#pragma warning restore SYSLIB0037
+        if (!definition.PublicKey.IsNil)
+        {
+            assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
+        }
+        if (definition.Flags.HasFlag(AssemblyFlags.Retargetable))
+        {
+            assemblyName.Flags |= AssemblyNameFlags.Retargetable;
+        }
+        if (definition.Flags.HasFlag(AssemblyFlags.WindowsRuntime))
+        {
+            assemblyName.ContentType = AssemblyContentType.WindowsRuntime;
+        }
+
+        return new VerifiedAssemblyIdentity(
+            assemblyName,
+            metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
+    }
+
+#pragma warning disable SYSLIB0037
+    private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>
+        headers.CoffHeader.Machine switch
+        {
+            Machine.I386 when headers.CorHeader?.Flags.HasFlag(CorFlags.Requires32Bit) == true => ProcessorArchitecture.X86,
+            Machine.I386 => ProcessorArchitecture.MSIL,
+            Machine.Amd64 => ProcessorArchitecture.Amd64,
+            Machine.IA64 => ProcessorArchitecture.IA64,
+            Machine.Arm or Machine.ArmThumb2 or Machine.Arm64 => ProcessorArchitecture.Arm,
+            _ => ProcessorArchitecture.None
+        };
+#pragma warning restore SYSLIB0037
 
     private sealed record VerifiedDependencyImage(VerifiedAssemblyIdentity Identity, byte[] Bytes);
 
-    private sealed record VerifiedModuleImage(CanonicalModulePlanModule Module, byte[] Bytes);
+    private sealed record VerifiedModuleImage(CanonicalModulePlanModule Module, byte[] Bytes, bool IsBuiltIn);
 
     private sealed class ByteArrayComparer : IEqualityComparer<byte[]>
     {

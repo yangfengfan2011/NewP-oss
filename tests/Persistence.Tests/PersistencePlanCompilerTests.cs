@@ -1002,7 +1002,7 @@ public sealed class PersistencePlanCompilerTests
             File.WriteAllText(modelPath, modelJson);
 
             var bundlePath = Path.Combine(backendRoot, "Partner.AssetCatalog.SqlServerMigrations.dll");
-            File.Copy(typeof(PersistencePlanCompilerTests).Assembly.Location, bundlePath);
+            File.Copy(typeof(ForbiddenSqlMigration).Assembly.Location, bundlePath);
 
             var document = new JsonModelMetadataDocumentLoader().LoadFromFile(modelPath);
             var typeMap = new JsonStorageTypeMapLoader().LoadFromFile(FindStorageTypeMap());

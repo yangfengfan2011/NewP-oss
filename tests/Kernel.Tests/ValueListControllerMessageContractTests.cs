@@ -1,8 +1,4 @@
 using System.Text.Json;
-using ICP.Platform.Modules.ConfigCenter.Controllers;
-using ICP.Platform.Modules.ConfigCenter.DTOs;
-using ICP.Platform.Modules.ConfigCenter.Repositories;
-using ICP.Platform.Modules.ConfigCenter.Services;
 using ICP.Platform.Sdk.UserMessages;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,21 +22,21 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
     public async Task Create_ReturnsStructuredUserMessage_WhenDuplicateCode()
     {
         using var scope = _factory.Services.CreateScope();
-        var controller = new ValueListController(scope.ServiceProvider.GetRequiredService<IValueListService>());
+        var (controller, dtoType) = CreateController(scope.ServiceProvider);
         var code = "STATUS_ACTIVE_" + Guid.NewGuid().ToString("N");
-        var createResult = await controller.Create(new ValueListItemDto
-        {
-            Code = code,
-            DisplayName = "启用"
-        });
-        Assert.IsType<OkObjectResult>(createResult.Result);
+        var createResult = await InvokeAsync(
+            controller,
+            "Create",
+            CreateDto(dtoType, code, "启用"),
+            CancellationToken.None);
+        Assert.IsType<OkObjectResult>(GetActionResult(createResult));
 
-        var duplicateResult = await controller.Create(new ValueListItemDto
-        {
-            Code = code,
-            DisplayName = "重复"
-        });
-        var errorResult = Assert.IsType<ObjectResult>(duplicateResult.Result);
+        var duplicateResult = await InvokeAsync(
+            controller,
+            "Create",
+            CreateDto(dtoType, code, "重复"),
+            CancellationToken.None);
+        var errorResult = Assert.IsType<ObjectResult>(GetActionResult(duplicateResult));
         Assert.Equal(400, errorResult.StatusCode);
         var message = Assert.IsType<UserMessageDto>(errorResult.Value);
 
@@ -56,9 +52,13 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
     public async Task Delete_ReturnsStructuredUserMessage_WhenItemIsMissing()
     {
         using var scope = _factory.Services.CreateScope();
-        var controller = new ValueListController(scope.ServiceProvider.GetRequiredService<IValueListService>());
+        var (controller, _) = CreateController(scope.ServiceProvider);
         const string missingId = "missing-id";
-        var deleteResult = await controller.Delete(missingId);
+        var deleteResult = await InvokeAsync(
+            controller,
+            "Delete",
+            missingId,
+            CancellationToken.None);
         var errorResult = Assert.IsType<ObjectResult>(deleteResult);
         Assert.Equal(404, errorResult.StatusCode);
         var message = Assert.IsType<UserMessageDto>(errorResult.Value);
@@ -89,8 +89,19 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<IValueListRepository>();
-                services.AddSingleton<IValueListRepository, ValueListRepository>();
+                var repositoryServiceType = services
+                    .Select(descriptor => descriptor.ServiceType)
+                    .Single(type => string.Equals(
+                        type.FullName,
+                        "ICP.Platform.Modules.ConfigCenter.Repositories.IValueListRepository",
+                        StringComparison.Ordinal));
+                var repositoryImplementationType = repositoryServiceType.Assembly.GetType(
+                    "ICP.Platform.Modules.ConfigCenter.Repositories.ValueListRepository",
+                    throwOnError: true)!;
+                services.RemoveAll(repositoryServiceType);
+                services.Add(ServiceDescriptor.Singleton(
+                    repositoryServiceType,
+                    repositoryImplementationType));
             });
         }
 
@@ -103,6 +114,52 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
             }
         }
     }
+
+    private static (object Controller, Type DtoType) CreateController(IServiceProvider services)
+    {
+        const string serviceTypeName = "ICP.Platform.Modules.ConfigCenter.Services.IValueListService";
+        var serviceTypes = AppDomain.CurrentDomain.GetAssemblies()
+            .Select(assembly => assembly.GetType(serviceTypeName, throwOnError: false))
+            .Where(static type => type is not null)
+            .Cast<Type>()
+            .Where(type => services.GetService(type) is not null)
+            .ToArray();
+        var serviceType = Assert.Single(serviceTypes);
+        var service = services.GetRequiredService(serviceType);
+        var controllerType = serviceType.Assembly.GetType(
+            "ICP.Platform.Modules.ConfigCenter.Controllers.ValueListController",
+            throwOnError: true)!;
+        var dtoType = serviceType.Assembly.GetType(
+            "ICP.Platform.Modules.ConfigCenter.DTOs.ValueListItemDto",
+            throwOnError: true)!;
+        return (Activator.CreateInstance(controllerType, service)!, dtoType);
+    }
+
+    private static object CreateDto(Type dtoType, string code, string displayName)
+    {
+        var dto = Activator.CreateInstance(dtoType)!;
+        dtoType.GetProperty("Code")!.SetValue(dto, code);
+        dtoType.GetProperty("DisplayName")!.SetValue(dto, displayName);
+        return dto;
+    }
+
+    private static async Task<object> InvokeAsync(
+        object target,
+        string methodName,
+        params object?[] arguments)
+    {
+        var method = target.GetType().GetMethods()
+            .Single(candidate =>
+                string.Equals(candidate.Name, methodName, StringComparison.Ordinal)
+                && candidate.GetParameters().Length == arguments.Length);
+        var task = Assert.IsAssignableFrom<Task>(method.Invoke(target, arguments));
+        await task;
+        return task.GetType().GetProperty("Result")!.GetValue(task)!;
+    }
+
+    private static IActionResult GetActionResult(object actionResult) =>
+        Assert.IsAssignableFrom<IActionResult>(
+            actionResult.GetType().GetProperty("Result")!.GetValue(actionResult));
 
     private static string RenderDictionaryText(string entryKey, params (string Key, string Value)[] args)
     {

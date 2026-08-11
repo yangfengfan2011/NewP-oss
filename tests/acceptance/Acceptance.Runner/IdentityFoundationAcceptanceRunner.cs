@@ -62,9 +62,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         _recorder = recorder;
     }
 
-    public async Task<IdentityFoundationAcceptanceExecution> RunAsync(
-        string trackedTreeBefore,
-        CancellationToken cancellationToken)
+    public async Task<IdentityFoundationAcceptanceExecution> RunAsync(CancellationToken cancellationToken)
     {
         AcceptanceCleanupResult cleanup = new("not-started", AcceptanceFailureCodes.CleanupIncomplete);
         try
@@ -100,7 +98,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
         finally
         {
             cleanup = await TeardownAsync(cancellationToken);
-            await VerifyTrackedTreeAsync(trackedTreeBefore, cancellationToken);
             await ValidateEvidenceAsync(cancellationToken);
             await ScanEvidenceForSecretsAsync(cancellationToken);
         }
@@ -1255,18 +1252,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
         var artifact = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, fullPath);
         if (!_artifactRefs.Contains(artifact, StringComparer.Ordinal)) _artifactRefs.Add(artifact);
         return artifact;
-    }
-
-    private async Task VerifyTrackedTreeAsync(string before, CancellationToken cancellationToken)
-    {
-        var after = await AcceptanceInfrastructure.RunGitAsync(_repositoryRoot, ["status", "--porcelain", "--untracked-files=no"], cancellationToken);
-        var matched = string.Equals(before, after, StringComparison.Ordinal);
-        await _recorder.RecordAsync(
-            AcceptanceGateKind.IdentityFoundation,
-            AcceptanceEventType.TreeVerified,
-            matched ? AcceptanceObservationOutcome.Succeeded : AcceptanceObservationOutcome.Failed,
-            failureCode: matched ? null : AcceptanceFailureCodes.TreeChanged,
-            cancellationToken: cancellationToken);
     }
 
     private async Task ValidateEvidenceAsync(CancellationToken cancellationToken)

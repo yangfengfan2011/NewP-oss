@@ -12,7 +12,6 @@ internal static class VerifiedAssemblyIdentityPolicy
         [
             "Kernel",
             "Sdk",
-            "HostApi",
             "PluginPlatform",
             "PlatformAuthorization",
             "PlatformCrud",

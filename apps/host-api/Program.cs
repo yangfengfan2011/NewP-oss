@@ -19,7 +19,6 @@ using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
-using ICP.Platform.Modules.Audit.Services;
 using ICP.Platform.Persistence;
 using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
@@ -56,17 +55,6 @@ if (identityMaintenanceCommand.IsMaintenanceCommand)
 var builder = WebApplication.CreateBuilder(
     identityMaintenanceCommand.IsMaintenanceCommand ? Array.Empty<string>() : args);
 
-var mvcBuilder = builder.Services.AddControllers(options =>
-    {
-        // 生成 DTO 同时承载 create/update/response；Id 等服务端生成字段不能因为 C# 非空标注被请求模型绑定强制必填。
-        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
-        options.Filters.Add<AuthenticationSessionCookieResultFilter>();
-    })
-    .AddJsonOptions(options =>
-    {
-        // 前端与生成 DTO 之间的枚举契约使用字符串值；Host 统一接住，避免各模块重复配置。
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHostReadiness();
@@ -83,10 +71,7 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddPlatformAuthorization();
-builder.Services.AddHostAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddHostAntiforgery(builder.Environment);
-builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
-builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 
 var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "modules";
 var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
@@ -191,8 +176,26 @@ if (standardDataDescriptors.Count > 0)
     }
 }
 
-var activeModuleAssemblies = new CanonicalModuleAssemblyLoader(AppContext.BaseDirectory)
+var trustedDefaultModuleRegistry = new TrustedDefaultModuleAssemblyRegistry();
+var activeModuleAssemblies = new CanonicalModuleAssemblyLoader(
+        AppContext.BaseDirectory,
+        trustedDefaultModuleRegistry)
     .Load(canonicalModulePlan);
+// Host 自身依赖的模块服务类型只能在 registry 从签发字节建立 Default 类型身份后触达。
+var mvcBuilder = builder.Services.AddControllers(options =>
+    {
+        // 生成 DTO 同时承载 create/update/response；Id 等服务端生成字段不能因为 C# 非空标注被请求模型绑定强制必填。
+        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+        options.Filters.Add<AuthenticationSessionCookieResultFilter>();
+    })
+    .AddJsonOptions(options =>
+    {
+        // 前端与生成 DTO 之间的枚举契约使用字符串值；Host 统一接住，避免各模块重复配置。
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+builder.Services.AddHostAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
+builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 var activeControllerAssemblies = new[]
     {
         Assembly.GetExecutingAssembly()
@@ -254,7 +257,6 @@ if (!externalPluginsEnabled)
 
 app.MapPluginManifestEndpoints(pluginInstallRoot);
 
-var registeredServices = app.Services.GetService<IServiceProviderIsService>();
 app.MapControllers();
 app.MapPersonnelAcceptanceFixture(builder.Configuration);
 if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
@@ -317,11 +319,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseHostAntiforgery();
 app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();
-if (registeredServices?.IsService(typeof(IAuditService)) is true)
-{
-    // Audit 插件被跳过时不能留下依赖其 scoped service 的宿主中间件。
-    app.UseAuditMiddleware();
-}
+app.UseAuditMiddlewareIfRegistered();
 app.UseAuthorization();
 
 var modules = registry.GetAllModules();

@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 
 namespace ICP.Platform.Acceptance;
 
@@ -47,17 +46,13 @@ public sealed class AcceptanceSkeletonRunner
         var runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
         var runDirectory = Path.Combine(outputRoot, "runs", $"{startedAtUtc:yyyyMMddTHHmmssfffZ}-{runId}");
         Directory.CreateDirectory(runDirectory);
+        await using var repositoryGuard = await AcceptanceRepositoryGuard.StartAsync(
+            repositoryRoot,
+            cancellationToken: cancellationToken);
 
         var requestedGates = AcceptanceReducer.GetRequestedGates(selection);
         var eventLogPath = Path.Combine(runDirectory, "events.jsonl");
         var recorder = new AcceptanceObservationRecorder(new AcceptanceEventLog(eventLogPath));
-        var trackedTreeBefore = await AcceptanceInfrastructure.RunGitAsync(
-            repositoryRoot,
-            ["status", "--porcelain", "--untracked-files=no"],
-            cancellationToken);
-        var commit = await AcceptanceInfrastructure.RunGitAsync(repositoryRoot, ["rev-parse", "HEAD"], cancellationToken);
-        var treeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(trackedTreeBefore)))
-            .ToLowerInvariant();
         var artifactRefs = new List<string> { "events.jsonl", "request.sanitized.json", "evidence-index.json" };
         var processIdentities = new List<string>();
         var cleanup = new AcceptanceCleanupResult("not-started", AcceptanceFailureCodes.CleanupIncomplete);
@@ -79,7 +74,7 @@ public sealed class AcceptanceSkeletonRunner
             if (gate is AcceptanceGateKind.IdentityFoundation)
             {
                 var execution = await new IdentityFoundationAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
-                    .RunAsync(trackedTreeBefore, cancellationToken);
+                    .RunAsync(cancellationToken);
                 databaseFingerprint = execution.DatabaseFingerprint;
                 processIdentities.AddRange(execution.ProcessIdentities);
                 artifactRefs.AddRange(execution.ArtifactRefs);
@@ -89,7 +84,7 @@ public sealed class AcceptanceSkeletonRunner
             if (gate is AcceptanceGateKind.Personnel)
             {
                 var execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
-                    .RunAsync(trackedTreeBefore, cancellationToken);
+                    .RunAsync(cancellationToken);
                 databaseFingerprint = execution.DatabaseFingerprint;
                 processIdentities.AddRange(execution.ProcessIdentities);
                 artifactRefs.AddRange(execution.ArtifactRefs);
@@ -105,6 +100,17 @@ public sealed class AcceptanceSkeletonRunner
                 cancellationToken: cancellationToken);
         }
 
+        var repositoryMatched = await repositoryGuard.CheckAsync(cancellationToken);
+        foreach (var gate in requestedGates)
+        {
+            await recorder.RecordAsync(
+                gate,
+                AcceptanceEventType.TreeVerified,
+                repositoryMatched ? AcceptanceObservationOutcome.Succeeded : AcceptanceObservationOutcome.Failed,
+                failureCode: repositoryMatched ? null : AcceptanceFailureCodes.TreeChanged,
+                cancellationToken: cancellationToken);
+        }
+
         var reduction = AcceptanceReducer.Reduce(selection, Definitions, recorder.Observations);
         var distinctArtifacts = artifactRefs.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         await AcceptanceInfrastructure.WriteJsonAsync(
@@ -116,12 +122,27 @@ public sealed class AcceptanceSkeletonRunner
             },
             cancellationToken);
 
+        var finalRepositoryMatched = await repositoryGuard.StopAsync(cancellationToken);
+        if (repositoryMatched && !finalRepositoryMatched)
+        {
+            foreach (var gate in requestedGates)
+            {
+                await recorder.RecordAsync(
+                    gate,
+                    AcceptanceEventType.TreeVerified,
+                    AcceptanceObservationOutcome.Failed,
+                    failureCode: AcceptanceFailureCodes.TreeChanged,
+                    cancellationToken: cancellationToken);
+            }
+            reduction = AcceptanceReducer.Reduce(selection, Definitions, recorder.Observations);
+        }
+
         var result = new AcceptanceRunResult(
             SchemaVersion: "1.0",
             RunId: runId,
             RequestedGates: requestedGates.Select(AcceptanceReducer.ToGateName).ToArray(),
-            Commit: commit,
-            TreeHash: treeHash,
+            Commit: repositoryGuard.Baseline.HeadCommit,
+            TreeHash: repositoryGuard.Baseline.HeadTree,
             PlatformApiRelease: null,
             PlatformApiDigest: null,
             ToolVersions: new Dictionary<string, string>(StringComparer.Ordinal)

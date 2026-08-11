@@ -528,16 +528,20 @@ public sealed class SqlServerPersistenceSmokeTests
         }
 
         var assemblyPath = typeof(CreateAssetCatalogMigration).Assembly.Location;
+        var assemblyBytes = File.ReadAllBytes(assemblyPath);
         var stream = new ModuleMigrationStream(
             "Partner.AssetCatalog",
             PersistenceProvider.SqlServer,
             assemblyPath,
             "test-manifest.json",
-            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath))),
+            Convert.ToHexStringLower(SHA256.HashData(assemblyBytes)),
             modelDigest,
             migrations[^1].MigrationId,
             IsLegacyBaseline: false,
-            migrations);
+            migrations)
+        {
+            AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+        };
         var legacyStream = new ModuleMigrationStream(
             "platform.core",
             PersistenceProvider.SqlServer,
@@ -935,61 +939,6 @@ public sealed class SqlServerPersistenceSmokeTests
 
         throw new InvalidOperationException("无法定位仓库根目录。");
     }
-}
-
-[DbContext(typeof(EfPlatformDbContext))]
-[Migration(MigrationId)]
-public sealed class CreateAssetCatalogMigration : Migration
-{
-    public const string MigrationId = ModuleMigrationIds.CreateAssetCatalog;
-
-    protected override void Up(MigrationBuilder migrationBuilder)
-    {
-        migrationBuilder.EnsureSchema(SqlServerModuleMigrationNames.Schema);
-        migrationBuilder.CreateTable(
-            name: "Asset",
-            schema: SqlServerModuleMigrationNames.Schema,
-            columns: table => new
-            {
-                Id = table.Column<string>(type: "nvarchar(64)", nullable: false),
-                Code = table.Column<string>(type: "nvarchar(128)", nullable: false)
-            },
-            constraints: table => table.PrimaryKey("PK_Asset", asset => asset.Id));
-    }
-
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
-    }
-}
-
-[DbContext(typeof(EfPlatformDbContext))]
-[Migration(MigrationId)]
-public sealed class AddUniqueAssetCodeMigration : Migration
-{
-    public const string MigrationId = ModuleMigrationIds.AddUniqueAssetCode;
-
-    protected override void Up(MigrationBuilder migrationBuilder) =>
-        migrationBuilder.CreateIndex(
-            name: "UX_Asset_Code",
-            schema: SqlServerModuleMigrationNames.Schema,
-            table: "Asset",
-            column: "Code",
-            unique: true);
-
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
-    }
-}
-
-internal static class ModuleMigrationIds
-{
-    public const string CreateAssetCatalog = "20260809001000_CreateAssetCatalog";
-    public const string AddUniqueAssetCode = "20260809002000_AddUniqueAssetCode";
-}
-
-internal static class SqlServerModuleMigrationNames
-{
-    public const string Schema = "np_partner_assetcatalog";
 }
 
 [CollectionDefinition(SqlServerPersistenceSmokeCollection.Name, DisableParallelization = true)]

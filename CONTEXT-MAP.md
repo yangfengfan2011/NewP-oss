@@ -18,10 +18,10 @@
 - **Organization → Identity / Authentication**：Organization 通过账号目录查询用户账号，并由 Person 保存不可变的 User EID 来拥有永久一对一绑定；Identity 不保存 Person EID，Person.Name 与 User.ENAME 分别维护且不自动同步。账号目录暂时不可用时，已绑定人员仍可降级读取 Organization 自有绑定事实，但新绑定安全关闭。Organization 应用层通过 Identity.Contracts、Authentication.Contracts 与平台事务执行器编排人员停用、关联账号停用、人员停用阻断和全部会话撤销的单事务提交；Host 不承载该业务流程。人员恢复只解除阻断条件，不会自动恢复账号或旧会话。
 - **Organization → Authorization**：Organization 声明业务权限和 endpoint access rule，并只通过稳定契约读取授权摘要；它不拥有角色、权限分配或授权存储实现。
 - **Plugin Platform → Host / Shell**：Plugin Platform 产生活动插件快照；Host 和 Shell 只消费同一快照，不分别决定插件版本或启用状态。
-- **Plugin Platform → Persistence**：Plugin Platform 编排插件拥有的模型与向前迁移；平台持久化负责 provider adapter 和执行保障，不拥有插件业务模型。
+- **Plugin Platform → Persistence**：Plugin Platform 把插件拥有的模型与 migration stream 纳入候选计划；它不直接执行迁移。Platform Persistence 负责 provider adapter、统一 history 和执行保障，不拥有插件业务模型。
 - **Platform Persistence → Plugin Platform**：Platform Persistence 只准备并执行某个候选快照的持久化计划；迁移成功不等于插件激活，活动状态仍由 Plugin Platform 原子提交。
-- **Platform Persistence → Modules**：模块拥有自己的模型和 migration stream；Platform Persistence 校验归属、顺序与安全性，并把所有活动模型投影进共享运行时 DbContext。
-- **Platform Persistence → Host**：Host 只提交同一份已编译计划用于 DI 注册和启动期执行，不枚举具体模块 provider，也不决定模块迁移顺序。
+- **Platform Persistence → Modules**：模块拥有自己的模型和 migration stream；Platform Persistence 校验归属、线性迁移链、摘要与目标 frontier，并把所有活动模型投影进共享运行时 DbContext。
+- **Platform Persistence → Host**：Host 是数据库 migration 的唯一受支持执行入口，使用同一份已编译计划完成 DI 注册、完整 EF Up、统一 history 维护和只读一致性检查；它不枚举具体模块 provider，也不决定模块迁移顺序。
 - **Authorization → Identity / LocalAuth**：Authorization 消费可信主体标识，不拥有凭据交换、Cookie 或账号生命周期。
 - **Authorization → Plugin Platform**：Authorization 只接受活动插件快照中的权限和 access rule；未激活插件的声明不能进入有效权限目录。
 - **Authorization → Shell**：Shell 可用当前主体的有效权限改善菜单和按钮可见性，但服务端判定始终是安全事实源。

@@ -1,8 +1,8 @@
 # 持久化开发流程
 
-当前持久化主链路是：候选 Canonical Module Plan → Compiled Persistence Plan → 共享运行时模型与模块自有 provider migration streams。`PlatformPersistenceModelCatalog` 和三个全局 migration 项目只保留为 Legacy Baseline 兼容事实，不是新增模块的默认接入点。
+当前持久化主链路是：候选 Canonical Module Plan → Compiled Persistence Plan → 共享运行时模型与模块自有 provider migration streams → Host 启动期完整 EF Up Migration。Host 是唯一受支持的迁移执行入口；`PlatformPersistenceModelCatalog` 和三个全局 migration 项目只保留为 Legacy Baseline 兼容事实，不是新增模块的默认接入点。
 
-开始前先阅读[Platform Persistence Context](../contexts/platform-persistence/CONTEXT.md)。
+开始前先阅读 [Platform Persistence Context](../contexts/platform-persistence/CONTEXT.md) 和 [ADR-0027](../adr/0027-host-is-the-only-full-up-migration-entry.md)。
 
 ## 新增或修改模块模型
 
@@ -11,17 +11,22 @@
 3. 运行模型校验和 DTO 同步，不手改 `DTOs/Generated/*.g.cs`。
 4. 在模块自有 migration 项目中增加不可变的线性迁移流，例如 `server/modules/<ModuleId>/Migrations.SqlServer/`。
 5. 让 migration manifest、target model digest 与模型投影一致，并通过候选计划编译。
-6. 补充模块、持久化和 Host readiness 的定向测试。
+6. 通过 Host 启动链路应用 migration；不要运行独立 schema apply 工具、`dotnet ef database update` 或手工 SQL 代替正式入口。
+7. 补充模块、持久化和 Host readiness 的定向测试。
 
 首个公开外部插件 profile 只支持 SQL Server。Oracle 或 MySQL 的新增迁移必须有单独设计与真实 provider 验证，不能因为 Legacy Baseline 存在三个 provider 项目就机械生成三份迁移。
 
 ## 迁移规则
 
-- 正常激活只自动执行 safe-expand：创建 schema/table/index，或增加 nullable/有安全默认值的列。
-- `Down`、Rename、Drop、破坏性 Alter 和任意 SQL 不进入普通插件激活路径。
-- 内建模块的旧基线切换必须使用已验证的 built-in provenance；外部模块不能自报破坏性权限。
-- 数据库超前于旧活动快照时，旧版本仍需兼容已提交的 safe-expand 前缀；失败不自动回滚数据库。
+- 所有环境通过同一条 Host 启动链路执行待应用的完整 EF `Up`，包括 Drop、Rename 和 Alter；当前不按开发/发布环境或风险等级裁剪操作。
+- Migration 可以定义 `Down`，但平台不自动执行 `Down`。已提交迁移的恢复使用修正后的前向 migration 或已验证的数据库恢复流程。
+- 完整 Up 不放松边界：模块归属、provider、全局唯一 Migration ID、线性迁移链、bundle/content/model/from-to digest、期望 frontier、事务和迁移锁都必须通过校验。
+- 所有模块与 Legacy Baseline 共用统一 EF Migration History；模块不得维护私有 history 或从 Host 外回写迁移事实。
+- 每个 migration 的 DDL 与 history 写入共用事务；不能参与事务或无法证明模块归属的操作必须在执行前失败。
+- 数据库超前、history 不是有效迁移链前缀或摘要不一致时，Host 保持 Not Ready，不运行旧快照、自动回退或改写 history。
 - migration 成功后仍要等待整个插件候选原子激活，不能单独写入活动状态。
+- `DevSchemaSync` CLI 和直接 SQL apply 路径不再是目标能力；Host 仅保留所有环境一致的只读 schema/history/digest 检查。
+- 真实生产数据库进入受支持范围后，再通过独立设计增加显式安全模式；不得仅依据环境名隐式改变迁移语义。
 
 ## 本地连接
 
@@ -43,4 +48,4 @@ dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj -- --chec
 .\scripts\verify.ps1
 ```
 
-涉及真实 DDL 时，还必须从空 catalog、已有受支持基线、失败重试和 Host restart/readiness 四个入口验证；不能用生成了 migration 文件代替数据库证据。
+涉及真实 DDL 时，还必须从空 catalog、已有受支持基线、包含 Drop/Rename/Alter 的完整 Up、并发迁移锁、失败重试、history/frontier/digest 不一致、Host restart/readiness 和只读一致性检查八个入口验证；不能用生成了 migration 文件代替数据库证据。

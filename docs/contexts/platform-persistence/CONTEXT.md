@@ -1,6 +1,8 @@
 # Platform Persistence
 
-Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥有的模型与迁移贡献，编译成共享运行时模型和可确定执行的 provider-specific migration streams。它保障归属、顺序、历史、事务与失败语义，但不拥有模块业务模型，也不决定插件是否激活。
+Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥有的模型与迁移贡献，编译成共享运行时模型和可确定执行的 provider-specific migration streams。它保障归属、顺序、统一历史、事务与失败语义，并只接受 Host 作为数据库迁移执行入口；它不拥有模块业务模型，也不决定插件是否激活。
+
+迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束。
 
 ## Language
 
@@ -29,23 +31,27 @@ _Avoid_: DbContext 配置、插件扫描结果、迁移执行日志
 _Avoid_: 程序集版本、插件版本、数据库 schema 版本号
 
 **迁移前沿（Migration Frontier）**：
-某模块在一个候选快照中期望达到的最后 migration 身份。EF migration history 是实际执行事实，活动快照只记录其期望 frontier 和持久化计划摘要。
+某模块在一个候选快照中期望达到的最后 migration 身份。统一 EF Migration History 是实际执行事实，活动快照只记录其期望 frontier 和持久化计划摘要。
 _Avoid_: 最新文件、最大时间戳、当前插件版本
 
-**安全扩展迁移（Safe Expand Migration）**：
-可由正常激活流程自动执行、并允许旧活动版本继续运行的向前 schema 变化，例如创建 schema/table/index，或增加 nullable/有安全默认值的列。
-_Avoid_: Down、Rename、Drop、破坏性 Alter、任意 SQL
+**完整 Up 迁移（Full Up Migration）**：
+Host 根据统一 Migration History，把已编译计划从当前有效前缀推进到期望 frontier 时执行的完整 EF `Up` 操作序列。它允许 Drop、Rename、Alter 等结构变化，但不放松模块归属、迁移链、摘要、事务和迁移锁校验，也不自动执行 `Down`。
+_Avoid_: safe-expand only、metadata diff SQL、按环境隐式裁剪操作
 
 **数据库超前（Database Ahead）**：
-某些已提交的安全扩展迁移超过当前活动快照的 frontier，通常源于后续 migration 失败。旧活动版本必须仍能在该 schema 上工作，重试从已提交前缀之后继续。
-_Avoid_: 自动回滚、schema drift、激活成功
+统一 Migration History 已超过当前已编译计划的目标 frontier。完整 Up 迁移不保证旧活动版本兼容更晚 schema，因此 Host 必须把它作为阻断性一致性失败，不得自动运行旧快照或执行 `Down`。
+_Avoid_: 可安全忽略的前缀、自动回滚、激活成功
+
+**统一迁移历史（Unified Migration History）**：
+同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。所有模块 migration stream 与 Legacy Baseline 共用该历史，Migration ID 在整份计划中全局唯一；模块不拥有私有 history。
+_Avoid_: 模块 history table、活动快照状态、手工回写记录
 
 **Schema Drift**：
-数据库实际结构或 migration history 与已验证的归属、链和期望 frontier 不一致。DevelopmentSchemaSync 只能报告 drift；正常 schema 写入仍必须通过 EF migrations。
-_Avoid_: 待执行迁移、数据库超前、模型摘要变化
+数据库实际结构或统一 Migration History 与已验证的归属、迁移链、模型摘要和期望 frontier 不一致。Host 只读一致性检查负责报告并阻断 drift；所有 schema 写入仍只能由 Host 执行 EF Up migrations。
+_Avoid_: 正常待执行迁移、自动修复计划、第二个结构写入入口
 
 **Provider Adapter**：
-在内部隐藏特定数据库的锁、EF migrator 配置、history reconciliation 和事务执行的实现 seam。首个外部插件门禁只支持 SQL Server；不支持的 provider 必须在 DDL 前失败。
+在内部隐藏特定数据库的迁移锁、EF migrator 配置、统一 history reconciliation 和事务执行的实现 seam。首个外部插件门禁只支持 SQL Server；不支持的 provider 必须在 DDL 前失败。
 _Avoid_: 插件接口、Host 分支、通用 SQL 生成器
 
 **Legacy Baseline**：
@@ -53,5 +59,5 @@ _Avoid_: 插件接口、Host 分支、通用 SQL 生成器
 _Avoid_: 清空 history、重新生成初始迁移、永久兼容模式
 
 **已验证旧基线切换（Verified Legacy Cutover）**：
-内建模块在自己拥有的 migration manifest 中冻结一次性 legacy 摘要、首迁移和允许丢弃的旧物理表；平台只定义通用协议，并仅在 built-in provenance 完整匹配时把该事实编译为执行器不可由公共调用方伪造的决策。外部模块或普通 `CompiledPersistencePlan` 自报相同字段不能获得破坏性迁移权限。
-_Avoid_: 平台内核硬编码模块私有表、外部插件自报 Drop 权限、仅凭 migration id 放行
+内建模块在自己拥有的 migration manifest 中冻结一次性 legacy 摘要、首迁移和旧物理对象，用于证明从 Legacy Baseline 进入模块迁移流的归属与链路。它不再是破坏性操作的特殊授权；所有完整 Up migrations 都必须通过相同的归属、迁移链和摘要校验。
+_Avoid_: 平台内核硬编码模块私有表、外部插件自报归属、仅凭 migration id 放行

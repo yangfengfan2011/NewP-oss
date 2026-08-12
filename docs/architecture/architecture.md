@@ -4,12 +4,12 @@
 
 ## 组合关系
 
-- Host 负责启动、认证接入、模块加载和宿主级横切能力。
+- Host 负责启动、认证接入、模块加载、数据库 migration 唯一执行入口和宿主级横切能力。
 - Shell 负责布局、全局 Provider，以及从活动模块运行时目录装配菜单、路由和前端实现。
 - Module Capsule 拥有模块身份、版本和依赖；metadata 拥有静态声明；C# 与 TypeScript 只提供 behavior binding。
 - Kernel 编译、校验并投影 Canonical Module Plan；冲突或引用缺失会拒绝整份候选，不按加载顺序覆盖。
-- Plugin Platform 管理外部插件的校验、期望状态、启动期激活和活动快照。
-- Platform Persistence 把同一候选计划编译为共享运行时模型和模块自有 migration streams。
+- Plugin Platform 管理外部插件的校验、期望状态、启动期激活和活动快照，但不直接执行数据库 migration。
+- Platform Persistence 把同一候选计划编译为共享运行时模型和模块自有 migration streams，并通过 Host 维护统一 EF Migration History、执行完整 Up 和完成只读一致性检查。
 - 内建模块通过 Contracts、SDK 和平台抽象协作，不依赖其他模块的私有实现。
 
 ## 事实入口

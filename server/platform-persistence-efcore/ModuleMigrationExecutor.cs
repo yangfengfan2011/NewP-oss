@@ -21,8 +21,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ICP.Platform.Persistence.EfCore;
 
 /// <summary>
-/// EF Core provider 内部的模块迁移执行器。先静态检查整份候选计划，再允许 ownership
-/// guard 建立连接；这样非法 bundle 不会留下 marker、history 或业务 schema 残留。
+/// EF Core provider 内部的完整 Up 模块迁移执行器。先静态检查整份候选计划，再允许
+/// ownership guard 建立连接；这样非法 bundle 不会留下 marker、history 或业务 schema 残留。
 /// </summary>
 internal sealed class ModuleMigrationExecutor(
     EfPlatformDbContext dbContext,
@@ -257,6 +257,9 @@ internal sealed class ModuleMigrationExecutor(
         optionsBuilder.ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>();
         using var generationContext = new EfPlatformDbContext(optionsBuilder.Options, plan);
         var generator = generationContext.GetService<IMigrationsSqlGenerator>();
+        // AlterColumn 等完整 Up 会让 SQL Server generator 重建受影响索引；该路径需要
+        // design-time facet，不能使用裁剪过的 read-optimized runtime model。
+        var designTimeModel = generationContext.GetService<IDesignTimeModel>().Model;
 
         return streams
             .Select(stream => stream with
@@ -266,7 +269,7 @@ internal sealed class ModuleMigrationExecutor(
                     {
                         var commands = generator.Generate(
                             migration.Migration.UpOperations,
-                            generationContext.Model);
+                            designTimeModel);
                         if (commands.Any(static command => command.TransactionSuppressed))
                         {
                             throw Failure(
@@ -792,14 +795,8 @@ internal sealed class ModuleMigrationExecutor(
                     exception);
             }
 
-            if (migration.DownOperations.Count != 0)
-            {
-                throw Failure(
-                    PersistenceMigrationFailureCodes.OperationForbidden,
-                    stream,
-                    step.MigrationId);
-            }
-
+            // Down 可以作为 migration 的人工回退定义存在，但 Host 永远只验证、生成并
+            // 执行 UpOperations；不能因定义了 Down 而拒绝合法 Up，也不能自动调用 Down。
             candidates.Add(new ProviderMigrationCandidate(step, migration));
         }
 

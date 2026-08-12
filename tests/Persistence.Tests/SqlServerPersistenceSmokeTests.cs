@@ -36,6 +36,10 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string ModuleMigrationOne = "20260809001000_CreateAssetCatalog";
     private const string ModuleMigrationTwo = "20260809002000_AddUniqueAssetCode";
     private const string ModuleSchema = "np_partner_assetcatalog";
+    private const string FullUpMigrationOne = "20260812011000_CreateFullUpAsset";
+    private const string FullUpMigrationTwo = "20260812012000_TransformFullUpAsset";
+    private const string FullUpMigrationThree = "20260812013000_AddUniqueFullUpAssetCode";
+    private const string FullUpSchema = "np_partner_fullup";
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -76,6 +80,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerProviderTransitions_EnforceDataPreconditionsWithoutDefaultsOrBackfill() =>
         RunCatalogScenarioAsync("target", VerifyProviderTransitionDataBoundariesAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerFullUp_DropRenameAlterRollbackRetryConcurrentAndNoOp() =>
+        RunCatalogScenarioAsync("fullup", VerifyFullUpMigrationLifecycleAsync);
 
     private static async Task RunCatalogScenarioAsync(
         string purpose,
@@ -440,6 +449,85 @@ public sealed class SqlServerPersistenceSmokeTests
             "np_partner_transition",
             "TransitionAsset",
             "OptionalValue"));
+    }
+
+    private static async Task VerifyFullUpMigrationLifecycleAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var connectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        await using (var initial = BuildProvider(connectionString, identity, BuildFullUpPlan(1)))
+        {
+            Assert.False(await RunMigrationsAsync(initial));
+        }
+
+        await ExecuteNonQueryAsync(connectionString, $"""
+            INSERT INTO [{FullUpSchema}].[Parent] ([Id]) VALUES (N'parent-1');
+            INSERT INTO [{FullUpSchema}].[LegacyAsset] ([Id], [LegacyCode], [ParentId], [Obsolete])
+            VALUES (N'asset-1', N'FULL-UP', N'parent-1', N'remove-me');
+            INSERT INTO [{FullUpSchema}].[RetiredAsset] ([Id]) VALUES (N'retired-1');
+            """);
+
+        await using var concurrentOne = BuildProvider(connectionString, identity, BuildFullUpPlan(2));
+        await using var concurrentTwo = BuildProvider(connectionString, identity, BuildFullUpPlan(2));
+        var concurrentResults = await Task.WhenAll(
+            RunMigrationsAsync(concurrentOne),
+            RunMigrationsAsync(concurrentTwo));
+        Assert.All(concurrentResults, static databaseAhead => Assert.False(databaseAhead));
+
+        Assert.False(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "LegacyAsset", "U"));
+        Assert.True(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "Asset", "U"));
+        Assert.False(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "RetiredAsset", "U"));
+        Assert.False(await ColumnExistsAsync(connectionString, FullUpSchema, "Asset", "LegacyCode"));
+        Assert.True(await ColumnExistsAsync(connectionString, FullUpSchema, "Asset", "Code"));
+        Assert.False(await ColumnExistsAsync(connectionString, FullUpSchema, "Asset", "Obsolete"));
+        Assert.False(await ColumnIsNullableAsync(connectionString, FullUpSchema, "Asset", "Code"));
+        Assert.Equal(
+            256,
+            await ReadCharacterMaximumLengthAsync(connectionString, FullUpSchema, "Asset", "Code"));
+        Assert.Equal(
+            "FULL-UP",
+            await ExecuteScalarAsync(
+                connectionString,
+                $"SELECT [Code] FROM [{FullUpSchema}].[Asset] WHERE [Id] = N'asset-1';"));
+        Assert.False(await DefaultConstraintExistsAsync(connectionString, FullUpSchema, "Asset", "Code"));
+        Assert.True(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "PK_Asset", "PK"));
+        Assert.True(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "FK_Asset_Parent", "F"));
+        Assert.True(await IndexExistsAsync(connectionString, FullUpSchema, "Asset", "IX_Asset_Code"));
+        Assert.True(await IndexExistsAsync(connectionString, FullUpSchema, "Asset", "UX_Asset_ParentId"));
+        Assert.True(await IndexIsUniqueAsync(connectionString, FullUpSchema, "Asset", "UX_Asset_ParentId"));
+        Assert.Equal(
+            1,
+            Convert.ToInt32(await ExecuteScalarAsync(
+                connectionString,
+                $"SELECT COUNT(*) FROM [dbo].[__NewPMigrationHistory] WHERE [MigrationId] = N'{FullUpMigrationTwo}';")));
+
+        await ExecuteNonQueryAsync(connectionString, $"""
+            INSERT INTO [{FullUpSchema}].[Parent] ([Id]) VALUES (N'parent-2');
+            INSERT INTO [{FullUpSchema}].[Asset] ([Id], [Code], [ParentId])
+            VALUES (N'asset-2', N'FULL-UP', N'parent-2');
+            """);
+
+        await using var failing = BuildProvider(connectionString, identity, BuildFullUpPlan(3));
+        await Assert.ThrowsAsync<SqlException>(() => RunMigrationsAsync(failing));
+        Assert.DoesNotContain(FullUpMigrationThree, await ReadAppliedMigrationsAsync(connectionString));
+        Assert.True(await IndexExistsAsync(connectionString, FullUpSchema, "Asset", "IX_Asset_Code"));
+        Assert.False(await IndexExistsAsync(connectionString, FullUpSchema, "Asset", "UX_Asset_Code"));
+
+        await ExecuteNonQueryAsync(
+            connectionString,
+            $"DELETE FROM [{FullUpSchema}].[Asset] WHERE [Id] = N'asset-2';");
+        Assert.False(await RunMigrationsAsync(failing));
+        Assert.False(await IndexExistsAsync(connectionString, FullUpSchema, "Asset", "IX_Asset_Code"));
+        Assert.True(await IndexIsUniqueAsync(connectionString, FullUpSchema, "Asset", "UX_Asset_Code"));
+
+        var completedHistory = await ReadAppliedMigrationsAsync(connectionString);
+        Assert.Equal(1, completedHistory.Count(migration => migration == FullUpMigrationThree));
+        Assert.False(await RunMigrationsAsync(failing));
+        Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(connectionString));
+        Assert.True(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "Asset", "U"));
+        Assert.False(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "LegacyAsset", "U"));
     }
 
     private static async Task VerifyNonEmptyUnownedCatalogIsRejectedAsync(
@@ -973,6 +1061,187 @@ public sealed class SqlServerPersistenceSmokeTests
         }
     }
 
+    private static CompiledPersistencePlan BuildFullUpPlan(int stage)
+    {
+        if (stage is < 1 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage));
+        }
+
+        const string owner = "Partner.FullUp";
+        var stageModels = Enumerable.Range(1, stage)
+            .Select(BuildFullUpModels)
+            .ToArray();
+        var finalModels = stageModels[^1];
+        var coreModels = TestPersistencePlan.Create().Models;
+        var models = coreModels.Concat(finalModels).ToArray();
+        var modelDigest = PersistenceModelDigest.Compute(models);
+        var migrationIds = new[]
+        {
+            FullUpMigrationOne,
+            FullUpMigrationTwo,
+            FullUpMigrationThree
+        };
+        var stageDigests = stageModels
+            .Select(PersistenceModelDigest.Compute)
+            .ToArray();
+        var migrations = Enumerable.Range(0, stage)
+            .Select(index => new CompiledMigrationStep(
+                $"{index + 1:D6}",
+                migrationIds[index],
+                index == 0 ? null : new string((char)('a' + index - 1), 64),
+                new string((char)('a' + index), 64),
+                index == 0 ? new string('0', 64) : stageDigests[index - 1],
+                stageDigests[index],
+                "safe-expand"))
+            .ToArray();
+        var assemblyPath = typeof(CreateFullUpAssetMigration).Assembly.Location;
+        var assemblyBytes = File.ReadAllBytes(assemblyPath);
+        var stream = new ModuleMigrationStream(
+            owner,
+            PersistenceProvider.SqlServer,
+            assemblyPath,
+            "test-full-up-manifest.json",
+            Convert.ToHexStringLower(SHA256.HashData(assemblyBytes)),
+            stageDigests[^1],
+            migrations[^1].MigrationId,
+            IsLegacyBaseline: false,
+            migrations)
+        {
+            AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+        };
+        var coreDigest = PersistenceModelDigest.Compute(coreModels);
+        var legacyStream = new ModuleMigrationStream(
+            "platform.core",
+            PersistenceProvider.SqlServer,
+            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
+            "platform.core:legacy-baseline",
+            coreDigest,
+            coreDigest,
+            LatestMigration,
+            IsLegacyBaseline: true,
+            []);
+        return new CompiledPersistencePlan(
+            $"full-up-stage-{stage}",
+            new string('b', 64),
+            new string('c', 64),
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            models,
+            [legacyStream, stream]);
+
+        static ModelDefinition[] BuildFullUpModels(int currentStage)
+        {
+            var id = new FieldDefinition(
+                "Id",
+                "Id",
+                FieldKind.Scalar,
+                FieldValueType.ObjectId,
+                "string",
+                Required: true,
+                IsPrimaryKey: true,
+                IsAuditField: false);
+            var parent = new ModelDefinition(
+                "Parent",
+                "Parent",
+                ModelKind.Entity,
+                [id],
+                [],
+                owner,
+                FullUpSchema);
+
+            if (currentStage == 1)
+            {
+                var legacyAsset = new ModelDefinition(
+                    "Asset",
+                    "LegacyAsset",
+                    ModelKind.Entity,
+                    [
+                        id,
+                        id with
+                        {
+                            Name = "LegacyCode",
+                            StoreName = "LegacyCode",
+                            Required = false,
+                            IsPrimaryKey = false
+                        },
+                        id with { Name = "ParentId", StoreName = "ParentId", IsPrimaryKey = false },
+                        id with
+                        {
+                            Name = "Obsolete",
+                            StoreName = "Obsolete",
+                            ValueType = FieldValueType.Text,
+                            StoreType = "nvarchar(256)",
+                            Required = false,
+                            IsPrimaryKey = false
+                        }
+                    ],
+                    [
+                        new IndexDefinition("IX_LegacyAsset_LegacyCode", ["LegacyCode"], IsUnique: false),
+                        new IndexDefinition("UX_LegacyAsset_ParentId", ["ParentId"], IsUnique: true)
+                    ],
+                    owner,
+                    FullUpSchema,
+                    [new ForeignKeyDefinition(
+                        "FK_LegacyAsset_Parent",
+                        ["ParentId"],
+                        $"{owner}/Parent",
+                        ["Id"],
+                        ForeignKeyDeleteBehavior.Restrict)]);
+                var retired = new ModelDefinition(
+                    "RetiredAsset",
+                    "RetiredAsset",
+                    ModelKind.Entity,
+                    [id],
+                    [],
+                    owner,
+                    FullUpSchema);
+                return [parent, legacyAsset, retired];
+            }
+
+            var indexes = new List<IndexDefinition>
+            {
+                new("UX_Asset_ParentId", ["ParentId"], IsUnique: true)
+            };
+            if (currentStage >= 3)
+            {
+                indexes.Add(new IndexDefinition("UX_Asset_Code", ["Code"], IsUnique: true));
+            }
+            else
+            {
+                indexes.Add(new IndexDefinition("IX_Asset_Code", ["Code"], IsUnique: false));
+            }
+
+            var asset = new ModelDefinition(
+                "Asset",
+                "Asset",
+                ModelKind.Entity,
+                [
+                    id,
+                    id with
+                    {
+                        Name = "Code",
+                        StoreName = "Code",
+                        ValueType = FieldValueType.Text,
+                        StoreType = "nvarchar(256)",
+                        IsPrimaryKey = false
+                    },
+                    id with { Name = "ParentId", StoreName = "ParentId", IsPrimaryKey = false }
+                ],
+                indexes,
+                owner,
+                FullUpSchema,
+                [new ForeignKeyDefinition(
+                    "FK_Asset_Parent",
+                    ["ParentId"],
+                    $"{owner}/Parent",
+                    ["Id"],
+                    ForeignKeyDeleteBehavior.Restrict)]);
+            return [parent, asset];
+        }
+    }
+
     private static CompiledPersistencePlan BuildLegacyFrontierPlan(string frontier)
     {
         var models = TestPersistencePlan.Create().Models;
@@ -1315,6 +1584,28 @@ public sealed class SqlServerPersistenceSmokeTests
         return Convert.ToBoolean(await command.ExecuteScalarAsync());
     }
 
+    private static async Task<int> ReadCharacterMaximumLengthAsync(
+        string connectionString,
+        string schema,
+        string table,
+        string column)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT [CHARACTER_MAXIMUM_LENGTH]
+            FROM [INFORMATION_SCHEMA].[COLUMNS]
+            WHERE [TABLE_SCHEMA] = @schema
+              AND [TABLE_NAME] = @table
+              AND [COLUMN_NAME] = @column;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        command.Parameters.AddWithValue("@column", column);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
     private static async Task<bool> DefaultConstraintExistsAsync(
         string connectionString,
         string schema,
@@ -1397,6 +1688,30 @@ public sealed class SqlServerPersistenceSmokeTests
         command.Parameters.AddWithValue("@table", table);
         command.Parameters.AddWithValue("@index", index);
         return Convert.ToInt32(await command.ExecuteScalarAsync()) == 1;
+    }
+
+    private static async Task<bool> IndexIsUniqueAsync(
+        string connectionString,
+        string schema,
+        string table,
+        string index)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT [indexes].[is_unique]
+            FROM [sys].[indexes] AS [indexes]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [indexes].[object_id]
+            INNER JOIN [sys].[schemas] AS [schemas] ON [schemas].[schema_id] = [tables].[schema_id]
+            WHERE [schemas].[name] = @schema
+              AND [tables].[name] = @table
+              AND [indexes].[name] = @index;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        command.Parameters.AddWithValue("@index", index);
+        return Convert.ToBoolean(await command.ExecuteScalarAsync());
     }
 
     private static async Task<string[]> ReadAppliedMigrationsAsync(string connectionString)

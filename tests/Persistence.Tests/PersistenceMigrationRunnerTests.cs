@@ -109,10 +109,12 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(PersistenceHistoryFailureCodes.VersionUnsupported, exception.FailureCode);
     }
 
-    [Fact]
-    public async Task MigrateAsync_ForbiddenModuleOperation_FailsBeforeOpeningConnection()
+    [Theory]
+    [InlineData(ForbiddenSqlMigration.MigrationId)]
+    [InlineData(TransactionSuppressedSqlMigration.MigrationId)]
+    public async Task MigrateAsync_ForbiddenOrTransactionSuppressedOperation_FailsBeforeOpeningConnection(
+        string migrationId)
     {
-        var migrationId = ForbiddenSqlMigration.MigrationId;
         var plan = BuildPlan(migrationId);
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -139,6 +141,24 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
         Assert.Equal("Partner.AssetCatalog", exception.ModuleId);
         Assert.Equal(migrationId, exception.MigrationId);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_MigrationDefinesDown_DoesNotRejectItsValidatedUp()
+    {
+        var plan = BuildPlan(CreateAssetWithDownMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+
+        Assert.False(
+            exception is PersistencePlanExecutionException
+            {
+                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
+            },
+            exception.ToString());
     }
 
     [Theory]

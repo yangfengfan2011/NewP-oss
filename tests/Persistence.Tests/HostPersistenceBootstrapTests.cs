@@ -22,7 +22,6 @@ public class HostPersistenceBootstrapTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "false",
                 ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
             })
             .Build();
@@ -89,7 +88,6 @@ public class HostPersistenceBootstrapTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "false",
                 ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
             })
             .Build();

@@ -529,7 +529,6 @@ try {
         $hostEnvironment["ConnectionStrings__SqlServer"] = $env:NEWP_DEV_SQLSERVER_CONNECTION_STRING
         $hostEnvironment["Persistence__Adapter"] = "EfCore"
         $hostEnvironment["Persistence__Provider"] = "SqlServer"
-        $hostEnvironment["Persistence__AutoMigrate"] = "true"
         $hostEnvironment["Persistence__AutoSeed"] = "true"
     }
 

@@ -86,10 +86,11 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
             builder.UseSetting("Platform:SkipAuthorizationCatalogInitialization", "true");
-            builder.UseSetting("Persistence:AutoMigrate", "false");
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<IPersistenceMigrationRunner>();
+                services.AddSingleton<IPersistenceMigrationRunner, TestPersistenceMigrationRunner>();
                 services.RemoveAll<IPersistenceConsistencyChecker>();
                 services.AddSingleton<IPersistenceConsistencyChecker, TestPersistenceConsistencyChecker>();
                 var repositoryServiceType = services

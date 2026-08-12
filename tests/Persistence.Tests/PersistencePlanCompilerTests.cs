@@ -266,11 +266,26 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
-    public void Compile_InstalledModuleBackupRestoreOnlyMigration_IsRejected()
+    public void Compile_InstalledModuleBackupRestoreOnlyMigration_IsPreservedForFullUpExecution()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
         package.RewriteManifest(manifest =>
             manifest["migrations"]!.AsArray()[0]!["compatibility"] = "backup-restore-only");
+        var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
+
+        var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        var migration = Assert.Single(Assert.Single(result.Plan!.Streams).Migrations);
+        Assert.Equal("backup-restore-only", migration.Compatibility);
+    }
+
+    [Fact]
+    public void Compile_UnknownMigrationCompatibilityLabel_IsRejected()
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteManifest(manifest =>
+            manifest["migrations"]!.AsArray()[0]!["compatibility"] = "custom-risk-policy");
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
@@ -280,7 +295,7 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
-    public void Compile_OtherBuiltInSelfReportsBackupRestoreOnlyMigration_IsRejected()
+    public void Compile_OtherBuiltInBackupRestoreOnlyMigration_IsPreservedForFullUpExecution()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
         package.RewriteManifest(manifest =>
@@ -291,12 +306,13 @@ public sealed class PersistencePlanCompilerTests
             BuildCanonicalPlan(package.BuildBuiltInModule()),
             PersistenceProvider.SqlServer);
 
-        Assert.False(result.IsSuccess);
-        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        var migration = Assert.Single(Assert.Single(result.Plan!.Streams).Migrations);
+        Assert.Equal("backup-restore-only", migration.Compatibility);
     }
 
     [Fact]
-    public void Compile_OtherBuiltInAddsLaterBackupRestoreOnlyMigration_IsRejected()
+    public void Compile_OtherBuiltInAddsLaterBackupRestoreOnlyMigration_PreservesCompleteChain()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
         var module = package.BuildBuiltInModule();
@@ -324,8 +340,10 @@ public sealed class PersistencePlanCompilerTests
             BuildCanonicalPlan(module),
             PersistenceProvider.SqlServer);
 
-        Assert.False(result.IsSuccess);
-        Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
+        Assert.Equal(
+            ["safe-expand", "backup-restore-only"],
+            Assert.Single(result.Plan!.Streams).Migrations.Select(static migration => migration.Compatibility));
     }
 
     [Fact]
@@ -747,7 +765,6 @@ public sealed class PersistencePlanCompilerTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "true",
                 ["ConnectionStrings:SqlServer"] =
                     "Server=invalid.invalid,1;Database=never-connect;Integrated Security=True;Connect Timeout=1;TrustServerCertificate=True;"
             })

@@ -20,7 +20,6 @@ public sealed class PersistenceBootstrapTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "true",
                 ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
             })
             .Build();
@@ -69,6 +68,35 @@ public sealed class PersistenceBootstrapTests
             element => element.Attribute("Include")?.Value.Contains(
                 @"DTOs\Generated",
                 StringComparison.Ordinal) is true);
+    }
+
+    [Fact]
+    public void RepositoryMigrationEntry_UsesDisposableHostPathWithoutRetiredSwitchOrExternalWriter()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var runtimePaths = new[]
+        {
+            Path.Combine(repositoryRoot, "apps", "host-api", "appsettings.json"),
+            Path.Combine(repositoryRoot, "apps", "host-api", "appsettings.Development.json"),
+            Path.Combine(repositoryRoot, "scripts", "dev.ps1"),
+            Path.Combine(repositoryRoot, "server", "platform-persistence", "PersistenceOptions.cs"),
+            Path.Combine(repositoryRoot, "server", "platform-persistence-efcore", "PersistenceMigrationRunner.cs")
+        };
+        Assert.All(runtimePaths, path =>
+            Assert.DoesNotContain("AutoMigrate", File.ReadAllText(path), StringComparison.Ordinal));
+
+        var smokePath = Path.Combine(
+            repositoryRoot,
+            "tests",
+            "integration",
+            "persistence",
+            "Invoke-PersistenceSmoke.ps1");
+        var smoke = File.ReadAllText(smokePath);
+        Assert.Contains("Run-SqlServerSmoke.ps1", smoke, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet-ef", smoke, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("database update", smoke, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Start-Process", smoke, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ASPNETCORE_URLS", smoke, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

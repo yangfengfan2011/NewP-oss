@@ -25,7 +25,6 @@ public sealed class ProviderTargetTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "false",
                 ["ConnectionStrings:SqlServer"] =
                     "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
             })
@@ -63,7 +62,6 @@ public sealed class ProviderTargetTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "false",
                 ["ConnectionStrings:SqlServer"] =
                     "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
             })

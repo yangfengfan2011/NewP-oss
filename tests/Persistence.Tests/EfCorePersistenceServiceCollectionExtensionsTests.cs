@@ -9,12 +9,50 @@ using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ICP.Platform.Persistence.Tests;
 
 public class EfCorePersistenceServiceCollectionExtensionsTests
 {
+    [Fact]
+    public void PersistenceOptions_PublicConfigurationSurface_IsExplicit()
+    {
+        var properties = typeof(PersistenceOptions)
+            .GetProperties()
+            .Select(static property => property.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["Adapter", "AutoSeed", "Provider"], properties);
+    }
+
+    [Fact]
+    public void AddEfCorePersistence_RetiredAutoMigrateOption_FailsExplicitly()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["Persistence:AutoMigrate"] = "false",
+                ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddEfCorePersistence(
+            configuration,
+            BuildPlan(),
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
+        using var provider = services.BuildServiceProvider();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            provider.GetRequiredService<IOptions<PersistenceOptions>>().Value);
+
+        Assert.Contains("AutoMigrate", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AddEfCorePersistence_RegistersRequestedProviderServices()
     {
@@ -24,7 +62,6 @@ public class EfCorePersistenceServiceCollectionExtensionsTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "false",
                 ["ConnectionStrings:SqlServer"] = "Server=(localdb)\\mssqllocaldb;Database=ICP_Platform;Trusted_Connection=True;TrustServerCertificate=True;"
             })
             .Build();

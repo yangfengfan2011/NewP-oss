@@ -134,7 +134,6 @@ public sealed class HostAuthenticationProcessRestartTests
         startInfo.ArgumentList.Add($"http://127.0.0.1:{port}");
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         startInfo.Environment["ConnectionStrings__SqlServer"] = connectionString;
-        startInfo.Environment["Persistence__AutoMigrate"] = "true";
         startInfo.Environment["Platform__PluginInstallRoot"] = plugins;
         startInfo.Environment["Platform__ExternalPluginsEnabled"] = "false";
         startInfo.Environment["Authentication__Host__KeyRingPath"] = keyRing;

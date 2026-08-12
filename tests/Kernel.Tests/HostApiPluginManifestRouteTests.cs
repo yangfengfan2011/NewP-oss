@@ -554,7 +554,6 @@ public class HostApiPluginManifestRouteTests : IDisposable
             process.StartInfo.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(installRoot, ".host-auth-key-ring");
             process.StartInfo.Environment["Authentication__Host__CookieName"] = "__Host-ICP.Platform.Auth";
             process.StartInfo.Environment["Authentication__Host__ProtectKeysAtRest"] = "true";
-            process.StartInfo.Environment["Persistence__AutoMigrate"] = "true";
             process.StartInfo.Environment["ConnectionStrings__SqlServer"] = connectionString;
 
             if (!process.Start())

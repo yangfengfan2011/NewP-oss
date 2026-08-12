@@ -7,6 +7,8 @@ using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Persistence.Abstractions;
@@ -42,6 +44,8 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string FullUpMigrationTwo = "20260813022000_TransformFullUpAsset";
     private const string FullUpMigrationThree = "20260813023000_AddUniqueFullUpAssetCode";
     private const string FullUpSchema = "np_partner_fullup";
+    private const string CompiledFullUpMigrationOne = "20260813031000_CreateCompiledFullUpAsset";
+    private const string CompiledFullUpMigrationTwo = "20260813032000_TransformCompiledFullUpAsset";
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -92,6 +96,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerFullUp_DropRenameAlterRollbackRetryConcurrentAndNoOp() =>
         RunCatalogScenarioAsync("fullup", VerifyFullUpMigrationLifecycleAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerCompiledHostFullUp_DestructiveCompatibilityRunsWithoutRiskLabelCutoff() =>
+        RunCatalogScenarioAsync("compiledfullup", VerifyCompiledHostFullUpAsync);
 
     private static async Task RunCatalogScenarioAsync(
         string purpose,
@@ -217,7 +226,8 @@ public sealed class SqlServerPersistenceSmokeTests
 
     private static WebApplication BuildHostApplication(
         IConfiguration configuration,
-        string environmentName)
+        string environmentName,
+        CompiledPersistencePlan? plan = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -226,7 +236,7 @@ public sealed class SqlServerPersistenceSmokeTests
         });
         builder.Services.AddPlatformPersistence(
             configuration,
-            TestPersistencePlan.CreateCurrentSqlServer());
+            plan ?? TestPersistencePlan.CreateCurrentSqlServer());
         return builder.Build();
     }
 
@@ -478,6 +488,66 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(connectionString));
         Assert.True(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "Asset", "U"));
         Assert.False(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "LegacyAsset", "U"));
+    }
+
+    private static async Task VerifyCompiledHostFullUpAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var connectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        using var initialFixture = BuildCompiledFullUpPlan(stage: 1);
+        await using (var initial = BuildHostApplication(
+                         BuildSqlServerConfiguration(connectionString),
+                         "Production",
+                         initialFixture.Plan))
+        {
+            await initial.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(initial)).State);
+        }
+
+        await ExecuteNonQueryAsync(connectionString, $"""
+            INSERT INTO [{FullUpSchema}].[LegacyAsset]
+                ([EID], [ALegacyCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [ZObsolete])
+            VALUES
+                (N'asset-1', N'COMPILED-UP', SYSUTCDATETIME(), N'test', SYSUTCDATETIME(), N'test', N'remove-me');
+            """);
+
+        using var destructiveFixture = BuildCompiledFullUpPlan(stage: 2);
+        var compiledStream = Assert.Single(
+            destructiveFixture.Plan.Streams,
+            static stream => stream.ModuleId == "Partner.FullUp");
+        Assert.Equal(
+            ["safe-expand", "backup-restore-only"],
+            compiledStream.Migrations.Select(static migration => migration.Compatibility));
+        await using (var destructive = BuildHostApplication(
+                         BuildSqlServerConfiguration(connectionString),
+                         "Acceptance",
+                         destructiveFixture.Plan))
+        {
+            await destructive.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(destructive)).State);
+        }
+
+        Assert.False(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "LegacyAsset", "U"));
+        Assert.True(await SchemaObjectExistsAsync(connectionString, FullUpSchema, "Asset", "U"));
+        Assert.False(await ColumnExistsAsync(connectionString, FullUpSchema, "Asset", "ALegacyCode"));
+        Assert.True(await ColumnExistsAsync(connectionString, FullUpSchema, "Asset", "Code"));
+        Assert.False(await ColumnExistsAsync(connectionString, FullUpSchema, "Asset", "ZObsolete"));
+        Assert.False(await ColumnIsNullableAsync(connectionString, FullUpSchema, "Asset", "Code"));
+        Assert.Equal(
+            "COMPILED-UP",
+            await ExecuteScalarAsync(
+                connectionString,
+                $"SELECT [Code] FROM [{FullUpSchema}].[Asset] WHERE [EID] = N'asset-1';"));
+        var appliedMigrations = await ReadAppliedMigrationsAsync(connectionString);
+        Assert.Contains(CompiledFullUpMigrationOne, appliedMigrations);
+        Assert.Contains(CompiledFullUpMigrationTwo, appliedMigrations);
+        Assert.Equal(
+            1,
+            Convert.ToInt32(await ExecuteScalarAsync(
+                connectionString,
+                $"SELECT COUNT(*) FROM [dbo].[__NewPMigrationHistory] WHERE [MigrationId] = N'{CompiledFullUpMigrationTwo}';")));
     }
 
     private static async Task VerifyNonEmptyUnownedCatalogIsRejectedAsync(
@@ -769,7 +839,6 @@ public sealed class SqlServerPersistenceSmokeTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "true",
                 ["ConnectionStrings:SqlServer"] = applicationConnectionString
             })
             .Build();
@@ -791,7 +860,6 @@ public sealed class SqlServerPersistenceSmokeTests
             {
                 ["Persistence:Adapter"] = "EfCore",
                 ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "true",
                 ["ConnectionStrings:SqlServer"] = applicationConnectionString
             })
             .Build();
@@ -1176,6 +1244,220 @@ public sealed class SqlServerPersistenceSmokeTests
                     ["Id"],
                     ForeignKeyDeleteBehavior.Restrict)]);
             return [parent, asset];
+        }
+    }
+
+    private static CompiledPlanFixture BuildCompiledFullUpPlan(int stage)
+    {
+        if (stage is < 1 or > 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage));
+        }
+
+        var repositoryRoot = FindRepositoryRoot();
+        var fixtureRoot = Path.Combine(
+            Path.GetTempPath(),
+            "newp-compiled-full-up-plan",
+            Guid.NewGuid().ToString("N"));
+        var modulesRoot = Path.Combine(fixtureRoot, "modules");
+        var moduleRoot = Path.Combine(modulesRoot, "Partner.FullUp");
+        var modelRoot = Path.Combine(moduleRoot, "metadata", "models");
+        var migrationRoot = Path.Combine(moduleRoot, "migrations");
+        Directory.CreateDirectory(modelRoot);
+        Directory.CreateDirectory(migrationRoot);
+
+        var modelKey = stage == 1 ? "LegacyAsset" : "Asset";
+        var modelPath = Path.Combine(modelRoot, $"{modelKey}.model.json");
+        File.WriteAllText(
+            modelPath,
+            stage == 1
+                ? """
+                    {
+                      "schemaVersion": "1.0",
+                      "type": "model",
+                      "LegacyAsset": {
+                        "kind": "Entity",
+                        "fields": [
+                          { "name": "ALegacyCode", "storage": { "type": "string", "nullable": true } },
+                          { "name": "ZObsolete", "storage": { "type": "text", "nullable": true } }
+                        ],
+                        "indexes": [
+                          { "name": "IX_LegacyAsset_ALegacyCode", "fields": ["ALegacyCode"], "unique": false }
+                        ]
+                      }
+                    }
+                    """
+                : """
+                    {
+                      "schemaVersion": "1.0",
+                      "type": "model",
+                      "Asset": {
+                        "kind": "Entity",
+                        "fields": [
+                          { "name": "Code", "storage": { "type": "string" } }
+                        ],
+                        "indexes": [
+                          { "name": "IX_Asset_Code", "fields": ["Code"], "unique": false }
+                        ]
+                      }
+                    }
+                    """);
+
+        var assemblyPath = Path.Combine(migrationRoot, "Partner.FullUp.SqlServerMigrations.dll");
+        File.Copy(typeof(CreateCompiledFullUpAssetMigration).Assembly.Location, assemblyPath);
+        var typeMapPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-modeling",
+            "metadata",
+            "storage-types.json");
+        var document = new JsonModelMetadataDocumentLoader().LoadFromFile(modelPath);
+        var model = new ModelMetadataProjector().Project(
+            document,
+            new JsonStorageTypeMapLoader().LoadFromFile(typeMapPath),
+            "SqlServer") with
+        {
+            OwnerModuleId = "Partner.FullUp",
+            SchemaName = FullUpSchema
+        };
+        var modelDigest = PersistenceModelDigest.Compute([model]);
+        using var stageOneFixture = stage == 2 ? BuildCompiledFullUpPlan(stage: 1) : null;
+        var stageOneDigest = stageOneFixture?.Plan.Streams
+            .Single(static stream => stream.ModuleId == "Partner.FullUp")
+            .Migrations
+            .Single()
+            .ToModelDigest
+            ?? modelDigest;
+        var manifestPath = Path.Combine(migrationRoot, "Partner.FullUp.SqlServerMigrations.json");
+        var migrations = new JsonArray
+        {
+            new JsonObject
+            {
+                ["sequence"] = "000001",
+                ["migrationId"] = CompiledFullUpMigrationOne,
+                ["previousContentDigest"] = null,
+                ["contentDigest"] = new string('c', 64),
+                ["fromModelDigest"] = new string('0', 64),
+                ["toModelDigest"] = stageOneDigest,
+                ["compatibility"] = "safe-expand"
+            }
+        };
+        if (stage == 2)
+        {
+            migrations.Add(new JsonObject
+            {
+                ["sequence"] = "000002",
+                ["migrationId"] = CompiledFullUpMigrationTwo,
+                ["previousContentDigest"] = new string('c', 64),
+                ["contentDigest"] = new string('d', 64),
+                ["fromModelDigest"] = stageOneDigest,
+                ["toModelDigest"] = modelDigest,
+                ["compatibility"] = "backup-restore-only"
+            });
+        }
+        File.WriteAllText(
+            manifestPath,
+            new JsonObject
+            {
+                ["schemaVersion"] = "1.0",
+                ["provider"] = "SqlServer",
+                ["moduleId"] = "Partner.FullUp",
+                ["modelDigest"] = modelDigest,
+                ["bundleChecksum"] = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath))),
+                ["migrations"] = migrations
+            }.ToJsonString());
+
+        try
+        {
+            var provenance = new ModulePlanProvenance(
+                "installed-package",
+                Path.Combine(moduleRoot, "plugin.json"),
+                "/");
+            var module = new CanonicalModulePlanModule(
+                "Partner.FullUp",
+                "1.0.0",
+                "Partner Full Up",
+                null,
+                moduleRoot,
+                null,
+                null,
+                null,
+                null,
+                "behavior-bindings",
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [modelKey],
+                provenance,
+                new ModulePersistenceContribution(
+                    [$"metadata/models/{modelKey}.model.json"],
+                    [new ModuleMigrationBundleReference(
+                        "SqlServer",
+                        "migrations/Partner.FullUp.SqlServerMigrations.dll",
+                        "migrations/Partner.FullUp.SqlServerMigrations.json")]));
+            var candidate = new ModuleCapsuleCandidate(
+                module.ModuleId,
+                module.Version,
+                module.DisplayName,
+                module.Description,
+                module.PackageRoot,
+                module.BackendEntry,
+                module.BackendBehaviorKey,
+                module.FrontendEntry,
+                module.FrontendBehaviorKey,
+                module.FrontendBindingMode,
+                module.Dependencies,
+                module.Routes,
+                module.FrontendBindings,
+                module.FrontendBindingReferences,
+                module.PermissionCodes,
+                module.PermissionReferences,
+                module.ModelKeys,
+                module.Provenance,
+                module.Persistence);
+            module = module with
+            {
+                Provenance = provenance.BindToCanonicalCandidate(candidate)
+            };
+            var canonicalPlan = new CanonicalModulePlan(
+                $"compiled-full-up-{stage}",
+                "test",
+                new string('a', 64),
+                new string('b', 64),
+                [],
+                [module]);
+            var result = new PersistencePlanCompiler(typeMapPath).Compile(
+                canonicalPlan,
+                PersistenceProvider.SqlServer);
+            var modulePlan = result.Plan
+                ?? throw new InvalidOperationException(string.Join(
+                    Environment.NewLine,
+                    result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+            return new CompiledPlanFixture(modulePlan, fixtureRoot);
+        }
+        catch
+        {
+            Directory.Delete(fixtureRoot, recursive: true);
+            throw;
+        }
+
+    }
+
+    private sealed class CompiledPlanFixture(
+        CompiledPersistencePlan plan,
+        string fixtureRoot) : IDisposable
+    {
+        public CompiledPersistencePlan Plan { get; } = plan;
+
+        public void Dispose()
+        {
+            if (Directory.Exists(fixtureRoot))
+            {
+                Directory.Delete(fixtureRoot, recursive: true);
+            }
         }
     }
 

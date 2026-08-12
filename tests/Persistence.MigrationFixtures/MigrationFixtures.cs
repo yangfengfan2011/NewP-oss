@@ -689,3 +689,147 @@ public sealed class AddUniqueFullUpAssetCodeMigration : Migration
             column: "Code");
     }
 }
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class CreateCompiledFullUpAssetMigration : Migration
+{
+    public const string MigrationId = "20260813031000_CreateCompiledFullUpAsset";
+    public const string OwnerModuleId = "Partner.FullUp";
+    public const string Schema = "np_partner_fullup";
+
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.EnsureSchema(Schema);
+        migrationBuilder.CreateTable(
+            name: "LegacyAsset",
+            schema: Schema,
+            columns: table => new
+            {
+                EID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                ALegacyCode = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                CreatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                ZObsolete = table.Column<string>(type: "nvarchar(max)", nullable: true)
+            },
+            constraints: table => table.PrimaryKey("PK_LegacyAsset", asset => asset.EID));
+        migrationBuilder.CreateIndex(
+            name: "IX_LegacyAsset_ALegacyCode",
+            schema: Schema,
+            table: "LegacyAsset",
+            column: "ALegacyCode");
+        migrationBuilder.CreateIndex(
+            name: "UX_LegacyAsset_EID",
+            schema: Schema,
+            table: "LegacyAsset",
+            column: "EID",
+            unique: true);
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.DropTable(name: "LegacyAsset", schema: Schema);
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class TransformCompiledFullUpAssetMigration : Migration
+{
+    public const string MigrationId = "20260813032000_TransformCompiledFullUpAsset";
+
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropPrimaryKey(
+                name: "PK_LegacyAsset",
+                schema: CreateCompiledFullUpAssetMigration.Schema,
+                table: "LegacyAsset")
+            .Annotation(
+                ProviderTransitionAnnotationNames.FromDescriptorV1,
+                ProviderTransitionDescriptorCodec.EncodeKey(
+                    CreateCompiledFullUpAssetMigration.OwnerModuleId,
+                    new ProviderKeyTarget("PK_LegacyAsset", ["EID"])));
+        migrationBuilder.DropIndex(
+                name: "UX_LegacyAsset_EID",
+                schema: CreateCompiledFullUpAssetMigration.Schema,
+                table: "LegacyAsset")
+            .Annotation(
+                ProviderTransitionAnnotationNames.FromDescriptorV1,
+                ProviderTransitionDescriptorCodec.EncodeIndex(
+                    CreateCompiledFullUpAssetMigration.OwnerModuleId,
+                    new ProviderIndexTarget(
+                        "UX_LegacyAsset_EID",
+                        ["EID"],
+                        IsUnique: true,
+                        IsDescending: null,
+                        Filter: null,
+                        ProviderAnnotations: [])));
+        migrationBuilder.DropColumn(
+                name: "ZObsolete",
+                schema: CreateCompiledFullUpAssetMigration.Schema,
+                table: "LegacyAsset")
+            .Annotation(
+                ProviderTransitionAnnotationNames.FromDescriptorV1,
+                ProviderTransitionDescriptorCodec.EncodeColumn(
+                    CreateCompiledFullUpAssetMigration.OwnerModuleId,
+                    6,
+                    new ProviderColumnTarget(
+                        "ZObsolete",
+                        "nvarchar(max)",
+                        typeof(string).FullName!,
+                        IsNullable: true,
+                        MaxLength: null,
+                        Precision: null,
+                        Scale: null,
+                        IsUnicode: null,
+                        IsFixedLength: null,
+                        Collation: null,
+                        ComputedColumnSql: null,
+                        IsStored: null,
+                        IsIdentity: false,
+                        IsRowVersion: false,
+                        DefaultValue: null,
+                        DefaultValueSql: null,
+                        ProviderAnnotations: [])));
+        migrationBuilder.RenameTable(
+            name: "LegacyAsset",
+            schema: CreateCompiledFullUpAssetMigration.Schema,
+            newName: "Asset",
+            newSchema: CreateCompiledFullUpAssetMigration.Schema);
+        migrationBuilder.RenameColumn(
+            name: "ALegacyCode",
+            schema: CreateCompiledFullUpAssetMigration.Schema,
+            table: "Asset",
+            newName: "Code");
+        migrationBuilder.RenameIndex(
+            name: "IX_LegacyAsset_ALegacyCode",
+            schema: CreateCompiledFullUpAssetMigration.Schema,
+            table: "Asset",
+            newName: "IX_Asset_Code");
+        migrationBuilder.AlterColumn<string>(
+            name: "Code",
+            schema: CreateCompiledFullUpAssetMigration.Schema,
+            table: "Asset",
+            type: "nvarchar(256)",
+            maxLength: 256,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(256)",
+            oldMaxLength: 256,
+            oldNullable: true);
+        migrationBuilder.AddPrimaryKey(
+            name: "PK_Asset",
+            schema: CreateCompiledFullUpAssetMigration.Schema,
+            table: "Asset",
+            column: "EID");
+        migrationBuilder.CreateIndex(
+            name: "UX_Asset_EID",
+            schema: CreateCompiledFullUpAssetMigration.Schema,
+            table: "Asset",
+            column: "EID",
+            unique: true);
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.DropTable(name: "Asset", schema: CreateCompiledFullUpAssetMigration.Schema);
+}

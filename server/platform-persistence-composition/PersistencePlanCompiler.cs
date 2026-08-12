@@ -515,7 +515,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 || !DigestPattern().IsMatch(migration.ContentDigest)
                 || !DigestPattern().IsMatch(migration.FromModelDigest)
                 || !DigestPattern().IsMatch(migration.ToModelDigest)
-                || migration.Compatibility is not "safe-expand")
+                || migration.Compatibility is not ("safe-expand" or "backup-restore-only"))
             {
                 throw new PersistencePlanValidationException(
                     "PERSISTENCE_MIGRATION_CHAIN_INVALID",

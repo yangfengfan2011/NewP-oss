@@ -8,7 +8,5 @@ public sealed class PersistenceOptions
 
     public PersistenceAdapterKind? Adapter { get; set; } = PersistenceAdapterKind.EfCore;
 
-    public bool AutoMigrate { get; set; } = true;
-
     public bool AutoSeed { get; set; } = true;
 }

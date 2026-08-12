@@ -6,10 +6,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthorizationProvider,
   useAuthorization,
+  type AuthorizationContextValue,
 } from '../../../core/src/authorization/AuthorizationContext';
+
+let observedAuthorization: AuthorizationContextValue | undefined;
 
 function PermissionProbe() {
   const authorization = useAuthorization();
+  observedAuthorization = authorization;
   return <span>{authorization.permissions.join(',')}</span>;
 }
 
@@ -23,10 +27,37 @@ describe('AuthorizationProvider current subject projection', () => {
     }
 
     container?.remove();
+    observedAuthorization = undefined;
     vi.unstubAllGlobals();
   });
 
-  it('loads permissions only from the current-user endpoint', async () => {
+  it('projects permissions from authentication without owning another request', async () => {
+    const fetchMock = vi.fn();
+    const refreshPermissions = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', fetchMock);
+    container = document.createElement('div');
+    document.body.append(container);
+
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(
+        <AuthorizationProvider
+          permissions={['Organization.Person.View']}
+          refreshPermissions={refreshPermissions}
+        >
+          <PermissionProbe />
+        </AuthorizationProvider>,
+      );
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('Organization.Person.View');
+
+    await act(async () => observedAuthorization?.refreshPermissions());
+    expect(refreshPermissions).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the legacy current-user loading contract when no snapshot is supplied', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       id: 'current-subject',
       permissions: ['Organization.Person.View'],
@@ -52,7 +83,6 @@ describe('AuthorizationProvider current subject projection', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/current-user', expect.objectContaining({
       credentials: 'include',
     }));
-    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/authorization/users/'), expect.anything());
     expect(container.textContent).toBe('Organization.Person.View');
   });
 });

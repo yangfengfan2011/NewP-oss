@@ -20,44 +20,66 @@ const AuthorizationContext = createContext<AuthorizationContextValue | undefined
 
 export interface AuthorizationProviderProps {
   children: ReactNode;
+  permissions?: string[];
+  loading?: boolean;
+  refreshPermissions?: () => Promise<void>;
+  /** @deprecated Prefer passing the authenticated subject's permissions. */
   isAuthenticated?: boolean;
+  /** @deprecated Prefer passing the authenticated subject's permissions. */
   apiBaseUrl?: string;
 }
 
-export function AuthorizationProvider({ children, isAuthenticated = false, apiBaseUrl = '/api' }: AuthorizationProviderProps) {
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+export function AuthorizationProvider({
+  children,
+  permissions: controlledPermissions,
+  loading: controlledLoading,
+  refreshPermissions: controlledRefreshPermissions,
+  isAuthenticated = false,
+  apiBaseUrl = '/api',
+}: AuthorizationProviderProps) {
+  const isControlled = controlledPermissions !== undefined;
+  const [loadedPermissions, setLoadedPermissions] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchPermissions = useCallback(async () => {
+    if (isControlled) {
+      return;
+    }
+
     if (!isAuthenticated) {
-      setPermissions([]);
-      setLoading(false);
+      setLoadedPermissions([]);
+      setIsLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
+      setIsLoading(true);
       const response = await fetch(`${apiBaseUrl}/auth/current-user`, {
         credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
-        setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
+        setLoadedPermissions(Array.isArray(data.permissions) ? data.permissions : []);
       } else {
         console.error('Failed to fetch permissions:', response.statusText);
-        setPermissions([]);
+        setLoadedPermissions([]);
       }
     } catch (error) {
       console.error('Error fetching permissions:', error);
-      setPermissions([]);
+      setLoadedPermissions([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [apiBaseUrl, isAuthenticated]);
+  }, [apiBaseUrl, isAuthenticated, isControlled]);
 
   useEffect(() => {
     void fetchPermissions();
   }, [fetchPermissions]);
+
+  // Shell 传入认证快照时走受控模式；旧调用方仍可沿用原有的独立加载行为。
+  const permissions = controlledPermissions ?? loadedPermissions;
+  const loading = controlledLoading ?? (isControlled ? false : isLoading);
+  const refreshPermissions = controlledRefreshPermissions ?? fetchPermissions;
 
   const hasPermission = (permission: string): boolean => {
     return permissions.includes(permission);
@@ -77,7 +99,7 @@ export function AuthorizationProvider({ children, isAuthenticated = false, apiBa
     hasAnyPermission,
     hasAllPermissions,
     loading,
-    refreshPermissions: fetchPermissions
+    refreshPermissions,
   };
 
   return (

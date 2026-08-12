@@ -32,7 +32,7 @@ dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 
 ```powershell
 .\scripts\dev.ps1
-Invoke-WebRequest http://localhost:5000/api/health
+Invoke-WebRequest http://127.0.0.1:5000/api/health
 .\scripts\stop-dev.ps1
 ```
 

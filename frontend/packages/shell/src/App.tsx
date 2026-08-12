@@ -7,7 +7,7 @@ import {
   LocalizationProvider,
   resolveAuthenticationDestination,
 } from '@icp-platform/core';
-import { ModuleRegistry, ShellView } from '@icp-platform/sdk';
+import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
 import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
 import Layout from './components/Layout';
@@ -90,11 +90,11 @@ function AuthenticationOnlyRoutes() {
   );
 }
 
-export function AuthenticationOnlyApp() {
+export function AuthenticationOnlyApp({ initialUser }: { initialUser?: AuthUser }) {
   return (
     <ConfigProvider theme={shellAntdTheme}>
       <BrowserRouter>
-        <AuthProvider>
+        <AuthProvider initialUser={initialUser}>
           <AuthenticationOnlyRoutes />
         </AuthProvider>
       </BrowserRouter>
@@ -128,7 +128,15 @@ function RouteAccess({
 function AuthorizationGate({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
 
-  return <AuthorizationProvider isAuthenticated={auth.isAuthenticated}>{children}</AuthorizationProvider>;
+  return (
+    <AuthorizationProvider
+      permissions={auth.user?.permissions ?? []}
+      loading={!auth.isInitialized}
+      refreshPermissions={auth.retrySessionValidation}
+    >
+      {children}
+    </AuthorizationProvider>
+  );
 }
 
 function StandardCrudDetailRoute({ viewKey }: { viewKey: string }) {
@@ -241,7 +249,7 @@ function getDefaultShellView(): ShellView {
   }
 }
 
-function App() {
+function App({ initialUser }: { initialUser?: AuthUser }) {
   const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
   const [localizationManifest, setLocalizationManifest] = useState<RuntimeLocalizationManifest | null>(null);
   const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeMetadataState | null>(null);
@@ -338,7 +346,7 @@ function App() {
           supportedLanguages={localizationManifest.supportedLanguages}
           catalogs={localizationManifest.catalogs}
         >
-          <AuthProvider>
+          <AuthProvider initialUser={initialUser}>
             <PlatformProvider
               uiConfig={shellUiConfig}
               shellView={shellView}

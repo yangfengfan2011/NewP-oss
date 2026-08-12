@@ -7,6 +7,8 @@ export type RuntimeLocalizationManifest = {
   catalogs: Record<string, Record<string, string>>;
 };
 
+const inFlightLoads = new WeakMap<typeof fetch, Promise<RuntimeLocalizationManifest>>();
+
 export function getFallbackRuntimeLocalizationManifest(): RuntimeLocalizationManifest {
   return {
     defaultLanguage: 'zhs',
@@ -22,8 +24,28 @@ export function getFallbackRuntimeLocalizationManifest(): RuntimeLocalizationMan
   };
 }
 
-export async function loadRuntimeLocalizationManifest(): Promise<RuntimeLocalizationManifest> {
-  const response = await fetch('/plugins/localization-manifest.json', {
+export function loadRuntimeLocalizationManifest(
+  fetcher: typeof fetch = fetch,
+): Promise<RuntimeLocalizationManifest> {
+  const existingLoad = inFlightLoads.get(fetcher);
+  if (existingLoad) {
+    return existingLoad;
+  }
+
+  let trackedLoad!: Promise<RuntimeLocalizationManifest>;
+  trackedLoad = loadRuntimeLocalizationManifestOnce(fetcher).finally(() => {
+    if (inFlightLoads.get(fetcher) === trackedLoad) {
+      inFlightLoads.delete(fetcher);
+    }
+  });
+  inFlightLoads.set(fetcher, trackedLoad);
+  return trackedLoad;
+}
+
+async function loadRuntimeLocalizationManifestOnce(
+  fetcher: typeof fetch,
+): Promise<RuntimeLocalizationManifest> {
+  const response = await fetcher('/plugins/localization-manifest.json', {
     credentials: 'same-origin',
   });
 

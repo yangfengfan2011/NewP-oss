@@ -12,15 +12,14 @@ import './index.css';
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
 void bootstrapShell({
-  readAuthenticationState: async () => {
-    const user = await readCurrentUser();
-    return !user ? 'anonymous' : user.mustChangePassword ? 'restricted' : 'regular';
-  },
+  readAuthenticationSnapshot: readCurrentUser,
   registerModules: registerShellModules,
   initializeModules: () => ModuleRegistry.initializeAll(),
-  renderApp: (authenticationState) => root.render(
+  renderApp: (user) => root.render(
     <React.StrictMode>
-      {authenticationState === 'regular' ? <App /> : <AuthenticationOnlyApp />}
+      {user && !user.mustChangePassword
+        ? <App initialUser={user} />
+        : <AuthenticationOnlyApp initialUser={user} />}
     </React.StrictMode>,
   ),
   renderFatal: (error, retry) => root.render(

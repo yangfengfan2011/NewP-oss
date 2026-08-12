@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FirstPasswordChangePage,
   RestrictedSessionGuard,
   useAuthenticationState,
+  type AuthenticationBootstrapSnapshot,
   type AuthenticationState,
 } from './index';
+import { invalidatePlatformAntiforgeryToken } from '../http';
 
 const authenticatedUser = {
   id: 'User_1',
@@ -22,8 +24,8 @@ const authenticatedUser = {
 
 let observedAuthentication: AuthenticationState | undefined;
 
-function AuthenticationProbe() {
-  observedAuthentication = useAuthenticationState();
+function AuthenticationProbe({ initialSnapshot }: { initialSnapshot?: AuthenticationBootstrapSnapshot }) {
+  observedAuthentication = useAuthenticationState(initialSnapshot);
   return null;
 }
 
@@ -109,6 +111,57 @@ describe('authentication components', () => {
     await act(async () => observedAuthentication!.logout());
     expect(observedAuthentication?.user).toBeUndefined();
     expect(observedAuthentication?.sessionError).toBeUndefined();
+  });
+
+  it('uses a verified bootstrap snapshot without repeating current-user in StrictMode', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(
+        <StrictMode>
+          <AuthenticationProbe initialSnapshot={{ user: authenticatedUser }} />
+        </StrictMode>,
+      );
+    });
+
+    expect(observedAuthentication?.isInitialized).toBe(true);
+    expect(observedAuthentication?.user).toEqual(authenticatedUser);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the login response as the current subject without a follow-up read', async () => {
+    invalidatePlatformAntiforgeryToken();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/auth/antiforgery-token')) {
+        return jsonResponse({ requestToken: 'csrf-token' });
+      }
+      if (url.endsWith('/api/auth/login')) {
+        return jsonResponse(authenticatedUser);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(<AuthenticationProbe initialSnapshot={{ user: undefined }} />);
+    });
+
+    await act(async () => observedAuthentication!.login('admin', 'password'));
+
+    const requestedUrls = fetchMock.mock.calls.map(([input]) => (
+      input instanceof Request ? input.url : String(input)
+    ));
+    expect(requestedUrls.some((url) => url.endsWith('/api/auth/current-user'))).toBe(false);
+    expect(observedAuthentication?.user).toEqual(authenticatedUser);
   });
 
   it('renders only the restricted branch for a temporary session', async () => {

@@ -26,6 +26,10 @@ export interface AuthenticationState {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
+export interface AuthenticationBootstrapSnapshot {
+  user?: AuthUser;
+}
+
 export async function readCurrentUser(): Promise<AuthUser | undefined> {
   let response: Response;
   try {
@@ -68,9 +72,12 @@ async function readProblemCode(response: Response): Promise<string> {
   }
 }
 
-export function useAuthenticationState(): AuthenticationState {
-  const [user, setUser] = useState<AuthUser>();
-  const [isInitialized, setIsInitialized] = useState(false);
+export function useAuthenticationState(
+  initialSnapshot?: AuthenticationBootstrapSnapshot,
+): AuthenticationState {
+  const hasInitialSnapshot = initialSnapshot !== undefined;
+  const [user, setUser] = useState<AuthUser | undefined>(() => initialSnapshot?.user);
+  const [isInitialized, setIsInitialized] = useState(hasInitialSnapshot);
   const [sessionError, setSessionError] = useState<string>();
 
   const refresh = useCallback(async () => {
@@ -88,6 +95,10 @@ export function useAuthenticationState(): AuthenticationState {
   }, []);
 
   useEffect(() => {
+    if (hasInitialSnapshot) {
+      return;
+    }
+
     let active = true;
     void readCurrentUser()
       .then((current) => {
@@ -106,7 +117,7 @@ export function useAuthenticationState(): AuthenticationState {
     return () => {
       active = false;
     };
-  }, []);
+  }, [hasInitialSnapshot]);
 
   const login = useCallback(async (ecode: string, password: string) => {
     const response = await platformFetch('/api/auth/login', {
@@ -116,8 +127,11 @@ export function useAuthenticationState(): AuthenticationState {
     });
     if (!response.ok) throw new Error(await readProblemCode(response));
     invalidatePlatformAntiforgeryToken();
-    if (!await refresh()) throw new Error('AUTH_SESSION_INVALID');
-  }, [refresh]);
+    const authenticatedUser = await response.json() as AuthUser;
+    setUser(authenticatedUser);
+    setSessionError(undefined);
+    setIsInitialized(true);
+  }, []);
 
   const logout = useCallback(async () => {
     let response: Response;

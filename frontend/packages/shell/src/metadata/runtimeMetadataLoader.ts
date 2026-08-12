@@ -7,6 +7,13 @@ import type {
 } from './runtimeMetadataManifest';
 
 const DEFAULT_RUNTIME_METADATA_MANIFEST_URL = '/plugins/metadata-runtime-manifest.json';
+const RUNTIME_METADATA_LOAD_CONCURRENCY = 8;
+const inFlightLoads = new WeakMap<typeof fetch, Promise<RuntimeMetadataState>>();
+
+type LoadedRuntimeMetadataDocument =
+  | { kind: 'nav'; document: RuntimeNavItemDocument }
+  | { kind: 'view'; document: RuntimeViewDocument }
+  | { kind: 'model'; document: RuntimeModelDocument };
 
 async function loadJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
   const response = await fetcher(url, { credentials: 'same-origin' });
@@ -26,7 +33,23 @@ export function getFallbackRuntimeMetadata(): RuntimeMetadataState {
   };
 }
 
-export async function loadRuntimeMetadata(fetcher: typeof fetch = fetch): Promise<RuntimeMetadataState> {
+export function loadRuntimeMetadata(fetcher: typeof fetch = fetch): Promise<RuntimeMetadataState> {
+  const existingLoad = inFlightLoads.get(fetcher);
+  if (existingLoad) {
+    return existingLoad;
+  }
+
+  let trackedLoad!: Promise<RuntimeMetadataState>;
+  trackedLoad = loadRuntimeMetadataOnce(fetcher).finally(() => {
+    if (inFlightLoads.get(fetcher) === trackedLoad) {
+      inFlightLoads.delete(fetcher);
+    }
+  });
+  inFlightLoads.set(fetcher, trackedLoad);
+  return trackedLoad;
+}
+
+async function loadRuntimeMetadataOnce(fetcher: typeof fetch): Promise<RuntimeMetadataState> {
   const manifestResponse = await fetcher(DEFAULT_RUNTIME_METADATA_MANIFEST_URL, {
     credentials: 'same-origin',
   });
@@ -36,21 +59,54 @@ export async function loadRuntimeMetadata(fetcher: typeof fetch = fetch): Promis
   }
 
   const manifest = await manifestResponse.json() as RuntimeMetadataManifest;
-  const navDocuments: RuntimeNavItemDocument[] = [];
-  const viewDocuments: RuntimeViewDocument[] = [];
-  const modelDocuments: RuntimeModelDocument[] = [];
+  const tasks: Array<() => Promise<LoadedRuntimeMetadataDocument>> = [];
 
   for (const entry of manifest.modules) {
     for (const relativePath of entry.navFiles) {
-      navDocuments.push(await loadJson<RuntimeNavItemDocument>(fetcher, `${entry.metadataBasePath}/${relativePath}`));
+      const url = `${entry.metadataBasePath}/${relativePath}`;
+      tasks.push(async () => ({
+        kind: 'nav',
+        document: await loadJson<RuntimeNavItemDocument>(fetcher, url),
+      }));
     }
 
     for (const relativePath of entry.viewFiles) {
-      viewDocuments.push(await loadJson<RuntimeViewDocument>(fetcher, `${entry.metadataBasePath}/${relativePath}`));
+      const url = `${entry.metadataBasePath}/${relativePath}`;
+      tasks.push(async () => ({
+        kind: 'view',
+        document: await loadJson<RuntimeViewDocument>(fetcher, url),
+      }));
     }
 
     for (const relativePath of entry.modelFiles) {
-      modelDocuments.push(await loadJson<RuntimeModelDocument>(fetcher, `${entry.metadataBasePath}/${relativePath}`));
+      const url = `${entry.metadataBasePath}/${relativePath}`;
+      tasks.push(async () => ({
+        kind: 'model',
+        document: await loadJson<RuntimeModelDocument>(fetcher, url),
+      }));
+    }
+  }
+
+  // 并发只缩短 I/O 等待；结果仍按 manifest 顺序归并，且全部成功前不发布部分快照。
+  const loadedDocuments = await mapWithConcurrency(
+    tasks,
+    RUNTIME_METADATA_LOAD_CONCURRENCY,
+    (task) => task(),
+  );
+  const navDocuments: RuntimeNavItemDocument[] = [];
+  const viewDocuments: RuntimeViewDocument[] = [];
+  const modelDocuments: RuntimeModelDocument[] = [];
+  for (const loaded of loadedDocuments) {
+    switch (loaded.kind) {
+      case 'nav':
+        navDocuments.push(loaded.document);
+        break;
+      case 'view':
+        viewDocuments.push(loaded.document);
+        break;
+      case 'model':
+        modelDocuments.push(loaded.document);
+        break;
     }
   }
 
@@ -60,5 +116,26 @@ export async function loadRuntimeMetadata(fetcher: typeof fetch = fetch): Promis
     viewDocuments,
     modelDocuments,
   };
+}
+
+async function mapWithConcurrency<T, TResult>(
+  items: T[],
+  concurrency: number,
+  map: (item: T, index: number) => Promise<TResult>,
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await map(items[currentIndex], currentIndex);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
 }
 

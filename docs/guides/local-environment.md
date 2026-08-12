@@ -17,7 +17,7 @@
 .\scripts\stop-dev.ps1
 ```
 
-Host 与 Shell 默认地址分别为 `http://localhost:5000` 和 `http://localhost:3000`。启动失败时先读取 `.codex-temp/dev/runs/<run>/result.json`、`stages.jsonl` 和对应 stderr 日志。
+Host 与 Shell 默认地址分别为 `http://127.0.0.1:5000` 和 `http://127.0.0.1:3000`。开发服务器只监听 IPv4 loopback；访问 `localhost` 时 Shell 会重定向到 `127.0.0.1`，避免系统优先尝试未监听的 `::1`。启动失败时先读取 `.codex-temp/dev/runs/<run>/result.json`、`stages.jsonl` 和对应 stderr 日志。
 
 ## 本地 SQL Server
 

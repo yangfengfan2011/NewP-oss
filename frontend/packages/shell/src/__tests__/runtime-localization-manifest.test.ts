@@ -56,4 +56,41 @@ describe('runtime localization manifest loader', () => {
 
     await expect(loadRuntimeLocalizationManifest()).rejects.toThrow('404');
   });
+
+  it('shares only an in-flight manifest request', async () => {
+    const fetchMock = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return new Response(JSON.stringify(runtimeLocalizationManifest), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await Promise.all([
+      loadRuntimeLocalizationManifest(),
+      loadRuntimeLocalizationManifest(),
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await loadRuntimeLocalizationManifest();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears a failed in-flight request so a later call can retry', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(runtimeLocalizationManifest), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+
+    await expect(
+      loadRuntimeLocalizationManifest(fetchMock as typeof fetch),
+    ).rejects.toThrow('503');
+    const manifest = await loadRuntimeLocalizationManifest(fetchMock as typeof fetch);
+
+    expect(manifest.defaultLanguage).toBe('zhs');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

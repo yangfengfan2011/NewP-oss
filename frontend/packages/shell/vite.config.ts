@@ -9,6 +9,28 @@ const devHostPort = Number.parseInt(process.env.ICP_DEV_HOST_PORT ?? '5000', 10)
 const virtualRegistryId = 'virtual:newp-frontend-entry-registry'
 const resolvedVirtualRegistryId = `\0${virtualRegistryId}`
 
+function localhostIpv4Redirect(): Plugin {
+  return {
+    name: 'newp-localhost-ipv4-redirect',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const host = request.headers.host?.trim().toLowerCase()
+        if (!host || !/^localhost(?::\d+)?$/.test(host)) {
+          next()
+          return
+        }
+
+        const requestPath = request.url?.startsWith('/') ? request.url : `/${request.url ?? ''}`
+        response.statusCode = 307
+        response.setHeader('Location', `http://127.0.0.1:${devShellPort}${requestPath}`)
+        response.setHeader('Cache-Control', 'no-store')
+        response.end()
+      })
+    },
+  }
+}
+
 function newpFrontendEntryRegistry(): Plugin {
   const entries = new Map<string, string>()
   const addEntry = (key: string, path: string) => {
@@ -58,7 +80,7 @@ function newpFrontendEntryRegistry(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [newpFrontendEntryRegistry(), react()],
+  plugins: [localhostIpv4Redirect(), newpFrontendEntryRegistry(), react()],
   resolve: {
     alias: {
       '@icp-platform/core': fileURLToPath(new URL('../core/src/index.ts', import.meta.url)),

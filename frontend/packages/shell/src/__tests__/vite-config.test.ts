@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import config from '../../vite.config';
@@ -59,5 +59,43 @@ describe('vite config', () => {
     expect(pluginNames).toContain('newp-frontend-entry-registry');
     expect(loaderSource).not.toContain(['import', 'meta', 'glob'].join('.'));
     expect(loaderSource).not.toContain(['..', '..', '..', 'modules', '*', 'src', 'index.ts'].join('/'));
+  });
+
+  it('redirects localhost requests once to the IPv4 shell origin', () => {
+    const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
+    const redirectPlugin = (serverConfig.plugins ?? [])
+      .flat()
+      .find((plugin) => plugin && plugin.name === 'newp-localhost-ipv4-redirect');
+    const configureServer = redirectPlugin && 'configureServer' in redirectPlugin
+      ? redirectPlugin.configureServer
+      : undefined;
+    expect(typeof configureServer).toBe('function');
+
+    const use = vi.fn();
+    if (typeof configureServer !== 'function') {
+      throw new Error('IPv4 redirect plugin is missing configureServer.');
+    }
+    configureServer({ middlewares: { use } } as never);
+    const middleware = use.mock.calls[0]?.[0] as (
+      request: { headers: { host?: string }; url?: string },
+      response: { statusCode: number; setHeader: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> },
+      next: ReturnType<typeof vi.fn>,
+    ) => void;
+    const response = { statusCode: 200, setHeader: vi.fn(), end: vi.fn() };
+    const next = vi.fn();
+
+    middleware(
+      { headers: { host: 'localhost:3000' }, url: '/login?source=bookmark' },
+      response,
+      next,
+    );
+
+    expect(response.statusCode).toBe(307);
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Location',
+      'http://127.0.0.1:3000/login?source=bookmark',
+    );
+    expect(response.end).toHaveBeenCalledOnce();
+    expect(next).not.toHaveBeenCalled();
   });
 });

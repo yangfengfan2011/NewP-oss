@@ -2,6 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { bootstrapShell } from '../bootstrap';
 
 describe('Shell module runtime bootstrap', () => {
+  const regularUser = {
+    id: 'User_1',
+    ecode: 'admin',
+    ename: 'Administrator',
+    permissions: [],
+    mustChangePassword: false,
+    revision: 1,
+    isLocalAdministrator: true,
+  };
+
   it('renders only a retryable fatal state when the active catalog cannot be committed', async () => {
     const failure = new Error('MODULE_PROJECTION_FAILED: Organization');
     const registerModules = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
@@ -9,8 +19,8 @@ describe('Shell module runtime bootstrap', () => {
     const renderApp = vi.fn();
     const renderFatal = vi.fn();
 
-    const readAuthenticationState = vi.fn().mockResolvedValue('regular' as const);
-    await bootstrapShell({ readAuthenticationState, registerModules, initializeModules, renderApp, renderFatal });
+    const readAuthenticationSnapshot = vi.fn().mockResolvedValue(regularUser);
+    await bootstrapShell({ readAuthenticationSnapshot, registerModules, initializeModules, renderApp, renderFatal });
 
     expect(initializeModules).not.toHaveBeenCalled();
     expect(renderApp).not.toHaveBeenCalled();
@@ -21,29 +31,29 @@ describe('Shell module runtime bootstrap', () => {
 
     expect(registerModules).toHaveBeenCalledTimes(2);
     expect(initializeModules).toHaveBeenCalledTimes(1);
-    expect(renderApp).toHaveBeenCalledTimes(1);
+    expect(renderApp).toHaveBeenCalledWith(regularUser);
   });
 
-  it.each(['anonymous', 'restricted'] as const)(
-    'renders core authentication before loading modules for %s sessions',
-    async (authenticationState) => {
-      const registerModules = vi.fn();
-      const initializeModules = vi.fn();
-      const renderApp = vi.fn();
-      const renderFatal = vi.fn();
+  it.each([
+    ['anonymous', undefined],
+    ['restricted', { ...regularUser, mustChangePassword: true }],
+  ] as const)('renders the verified %s snapshot before loading modules', async (_kind, user) => {
+    const registerModules = vi.fn();
+    const initializeModules = vi.fn();
+    const renderApp = vi.fn();
+    const renderFatal = vi.fn();
 
-      await bootstrapShell({
-        readAuthenticationState: vi.fn().mockResolvedValue(authenticationState),
-        registerModules,
-        initializeModules,
-        renderApp,
-        renderFatal,
-      });
+    await bootstrapShell({
+      readAuthenticationSnapshot: vi.fn().mockResolvedValue(user),
+      registerModules,
+      initializeModules,
+      renderApp,
+      renderFatal,
+    });
 
-      expect(registerModules).not.toHaveBeenCalled();
-      expect(initializeModules).not.toHaveBeenCalled();
-      expect(renderApp).toHaveBeenCalledOnce();
-      expect(renderFatal).not.toHaveBeenCalled();
-    },
-  );
+    expect(registerModules).not.toHaveBeenCalled();
+    expect(initializeModules).not.toHaveBeenCalled();
+    expect(renderApp).toHaveBeenCalledWith(user);
+    expect(renderFatal).not.toHaveBeenCalled();
+  });
 });

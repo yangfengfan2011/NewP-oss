@@ -55,7 +55,7 @@ describe('AuthProvider core authentication composition', () => {
     document.body.append(container);
     await act(async () => {
       root = createRoot(container!);
-      root.render(<AuthProvider><AuthProbe /></AuthProvider>);
+      root.render(<AuthProvider initialUser={coreAuthentication.user}><AuthProbe /></AuthProvider>);
     });
 
     expect(observedAuth?.user?.revision).toBe(4);

@@ -1,13 +1,13 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useAuthenticationState, type AuthenticationState } from '@icp-platform/core';
-import type { AuthContext as IAuthContext } from '@icp-platform/sdk';
+import type { AuthContext as IAuthContext, AuthUser } from '@icp-platform/sdk';
 
 type ShellAuthContext = IAuthContext & Pick<AuthenticationState, 'sessionError' | 'retrySessionValidation'>;
 
 const AuthContext = createContext<ShellAuthContext | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const authentication = useAuthenticationState();
+export function AuthProvider({ children, initialUser }: { children: ReactNode; initialUser: AuthUser | undefined }) {
+  const authentication = useAuthenticationState({ user: initialUser });
 
   const hasPermission = (permission: string): boolean =>
     Boolean(authentication.user?.permissions.includes(permission));

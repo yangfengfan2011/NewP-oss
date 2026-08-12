@@ -96,6 +96,32 @@ public sealed class PluginActivationGateTests : IDisposable
     }
 
     [Fact]
+    public async Task CompleteAsync_WhenPostMigrationConsistencyCheckFails_DoesNotCommitActiveSnapshot()
+    {
+        var events = new List<string>();
+        var manager = CreateManager();
+        var inventory = CreateInventory();
+        var plan = CreateModulePlan("snapshot-1-1", "1.1.0");
+        var persistencePlan = CreatePersistencePlan(plan);
+        var projection = new RecordingProjection(events, "legacy-active");
+        var gate = CreateGate(events, manager, plan, persistencePlan, projection);
+
+        using var session = gate.Prepare(inventory);
+        var error = await Assert.ThrowsAsync<PluginActivationException>(() =>
+            session.CompleteAsync(
+                new RecordingMigrationExecutor(events, failAfterApply: true),
+                new RecordingPermissionSynchronizer(events)));
+
+        Assert.Equal(PersistenceConsistencyFailureCodes.SchemaTargetMismatch, error.FailureCode);
+        Assert.True(error.DatabaseAhead);
+        Assert.Equal(
+            ["preflight", "module-plan", "permission-catalog", "persistence-plan", "migration"],
+            events);
+        Assert.Equal("1.0.0", Assert.Single(manager.Resolve(inventory).ActiveSnapshot!.Modules).Version);
+        Assert.Equal("legacy-active", projection.ActiveSnapshotId);
+    }
+
+    [Fact]
     public async Task CompleteAsync_WhenActiveStateCommitFails_RollsBackRuntimeProjection()
     {
         var events = new List<string>();
@@ -231,7 +257,9 @@ public sealed class PluginActivationGateTests : IDisposable
         }
     }
 
-    private sealed class RecordingMigrationExecutor(List<string> events) : IPluginMigrationExecutor
+    private sealed class RecordingMigrationExecutor(
+        List<string> events,
+        bool failAfterApply = false) : IPluginMigrationExecutor
     {
         public bool DatabaseAhead => SafePrefixApplied;
 
@@ -249,6 +277,14 @@ public sealed class PluginActivationGateTests : IDisposable
             {
                 SafePrefixApplied = true;
                 AppliedPrefixes++;
+            }
+
+            if (failAfterApply)
+            {
+                return Task.FromException(
+                    new PersistencePlanExecutionException(
+                        PersistenceConsistencyFailureCodes.SchemaTargetMismatch,
+                        "Partner.AssetCatalog"));
             }
 
             return Task.CompletedTask;

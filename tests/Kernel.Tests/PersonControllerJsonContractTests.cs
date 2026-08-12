@@ -8,6 +8,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization;
+using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -67,10 +68,11 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
             builder.UseSetting("Platform:SkipAuthorizationCatalogInitialization", "true");
             builder.UseSetting("Persistence:AutoMigrate", "false");
-            builder.UseSetting("DevelopmentSchemaSync:Enabled", "false");
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<IPersistenceConsistencyChecker>();
+                services.AddSingleton<IPersistenceConsistencyChecker, TestPersistenceConsistencyChecker>();
                 services.RemoveAll<IStandardCrudService>();
                 services.AddSingleton<IStandardCrudService>(StandardCrudService);
                 services.RemoveAll<IPermissionDecisionSource>();

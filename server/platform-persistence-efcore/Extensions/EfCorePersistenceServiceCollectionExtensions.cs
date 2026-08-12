@@ -65,8 +65,12 @@ public static class EfCorePersistenceServiceCollectionExtensions
             services.AddScoped<IPersistenceMigrationGuard, SqlServerDatabaseOwnershipGuard>();
         }
 
-        services.AddScoped<IPersistenceMigrationRunner, PersistenceMigrationRunner>();
         services.AddScoped<IProviderTargetSource, EfProviderTargetSource>();
+        services.AddScoped<PersistenceMigrationRunner>();
+        services.AddScoped<IPersistenceMigrationRunner>(provider =>
+            provider.GetRequiredService<PersistenceMigrationRunner>());
+        services.AddScoped<IPersistenceConsistencyChecker>(provider =>
+            provider.GetRequiredService<PersistenceMigrationRunner>());
 
         return services;
     }

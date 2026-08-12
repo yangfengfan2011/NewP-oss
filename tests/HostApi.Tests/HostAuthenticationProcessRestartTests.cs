@@ -135,7 +135,6 @@ public sealed class HostAuthenticationProcessRestartTests
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         startInfo.Environment["ConnectionStrings__SqlServer"] = connectionString;
         startInfo.Environment["Persistence__AutoMigrate"] = "true";
-        startInfo.Environment["DevelopmentSchemaSync__Enabled"] = "false";
         startInfo.Environment["Platform__PluginInstallRoot"] = plugins;
         startInfo.Environment["Platform__ExternalPluginsEnabled"] = "false";
         startInfo.Environment["Authentication__Host__KeyRingPath"] = keyRing;

@@ -216,7 +216,7 @@ internal sealed class ModuleMigrationExecutor(
                 EfCoreProviderOptions.GetDefaultMigrationsAssembly(plan.Provider));
             coreOptionsBuilder.ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>();
             // legacy snapshot 仍保留迁移生成时的未限定实体名；物理模型由编译计划与
-            // DevSchemaSync 报告校验，不能让纯逻辑键限定被误判为缺少 DDL migration。
+            // migration 后只读 Provider Target 检查校验，不能让纯逻辑键限定被误判为缺少 DDL migration。
             coreOptionsBuilder.ConfigureWarnings(warnings =>
                 warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
             using (var coreContext = new EfPlatformDbContext(coreOptionsBuilder.Options, corePlan))
@@ -243,6 +243,18 @@ internal sealed class ModuleMigrationExecutor(
 
             await ApplyMigrationAsync(item.Stream, item.Migration, expected, cancellationToken);
             appliedMigrations.Add(expected.MigrationId);
+        }
+    }
+
+    public async Task VerifyAppliedHistoryAsync(CancellationToken cancellationToken)
+    {
+        ValidateBeforeConnection();
+        var reconciliation = await ReconcileHistoryAsync(cancellationToken);
+        if (reconciliation.Pending.FirstOrDefault() is { } pending)
+        {
+            throw new PersistenceHistoryException(
+                PersistenceHistoryFailureCodes.FrontierMismatch,
+                pending.MigrationId);
         }
     }
 
@@ -293,7 +305,7 @@ internal sealed class ModuleMigrationExecutor(
             .ToArray();
     }
 
-    private async Task ReconcileHistoryAsync(CancellationToken cancellationToken)
+    private async Task<UnifiedMigrationHistoryReconciliation> ReconcileHistoryAsync(CancellationToken cancellationToken)
     {
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
         try
@@ -303,8 +315,9 @@ internal sealed class ModuleMigrationExecutor(
                 IsolationLevel.ReadCommitted,
                 cancellationToken);
             await AcquireHistoryLockAsync(connection, transaction, cancellationToken);
-            await ReadAndReconcileHistoryAsync(connection, transaction, cancellationToken);
+            var reconciliation = await ReadAndReconcileHistoryAsync(connection, transaction, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            return reconciliation;
         }
         finally
         {

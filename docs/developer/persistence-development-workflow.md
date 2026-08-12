@@ -32,7 +32,7 @@
 - 已冻结 migration 若历史上只携带 CLR 默认值，执行端仅在目标明确无 DEFAULT、值确为该 CLR 类型默认值且新增列 required 时通用消除该参数，并仍执行“表必须为空”前置检查；不得改写旧 migration/content digest 或添加模块特例。
 - 数据库超前、history 不是有效迁移链前缀或摘要不一致时，Host 保持 Not Ready，不运行旧快照、自动回退或改写 history。
 - migration 成功后仍要等待整个插件候选原子激活，不能单独写入活动状态。
-- `DevSchemaSync` CLI 和直接 SQL apply 路径不再是目标能力；Host 仅保留所有环境一致的只读 schema/history/digest 检查。
+- Host 外结构同步 CLI 和直接 SQL apply 路径已经移除；Host 仅保留所有环境一致的只读 schema/history/digest/target 检查。
 - 真实生产数据库进入受支持范围后，再通过独立设计增加显式安全模式；不得仅依据环境名隐式改变迁移语义。
 
 ## 本地连接

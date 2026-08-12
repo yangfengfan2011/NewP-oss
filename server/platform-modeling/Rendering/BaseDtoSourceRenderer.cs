@@ -1,11 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace ICP.Platform.Persistence.DevSync.Rendering;
+namespace ICP.Platform.Modeling.Rendering;
 
 /// <summary>
 /// 提供基础 DTO 生成物的稳定源码包装与签名规则。
-/// Host-facing 校验和 model-dto-sync 写入必须共用这里的规则，避免换行、namespace 或 hash 逻辑分叉。
 /// </summary>
 public static class BaseDtoSourceRenderer
 {
@@ -38,15 +37,13 @@ public static class BaseDtoSourceRenderer
     }
 
     /// <summary>
-    /// 计算基础 DTO 源码的稳定签名；失败排查时优先确认调用方传入的是同一份规范化源码。
+    /// 计算基础 DTO 源码的稳定签名。
     /// </summary>
     public static string ComputeSignature(string sourceCode)
     {
         ArgumentNullException.ThrowIfNull(sourceCode);
-
         var normalized = NormalizeLineEndings(sourceCode);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
-        return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
+        return "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 
     /// <summary>
@@ -55,7 +52,6 @@ public static class BaseDtoSourceRenderer
     public static string NormalizeLineEndings(string sourceCode)
     {
         ArgumentNullException.ThrowIfNull(sourceCode);
-
         return sourceCode.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace("\r", "\n", StringComparison.Ordinal);
     }

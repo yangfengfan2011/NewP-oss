@@ -127,6 +127,14 @@ public static class PersistenceMigrationFailureCodes
 }
 
 /// <summary>
+/// migration 完成后的只读一致性检查失败码。
+/// </summary>
+public static class PersistenceConsistencyFailureCodes
+{
+    public const string SchemaTargetMismatch = "PERSISTENCE_SCHEMA_TARGET_MISMATCH";
+}
+
+/// <summary>
 /// migration bundle 在连接前静态检查失败时抛出的稳定异常。
 /// </summary>
 public sealed class PersistencePlanExecutionException : InvalidOperationException

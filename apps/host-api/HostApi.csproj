@@ -7,10 +7,6 @@
     <RootNamespace>ICP.Platform.HostApi</RootNamespace>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <EnableDevelopmentSchemaSyncAssets Condition="'$(EnableDevelopmentSchemaSyncAssets)' == '' and '$(Configuration)' == 'Debug'">true</EnableDevelopmentSchemaSyncAssets>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
@@ -67,17 +63,6 @@
     </Content>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(EnableDevelopmentSchemaSyncAssets)' == 'true'">
-    <Content Include="..\..\server\modules\**\DTOs\Generated\*Dto.g.cs">
-      <Link>server\modules\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\server\modules\**\DTOs\Generated\*BaseDtoSignatureProvider.g.cs">
-      <Link>server\modules\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
   <ItemGroup>
     <!-- Development-time staging only; runtime module composition is manifest-driven. -->
     <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
@@ -85,7 +70,6 @@
     <ProjectReference Include="..\..\server\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-composition\PlatformPersistence.Composition.csproj" />
-    <ProjectReference Include="..\..\server\platform-persistence-devsync\PlatformPersistence.DevSync.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.sqlserver\PlatformPersistence.EfCore.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.oracle\PlatformPersistence.EfCore.OracleMigrations.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.mysql\PlatformPersistence.EfCore.MySqlMigrations.csproj" />

@@ -1,5 +1,5 @@
 using System.Text;
-using ICP.Platform.Persistence.DevSync.Rendering;
+using ICP.Platform.Modeling.Rendering;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -8,7 +8,7 @@ public sealed class DtoSignatureWriter
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     /// <summary>
-    /// 写入模块基础 DTO 签名清单，供后续开发态同步在启动前校验生成物是否仍匹配模型真源。
+    /// 写入模块基础 DTO 签名清单，供生成物检查确认源码仍匹配模型真源。
     /// </summary>
     public string Write(string outputDirectory, string moduleId, IReadOnlyDictionary<string, string> signatures)
     {

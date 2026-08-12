@@ -18,7 +18,6 @@ internal static class VerifiedAssemblyIdentityPolicy
             "PlatformModeling",
             "PlatformPersistence",
             "PlatformPersistence.Composition",
-            "PlatformPersistence.DevSync",
             "PlatformPersistence.EfCore",
             "PlatformQuery",
             "Microsoft.Data.SqlClient",

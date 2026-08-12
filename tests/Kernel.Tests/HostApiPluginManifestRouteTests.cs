@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Kernel.PluginPackages;
+using Microsoft.Data.SqlClient;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -13,13 +14,14 @@ public class HostApiPluginManifestRouteTests : IDisposable
 {
     private readonly UnifiedPluginPackageTestData _testData = new();
     private readonly List<string> _tempRoots = new();
+    private readonly SqlServerTestCatalog _database = SqlServerTestCatalog.Create();
 
     [Fact]
     public async Task HostApiStarts_WhenInstalledPluginStateIsMissing_UsingBuiltInModuleFallback()
     {
         var installRoot = CreateTempRoot();
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -42,7 +44,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         var packageRoot = _testData.CreateValidPackage();
         EnableInstalledPackage(packageRoot, installRoot, "Audit");
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -69,7 +71,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
     {
         var installRoot = CreateTempRoot();
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -115,7 +117,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         var packageRoot = _testData.CreateValidPackage();
         EnableInstalledPackage(packageRoot, installRoot, "Audit");
 
-        await using var host = await HostApiProcess.StartAsync(
+        await using var host = await StartHostAsync(
             installRoot,
             externalPluginsEnabled: externalPluginsEnabled);
 
@@ -151,7 +153,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         EnableInstalledPackage(packageRoot, installRoot, "Audit");
 
         string externalFrontendUrl;
-        await using (var enabledHost = await HostApiProcess.StartAsync(
+        await using (var enabledHost = await StartHostAsync(
                          installRoot,
                          externalPluginsEnabled: true))
         {
@@ -161,7 +163,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         }
 
         var externalStateBeforeDisabledStartup = SnapshotExternalPluginState(installRoot);
-        await using (var disabledHost = await HostApiProcess.StartAsync(
+        await using (var disabledHost = await StartHostAsync(
                          installRoot,
                          externalPluginsEnabled: false))
         {
@@ -172,7 +174,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             externalStateBeforeDisabledStartup,
             SnapshotExternalPluginState(installRoot));
 
-        await using (var reenabledHost = await HostApiProcess.StartAsync(
+        await using (var reenabledHost = await StartHostAsync(
                          installRoot,
                          externalPluginsEnabled: true))
         {
@@ -229,7 +231,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         var packageRoot = _testData.CreateValidPackage();
         EnableInstalledPackage(packageRoot, installRoot, "Audit");
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -256,7 +258,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
     {
         var installRoot = CreateTempRoot();
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -309,7 +311,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             Path.Combine(stalePlatformMetadataPath, "stale.txt"),
             "stale runtime metadata");
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -364,7 +366,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             """);
         EnableInstalledPackage(packageRoot, installRoot, "Organization");
 
-        await using var host = await HostApiProcess.StartAsync(installRoot);
+        await using var host = await StartHostAsync(installRoot);
 
         using var client = new HttpClient
         {
@@ -407,7 +409,19 @@ public class HostApiPluginManifestRouteTests : IDisposable
                 Directory.Delete(tempRoot, recursive: true);
             }
         }
+
+        _database.Dispose();
     }
+
+    private Task<HostApiProcess> StartHostAsync(
+        string installRoot,
+        bool skipLocalAuthSeeding = true,
+        bool? externalPluginsEnabled = true) =>
+        HostApiProcess.StartAsync(
+            installRoot,
+            _database.ConnectionString,
+            skipLocalAuthSeeding,
+            externalPluginsEnabled);
 
     private string CreateTempRoot()
     {
@@ -496,6 +510,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
 
         public static async Task<HostApiProcess> StartAsync(
             string installRoot,
+            string connectionString,
             bool skipLocalAuthSeeding = true,
             bool? externalPluginsEnabled = true)
         {
@@ -539,8 +554,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
             process.StartInfo.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(installRoot, ".host-auth-key-ring");
             process.StartInfo.Environment["Authentication__Host__CookieName"] = "__Host-ICP.Platform.Auth";
             process.StartInfo.Environment["Authentication__Host__ProtectKeysAtRest"] = "true";
-            process.StartInfo.Environment["Persistence__AutoMigrate"] = "false";
-            process.StartInfo.Environment["ConnectionStrings__SqlServer"] = "Server=localhost;Database=icp_platform_route_tests;Trusted_Connection=True;TrustServerCertificate=True;";
+            process.StartInfo.Environment["Persistence__AutoMigrate"] = "true";
+            process.StartInfo.Environment["ConnectionStrings__SqlServer"] = connectionString;
 
             if (!process.Start())
             {
@@ -630,6 +645,65 @@ public class HostApiPluginManifestRouteTests : IDisposable
             var port = ((IPEndPoint)listener.LocalEndpoint).Port;
             listener.Stop();
             return port;
+        }
+    }
+
+    private sealed class SqlServerTestCatalog : IDisposable
+    {
+        private const string CatalogPrefix = "newp_kernel_route_";
+        private readonly string _adminConnectionString;
+        private readonly string _catalog;
+
+        private SqlServerTestCatalog(string adminConnectionString, string catalog)
+        {
+            _adminConnectionString = adminConnectionString;
+            _catalog = catalog;
+            ConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
+            {
+                InitialCatalog = catalog
+            }.ConnectionString;
+        }
+
+        public string ConnectionString { get; }
+
+        public static SqlServerTestCatalog Create()
+        {
+            var catalog = CatalogPrefix + Guid.NewGuid().ToString("N");
+            var adminConnectionString = new SqlConnectionStringBuilder
+            {
+                DataSource = "localhost",
+                InitialCatalog = "master",
+                IntegratedSecurity = true,
+                TrustServerCertificate = true,
+                ConnectTimeout = 15
+            }.ConnectionString;
+            using var connection = new SqlConnection(adminConnectionString);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"CREATE DATABASE [{catalog}];";
+            command.ExecuteNonQuery();
+            return new SqlServerTestCatalog(adminConnectionString, catalog);
+        }
+
+        public void Dispose()
+        {
+            if (!_catalog.StartsWith(CatalogPrefix, StringComparison.Ordinal)
+                || _catalog.Length != CatalogPrefix.Length + 32)
+            {
+                throw new InvalidOperationException("Refusing to remove a catalog not owned by this test.");
+            }
+
+            using var connection = new SqlConnection(_adminConnectionString);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                IF DB_ID(N'{_catalog}') IS NOT NULL
+                BEGIN
+                    ALTER DATABASE [{_catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+                    DROP DATABASE [{_catalog}];
+                END
+                """;
+            command.ExecuteNonQuery();
         }
     }
 }

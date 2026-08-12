@@ -31,7 +31,7 @@ _Avoid_: DbContext 配置、插件扫描结果、迁移执行日志
 _Avoid_: 程序集版本、插件版本、数据库 schema 版本号
 
 **Provider Target**：
-从 EF design-time/provider model 投影的版本化、canonical、只读数据库目标，包含 owner、物理表列顺序、provider type、nullability、长度/精度、数据库生成语义、provider annotation、键、外键、索引和 check constraint。它是数据库最终结构事实源，但不替代 model metadata 的 authoring 职责，也不依赖 DevSchemaSync CLI 或 SQL apply。
+从 EF design-time/provider model 投影的版本化、canonical、只读数据库目标，包含 owner、物理表列顺序、provider type、nullability、长度/精度、数据库生成语义、provider annotation、键、外键、索引和 check constraint。它是数据库最终结构事实源，但不替代 model metadata 的 authoring 职责，也不依赖任何 Host 外结构写工具。
 _Avoid_: 表单默认值、metadata diff target、运行中数据库快照
 
 **Provider Transition**：
@@ -69,6 +69,10 @@ _Avoid_: 把当前 full target 摘要持久化为不可追加的旧步骤身份�
 **Schema Drift**：
 数据库实际结构或统一 Migration History 与已验证的归属、迁移链、模型摘要和期望 frontier 不一致。Host 只读一致性检查负责报告并阻断 drift；所有 schema 写入仍只能由 Host 执行 EF Up migrations。
 _Avoid_: 正常待执行迁移、自动修复计划、第二个结构写入入口
+
+**只读一致性检查（Read-only Consistency Check）**：
+Host 在 migration 成功后、插件活动快照提交和 readiness Ready 之前运行的统一检查。它重新核对完整 history 前缀与版本化摘要，并把 SQL Server 系统目录投影与 canonical Provider Target 比较；Development、Acceptance 与 Production 使用同一执行顺序。该检查只发出目录和 history SELECT，不生成 SQL 预览，不写 DDL、history 或业务数据。
+_Avoid_: 开发环境开关、漂移修复器、启动后后台轮询
 
 **Provider Adapter**：
 在内部隐藏特定数据库的迁移锁、EF migrator 配置、统一 history reconciliation 和事务执行的实现 seam。首个外部插件门禁只支持 SQL Server；不支持的 provider 必须在 DDL 前失败。

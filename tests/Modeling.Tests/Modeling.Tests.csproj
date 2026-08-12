@@ -20,7 +20,6 @@
   <ItemGroup>
     <ProjectReference Include="..\\..\\server\\platform-modeling\\PlatformModeling.csproj" />
     <ProjectReference Include="..\\..\\server\\platform-persistence-composition\\PlatformPersistence.Composition.csproj" />
-    <ProjectReference Include="..\\..\\server\\platform-persistence-devsync\\PlatformPersistence.DevSync.csproj" />
     <ProjectReference Include="..\\..\\server\\tools\\model-dto-sync\\ModelDtoSync.csproj" />
   </ItemGroup>
 

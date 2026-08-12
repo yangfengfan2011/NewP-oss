@@ -1,5 +1,5 @@
 using System.Text;
-using ICP.Platform.Persistence.DevSync.Rendering;
+using ICP.Platform.Modeling.Rendering;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -28,7 +28,7 @@ public sealed class GeneratedCodeWriter
     }
 
     /// <summary>
-    /// 基础 DTO 仍落在模块 DTO 命名空间；实际包装规则委托给 devsync 共享 helper，避免校验端与写入端分叉。
+    /// 基础 DTO 仍落在模块 DTO 命名空间；包装规则由 Modeling 共享 helper 统一提供。
     /// </summary>
     public static string WrapInNamespace(
         string sourceCode,

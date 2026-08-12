@@ -21,6 +21,7 @@ using Microsoft.Extensions.Logging;
 using ICP.Platform.Modules.Audit.Services;
 using ICP.Platform.Modules.Audit.DTOs;
 using ICP.Platform.Modules.Audit.Models;
+using ICP.Platform.Persistence.Abstractions;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -625,6 +626,8 @@ public class PluginOperationsControllerTests : IClassFixture<PluginOperationsCon
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<IPersistenceConsistencyChecker>();
+                services.AddSingleton<IPersistenceConsistencyChecker, TestPersistenceConsistencyChecker>();
                 services.AddSingleton(new TestAuthenticationState(() => StubRoles));
                 services.AddAuthentication(TestAuthenticationHandler.SchemeName)
                     .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(

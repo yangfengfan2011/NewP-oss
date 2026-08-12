@@ -143,7 +143,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
         _hostEnvironment["Identity__Credentials__UseSharedDevelopmentCredential"] = "true";
         _hostEnvironment["Identity__LocalAdministrator__ECODE"] = "admin";
         _hostEnvironment["Identity__LocalAdministrator__ENAME"] = "Local Administrator";
-        _hostEnvironment["DevelopmentSchemaSync__Enabled"] = "true";
         _hostEnvironment["Logging__LogLevel__Default"] = "Information";
 
         await RunStopDevAsync("identity-foundation/preflight-stop-existing.json", cancellationToken, true);

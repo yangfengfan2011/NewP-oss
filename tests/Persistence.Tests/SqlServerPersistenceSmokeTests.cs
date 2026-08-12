@@ -11,7 +11,6 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
-using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.Data.SqlClient;
@@ -45,6 +44,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_EmptyCatalogCreatesCurrentFoundationAndWarmStartIsNoOp() =>
         RunCatalogScenarioAsync("forward", VerifyForwardMigrationAndWarmNoOpAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerReadOnlyConsistency_DriftFailsWithoutRepairOrHistoryWrite() =>
+        RunCatalogScenarioAsync("consistency", VerifyReadOnlyConsistencyFailureAsync);
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -123,6 +127,12 @@ public sealed class SqlServerPersistenceSmokeTests
 
         Assert.False(await RunMigrationsAsync(provider));
 
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var checker = scope.ServiceProvider.GetRequiredService<IPersistenceConsistencyChecker>();
+            await checker.CheckAsync();
+        }
+
         var historyBeforeWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
         Assert.Equal(
             [
@@ -165,6 +175,46 @@ public sealed class SqlServerPersistenceSmokeTests
             applicationConnectionString,
             "UPDATE [dbo].[__NewPDatabaseOwnership] SET [Version] = 2 WHERE [MarkerId] = 1;"));
         Assert.Equal(51000, exception.Number);
+    }
+
+    private static async Task VerifyReadOnlyConsistencyFailureAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        await using var provider = BuildProvider(
+            applicationConnectionString,
+            identity,
+            TestPersistencePlan.CreateCurrentSqlServer());
+        Assert.False(await RunMigrationsAsync(provider));
+        var historyBefore = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        var factsBefore = await CountMigrationFactsAsync(applicationConnectionString);
+
+        await ExecuteNonQueryAsync(applicationConnectionString, """
+            CREATE TABLE [dbo].[UnexpectedDrift]
+            (
+                [Id] int NOT NULL CONSTRAINT [PK_UnexpectedDrift] PRIMARY KEY
+            );
+            INSERT INTO [dbo].[UnexpectedDrift] ([Id]) VALUES (1);
+            """);
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var checker = scope.ServiceProvider.GetRequiredService<IPersistenceConsistencyChecker>();
+            var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() =>
+                checker.CheckAsync());
+            Assert.Equal(PersistenceConsistencyFailureCodes.SchemaTargetMismatch, exception.FailureCode);
+        }
+
+        Assert.True(await TableExistsAsync(applicationConnectionString, "UnexpectedDrift"));
+        Assert.Equal(
+            1,
+            Convert.ToInt32(await ExecuteScalarAsync(
+                applicationConnectionString,
+                "SELECT COUNT(*) FROM [dbo].[UnexpectedDrift] WHERE [Id] = 1;")));
+        Assert.Equal(historyBefore, await ReadAppliedMigrationsAsync(applicationConnectionString));
+        Assert.Equal(factsBefore, await CountMigrationFactsAsync(applicationConnectionString));
     }
 
     private static async Task VerifyPrecreatedBusinessTableRequiresDatabaseRebuildAsync(

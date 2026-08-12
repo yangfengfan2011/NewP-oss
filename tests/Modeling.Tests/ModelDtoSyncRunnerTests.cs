@@ -1,5 +1,5 @@
 using ICP.Platform.Persistence.Composition;
-using ICP.Platform.Persistence.DevSync.Rendering;
+using ICP.Platform.Modeling.Rendering;
 using ICP.Platform.Tools.ModelDtoSync;
 using Xunit;
 

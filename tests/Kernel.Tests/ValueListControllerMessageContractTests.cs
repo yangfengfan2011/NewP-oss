@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ICP.Platform.Sdk.UserMessages;
+using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -89,6 +90,8 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<IPersistenceConsistencyChecker>();
+                services.AddSingleton<IPersistenceConsistencyChecker, TestPersistenceConsistencyChecker>();
                 var repositoryServiceType = services
                     .Select(descriptor => descriptor.ServiceType)
                     .Single(type => string.Equals(

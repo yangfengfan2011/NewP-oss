@@ -28,6 +28,32 @@ public sealed record CompiledMigrationStep(
 }
 
 /// <summary>
+/// 已编译计划与统一迁移事实共同使用的 history reconciliation 版本。
+/// </summary>
+public static class PersistenceHistoryVersions
+{
+    public const string ReconciliationV1 = "unified-history/v1";
+}
+
+/// <summary>
+/// 已编译持久化计划期望的单个全局有序迁移事实。
+/// </summary>
+public sealed record CompiledMigrationHistoryEntry(
+    int Position,
+    string HistoryVersion,
+    string MigrationId,
+    string OwnerModuleId,
+    string BundleDigest,
+    string ContentDigest,
+    string FromModelDigest,
+    string ToModelDigest,
+    string PlanDigest,
+    string ProviderTargetVersion,
+    string ProviderTargetDigest,
+    string ProviderTransitionVersion,
+    string ProviderTransitionDigest);
+
+/// <summary>
 /// 一个模块在一个 provider 下的线性迁移流。
 /// </summary>
 public sealed record ModuleMigrationStream(
@@ -61,6 +87,11 @@ public sealed record CompiledPersistencePlan(
     IReadOnlyList<ModelDefinition> Models,
     IReadOnlyList<ModuleMigrationStream> Streams)
 {
+    /// <summary>
+    /// 统一 history reconciliation 契约版本；未知版本必须阻断。
+    /// </summary>
+    public string HistoryVersion { get; init; } = PersistenceHistoryVersions.ReconciliationV1;
+
     /// <summary>
     /// DbContext 注册消费的计划实例。
     /// </summary>

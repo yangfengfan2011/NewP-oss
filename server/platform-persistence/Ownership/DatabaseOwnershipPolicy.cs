@@ -1,3 +1,5 @@
+using ICP.Platform.Persistence.Planning;
+
 namespace ICP.Platform.Persistence.Ownership;
 
 /// <summary>
@@ -64,35 +66,38 @@ public static class DatabaseOwnershipPolicy
         IReadOnlyList<string> appliedMigrations,
         IReadOnlyList<string> knownMigrations)
     {
-        if (knownMigrations.Count == 0
-            || !string.Equals(appliedMigrations[0], knownMigrations[0], StringComparison.Ordinal))
+        if (knownMigrations.Count == 0)
         {
-            return Reject(DatabaseOwnershipFailureCodes.MigrationHistoryInvalid);
+            return Reject(PersistenceHistoryFailureCodes.FrontierMismatch);
         }
 
-        var knownIndex = 0;
-        var databaseAhead = false;
-        foreach (var appliedMigration in appliedMigrations)
+        if (appliedMigrations
+            .GroupBy(static migrationId => migrationId, StringComparer.Ordinal)
+            .Any(static group => group.Count() > 1))
         {
-            if (!databaseAhead
-                && knownIndex < knownMigrations.Count
-                && string.Equals(appliedMigration, knownMigrations[knownIndex], StringComparison.Ordinal))
+            return Reject(PersistenceHistoryFailureCodes.Duplicate);
+        }
+
+        for (var index = 0; index < appliedMigrations.Count; index++)
+        {
+            var appliedMigration = appliedMigrations[index];
+            if (index < knownMigrations.Count
+                && string.Equals(appliedMigration, knownMigrations[index], StringComparison.Ordinal))
             {
-                knownIndex++;
                 continue;
             }
 
             if (knownMigrations.Contains(appliedMigration, StringComparer.Ordinal))
             {
-                return Reject(DatabaseOwnershipFailureCodes.MigrationHistoryInvalid);
+                return Reject(PersistenceHistoryFailureCodes.NonPrefix);
             }
 
-            databaseAhead = true;
+            return Reject(index >= knownMigrations.Count
+                ? PersistenceHistoryFailureCodes.FrontierMismatch
+                : PersistenceHistoryFailureCodes.Unknown);
         }
 
-        return new DatabaseOwnershipDecision(
-            DatabaseOwnershipDecisionKind.Allow,
-            DatabaseAhead: databaseAhead);
+        return new DatabaseOwnershipDecision(DatabaseOwnershipDecisionKind.Allow);
     }
 
     private static DatabaseOwnershipDecision Reject(string failureCode) =>

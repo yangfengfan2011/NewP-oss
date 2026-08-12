@@ -55,8 +55,16 @@ _Avoid_: safe-expand only、metadata diff SQL、按环境隐式裁剪操作
 _Avoid_: 可安全忽略的前缀、自动回滚、激活成功
 
 **统一迁移历史（Unified Migration History）**：
-同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。所有模块 migration stream 与 Legacy Baseline 共用该历史，Migration ID 在整份计划中全局唯一；模块不拥有私有 history。
+同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。`dbo.__EFMigrationsHistory` 保存全局执行顺序；模块 migration 还在同一事务中向 `dbo.__NewPMigrationHistory` 写入版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 摘要。所有模块 migration stream 与 Legacy Baseline 共用该历史，Migration ID 在整份计划中全局唯一；模块不拥有私有 history。Legacy Baseline 仅以已编译显式 frontier 兼容既有 EF history，不补写事实。
 _Avoid_: 模块 history table、活动快照状态、手工回写记录
+
+**迁移包完整性摘要（Bundle Checksum）与步骤成员摘要（Bundle Digest）**：
+`BundleChecksum` 是候选当前 migration assembly 的 whole-artifact SHA-256，计划编译及执行连接前必须匹配；assembly 追加 migration 后它可以变化。history 中的 `BundleDigest` 则从 owner、provider 和不可变 step 链输入 canonical 计算，证明该已执行 step 的 bundle membership，并在合法追加 migration 时保持旧前缀稳定。二者不能互换，也不能通过重算数据库旧事实兼容新包。
+_Avoid_: 把 whole-assembly checksum 持久化为旧 step 身份、忽略当前 artifact checksum、追加时改写旧 history
+
+**Provider 历史事实投影（Provider History Fact Projection）**：
+统一 history 对 Provider Target/Transition v1 的 owner-scoped canonical 投影。它保留 migration owner 表的所有列、key、index、FK 和 FK principal 物理引用，只排除其他 owner 的表，使后续增加无关模块时旧 fact 不变；修改旧 owner 表或其既有跨模块引用仍会摘要不一致。该投影不是新的 Provider Target 协议，也不替代连接前 full target/transition operation 校验。
+_Avoid_: 把当前 full target 摘要持久化为不可追加的旧步骤身份、投影掉 FK principal、用 history 投影放松 operation 校验
 
 **Schema Drift**：
 数据库实际结构或统一 Migration History 与已验证的归属、迁移链、模型摘要和期望 frontier 不一致。Host 只读一致性检查负责报告并阻断 drift；所有 schema 写入仍只能由 Host 执行 EF Up migrations。

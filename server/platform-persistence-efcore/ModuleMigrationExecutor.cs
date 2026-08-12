@@ -6,6 +6,7 @@ using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
+using System.Text;
 using ICP.Platform.Kernel.ModuleLoading;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Persistence.Planning;
@@ -32,6 +33,7 @@ internal sealed class ModuleMigrationExecutor(
         CompiledPersistencePlan,
         Lazy<IReadOnlyList<ValidatedMigrationStream>>> ValidationCache = new();
     private IReadOnlyList<ValidatedMigrationStream>? _validatedStreams;
+    private IReadOnlyList<CompiledMigrationHistoryEntry>? _expectedHistory;
     private ProviderTargetSnapshot? _providerTarget;
 
     public void ValidateBeforeConnection()
@@ -41,11 +43,24 @@ internal sealed class ModuleMigrationExecutor(
             return;
         }
 
+        if (!string.Equals(
+                plan.HistoryVersion,
+                PersistenceHistoryVersions.ReconciliationV1,
+                StringComparison.Ordinal))
+        {
+            throw new PersistenceHistoryException(PersistenceHistoryFailureCodes.VersionUnsupported);
+        }
+
         _validatedStreams = ValidationCache.GetValue(
             plan,
             _ => new Lazy<IReadOnlyList<ValidatedMigrationStream>>(
                 CompileValidatedStreams,
                 LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        _expectedHistory = BuildExpectedHistory(_validatedStreams);
+        _ = UnifiedMigrationHistoryReconciler.Reconcile(
+            plan.HistoryVersion,
+            [],
+            _expectedHistory);
     }
 
     private IReadOnlyList<ValidatedMigrationStream> CompileValidatedStreams()
@@ -73,6 +88,89 @@ internal sealed class ModuleMigrationExecutor(
         return GenerateSqlCommands(validatedStreams);
     }
 
+    private IReadOnlyList<CompiledMigrationHistoryEntry> BuildExpectedHistory(
+        IReadOnlyList<ValidatedMigrationStream> streams)
+    {
+        var entries = new List<CompiledMigrationHistoryEntry>();
+        var legacyStream = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline);
+        if (legacyStream is not null)
+        {
+            var legacyMigrations = dbContext.Database.GetMigrations().ToArray();
+            var frontierIndex = Array.FindIndex(
+                legacyMigrations,
+                migrationId => string.Equals(
+                    migrationId,
+                    legacyStream.ExpectedFrontier,
+                    StringComparison.Ordinal));
+            if (frontierIndex < 0)
+            {
+                throw new PersistenceHistoryException(
+                    PersistenceHistoryFailureCodes.FrontierMismatch,
+                    legacyStream.ExpectedFrontier);
+            }
+
+            foreach (var migrationId in legacyMigrations[..(frontierIndex + 1)])
+            {
+                // Legacy Baseline 没有版本化 fact；这些合成字段只用于稳定锚定后续
+                // module 前缀，不能依赖会随模块切出 baseline 而变化的当前模型摘要。
+                var bundleDigest = Hash($"legacy-bundle/v1|{plan.Provider}|{migrationId}");
+                var contentDigest = Hash($"legacy-content|{migrationId}");
+                var modelDigest = Hash($"legacy-model/v1|{plan.Provider}|{migrationId}");
+                var providerTargetDigest = Hash($"legacy-provider-target/v1|{plan.Provider}|{migrationId}");
+                var transitionDigest = Hash($"legacy-transition|{plan.Provider}|{migrationId}");
+                entries.Add(new CompiledMigrationHistoryEntry(
+                    0,
+                    plan.HistoryVersion,
+                    migrationId,
+                    legacyStream.ModuleId,
+                    bundleDigest,
+                    contentDigest,
+                    modelDigest,
+                    modelDigest,
+                    string.Empty,
+                    ProviderTargetSchemaVersions.TargetV1,
+                    providerTargetDigest,
+                    ProviderTargetSchemaVersions.TransitionV1,
+                    transitionDigest));
+            }
+        }
+
+        foreach (var stream in streams)
+        {
+            foreach (var migration in stream.Migrations)
+            {
+                entries.Add(new CompiledMigrationHistoryEntry(
+                    0,
+                    plan.HistoryVersion,
+                    migration.MigrationId,
+                    stream.Source.ModuleId,
+                    UnifiedMigrationHistoryDigest.ComputeBundleDigest(
+                        stream.Source.ModuleId,
+                        stream.Source.Provider,
+                        migration.Step),
+                    migration.Step.ContentDigest,
+                    migration.Step.FromModelDigest,
+                    migration.Step.ToModelDigest,
+                    string.Empty,
+                    migration.Transition.To.SchemaVersion,
+                    UnifiedMigrationHistoryDigest.ComputeProviderTargetFactDigest(
+                        migration.Transition),
+                    migration.Transition.SchemaVersion,
+                    UnifiedMigrationHistoryDigest.ComputeProviderTransitionFactDigest(
+                        migration.Transition)));
+            }
+        }
+
+        var ordered = entries
+            .OrderBy(static entry => entry.MigrationId, StringComparer.Ordinal)
+            .Select((entry, position) => entry with { Position = position })
+            .ToArray();
+        return UnifiedMigrationHistoryDigest.BindPlanDigests(ordered);
+    }
+
+    private static string Hash(string value) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
     public async Task ApplyAsync(CancellationToken cancellationToken)
     {
         ValidateBeforeConnection();
@@ -83,14 +181,15 @@ internal sealed class ModuleMigrationExecutor(
             throw new InvalidOperationException("The persistence connection string is unavailable.");
         }
 
+        await ReconcileHistoryAsync(cancellationToken);
+        var legacyStream = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline);
         var appliedMigrations = (await dbContext.Database
                 .GetAppliedMigrationsAsync(cancellationToken))
             .ToHashSet(StringComparer.Ordinal);
-        var legacyStream = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline);
 
         // platform.core 以冻结 baseline 模型运行现有迁移程序集，避免外部模块模型被 EF
         // 误判为该程序集缺失的 migration；外部模型只由其自己的编译迁移流推进。
-        if (legacyStream is null || !appliedMigrations.Contains(legacyStream.ExpectedFrontier))
+        if (legacyStream is not null && !appliedMigrations.Contains(legacyStream.ExpectedFrontier))
         {
             var moduleOwnedMigrationIds = plan.Streams
                 .Where(static stream => !stream.IsLegacyBaseline)
@@ -125,20 +224,22 @@ internal sealed class ModuleMigrationExecutor(
             appliedMigrations = (await dbContext.Database
                     .GetAppliedMigrationsAsync(cancellationToken))
                 .ToHashSet(StringComparer.Ordinal);
+            await ReconcileHistoryAsync(cancellationToken);
         }
 
-        foreach (var stream in _validatedStreams ?? [])
+        var validatedById = (_validatedStreams ?? [])
+            .SelectMany(stream => stream.Migrations.Select(migration => new { Stream = stream.Source, Migration = migration }))
+            .ToDictionary(static item => item.Migration.MigrationId, StringComparer.Ordinal);
+        foreach (var expected in _expectedHistory ?? [])
         {
-            foreach (var migration in stream.Migrations)
+            if (!validatedById.TryGetValue(expected.MigrationId, out var item)
+                || appliedMigrations.Contains(expected.MigrationId))
             {
-                if (appliedMigrations.Contains(migration.MigrationId))
-                {
-                    continue;
-                }
-
-                await ApplyMigrationAsync(stream.Source, migration, cancellationToken);
-                appliedMigrations.Add(migration.MigrationId);
+                continue;
             }
+
+            await ApplyMigrationAsync(item.Stream, item.Migration, expected, cancellationToken);
+            appliedMigrations.Add(expected.MigrationId);
         }
     }
 
@@ -186,9 +287,205 @@ internal sealed class ModuleMigrationExecutor(
             .ToArray();
     }
 
+    private async Task ReconcileHistoryAsync(CancellationToken cancellationToken)
+    {
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            var connection = dbContext.Database.GetDbConnection();
+            await using var transaction = await connection.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted,
+                cancellationToken);
+            await AcquireHistoryLockAsync(connection, transaction, cancellationToken);
+            await ReadAndReconcileHistoryAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    private async Task<UnifiedMigrationHistoryReconciliation> ReadAndReconcileHistoryAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var expected = _expectedHistory
+            ?? throw new InvalidOperationException("Migration history target has not been validated.");
+        var migrationIds = await ReadAppliedMigrationIdsAsync(connection, transaction, cancellationToken);
+        var facts = await ReadMigrationFactsAsync(connection, transaction, cancellationToken);
+        var duplicateFact = facts
+            .GroupBy(static fact => fact.MigrationId, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1)?.First();
+        if (duplicateFact is not null)
+        {
+            throw new PersistenceHistoryException(
+                PersistenceHistoryFailureCodes.Duplicate,
+                duplicateFact.MigrationId);
+        }
+
+        var factsById = facts.ToDictionary(static fact => fact.MigrationId, StringComparer.Ordinal);
+        var expectedById = expected.ToDictionary(static fact => fact.MigrationId, StringComparer.Ordinal);
+        var legacyOwner = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline)?.ModuleId;
+        var applied = new List<CompiledMigrationHistoryEntry>(migrationIds.Count);
+        for (var position = 0; position < migrationIds.Count; position++)
+        {
+            var migrationId = migrationIds[position];
+            if (factsById.TryGetValue(migrationId, out var fact))
+            {
+                applied.Add(fact);
+                continue;
+            }
+
+            if (expectedById.TryGetValue(migrationId, out var legacy)
+                && string.Equals(legacy.OwnerModuleId, legacyOwner, StringComparison.Ordinal))
+            {
+                // Legacy EF migrations 早于版本化执行事实。显式编译并排序的 ID 前缀是
+                // 唯一兼容路径；这里不向数据库补写 fact。
+                applied.Add(legacy);
+                continue;
+            }
+
+            if (expectedById.ContainsKey(migrationId))
+            {
+                throw new PersistenceHistoryException(
+                    PersistenceHistoryFailureCodes.FactMissing,
+                    migrationId);
+            }
+
+            applied.Add(UnknownFact(position, migrationId));
+        }
+
+        var appliedIds = migrationIds.ToHashSet(StringComparer.Ordinal);
+        var orphan = facts.FirstOrDefault(fact => !appliedIds.Contains(fact.MigrationId));
+        if (orphan is not null)
+        {
+            throw new PersistenceHistoryException(
+                PersistenceHistoryFailureCodes.Unknown,
+                orphan.MigrationId);
+        }
+
+        return UnifiedMigrationHistoryReconciler.Reconcile(plan.HistoryVersion, applied, expected);
+    }
+
+    private static CompiledMigrationHistoryEntry UnknownFact(int position, string migrationId) =>
+        new(
+            position,
+            PersistenceHistoryVersions.ReconciliationV1,
+            migrationId,
+            "unknown",
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            ProviderTargetSchemaVersions.TargetV1,
+            string.Empty,
+            ProviderTargetSchemaVersions.TransitionV1,
+            string.Empty);
+
+    private static async Task<IReadOnlyList<string>> ReadAppliedMigrationIdsAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, transaction, """
+            IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]', N'U') IS NULL
+                SELECT CAST(NULL AS nvarchar(150)) AS [MigrationId] WHERE 1 = 0;
+            ELSE
+                SELECT [MigrationId] FROM [dbo].[__EFMigrationsHistory] ORDER BY [MigrationId];
+            """);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var migrations = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            migrations.Add(reader.GetString(0));
+        }
+
+        return migrations;
+    }
+
+    private static async Task<IReadOnlyList<CompiledMigrationHistoryEntry>> ReadMigrationFactsAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, transaction, """
+            IF OBJECT_ID(N'[dbo].[__NewPMigrationHistory]', N'U') IS NULL
+                SELECT
+                    CAST(NULL AS int) AS [Position],
+                    CAST(NULL AS nvarchar(64)) AS [HistoryVersion],
+                    CAST(NULL AS nvarchar(150)) AS [MigrationId],
+                    CAST(NULL AS nvarchar(256)) AS [OwnerModuleId],
+                    CAST(NULL AS char(64)) AS [BundleDigest],
+                    CAST(NULL AS char(64)) AS [ContentDigest],
+                    CAST(NULL AS char(64)) AS [FromModelDigest],
+                    CAST(NULL AS char(64)) AS [ToModelDigest],
+                    CAST(NULL AS char(64)) AS [PlanDigest],
+                    CAST(NULL AS nvarchar(64)) AS [ProviderTargetVersion],
+                    CAST(NULL AS char(64)) AS [ProviderTargetDigest],
+                    CAST(NULL AS nvarchar(64)) AS [ProviderTransitionVersion],
+                    CAST(NULL AS char(64)) AS [ProviderTransitionDigest]
+                WHERE 1 = 0;
+            ELSE
+                SELECT
+                    [Position], [HistoryVersion], [MigrationId], [OwnerModuleId],
+                    [BundleDigest], [ContentDigest], [FromModelDigest], [ToModelDigest], [PlanDigest],
+                    [ProviderTargetVersion], [ProviderTargetDigest],
+                    [ProviderTransitionVersion], [ProviderTransitionDigest]
+                FROM [dbo].[__NewPMigrationHistory]
+                ORDER BY [Position];
+            """);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var facts = new List<CompiledMigrationHistoryEntry>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            facts.Add(new CompiledMigrationHistoryEntry(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetString(8),
+                reader.GetString(9),
+                reader.GetString(10),
+                reader.GetString(11),
+                reader.GetString(12)));
+        }
+
+        return facts;
+    }
+
+    private static async Task AcquireHistoryLockAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, transaction, """
+            DECLARE @result int;
+            EXEC @result = sys.sp_getapplock
+                @Resource = N'NewP.PersistenceBootstrap',
+                @LockMode = N'Exclusive',
+                @LockOwner = N'Transaction',
+                @LockTimeout = 15000;
+            SELECT @result;
+            """);
+        if (Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) < 0)
+        {
+            throw new PersistencePlanExecutionException(
+                PersistenceMigrationFailureCodes.MigrationLockUnavailable,
+                "platform.persistence");
+        }
+    }
+
     private async Task ApplyMigrationAsync(
         ModuleMigrationStream stream,
         ValidatedMigration migration,
+        CompiledMigrationHistoryEntry expectedHistory,
         CancellationToken cancellationToken)
     {
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
@@ -205,15 +502,28 @@ internal sealed class ModuleMigrationExecutor(
                 migration.MigrationId,
                 cancellationToken);
 
-            if (await MigrationHistoryContainsAsync(
-                    connection,
-                    transaction,
+            var reconciliation = await ReadAndReconcileHistoryAsync(
+                connection,
+                transaction,
+                cancellationToken);
+            if (reconciliation.Applied.Any(entry => string.Equals(
+                    entry.MigrationId,
                     migration.MigrationId,
-                    cancellationToken))
+                    StringComparison.Ordinal)))
             {
                 await transaction.CommitAsync(cancellationToken);
                 return;
             }
+
+            if (reconciliation.Pending.FirstOrDefault() is not { } next
+                || !string.Equals(next.MigrationId, migration.MigrationId, StringComparison.Ordinal))
+            {
+                throw new PersistenceHistoryException(
+                    PersistenceHistoryFailureCodes.FrontierMismatch,
+                    migration.MigrationId);
+            }
+
+            await EnsureMigrationHistoryTablesAsync(connection, transaction, cancellationToken);
 
             await VerifyDataPreconditionsAsync(
                 connection,
@@ -232,6 +542,11 @@ internal sealed class ModuleMigrationExecutor(
                 connection,
                 transaction,
                 migration.MigrationId,
+                cancellationToken);
+            await InsertMigrationHistoryFactAsync(
+                connection,
+                transaction,
+                expectedHistory,
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -267,19 +582,45 @@ internal sealed class ModuleMigrationExecutor(
         }
     }
 
-    private static async Task<bool> MigrationHistoryContainsAsync(
+    private static async Task EnsureMigrationHistoryTablesAsync(
         DbConnection connection,
         DbTransaction transaction,
-        string migrationId,
         CancellationToken cancellationToken)
     {
         await using var command = CreateCommand(connection, transaction, """
-            SELECT COUNT(*)
-            FROM [dbo].[__EFMigrationsHistory]
-            WHERE [MigrationId] = @migrationId;
+            IF OBJECT_ID(N'[dbo].[__EFMigrationsHistory]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[__EFMigrationsHistory]
+                (
+                    [MigrationId] nvarchar(150) NOT NULL,
+                    [ProductVersion] nvarchar(32) NOT NULL,
+                    CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+                );
+            END;
+
+            IF OBJECT_ID(N'[dbo].[__NewPMigrationHistory]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[__NewPMigrationHistory]
+                (
+                    [Position] int NOT NULL,
+                    [HistoryVersion] nvarchar(64) NOT NULL,
+                    [MigrationId] nvarchar(150) NOT NULL,
+                    [OwnerModuleId] nvarchar(256) NOT NULL,
+                    [BundleDigest] char(64) NOT NULL,
+                    [ContentDigest] char(64) NOT NULL,
+                    [FromModelDigest] char(64) NOT NULL,
+                    [ToModelDigest] char(64) NOT NULL,
+                    [PlanDigest] char(64) NOT NULL,
+                    [ProviderTargetVersion] nvarchar(64) NOT NULL,
+                    [ProviderTargetDigest] char(64) NOT NULL,
+                    [ProviderTransitionVersion] nvarchar(64) NOT NULL,
+                    [ProviderTransitionDigest] char(64) NOT NULL,
+                    CONSTRAINT [PK___NewPMigrationHistory] PRIMARY KEY ([MigrationId]),
+                    CONSTRAINT [UX___NewPMigrationHistory_Position] UNIQUE ([Position])
+                );
+            END;
             """);
-        AddParameter(command, "@migrationId", migrationId);
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task InsertMigrationHistoryAsync(
@@ -294,6 +635,44 @@ internal sealed class ModuleMigrationExecutor(
             """);
         AddParameter(command, "@migrationId", migrationId);
         AddParameter(command, "@productVersion", ProductInfo.GetVersion());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task InsertMigrationHistoryFactAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        CompiledMigrationHistoryEntry fact,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, transaction, """
+            INSERT INTO [dbo].[__NewPMigrationHistory]
+            (
+                [Position], [HistoryVersion], [MigrationId], [OwnerModuleId],
+                [BundleDigest], [ContentDigest], [FromModelDigest], [ToModelDigest], [PlanDigest],
+                [ProviderTargetVersion], [ProviderTargetDigest],
+                [ProviderTransitionVersion], [ProviderTransitionDigest]
+            )
+            VALUES
+            (
+                @position, @historyVersion, @migrationId, @ownerModuleId,
+                @bundleDigest, @contentDigest, @fromModelDigest, @toModelDigest, @planDigest,
+                @providerTargetVersion, @providerTargetDigest,
+                @providerTransitionVersion, @providerTransitionDigest
+            );
+            """);
+        AddParameter(command, "@position", fact.Position);
+        AddParameter(command, "@historyVersion", fact.HistoryVersion);
+        AddParameter(command, "@migrationId", fact.MigrationId);
+        AddParameter(command, "@ownerModuleId", fact.OwnerModuleId);
+        AddParameter(command, "@bundleDigest", fact.BundleDigest);
+        AddParameter(command, "@contentDigest", fact.ContentDigest);
+        AddParameter(command, "@fromModelDigest", fact.FromModelDigest);
+        AddParameter(command, "@toModelDigest", fact.ToModelDigest);
+        AddParameter(command, "@planDigest", fact.PlanDigest);
+        AddParameter(command, "@providerTargetVersion", fact.ProviderTargetVersion);
+        AddParameter(command, "@providerTargetDigest", fact.ProviderTargetDigest);
+        AddParameter(command, "@providerTransitionVersion", fact.ProviderTransitionVersion);
+        AddParameter(command, "@providerTransitionDigest", fact.ProviderTransitionDigest);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -323,6 +702,18 @@ internal sealed class ModuleMigrationExecutor(
         if (stream.Provider != plan.Provider)
         {
             throw Failure(PersistenceMigrationFailureCodes.ProviderUnsupported, stream);
+        }
+
+        if (stream.Migrations.Count == 0
+            || !string.Equals(
+                stream.Migrations[^1].MigrationId,
+                stream.ExpectedFrontier,
+                StringComparison.Ordinal))
+        {
+            throw Failure(
+                PersistenceHistoryFailureCodes.FrontierMismatch,
+                stream,
+                stream.ExpectedFrontier);
         }
 
         var duplicateMigrationId = stream.Migrations
@@ -417,6 +808,7 @@ internal sealed class ModuleMigrationExecutor(
             var validatedMigrations = new ProviderMigrationOperationValidator(plan, ProviderTarget)
                 .Validate(stream, candidates)
                 .Select(static migration => new ValidatedMigration(
+                    migration.Step,
                     migration.MigrationId,
                     migration.Migration,
                     migration.Transition,
@@ -685,6 +1077,7 @@ internal sealed class ModuleMigrationExecutor(
         new(failureCode, stream.ModuleId, migrationId, innerException);
 
     private sealed record ValidatedMigration(
+        CompiledMigrationStep Step,
         string MigrationId,
         Migration Migration,
         ProviderTransitionSnapshot Transition,

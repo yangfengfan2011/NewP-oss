@@ -5,6 +5,7 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.DevSync.Coordination;
 using ICP.Platform.Persistence.DevSync.Execution;
 using ICP.Platform.Persistence.DevSync.Planning;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -149,7 +150,7 @@ public class DevelopmentSchemaSyncBootstrapTests
     }
 
     [Fact]
-    public async Task ApplyPlatformPersistenceAsync_WhenDevelopmentSchemaSyncSafePlanAllowsStartup_ReportsWithoutApplying()
+    public async Task ApplyPlatformPersistenceAsync_WhenRunnerReportsDatabaseAhead_BlocksReadiness()
     {
         var migrationRunner = new RecordingMigrationRunner(databaseAhead: true);
         var applyCalled = false;
@@ -173,15 +174,54 @@ public class DevelopmentSchemaSyncBootstrapTests
                 }),
             migrationRunner);
 
-        await app.ApplyPlatformPersistenceAsync();
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() =>
+            app.ApplyPlatformPersistenceAsync());
 
         Assert.False(applyCalled);
         Assert.Equal(1, migrationRunner.CallCount);
+        Assert.Equal(PersistenceHistoryFailureCodes.FrontierMismatch, exception.FailureCode);
         var readiness = new PersistenceReadinessContributor(
             app.Services.GetRequiredService<PersistenceReadinessState>());
         var contribution = await readiness.CheckAsync(CancellationToken.None);
-        Assert.Equal(ReadinessState.Ready, contribution.State);
-        Assert.Contains("database-ahead", contribution.Diagnostic, StringComparison.Ordinal);
+        Assert.Equal(ReadinessState.Failed, contribution.State);
+        Assert.Equal(PersistenceHistoryFailureCodes.FrontierMismatch, contribution.FailureCode);
+    }
+
+    [Theory]
+    [InlineData(PersistenceHistoryFailureCodes.VersionUnsupported)]
+    [InlineData(PersistenceHistoryFailureCodes.Duplicate)]
+    [InlineData(PersistenceHistoryFailureCodes.Unknown)]
+    [InlineData(PersistenceHistoryFailureCodes.NonPrefix)]
+    [InlineData(PersistenceHistoryFailureCodes.FrontierMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.FactMissing)]
+    [InlineData(PersistenceHistoryFailureCodes.OwnerMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.BundleMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.ContentMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.ModelMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.PlanMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.ProviderTargetMismatch)]
+    [InlineData(PersistenceHistoryFailureCodes.ProviderTransitionMismatch)]
+    public async Task ApplyPlatformPersistenceAsync_HistoryFailure_PreservesStableNotReadyCode(
+        string failureCode)
+    {
+        var migrationRunner = new RecordingMigrationRunner(
+            new PersistencePlanExecutionException(failureCode, "platform.persistence"));
+        await using var app = BuildApp(
+            Environments.Production,
+            "SqlServer",
+            developmentSchemaSyncEnabled: false,
+            CreateAllowedCoordinator(),
+            migrationRunner);
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() =>
+            app.ApplyPlatformPersistenceAsync());
+
+        Assert.Equal(failureCode, exception.FailureCode);
+        var readiness = new PersistenceReadinessContributor(
+            app.Services.GetRequiredService<PersistenceReadinessState>());
+        var contribution = await readiness.CheckAsync(CancellationToken.None);
+        Assert.Equal(ReadinessState.Failed, contribution.State);
+        Assert.Equal(failureCode, contribution.FailureCode);
     }
 
     [Fact]

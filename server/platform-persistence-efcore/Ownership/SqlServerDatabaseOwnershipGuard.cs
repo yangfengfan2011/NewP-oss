@@ -48,7 +48,8 @@ public sealed class SqlServerDatabaseOwnershipGuard : IPersistenceMigrationGuard
                 : null;
             var tables = await ReadUserTablesAsync(connection, transaction, cancellationToken);
             var appliedMigrations = await ReadAppliedMigrationsAsync(connection, transaction, cancellationToken);
-            var knownMigrations = _dbContext.Database.GetMigrations()
+            var legacyMigrations = ResolveLegacyMigrations();
+            var knownMigrations = legacyMigrations
                 .Concat(_plan.Streams
                     .Where(stream => !stream.IsLegacyBaseline && stream.Provider == _plan.Provider)
                     .SelectMany(static stream => stream.Migrations)
@@ -84,6 +85,29 @@ public sealed class SqlServerDatabaseOwnershipGuard : IPersistenceMigrationGuard
         {
             await _dbContext.Database.CloseConnectionAsync();
         }
+    }
+
+    private IReadOnlyList<string> ResolveLegacyMigrations()
+    {
+        var legacyStream = _plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline);
+        if (legacyStream is null)
+        {
+            return [];
+        }
+
+        var migrations = _dbContext.Database.GetMigrations().ToArray();
+        var frontierIndex = Array.FindIndex(
+            migrations,
+            migrationId => string.Equals(
+                migrationId,
+                legacyStream.ExpectedFrontier,
+                StringComparison.Ordinal));
+        if (frontierIndex < 0)
+        {
+            throw new DatabaseOwnershipException(PersistenceHistoryFailureCodes.FrontierMismatch);
+        }
+
+        return migrations[..(frontierIndex + 1)];
     }
 
     private static async Task AcquireBootstrapLockAsync(

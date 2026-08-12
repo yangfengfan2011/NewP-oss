@@ -75,6 +75,41 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
+    public async Task MigrateAsync_StreamFrontierDoesNotMatchCompiledMigration_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildPlan(ForbiddenSqlMigration.MigrationId);
+        var stream = plan.Streams.Single();
+        plan = plan with
+        {
+            Streams = [stream with { ExpectedFrontier = "20990101000000_Unknown" }]
+        };
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceHistoryFailureCodes.FrontierMismatch, exception.FailureCode);
+        Assert.Equal("20990101000000_Unknown", exception.MigrationId);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_UnknownHistoryVersion_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildPlan(ForbiddenSqlMigration.MigrationId) with
+        {
+            HistoryVersion = "unified-history/v2"
+        };
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceHistoryFailureCodes.VersionUnsupported, exception.FailureCode);
+    }
+
+    [Fact]
     public async Task MigrateAsync_ForbiddenModuleOperation_FailsBeforeOpeningConnection()
     {
         var migrationId = ForbiddenSqlMigration.MigrationId;

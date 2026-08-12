@@ -16,6 +16,7 @@ internal sealed record ProviderMigrationDataPrecondition(
     string? Column);
 
 internal sealed record ValidatedProviderMigration(
+    CompiledMigrationStep Step,
     string MigrationId,
     Migration Migration,
     ProviderTransitionSnapshot Transition,
@@ -82,6 +83,7 @@ internal sealed class ProviderMigrationOperationValidator(
                 current,
                 to);
             results[migrationIndex] = new ValidatedProviderMigration(
+                candidate.Step,
                 candidate.Step.MigrationId,
                 candidate.Migration,
                 transition,

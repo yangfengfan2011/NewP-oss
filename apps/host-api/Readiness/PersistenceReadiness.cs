@@ -26,15 +26,13 @@ public sealed class PersistenceReadinessState
                 PersistenceReadinessFailureCodes.NotInitialized,
                 "Persistence bootstrap has not completed."));
 
-    public void MarkReady(bool databaseAhead) =>
+    public void MarkReady() =>
         Interlocked.Exchange(
             ref _snapshot,
             new Snapshot(
                 ReadinessState.Ready,
                 null,
-                databaseAhead
-                    ? "Persistence ready (database-ahead; no Down migration executed)."
-                    : "Persistence ready."));
+                "Persistence ready."));
 
     public void MarkFailed(string? failureCode = null) =>
         Interlocked.Exchange(

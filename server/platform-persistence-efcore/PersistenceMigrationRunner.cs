@@ -37,17 +37,24 @@ public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner
             return;
         }
 
-        _moduleMigrationExecutor.ValidateBeforeConnection();
-
-        foreach (var guard in _guards)
+        try
         {
-            var result = await guard.VerifyAsync(cancellationToken);
-            DatabaseAhead |= result.DatabaseAhead;
-        }
+            _moduleMigrationExecutor.ValidateBeforeConnection();
 
-        if (!DatabaseAhead)
-        {
+            foreach (var guard in _guards)
+            {
+                await guard.VerifyAsync(cancellationToken);
+            }
+
             await _moduleMigrationExecutor.ApplyAsync(cancellationToken);
+        }
+        catch (PersistenceHistoryException exception)
+        {
+            throw new PersistencePlanExecutionException(
+                exception.FailureCode,
+                "platform.persistence",
+                exception.MigrationId,
+                exception);
         }
     }
 }

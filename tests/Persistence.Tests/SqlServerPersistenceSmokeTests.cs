@@ -226,7 +226,8 @@ public sealed class SqlServerPersistenceSmokeTests
             INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
             VALUES (N'20990101000000_FutureMigration', N'99.0.0');
             """);
-        Assert.True(await RunMigrationsAsync(provider));
+        var ahead = await Assert.ThrowsAsync<DatabaseOwnershipException>(() => RunMigrationsAsync(provider));
+        Assert.Equal(PersistenceHistoryFailureCodes.FrontierMismatch, ahead.FailureCode);
         await ExecuteNonQueryAsync(
             applicationConnectionString,
             "SELECT TOP (0) [ECODE], [ENAME] FROM [Company]; SELECT TOP (0) [ENAME] FROM [Person];");
@@ -545,12 +546,20 @@ public sealed class SqlServerPersistenceSmokeTests
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
         var firstPlan = BuildModulePlan(includeSecondMigration: false);
         var secondPlan = BuildModulePlan(includeSecondMigration: true);
+        Assert.NotEqual(
+            firstPlan.Streams.Single(static stream => !stream.IsLegacyBaseline).BundleChecksum,
+            secondPlan.Streams.Single(static stream => !stream.IsLegacyBaseline).BundleChecksum);
 
         using var firstProvider = BuildProvider(applicationConnectionString, identity, firstPlan);
         Assert.False(await RunMigrationsAsync(firstProvider));
         var firstHistory = await ReadAppliedMigrationsAsync(applicationConnectionString);
         Assert.Contains(ModuleMigrationOne, firstHistory);
         Assert.DoesNotContain(ModuleMigrationTwo, firstHistory);
+        Assert.Equal(
+            1,
+            Convert.ToInt32(await ExecuteScalarAsync(
+                applicationConnectionString,
+                $"SELECT COUNT(*) FROM [dbo].[__NewPMigrationHistory] WHERE [MigrationId] = N'{ModuleMigrationOne}';")));
         Assert.True(await SchemaObjectExistsAsync(
             applicationConnectionString,
             ModuleSchema,
@@ -576,6 +585,11 @@ public sealed class SqlServerPersistenceSmokeTests
         var failedHistory = await ReadAppliedMigrationsAsync(applicationConnectionString);
         Assert.Contains(ModuleMigrationOne, failedHistory);
         Assert.DoesNotContain(ModuleMigrationTwo, failedHistory);
+        Assert.Equal(
+            0,
+            Convert.ToInt32(await ExecuteScalarAsync(
+                applicationConnectionString,
+                $"SELECT COUNT(*) FROM [dbo].[__NewPMigrationHistory] WHERE [MigrationId] = N'{ModuleMigrationTwo}';")));
         Assert.False(await IndexExistsAsync(
             applicationConnectionString,
             ModuleSchema,
@@ -585,15 +599,63 @@ public sealed class SqlServerPersistenceSmokeTests
             applicationConnectionString,
             $"SELECT TOP (0) [Id], [Code] FROM [{ModuleSchema}].[Asset];");
 
-        // Candidate 失败时，仍处于旧 frontier 的 Active 可继续启动并读写。
+        // 当前 migration 已整体回滚，数据库仍精确位于旧 frontier，旧计划可继续启动。
         Assert.False(await RunMigrationsAsync(firstProvider));
         await ExecuteNonQueryAsync(applicationConnectionString, $"""
             DELETE FROM [{ModuleSchema}].[Asset] WHERE [Id] = N'asset-2';
             """);
 
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            UPDATE [dbo].[__NewPMigrationHistory]
+            SET [ContentDigest] = '{new string('f', 64)}'
+            WHERE [MigrationId] = N'{ModuleMigrationOne}';
+            """);
+        var digestMismatch = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => RunMigrationsAsync(secondProvider));
+        Assert.Equal(PersistenceHistoryFailureCodes.ContentMismatch, digestMismatch.FailureCode);
+        Assert.False(await IndexExistsAsync(
+            applicationConnectionString,
+            ModuleSchema,
+            "Asset",
+            "UX_Asset_Code"));
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            UPDATE [dbo].[__NewPMigrationHistory]
+            SET [ContentDigest] = '{new string('1', 64)}'
+            WHERE [MigrationId] = N'{ModuleMigrationOne}';
+            """);
+
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            UPDATE [dbo].[__NewPMigrationHistory]
+            SET [BundleDigest] = '{new string('f', 64)}'
+            WHERE [MigrationId] = N'{ModuleMigrationOne}';
+            """);
+        var bundleMismatch = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => RunMigrationsAsync(secondProvider));
+        Assert.Equal(PersistenceHistoryFailureCodes.BundleMismatch, bundleMismatch.FailureCode);
+        Assert.False(await IndexExistsAsync(
+            applicationConnectionString,
+            ModuleSchema,
+            "Asset",
+            "UX_Asset_Code"));
+        var firstStream = firstPlan.Streams.Single(static stream => !stream.IsLegacyBaseline);
+        var firstBundleDigest = UnifiedMigrationHistoryDigest.ComputeBundleDigest(
+            firstStream.ModuleId,
+            firstStream.Provider,
+            firstStream.Migrations[0]);
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            UPDATE [dbo].[__NewPMigrationHistory]
+            SET [BundleDigest] = '{firstBundleDigest}'
+            WHERE [MigrationId] = N'{ModuleMigrationOne}';
+            """);
+
         Assert.False(await RunMigrationsAsync(secondProvider));
         var completedHistory = await ReadAppliedMigrationsAsync(applicationConnectionString);
         Assert.Contains(ModuleMigrationTwo, completedHistory);
+        Assert.Equal(
+            1,
+            Convert.ToInt32(await ExecuteScalarAsync(
+                applicationConnectionString,
+                $"SELECT COUNT(*) FROM [dbo].[__NewPMigrationHistory] WHERE [MigrationId] = N'{ModuleMigrationTwo}';")));
         Assert.True(await IndexExistsAsync(
             applicationConnectionString,
             ModuleSchema,
@@ -603,11 +665,45 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.False(await RunMigrationsAsync(secondProvider));
         Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
 
-        // 新 frontier 生效后，旧 Active 只标记 database-ahead，绝不尝试 Down。
-        Assert.True(await RunMigrationsAsync(firstProvider));
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            DELETE FROM [dbo].[__EFMigrationsHistory]
+            WHERE [MigrationId] = N'{ModuleMigrationOne}';
+            """);
+        var nonPrefix = await Assert.ThrowsAsync<DatabaseOwnershipException>(
+            () => RunMigrationsAsync(secondProvider));
+        Assert.Equal(PersistenceHistoryFailureCodes.NonPrefix, nonPrefix.FailureCode);
+
+        const string unknownMigration = "20260809001500_UnknownAssetCatalog";
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+            VALUES (N'{unknownMigration}', N'10.0.0');
+            """);
+        var unknown = await Assert.ThrowsAsync<DatabaseOwnershipException>(
+            () => RunMigrationsAsync(secondProvider));
+        Assert.Equal(PersistenceHistoryFailureCodes.Unknown, unknown.FailureCode);
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            DELETE FROM [dbo].[__EFMigrationsHistory]
+            WHERE [MigrationId] = N'{unknownMigration}';
+            INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+            VALUES (N'{ModuleMigrationOne}', N'10.0.0');
+            """);
+        Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
+
+        // 新 frontier 生效后，旧计划必须在任何 DDL 前阻断，不能作为兼容快照 Ready。
+        var ahead = await Assert.ThrowsAsync<DatabaseOwnershipException>(() => RunMigrationsAsync(firstProvider));
+        Assert.Equal(PersistenceHistoryFailureCodes.FrontierMismatch, ahead.FailureCode);
         await ExecuteNonQueryAsync(
             applicationConnectionString,
             $"SELECT TOP (0) [Id], [Code] FROM [{ModuleSchema}].[Asset];");
+        Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
+
+        await ExecuteNonQueryAsync(applicationConnectionString, $"""
+            DELETE FROM [dbo].[__NewPMigrationHistory]
+            WHERE [MigrationId] = N'{ModuleMigrationOne}';
+            """);
+        var factMissing = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => RunMigrationsAsync(secondProvider));
+        Assert.Equal(PersistenceHistoryFailureCodes.FactMissing, factMissing.FailureCode);
         Assert.Equal(completedHistory, await ReadAppliedMigrationsAsync(applicationConnectionString));
     }
 
@@ -677,7 +773,9 @@ public sealed class SqlServerPersistenceSmokeTests
             "Partner.AssetCatalog",
             ModuleSchema);
         var models = TestPersistencePlan.Create().Models.Append(externalModel).ToArray();
-        var modelDigest = PersistenceModelDigest.Compute(models);
+        var planDigest = PersistenceModelDigest.Compute(models);
+        var firstModelDigest = PersistenceModelDigest.Compute([externalModel with { Indexes = [] }]);
+        var modelDigest = PersistenceModelDigest.Compute([externalModel]);
         var migrations = new List<CompiledMigrationStep>
         {
             new(
@@ -686,7 +784,7 @@ public sealed class SqlServerPersistenceSmokeTests
                 null,
                 new string('1', 64),
                 new string('0', 64),
-                modelDigest,
+                firstModelDigest,
                 "safe-expand")
         };
         if (includeSecondMigration)
@@ -696,13 +794,19 @@ public sealed class SqlServerPersistenceSmokeTests
                 ModuleMigrationTwo,
                 new string('1', 64),
                 new string('2', 64),
-                modelDigest,
+                firstModelDigest,
                 modelDigest,
                 "safe-expand"));
         }
 
         var assemblyPath = typeof(CreateAssetCatalogMigration).Assembly.Location;
         var assemblyBytes = File.ReadAllBytes(assemblyPath);
+        if (includeSecondMigration)
+        {
+            // PE overlay 不改变程序集内容或 MVID，但模拟向 migration assembly 追加内容后
+            // whole-assembly checksum 变化，验证旧 step fact 仍是有效前缀。
+            assemblyBytes = [.. assemblyBytes, 0];
+        }
         var stream = new ModuleMigrationStream(
             "Partner.AssetCatalog",
             PersistenceProvider.SqlServer,
@@ -716,13 +820,14 @@ public sealed class SqlServerPersistenceSmokeTests
         {
             AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
         };
+        var coreDigest = PersistenceModelDigest.Compute(TestPersistencePlan.Create().Models);
         var legacyStream = new ModuleMigrationStream(
             "platform.core",
             PersistenceProvider.SqlServer,
             EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
             "platform.core:legacy-baseline",
-            modelDigest,
-            modelDigest,
+            coreDigest,
+            coreDigest,
             LatestMigration,
             IsLegacyBaseline: true,
             []);
@@ -731,7 +836,7 @@ public sealed class SqlServerPersistenceSmokeTests
             new string('b', 64),
             new string('c', 64),
             PersistenceProvider.SqlServer,
-            modelDigest,
+            planDigest,
             [],
             models,
             [legacyStream, stream]);
@@ -788,13 +893,14 @@ public sealed class SqlServerPersistenceSmokeTests
         {
             AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
         };
+        var coreDigest = PersistenceModelDigest.Compute(coreModels);
         var legacyStream = new ModuleMigrationStream(
             "platform.core",
             PersistenceProvider.SqlServer,
             EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
             "platform.core:legacy-baseline",
-            modelDigest,
-            modelDigest,
+            coreDigest,
+            coreDigest,
             LatestMigration,
             IsLegacyBaseline: true,
             []);

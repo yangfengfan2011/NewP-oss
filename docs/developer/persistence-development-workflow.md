@@ -24,6 +24,9 @@
 - EF design-time/provider model 投影为长期只读 `Provider Target v1`；每个 migration 形成 `Provider Transition v1`。Create/Add/Rename/Alter 及键、外键、索引必须逐 facet 与 canonical `from`/`to` 匹配，不能只按操作类型放行。
 - Drop table/column/key/FK/index 无法从 EF operation 本身恢复完整旧 facet，新增迁移必须使用 `ProviderTransitionDescriptorCodec` 生成版本化 `NewP:ProviderTransition:FromDescriptor/v1` annotation；descriptor 的 owner、对象名、结构和列 ordinal 都会在连接前校验。不要手写 descriptor JSON。
 - 所有模块与 Legacy Baseline 共用统一 EF Migration History；模块不得维护私有 history 或从 Host 外回写迁移事实。
+- 模块 migration 会在同一事务内同时写入 `dbo.__EFMigrationsHistory` 与 `dbo.__NewPMigrationHistory`。后者保存 `unified-history/v1` 的 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 事实；任何未知版本、缺失事实、非有效前缀或事实不匹配都会在新增 DDL 前阻断 Host readiness。Legacy Baseline 只兼容已编译显式 frontier 内的既有 EF history，不执行 fact backfill。
+- manifest 的 `bundleChecksum` 是当前整份 assembly 的完整性校验，会在追加 migration 后变化；history 的 `BundleDigest` 是从不可变 migration step 链输入计算的稳定成员事实。新增 migration 不得复用、删除或改写旧 step 来规避任一校验。
+- history 中的 Provider Target/Transition fact 使用 #43 v1 canonical 算法的 owner-scoped 投影：保留 owner 表完整结构及 FK principal 物理引用，排除其他 owner 的表。它只服务历史前缀稳定性；执行端仍必须用 full Provider Target/Transition 对当前候选逐 operation 精确校验。
 - 每个 migration 的 DDL 与 history 写入共用事务；不能参与事务或无法证明模块归属的操作必须在执行前失败。
 - 业务默认值只属于 `form.create.defaultValue`，不得进入 Provider Target 或 migration 的数据库 `DEFAULT`。新增 nullable 列让旧行保留 `NULL`；新增 required 列要求表为空；nullable 收紧 required 要求存量值均非空。两类检查都在迁移锁内且在 DDL/history 前执行，禁止 migration 回填或自动降级 nullability。
 - 已冻结 migration 若历史上只携带 CLR 默认值，执行端仅在目标明确无 DEFAULT、值确为该 CLR 类型默认值且新增列 required 时通用消除该参数，并仍执行“表必须为空”前置检查；不得改写旧 migration/content digest 或添加模块特例。

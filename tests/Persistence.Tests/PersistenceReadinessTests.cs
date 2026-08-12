@@ -17,10 +17,10 @@ public sealed class PersistenceReadinessTests
         Assert.Equal(ReadinessState.Starting, starting.State);
         Assert.Equal(PersistenceReadinessFailureCodes.NotInitialized, starting.FailureCode);
 
-        state.MarkReady(databaseAhead: true);
+        state.MarkReady();
         var ready = await contributor.CheckAsync(CancellationToken.None);
         Assert.Equal(ReadinessState.Ready, ready.State);
-        Assert.Contains("database-ahead", ready.Diagnostic, StringComparison.Ordinal);
+        Assert.Equal("Persistence ready.", ready.Diagnostic);
     }
 
     [Fact]

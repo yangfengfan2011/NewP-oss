@@ -63,6 +63,12 @@ public static class PersistenceBootstrapExtensions
             try
             {
                 await migrationRunner.MigrateAsync(cancellationToken);
+                if (migrationRunner.DatabaseAhead)
+                {
+                    throw new PersistencePlanExecutionException(
+                        PersistenceHistoryFailureCodes.FrontierMismatch,
+                        "platform.persistence");
+                }
             }
             finally
             {
@@ -93,7 +99,7 @@ public static class PersistenceBootstrapExtensions
                 }
             }
 
-            readiness.MarkReady(migrationRunner.DatabaseAhead);
+            readiness.MarkReady();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -102,9 +108,13 @@ public static class PersistenceBootstrapExtensions
         }
         catch (Exception exception)
         {
-            readiness.MarkFailed(exception is DatabaseOwnershipException ownershipException
-                ? ownershipException.FailureCode
-                : PersistenceReadinessFailureCodes.BootstrapFailed);
+            readiness.MarkFailed(exception switch
+            {
+                DatabaseOwnershipException ownershipException => ownershipException.FailureCode,
+                PersistencePlanExecutionException executionException => executionException.FailureCode,
+                PersistenceHistoryException historyException => historyException.FailureCode,
+                _ => PersistenceReadinessFailureCodes.BootstrapFailed
+            });
             throw;
         }
     }

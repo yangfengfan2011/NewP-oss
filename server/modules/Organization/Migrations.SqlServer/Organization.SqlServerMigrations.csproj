@@ -17,6 +17,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+    <ProjectReference Include="..\OrganizationModule.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

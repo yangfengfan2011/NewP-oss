@@ -39,7 +39,16 @@ public sealed class EfProviderTargetSource(
             var tableName = entity.GetTableName()
                 ?? throw new InvalidOperationException($"Provider model '{definition.LogicalKey}' is not mapped to a table.");
             var storeObject = StoreObjectIdentifier.Table(tableName, schema);
-            var columns = definition.Fields
+            // SQL Server 的初始 migration 按 EF provider 的物理顺序生成列：主键在前，
+            // 其余属性按名称排序。只在 Provider Target 投影边界规范化，避免改变 authoring、
+            // DTO 或共享运行时模型的公共字段顺序。
+            IEnumerable<ICP.Platform.Modeling.Definitions.FieldDefinition> providerFields =
+                plan.Provider is PersistenceProvider.SqlServer
+                ? definition.Fields
+                    .OrderByDescending(static field => field.IsPrimaryKey)
+                    .ThenBy(static field => field.Name, StringComparer.Ordinal)
+                : definition.Fields;
+            var columns = providerFields
                 .Select(field => entity.FindProperty(field.Name)
                     ?? throw new InvalidOperationException($"Provider model is missing '{definition.LogicalKey}.{field.Name}'."))
                 .Select(property => ProjectColumn(property, storeObject, plan.Provider))

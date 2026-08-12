@@ -21,9 +21,10 @@ public sealed class DatabaseOwnershipPolicyTests
 
     private static readonly string[] KnownMigrations =
     [
-        "20260409154403_InitialCreate",
-        "20260416171103_AdoptPascalCaseNaming",
-        "20260808054041_AlignOrganizationSchemaDrift"
+        "20260812144154_PlatformFoundation",
+        "20260810033908_Identity_000001_Foundation",
+        "20260810033909_Authentication_000001_Foundation",
+        "20260812144235_Organization_000001_Foundation"
     ];
 
     [Fact]
@@ -60,7 +61,7 @@ public sealed class DatabaseOwnershipPolicyTests
             KnownMigrations);
 
         Assert.Equal(DatabaseOwnershipDecisionKind.Reject, decision.Kind);
-        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseUnowned, decision.FailureCode);
+        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired, decision.FailureCode);
     }
 
     [Fact]
@@ -305,19 +306,19 @@ public sealed class DatabaseOwnershipPolicyTests
     }
 
     [Fact]
-    public void Evaluate_MigrationHistoryWithoutPlatformCoreBaseline_Rejects()
+    public void Evaluate_MigrationHistoryFromPreviousBaseline_RequiresDatabaseRebuild()
     {
         var decision = DatabaseOwnershipPolicy.Evaluate(
             ExpectedMarker,
             new DatabaseOwnershipInspection(
                 ExpectedMarker,
                 1,
-                KnownMigrations[..2],
+                ["20260409154403_InitialCreate"],
                 Tables("ConfigItem")),
             KnownMigrations);
 
         Assert.Equal(DatabaseOwnershipDecisionKind.Reject, decision.Kind);
-        Assert.Equal(DatabaseOwnershipFailureCodes.LegacyBaselineInvalid, decision.FailureCode);
+        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired, decision.FailureCode);
     }
 
     private static IReadOnlySet<string> Tables(params string[] names) =>

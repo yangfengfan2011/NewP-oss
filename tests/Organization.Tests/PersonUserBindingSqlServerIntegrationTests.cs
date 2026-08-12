@@ -8,20 +8,17 @@ using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
-using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
-using ICP.Platform.Persistence.EfCore.SqlServerMigrations;
 using ICP.Platform.Persistence.EfCore.Transactions;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -30,36 +27,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION";
-
-    [Fact]
-    [Trait("Category", "SqlServerSmoke")]
-    public async Task SqlServer_MigrationDropsLegacyRowsWithoutMappingAndCreatesPermanentBindingColumns()
-    {
-        if (!ShouldRun()) return;
-        var fixture = await SqlFixture.CreateAsync("Migration");
-        await using (fixture)
-        {
-            await using (var context = CreateMigrationContext(fixture.ConnectionString))
-            {
-                var migrator = context.Database.GetService<IMigrator>();
-                await migrator.MigrateAsync(PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline);
-                await context.Database.ExecuteSqlRawAsync("""
-                    INSERT INTO [PersonUserLink] ([EID], [PersonId], [UserId], [LinkedAt], [LinkedBy], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy])
-                    VALUES (N'LegacyLink_1', N'LegacyPerson_1', N'LegacyUser_1', SYSUTCDATETIME(), N'legacy', SYSUTCDATETIME(), N'legacy', SYSUTCDATETIME(), N'legacy');
-                    """);
-            }
-
-            await using (var context = CreateOrganizationMigrationContext(fixture.ConnectionString))
-            {
-                await context.Database.GetService<IMigrator>().MigrateAsync();
-            }
-
-            Assert.Equal(0, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.tables WHERE [name] = N'PersonUserLink'"));
-            Assert.Equal(4, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] IN (N'UserEID', N'UserBoundAt', N'UserBoundBy', N'UserBindingReason')"));
-            Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] = N'Revision' AND [is_nullable] = 0"));
-            Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[dbo].[Person]') AND [name] = N'UX_Person_UserEID' AND [is_unique] = 1"));
-        }
-    }
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -305,38 +272,13 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
     private static bool ShouldRun() =>
         string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal);
 
-    private static EfPlatformDbContext CreateMigrationContext(string connectionString)
-    {
-        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
-            .UseSqlServer(connectionString, sql => sql.MigrationsAssembly(typeof(SqlServerDesignTimeDbContextFactory).Assembly.GetName().Name))
-            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
-            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        return new EfPlatformDbContext(
-            options,
-            PlatformPersistenceModelCatalog.AdaptSqlServerMigrationBaseline(PlatformCoreLegacyModelSource.GetDefinitions()));
-    }
-
-    private static EfPlatformDbContext CreateOrganizationMigrationContext(string connectionString)
-    {
-        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
-            .UseSqlServer(connectionString, sql => sql.MigrationsAssembly(typeof(OrganizationPermanentUserBinding).Assembly.GetName().Name))
-            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
-            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        var definitions = new ICP.Platform.Modules.Organization.Persistence.Descriptors.OrganizationModelMetadataProvider().GetDefinitions()
-            .Select(static model => model with { OwnerModuleId = "Organization", SchemaName = "dbo" })
-            .ToArray();
-        return new EfPlatformDbContext(options, definitions);
-    }
-
     private static EfPlatformDbContext CreateRuntimeContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseSqlServer(connectionString)
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
             .Options;
-        var definitions = PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions())
+        var definitions = PlatformPersistenceModelCatalog.AdaptPlatformCore(NonSqlPlatformBaselineModelSource.GetDefinitions())
             .Concat(IdentityModelDefinitions.All)
             .Concat(AuthenticationModelDefinitions.All)
             .ToArray();

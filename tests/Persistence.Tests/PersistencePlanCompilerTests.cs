@@ -352,21 +352,10 @@ public sealed class PersistencePlanCompilerTests
     }
 
     [Fact]
-    public void Compile_OrganizationInitialMigrationFromPinnedLegacyDigest_IsAccepted()
+    public void Compile_OrganizationInitialMigrationFromZeroDigest_IsAccepted()
     {
         using var package = TestPackage.Create("Organization", "Asset");
         var module = package.BuildBuiltInModule();
-        package.WriteLegacyCutover(
-            "20260810102141_Organization_000001_PermanentUserBinding",
-            OrganizationInitialFromModelDigest,
-            "dbo.PersonUserLink");
-        package.RewriteManifest(manifest =>
-        {
-            var migration = manifest["migrations"]!.AsArray()[0]!;
-            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
-            migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
-            migration["compatibility"] = "backup-restore-only";
-        });
         module = package.ResignBuiltInModule(module);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
@@ -375,16 +364,12 @@ public sealed class PersistencePlanCompilerTests
             PersistenceProvider.SqlServer);
 
         Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
-        var decision = Assert.IsType<VerifiedLegacyCutoverDecision>(
-            Assert.Single(Assert.Single(result.Plan!.Streams).Migrations).LegacyCutover);
-        Assert.Equal("built-in", decision.SourceKind);
-        Assert.Equal("Organization", decision.ModuleId);
-        Assert.Equal("dbo.PersonUserLink", Assert.Single(decision.DroppedPhysicalTables));
-        Assert.Matches("^[0-9a-f]{64}$", decision.DecisionDigest);
+        var stream = Assert.Single(result.Plan!.Streams);
+        var migration = Assert.Single(stream.Migrations);
+        Assert.Equal(new string('0', 64), migration.FromModelDigest);
+        Assert.Equal(stream.ModelDigest, migration.ToModelDigest);
+        Assert.Equal("safe-expand", migration.Compatibility);
         Assert.DoesNotContain(package.Root, Encoding.UTF8.GetString(result.Plan.CanonicalBytes), StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(typeof(VerifiedLegacyCutoverDecision).GetConstructors());
-        Assert.False(typeof(CompiledMigrationStep).GetProperty(nameof(CompiledMigrationStep.LegacyCutover))!.SetMethod!.IsPublic);
-        Assert.False(typeof(CompiledMigrationStep).GetProperty(nameof(CompiledMigrationStep.LegacyCutoverDigest))!.SetMethod!.IsPublic);
     }
 
     [Fact]
@@ -549,64 +534,6 @@ public sealed class PersistencePlanCompilerTests
 
         Assert.False(result.IsSuccess);
         Assert.Contains(result.Diagnostics, static item => item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
-    }
-
-    [Fact]
-    public async Task Execute_CompilerDecisionCannotBeReusedAfterMigrationTupleTampering()
-    {
-        using var package = TestPackage.Create("Organization", "Asset");
-        var module = package.BuildBuiltInModule();
-        package.WriteLegacyCutover(
-            "20260810102141_Organization_000001_PermanentUserBinding",
-            OrganizationInitialFromModelDigest,
-            "dbo.PersonUserLink");
-        package.RewriteManifest(manifest =>
-        {
-            var migration = manifest["migrations"]!.AsArray()[0]!;
-            migration["migrationId"] = "20260810102141_Organization_000001_PermanentUserBinding";
-            migration["fromModelDigest"] = OrganizationInitialFromModelDigest;
-            migration["compatibility"] = "backup-restore-only";
-        });
-        module = package.ResignBuiltInModule(module);
-        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
-            BuildCanonicalPlan(module),
-            PersistenceProvider.SqlServer);
-        var plan = Assert.IsType<CompiledPersistencePlan>(result.Plan);
-        var stream = Assert.Single(plan.Streams);
-        var step = Assert.Single(stream.Migrations);
-        var tamperedPlan = plan with
-        {
-            Streams =
-            [
-                stream with
-                {
-                    Migrations = [step with { FromModelDigest = new string('0', 64) }]
-                }
-            ]
-        };
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Persistence:Adapter"] = "EfCore",
-                ["Persistence:Provider"] = "SqlServer",
-                ["Persistence:AutoMigrate"] = "true",
-                ["ConnectionStrings:SqlServer"] =
-                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
-            })
-            .Build();
-        var services = new ServiceCollection();
-        services.AddEfCorePersistence(
-            configuration,
-            tamperedPlan,
-            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
-        await using var provider = services.BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var runner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
-
-        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
-            () => runner.MigrateAsync());
-
-        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
     }
 
     [Fact]
@@ -859,7 +786,7 @@ public sealed class PersistencePlanCompilerTests
         Assert.Equal(
             ["Identity", "Authentication"],
             result.Plan!.Streams.Select(static stream => stream.ModuleId));
-        Assert.DoesNotContain(result.Plan.Streams, static stream => stream.IsLegacyBaseline);
+        Assert.DoesNotContain(result.Plan.Streams, static stream => stream.IsPlatformStream);
     }
 
     [Theory]

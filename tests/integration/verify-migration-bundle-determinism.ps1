@@ -23,6 +23,12 @@ $primaryRevisionArgument = "-p:SourceRevisionId=$revision"
 $copyRevisionArgument = '-p:SourceRevisionId=0000000000000000000000000000000000000000'
 $projects = @(
     @{
+        Name = 'PlatformFoundation'
+        Project = 'server\platform-persistence-efcore.migrations.sqlserver\PlatformPersistence.EfCore.SqlServerMigrations.csproj'
+        Dll = 'server\platform-persistence-efcore.migrations.sqlserver\bin\Debug\net10.0\PlatformPersistence.EfCore.SqlServerMigrations.dll'
+        Manifest = 'server\platform-persistence-efcore.migrations.sqlserver\PlatformFoundation.SqlServerMigrations.json'
+    },
+    @{
         Name = 'Organization'
         Project = 'server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj'
         Dll = 'server\modules\Organization\Migrations.SqlServer\bin\Debug\net10.0\Organization.SqlServerMigrations.dll'

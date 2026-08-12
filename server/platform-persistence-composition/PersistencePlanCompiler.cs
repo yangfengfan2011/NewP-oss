@@ -52,7 +52,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             CompileModule(module, provider, models, streams, diagnostics);
         }
 
-        AddLegacyBaselineStream(modules, provider, models, streams);
+        AddPlatformStream(modules, provider, models, streams, diagnostics);
         AddGlobalConflictDiagnostics(models, streams, diagnostics);
         var orderedDiagnostics = diagnostics
             .OrderBy(static item => item.Code, StringComparer.Ordinal)
@@ -70,7 +70,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             .ToArray();
         var dependencyDepths = BuildDependencyDepths(modules);
         var orderedStreams = streams
-            .OrderBy(static stream => stream.IsLegacyBaseline ? 0 : 1)
+            .OrderBy(static stream => stream.IsPlatformStream ? 0 : 1)
             .ThenBy(stream => dependencyDepths.GetValueOrDefault(stream.ModuleId, int.MaxValue))
             .ThenBy(static stream => stream.ModuleId, StringComparer.Ordinal)
             .ToArray();
@@ -89,7 +89,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 stream.BundleChecksum,
                 stream.ModelDigest,
                 stream.ExpectedFrontier,
-                stream.IsLegacyBaseline,
+                stream.IsPlatformStream,
                 stream.Migrations
             })
         };
@@ -254,36 +254,40 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         CompileBundle(module, provider, matchingBundles[0], modelDigest, streams, diagnostics);
     }
 
-    private static void AddLegacyBaselineStream(
+    private static void AddPlatformStream(
         CanonicalModulePlan modules,
         PersistenceProvider provider,
         IReadOnlyList<ModelDefinition> models,
-        List<ModuleMigrationStream> streams)
+        List<ModuleMigrationStream> streams,
+        List<PersistencePlanDiagnostic> diagnostics)
     {
         var builtInOwners = modules.Modules
             .Where(static module => module.Provenance.AuthenticatesBuiltIn(module))
             .Select(static module => module.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
         var moduleOwnedMigrationStreams = streams
-            .Where(static stream => !stream.IsLegacyBaseline)
+            .Where(static stream => !stream.IsPlatformStream)
             .Select(static stream => stream.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
-        var legacyModels = models
+        var platformModels = models
             .Where(model =>
                 builtInOwners.Contains(model.OwnerModuleId)
                 && !moduleOwnedMigrationStreams.Contains(model.OwnerModuleId))
             .ToArray();
-        if (legacyModels.Length == 0)
+        if (platformModels.Length == 0)
         {
             return;
         }
 
-        var modelDigest = PersistenceModelDigest.Compute(legacyModels);
+        var modelDigest = PersistenceModelDigest.Compute(platformModels);
+        if (provider is PersistenceProvider.SqlServer)
+        {
+            AddSqlServerPlatformFoundation(modelDigest, streams, diagnostics);
+            return;
+        }
+
         var (assemblyName, frontier) = provider switch
         {
-            PersistenceProvider.SqlServer => (
-                "PlatformPersistence.EfCore.SqlServerMigrations",
-                PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline),
             PersistenceProvider.Oracle => (
                 "PlatformPersistence.EfCore.OracleMigrations",
                 "20260428145243_AlignModelMetadataEntityKeys"),
@@ -296,12 +300,64 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             "platform.core",
             provider,
             assemblyName,
-            "platform.core:legacy-baseline",
+            "platform.core:provider-baseline",
             modelDigest,
             modelDigest,
             frontier,
-            IsLegacyBaseline: true,
+            IsPlatformStream: true,
             Array.Empty<CompiledMigrationStep>()));
+    }
+
+    private static void AddSqlServerPlatformFoundation(
+        string modelDigest,
+        List<ModuleMigrationStream> streams,
+        List<PersistencePlanDiagnostic> diagnostics)
+    {
+        const string moduleId = "platform.foundation";
+        var assemblyPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "PlatformPersistence.EfCore.SqlServerMigrations.dll");
+        var manifestPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "PlatformFoundation.SqlServerMigrations.json");
+        try
+        {
+            var assemblyBytes = File.ReadAllBytes(assemblyPath);
+            var manifest = JsonSerializer.Deserialize<MigrationManifest>(
+                File.ReadAllBytes(manifestPath),
+                ManifestJsonOptions)
+                ?? throw new InvalidOperationException("Platform foundation migration manifest is empty.");
+            ValidateManifest(
+                moduleId,
+                PersistenceProvider.SqlServer,
+                manifest,
+                assemblyBytes,
+                manifestPath,
+                modelDigest);
+            var migrations = CompileManifestSteps(manifest);
+            streams.Add(new ModuleMigrationStream(
+                moduleId,
+                PersistenceProvider.SqlServer,
+                assemblyPath,
+                manifestPath,
+                manifest.BundleChecksum,
+                modelDigest,
+                migrations[^1].MigrationId,
+                IsPlatformStream: true,
+                migrations)
+            {
+                AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+            });
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Add(new PersistencePlanDiagnostic(
+                "PERSISTENCE_PLATFORM_FOUNDATION_INVALID",
+                moduleId,
+                PersistenceProvider.SqlServer.ToString(),
+                manifestPath,
+                exception.Message));
+        }
     }
 
     private void CompileBundle(
@@ -325,29 +381,14 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 manifestArtifact.Bytes.Span,
                 ManifestJsonOptions)
                 ?? throw new InvalidOperationException("Migration manifest is empty.");
-            var legacyCutover = ValidateManifest(
-                module,
+            ValidateManifest(
+                module.ModuleId,
                 provider,
                 manifest,
-                assemblyArtifact,
+                assemblyArtifact.Bytes.Span,
                 manifestArtifact.DisplayPath,
                 modelDigest);
-
-            var migrations = manifest.Migrations
-                .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
-                .Select((migration, index) => new CompiledMigrationStep(
-                    migration.Sequence,
-                    migration.MigrationId,
-                    migration.PreviousContentDigest,
-                    migration.ContentDigest,
-                    migration.FromModelDigest,
-                    migration.ToModelDigest,
-                    migration.Compatibility)
-                {
-                    LegacyCutover = index == 0 ? legacyCutover : null,
-                    LegacyCutoverDigest = index == 0 ? legacyCutover?.DecisionDigest : null
-                })
-                .ToArray();
+            var migrations = CompileManifestSteps(manifest);
             streams.Add(new ModuleMigrationStream(
                 module.ModuleId,
                 provider,
@@ -356,7 +397,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 manifest.BundleChecksum,
                 modelDigest,
                 migrations[^1].MigrationId,
-                IsLegacyBaseline: false,
+                IsPlatformStream: false,
                 migrations)
             {
                 AssemblyImage = new VerifiedArtifactImage(assemblyArtifact.Bytes.Span)
@@ -382,35 +423,48 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
     }
 
-    private static VerifiedLegacyCutoverDecision? ValidateManifest(
-        CanonicalModulePlanModule module,
+    private static CompiledMigrationStep[] CompileManifestSteps(MigrationManifest manifest) =>
+        manifest.Migrations
+            .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
+            .Select(static migration => new CompiledMigrationStep(
+                migration.Sequence,
+                migration.MigrationId,
+                migration.PreviousContentDigest,
+                migration.ContentDigest,
+                migration.FromModelDigest,
+                migration.ToModelDigest,
+                migration.Compatibility))
+            .ToArray();
+
+    private static void ValidateManifest(
+        string moduleId,
         PersistenceProvider provider,
         MigrationManifest manifest,
-        ResolvedArtifact assemblyArtifact,
+        ReadOnlySpan<byte> assemblyBytes,
         string manifestPath,
         string modelDigest)
     {
-        if (!string.Equals(manifest.ModuleId, module.ModuleId, StringComparison.Ordinal)
+        if (!string.Equals(manifest.ModuleId, moduleId, StringComparison.Ordinal)
             || !string.Equals(manifest.Provider, provider.ToString(), StringComparison.OrdinalIgnoreCase))
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MIGRATION_OWNER_MISMATCH",
-                $"Migration manifest '{manifestPath}' does not match {module.ModuleId}/{provider}.");
+                $"Migration manifest '{manifestPath}' does not match {moduleId}/{provider}.");
         }
 
-        var checksum = Convert.ToHexStringLower(SHA256.HashData(assemblyArtifact.Bytes.Span));
+        var checksum = Convert.ToHexStringLower(SHA256.HashData(assemblyBytes));
         if (!string.Equals(checksum, manifest.BundleChecksum, StringComparison.Ordinal))
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_BUNDLE_CHECKSUM_MISMATCH",
-                $"Migration bundle checksum mismatch for '{module.ModuleId}'.");
+                $"Migration bundle checksum mismatch for '{moduleId}'.");
         }
 
         if (!string.Equals(manifest.ModelDigest, modelDigest, StringComparison.Ordinal))
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MODEL_MISMATCH",
-                $"Migration manifest model digest does not match compiled model '{module.ModuleId}'.");
+                $"Migration manifest model digest does not match compiled model '{moduleId}'.");
         }
 
         var migrations = manifest.Migrations
@@ -420,7 +474,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MIGRATION_REQUIRED",
-                $"Migration stream '{module.ModuleId}' is empty.");
+                $"Migration stream '{moduleId}' is empty.");
         }
 
         var duplicateMigrationId = migrations
@@ -430,37 +484,20 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         {
             throw new PersistencePlanValidationException(
                 PersistenceMigrationFailureCodes.MigrationIdConflict,
-                $"Migration id '{duplicateMigrationId}' is repeated in module stream '{module.ModuleId}'.",
+                $"Migration id '{duplicateMigrationId}' is repeated in module stream '{moduleId}'.",
                 duplicateMigrationId);
         }
 
         var firstMigration = migrations[0];
-        var declaredCutover = manifest.LegacyCutover;
-        var isTrustedLegacyCutover = declaredCutover is not null
-            && module.Provenance.AuthenticatesBuiltIn(module)
-            && string.Equals(declaredCutover.MigrationId, firstMigration.MigrationId, StringComparison.Ordinal)
-            && string.Equals(declaredCutover.Compatibility, firstMigration.Compatibility, StringComparison.Ordinal)
-            && string.Equals(declaredCutover.FromModelDigest, firstMigration.FromModelDigest, StringComparison.Ordinal)
-            && string.Equals(declaredCutover.Compatibility, "backup-restore-only", StringComparison.Ordinal)
-            && declaredCutover.DroppedPhysicalTables.Count > 0
-            && declaredCutover.DroppedPhysicalTables.All(static table => PhysicalObjectPattern().IsMatch(table))
-            && declaredCutover.DroppedPhysicalTables.Distinct(StringComparer.OrdinalIgnoreCase).Count()
-                == declaredCutover.DroppedPhysicalTables.Count;
         var startsFromZeroDigest = string.Equals(
             firstMigration.FromModelDigest,
             new string('0', 64),
             StringComparison.Ordinal);
-        var backupRestoreMigrations = migrations
-            .Where(static migration => migration.Compatibility == "backup-restore-only")
-            .ToArray();
-        if ((declaredCutover is not null && !isTrustedLegacyCutover)
-            || (!startsFromZeroDigest && !isTrustedLegacyCutover)
-            || (backupRestoreMigrations.Length > 0
-                && (!isTrustedLegacyCutover || backupRestoreMigrations.Length != 1)))
+        if (!startsFromZeroDigest)
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MIGRATION_CHAIN_INVALID",
-                $"Migration stream '{module.ModuleId}' does not start from its trusted initial model digest.");
+                $"Migration stream '{moduleId}' must start from the zero model digest.");
         }
 
         string? previousDigest = null;
@@ -478,11 +515,11 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 || !DigestPattern().IsMatch(migration.ContentDigest)
                 || !DigestPattern().IsMatch(migration.FromModelDigest)
                 || !DigestPattern().IsMatch(migration.ToModelDigest)
-                || (migration.Compatibility is not "safe-expand" and not "backup-restore-only"))
+                || migration.Compatibility is not "safe-expand")
             {
                 throw new PersistencePlanValidationException(
                     "PERSISTENCE_MIGRATION_CHAIN_INVALID",
-                    $"Migration stream '{module.ModuleId}' is not linear and immutable at sequence '{migration.Sequence}'.");
+                    $"Migration stream '{moduleId}' is not linear and immutable at sequence '{migration.Sequence}'.");
             }
 
             previousDigest = migration.ContentDigest;
@@ -492,31 +529,8 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         {
             throw new PersistencePlanValidationException(
                 "PERSISTENCE_MODEL_MISMATCH",
-                $"Migration frontier does not target the compiled model digest for '{module.ModuleId}'.");
+                $"Migration frontier does not target the compiled model digest for '{moduleId}'.");
         }
-
-        if (!isTrustedLegacyCutover)
-        {
-            return null;
-        }
-
-        // 破坏性权限来自内建模块自有 manifest，但只有受信编译器能够把它签入运行计划。
-        return new VerifiedLegacyCutoverDecision(
-            module.Provenance.SourceKind,
-            module.ModuleId,
-            provider,
-            assemblyArtifact.DisplayPath,
-            manifestPath,
-            manifest.BundleChecksum,
-            modelDigest,
-            firstMigration.Sequence,
-            firstMigration.MigrationId,
-            firstMigration.PreviousContentDigest,
-            firstMigration.ContentDigest,
-            firstMigration.FromModelDigest,
-            firstMigration.ToModelDigest,
-            firstMigration.Compatibility,
-            declaredCutover!.DroppedPhysicalTables);
     }
 
     private static ResolvedArtifact? ResolveContainedArtifact(
@@ -703,23 +717,13 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.CultureInvariant)]
     private static partial Regex NonSchemaCharacterPattern();
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]
-    private static partial Regex PhysicalObjectPattern();
-
     private sealed record MigrationManifest(
         string SchemaVersion,
         string Provider,
         string ModuleId,
         string ModelDigest,
         string BundleChecksum,
-        IReadOnlyList<MigrationManifestStep> Migrations,
-        LegacyMigrationCutoverManifest? LegacyCutover = null);
-
-    private sealed record LegacyMigrationCutoverManifest(
-        string MigrationId,
-        string FromModelDigest,
-        string Compatibility,
-        IReadOnlyList<string> DroppedPhysicalTables);
+        IReadOnlyList<MigrationManifestStep> Migrations);
 
     private sealed record MigrationManifestStep(
         string Sequence,

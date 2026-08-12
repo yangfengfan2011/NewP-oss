@@ -6,12 +6,12 @@ using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 namespace ICP.Platform.Persistence.Composition;
 
 /// <summary>
-/// 冻结的 platform.core 统一 migrations 设计期模型来源；仅供 legacy baseline、工具与迁移测试使用。
+/// Oracle 与 MySQL 既有平台迁移程序集的设计期模型来源。
 /// </summary>
-public static class PlatformCoreLegacyModelSource
+public static class NonSqlPlatformBaselineModelSource
 {
     /// <summary>
-    /// 仅为现有统一 migrations、设计期工具和迁移测试聚合冻结模型。
+    /// 仅为尚未重建基线的非 SQL Server provider 聚合现有模型。
     /// </summary>
     public static IReadOnlyList<ModelDefinition> GetDefinitions() =>
         new IModelDefinitionProvider[]

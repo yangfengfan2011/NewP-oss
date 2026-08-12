@@ -5,25 +5,23 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class SqlServerMigrationContractTests
 {
     [Fact]
-    public void LatestMigration_RenamesProtocolFieldsAndBackfillsPersonNameBeforeDrop()
+    public void CurrentInitialMigrations_ContainNoDefaultsOrRawDataOperations()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var migrationPath = Path.Combine(
-            repositoryRoot,
-            "server",
-            "platform-persistence-efcore.migrations.sqlserver",
-            "Migrations",
-            "20260808054041_AlignOrganizationSchemaDrift.cs");
-        var source = File.ReadAllText(migrationPath);
+        var migrationPaths = new[]
+        {
+            Path.Combine(repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver", "Migrations", "20260812144154_PlatformFoundation.cs"),
+            Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations", "20260812144235_Organization_000001_Foundation.cs")
+        };
 
-        Assert.Contains("UPDATE [Person] SET [ENAME] = [Name]", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("computedColumnSql:", source, StringComparison.Ordinal);
-        Assert.Contains("newName: \"ECODE\"", source, StringComparison.Ordinal);
-        Assert.Contains("newName: \"ENAME\"", source, StringComparison.Ordinal);
-
-        var backfill = source.IndexOf("UPDATE [Person] SET [ENAME] = [Name]", StringComparison.Ordinal);
-        var dropLegacyPersonName = source.IndexOf("migrationBuilder.DropColumn(", backfill, StringComparison.Ordinal);
-        Assert.True(backfill >= 0 && dropLegacyPersonName > backfill);
+        foreach (var migrationPath in migrationPaths)
+        {
+            var source = File.ReadAllText(migrationPath);
+            Assert.DoesNotContain("defaultValue", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("defaultValueSql", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("migrationBuilder.Sql", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("SqlOperation", source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

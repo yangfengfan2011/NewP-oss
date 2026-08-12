@@ -55,7 +55,7 @@ _Avoid_: safe-expand only、metadata diff SQL、按环境隐式裁剪操作
 _Avoid_: 可安全忽略的前缀、自动回滚、激活成功
 
 **统一迁移历史（Unified Migration History）**：
-同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。`dbo.__EFMigrationsHistory` 保存全局执行顺序；模块 migration 还在同一事务中向 `dbo.__NewPMigrationHistory` 写入版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 摘要。所有模块 migration stream 与 Legacy Baseline 共用该历史，Migration ID 在整份计划中全局唯一；模块不拥有私有 history。Legacy Baseline 仅以已编译显式 frontier 兼容既有 EF history，不补写事实。
+同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。`dbo.__EFMigrationsHistory` 保存全局执行顺序；每个 migration 还在同一事务中向 `dbo.__NewPMigrationHistory` 写入版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 摘要。所有模块 migration stream 与 Platform Foundation Stream 共用该历史，Migration ID 在整份计划中全局唯一；模块不拥有私有 history。SQL Server 只接受空 catalog 或由当前已编译计划创建的有效 history 前缀，不补写、兼容或改写旧 history。
 _Avoid_: 模块 history table、活动快照状态、手工回写记录
 
 **迁移包完整性摘要（Bundle Checksum）与步骤成员摘要（Bundle Digest）**：
@@ -74,10 +74,10 @@ _Avoid_: 正常待执行迁移、自动修复计划、第二个结构写入入�
 在内部隐藏特定数据库的迁移锁、EF migrator 配置、统一 history reconciliation 和事务执行的实现 seam。首个外部插件门禁只支持 SQL Server；不支持的 provider 必须在 DDL 前失败。
 _Avoid_: 插件接口、Host 分支、通用 SQL 生成器
 
-**Legacy Baseline**：
-现有统一 migrations assembly 和 `dbo` 映射形成的受保护历史起点。它可以通过显式、一次性的兼容适配接入新计划，但不得被静默重写或作为新外部模块的默认路径。
-_Avoid_: 清空 history、重新生成初始迁移、永久兼容模式
+**平台基础迁移流（Platform Foundation Stream）**：
+SQL Server 从零摘要开始的平台自有 migration stream，只创建当前尚未拥有模块 migration bundle 的内建模型；当前 owner 是 Authorization 与 ConfigCenter，不包含 Organization。它与模块迁移流使用相同的 manifest、完整性、Provider Target/Transition、统一 history、事务和锁校验，不享有特殊执行授权。
+_Avoid_: 旧 history 兼容器、平台内核拥有模块私有表、仅凭 migration id 放行
 
-**已验证旧基线切换（Verified Legacy Cutover）**：
-内建模块在自己拥有的 migration manifest 中冻结一次性 legacy 摘要、首迁移和旧物理对象，用于证明从 Legacy Baseline 进入模块迁移流的归属与链路。它不再是破坏性操作的特殊授权；所有完整 Up migrations 都必须通过相同的归属、迁移链和摘要校验。
-_Avoid_: 平台内核硬编码模块私有表、外部插件自报归属、仅凭 migration id 放行
+**空数据库基线（Empty Database Baseline）**：
+SQL Server 唯一受支持的重建起点。catalog 可以包含 NewP ownership marker，但不得包含业务表或 migration history；旧 history、已有平台业务表或其他非空业务结构必须在新增 DDL 前稳定拒绝并要求删除重建。
+_Avoid_: 自动升级旧库、删除旧对象后继续、数据回填、永久兼容模式

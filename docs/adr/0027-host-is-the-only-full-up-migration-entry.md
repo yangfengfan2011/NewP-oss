@@ -13,8 +13,8 @@ NewP 当前尚未接入需要独立发布保护的真实生产数据库。继续
 - 模块继续拥有自己的 model 元数据和不可变线性 migration stream；现有 model 元数据结构及其 authoring 真源地位不变。Host 不拥有模块业务模型，也不自行发现、补写或排序模块迁移。
 - “完整 `Up`”表示执行已确认迁移中面向目标 frontier 的全部 EF Up 操作。Migration 可以定义 `Down`，但 Host 不自动执行 `Down`，也不通过 metadata diff 或临时 SQL 修复数据库。
 - 完整操作集不绕过平台校验。Provider、模块归属、全局唯一 Migration ID、线性迁移链、bundle/content/model/from-to digest、期望 frontier 和程序集完整性必须在 DDL 前通过；无法证明归属的操作仍然拒绝。
-- 所有模块和 Legacy Baseline 共用一份由 Platform Persistence 维护的 EF Migration History。模块不得创建私有 history，也不得绕过 Host 回写迁移事实。
-- `dbo.__EFMigrationsHistory` 继续记录全局执行顺序；模块 migration 同一事务写入 `dbo.__NewPMigrationHistory` 的版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀、Provider Target/Transition 事实。Legacy Baseline 只按已编译显式 frontier 兼容既有 EF history，不回填或改写旧 history。
+- 所有模块迁移流和 Platform Foundation Stream 共用一份由 Platform Persistence 维护的 EF Migration History。模块不得创建私有 history，也不得绕过 Host 回写迁移事实。
+- `dbo.__EFMigrationsHistory` 继续记录全局执行顺序；每个 migration 同一事务写入 `dbo.__NewPMigrationHistory` 的版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀、Provider Target/Transition 事实。SQL Server 只接受空 catalog 或由当前已编译计划创建的有效 history 前缀；旧 history 和预建业务结构在新增 DDL 前拒绝，不回填或改写。
 - history `BundleDigest` 是从 owner/provider 与不可变 migration step 链输入计算的稳定 membership fact，不是会随 assembly 追加 migration 而变化的 whole-assembly `BundleChecksum`；后者仍在候选计划编译及连接前严格校验当前 artifact 完整性。
 - history 的 Provider Target/Transition fact 沿用 #43 的 v1 canonical 摘要算法，但只投影 migration owner 的完整表结构；owner 表上的列、key、index、FK 及 FK principal 物理引用全部保留。该投影仅保证追加其他 owner 时旧历史稳定，不替代连接前对当前候选 full Provider Target/Transition 的精确 operation 校验。
 - 每个 migration 的 DDL 与对应 history 写入必须处于同一事务；不能参与事务的命令不得进入该执行链。全局迁移锁继续串行化并发 Host 的 schema 写入。
@@ -31,4 +31,4 @@ NewP 当前尚未接入需要独立发布保护的真实生产数据库。继续
 - history 不是已编译迁移链的有效前缀、数据库超前于目标 frontier、摘要或归属不一致时，Host 必须在新增 DDL 前失败并保持 Not Ready，不自动降级、回退或改写 history。
 - 某个 migration 失败时，该 migration 的 DDL 与 history 写入一并回滚；此前已经提交的 migration 不自动回退。
 - 如果迁移已经提交而后续候选激活失败，Host 不得假定旧活动快照仍与数据库兼容。系统保持 Not Ready，恢复方式是发布修正后的前向 migration，或使用已验证的数据库恢复流程，而不是自动执行 `Down`。
-- 实施验收必须覆盖空数据库、已有受支持基线、包含 Drop/Rename/Alter 的待执行 Up、并发迁移锁、失败重试、history/frontier/digest 不一致、Host 重启，以及只读一致性检查不会产生 schema 写入。
+- 实施验收必须覆盖空数据库、由当前计划创建的有效 history 前缀、包含 Drop/Rename/Alter 的待执行 Up、并发迁移锁、失败重试、history/frontier/digest 不一致、Host 重启，以及只读一致性检查不会产生 schema 写入。

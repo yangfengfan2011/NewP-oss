@@ -42,12 +42,56 @@ public sealed class ProviderTargetTests
 
         Assert.Equal(ProviderTargetSchemaVersions.TargetV1, target.SchemaVersion);
         Assert.Equal(64, ProviderTargetDigest.Compute(target).Length);
-        var person = Assert.Single(target.Tables, static table => table.Name == "Person");
-        Assert.Equal("platform.core", person.OwnerModuleId);
-        Assert.Null(Assert.Single(person.Columns, static column => column.Name == "EmploymentStatus").DefaultValue);
-        Assert.Null(Assert.Single(person.Columns, static column => column.Name == "IsEnabled").DefaultValue);
-        Assert.Null(Assert.Single(person.Columns, static column => column.Name == "Revision").DefaultValue);
+        var role = Assert.Single(target.Tables, static table => table.Name == "Role");
+        Assert.Equal("Authorization", role.OwnerModuleId);
+        Assert.Null(Assert.Single(role.Columns, static column => column.Name == "IsEnabled").DefaultValue);
+        Assert.Null(Assert.Single(role.Columns, static column => column.Name == "CreatedAt").DefaultValue);
+        Assert.Null(Assert.Single(role.Columns, static column => column.Name == "UpdatedAt").DefaultValue);
         Assert.Equal(modelDigestV1, plan.PlanDigest);
+    }
+
+    [Fact]
+    public async Task Read_SqlServerOrdersEveryPhysicalTableLikeEfWithoutReorderingCompiledModels()
+    {
+        var plan = TestPersistencePlan.CreateCurrentSqlServer();
+        var originalFieldOrder = plan.Models.ToDictionary(
+            static model => model.LogicalKey,
+            static model => model.Fields.Select(static field => field.Name).ToArray(),
+            StringComparer.Ordinal);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["Persistence:AutoMigrate"] = "false",
+                ["ConnectionStrings:SqlServer"] =
+                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddEfCorePersistence(
+            configuration,
+            plan,
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var target = scope.ServiceProvider.GetRequiredService<IProviderTargetSource>().Read();
+
+        foreach (var model in plan.Models)
+        {
+            var table = Assert.Single(target.Tables, candidate =>
+                string.Equals(candidate.OwnerModuleId, model.OwnerModuleId, StringComparison.Ordinal)
+                && string.Equals(candidate.Name, model.TableName, StringComparison.Ordinal));
+            var expectedProviderOrder = model.Fields
+                .OrderByDescending(static field => field.IsPrimaryKey)
+                .ThenBy(static field => field.Name, StringComparer.Ordinal)
+                .Select(static field => field.Name)
+                .ToArray();
+
+            Assert.Equal(expectedProviderOrder, table.Columns.Select(static column => column.Name));
+            Assert.Equal(originalFieldOrder[model.LogicalKey], model.Fields.Select(static field => field.Name));
+        }
     }
 
     [Fact]
@@ -392,7 +436,7 @@ public sealed class ProviderTargetTests
         new string('a', 64),
         new string('b', 64),
         migrationId,
-        IsLegacyBaseline: false,
+        IsPlatformStream: false,
         [Step(migrationId)]);
 
     private static CompiledMigrationStep Step(string migrationId) => new(

@@ -99,7 +99,7 @@ public sealed class RequiredBuiltinReadinessContributor : IReadinessContributor
 
     private bool HasRequiredMigration(string moduleId, string expectedFrontier) =>
         _persistencePlan.Streams.Any(stream =>
-            !stream.IsLegacyBaseline
+            !stream.IsPlatformStream
             && string.Equals(stream.ModuleId, moduleId, StringComparison.Ordinal)
             && stream.Provider == PersistenceProvider.SqlServer
             && string.Equals(stream.ExpectedFrontier, expectedFrontier, StringComparison.Ordinal));

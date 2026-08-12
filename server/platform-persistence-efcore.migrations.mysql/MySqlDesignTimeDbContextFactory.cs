@@ -21,6 +21,6 @@ public sealed class MySqlDesignTimeDbContextFactory : IDesignTimeDbContextFactor
 
         return new EfPlatformDbContext(
             optionsBuilder.Options,
-            PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions()));
+            PlatformPersistenceModelCatalog.AdaptPlatformCore(NonSqlPlatformBaselineModelSource.GetDefinitions()));
     }
 }

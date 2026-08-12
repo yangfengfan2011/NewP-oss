@@ -7,7 +7,7 @@ public static class DatabaseOwnershipFailureCodes
     public const string MarkerInvalid = "PERSISTENCE_DATABASE_MARKER_INVALID";
     public const string MigrationHistoryMissing = "PERSISTENCE_MIGRATION_HISTORY_MISSING";
     public const string MigrationHistoryInvalid = "PERSISTENCE_MIGRATION_HISTORY_INVALID";
-    public const string LegacyBaselineInvalid = "PERSISTENCE_LEGACY_BASELINE_INVALID";
+    public const string DatabaseRebuildRequired = "PERSISTENCE_DATABASE_REBUILD_REQUIRED";
 }
 
 /// <summary>

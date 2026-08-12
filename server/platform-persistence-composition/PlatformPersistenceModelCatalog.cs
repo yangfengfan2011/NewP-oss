@@ -32,26 +32,21 @@ public static class PlatformPersistenceModelCatalog
     }
 
     /// <summary>
-    /// 为 SQL Server 统一迁移保留已冻结模型的历史表形态。
+    /// 为 SQL Server 平台基础迁移生成当前物理模型。设计期实体名保持未限定，
+    /// 但列可空性和其他 facet 必须与当前运行时目标一致。
     /// </summary>
-    public static IReadOnlyList<ModelDefinition> AdaptSqlServerMigrationBaseline(
-        IEnumerable<ModelDefinition> legacyDefinitions)
+    public static IReadOnlyList<ModelDefinition> AdaptSqlServerPlatformFoundation(
+        IEnumerable<ModelDefinition> definitions)
     {
-        ArgumentNullException.ThrowIfNull(legacyDefinitions);
-        return legacyDefinitions
+        ArgumentNullException.ThrowIfNull(definitions);
+        return definitions
             .Select(static definition =>
             {
                 return definition with
                 {
-                    // 空 owner 是设计期兼容标记：让 EF 继续使用冻结快照中的裸实体名，
-                    // 避免 #31 的新增迁移顺带重写全部历史模型。
+                    // 设计期 migration 使用裸实体名，运行时归属仍由 Compiled Plan 保留。
                     OwnerModuleId = string.Empty,
                     SchemaName = string.Empty,
-                    Fields = definition.Fields
-                        .Select(static field => field.Name is "CreatedBy" or "UpdatedBy"
-                            ? field with { Required = false }
-                            : field)
-                        .ToArray(),
                     ForeignKeys = definition.ForeignKeys
                         .Select(static foreignKey => foreignKey with
                         {

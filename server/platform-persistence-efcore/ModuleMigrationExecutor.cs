@@ -65,24 +65,24 @@ internal sealed class ModuleMigrationExecutor(
 
     private IReadOnlyList<ValidatedMigrationStream> CompileValidatedStreams()
     {
-        var externalStreams = plan.Streams
-            .Where(static stream => !stream.IsLegacyBaseline)
+        var executableStreams = plan.Streams
+            .Where(static stream => stream.Migrations.Count > 0)
             .ToArray();
-        if (externalStreams.Length == 0)
+        if (executableStreams.Length == 0)
         {
             return [];
         }
 
         if (plan.Provider is not PersistenceProvider.SqlServer)
         {
-            var stream = externalStreams[0];
+            var stream = executableStreams[0];
             throw Failure(
                 PersistenceMigrationFailureCodes.ProviderUnsupported,
                 stream);
         }
 
-        var assemblyContext = new VerifiedMigrationAssemblyLoadContext(externalStreams);
-        var validatedStreams = externalStreams
+        var assemblyContext = new VerifiedMigrationAssemblyLoadContext(executableStreams);
+        var validatedStreams = executableStreams
             .Select(stream => ValidateStream(stream, assemblyContext))
             .ToArray();
         return GenerateSqlCommands(validatedStreams);
@@ -92,37 +92,38 @@ internal sealed class ModuleMigrationExecutor(
         IReadOnlyList<ValidatedMigrationStream> streams)
     {
         var entries = new List<CompiledMigrationHistoryEntry>();
-        var legacyStream = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline);
-        if (legacyStream is not null)
+        var compatibilityPlatformStream = plan.Streams.SingleOrDefault(static stream =>
+            stream.IsPlatformStream && stream.Migrations.Count == 0);
+        if (compatibilityPlatformStream is not null)
         {
             var legacyMigrations = dbContext.Database.GetMigrations().ToArray();
             var frontierIndex = Array.FindIndex(
                 legacyMigrations,
                 migrationId => string.Equals(
                     migrationId,
-                    legacyStream.ExpectedFrontier,
+                    compatibilityPlatformStream.ExpectedFrontier,
                     StringComparison.Ordinal));
             if (frontierIndex < 0)
             {
                 throw new PersistenceHistoryException(
                     PersistenceHistoryFailureCodes.FrontierMismatch,
-                    legacyStream.ExpectedFrontier);
+                    compatibilityPlatformStream.ExpectedFrontier);
             }
 
             foreach (var migrationId in legacyMigrations[..(frontierIndex + 1)])
             {
-                // Legacy Baseline 没有版本化 fact；这些合成字段只用于稳定锚定后续
-                // module 前缀，不能依赖会随模块切出 baseline 而变化的当前模型摘要。
-                var bundleDigest = Hash($"legacy-bundle/v1|{plan.Provider}|{migrationId}");
-                var contentDigest = Hash($"legacy-content|{migrationId}");
-                var modelDigest = Hash($"legacy-model/v1|{plan.Provider}|{migrationId}");
-                var providerTargetDigest = Hash($"legacy-provider-target/v1|{plan.Provider}|{migrationId}");
-                var transitionDigest = Hash($"legacy-transition|{plan.Provider}|{migrationId}");
+                // 非 SQL Server provider 尚未重建基线，继续使用既有只读合成事实；
+                // SQL Server 平台基础流拥有完整版本化 migration step，不进入这里。
+                var bundleDigest = Hash($"platform-bundle/v1|{plan.Provider}|{migrationId}");
+                var contentDigest = Hash($"platform-content|{migrationId}");
+                var modelDigest = Hash($"platform-model/v1|{plan.Provider}|{migrationId}");
+                var providerTargetDigest = Hash($"platform-provider-target/v1|{plan.Provider}|{migrationId}");
+                var transitionDigest = Hash($"platform-transition|{plan.Provider}|{migrationId}");
                 entries.Add(new CompiledMigrationHistoryEntry(
                     0,
                     plan.HistoryVersion,
                     migrationId,
-                    legacyStream.ModuleId,
+                    compatibilityPlatformStream.ModuleId,
                     bundleDigest,
                     contentDigest,
                     modelDigest,
@@ -182,17 +183,19 @@ internal sealed class ModuleMigrationExecutor(
         }
 
         await ReconcileHistoryAsync(cancellationToken);
-        var legacyStream = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline);
+        var compatibilityPlatformStream = plan.Streams.SingleOrDefault(static stream =>
+            stream.IsPlatformStream && stream.Migrations.Count == 0);
         var appliedMigrations = (await dbContext.Database
                 .GetAppliedMigrationsAsync(cancellationToken))
             .ToHashSet(StringComparer.Ordinal);
 
-        // platform.core 以冻结 baseline 模型运行现有迁移程序集，避免外部模块模型被 EF
-        // 误判为该程序集缺失的 migration；外部模型只由其自己的编译迁移流推进。
-        if (legacyStream is not null && !appliedMigrations.Contains(legacyStream.ExpectedFrontier))
+        // Oracle/MySQL 尚未重建其平台流，继续通过既有 provider migrations assembly 推进；
+        // SQL Server 平台基础流和模块流均走上面的版本化执行器。
+        if (compatibilityPlatformStream is not null
+            && !appliedMigrations.Contains(compatibilityPlatformStream.ExpectedFrontier))
         {
             var moduleOwnedMigrationIds = plan.Streams
-                .Where(static stream => !stream.IsLegacyBaseline)
+                .Where(static stream => !stream.IsPlatformStream)
                 .Select(static stream => stream.ModuleId)
                 .ToHashSet(StringComparer.Ordinal);
             var coreModels = plan.Models
@@ -203,7 +206,7 @@ internal sealed class ModuleMigrationExecutor(
             {
                 PlanDigest = coreDigest,
                 Models = coreModels,
-                Streams = plan.Streams.Where(static stream => stream.IsLegacyBaseline).ToArray()
+                Streams = plan.Streams.Where(static stream => stream.IsPlatformStream).ToArray()
             };
             var coreOptionsBuilder = new DbContextOptionsBuilder<EfPlatformDbContext>();
             EfCoreProviderOptions.Configure(
@@ -330,7 +333,8 @@ internal sealed class ModuleMigrationExecutor(
 
         var factsById = facts.ToDictionary(static fact => fact.MigrationId, StringComparer.Ordinal);
         var expectedById = expected.ToDictionary(static fact => fact.MigrationId, StringComparer.Ordinal);
-        var legacyOwner = plan.Streams.SingleOrDefault(static stream => stream.IsLegacyBaseline)?.ModuleId;
+        var compatibilityPlatformOwner = plan.Streams.SingleOrDefault(static stream =>
+            stream.IsPlatformStream && stream.Migrations.Count == 0)?.ModuleId;
         var applied = new List<CompiledMigrationHistoryEntry>(migrationIds.Count);
         for (var position = 0; position < migrationIds.Count; position++)
         {
@@ -341,12 +345,14 @@ internal sealed class ModuleMigrationExecutor(
                 continue;
             }
 
-            if (expectedById.TryGetValue(migrationId, out var legacy)
-                && string.Equals(legacy.OwnerModuleId, legacyOwner, StringComparison.Ordinal))
+            if (expectedById.TryGetValue(migrationId, out var compatibilityFact)
+                && string.Equals(
+                    compatibilityFact.OwnerModuleId,
+                    compatibilityPlatformOwner,
+                    StringComparison.Ordinal))
             {
-                // Legacy EF migrations 早于版本化执行事实。显式编译并排序的 ID 前缀是
-                // 唯一兼容路径；这里不向数据库补写 fact。
-                applied.Add(legacy);
+                // 仅非 SQL Server 的既有 provider stream 缺少版本化事实；不补写数据库。
+                applied.Add(compatibilityFact);
                 continue;
             }
 
@@ -728,16 +734,6 @@ internal sealed class ModuleMigrationExecutor(
                 PersistenceMigrationFailureCodes.MigrationIdConflict,
                 stream,
                 duplicateMigrationId);
-        }
-
-        var mismatchedCutover = stream.Migrations.FirstOrDefault(step =>
-            step.LegacyCutover is not null && !step.LegacyCutover.Matches(stream, step));
-        if (mismatchedCutover is not null)
-        {
-            throw Failure(
-                PersistenceMigrationFailureCodes.OperationForbidden,
-                stream,
-                mismatchedCutover.MigrationId);
         }
 
         var assembly = LoadMigrationAssembly(stream, assemblyContext);

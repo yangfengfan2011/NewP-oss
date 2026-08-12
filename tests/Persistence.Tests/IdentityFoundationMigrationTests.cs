@@ -14,11 +14,56 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class IdentityFoundationMigrationTests
 {
     [Fact]
-    public void SqlServerLegacyFrontier_RemainsFrozenBeforeOrganizationOwnedMigrations()
+    public void SqlServerPlatformFoundationMigration_StartsFromZeroAndExcludesOrganization()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var migrationDirectory = Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "Migrations");
+        var migrationPath = Assert.Single(Directory.GetFiles(
+            migrationDirectory,
+            "*_PlatformFoundation.cs"));
+        var source = File.ReadAllText(migrationPath);
+
+        foreach (var table in new[] { "ConfigItem", "ValueListItem", "Role", "Permission", "RolePermission", "UserRole" })
+        {
+            Assert.Contains($"name: \"{table}\"", source, StringComparison.Ordinal);
+        }
+
+        foreach (var table in new[] { "Company", "Department", "Person", "Position" })
+        {
+            Assert.DoesNotContain($"name: \"{table}\"", source, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("defaultValue", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValueSql", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PlatformFoundationModelDigest_IsPinnedToAuthorizationAndConfigCenter()
+    {
+        var definitions = PlatformFoundationModelSource.GetDefinitions()
+            .Select(static definition => definition with
+            {
+                OwnerModuleId = definition.OwnerModuleId,
+                SchemaName = "dbo"
+            })
+            .ToArray();
+
+        Assert.Equal(
+            "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+            PersistenceModelDigest.Compute(definitions));
+    }
+
+    [Fact]
+    public void SqlServerPlatformFoundationFrontier_IsCurrentEmptyDatabaseMigration()
     {
         Assert.Equal(
-            "20260808054041_AlignOrganizationSchemaDrift",
-            PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline);
+            "20260812144154_PlatformFoundation",
+            PlatformCoreMigrationFrontiers.SqlServerPlatformFoundation);
     }
 
     [Fact]
@@ -38,11 +83,13 @@ public sealed class IdentityFoundationMigrationTests
     }
 
     [Fact]
-    public void LegacyDesignModel_ExcludesModuleOwnedIdentityFoundationModels()
+    public void PlatformFoundationDesignModel_ContainsOnlyAuthorizationAndConfigCenter()
     {
-        var definitions = PlatformCoreLegacyModelSource.GetDefinitions();
+        var definitions = PlatformFoundationModelSource.GetDefinitions();
 
-        Assert.DoesNotContain(definitions, static model => model.OwnerModuleId is "Identity" or "Authentication");
+        Assert.Equal(
+            ["ConfigItem", "Permission", "Role", "RolePermission", "UserRole", "ValueListItem"],
+            definitions.Select(static model => model.Name).Order(StringComparer.Ordinal));
 
         var adapted = PlatformPersistenceModelCatalog.AdaptPlatformCore(definitions);
         Assert.All(
@@ -51,16 +98,16 @@ public sealed class IdentityFoundationMigrationTests
     }
 
     [Fact]
-    public void SqlServerMigrationDesignModel_PreservesFrozenLegacyShape()
+    public void SqlServerMigrationDesignModel_UsesCurrentFoundationShape()
     {
-        var adapted = PlatformPersistenceModelCatalog.AdaptSqlServerMigrationBaseline(
-            PlatformCoreLegacyModelSource.GetDefinitions());
+        var adapted = PlatformPersistenceModelCatalog.AdaptSqlServerPlatformFoundation(
+            PlatformFoundationModelSource.GetDefinitions());
 
-        var legacyModel = Assert.Single(adapted, static model => model.Name == "Company");
-        Assert.Equal(string.Empty, legacyModel.OwnerModuleId);
-        Assert.Equal(string.Empty, legacyModel.SchemaName);
-        Assert.False(Assert.Single(legacyModel.Fields, static field => field.Name == "CreatedBy").Required);
-        Assert.False(Assert.Single(legacyModel.Fields, static field => field.Name == "UpdatedBy").Required);
+        var model = Assert.Single(adapted, static model => model.Name == "Role");
+        Assert.Equal(string.Empty, model.OwnerModuleId);
+        Assert.Equal(string.Empty, model.SchemaName);
+        Assert.True(Assert.Single(model.Fields, static field => field.Name == "CreatedBy").Required);
+        Assert.True(Assert.Single(model.Fields, static field => field.Name == "UpdatedBy").Required);
 
         Assert.All(
             adapted.SelectMany(static model => model.ForeignKeys),
@@ -102,6 +149,7 @@ public sealed class IdentityFoundationMigrationTests
     public void SqlServerMigrationManifests_PinBuiltBundleAndSourceDigests()
     {
         var repositoryRoot = FindRepositoryRoot();
+        AssertPlatformFoundationManifest(repositoryRoot);
         AssertManifest(
             repositoryRoot,
             "Identity",
@@ -122,6 +170,7 @@ public sealed class IdentityFoundationMigrationTests
     {
         var repositoryRoot = FindRepositoryRoot();
 
+        AssertPlatformFoundationPathMap(repositoryRoot);
         AssertPathMap(
             repositoryRoot,
             "Identity",
@@ -144,24 +193,44 @@ public sealed class IdentityFoundationMigrationTests
             "verify-migration-bundle-determinism.ps1")));
     }
 
+    private static void AssertPlatformFoundationPathMap(string repositoryRoot)
+    {
+        var projectPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "PlatformPersistence.EfCore.SqlServerMigrations.csproj");
+        var project = File.ReadAllText(projectPath);
+
+        Assert.Contains(
+            "$(MSBuildProjectDirectory)=/_/PlatformPersistence.EfCore.SqlServerMigrations",
+            project,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
-    public void OrganizationMigrations_AreOwnedByModuleAndUseBackupOnlyRollback()
+    public void OrganizationMigration_StartsFromZeroAndCreatesCurrentSchemaWithoutLegacyCutover()
     {
         var repositoryRoot = FindRepositoryRoot();
         var coreDirectory = Path.Combine(repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver", "Migrations");
         var organizationDirectory = Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations");
 
         Assert.Empty(Directory.GetFiles(coreDirectory, "*_Organization_*.cs"));
-        var sources = Directory.GetFiles(organizationDirectory, "*.cs").OrderBy(static path => path, StringComparer.Ordinal).ToArray();
-        Assert.Equal(2, sources.Length);
-        var source = string.Join('\n', sources.Select(File.ReadAllText));
-        Assert.Contains("DropTable(name: \"PersonUserLink\")", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("SELECT", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("INSERT", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("UPDATE", source, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(2, Count(source, "protected override void Down"));
+        var sourcePath = Assert.Single(Directory.GetFiles(organizationDirectory, "*_Foundation.cs"));
+        var source = File.ReadAllText(sourcePath);
+        foreach (var table in new[] { "Company", "Department", "Person", "Position" })
+        {
+            Assert.Contains($"name: \"{table}\"", source, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("PersonUserLink", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValueSql", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SqlOperation", source, StringComparison.Ordinal);
+        Assert.Equal(1, Count(source, "protected override void Down"));
         Assert.DoesNotContain("DropColumn", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("CreateTable", source, StringComparison.Ordinal);
+        Assert.Equal(4, Count(source, "migrationBuilder.CreateTable"));
     }
 
     private static void AssertOrganizationManifest(string repositoryRoot)
@@ -169,44 +238,57 @@ public sealed class IdentityFoundationMigrationTests
         var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
-        var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        var legacyCutover = root.GetProperty("legacyCutover");
-        Assert.Equal(2, migrations.Length);
-        Assert.Equal(migrations[0].GetProperty("migrationId").GetString(), legacyCutover.GetProperty("migrationId").GetString());
-        Assert.Equal(migrations[0].GetProperty("fromModelDigest").GetString(), legacyCutover.GetProperty("fromModelDigest").GetString());
-        Assert.Equal("backup-restore-only", legacyCutover.GetProperty("compatibility").GetString());
-        Assert.Equal("dbo.PersonUserLink", Assert.Single(legacyCutover.GetProperty("droppedPhysicalTables").EnumerateArray()).GetString());
+        var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
+        Assert.False(root.TryGetProperty("legacyCutover", out _));
+        Assert.Equal("20260812144235_Organization_000001_Foundation", migration.GetProperty("migrationId").GetString());
+        Assert.Equal(new string('0', 64), migration.GetProperty("fromModelDigest").GetString());
+        Assert.Equal("safe-expand", migration.GetProperty("compatibility").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), migration.GetProperty("toModelDigest").GetString());
+        Assert.Equal(JsonValueKind.Null, migration.GetProperty("previousContentDigest").ValueKind);
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(OrganizationPermanentUserBinding).Assembly.Location))));
+            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location))));
 
-        var sourceNames = new[]
-        {
-            "20260810102141_Organization_000001_PermanentUserBinding.cs",
-            "20260810111523_Organization_000002_PersonLifecycleRevision.cs"
-        };
-        for (var index = 0; index < migrations.Length; index++)
-        {
-            var sourcePath = Path.Combine(
-                repositoryRoot,
-                "server",
-                "modules",
-                "Organization",
-                "Migrations.SqlServer",
-                "Migrations",
-                sourceNames[index]);
-            Assert.Equal(
-                migrations[index].GetProperty("contentDigest").GetString(),
-                Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
-        }
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
+            "Migrations",
+            "20260812144235_Organization_000001_Foundation.cs");
+        Assert.Equal(
+            migration.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+    }
 
+    private static void AssertPlatformFoundationManifest(string repositoryRoot)
+    {
+        var manifestPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "PlatformFoundation.SqlServerMigrations.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = document.RootElement;
+        var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-persistence-efcore.migrations.sqlserver",
+            "Migrations",
+            "20260812144154_PlatformFoundation.cs");
+
+        Assert.Equal("platform.foundation", root.GetProperty("moduleId").GetString());
+        Assert.Equal(new string('0', 64), migration.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), migration.GetProperty("toModelDigest").GetString());
         Assert.Equal(
-            migrations[0].GetProperty("contentDigest").GetString(),
-            migrations[1].GetProperty("previousContentDigest").GetString());
+            root.GetProperty("bundleChecksum").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(
+                typeof(ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations.PlatformFoundation).Assembly.Location))));
         Assert.Equal(
-            migrations[0].GetProperty("toModelDigest").GetString(),
-            migrations[1].GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), migrations[1].GetProperty("toModelDigest").GetString());
+            migration.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
     }
 
     private static void AssertManifest(

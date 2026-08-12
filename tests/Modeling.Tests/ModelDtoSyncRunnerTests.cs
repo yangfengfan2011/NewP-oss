@@ -10,7 +10,7 @@ public class ModelDtoSyncRunnerTests
     [Fact]
     public void PlatformPersistenceModelCatalog_ReturnsProviderProjectedDefinitionsOnly()
     {
-        var definitions = PlatformCoreLegacyModelSource.GetDefinitions();
+        var definitions = NonSqlPlatformBaselineModelSource.GetDefinitions();
 
         Assert.Contains(definitions, item => item.Name == "Role");
         Assert.Contains(definitions, item => item.Name == "Company");

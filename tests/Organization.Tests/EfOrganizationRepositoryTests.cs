@@ -180,7 +180,7 @@ public class EfOrganizationRepositoryTests
     public void PlatformPersistenceModelCatalog_IncludesProviderProjectedOrganizationDefinitions()
     {
         var referencedAssemblies = typeof(PlatformPersistenceModelCatalog).Assembly.GetReferencedAssemblies();
-        var definitions = PlatformPersistenceModelCatalog.AdaptPlatformCore(PlatformCoreLegacyModelSource.GetDefinitions());
+        var definitions = PlatformPersistenceModelCatalog.AdaptPlatformCore(NonSqlPlatformBaselineModelSource.GetDefinitions());
 
         Assert.Contains(referencedAssemblies, assembly => assembly.Name == "OrganizationModule");
         Assert.Contains(definitions, definition => definition.Name == "Company");
@@ -197,7 +197,9 @@ public class EfOrganizationRepositoryTests
         var sqlServerSnapshot = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "server",
-            "platform-persistence-efcore.migrations.sqlserver",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
             "Migrations",
             "EfPlatformDbContextModelSnapshot.cs"));
         var mySqlSnapshot = File.ReadAllText(Path.Combine(
@@ -228,9 +230,9 @@ public class EfOrganizationRepositoryTests
         }
 
         var sqlServerPerson = ExtractPersonSection(sqlServerSnapshot);
-        Assert.Contains("modelBuilder.Entity(\"PersonUserLink\"", sqlServerSnapshot, StringComparison.Ordinal);
-        Assert.DoesNotContain("b.Property<string>(\"UserEID\")", sqlServerPerson, StringComparison.Ordinal);
-        Assert.DoesNotContain("b.Property<long>(\"Revision\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.DoesNotContain("PersonUserLink", sqlServerSnapshot, StringComparison.Ordinal);
+        Assert.Contains("b.Property<string>(\"UserEID\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains("b.Property<long>(\"Revision\")", sqlServerPerson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -240,7 +242,9 @@ public class EfOrganizationRepositoryTests
         var sqlServerSnapshot = File.ReadAllText(Path.Combine(
             repositoryRoot,
             "server",
-            "platform-persistence-efcore.migrations.sqlserver",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
             "Migrations",
             "EfPlatformDbContextModelSnapshot.cs"));
         var mySqlSnapshot = File.ReadAllText(Path.Combine(
@@ -275,13 +279,9 @@ public class EfOrganizationRepositoryTests
     }
 
     [Fact]
-    public void MigrationFiles_BackfillPersonUserLinkEidBeforePrimaryKeySwitch()
+    public void NonSqlMigrationFiles_BackfillPersonUserLinkEidBeforePrimaryKeySwitch()
     {
         var repositoryRoot = GetRepositoryRoot();
-        var sqlServerMigration = ReadMigration(
-            repositoryRoot,
-            "platform-persistence-efcore.migrations.sqlserver",
-            "AlignModelMetadataEntityKeys");
         var mySqlMigration = ReadMigration(
             repositoryRoot,
             "platform-persistence-efcore.migrations.mysql",
@@ -291,27 +291,26 @@ public class EfOrganizationRepositoryTests
             "platform-persistence-efcore.migrations.oracle",
             "AlignModelMetadataEntityKeys");
 
-        AssertPersonUserLinkBackfillPrecedesKeySwitch(sqlServerMigration, "SET [EID] = [PersonId]");
         AssertPersonUserLinkBackfillPrecedesKeySwitch(mySqlMigration, "SET `EID` = `PersonId`");
         AssertPersonUserLinkBackfillPrecedesKeySwitch(oracleMigration, @"SET \""EID\"" = \""PersonId\""");
     }
 
     [Fact]
-    public void PermanentBindingMigration_DropsLegacyTableWithoutReadingOrMigratingRows()
+    public void SqlServerFoundationMigration_CreatesCurrentBindingWithoutDataOperationsOrDefaults()
     {
         var migration = ReadMigration(
             GetRepositoryRoot(),
             Path.Combine("modules", "Organization", "Migrations.SqlServer"),
-            "Organization_000001_PermanentUserBinding");
+            "Organization_000001_Foundation");
 
-        Assert.Contains("DropTable(name: \"PersonUserLink\")", migration, StringComparison.Ordinal);
-        Assert.Contains("name: \"UserEID\"", migration, StringComparison.Ordinal);
+        Assert.Contains("UserEID = table.Column<string>", migration, StringComparison.Ordinal);
         Assert.Contains("name: \"UX_Person_UserEID\"", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("PersonUserLink", migration, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT", migration, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("INSERT", migration, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("UPDATE", migration, StringComparison.OrdinalIgnoreCase);
-        var down = migration[migration.IndexOf("protected override void Down", StringComparison.Ordinal)..];
-        Assert.DoesNotContain("CreateTable", down, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("SqlOperation", migration, StringComparison.Ordinal);
     }
 
     private static EfPlatformDbContext CreateDbContext()
@@ -356,9 +355,15 @@ public class EfOrganizationRepositoryTests
     private static string ExtractModelSection(string snapshot, string modelName)
     {
         var marker = $"modelBuilder.Entity(\"{modelName}\", b =>";
+        var ownedMarker = $"modelBuilder.Entity(\"Organization/{modelName}\", b =>";
         const string nextMarker = "modelBuilder.Entity(\"";
 
         var start = snapshot.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            marker = ownedMarker;
+            start = snapshot.IndexOf(marker, StringComparison.Ordinal);
+        }
         Assert.True(start >= 0, $"快照中缺少 {modelName} 实体定义。");
 
         var next = snapshot.IndexOf(nextMarker, start + marker.Length, StringComparison.Ordinal);

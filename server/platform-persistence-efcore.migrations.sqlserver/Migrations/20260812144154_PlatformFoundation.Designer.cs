@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
 {
     [DbContext(typeof(EfPlatformDbContext))]
-    [Migration("20260808054041_AlignOrganizationSchemaDrift")]
-    partial class AlignOrganizationSchemaDrift
+    [Migration("20260812144154_PlatformFoundation")]
+    partial class PlatformFoundation
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,66 +24,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("Company", b =>
-                {
-                    b.Property<string>("EID")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("EID");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CreatedBy");
-
-                    b.Property<string>("ECODE")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ECODE");
-
-                    b.Property<string>("ENAME")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ENAME");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("bit")
-                        .HasColumnName("IsEnabled");
-
-                    b.Property<string>("SortOrder")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("SortOrder");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("UpdatedAt");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("UpdatedBy");
-
-                    b.HasKey("EID");
-
-                    b.HasIndex("ECODE")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Company_ECODE");
-
-                    b.HasIndex("EID")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Company_EID");
-
-                    b.ToTable("Company", (string)null);
-                });
 
             modelBuilder.Entity("ConfigItem", b =>
                 {
@@ -97,6 +37,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
@@ -153,6 +94,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
@@ -170,82 +112,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.ToTable("ConfigItem", (string)null);
                 });
 
-            modelBuilder.Entity("Department", b =>
-                {
-                    b.Property<string>("EID")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("EID");
-
-                    b.Property<string>("CompanyId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CompanyId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CreatedBy");
-
-                    b.Property<string>("ECODE")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ECODE");
-
-                    b.Property<string>("ENAME")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ENAME");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("bit")
-                        .HasColumnName("IsEnabled");
-
-                    b.Property<string>("ParentDepartmentId")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("ParentDepartmentId");
-
-                    b.Property<string>("SortOrder")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("SortOrder");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("UpdatedAt");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("UpdatedBy");
-
-                    b.HasKey("EID");
-
-                    b.HasIndex("CompanyId")
-                        .HasDatabaseName("IX_Department_Company");
-
-                    b.HasIndex("EID")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Department_EID");
-
-                    b.HasIndex("ParentDepartmentId")
-                        .HasDatabaseName("IX_Department_Parent");
-
-                    b.HasIndex("CompanyId", "ParentDepartmentId", "ECODE")
-                        .HasDatabaseName("IX_Department_Company_Parent_ECODE");
-
-                    b.ToTable("Department", (string)null);
-                });
-
             modelBuilder.Entity("Permission", b =>
                 {
                     b.Property<string>("EID")
@@ -258,6 +124,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
@@ -294,6 +161,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
@@ -314,220 +182,6 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.ToTable("Permission", (string)null);
                 });
 
-            modelBuilder.Entity("Person", b =>
-                {
-                    b.Property<string>("EID")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("EID");
-
-                    b.Property<string>("CompanyId")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CompanyId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CreatedBy");
-
-                    b.Property<string>("DepartmentId")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("DepartmentId");
-
-                    b.Property<string>("ENAME")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ENAME");
-
-                    b.Property<string>("EmploymentStatus")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("EmploymentStatus");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("bit")
-                        .HasColumnName("IsEnabled");
-
-                    b.Property<string>("PersonNo")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("PersonNo");
-
-                    b.Property<string>("PositionId")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("PositionId");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("UpdatedAt");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("UpdatedBy");
-
-                    b.HasKey("EID");
-
-                    b.HasIndex("EID")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Person_EID");
-
-                    b.ToTable("Person", (string)null);
-                });
-
-            modelBuilder.Entity("PersonUserLink", b =>
-                {
-                    b.Property<string>("EID")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("EID");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CreatedBy");
-
-                    b.Property<DateTime>("LinkedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("LinkedAt");
-
-                    b.Property<string>("LinkedBy")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("LinkedBy");
-
-                    b.Property<string>("PersonId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("PersonId");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("UpdatedAt");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("UpdatedBy");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("UserId");
-
-                    b.HasKey("EID");
-
-                    b.HasIndex("EID")
-                        .IsUnique()
-                        .HasDatabaseName("UX_PersonUserLink_EID");
-
-                    b.HasIndex("PersonId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_PersonUserLink_Person");
-
-                    b.HasIndex("UserId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_PersonUserLink_User");
-
-                    b.ToTable("PersonUserLink", (string)null);
-                });
-
-            modelBuilder.Entity("Position", b =>
-                {
-                    b.Property<string>("EID")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("EID");
-
-                    b.Property<string>("CompanyId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CompanyId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CreatedBy");
-
-                    b.Property<string>("DepartmentId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("DepartmentId");
-
-                    b.Property<string>("ECODE")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ECODE");
-
-                    b.Property<string>("ENAME")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ENAME");
-
-                    b.Property<string>("EmploymentStatus")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("EmploymentStatus");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("bit")
-                        .HasColumnName("IsEnabled");
-
-                    b.Property<string>("SortOrder")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("SortOrder");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("UpdatedAt");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("UpdatedBy");
-
-                    b.HasKey("EID");
-
-                    b.HasIndex("CompanyId")
-                        .HasDatabaseName("IX_Position_Company");
-
-                    b.HasIndex("DepartmentId")
-                        .HasDatabaseName("IX_Position_Department");
-
-                    b.HasIndex("EID")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Position_EID");
-
-                    b.ToTable("Position", (string)null);
-                });
-
             modelBuilder.Entity("Role", b =>
                 {
                     b.Property<string>("EID")
@@ -540,6 +194,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
@@ -573,6 +228,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
@@ -602,6 +258,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
@@ -632,6 +289,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
@@ -670,6 +328,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
@@ -685,6 +344,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
@@ -723,6 +383,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
@@ -748,6 +409,7 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnName("UpdatedAt");
 
                     b.Property<string>("UpdatedBy")
+                        .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");

@@ -21,7 +21,7 @@ public sealed class SqlServerDesignTimeDbContextFactory : IDesignTimeDbContextFa
 
         return new EfPlatformDbContext(
             optionsBuilder.Options,
-            PlatformPersistenceModelCatalog.AdaptSqlServerMigrationBaseline(
-                PlatformCoreLegacyModelSource.GetDefinitions()));
+            PlatformPersistenceModelCatalog.AdaptSqlServerPlatformFoundation(
+                PlatformFoundationModelSource.GetDefinitions()));
     }
 }

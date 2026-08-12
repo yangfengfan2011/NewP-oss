@@ -7,16 +7,6 @@ namespace ICP.Platform.Persistence.Ownership;
 /// </summary>
 public static class DatabaseOwnershipPolicy
 {
-    private const string PascalCaseMigration = "20260416171103_AdoptPascalCaseNaming";
-
-    private static readonly IReadOnlySet<string> LegacyCoreTables = new HashSet<string>(
-        ["config_items", "auth_roles", "auth_permissions", "auth_role_permissions", "auth_user_roles"],
-        StringComparer.OrdinalIgnoreCase);
-
-    private static readonly IReadOnlySet<string> CurrentCoreTables = new HashSet<string>(
-        ["ConfigItem", "Role", "Permission", "RolePermission", "UserRole"],
-        StringComparer.OrdinalIgnoreCase);
-
     public static DatabaseOwnershipDecision Evaluate(
         DatabaseOwnershipMarker expectedMarker,
         DatabaseOwnershipInspection inspection,
@@ -30,7 +20,7 @@ public static class DatabaseOwnershipPolicy
         {
             return inspection.UserTableCount == 0
                 ? new DatabaseOwnershipDecision(DatabaseOwnershipDecisionKind.EstablishMarker)
-                : Reject(DatabaseOwnershipFailureCodes.DatabaseUnowned);
+                : Reject(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired);
         }
 
         if (inspection.Marker != expectedMarker)
@@ -42,21 +32,13 @@ public static class DatabaseOwnershipPolicy
         {
             return inspection.UserTableCount == 0
                 ? new DatabaseOwnershipDecision(DatabaseOwnershipDecisionKind.Allow)
-                : Reject(DatabaseOwnershipFailureCodes.MigrationHistoryMissing);
+                : Reject(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired);
         }
 
         var historyDecision = ValidateMigrationHistory(inspection.AppliedMigrations, knownMigrations);
         if (historyDecision.Kind is DatabaseOwnershipDecisionKind.Reject)
         {
             return historyDecision;
-        }
-
-        var requiredTables = inspection.AppliedMigrations.Contains(PascalCaseMigration, StringComparer.Ordinal)
-            ? CurrentCoreTables
-            : LegacyCoreTables;
-        if (!requiredTables.IsSubsetOf(inspection.ExistingTables))
-        {
-            return Reject(DatabaseOwnershipFailureCodes.LegacyBaselineInvalid);
         }
 
         return historyDecision;
@@ -90,6 +72,11 @@ public static class DatabaseOwnershipPolicy
             if (knownMigrations.Contains(appliedMigration, StringComparer.Ordinal))
             {
                 return Reject(PersistenceHistoryFailureCodes.NonPrefix);
+            }
+
+            if (index == 0)
+            {
+                return Reject(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired);
             }
 
             return Reject(index >= knownMigrations.Count

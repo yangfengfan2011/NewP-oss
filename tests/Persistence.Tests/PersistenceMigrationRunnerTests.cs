@@ -465,7 +465,7 @@ public sealed class PersistenceMigrationRunnerTests
             Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assemblyPath))),
             modelDigest,
             migrationId,
-            IsLegacyBaseline: false,
+            IsPlatformStream: false,
             [
                 new CompiledMigrationStep(
                     "000001",
@@ -535,7 +535,7 @@ public sealed class PersistenceMigrationRunnerTests
             Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assemblyPath))),
             modelDigest,
             migrationId,
-            IsLegacyBaseline: false,
+            IsPlatformStream: false,
             [
                 new CompiledMigrationStep(
                     "000001",
@@ -603,7 +603,7 @@ public sealed class PersistenceMigrationRunnerTests
             Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assemblyPath))),
             modelDigest,
             migrationId,
-            IsLegacyBaseline: false,
+            IsPlatformStream: false,
             [
                 new CompiledMigrationStep(
                     "000001",

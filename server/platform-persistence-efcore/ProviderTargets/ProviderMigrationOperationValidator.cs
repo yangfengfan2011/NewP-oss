@@ -50,7 +50,7 @@ internal sealed class ProviderMigrationOperationValidator(
         var current = providerTarget with
         {
             Tables = providerTarget.Tables
-                .Where(table => string.Equals(table.OwnerModuleId, stream.ModuleId, StringComparison.Ordinal))
+                .Where(table => OwnsTable(stream, table))
                 .ToArray()
         };
         var results = new ValidatedProviderMigration[candidates.Count];
@@ -144,7 +144,7 @@ internal sealed class ProviderMigrationOperationValidator(
         ProviderTargetSnapshot current)
     {
         if (!plan.Models.Any(model =>
-                string.Equals(model.OwnerModuleId, stream.ModuleId, StringComparison.Ordinal)
+                OwnsModel(stream, model.OwnerModuleId)
                 && string.Equals(model.SchemaName, operation.Name, StringComparison.OrdinalIgnoreCase)))
         {
             throw new InvalidOperationException();
@@ -196,28 +196,7 @@ internal sealed class ProviderMigrationOperationValidator(
             return AddTable(current, table);
         }
 
-        if (step.LegacyCutover?.AllowsDrop(
-                stream,
-                step,
-                operation.Schema ?? "dbo",
-                operation.Name) != true)
-        {
-            throw new InvalidOperationException();
-        }
-
-        // 旧 baseline 已由受信 cutover 决策冻结物理对象与 owner。历史 migration
-        // 没有携带列结构，故只恢复这一个已验证的 owner tombstone，不伪造旧列定义。
-        var restored = new ProviderTableTarget(
-            stream.ModuleId,
-            operation.Schema ?? "dbo",
-            operation.Name,
-            [],
-            null,
-            [],
-            [],
-            [],
-            []);
-        return AddTable(current, restored);
+        throw new InvalidOperationException();
     }
 
     private ProviderTargetSnapshot ReverseRenameTable(
@@ -933,17 +912,27 @@ internal sealed class ProviderMigrationOperationValidator(
         return descriptor;
     }
 
-    private static ProviderTableTarget FindOwnedTable(
+    private ProviderTableTarget FindOwnedTable(
         ModuleMigrationStream stream,
         ProviderTargetSnapshot target,
         string? schema,
         string table)
     {
         var result = TryFindTable(target, schema, table);
-        return result is not null && string.Equals(result.OwnerModuleId, stream.ModuleId, StringComparison.Ordinal)
+        return result is not null && OwnsTable(stream, result)
             ? result
             : throw new InvalidOperationException();
     }
+
+    private bool OwnsTable(ModuleMigrationStream stream, ProviderTableTarget table) =>
+        OwnsModel(stream, table.OwnerModuleId);
+
+    private bool OwnsModel(ModuleMigrationStream stream, string ownerModuleId) =>
+        stream.IsPlatformStream
+            ? plan.Streams.All(candidate =>
+                candidate.IsPlatformStream
+                || !string.Equals(candidate.ModuleId, ownerModuleId, StringComparison.Ordinal))
+            : string.Equals(ownerModuleId, stream.ModuleId, StringComparison.Ordinal);
 
     private static ProviderTableTarget? TryFindTable(
         ProviderTargetSnapshot target,

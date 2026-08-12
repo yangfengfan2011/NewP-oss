@@ -31,7 +31,7 @@ public sealed class ModelSourceInventory
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var requiredModels = PlatformCoreLegacyModelSource.GetDefinitions()
+        var requiredModels = NonSqlPlatformBaselineModelSource.GetDefinitions()
             .Select(static definition => definition.Name)
             .ToArray();
 

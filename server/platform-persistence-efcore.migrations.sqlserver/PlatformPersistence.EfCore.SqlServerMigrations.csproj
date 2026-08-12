@@ -6,6 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PlatformPersistence.EfCore.SqlServerMigrations</AssemblyName>
     <RootNamespace>ICP.Platform.Persistence.EfCore.SqlServerMigrations</RootNamespace>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/_/PlatformPersistence.EfCore.SqlServerMigrations</PathMap>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +26,10 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="PlatformFoundation.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

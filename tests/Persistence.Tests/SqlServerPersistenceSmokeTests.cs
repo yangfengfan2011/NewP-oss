@@ -29,21 +29,21 @@ public sealed class SqlServerPersistenceSmokeTests
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_SQLSERVER_SMOKE";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION";
-    private const string PreviousMigration = "20260428145214_AlignModelMetadataEntityKeys";
-    private const string PersonPermanentBindingMigration = "20260810102141_Organization_000001_PermanentUserBinding";
-    private const string PersonLifecycleRevisionMigration = "20260810111523_Organization_000002_PersonLifecycleRevision";
-    private const string LatestMigration = "20260808054041_AlignOrganizationSchemaDrift";
-    private const string ModuleMigrationOne = "20260809001000_CreateAssetCatalog";
-    private const string ModuleMigrationTwo = "20260809002000_AddUniqueAssetCode";
+    private const string PlatformFoundationMigration = "20260812144154_PlatformFoundation";
+    private const string IdentityFoundationMigration = "20260810033908_Identity_000001_Foundation";
+    private const string AuthenticationFoundationMigration = "20260810033909_Authentication_000001_Foundation";
+    private const string OrganizationFoundationMigration = "20260812144235_Organization_000001_Foundation";
+    private const string ModuleMigrationOne = "20260813001000_CreateAssetCatalog";
+    private const string ModuleMigrationTwo = "20260813002000_AddUniqueAssetCode";
     private const string ModuleSchema = "np_partner_assetcatalog";
-    private const string FullUpMigrationOne = "20260812011000_CreateFullUpAsset";
-    private const string FullUpMigrationTwo = "20260812012000_TransformFullUpAsset";
-    private const string FullUpMigrationThree = "20260812013000_AddUniqueFullUpAssetCode";
+    private const string FullUpMigrationOne = "20260813021000_CreateFullUpAsset";
+    private const string FullUpMigrationTwo = "20260813022000_TransformFullUpAsset";
+    private const string FullUpMigrationThree = "20260813023000_AddUniqueFullUpAssetCode";
     private const string FullUpSchema = "np_partner_fullup";
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
-    public Task SqlServerBootstrap_EmptyCatalogMigratesForwardAndWarmStartIsNoOp() =>
+    public Task SqlServerBootstrap_EmptyCatalogCreatesCurrentFoundationAndWarmStartIsNoOp() =>
         RunCatalogScenarioAsync("forward", VerifyForwardMigrationAndWarmNoOpAsync);
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class SqlServerPersistenceSmokeTests
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
-    public Task SqlServerBootstrap_MigrationFailureKeepsReadableSafePrefix() =>
-        RunCatalogScenarioAsync("failure", VerifyMigrationFailureKeepsReadableSafePrefixAsync);
+    public Task SqlServerBootstrap_PreviousMigrationHistoryRequiresDatabaseRebuild() =>
+        RunCatalogScenarioAsync("oldhistory", VerifyPreviousMigrationHistoryRequiresDatabaseRebuildAsync);
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -68,13 +68,8 @@ public sealed class SqlServerPersistenceSmokeTests
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
-    public Task SqlServerLegacyFrontier_AppliesOrganizationOwnedPermanentBindingAndRevision() =>
-        RunCatalogScenarioAsync("revision", VerifyPersonRevisionUpgradeAsync);
-
-    [Fact]
-    [Trait("Category", "SqlServerSmoke")]
-    public Task SqlServerLegacyFrontier_NonEmptyPersonBlocksRevisionWithoutDefaultAndRetries() =>
-        RunCatalogScenarioAsync("revisionguard", VerifyPersonRevisionPreconditionAsync);
+    public Task SqlServerBootstrap_PrecreatedBusinessTableRequiresDatabaseRebuild() =>
+        RunCatalogScenarioAsync("prebuilt", VerifyPrecreatedBusinessTableRequiresDatabaseRebuildAsync);
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -121,115 +116,40 @@ public sealed class SqlServerPersistenceSmokeTests
         WorktreeDatabaseIdentity identity)
     {
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
-        await using var provider = BuildProvider(applicationConnectionString, identity);
-
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var guard = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationGuard>();
-            await guard.VerifyAsync();
-            var context = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            await context.GetService<IMigrator>().MigrateAsync(PreviousMigration);
-        }
-
-        await ExecuteNonQueryAsync(applicationConnectionString, """
-            INSERT INTO [Company]
-                ([EID], [Code], [Name], [SortOrder], [IsEnabled], [CreatedAt], [UpdatedAt])
-            VALUES
-                (N'company-smoke', N'COMPANY-SMOKE', N'迁移前公司', N'1', 1, SYSUTCDATETIME(), SYSUTCDATETIME());
-
-            INSERT INTO [Person]
-                ([EID], [PersonNo], [Name], [ENAME], [IsEnabled], [CreatedAt], [UpdatedAt])
-            VALUES
-                (N'person-smoke', N'P-SMOKE', N'迁移前人员', N'', 1, SYSUTCDATETIME(), SYSUTCDATETIME());
-            """);
+        await using var provider = BuildProvider(
+            applicationConnectionString,
+            identity,
+            TestPersistencePlan.CreateCurrentSqlServer());
 
         Assert.False(await RunMigrationsAsync(provider));
 
-        await using (var connection = new SqlConnection(applicationConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT [ECODE], [ENAME]
-                FROM [Company]
-                WHERE [EID] = N'company-smoke';
-
-                SELECT [ENAME]
-                FROM [Person]
-                WHERE [EID] = N'person-smoke';
-                """;
-            await using var reader = await command.ExecuteReaderAsync();
-            Assert.True(await reader.ReadAsync());
-            Assert.Equal("COMPANY-SMOKE", reader.GetString(0));
-            Assert.Equal("迁移前公司", reader.GetString(1));
-
-            Assert.True(await reader.NextResultAsync());
-            Assert.True(await reader.ReadAsync());
-            Assert.Equal("迁移前人员", reader.GetString(0));
-        }
-
-        var devSyncOptions = new DevelopmentSchemaSyncOptions(
-            FindRepositoryRoot(),
-            applicationConnectionString,
-            "SqlServer",
-            ApplyChanges: false,
-            GenerateSqlPreview: false,
-            AllowConfirmOperations: true);
-        var devSyncResult = await DevelopmentSchemaSyncCoordinator.Create(devSyncOptions).PrepareAsync();
-        Assert.True(devSyncResult.StartupAllowed, devSyncResult.BuildMessage());
-        var reportedOperations = devSyncResult.Plan?.Operations ?? [];
-        var expectedOperations = new[]
-        {
-            "AddColumn:Person:Revision",
-            "AddColumn:Person:UserBindingReason",
-            "AddColumn:Person:UserBoundAt",
-            "AddColumn:Person:UserBoundBy",
-            "AddColumn:Person:UserEID",
-            "CreateTable:AuthenticationSession:",
-            "CreateTable:IdentitySecurityEvent:",
-            "CreateTable:LocalCredential:",
-            "CreateTable:User:"
-        }
-            .Concat(new[]
-            {
-                "Company",
-                "ConfigItem",
-                "Department",
-                "Permission",
-                "Person",
-                "Position",
-                "Role",
-                "RolePermission",
-                "UserRole",
-                "ValueListItem"
-            }.SelectMany(static table => new[]
-            {
-                $"AlterNullability:{table}:CreatedBy",
-                $"AlterNullability:{table}:UpdatedBy"
-            }))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        Assert.Equal(
-            expectedOperations,
-            reportedOperations
-                .Select(static operation => $"{operation.Kind}:{operation.TableName}:{operation.ColumnName}")
-                .Order(StringComparer.Ordinal)
-                .ToArray());
-        Assert.All(
-            reportedOperations.Where(static operation => operation.Kind == "AlterNullability"),
-            static operation => Assert.Equal("Confirm", operation.RiskLevel));
-        Assert.All(
-            reportedOperations.Where(static operation => operation.Kind is "AddColumn" or "CreateTable"),
-            static operation => Assert.Equal("Safe", operation.RiskLevel));
-        Assert.Contains("dbo.__NewPDatabaseOwnership", devSyncResult.Plan?.UnmanagedTables ?? []);
-
         var historyBeforeWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
-        Assert.Contains(LatestMigration, historyBeforeWarmStart);
+        Assert.Equal(
+            [
+                IdentityFoundationMigration,
+                AuthenticationFoundationMigration,
+                PlatformFoundationMigration,
+                OrganizationFoundationMigration
+            ],
+            historyBeforeWarmStart);
+        foreach (var table in new[]
+        {
+            "ConfigItem", "ValueListItem", "Role", "Permission", "RolePermission", "UserRole",
+            "User", "LocalCredential", "IdentitySecurityEvent", "AuthenticationSession",
+            "Company", "Department", "Person", "Position"
+        })
+        {
+            Assert.True(await TableExistsAsync(applicationConnectionString, table), table);
+        }
+        Assert.Equal(0, await CountBusinessDefaultConstraintsAsync(applicationConnectionString));
+        Assert.Equal(0, await CountNullableAuditColumnsAsync(applicationConnectionString));
+        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
 
         Assert.False(await RunMigrationsAsync(provider));
 
         var historyAfterWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
         Assert.Equal(historyBeforeWarmStart, historyAfterWarmStart);
+        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
 
         await ExecuteNonQueryAsync(applicationConnectionString, """
             INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
@@ -237,9 +157,6 @@ public sealed class SqlServerPersistenceSmokeTests
             """);
         var ahead = await Assert.ThrowsAsync<DatabaseOwnershipException>(() => RunMigrationsAsync(provider));
         Assert.Equal(PersistenceHistoryFailureCodes.FrontierMismatch, ahead.FailureCode);
-        await ExecuteNonQueryAsync(
-            applicationConnectionString,
-            "SELECT TOP (0) [ECODE], [ENAME] FROM [Company]; SELECT TOP (0) [ENAME] FROM [Person];");
         Assert.Equal(
             "20990101000000_FutureMigration",
             (await ReadAppliedMigrationsAsync(applicationConnectionString))[^1]);
@@ -250,100 +167,24 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.Equal(51000, exception.Number);
     }
 
-    private static async Task VerifyPersonRevisionUpgradeAsync(
+    private static async Task VerifyPrecreatedBusinessTableRequiresDatabaseRebuildAsync(
         string adminConnectionString,
         string catalog,
         WorktreeDatabaseIdentity identity)
     {
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
-        await using (var legacyProvider = BuildProvider(
-                         applicationConnectionString,
-                         identity,
-                         BuildLegacyFrontierPlan(PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline)))
-        {
-            Assert.False(await RunMigrationsAsync(legacyProvider));
-        }
-
         await ExecuteNonQueryAsync(applicationConnectionString, """
-            INSERT INTO [dbo].[PersonUserLink]
-                ([EID], [PersonId], [UserId], [LinkedAt], [LinkedBy], [CreatedBy], [CreatedAt], [UpdatedBy], [UpdatedAt])
-            VALUES
-                (N'legacy-link', N'legacy-person', N'legacy-user', SYSUTCDATETIME(), N'legacy-actor', N'legacy-actor', SYSUTCDATETIME(), N'legacy-actor', SYSUTCDATETIME());
+            CREATE TABLE [dbo].[Person] ([EID] nvarchar(128) NOT NULL PRIMARY KEY);
             """);
-
-        using var organizationFixture = BuildOrganizationPlan();
-        await using var provider = BuildProvider(applicationConnectionString, identity, organizationFixture.Plan);
-
-        Assert.False(await RunMigrationsAsync(provider));
-
-        var history = await ReadAppliedMigrationsAsync(applicationConnectionString);
-        Assert.Contains(LatestMigration, history);
-        Assert.Contains(PersonPermanentBindingMigration, history);
-        Assert.Contains(PersonLifecycleRevisionMigration, history);
-        Assert.False(await TableExistsAsync(applicationConnectionString, "PersonUserLink"));
-        await ExecuteNonQueryAsync(
+        await using var provider = BuildProvider(
             applicationConnectionString,
-            "SELECT TOP (0) [UserEID], [UserBoundAt], [UserBoundBy], [UserBindingReason], [Revision] FROM [dbo].[Person];");
-        Assert.True(await IndexExistsAsync(applicationConnectionString, "dbo", "Person", "UX_Person_UserEID"));
-        Assert.False(await DefaultConstraintExistsAsync(
-            applicationConnectionString,
-            "dbo",
-            "Person",
-            "Revision"));
-    }
-
-    private static async Task VerifyPersonRevisionPreconditionAsync(
-        string adminConnectionString,
-        string catalog,
-        WorktreeDatabaseIdentity identity)
-    {
-        var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
-        await using (var legacyProvider = BuildProvider(applicationConnectionString, identity))
-        {
-            await using (var scope = legacyProvider.CreateAsyncScope())
-            {
-                var guard = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationGuard>();
-                await guard.VerifyAsync();
-                var context = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-                await context.GetService<IMigrator>().MigrateAsync(PreviousMigration);
-            }
-
-            await ExecuteNonQueryAsync(applicationConnectionString, """
-                INSERT INTO [Person]
-                    ([EID], [PersonNo], [Name], [ENAME], [IsEnabled], [CreatedAt], [UpdatedAt])
-                VALUES
-                    (N'person-revision-guard', N'P-REVISION-GUARD', N'迁移前人员', N'', 1, SYSUTCDATETIME(), SYSUTCDATETIME());
-                """);
-            Assert.False(await RunMigrationsAsync(legacyProvider));
-        }
-
-        using var organizationFixture = BuildOrganizationPlan();
-        await using var provider = BuildProvider(applicationConnectionString, identity, organizationFixture.Plan);
-        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => RunMigrationsAsync(provider));
-        Assert.True(
-            string.Equals(
-                PersistenceMigrationFailureCodes.TableNotEmpty,
-                exception.FailureCode,
-                StringComparison.Ordinal),
-            exception.ToString());
-
-        var historyAfterFailure = await ReadAppliedMigrationsAsync(applicationConnectionString);
-        Assert.Contains(PersonPermanentBindingMigration, historyAfterFailure);
-        Assert.DoesNotContain(PersonLifecycleRevisionMigration, historyAfterFailure);
-        Assert.False(await ColumnExistsAsync(applicationConnectionString, "dbo", "Person", "Revision"));
-
-        await ExecuteNonQueryAsync(
-            applicationConnectionString,
-            "DELETE FROM [dbo].[Person] WHERE [EID] = N'person-revision-guard';");
-        Assert.False(await RunMigrationsAsync(provider));
-
-        Assert.Contains(PersonLifecycleRevisionMigration, await ReadAppliedMigrationsAsync(applicationConnectionString));
-        Assert.True(await ColumnExistsAsync(applicationConnectionString, "dbo", "Person", "Revision"));
-        Assert.False(await DefaultConstraintExistsAsync(
-            applicationConnectionString,
-            "dbo",
-            "Person",
-            "Revision"));
+            identity,
+            TestPersistencePlan.CreateCurrentSqlServer());
+        var exception = await Assert.ThrowsAsync<DatabaseOwnershipException>(() => RunMigrationsAsync(provider));
+        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired, exception.FailureCode);
+        Assert.True(await TableExistsAsync(applicationConnectionString, "Person"));
+        Assert.False(await TableExistsAsync(applicationConnectionString, "Role"));
+        Assert.False(await TableExistsAsync(applicationConnectionString, "__EFMigrationsHistory"));
     }
 
     private static async Task VerifyProviderTransitionDataBoundariesAsync(
@@ -543,7 +384,7 @@ public sealed class SqlServerPersistenceSmokeTests
 
         var exception = await Assert.ThrowsAsync<DatabaseOwnershipException>(() => RunMigrationsAsync(provider));
 
-        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseUnowned, exception.FailureCode);
+        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired, exception.FailureCode);
         Assert.False(await TableExistsAsync(applicationConnectionString, "__NewPDatabaseOwnership"));
         Assert.False(await TableExistsAsync(applicationConnectionString, "__EFMigrationsHistory"));
         Assert.True(await TableExistsAsync(applicationConnectionString, "ForeignTable"));
@@ -596,34 +437,40 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.False(await TableExistsAsync(applicationConnectionString, "__EFMigrationsHistory"));
     }
 
-    private static async Task VerifyMigrationFailureKeepsReadableSafePrefixAsync(
+    private static async Task VerifyPreviousMigrationHistoryRequiresDatabaseRebuildAsync(
         string adminConnectionString,
         string catalog,
         WorktreeDatabaseIdentity identity)
     {
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
-        await using var provider = BuildProvider(applicationConnectionString, identity);
+        await using var provider = BuildProvider(
+            applicationConnectionString,
+            identity,
+            TestPersistencePlan.CreateCurrentSqlServer());
 
         await using (var scope = provider.CreateAsyncScope())
         {
             var guard = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationGuard>();
             await guard.VerifyAsync();
-            var context = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            await context.GetService<IMigrator>().MigrateAsync(PreviousMigration);
         }
 
-        await ExecuteNonQueryAsync(
-            applicationConnectionString,
-            "ALTER TABLE [Company] ADD [ECODE] nvarchar(256) NULL;");
+        await ExecuteNonQueryAsync(applicationConnectionString, """
+            CREATE TABLE [dbo].[__EFMigrationsHistory]
+            (
+                [MigrationId] nvarchar(150) NOT NULL PRIMARY KEY,
+                [ProductVersion] nvarchar(32) NOT NULL
+            );
+            INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+            VALUES (N'20260409154403_InitialCreate', N'10.0.0');
+            """);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => RunMigrationsAsync(provider));
+        var exception = await Assert.ThrowsAsync<DatabaseOwnershipException>(() => RunMigrationsAsync(provider));
 
+        Assert.Equal(DatabaseOwnershipFailureCodes.DatabaseRebuildRequired, exception.FailureCode);
         var history = await ReadAppliedMigrationsAsync(applicationConnectionString);
-        Assert.Equal(PreviousMigration, history[^1]);
-        Assert.DoesNotContain(LatestMigration, history);
-        await ExecuteNonQueryAsync(
-            applicationConnectionString,
-            "SELECT TOP (0) [Code], [Name] FROM [Company]; SELECT TOP (0) [Name] FROM [Person];");
+        Assert.Equal(["20260409154403_InitialCreate"], history);
+        Assert.False(await TableExistsAsync(applicationConnectionString, "Role"));
+        Assert.False(await TableExistsAsync(applicationConnectionString, "__NewPMigrationHistory"));
     }
 
     private static async Task VerifyModuleMigrationLifecycleAsync(
@@ -635,8 +482,8 @@ public sealed class SqlServerPersistenceSmokeTests
         var firstPlan = BuildModulePlan(includeSecondMigration: false);
         var secondPlan = BuildModulePlan(includeSecondMigration: true);
         Assert.NotEqual(
-            firstPlan.Streams.Single(static stream => !stream.IsLegacyBaseline).BundleChecksum,
-            secondPlan.Streams.Single(static stream => !stream.IsLegacyBaseline).BundleChecksum);
+            firstPlan.Streams.Single(static stream => stream.ModuleId == "Partner.AssetCatalog").BundleChecksum,
+            secondPlan.Streams.Single(static stream => stream.ModuleId == "Partner.AssetCatalog").BundleChecksum);
 
         using var firstProvider = BuildProvider(applicationConnectionString, identity, firstPlan);
         Assert.False(await RunMigrationsAsync(firstProvider));
@@ -725,7 +572,7 @@ public sealed class SqlServerPersistenceSmokeTests
             ModuleSchema,
             "Asset",
             "UX_Asset_Code"));
-        var firstStream = firstPlan.Streams.Single(static stream => !stream.IsLegacyBaseline);
+        var firstStream = firstPlan.Streams.Single(static stream => stream.ModuleId == "Partner.AssetCatalog");
         var firstBundleDigest = UnifiedMigrationHistoryDigest.ComputeBundleDigest(
             firstStream.ModuleId,
             firstStream.Provider,
@@ -761,7 +608,7 @@ public sealed class SqlServerPersistenceSmokeTests
             () => RunMigrationsAsync(secondProvider));
         Assert.Equal(PersistenceHistoryFailureCodes.NonPrefix, nonPrefix.FailureCode);
 
-        const string unknownMigration = "20260809001500_UnknownAssetCatalog";
+        const string unknownMigration = "20260813001500_UnknownAssetCatalog";
         await ExecuteNonQueryAsync(applicationConnectionString, $"""
             INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
             VALUES (N'{unknownMigration}', N'10.0.0');
@@ -860,7 +707,8 @@ public sealed class SqlServerPersistenceSmokeTests
                 : [],
             "Partner.AssetCatalog",
             ModuleSchema);
-        var models = TestPersistencePlan.Create().Models.Append(externalModel).ToArray();
+        var basePlan = TestPersistencePlan.CreateCurrentSqlServer();
+        var models = basePlan.Models.Append(externalModel).ToArray();
         var planDigest = PersistenceModelDigest.Compute(models);
         var firstModelDigest = PersistenceModelDigest.Compute([externalModel with { Indexes = [] }]);
         var modelDigest = PersistenceModelDigest.Compute([externalModel]);
@@ -903,22 +751,11 @@ public sealed class SqlServerPersistenceSmokeTests
             Convert.ToHexStringLower(SHA256.HashData(assemblyBytes)),
             modelDigest,
             migrations[^1].MigrationId,
-            IsLegacyBaseline: false,
+            IsPlatformStream: false,
             migrations)
         {
             AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
         };
-        var coreDigest = PersistenceModelDigest.Compute(TestPersistencePlan.Create().Models);
-        var legacyStream = new ModuleMigrationStream(
-            "platform.core",
-            PersistenceProvider.SqlServer,
-            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
-            "platform.core:legacy-baseline",
-            coreDigest,
-            coreDigest,
-            LatestMigration,
-            IsLegacyBaseline: true,
-            []);
         return new CompiledPersistencePlan(
             "test-module-candidate",
             new string('b', 64),
@@ -927,7 +764,7 @@ public sealed class SqlServerPersistenceSmokeTests
             planDigest,
             [],
             models,
-            [legacyStream, stream]);
+            [.. basePlan.Streams, stream]);
     }
 
     private static CompiledPersistencePlan BuildProviderTransitionPlan(int stage)
@@ -943,7 +780,8 @@ public sealed class SqlServerPersistenceSmokeTests
             .Select(BuildProviderTransitionModel)
             .ToArray();
         var finalModel = stageModels[^1];
-        var coreModels = TestPersistencePlan.Create().Models;
+        var basePlan = TestPersistencePlan.CreateCurrentSqlServer();
+        var coreModels = basePlan.Models;
         var models = coreModels.Append(finalModel).ToArray();
         var modelDigest = PersistenceModelDigest.Compute(models);
         var migrationIds = new[]
@@ -976,22 +814,11 @@ public sealed class SqlServerPersistenceSmokeTests
             Convert.ToHexStringLower(SHA256.HashData(assemblyBytes)),
             stageDigests[^1],
             migrations[^1].MigrationId,
-            IsLegacyBaseline: false,
+            IsPlatformStream: false,
             migrations)
         {
             AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
         };
-        var coreDigest = PersistenceModelDigest.Compute(coreModels);
-        var legacyStream = new ModuleMigrationStream(
-            "platform.core",
-            PersistenceProvider.SqlServer,
-            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
-            "platform.core:legacy-baseline",
-            coreDigest,
-            coreDigest,
-            LatestMigration,
-            IsLegacyBaseline: true,
-            []);
         return new CompiledPersistencePlan(
             $"provider-transition-stage-{stage}",
             new string('b', 64),
@@ -1000,7 +827,7 @@ public sealed class SqlServerPersistenceSmokeTests
             modelDigest,
             [],
             models,
-            [legacyStream, stream]);
+            [.. basePlan.Streams, stream]);
 
         ModelDefinition BuildProviderTransitionModel(int currentStage)
         {
@@ -1073,7 +900,8 @@ public sealed class SqlServerPersistenceSmokeTests
             .Select(BuildFullUpModels)
             .ToArray();
         var finalModels = stageModels[^1];
-        var coreModels = TestPersistencePlan.Create().Models;
+        var basePlan = TestPersistencePlan.CreateCurrentSqlServer();
+        var coreModels = basePlan.Models;
         var models = coreModels.Concat(finalModels).ToArray();
         var modelDigest = PersistenceModelDigest.Compute(models);
         var migrationIds = new[]
@@ -1105,22 +933,11 @@ public sealed class SqlServerPersistenceSmokeTests
             Convert.ToHexStringLower(SHA256.HashData(assemblyBytes)),
             stageDigests[^1],
             migrations[^1].MigrationId,
-            IsLegacyBaseline: false,
+            IsPlatformStream: false,
             migrations)
         {
             AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
         };
-        var coreDigest = PersistenceModelDigest.Compute(coreModels);
-        var legacyStream = new ModuleMigrationStream(
-            "platform.core",
-            PersistenceProvider.SqlServer,
-            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
-            "platform.core:legacy-baseline",
-            coreDigest,
-            coreDigest,
-            LatestMigration,
-            IsLegacyBaseline: true,
-            []);
         return new CompiledPersistencePlan(
             $"full-up-stage-{stage}",
             new string('b', 64),
@@ -1129,7 +946,7 @@ public sealed class SqlServerPersistenceSmokeTests
             modelDigest,
             [],
             models,
-            [legacyStream, stream]);
+            [.. basePlan.Streams, stream]);
 
         static ModelDefinition[] BuildFullUpModels(int currentStage)
         {
@@ -1242,31 +1059,6 @@ public sealed class SqlServerPersistenceSmokeTests
         }
     }
 
-    private static CompiledPersistencePlan BuildLegacyFrontierPlan(string frontier)
-    {
-        var models = TestPersistencePlan.Create().Models;
-        var modelDigest = PersistenceModelDigest.Compute(models);
-        var stream = new ModuleMigrationStream(
-            "platform.core",
-            PersistenceProvider.SqlServer,
-            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
-            "platform.core:legacy-baseline",
-            modelDigest,
-            modelDigest,
-            frontier,
-            IsLegacyBaseline: true,
-            []);
-        return new CompiledPersistencePlan(
-            "legacy-frontier-test",
-            modelDigest,
-            modelDigest,
-            PersistenceProvider.SqlServer,
-            modelDigest,
-            [],
-            models,
-            [stream]);
-    }
-
     private static OrganizationPlanFixture BuildOrganizationPlan()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1288,7 +1080,7 @@ public sealed class SqlServerPersistenceSmokeTests
         }
 
         var assemblyPath = Path.Combine(migrationRoot, "Organization.SqlServerMigrations.dll");
-        File.Copy(typeof(OrganizationPermanentUserBinding).Assembly.Location, assemblyPath);
+        File.Copy(typeof(Organization_000001_Foundation).Assembly.Location, assemblyPath);
         var manifestSourcePath = Path.Combine(
             repositoryRoot,
             "modules",
@@ -1386,25 +1178,12 @@ public sealed class SqlServerPersistenceSmokeTests
 
             var organizationModels = organizationPlan.Models;
             var organizationDigest = PersistenceModelDigest.Compute(organizationModels);
-            var coreModels = TestPersistencePlan.Create().Models
-                .Where(static model => model.Name is not ("Company" or "Department" or "Person" or "Position"))
-                .ToArray();
+            var foundationPlan = TestPersistencePlan.Create();
+            var coreModels = foundationPlan.Models;
             var models = coreModels.Concat(organizationModels).ToArray();
-            var coreDigest = PersistenceModelDigest.Compute(coreModels);
-            var streams = new[]
-            {
-                new ModuleMigrationStream(
-                    "platform.core",
-                    PersistenceProvider.SqlServer,
-                    EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
-                    "platform.core:legacy-baseline",
-                    coreDigest,
-                    coreDigest,
-                    PlatformCoreMigrationFrontiers.SqlServerLegacyBaseline,
-                    IsLegacyBaseline: true,
-                    []),
-                Assert.Single(organizationPlan.Streams)
-            };
+            var streams = foundationPlan.Streams
+                .Append(Assert.Single(organizationPlan.Streams))
+                .ToArray();
             return new OrganizationPlanFixture(
                 new CompiledPersistencePlan(
                     "organization-migration-test",
@@ -1535,6 +1314,31 @@ public sealed class SqlServerPersistenceSmokeTests
         var value = await command.ExecuteScalarAsync();
         return value is DBNull ? null : value;
     }
+
+    private static async Task<int> CountBusinessDefaultConstraintsAsync(string connectionString) =>
+        Convert.ToInt32(await ExecuteScalarAsync(connectionString, """
+            SELECT COUNT(*)
+            FROM [sys].[default_constraints] AS [d]
+            INNER JOIN [sys].[tables] AS [t] ON [t].[object_id] = [d].[parent_object_id]
+            WHERE [t].[is_ms_shipped] = 0
+              AND [t].[name] NOT LIKE N'__%';
+            """));
+
+    private static async Task<int> CountNullableAuditColumnsAsync(string connectionString) =>
+        Convert.ToInt32(await ExecuteScalarAsync(connectionString, """
+            SELECT COUNT(*)
+            FROM [sys].[columns] AS [c]
+            INNER JOIN [sys].[tables] AS [t] ON [t].[object_id] = [c].[object_id]
+            WHERE [t].[is_ms_shipped] = 0
+              AND [t].[name] NOT LIKE N'__%'
+              AND [c].[name] IN (N'CreatedBy', N'CreatedAt', N'UpdatedBy', N'UpdatedAt')
+              AND [c].[is_nullable] = 1;
+            """));
+
+    private static async Task<int> CountMigrationFactsAsync(string connectionString) =>
+        Convert.ToInt32(await ExecuteScalarAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM [dbo].[__NewPMigrationHistory];"));
 
     private static async Task<bool> ColumnExistsAsync(
         string connectionString,

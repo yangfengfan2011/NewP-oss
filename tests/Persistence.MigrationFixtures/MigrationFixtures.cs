@@ -254,7 +254,7 @@ public sealed class CreateAssetWithDownMigration : Migration
 [Migration(MigrationId)]
 public sealed class CreateAssetCatalogMigration : Migration
 {
-    public const string MigrationId = "20260809001000_CreateAssetCatalog";
+    public const string MigrationId = "20260813001000_CreateAssetCatalog";
 
     protected override void Up(MigrationBuilder migrationBuilder)
     {
@@ -277,7 +277,7 @@ public sealed class CreateAssetCatalogMigration : Migration
 [Migration(MigrationId)]
 public sealed class AddUniqueAssetCodeMigration : Migration
 {
-    public const string MigrationId = "20260809002000_AddUniqueAssetCode";
+    public const string MigrationId = "20260813002000_AddUniqueAssetCode";
 
     protected override void Up(MigrationBuilder migrationBuilder) =>
         migrationBuilder.CreateIndex(
@@ -348,7 +348,7 @@ public sealed class AddRevisionWithClrDefaultMigration : Migration
 [Migration(MigrationId)]
 public sealed class CreateProviderTransitionAssetMigration : Migration
 {
-    public const string MigrationId = "20260812001000_CreateProviderTransitionAsset";
+    public const string MigrationId = "20260813011000_CreateProviderTransitionAsset";
 
     protected override void Up(MigrationBuilder migrationBuilder)
     {
@@ -371,7 +371,7 @@ public sealed class CreateProviderTransitionAssetMigration : Migration
 [Migration(MigrationId)]
 public sealed class AddNullableTransitionColumnMigration : Migration
 {
-    public const string MigrationId = "20260812002000_AddNullableTransitionColumn";
+    public const string MigrationId = "20260813012000_AddNullableTransitionColumn";
 
     protected override void Up(MigrationBuilder migrationBuilder) =>
         migrationBuilder.AddColumn<string>(
@@ -389,7 +389,7 @@ public sealed class AddNullableTransitionColumnMigration : Migration
 [Migration(MigrationId)]
 public sealed class AddRequiredTransitionColumnMigration : Migration
 {
-    public const string MigrationId = "20260812003000_AddRequiredTransitionColumn";
+    public const string MigrationId = "20260813013000_AddRequiredTransitionColumn";
 
     protected override void Up(MigrationBuilder migrationBuilder) =>
         migrationBuilder.AddColumn<long>(
@@ -407,7 +407,7 @@ public sealed class AddRequiredTransitionColumnMigration : Migration
 [Migration(MigrationId)]
 public sealed class RequireTransitionValueMigration : Migration
 {
-    public const string MigrationId = "20260812004000_RequireTransitionValue";
+    public const string MigrationId = "20260813014000_RequireTransitionValue";
 
     protected override void Up(MigrationBuilder migrationBuilder) =>
         migrationBuilder.AlterColumn<string>(
@@ -429,7 +429,7 @@ public sealed class RequireTransitionValueMigration : Migration
 [Migration(MigrationId)]
 public sealed class CreateFullUpAssetMigration : Migration
 {
-    public const string MigrationId = "20260812011000_CreateFullUpAsset";
+    public const string MigrationId = "20260813021000_CreateFullUpAsset";
     public const string OwnerModuleId = "Partner.FullUp";
     public const string Schema = "np_partner_fullup";
 
@@ -459,8 +459,8 @@ public sealed class CreateFullUpAssetMigration : Migration
             {
                 Id = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 LegacyCode = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                ParentId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                Obsolete = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true)
+                Obsolete = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                ParentId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
@@ -498,7 +498,7 @@ public sealed class CreateFullUpAssetMigration : Migration
 [Migration(MigrationId)]
 public sealed class TransformFullUpAssetMigration : Migration
 {
-    public const string MigrationId = "20260812012000_TransformFullUpAsset";
+    public const string MigrationId = "20260813022000_TransformFullUpAsset";
 
     protected override void Up(MigrationBuilder migrationBuilder)
     {
@@ -550,7 +550,7 @@ public sealed class TransformFullUpAssetMigration : Migration
                 ProviderTransitionAnnotationNames.FromDescriptorV1,
                 ProviderTransitionDescriptorCodec.EncodeColumn(
                     CreateFullUpAssetMigration.OwnerModuleId,
-                    3,
+                    2,
                     StringColumn("Obsolete", "nvarchar(256)", 256, isNullable: true)));
         migrationBuilder.DropTable(
                 name: "RetiredAsset",
@@ -649,7 +649,7 @@ public sealed class TransformFullUpAssetMigration : Migration
 [Migration(MigrationId)]
 public sealed class AddUniqueFullUpAssetCodeMigration : Migration
 {
-    public const string MigrationId = "20260812013000_AddUniqueFullUpAssetCode";
+    public const string MigrationId = "20260813023000_AddUniqueFullUpAssetCode";
 
     protected override void Up(MigrationBuilder migrationBuilder)
     {

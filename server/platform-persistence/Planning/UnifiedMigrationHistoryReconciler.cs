@@ -239,8 +239,7 @@ public static class UnifiedMigrationHistoryDigest
             step.ContentDigest,
             step.FromModelDigest,
             step.ToModelDigest,
-            step.Compatibility,
-            step.LegacyCutoverDigest
+            step.Compatibility
         }, JsonOptions);
         return Convert.ToHexStringLower(SHA256.HashData(bytes));
     }
@@ -252,7 +251,7 @@ public static class UnifiedMigrationHistoryDigest
     public static string ComputeProviderTargetFactDigest(ProviderTransitionSnapshot transition)
     {
         ArgumentNullException.ThrowIfNull(transition);
-        return ProviderTargetDigest.Compute(ScopeToOwner(transition.To, transition.ModuleId));
+        return ProviderTargetDigest.Compute(ScopeToStream(transition.To, transition.ModuleId));
     }
 
     /// <summary>
@@ -264,16 +263,21 @@ public static class UnifiedMigrationHistoryDigest
         ArgumentNullException.ThrowIfNull(transition);
         return ProviderTargetDigest.Compute(transition with
         {
-            From = ScopeToOwner(transition.From, transition.ModuleId),
-            To = ScopeToOwner(transition.To, transition.ModuleId)
+            From = ScopeToStream(transition.From, transition.ModuleId),
+            To = ScopeToStream(transition.To, transition.ModuleId)
         });
     }
 
-    private static ProviderTargetSnapshot ScopeToOwner(
+    private static ProviderTargetSnapshot ScopeToStream(
         ProviderTargetSnapshot target,
         string ownerModuleId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerModuleId);
+        if (string.Equals(ownerModuleId, "platform.foundation", StringComparison.Ordinal))
+        {
+            return target;
+        }
+
         return target with
         {
             Tables = target.Tables

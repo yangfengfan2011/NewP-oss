@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ICP.Platform.HostApi.Extensions;
+using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
@@ -13,6 +15,7 @@ using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -44,6 +47,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_EmptyCatalogCreatesCurrentFoundationAndWarmStartIsNoOp() =>
         RunCatalogScenarioAsync("forward", VerifyForwardMigrationAndWarmNoOpAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerHostBootstrap_EmptyCatalogBecomesReadyAndWarmStartIsNoOp() =>
+        RunCatalogScenarioAsync("host", VerifyHostBootstrapAndWarmNoOpAsync);
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -177,17 +185,69 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.Equal(51000, exception.Number);
     }
 
+    private static async Task VerifyHostBootstrapAndWarmNoOpAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        var configuration = BuildSqlServerConfiguration(applicationConnectionString);
+        Assert.Equal(identity, WorktreeDatabaseIdentity.Resolve(FindRepositoryRoot()));
+        await using (var app = BuildHostApplication(configuration, "Production"))
+        {
+            await app.ApplyPlatformPersistenceAsync();
+            var readiness = await ReadPersistenceReadinessAsync(app);
+            Assert.Equal(ReadinessState.Ready, readiness.State);
+            Assert.Null(readiness.FailureCode);
+        }
+
+        var historyBeforeWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        Assert.Equal(4, historyBeforeWarmStart.Length);
+        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
+
+        await using (var restarted = BuildHostApplication(configuration, "Development"))
+        {
+            await restarted.ApplyPlatformPersistenceAsync();
+            var readiness = await ReadPersistenceReadinessAsync(restarted);
+            Assert.Equal(ReadinessState.Ready, readiness.State);
+        }
+        Assert.Equal(historyBeforeWarmStart, await ReadAppliedMigrationsAsync(applicationConnectionString));
+        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
+    }
+
+    private static WebApplication BuildHostApplication(
+        IConfiguration configuration,
+        string environmentName)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = environmentName,
+            ContentRootPath = FindRepositoryRoot()
+        });
+        builder.Services.AddPlatformPersistence(
+            configuration,
+            TestPersistencePlan.CreateCurrentSqlServer());
+        return builder.Build();
+    }
+
+    private static async Task<ReadinessContribution> ReadPersistenceReadinessAsync(WebApplication app)
+    {
+        var contributor = new PersistenceReadinessContributor(
+            app.Services.GetRequiredService<PersistenceReadinessState>());
+        return await contributor.CheckAsync(CancellationToken.None);
+    }
+
     private static async Task VerifyReadOnlyConsistencyFailureAsync(
         string adminConnectionString,
         string catalog,
         WorktreeDatabaseIdentity identity)
     {
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
-        await using var provider = BuildProvider(
-            applicationConnectionString,
-            identity,
-            TestPersistencePlan.CreateCurrentSqlServer());
-        Assert.False(await RunMigrationsAsync(provider));
+        Assert.Equal(identity, WorktreeDatabaseIdentity.Resolve(FindRepositoryRoot()));
+        await using var app = BuildHostApplication(
+            BuildSqlServerConfiguration(applicationConnectionString),
+            "Acceptance");
+        await app.ApplyPlatformPersistenceAsync();
         var historyBefore = await ReadAppliedMigrationsAsync(applicationConnectionString);
         var factsBefore = await CountMigrationFactsAsync(applicationConnectionString);
 
@@ -199,13 +259,12 @@ public sealed class SqlServerPersistenceSmokeTests
             INSERT INTO [dbo].[UnexpectedDrift] ([Id]) VALUES (1);
             """);
 
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var checker = scope.ServiceProvider.GetRequiredService<IPersistenceConsistencyChecker>();
-            var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() =>
-                checker.CheckAsync());
-            Assert.Equal(PersistenceConsistencyFailureCodes.SchemaTargetMismatch, exception.FailureCode);
-        }
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() =>
+            app.ApplyPlatformPersistenceAsync());
+        Assert.Equal(PersistenceConsistencyFailureCodes.SchemaTargetMismatch, exception.FailureCode);
+        var readiness = await ReadPersistenceReadinessAsync(app);
+        Assert.Equal(ReadinessState.Failed, readiness.State);
+        Assert.Equal(PersistenceConsistencyFailureCodes.SchemaTargetMismatch, readiness.FailureCode);
 
         Assert.True(await TableExistsAsync(applicationConnectionString, "UnexpectedDrift"));
         Assert.Equal(
@@ -725,6 +784,17 @@ public sealed class SqlServerPersistenceSmokeTests
             ValidateScopes = true
         });
     }
+
+    private static IConfiguration BuildSqlServerConfiguration(string applicationConnectionString) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["Persistence:AutoMigrate"] = "true",
+                ["ConnectionStrings:SqlServer"] = applicationConnectionString
+            })
+            .Build();
 
     private static CompiledPersistencePlan BuildModulePlan(bool includeSecondMigration)
     {

@@ -21,8 +21,12 @@
 - 所有环境通过同一条 Host 启动链路执行待应用的完整 EF `Up`，包括 Drop、Rename 和 Alter；当前不按开发/发布环境或风险等级裁剪操作。
 - Migration 可以定义 `Down`，但平台不自动执行 `Down`。已提交迁移的恢复使用修正后的前向 migration 或已验证的数据库恢复流程。
 - 完整 Up 不放松边界：模块归属、provider、全局唯一 Migration ID、线性迁移链、bundle/content/model/from-to digest、期望 frontier、事务和迁移锁都必须通过校验。
+- EF design-time/provider model 投影为长期只读 `Provider Target v1`；每个 migration 形成 `Provider Transition v1`。Create/Add/Rename/Alter 及键、外键、索引必须逐 facet 与 canonical `from`/`to` 匹配，不能只按操作类型放行。
+- Drop table/column/key/FK/index 无法从 EF operation 本身恢复完整旧 facet，新增迁移必须使用 `ProviderTransitionDescriptorCodec` 生成版本化 `NewP:ProviderTransition:FromDescriptor/v1` annotation；descriptor 的 owner、对象名、结构和列 ordinal 都会在连接前校验。不要手写 descriptor JSON。
 - 所有模块与 Legacy Baseline 共用统一 EF Migration History；模块不得维护私有 history 或从 Host 外回写迁移事实。
 - 每个 migration 的 DDL 与 history 写入共用事务；不能参与事务或无法证明模块归属的操作必须在执行前失败。
+- 业务默认值只属于 `form.create.defaultValue`，不得进入 Provider Target 或 migration 的数据库 `DEFAULT`。新增 nullable 列让旧行保留 `NULL`；新增 required 列要求表为空；nullable 收紧 required 要求存量值均非空。两类检查都在迁移锁内且在 DDL/history 前执行，禁止 migration 回填或自动降级 nullability。
+- 已冻结 migration 若历史上只携带 CLR 默认值，执行端仅在目标明确无 DEFAULT、值确为该 CLR 类型默认值且新增列 required 时通用消除该参数，并仍执行“表必须为空”前置检查；不得改写旧 migration/content digest 或添加模块特例。
 - 数据库超前、history 不是有效迁移链前缀或摘要不一致时，Host 保持 Not Ready，不运行旧快照、自动回退或改写 history。
 - migration 成功后仍要等待整个插件候选原子激活，不能单独写入活动状态。
 - `DevSchemaSync` CLI 和直接 SQL apply 路径不再是目标能力；Host 仅保留所有环境一致的只读 schema/history/digest 检查。
@@ -46,6 +50,9 @@ dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj -- --chec
 
 # 定向测试后执行仓库冻结验证
 .\scripts\verify.ps1
+
+# 真实 SQL Server disposable catalog smoke（连接值由环境或本地配置解析，不进入命令行）
+.\tests\integration\persistence\Run-SqlServerSmoke.ps1
 ```
 
 涉及真实 DDL 时，还必须从空 catalog、已有受支持基线、包含 Drop/Rename/Alter 的完整 Up、并发迁移锁、失败重试、history/frontier/digest 不一致、Host restart/readiness 和只读一致性检查八个入口验证；不能用生成了 migration 文件代替数据库证据。

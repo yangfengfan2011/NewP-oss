@@ -101,8 +101,10 @@ public static class PersistenceMigrationFailureCodes
     public const string MigrationMissing = "PERSISTENCE_MIGRATION_MISSING";
     public const string MigrationIdConflict = "PERSISTENCE_MIGRATION_ID_CONFLICT";
     public const string MigrationLockUnavailable = "PERSISTENCE_MIGRATION_LOCK_UNAVAILABLE";
+    public const string NullValuesPresent = "PERSISTENCE_MIGRATION_NULL_VALUES_PRESENT";
     public const string OperationForbidden = "PERSISTENCE_MIGRATION_OPERATION_FORBIDDEN";
     public const string ProviderUnsupported = "PERSISTENCE_MIGRATION_PROVIDER_UNSUPPORTED";
+    public const string TableNotEmpty = "PERSISTENCE_MIGRATION_TABLE_NOT_EMPTY";
 }
 
 /// <summary>

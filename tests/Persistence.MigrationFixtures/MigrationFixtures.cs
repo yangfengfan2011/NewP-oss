@@ -16,6 +16,71 @@ public sealed class ForbiddenSqlMigration : Migration
 
 [DbContext(typeof(EfPlatformDbContext))]
 [Migration(MigrationId)]
+public sealed class MalformedCreateTableMigration : Migration
+{
+    public const string MigrationId = "20260812000100_MalformedCreateTable";
+
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.CreateTable(
+        name: "Asset",
+        schema: "np_partner_assetcatalog",
+        columns: table => new
+        {
+            Id = table.Column<int>(type: "int", nullable: false)
+        },
+        constraints: table => table.PrimaryKey("PK_Asset", asset => asset.Id));
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class MalformedRenameTableMigration : Migration
+{
+    public const string MigrationId = "20260812000200_MalformedRenameTable";
+
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.RenameTable(
+        name: "OldAsset",
+        schema: "np_partner_assetcatalog",
+        newName: "UnexpectedAsset");
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class MalformedAlterColumnMigration : Migration
+{
+    public const string MigrationId = "20260812000300_MalformedAlterColumn";
+
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.AlterColumn<int>(
+        name: "Id",
+        schema: "np_partner_assetcatalog",
+        table: "Asset",
+        type: "int",
+        nullable: false,
+        oldClrType: typeof(string),
+        oldType: "nvarchar(128)",
+        oldMaxLength: 128);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class MalformedDropColumnMigration : Migration
+{
+    public const string MigrationId = "20260812000400_MalformedDropColumn";
+
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.DropColumn(
+        name: "Obsolete",
+        schema: "np_partner_assetcatalog",
+        table: "Asset");
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
 public sealed class FilteredIndexMigration : Migration
 {
     public const string MigrationId = "20260809999800_FilteredIndex";
@@ -163,8 +228,8 @@ public sealed class CreateAssetCatalogMigration : Migration
             schema: "np_partner_assetcatalog",
             columns: table => new
             {
-                Id = table.Column<string>(type: "nvarchar(64)", nullable: false),
-                Code = table.Column<string>(type: "nvarchar(128)", nullable: false)
+                Id = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                Code = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false)
             },
             constraints: table => table.PrimaryKey("PK_Asset", asset => asset.Id));
     }
@@ -185,6 +250,141 @@ public sealed class AddUniqueAssetCodeMigration : Migration
             table: "Asset",
             column: "Code",
             unique: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class AddMismatchedRevisionColumnMigration : Migration
+{
+    public const string MigrationId = "20260812000100_AddMismatchedRevisionColumn";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AddColumn<int>(
+            name: "Revision",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            type: "int",
+            nullable: false,
+            defaultValue: 0);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class AddRevisionWithBusinessDefaultMigration : Migration
+{
+    public const string MigrationId = "20260812000200_AddRevisionWithBusinessDefault";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AddColumn<long>(
+            name: "Revision",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            type: "bigint",
+            nullable: false,
+            defaultValue: 42L);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class AddRevisionWithClrDefaultMigration : Migration
+{
+    public const string MigrationId = "20260812000300_AddRevisionWithClrDefault";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AddColumn<long>(
+            name: "Revision",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            type: "bigint",
+            nullable: false,
+            defaultValue: 0L);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class CreateProviderTransitionAssetMigration : Migration
+{
+    public const string MigrationId = "20260812001000_CreateProviderTransitionAsset";
+
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.EnsureSchema("np_partner_transition");
+        migrationBuilder.CreateTable(
+            name: "TransitionAsset",
+            schema: "np_partner_transition",
+            columns: table => new
+            {
+                Id = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                OptionalValue = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true)
+            },
+            constraints: table => table.PrimaryKey("PK_TransitionAsset", asset => asset.Id));
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class AddNullableTransitionColumnMigration : Migration
+{
+    public const string MigrationId = "20260812002000_AddNullableTransitionColumn";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AddColumn<string>(
+            name: "OptionalAdded",
+            schema: "np_partner_transition",
+            table: "TransitionAsset",
+            type: "nvarchar(256)",
+            maxLength: 256,
+            nullable: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class AddRequiredTransitionColumnMigration : Migration
+{
+    public const string MigrationId = "20260812003000_AddRequiredTransitionColumn";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AddColumn<long>(
+            name: "RequiredAdded",
+            schema: "np_partner_transition",
+            table: "TransitionAsset",
+            type: "bigint",
+            nullable: false,
+            defaultValue: 0L);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class RequireTransitionValueMigration : Migration
+{
+    public const string MigrationId = "20260812004000_RequireTransitionValue";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AlterColumn<string>(
+            name: "OptionalValue",
+            schema: "np_partner_transition",
+            table: "TransitionAsset",
+            type: "nvarchar(256)",
+            maxLength: 256,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(256)",
+            oldMaxLength: 256,
+            oldNullable: true);
 
     protected override void Down(MigrationBuilder migrationBuilder) { }
 }

@@ -30,6 +30,18 @@ _Avoid_: DbContext 配置、插件扫描结果、迁移执行日志
 模块规范化模型的内容身份，用于证明模型声明、migration target 与运行时投影一致。模型变化但没有对应 migration frontier 时，候选必须失败。
 _Avoid_: 程序集版本、插件版本、数据库 schema 版本号
 
+**Provider Target**：
+从 EF design-time/provider model 投影的版本化、canonical、只读数据库目标，包含 owner、物理表列顺序、provider type、nullability、长度/精度、数据库生成语义、provider annotation、键、外键、索引和 check constraint。它是数据库最终结构事实源，但不替代 model metadata 的 authoring 职责，也不依赖 DevSchemaSync CLI 或 SQL apply。
+_Avoid_: 表单默认值、metadata diff target、运行中数据库快照
+
+**Provider Transition**：
+单个 migration 的版本化 canonical `from`/`to` Provider Target 及内容摘要。执行端从最终 Provider Target 逆推并逐项核对 operation；Drop 等本身不携带旧 facet 的操作必须携带版本化旧对象 descriptor，明确证明旧 owner、旧结构和列 ordinal。Provider Target/Transition 摘要独立演进，不重算或偷换 Model Digest v1 与既有 migration digest。
+_Avoid_: 仅按操作类型放行、仅凭 migration id 推断旧对象、重算旧摘要
+
+**迁移数据前置条件（Migration Data Precondition）**：
+Host 在全局迁移锁内、DDL 与 history 前执行的只读数据检查。新增非空列要求目标表为空；nullable 收紧为 required 要求现有值全部非空。不满足时返回稳定失败码并回滚当前 migration，不回填、增加业务 DEFAULT 或自动改为可空。
+_Avoid_: 默认值兼容回填、原始 UPDATE、DDL 后补查
+
 **迁移前沿（Migration Frontier）**：
 某模块在一个候选快照中期望达到的最后 migration 身份。统一 EF Migration History 是实际执行事实，活动快照只记录其期望 frontier 和持久化计划摘要。
 _Avoid_: 最新文件、最大时间戳、当前插件版本

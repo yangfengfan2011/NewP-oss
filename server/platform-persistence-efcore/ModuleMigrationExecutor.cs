@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
@@ -9,14 +8,14 @@ using System.Runtime.Loader;
 using System.Security.Cryptography;
 using ICP.Platform.Kernel.ModuleLoading;
 using ICP.Platform.Kernel.ModulePlanning;
-using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Planning;
+using ICP.Platform.Persistence.EfCore.ProviderTargets;
+using ICP.Platform.Persistence.ProviderTargets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace ICP.Platform.Persistence.EfCore;
 
@@ -33,6 +32,7 @@ internal sealed class ModuleMigrationExecutor(
         CompiledPersistencePlan,
         Lazy<IReadOnlyList<ValidatedMigrationStream>>> ValidationCache = new();
     private IReadOnlyList<ValidatedMigrationStream>? _validatedStreams;
+    private ProviderTargetSnapshot? _providerTarget;
 
     public void ValidateBeforeConnection()
     {
@@ -215,6 +215,13 @@ internal sealed class ModuleMigrationExecutor(
                 return;
             }
 
+            await VerifyDataPreconditionsAsync(
+                connection,
+                transaction,
+                stream,
+                migration,
+                cancellationToken);
+
             foreach (var sql in migration.Commands)
             {
                 await using var command = CreateCommand(connection, transaction, sql);
@@ -365,7 +372,7 @@ internal sealed class ModuleMigrationExecutor(
                 innerException: exception);
         }
 
-        var validatedMigrations = new List<ValidatedMigration>(stream.Migrations.Count);
+        var candidates = new List<ProviderMigrationCandidate>(stream.Migrations.Count);
         foreach (var step in stream.Migrations)
         {
             if (!migrationTypes.TryGetValue(step.MigrationId, out var migrationType))
@@ -394,212 +401,77 @@ internal sealed class ModuleMigrationExecutor(
                     exception);
             }
 
-            ValidateOperations(stream, step, migration);
-            validatedMigrations.Add(new ValidatedMigration(step.MigrationId, migration, []));
-        }
-
-        return new ValidatedMigrationStream(stream, assembly, validatedMigrations);
-    }
-
-    private void ValidateOperations(
-        ModuleMigrationStream stream,
-        CompiledMigrationStep step,
-        Migration migration)
-    {
-        if (migration.DownOperations.Count != 0)
-        {
-            throw Failure(
-                PersistenceMigrationFailureCodes.OperationForbidden,
-                stream,
-                step.MigrationId);
-        }
-
-        var ownedModels = plan.Models
-            .Where(model => string.Equals(model.OwnerModuleId, stream.ModuleId, StringComparison.Ordinal))
-            .ToArray();
-        var schemas = ownedModels
-            .Select(static model => model.SchemaName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var tables = ownedModels
-            .Select(static model => PhysicalKey(model.SchemaName, model.TableName))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var currentTables = plan.Models
-            .Select(static model => PhysicalKey(model.SchemaName, model.TableName))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var operation in migration.UpOperations)
-        {
-            var isAllowed = operation switch
-            {
-                EnsureSchemaOperation ensureSchema => schemas.Contains(ensureSchema.Name),
-                CreateTableOperation createTable =>
-                    ownedModels.SingleOrDefault(model =>
-                        string.Equals(
-                            PhysicalKey(model.SchemaName, model.TableName),
-                            PhysicalKey(createTable.Schema, createTable.Name),
-                            StringComparison.OrdinalIgnoreCase)) is { } ownedModel
-                    && ForeignKeysMatch(createTable, ownedModel)
-                    && createTable.CheckConstraints.Count == 0
-                    && createTable.Columns.All(IsSafeColumnDefinition),
-                CreateIndexOperation createIndex => IsOwnedIndex(createIndex, ownedModels),
-                AddColumnOperation addColumn =>
-                    tables.Contains(PhysicalKey(addColumn.Schema, addColumn.Table))
-                    && IsSafeColumnDefinition(addColumn)
-                    && (addColumn.IsNullable || addColumn.DefaultValue is not null),
-                DropTableOperation dropTable =>
-                    step.LegacyCutover?.AllowsDrop(
-                        stream,
-                        step,
-                        dropTable.Schema ?? "dbo",
-                        dropTable.Name) == true
-                    && !currentTables.Contains(PhysicalKey(dropTable.Schema, dropTable.Name)),
-                _ => false
-            };
-
-            if (!isAllowed)
+            if (migration.DownOperations.Count != 0)
             {
                 throw Failure(
                     PersistenceMigrationFailureCodes.OperationForbidden,
                     stream,
                     step.MigrationId);
             }
+
+            candidates.Add(new ProviderMigrationCandidate(step, migration));
+        }
+
+        try
+        {
+            var validatedMigrations = new ProviderMigrationOperationValidator(plan, ProviderTarget)
+                .Validate(stream, candidates)
+                .Select(static migration => new ValidatedMigration(
+                    migration.MigrationId,
+                    migration.Migration,
+                    migration.Transition,
+                    migration.TransitionDigest,
+                    migration.Preconditions,
+                    []))
+                .ToArray();
+            return new ValidatedMigrationStream(stream, assembly, validatedMigrations);
+        }
+        catch (ProviderOperationValidationException exception)
+        {
+            throw Failure(
+                PersistenceMigrationFailureCodes.OperationForbidden,
+                stream,
+                exception.MigrationId,
+                exception);
         }
     }
 
-    private bool IsOwnedIndex(
-        CreateIndexOperation operation,
-        IReadOnlyList<ModelDefinition> ownedModels)
+    private static async Task VerifyDataPreconditionsAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        ModuleMigrationStream stream,
+        ValidatedMigration migration,
+        CancellationToken cancellationToken)
     {
-        var ownedModel = ownedModels.SingleOrDefault(candidate =>
-            string.Equals(
-                PhysicalKey(candidate.SchemaName, candidate.TableName),
-                PhysicalKey(operation.Schema, operation.Table),
-                StringComparison.OrdinalIgnoreCase));
-        if (ownedModel is null)
+        foreach (var precondition in migration.Preconditions)
         {
-            return false;
-        }
-
-        // EF 的目标模型还包含外键约定生成的索引；执行端必须与最终 provider
-        // 模型精确比对，不能只看 authoring 中显式声明的 IndexDefinition。
-        var targetEntity = dbContext.GetService<IDesignTimeModel>().Model.GetEntityTypes().SingleOrDefault(entity =>
-            string.Equals(entity.GetTableName(), operation.Table, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(
-                entity.GetSchema() ?? "dbo",
-                operation.Schema ?? "dbo",
-                StringComparison.OrdinalIgnoreCase));
-        var expected = targetEntity?.GetIndexes().SingleOrDefault(index =>
-            string.Equals(index.GetDatabaseName(), operation.Name, StringComparison.Ordinal));
-        if (expected is null
-            || expected.IsUnique != operation.IsUnique
-            || !NullableSequenceEqual(operation.IsDescending, expected.IsDescending)
-            || !SqlServerAnnotationsMatch(operation, expected))
-        {
-            return false;
-        }
-
-        var storeObject = StoreObjectIdentifier.Table(operation.Table, operation.Schema ?? "dbo");
-        var expectedColumns = expected.Properties
-            .Select(property => property.GetColumnName(storeObject))
-            .ToArray();
-        if (expectedColumns.Any(static column => column is null)
-            || !operation.Columns.SequenceEqual(expectedColumns!, StringComparer.Ordinal))
-        {
-            return false;
-        }
-
-        return string.Equals(operation.Filter, expected.GetFilter(), StringComparison.Ordinal);
-    }
-
-    private static bool SqlServerAnnotationsMatch(
-        CreateIndexOperation operation,
-        IReadOnlyIndex expected)
-    {
-        var actualAnnotations = operation.GetAnnotations()
-            .Where(static annotation => annotation.Name.StartsWith("SqlServer:", StringComparison.Ordinal))
-            .ToDictionary(static annotation => annotation.Name, static annotation => annotation.Value, StringComparer.Ordinal);
-        var expectedAnnotations = expected.GetAnnotations()
-            .Where(static annotation => annotation.Name.StartsWith("SqlServer:", StringComparison.Ordinal))
-            .ToDictionary(static annotation => annotation.Name, static annotation => annotation.Value, StringComparer.Ordinal);
-        return actualAnnotations.Count == expectedAnnotations.Count
-            && actualAnnotations.All(pair =>
-                expectedAnnotations.TryGetValue(pair.Key, out var expectedValue)
-                && AnnotationValueEquals(pair.Value, expectedValue));
-    }
-
-    private static bool AnnotationValueEquals(object? actual, object? expected)
-    {
-        if (actual is string || expected is string)
-        {
-            return Equals(actual, expected);
-        }
-
-        if (actual is IEnumerable actualValues && expected is IEnumerable expectedValues)
-        {
-            return actualValues.Cast<object?>().SequenceEqual(expectedValues.Cast<object?>());
-        }
-
-        return Equals(actual, expected);
-    }
-
-    private static bool NullableSequenceEqual<T>(
-        IReadOnlyList<T>? actual,
-        IReadOnlyList<T>? expected) =>
-        actual is null
-            ? expected is null
-            : expected is not null && actual.SequenceEqual(expected);
-
-    private bool ForeignKeysMatch(CreateTableOperation operation, ModelDefinition model)
-    {
-        if (operation.ForeignKeys.Count != model.ForeignKeys.Count)
-        {
-            return false;
-        }
-
-        foreach (var actual in operation.ForeignKeys)
-        {
-            var expected = model.ForeignKeys.SingleOrDefault(foreignKey =>
-                string.Equals(foreignKey.Name, actual.Name, StringComparison.Ordinal));
-            var principal = expected is null
-                ? null
-                : plan.Models.SingleOrDefault(candidate =>
-                    string.Equals(candidate.LogicalKey, expected.PrincipalModelKey, StringComparison.Ordinal));
-            if (expected is null
-                || principal is null
-                || !actual.Columns.SequenceEqual(
-                    expected.Fields.Select(field => model.Fields.Single(candidate => candidate.Name == field).StoreName),
-                    StringComparer.Ordinal)
-                || !string.Equals(
-                    PhysicalKey(actual.PrincipalSchema, actual.PrincipalTable),
-                    PhysicalKey(principal.SchemaName, principal.TableName),
-                    StringComparison.OrdinalIgnoreCase)
-                || !(actual.PrincipalColumns ?? []).SequenceEqual(
-                    expected.PrincipalFields.Select(field => principal.Fields.Single(candidate => candidate.Name == field).StoreName),
-                    StringComparer.Ordinal)
-                || actual.OnDelete != MapDeleteBehavior(expected.DeleteBehavior))
+            var predicate = precondition.Column is null
+                ? "1 = 1"
+                : $"{QuoteIdentifier(precondition.Column)} IS NULL";
+            // HOLDLOCK 把读取条件保留到当前 migration 事务结束，避免检查后、
+            // DDL 前又插入不符合条件的新行。全局 app lock 另外负责串行化 Host。
+            await using var command = CreateCommand(
+                connection,
+                transaction,
+                $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {QuoteTable(precondition.Schema, precondition.Table)} WITH (UPDLOCK, HOLDLOCK) WHERE {predicate}) THEN 1 ELSE 0 END;");
+            if (Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) != 0)
             {
-                return false;
+                throw Failure(
+                    precondition.FailureCode,
+                    stream,
+                    migration.MigrationId);
             }
         }
-
-        return true;
     }
 
-    private static ReferentialAction MapDeleteBehavior(ForeignKeyDeleteBehavior behavior) => behavior switch
-    {
-        ForeignKeyDeleteBehavior.Restrict => ReferentialAction.Restrict,
-        ForeignKeyDeleteBehavior.Cascade => ReferentialAction.Cascade,
-        ForeignKeyDeleteBehavior.SetNull => ReferentialAction.SetNull,
-        ForeignKeyDeleteBehavior.NoAction => ReferentialAction.NoAction,
-        _ => throw new ArgumentOutOfRangeException(nameof(behavior), behavior, null)
-    };
+    private static string QuoteTable(string schema, string table) =>
+        $"{QuoteIdentifier(schema)}.{QuoteIdentifier(table)}";
 
-    private static bool IsSafeColumnDefinition(ColumnOperation column) =>
-        string.IsNullOrWhiteSpace(column.ComputedColumnSql)
-        && string.IsNullOrWhiteSpace(column.DefaultValueSql);
+    private static string QuoteIdentifier(string identifier) =>
+        $"[{identifier.Replace("]", "]]", StringComparison.Ordinal)}]";
 
-    private static string PhysicalKey(string? schema, string table) =>
-        $"{schema ?? "dbo"}.{table}";
+    private ProviderTargetSnapshot ProviderTarget => _providerTarget ??=
+        EfProviderTargetSource.Project(dbContext.GetService<IDesignTimeModel>().Model, plan);
 
     private static Assembly LoadMigrationAssembly(
         ModuleMigrationStream stream,
@@ -815,6 +687,9 @@ internal sealed class ModuleMigrationExecutor(
     private sealed record ValidatedMigration(
         string MigrationId,
         Migration Migration,
+        ProviderTransitionSnapshot Transition,
+        string TransitionDigest,
+        IReadOnlyList<ProviderMigrationDataPrecondition> Preconditions,
         IReadOnlyList<string> Commands);
 
     private sealed record ValidatedMigrationStream(

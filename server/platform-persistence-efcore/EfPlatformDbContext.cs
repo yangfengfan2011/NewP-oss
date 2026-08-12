@@ -5,6 +5,8 @@ using ICP.Platform.Persistence.EfCore.Projection;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace ICP.Platform.Persistence.EfCore;
 
@@ -30,7 +32,9 @@ public sealed class EfPlatformDbContext : DbContext
             .Where(static definition => definition.Kind == ModelKind.Entity)
             .Select(static definition => definition.LogicalKey)
             .ToHashSet(StringComparer.Ordinal);
-        _modelCacheSignature = plan.PlanDigest;
+        // Model Digest v1 是冻结的持久契约，不包含后来新增的全部 provider facet
+        //（例如 foreign key）。EF 模型缓存键必须使用独立的运行时签名，以免错用其他计划的 provider model。
+        _modelCacheSignature = ComputeRuntimeModelCacheSignature(plan);
     }
 
     public EfPlatformDbContext(
@@ -192,5 +196,15 @@ public sealed class EfPlatformDbContext : DbContext
             Array.Empty<byte>(),
             definitions,
             Array.Empty<ModuleMigrationStream>());
+    }
+
+    private static string ComputeRuntimeModelCacheSignature(CompiledPersistencePlan plan)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            provider = plan.Provider.ToString(),
+            models = plan.Models.OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
+        });
+        return Convert.ToHexStringLower(SHA256.HashData(bytes));
     }
 }

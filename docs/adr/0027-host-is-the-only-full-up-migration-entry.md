@@ -4,7 +4,7 @@ status: accepted
 
 # Host 是完整 Up Migration 的唯一执行入口
 
-> 实现状态：决策已确认，代码尚未实施；实施完成前，当前运行行为仍以源码和配置为准。
+> 实现状态：决策已确认。Provider Target/Transition 精确校验与数据前置检查基础已实施；完整 Up、阻断性 history/frontier 语义和移除 DevSchemaSync 写入口仍在后续子 Issue 中实施。在父 Issue 完成前，当前运行行为仍以源码和配置为准。
 
 NewP 当前尚未接入需要独立发布保护的真实生产数据库。继续同时维护 `safe-expand` 限制、开发态直连结构同步工具和 Host 启动迁移，会形成多个数据库结构写入入口，并过早引入环境分支。平台决定由 Host 作为唯一受支持的 Migration 执行入口：所有环境默认沿同一条 Host 启动链路，根据已编译持久化计划和统一 EF Migration History 执行尚未应用的完整 `Up`，包括 Drop、Rename、Alter 等删除、重命名和结构修改操作，不再按开发/发布环境或操作风险类别切换默认行为。
 

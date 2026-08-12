@@ -4,6 +4,8 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore.Ownership;
 using ICP.Platform.Persistence.EfCore.Sql;
 using ICP.Platform.Persistence.EfCore.Transactions;
+using ICP.Platform.Persistence.EfCore.ProviderTargets;
+using ICP.Platform.Persistence.ProviderTargets;
 using ICP.Platform.Persistence.Extensions;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
@@ -64,6 +66,7 @@ public static class EfCorePersistenceServiceCollectionExtensions
         }
 
         services.AddScoped<IPersistenceMigrationRunner, PersistenceMigrationRunner>();
+        services.AddScoped<IProviderTargetSource, EfProviderTargetSource>();
 
         return services;
     }

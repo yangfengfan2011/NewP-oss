@@ -67,6 +67,16 @@ public sealed class SqlServerPersistenceSmokeTests
     public Task SqlServerLegacyFrontier_AppliesOrganizationOwnedPermanentBindingAndRevision() =>
         RunCatalogScenarioAsync("revision", VerifyPersonRevisionUpgradeAsync);
 
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerLegacyFrontier_NonEmptyPersonBlocksRevisionWithoutDefaultAndRetries() =>
+        RunCatalogScenarioAsync("revisionguard", VerifyPersonRevisionPreconditionAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerProviderTransitions_EnforceDataPreconditionsWithoutDefaultsOrBackfill() =>
+        RunCatalogScenarioAsync("target", VerifyProviderTransitionDataBoundariesAsync);
+
     private static async Task RunCatalogScenarioAsync(
         string purpose,
         Func<string, string, WorktreeDatabaseIdentity, Task> scenario)
@@ -265,6 +275,170 @@ public sealed class SqlServerPersistenceSmokeTests
             applicationConnectionString,
             "SELECT TOP (0) [UserEID], [UserBoundAt], [UserBoundBy], [UserBindingReason], [Revision] FROM [dbo].[Person];");
         Assert.True(await IndexExistsAsync(applicationConnectionString, "dbo", "Person", "UX_Person_UserEID"));
+        Assert.False(await DefaultConstraintExistsAsync(
+            applicationConnectionString,
+            "dbo",
+            "Person",
+            "Revision"));
+    }
+
+    private static async Task VerifyPersonRevisionPreconditionAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        await using (var legacyProvider = BuildProvider(applicationConnectionString, identity))
+        {
+            await using (var scope = legacyProvider.CreateAsyncScope())
+            {
+                var guard = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationGuard>();
+                await guard.VerifyAsync();
+                var context = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+                await context.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            }
+
+            await ExecuteNonQueryAsync(applicationConnectionString, """
+                INSERT INTO [Person]
+                    ([EID], [PersonNo], [Name], [ENAME], [IsEnabled], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (N'person-revision-guard', N'P-REVISION-GUARD', N'迁移前人员', N'', 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+                """);
+            Assert.False(await RunMigrationsAsync(legacyProvider));
+        }
+
+        using var organizationFixture = BuildOrganizationPlan();
+        await using var provider = BuildProvider(applicationConnectionString, identity, organizationFixture.Plan);
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => RunMigrationsAsync(provider));
+        Assert.True(
+            string.Equals(
+                PersistenceMigrationFailureCodes.TableNotEmpty,
+                exception.FailureCode,
+                StringComparison.Ordinal),
+            exception.ToString());
+
+        var historyAfterFailure = await ReadAppliedMigrationsAsync(applicationConnectionString);
+        Assert.Contains(PersonPermanentBindingMigration, historyAfterFailure);
+        Assert.DoesNotContain(PersonLifecycleRevisionMigration, historyAfterFailure);
+        Assert.False(await ColumnExistsAsync(applicationConnectionString, "dbo", "Person", "Revision"));
+
+        await ExecuteNonQueryAsync(
+            applicationConnectionString,
+            "DELETE FROM [dbo].[Person] WHERE [EID] = N'person-revision-guard';");
+        Assert.False(await RunMigrationsAsync(provider));
+
+        Assert.Contains(PersonLifecycleRevisionMigration, await ReadAppliedMigrationsAsync(applicationConnectionString));
+        Assert.True(await ColumnExistsAsync(applicationConnectionString, "dbo", "Person", "Revision"));
+        Assert.False(await DefaultConstraintExistsAsync(
+            applicationConnectionString,
+            "dbo",
+            "Person",
+            "Revision"));
+    }
+
+    private static async Task VerifyProviderTransitionDataBoundariesAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var connectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        await using (var initial = BuildProvider(connectionString, identity, BuildProviderTransitionPlan(1)))
+        {
+            Assert.False(await RunMigrationsAsync(initial));
+        }
+
+        await ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [np_partner_transition].[TransitionAsset] ([Id], [OptionalValue])
+            VALUES (N'old-row', NULL);
+            """);
+
+        await using (var nullable = BuildProvider(connectionString, identity, BuildProviderTransitionPlan(2)))
+        {
+            Assert.False(await RunMigrationsAsync(nullable));
+        }
+        Assert.Null(await ExecuteScalarAsync(
+            connectionString,
+            "SELECT [OptionalAdded] FROM [np_partner_transition].[TransitionAsset] WHERE [Id] = N'old-row';"));
+        Assert.False(await DefaultConstraintExistsAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "OptionalAdded"));
+
+        await using (var required = BuildProvider(connectionString, identity, BuildProviderTransitionPlan(3)))
+        {
+            var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => RunMigrationsAsync(required));
+            Assert.Equal(PersistenceMigrationFailureCodes.TableNotEmpty, exception.FailureCode);
+        }
+        Assert.False(await ColumnExistsAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "RequiredAdded"));
+        Assert.DoesNotContain(
+            AddRequiredTransitionColumnMigration.MigrationId,
+            await ReadAppliedMigrationsAsync(connectionString));
+
+        await ExecuteNonQueryAsync(
+            connectionString,
+            "DELETE FROM [np_partner_transition].[TransitionAsset];");
+        await using (var required = BuildProvider(connectionString, identity, BuildProviderTransitionPlan(3)))
+        {
+            Assert.False(await RunMigrationsAsync(required));
+        }
+        Assert.True(await ColumnExistsAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "RequiredAdded"));
+        Assert.False(await DefaultConstraintExistsAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "RequiredAdded"));
+
+        await ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [np_partner_transition].[TransitionAsset]
+                ([Id], [OptionalValue], [OptionalAdded], [RequiredAdded])
+            VALUES
+                (N'nullable-row', NULL, NULL, 7);
+            """);
+        await using (var requiredValue = BuildProvider(connectionString, identity, BuildProviderTransitionPlan(4)))
+        {
+            var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => RunMigrationsAsync(requiredValue));
+            Assert.True(
+                string.Equals(
+                    PersistenceMigrationFailureCodes.NullValuesPresent,
+                    exception.FailureCode,
+                    StringComparison.Ordinal),
+                exception.ToString());
+        }
+        Assert.True(await ColumnIsNullableAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "OptionalValue"));
+        Assert.DoesNotContain(
+            RequireTransitionValueMigration.MigrationId,
+            await ReadAppliedMigrationsAsync(connectionString));
+
+        await ExecuteNonQueryAsync(
+            connectionString,
+            "UPDATE [np_partner_transition].[TransitionAsset] SET [OptionalValue] = N'provided' WHERE [Id] = N'nullable-row';");
+        await using (var requiredValue = BuildProvider(connectionString, identity, BuildProviderTransitionPlan(4)))
+        {
+            Assert.False(await RunMigrationsAsync(requiredValue));
+        }
+        Assert.False(await ColumnIsNullableAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "OptionalValue"));
+        Assert.False(await DefaultConstraintExistsAsync(
+            connectionString,
+            "np_partner_transition",
+            "TransitionAsset",
+            "OptionalValue"));
     }
 
     private static async Task VerifyNonEmptyUnownedCatalogIsRejectedAsync(
@@ -483,7 +657,7 @@ public sealed class SqlServerPersistenceSmokeTests
                     "Id",
                     FieldKind.Scalar,
                     FieldValueType.ObjectId,
-                    "nvarchar(64)",
+                    "string",
                     Required: true,
                     IsPrimaryKey: true,
                     IsAuditField: false),
@@ -561,6 +735,136 @@ public sealed class SqlServerPersistenceSmokeTests
             [],
             models,
             [legacyStream, stream]);
+    }
+
+    private static CompiledPersistencePlan BuildProviderTransitionPlan(int stage)
+    {
+        if (stage is < 1 or > 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage));
+        }
+
+        const string owner = "Partner.ProviderTransition";
+        const string schema = "np_partner_transition";
+        var stageModels = Enumerable.Range(1, stage)
+            .Select(BuildProviderTransitionModel)
+            .ToArray();
+        var finalModel = stageModels[^1];
+        var coreModels = TestPersistencePlan.Create().Models;
+        var models = coreModels.Append(finalModel).ToArray();
+        var modelDigest = PersistenceModelDigest.Compute(models);
+        var migrationIds = new[]
+        {
+            CreateProviderTransitionAssetMigration.MigrationId,
+            AddNullableTransitionColumnMigration.MigrationId,
+            AddRequiredTransitionColumnMigration.MigrationId,
+            RequireTransitionValueMigration.MigrationId
+        };
+        var stageDigests = stageModels
+            .Select(model => PersistenceModelDigest.Compute([model]))
+            .ToArray();
+        var migrations = Enumerable.Range(0, stage)
+            .Select(index => new CompiledMigrationStep(
+                $"{index + 1:D6}",
+                migrationIds[index],
+                index == 0 ? null : new string((char)('a' + index - 1), 64),
+                new string((char)('a' + index), 64),
+                index == 0 ? new string('0', 64) : stageDigests[index - 1],
+                stageDigests[index],
+                "safe-expand"))
+            .ToArray();
+        var assemblyPath = typeof(CreateProviderTransitionAssetMigration).Assembly.Location;
+        var assemblyBytes = File.ReadAllBytes(assemblyPath);
+        var stream = new ModuleMigrationStream(
+            owner,
+            PersistenceProvider.SqlServer,
+            assemblyPath,
+            "test-provider-transition-manifest.json",
+            Convert.ToHexStringLower(SHA256.HashData(assemblyBytes)),
+            stageDigests[^1],
+            migrations[^1].MigrationId,
+            IsLegacyBaseline: false,
+            migrations)
+        {
+            AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+        };
+        var legacyStream = new ModuleMigrationStream(
+            "platform.core",
+            PersistenceProvider.SqlServer,
+            EfCoreProviderOptions.GetDefaultMigrationsAssembly(PersistenceProvider.SqlServer),
+            "platform.core:legacy-baseline",
+            modelDigest,
+            modelDigest,
+            LatestMigration,
+            IsLegacyBaseline: true,
+            []);
+        return new CompiledPersistencePlan(
+            $"provider-transition-stage-{stage}",
+            new string('b', 64),
+            new string('c', 64),
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            models,
+            [legacyStream, stream]);
+
+        ModelDefinition BuildProviderTransitionModel(int currentStage)
+        {
+            var fields = new List<FieldDefinition>
+            {
+                new(
+                    "Id",
+                    "Id",
+                    FieldKind.Scalar,
+                    FieldValueType.ObjectId,
+                    "string",
+                    Required: true,
+                    IsPrimaryKey: true,
+                    IsAuditField: false),
+                new(
+                    "OptionalValue",
+                    "OptionalValue",
+                    FieldKind.Scalar,
+                    FieldValueType.Text,
+                    "nvarchar(256)",
+                    Required: currentStage >= 4,
+                    IsPrimaryKey: false,
+                    IsAuditField: false)
+            };
+            if (currentStage >= 2)
+            {
+                fields.Add(new FieldDefinition(
+                    "OptionalAdded",
+                    "OptionalAdded",
+                    FieldKind.Scalar,
+                    FieldValueType.Text,
+                    "nvarchar(256)",
+                    Required: false,
+                    IsPrimaryKey: false,
+                    IsAuditField: false));
+            }
+            if (currentStage >= 3)
+            {
+                fields.Add(new FieldDefinition(
+                    "RequiredAdded",
+                    "RequiredAdded",
+                    FieldKind.Scalar,
+                    FieldValueType.Integer,
+                    "bigint",
+                    Required: true,
+                    IsPrimaryKey: false,
+                    IsAuditField: false));
+            }
+
+            return new ModelDefinition(
+                "TransitionAsset",
+                "TransitionAsset",
+                ModelKind.Entity,
+                fields,
+                [],
+                owner,
+                schema);
+        }
     }
 
     private static CompiledPersistencePlan BuildLegacyFrontierPlan(string frontier)
@@ -845,6 +1149,91 @@ public sealed class SqlServerPersistenceSmokeTests
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<object?> ExecuteScalarAsync(string connectionString, string sql)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        var value = await command.ExecuteScalarAsync();
+        return value is DBNull ? null : value;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        string connectionString,
+        string schema,
+        string table,
+        string column)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM [sys].[columns] AS [columns]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [columns].[object_id]
+            INNER JOIN [sys].[schemas] AS [schemas] ON [schemas].[schema_id] = [tables].[schema_id]
+            WHERE [schemas].[name] = @schema
+              AND [tables].[name] = @table
+              AND [columns].[name] = @column;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        command.Parameters.AddWithValue("@column", column);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) == 1;
+    }
+
+    private static async Task<bool> ColumnIsNullableAsync(
+        string connectionString,
+        string schema,
+        string table,
+        string column)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT [columns].[is_nullable]
+            FROM [sys].[columns] AS [columns]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [columns].[object_id]
+            INNER JOIN [sys].[schemas] AS [schemas] ON [schemas].[schema_id] = [tables].[schema_id]
+            WHERE [schemas].[name] = @schema
+              AND [tables].[name] = @table
+              AND [columns].[name] = @column;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        command.Parameters.AddWithValue("@column", column);
+        return Convert.ToBoolean(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<bool> DefaultConstraintExistsAsync(
+        string connectionString,
+        string schema,
+        string table,
+        string column)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM [sys].[default_constraints] AS [defaults]
+            INNER JOIN [sys].[columns] AS [columns]
+                ON [columns].[object_id] = [defaults].[parent_object_id]
+               AND [columns].[column_id] = [defaults].[parent_column_id]
+            INNER JOIN [sys].[tables] AS [tables] ON [tables].[object_id] = [columns].[object_id]
+            INNER JOIN [sys].[schemas] AS [schemas] ON [schemas].[schema_id] = [tables].[schema_id]
+            WHERE [schemas].[name] = @schema
+              AND [tables].[name] = @table
+              AND [columns].[name] = @column;
+            """;
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        command.Parameters.AddWithValue("@column", column);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) != 0;
     }
 
     private static async Task<bool> TableExistsAsync(string connectionString, string tableName)

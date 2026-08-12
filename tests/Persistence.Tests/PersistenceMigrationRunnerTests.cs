@@ -106,6 +106,61 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(migrationId, exception.MigrationId);
     }
 
+    [Theory]
+    [InlineData(MalformedCreateTableMigration.MigrationId)]
+    [InlineData(MalformedRenameTableMigration.MigrationId)]
+    [InlineData(MalformedAlterColumnMigration.MigrationId)]
+    [InlineData(MalformedDropColumnMigration.MigrationId)]
+    public async Task MigrateAsync_MalformedStructuralOperation_FailsBeforeOpeningConnection(
+        string migrationId)
+    {
+        var runner = CreateRunner(BuildPlan(migrationId), out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+        Assert.Equal(migrationId, exception.MigrationId);
+    }
+
+    [Theory]
+    [InlineData(AddMismatchedRevisionColumnMigration.MigrationId)]
+    [InlineData(AddRevisionWithBusinessDefaultMigration.MigrationId)]
+    public async Task MigrateAsync_AddColumnThatDoesNotMatchProviderTarget_FailsBeforeOpeningConnection(
+        string migrationId)
+    {
+        var plan = BuildPlanWithRevision(migrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
+            () => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+        Assert.Equal(migrationId, exception.MigrationId);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_AddRequiredColumnWithClrDefault_NormalizesToNoDefaultBeforeConnection()
+    {
+        var plan = BuildPlanWithRevision(AddRevisionWithClrDefaultMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => runner.MigrateAsync());
+
+        Assert.False(
+            exception is PersistencePlanExecutionException
+            {
+                FailureCode: PersistenceMigrationFailureCodes.OperationForbidden
+            },
+            exception.ToString());
+    }
+
     [Fact]
     public async Task MigrateAsync_FilteredModuleIndex_FailsBeforeOpeningConnection()
     {
@@ -439,6 +494,75 @@ public sealed class PersistenceMigrationRunnerTests
         {
             AssemblyImage = new VerifiedArtifactImage(File.ReadAllBytes(assemblyPath))
         };
+        return new CompiledPersistencePlan(
+            "test-candidate",
+            new string('a', 64),
+            new string('a', 64),
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            models,
+            [stream]);
+    }
+
+    private static CompiledPersistencePlan BuildPlanWithRevision(string migrationId)
+    {
+        const string owner = "Partner.AssetCatalog";
+        const string schema = "np_partner_assetcatalog";
+        var models = TestPersistencePlan.Create().Models
+            .Append(new ModelDefinition(
+                "Asset",
+                "Asset",
+                ModelKind.Entity,
+                [
+                    new FieldDefinition(
+                        "Id",
+                        "Id",
+                        FieldKind.Scalar,
+                        FieldValueType.ObjectId,
+                        "string",
+                        Required: true,
+                        IsPrimaryKey: true,
+                        IsAuditField: false),
+                    new FieldDefinition(
+                        "Revision",
+                        "Revision",
+                        FieldKind.Scalar,
+                        FieldValueType.Integer,
+                        "long",
+                        Required: true,
+                        IsPrimaryKey: false,
+                        IsAuditField: false)
+                ],
+                [],
+                owner,
+                schema))
+            .ToArray();
+        var modelDigest = PersistenceModelDigest.Compute(models);
+        var assemblyPath = typeof(AddMismatchedRevisionColumnMigration).Assembly.Location;
+        var stream = new ModuleMigrationStream(
+            owner,
+            PersistenceProvider.SqlServer,
+            assemblyPath,
+            "test-manifest.json",
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assemblyPath))),
+            modelDigest,
+            migrationId,
+            IsLegacyBaseline: false,
+            [
+                new CompiledMigrationStep(
+                    "000001",
+                    migrationId,
+                    null,
+                    new string('c', 64),
+                    new string('d', 64),
+                    modelDigest,
+                    "safe-expand")
+            ])
+        {
+            AssemblyImage = new VerifiedArtifactImage(File.ReadAllBytes(assemblyPath))
+        };
+
         return new CompiledPersistencePlan(
             "test-candidate",
             new string('a', 64),

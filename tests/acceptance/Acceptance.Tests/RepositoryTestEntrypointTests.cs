@@ -133,8 +133,8 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("Filter(new LocatorFilterOptions { HasTextString = fixture.CompanyName })", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\".ant-drawer-content:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\".ant-table-content:visible\"", runner, StringComparison.Ordinal);
-        Assert.Contains("HasTextString = \"刷新\"", runner, StringComparison.Ordinal);
-        Assert.Contains("HasTextString = \"重置\"", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"刷新\", Exact = true", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"重置\", Exact = true", runner, StringComparison.Ordinal);
         Assert.Contains("await refresh.First.ClickAsync()", runner, StringComparison.Ordinal);
         Assert.Contains("await reset.First.ClickAsync()", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("Name = \"查看\"", runner, StringComparison.Ordinal);

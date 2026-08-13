@@ -677,20 +677,18 @@ internal sealed class PersonnelAcceptanceRunner
             throw new InvalidOperationException("Personnel keyword control did not retain keyboard focus after Enter submission.");
         }
 
-        var refresh = page.Locator("button:visible", new PageLocatorOptions { HasTextString = "刷新" });
-        if (await refresh.CountAsync() < 1)
-        {
-            throw new InvalidOperationException("Personnel page did not expose a visible named refresh entry.");
-        }
+        var refresh = page.GetByRole(
+            AriaRole.Button,
+            new PageGetByRoleOptions { Name = "刷新", Exact = true }).First;
+        await refresh.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await refresh.First.ClickAsync();
         await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo }).Last
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
 
-        var reset = page.Locator("button:visible", new PageLocatorOptions { HasTextString = "重置" });
-        if (await reset.CountAsync() < 1)
-        {
-            throw new InvalidOperationException("Personnel page did not expose a visible named reset entry.");
-        }
+        var reset = page.GetByRole(
+            AriaRole.Button,
+            new PageGetByRoleOptions { Name = "重置", Exact = true }).First;
+        await reset.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await reset.First.ClickAsync();
         await page.WaitForFunctionAsync("() => !new URL(window.location.href).searchParams.has('keyword')");
     }

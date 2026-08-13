@@ -658,7 +658,7 @@ internal sealed class PersonnelAcceptanceRunner
 
     private async Task AssertSubmittedQueryAndKeyboardAsync(IPage page, PersonData person)
     {
-        var drawer = page.Locator(".ant-drawer-content").Last;
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
         if (await drawer.IsVisibleAsync())
         {
             await drawer.Locator(".ant-drawer-close").ClickAsync();
@@ -713,7 +713,7 @@ internal sealed class PersonnelAcceptanceRunner
             var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
             await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             AssertContains(await row.InnerTextAsync(), person.Name, $"{viewportName} person row");
-            var tableContent = page.Locator(".ant-table-content").First;
+            var tableContent = page.Locator(".ant-table-content:visible").First;
             await tableContent.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             if (viewportName == "narrow"
                 && !await tableContent.EvaluateAsync<bool>("element => element.scrollWidth > element.clientWidth"))
@@ -748,8 +748,8 @@ internal sealed class PersonnelAcceptanceRunner
             await SubmitPersonnelKeywordAsync(page, person.PersonNo);
             var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
             await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            if (await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "新建人员", Exact = true }).CountAsync() != 0
-                || await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "编辑", Exact = true }).CountAsync() != 0)
+            if (await page.Locator("button:visible", new PageLocatorOptions { HasTextString = "新建人员" }).CountAsync() != 0
+                || await row.Locator("button:visible", new LocatorLocatorOptions { HasTextString = "编辑" }).CountAsync() != 0)
             {
                 throw new InvalidOperationException("Restricted Personnel subject received a write action in the Shell projection.");
             }
@@ -806,7 +806,7 @@ internal sealed class PersonnelAcceptanceRunner
         AssertContains(rowText, fixture.CompanyName, "company display name in list row");
         AssertContains(rowText, fixture.DepartmentName, "department display name in list row");
 
-        var drawer = page.Locator(".ant-drawer-content").Last;
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
         // 硬刷新会按 URL 恢复已打开的查看抽屉；此时遮罩仍在，不能再次点击行内入口。
         if (!await drawer.IsVisibleAsync())
         {

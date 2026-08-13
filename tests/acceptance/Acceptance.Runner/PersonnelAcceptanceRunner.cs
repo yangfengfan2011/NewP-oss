@@ -49,6 +49,7 @@ internal sealed class PersonnelAcceptanceRunner
     private string? _adminPassword;
     private string? _readOnlyECode;
     private string? _readOnlyPassword;
+    private long? _readOnlyRevision;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
 
     public PersonnelAcceptanceRunner(
@@ -197,7 +198,7 @@ internal sealed class PersonnelAcceptanceRunner
             var revision = ReadLong(restrictedLogin.RootElement, "revision");
             _adminPassword = $"Adm-{_runId}-Pass";
             _secretTokens.Add(_adminPassword);
-            await ChangePasswordAsync(
+            _ = await ChangePasswordAsync(
                 administrator,
                 bootstrap.TemporaryCredential,
                 _adminPassword,
@@ -228,7 +229,7 @@ internal sealed class PersonnelAcceptanceRunner
                 cancellationToken);
             _readOnlyPassword = $"Read-{_runId}-Pass";
             _secretTokens.Add(_readOnlyPassword);
-            await ChangePasswordAsync(
+            _readOnlyRevision = await ChangePasswordAsync(
                 readOnly,
                 temporaryCredential,
                 _readOnlyPassword,
@@ -475,7 +476,8 @@ internal sealed class PersonnelAcceptanceRunner
                    new
                    {
                        accountEid = fixture.ReadOnlyUserId,
-                       expectedRevision = enabledRevision,
+                       expectedRevision = _readOnlyRevision
+                           ?? throw new InvalidOperationException("Read-only account revision was not prepared."),
                        reason = "Personnel acceptance permanent binding"
                    },
                    cancellationToken))
@@ -1338,7 +1340,7 @@ internal sealed class PersonnelAcceptanceRunner
         return JsonDocument.Parse(body);
     }
 
-    private static async Task ChangePasswordAsync(
+    private static async Task<long> ChangePasswordAsync(
         HttpClient client,
         string currentPassword,
         string newPassword,
@@ -1354,6 +1356,8 @@ internal sealed class PersonnelAcceptanceRunner
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.OK, body, "change identity password");
         CaptureAuthenticationCookie(client, response);
+        using var result = JsonDocument.Parse(body);
+        return ReadLong(ReadObject(result.RootElement, "account"), "revision");
     }
 
     private static void CaptureAuthenticationCookie(HttpClient client, HttpResponseMessage response)

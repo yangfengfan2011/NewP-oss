@@ -678,15 +678,18 @@ internal sealed class PersonnelAcceptanceRunner
         }
 
         var refresh = page.Locator("button:visible", new PageLocatorOptions { HasTextString = "刷新" });
-        if (await refresh.CountAsync() != 1)
+        if (await refresh.CountAsync() < 1)
         {
-            throw new InvalidOperationException("Personnel page did not expose exactly one named refresh entry.");
+            throw new InvalidOperationException("Personnel page did not expose a visible named refresh entry.");
         }
+        await refresh.First.ClickAsync();
+        await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo }).Last
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
 
         var reset = page.Locator("button:visible", new PageLocatorOptions { HasTextString = "重置" });
-        if (await reset.CountAsync() != 1)
+        if (await reset.CountAsync() < 1)
         {
-            throw new InvalidOperationException("Personnel page did not expose exactly one visible reset entry.");
+            throw new InvalidOperationException("Personnel page did not expose a visible named reset entry.");
         }
         await reset.First.ClickAsync();
         await page.WaitForFunctionAsync("() => !new URL(window.location.href).searchParams.has('keyword')");

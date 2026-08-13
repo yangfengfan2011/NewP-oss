@@ -134,6 +134,8 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("Locator(\".ant-table-content:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("HasTextString = \"刷新\"", runner, StringComparison.Ordinal);
         Assert.Contains("HasTextString = \"重置\"", runner, StringComparison.Ordinal);
+        Assert.Contains("await refresh.First.ClickAsync()", runner, StringComparison.Ordinal);
+        Assert.Contains("await reset.First.ClickAsync()", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("Name = \"查看\"", runner, StringComparison.Ordinal);
         Assert.DoesNotContain(".ant-drawer-content #PersonNo", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("window.location.pathname !== '/login'", runner, StringComparison.Ordinal);

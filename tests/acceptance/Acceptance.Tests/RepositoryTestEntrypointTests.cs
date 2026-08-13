@@ -130,6 +130,7 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("SubmitPersonnelKeywordAsync(page, person.PersonNo)", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\"button:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\"tr:visible\"", runner, StringComparison.Ordinal);
+        Assert.Contains("Filter(new LocatorFilterOptions { HasTextString = fixture.CompanyName })", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\".ant-drawer-content:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\".ant-table-content:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("HasTextString = \"刷新\"", runner, StringComparison.Ordinal);

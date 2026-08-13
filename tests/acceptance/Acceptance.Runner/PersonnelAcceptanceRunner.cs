@@ -801,7 +801,11 @@ internal sealed class PersonnelAcceptanceRunner
         FixtureData fixture)
     {
         await SubmitPersonnelKeywordAsync(page, person.PersonNo);
-        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
+        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
+            .Filter(new LocatorFilterOptions { HasTextString = person.Name })
+            .Filter(new LocatorFilterOptions { HasTextString = fixture.CompanyName })
+            .Filter(new LocatorFilterOptions { HasTextString = fixture.DepartmentName })
+            .Last;
         await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         var rowText = await row.InnerTextAsync();
         AssertContains(rowText, person.PersonNo, "person number in list row");

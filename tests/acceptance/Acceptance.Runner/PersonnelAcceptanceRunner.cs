@@ -666,6 +666,7 @@ internal sealed class PersonnelAcceptanceRunner
         }
 
         var keyword = page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true });
+        await keyword.FillAsync(string.Empty);
         await keyword.FillAsync(person.PersonNo);
         await keyword.PressAsync("Enter");
         await page.WaitForFunctionAsync("() => new URL(window.location.href).searchParams.has('keyword')");
@@ -703,6 +704,7 @@ internal sealed class PersonnelAcceptanceRunner
         await using (context)
         {
             var page = await LoginAndOpenPersonnelAsync(context, "admin", adminPassword, cancellationToken);
+            await SubmitPersonnelKeywordAsync(page, person.PersonNo);
             var row = page.Locator("tr", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
             await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             AssertContains(await row.InnerTextAsync(), person.Name, $"{viewportName} person row");
@@ -738,6 +740,7 @@ internal sealed class PersonnelAcceptanceRunner
                 _readOnlyECode ?? throw new InvalidOperationException("Read-only ECODE was not prepared."),
                 _readOnlyPassword ?? throw new InvalidOperationException("Read-only password was not prepared."),
                 cancellationToken);
+            await SubmitPersonnelKeywordAsync(page, person.PersonNo);
             var row = page.Locator("tr", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
             await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             if (await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "新建人员", Exact = true }).CountAsync() != 0
@@ -789,6 +792,7 @@ internal sealed class PersonnelAcceptanceRunner
         PersonData person,
         FixtureData fixture)
     {
+        await SubmitPersonnelKeywordAsync(page, person.PersonNo);
         var row = page.Locator("tr", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
         await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         var rowText = await row.InnerTextAsync();
@@ -816,6 +820,16 @@ internal sealed class PersonnelAcceptanceRunner
         AssertContains(drawerText, person.Name, "person name in view drawer");
         AssertContains(drawerText, fixture.CompanyName, "company display name in view drawer");
         AssertContains(drawerText, fixture.DepartmentName, "department display name in view drawer");
+    }
+
+    private static async Task SubmitPersonnelKeywordAsync(IPage page, string keywordValue)
+    {
+        var keyword = page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true });
+        await keyword.FillAsync(keywordValue);
+        await keyword.PressAsync("Enter");
+        await page.WaitForFunctionAsync(
+            "value => new URL(window.location.href).searchParams.get('keyword') === value",
+            keywordValue);
     }
 
     private async Task RunRestartScenarioAsync(CancellationToken cancellationToken)

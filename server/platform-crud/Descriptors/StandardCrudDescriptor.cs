@@ -19,6 +19,11 @@ public sealed class StandardCrudDescriptor
     public IReadOnlyList<PlatformDisplayValueField> DisplayValueFields { get; init; } = [];
 
     /// <summary>
+    /// 获取或设置用于普通更新乐观并发检查的单调递增 long 字段；未声明的资源保持旧更新语义。
+    /// </summary>
+    public string? ConcurrencyRevisionField { get; init; }
+
+    /// <summary>
     /// 获取或设置允许客户端请求的服务端单列排序字段。
     /// </summary>
     public IReadOnlyList<string> SortableFields { get; init; } = [];

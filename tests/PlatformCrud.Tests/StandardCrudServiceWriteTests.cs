@@ -145,6 +145,75 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenDeclaredRevisionIsStale_ReturnsConflictWithoutOverwriting()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
+            }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            Descriptor(concurrencyRevisionField: "Revision"),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "过期草稿", ["Revision"] = 3L });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.ConcurrencyConflict", result.Error.Code);
+        var current = await repository.GetByIdAsync(Descriptor(concurrencyRevisionField: "Revision"), "person-1");
+        Assert.Equal("服务器姓名", current!["ENAME"]);
+        Assert.Equal(4L, current["Revision"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenDeclaredRevisionMatches_UpdatesAndReturnsIncrementedRevision()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
+            }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            Descriptor(concurrencyRevisionField: "Revision"),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "新姓名", ["Revision"] = 4m });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("新姓名", result.Detail!.Fields["ENAME"]);
+        Assert.Equal(5L, result.Detail.Fields["Revision"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenDeclaredRevisionIsMissing_FailsClosed()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "服务器姓名", ["IsEnabled"] = true, ["Revision"] = 4L
+            }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            Descriptor(concurrencyRevisionField: "Revision"),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "无版本草稿" });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.ConcurrencyRevisionRequired", result.Error.Code);
+    }
+
+    [Fact]
     public async Task DisableAsync_SetsEnabledFieldFalse()
     {
         var repository = new InMemoryStandardCrudRepository(
@@ -390,7 +459,8 @@ public sealed class StandardCrudServiceWriteTests
         StandardCrudDeletePolicy policy = StandardCrudDeletePolicy.None,
         bool includeEnabledInUpdateFields = true,
         bool includeUpdatedAt = false,
-        bool includeCreatedAt = false) => new()
+        bool includeCreatedAt = false,
+        string? concurrencyRevisionField = null) => new()
     {
         ResourceKey = "organization.person",
         ModuleId = "Organization",
@@ -401,7 +471,9 @@ public sealed class StandardCrudServiceWriteTests
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "IsEnabled"],
-            DetailFields: includeCreatedAt
+            DetailFields: concurrencyRevisionField is not null
+                ? ["EID", "PersonNo", "ENAME", "IsEnabled", concurrencyRevisionField]
+                : includeCreatedAt
                 ? ["EID", "PersonNo", "ENAME", "IsEnabled", "CreatedAt"]
                 : includeUpdatedAt
                 ? ["EID", "PersonNo", "ENAME", "IsEnabled", "UpdatedAt"]
@@ -410,7 +482,8 @@ public sealed class StandardCrudServiceWriteTests
             UpdateFields: includeUpdatedAt
                 ? ["ENAME", "IsEnabled", "UpdatedAt"]
                 : includeEnabledInUpdateFields ? ["ENAME", "IsEnabled"] : ["ENAME"]),
-        DeletePolicy = policy
+        DeletePolicy = policy,
+        ConcurrencyRevisionField = concurrencyRevisionField
     };
 
     private static StandardCrudDescriptor DescriptorWithUniqueConstraint(bool includePersonNoInUpdate = false) => new()

@@ -217,6 +217,8 @@ export interface StandardCrudResourceRegistration<
   listRoutePath?: string;
   detailViewKey?: string;
   detailRoutePath?: string;
+  /** 普通更新需要从已加载详情原样回传的单调递增并发版本字段。 */
+  concurrencyRevisionField?: string;
   listPanelTitle?: string;
   permissions?: string[];
   // 第二批扩展只声明资源允许的平台化能力；lookup 加载、动作状态、summary 状态和提交流程仍由 Shell 运行时执行。
@@ -707,19 +709,28 @@ export function buildStandardCrudPath(
 async function requestJson<T>(fetcher: typeof fetch, path: string, init: RequestInit, errorMessage: string): Promise<T> {
   const response = await fetcher(path, init);
   if (!response.ok) {
-    let problem: { message?: unknown; title?: unknown; errors?: unknown } = {};
+    let problem: { message?: unknown; title?: unknown; errors?: unknown; fieldErrors?: unknown } = {};
     try {
       problem = await response.clone().json() as typeof problem;
     } catch {
       problem = {};
     }
-    const fieldErrors = typeof problem.errors === 'object' && problem.errors !== null && !Array.isArray(problem.errors)
+    const legacyFieldErrors = typeof problem.errors === 'object' && problem.errors !== null && !Array.isArray(problem.errors)
       ? Object.fromEntries(Object.entries(problem.errors).flatMap(([key, value]) => {
         if (typeof value === 'string') return [[key, value]];
         if (Array.isArray(value) && typeof value[0] === 'string') return [[key, value[0]]];
         return [];
       }))
       : {};
+    const standardFieldErrors = Array.isArray(problem.fieldErrors)
+      ? Object.fromEntries(problem.fieldErrors.flatMap((value) => {
+        if (!isStandardCrudRecord(value)) return [];
+        return typeof value.field === 'string' && typeof value.message === 'string'
+          ? [[value.field, value.message]]
+          : [];
+      }))
+      : {};
+    const fieldErrors = { ...legacyFieldErrors, ...standardFieldErrors };
     const backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
       ? problem.message
       : typeof problem.title === 'string' && problem.title.trim().length > 0

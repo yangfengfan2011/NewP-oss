@@ -210,6 +210,79 @@ public sealed class PersonCrudValidatorTests
         AssertError(error, expectedCode, "PositionId");
     }
 
+    [Fact]
+    public async Task ValidateCreateAsync_WithPositionButNoAffiliation_RequiresCompanyAndDepartment()
+    {
+        var validator = CreateValidator([], [], positions: [Position("Position_1", DepartmentId, enabled: true)]);
+        var values = Values(null, null);
+        values["PositionId"] = "Position_1";
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            values,
+            CancellationToken.None);
+
+        AssertError(error, "Organization.Person.CompanyRequired", "CompanyId");
+    }
+
+    [Fact]
+    public async Task ValidateCreateAsync_WithPositionAndCompleteAffiliation_ReturnsNoError()
+    {
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: true)],
+            [Department(DepartmentId, CompanyId, enabled: true)],
+            positions: [Position("Position_1", DepartmentId, enabled: true)]);
+        var values = Values(CompanyId, DepartmentId);
+        values["PositionId"] = "Position_1";
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            values,
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_WithPositionButNoAffiliation_RequiresCompanyAndDepartment()
+    {
+        var existing = Values(null, null);
+        existing["EID"] = "Person_1";
+        var validator = CreateValidator(
+            [],
+            [],
+            existing,
+            positions: [Position("Position_1", DepartmentId, enabled: true)]);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?> { ["PositionId"] = "Position_1" },
+            CancellationToken.None);
+
+        AssertError(error, "Organization.Person.CompanyRequired", "CompanyId");
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_WithPositionAndCompleteAffiliation_ReturnsNoError()
+    {
+        var existing = Values(CompanyId, DepartmentId);
+        existing["EID"] = "Person_1";
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: true)],
+            [Department(DepartmentId, CompanyId, enabled: true)],
+            existing,
+            positions: [Position("Position_1", DepartmentId, enabled: true)]);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?> { ["PositionId"] = "Position_1" },
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
     private static PersonCrudValidator CreateValidator(
         IEnumerable<Company> companies,
         IEnumerable<Department> departments,

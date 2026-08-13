@@ -989,9 +989,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       setSaveFieldErrors({});
       setHasSaveConflict(false);
       const mutationFields = drawerState.mode === 'create' ? createFields : editFields;
-      const values = registration.buildMutationValues
+      const normalizedValues = registration.buildMutationValues
         ? registration.buildMutationValues(formValues)
         : normalizeStandardCrudSubmitValues(mutationFields, formValues);
+      const values = drawerState.mode === 'edit' && registration.concurrencyRevisionField
+        ? {
+            ...normalizedValues,
+            [registration.concurrencyRevisionField]: detailFields[registration.concurrencyRevisionField],
+          }
+        : normalizedValues;
 
       if (drawerState.mode === 'create') {
         await client.create(values);

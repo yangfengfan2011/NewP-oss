@@ -113,6 +113,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   listRoutePath: '/organization/persons',
   detailViewKey: 'organization.person.detail',
   detailRoutePath: '/organization/persons/:id',
+  concurrencyRevisionField: 'Revision',
   permissions: ['Organization.Person.View'],
   lookupProviders: organizationLookupProviders,
   enumOptions: {

@@ -150,6 +150,9 @@ public sealed class StandardCrudService : IStandardCrudService
         return StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, created, cancellationToken));
     }
 
+    /// <summary>
+    /// 按描述符白名单更新资源；声明 revision 字段的资源必须提交详情版本并通过仓储条件更新。
+    /// </summary>
     public async Task<StandardCrudMutationResult> UpdateAsync(
         StandardCrudDescriptor descriptor,
         string id,
@@ -161,6 +164,23 @@ public sealed class StandardCrudService : IStandardCrudService
         if (existing is null)
         {
             return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+        }
+
+        long? expectedRevision = null;
+        if (!string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
+        {
+            if (!TryReadRevision(values, descriptor.ConcurrencyRevisionField, out var submittedRevision))
+            {
+                return StandardCrudMutationResult.Failure(ConcurrencyRevisionRequired(descriptor));
+            }
+
+            if (!TryReadRevision(existing, descriptor.ConcurrencyRevisionField, out var currentRevision)
+                || submittedRevision != currentRevision)
+            {
+                return StandardCrudMutationResult.Failure(ConcurrencyConflict(descriptor));
+            }
+
+            expectedRevision = submittedRevision;
         }
 
         var allowed = new Dictionary<string, object?>(
@@ -194,9 +214,13 @@ public sealed class StandardCrudService : IStandardCrudService
             }
         }
 
-        var updated = await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
+        var updated = expectedRevision.HasValue
+            ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
+            : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
         return updated is null
-            ? StandardCrudMutationResult.Failure(NotFound(descriptor, id))
+            ? StandardCrudMutationResult.Failure(expectedRevision.HasValue
+                ? ConcurrencyConflict(descriptor)
+                : NotFound(descriptor, id))
             : StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, updated, cancellationToken));
     }
 
@@ -585,6 +609,62 @@ public sealed class StandardCrudService : IStandardCrudService
             values["UpdatedAt"] = DateTime.UtcNow;
         }
     }
+
+    // revision 可能来自 EF long、测试数值或 System.Text.Json；这里只接受可无损转换的非负整数。
+    private static bool TryReadRevision(
+        IReadOnlyDictionary<string, object?> values,
+        string field,
+        out long revision)
+    {
+        revision = default;
+        if (!values.TryGetValue(field, out var value))
+        {
+            return false;
+        }
+
+        var parsed = value switch
+        {
+            long longValue => longValue,
+            int intValue => intValue,
+            decimal decimalValue
+                when decimalValue >= 0
+                    && decimalValue <= long.MaxValue
+                    && decimal.Truncate(decimalValue) == decimalValue => (long)decimalValue,
+            System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Number } element
+                when element.TryGetInt64(out var jsonValue) => jsonValue,
+            string text when long.TryParse(
+                text,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var textValue) => textValue,
+            _ => -1
+        };
+        if (parsed < 0)
+        {
+            return false;
+        }
+
+        revision = parsed;
+        return true;
+    }
+
+    // 缺少客户端已读取版本时不得降级为无条件覆盖，调用方需要重新加载详情后再提交。
+    private static StandardCrudError ConcurrencyRevisionRequired(StandardCrudDescriptor descriptor) => new()
+    {
+        StatusCode = 409,
+        Code = "StandardCrud.ConcurrencyRevisionRequired",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 缺少有效并发版本，请重新加载后再编辑。",
+        ReasonKey = "standardCrud.concurrencyRevisionRequired"
+    };
+
+    // 条件更新未命中时统一返回稳定冲突，不泄漏或覆盖服务器上的新版本。
+    private static StandardCrudError ConcurrencyConflict(StandardCrudDescriptor descriptor) => new()
+    {
+        StatusCode = 409,
+        Code = "StandardCrud.ConcurrencyConflict",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 已发生变化，请重新加载后再编辑。",
+        ReasonKey = "standardCrud.concurrencyConflict"
+    };
 
     private static StandardCrudError NotFound(StandardCrudDescriptor descriptor, string id) => new()
     {

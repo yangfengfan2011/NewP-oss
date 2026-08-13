@@ -166,6 +166,54 @@ public sealed class StandardCrudDescriptorTests
     }
 
     [Fact]
+    public void Validate_WhenConcurrencyRevisionIsNotReadable_ThrowsStableMessage()
+    {
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            ConcurrencyRevisionField = "Revision",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"])
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的并发版本字段 Revision 必须包含在 DetailFields 中。", error.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenConcurrencyRevisionIsBusinessWritable_ThrowsStableMessage()
+    {
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            ConcurrencyRevisionField = "Revision",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "Revision"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME", "Revision"])
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal("标准 CRUD 资源 organization.person 的并发版本字段 Revision 不得作为业务更新字段声明。", error.Message);
+    }
+
+    [Fact]
     public void Validate_WhenRequiredFieldContractMissing_ThrowsStableMessage()
     {
         var descriptor = DescriptorWithRequiredFields(

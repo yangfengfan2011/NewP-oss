@@ -4,6 +4,7 @@ using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Tests.Support;
 using ICP.Platform.Persistence.EfCore;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -172,6 +173,39 @@ public sealed class StandardCrudEfRepositoryTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WithRevisionCondition_RejectsStaleAndIncrementsFreshRevision()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildSqliteDbContext(connection);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "服务器姓名", true));
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+        ICP.Platform.Crud.Abstractions.IStandardCrudRepository repository =
+            new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var descriptor = Descriptor(concurrencyRevisionField: "Revision");
+
+        var stale = await repository.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "过期草稿" },
+            expectedRevision: 3L);
+        var afterStale = await repository.GetByIdAsync(descriptor, "person-1");
+        var fresh = await repository.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "新姓名" },
+            expectedRevision: 0L);
+
+        Assert.Null(stale);
+        Assert.Equal("服务器姓名", afterStale!["ENAME"]);
+        Assert.NotNull(fresh);
+        Assert.Equal("新姓名", fresh["ENAME"]);
+        Assert.Equal(1L, fresh["Revision"]);
+    }
+
+    [Fact]
     public void PlatformObjectIdGenerator_NewId_UsesModelNamePrefixAndLowerHex()
     {
         var id = new PlatformObjectIdGenerator().NewId("Person");
@@ -199,6 +233,15 @@ public sealed class StandardCrudEfRepositoryTests
         return new EfPlatformDbContext(options, [PlatformCrudModelDefinitions.Person()]);
     }
 
+    private static EfPlatformDbContext BuildSqliteDbContext(SqliteConnection connection)
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        return new EfPlatformDbContext(options, [PlatformCrudModelDefinitions.Person()]);
+    }
+
     private static Dictionary<string, object?> Row(string id, string personNo, string name, bool isEnabled) => new(StringComparer.Ordinal)
     {
         ["EID"] = id,
@@ -211,7 +254,7 @@ public sealed class StandardCrudEfRepositoryTests
         ["CreatedAt"] = DateTime.UtcNow
     };
 
-    private static StandardCrudDescriptor Descriptor() => new()
+    private static StandardCrudDescriptor Descriptor(string? concurrencyRevisionField = null) => new()
     {
         ResourceKey = "organization.person",
         ModuleId = "Organization",
@@ -225,7 +268,8 @@ public sealed class StandardCrudEfRepositoryTests
             DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled", "Revision", "EffectiveAt", "CreatedAt"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"]),
-        OptionLabelFields = ["PersonNo", "ENAME"]
+        OptionLabelFields = ["PersonNo", "ENAME"],
+        ConcurrencyRevisionField = concurrencyRevisionField
     };
 
     private static StandardCrudUniqueConstraint UniqueConstraint(bool caseInsensitive = true) => new()

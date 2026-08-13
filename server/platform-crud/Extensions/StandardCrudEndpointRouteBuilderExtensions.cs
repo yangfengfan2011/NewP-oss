@@ -214,6 +214,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         }
     }
 
+    // 枚举一个 descriptor 会派生的全部 HTTP 路由，供启动期统一检查静态与参数路由冲突。
     private static IEnumerable<StandardRouteCandidate> BuildRouteCandidates(StandardCrudDescriptor descriptor)
     {
         var route = "/" + descriptor.Route.Trim().Trim('/');

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.IO.Compression;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
@@ -245,11 +246,12 @@ public sealed class StandardCrudEndpointRouteBuilderTests
 
         var updateResponse = await client.PutAsJsonAsync(
             "/api/organization/persons/Person_00000000000000000000000000000001",
-            new Dictionary<string, object?> { ["ENAME"] = "李四" });
+            new Dictionary<string, object?> { ["ENAME"] = "李四", ["Revision"] = 4L });
 
         Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
         Assert.Equal(nameof(IStandardCrudService.UpdateAsync), recording.LastMutation);
         Assert.Equal("李四", recording.LastMutationValues!["ENAME"]!.ToString());
+        Assert.Equal(4L, recording.LastMutationValues["Revision"]);
 
         var disableResponse = await client.PostAsync(
             "/api/organization/persons/Person_00000000000000000000000000000001/disable",
@@ -274,7 +276,11 @@ public sealed class StandardCrudEndpointRouteBuilderTests
                 StatusCode = 409,
                 Code = "Organization.Person.PersonNoDuplicated",
                 Message = "人员工号必须唯一。",
-                ReasonKey = "organization.person.personNoDuplicated"
+                ReasonKey = "organization.person.personNoDuplicated",
+                FieldErrors =
+                [
+                    new StandardCrudFieldError("PersonNo", "Organization.Person.PersonNoDuplicated", "人员工号必须唯一。")
+                ]
             })
         };
         await using var app = BuildApp(recording);
@@ -285,6 +291,8 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "张三" });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("PersonNo", problem.GetProperty("fieldErrors")[0].GetProperty("field").GetString());
     }
 
     [Fact]

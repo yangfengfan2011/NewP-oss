@@ -27,9 +27,26 @@ public static class StandardCrudDescriptorValidator
         }
 
         ValidateDisplayValueFields(descriptor);
+        ValidateConcurrencyRevision(descriptor);
         ValidateSort(descriptor);
         ValidateRequiredFields(descriptor);
         ValidateUniqueConstraints(descriptor);
+    }
+
+    // 并发版本必须可由详情读取，但不属于业务可编辑字段，服务层会单独读取并交给仓储执行条件更新。
+    private static void ValidateConcurrencyRevision(StandardCrudDescriptor descriptor)
+    {
+        if (string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
+        {
+            return;
+        }
+
+        Require(
+            descriptor.FieldSet.DetailFields.Contains(descriptor.ConcurrencyRevisionField, StringComparer.Ordinal),
+            $"标准 CRUD 资源 {descriptor.ResourceKey} 的并发版本字段 {descriptor.ConcurrencyRevisionField} 必须包含在 DetailFields 中。");
+        Require(
+            !descriptor.FieldSet.UpdateFields.Contains(descriptor.ConcurrencyRevisionField, StringComparer.Ordinal),
+            $"标准 CRUD 资源 {descriptor.ResourceKey} 的并发版本字段 {descriptor.ConcurrencyRevisionField} 不得作为业务更新字段声明。");
     }
 
     // 这里统一生成描述符失败信号，避免后续模块各自散落不同错误文案。

@@ -50,6 +50,15 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public void PersonCrudDescriptor_DeclaresRevisionConcurrency()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        Assert.Equal("Revision", descriptor.ConcurrencyRevisionField);
+        Assert.Contains(descriptor.ConcurrencyRevisionField, descriptor.FieldSet.DetailFields);
+    }
+
+    [Fact]
     public void Descriptor_ShouldExposePersonDisplayValueProjectionFields()
     {
         var descriptor = PersonCrudDescriptorFactory.Create();

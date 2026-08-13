@@ -92,6 +92,33 @@ public class InMemoryStandardCrudRepository : IStandardCrudRepository
         return Task.FromResult<IReadOnlyDictionary<string, object?>?>(Project(row, descriptor.FieldSet.DetailFields));
     }
 
+    public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        IReadOnlyDictionary<string, object?> values,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        var revisionField = descriptor.ConcurrencyRevisionField;
+        var row = _rows.FirstOrDefault(item =>
+            string.Equals(item[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal)
+            && revisionField is not null
+            && item.TryGetValue(revisionField, out var revision)
+            && Convert.ToInt64(revision, System.Globalization.CultureInfo.InvariantCulture) == expectedRevision);
+        if (row is null || revisionField is null)
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
+        }
+
+        foreach (var pair in values)
+        {
+            row[pair.Key] = pair.Value;
+        }
+
+        row[revisionField] = expectedRevision + 1;
+        return Task.FromResult<IReadOnlyDictionary<string, object?>?>(Project(row, descriptor.FieldSet.DetailFields));
+    }
+
     public Task<bool> DeleteAsync(
         StandardCrudDescriptor descriptor,
         string id,

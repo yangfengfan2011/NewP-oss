@@ -49,6 +49,17 @@ public interface IStandardCrudRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 以调用方已读取的 long revision 执行条件更新；实现不支持该能力时返回 null，使声明并发保护的资源失败关闭。
+    /// </summary>
+    Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        IReadOnlyDictionary<string, object?> values,
+        long expectedRevision,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
+
+    /// <summary>
     /// 删除一条标准 CRUD 资源记录；删除策略与守卫必须在服务层先完成判断。
     /// </summary>
     Task<bool> DeleteAsync(

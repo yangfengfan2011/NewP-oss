@@ -139,6 +139,25 @@ describe('standard CRUD SDK helpers', () => {
     });
   });
 
+  it('maps the backend standard CRUD fieldErrors array into field feedback', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'Organization.Person.NameRequired',
+      message: '人员姓名不能为空。',
+      fieldErrors: [
+        { field: 'ENAME', code: 'Organization.Person.NameRequired', message: '人员姓名不能为空。' },
+      ],
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/problem+json' },
+    }));
+    const client = createStandardCrudClient('/api/organization/persons', fetcher as unknown as typeof fetch);
+
+    await expect(client.update('Person_1', { ENAME: '' })).rejects.toMatchObject<Partial<StandardCrudRequestError>>({
+      status: 400,
+      fieldErrors: { ENAME: '人员姓名不能为空。' },
+    });
+  });
+
   it.each([
     [401, '登录状态已失效'],
     [403, '权限已变化'],

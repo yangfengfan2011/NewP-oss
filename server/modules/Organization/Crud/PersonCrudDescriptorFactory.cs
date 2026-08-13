@@ -21,6 +21,7 @@ public static class PersonCrudDescriptorFactory
         DefaultSortDirection = "asc",
         Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PersonStem),
         EnabledField = "IsEnabled",
+        ConcurrencyRevisionField = "Revision",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "AccountEID"],
             DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "CreatedAt", "UpdatedAt", "AccountEID", "AccountBoundAt", "AccountBoundBy", "AccountBindingReason"],

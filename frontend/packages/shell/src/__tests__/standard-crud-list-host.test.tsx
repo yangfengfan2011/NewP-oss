@@ -873,16 +873,18 @@ describe('StandardCrudListPageHost', () => {
   });
 
   it('keeps input and exposes reload after a 409 save conflict', async () => {
-    mockStandardCrudModule();
+    mockStandardCrudModule({ concurrencyRevisionField: 'Revision' });
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({
         items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }], total: 1, page: 1, pageSize: 20,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三' }, summaries: {},
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', Revision: 4 }, summaries: {},
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        title: '记录已经变化', errors: { ENAME: ['姓名已被其他人修改'] },
+        code: 'StandardCrud.ConcurrencyConflict',
+        message: '记录已经变化',
+        fieldErrors: [{ field: 'ENAME', code: 'Organization.Person.NameChanged', message: '姓名已被其他人修改' }],
       }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }));
 
     await renderHost();
@@ -904,6 +906,9 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.textContent).toContain('姓名已被其他人修改');
     expect(document.body.textContent).toContain('重新加载当前数据');
     expect((document.body.querySelector('input[value="李四"]') as HTMLInputElement | null)).not.toBeNull();
+    const updateCall = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'PUT');
+    expect(updateCall?.[0]).toBe('/api/organization/persons/Person_1');
+    expect(JSON.parse(String(updateCall?.[1]?.body))).toMatchObject({ ENAME: '李四', Revision: 4 });
   });
 
   it('renders a clear error when registration is missing', async () => {

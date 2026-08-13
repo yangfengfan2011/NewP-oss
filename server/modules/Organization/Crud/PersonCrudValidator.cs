@@ -57,14 +57,16 @@ public sealed class PersonCrudValidator(
         return await ValidateAffiliationAsync(candidate, cancellationToken);
     }
 
+    // 组织归属允许三者全空；一旦选择岗位，仍必须提供完整公司与部门并验证岗位归属。
     private async Task<StandardCrudError?> ValidateAffiliationAsync(
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken)
     {
         var companyId = ReadOptionalId(values, "CompanyId");
         var departmentId = ReadOptionalId(values, "DepartmentId");
+        var positionId = ReadOptionalId(values, "PositionId");
 
-        if (companyId is null && departmentId is null)
+        if (companyId is null && departmentId is null && positionId is null)
         {
             return null;
         }
@@ -106,7 +108,6 @@ public sealed class PersonCrudValidator(
             return FieldError("DepartmentId", "Organization.Person.DepartmentCompanyMismatch", "所属部门不属于所选公司。", "organization.person.departmentCompanyMismatch");
         }
 
-        var positionId = ReadOptionalId(values, "PositionId");
         if (positionId is null)
         {
             return null;

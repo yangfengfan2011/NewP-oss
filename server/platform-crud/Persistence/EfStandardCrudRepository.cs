@@ -134,6 +134,87 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         return Project(row, descriptor.FieldSet.DetailFields);
     }
 
+    /// <summary>
+    /// 以 descriptor 声明的 long revision 执行原子 claim，并在同一事务内完成业务字段更新与版本递增。
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        IReadOnlyDictionary<string, object?> values,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        var revisionField = descriptor.ConcurrencyRevisionField;
+        if (string.IsNullOrWhiteSpace(revisionField))
+        {
+            return null;
+        }
+
+        var modelKey = _dbContext.ResolveModelKey(descriptor.ModelName);
+        var rows = _dbContext.Set<Dictionary<string, object?>>(modelKey);
+        if (!_dbContext.Database.IsRelational())
+        {
+            var inMemoryRow = await rows.FirstOrDefaultAsync(item =>
+                EF.Property<string>(item, descriptor.IdField) == id
+                && EF.Property<long>(item, revisionField) == expectedRevision,
+                cancellationToken);
+            if (inMemoryRow is null)
+            {
+                return null;
+            }
+
+            ApplyUpdateValues(modelKey, inMemoryRow, values, revisionField);
+            inMemoryRow[revisionField] = expectedRevision + 1;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Project(inMemoryRow, descriptor.FieldSet.DetailFields);
+        }
+
+        await using var ownedTransaction = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        var affected = await rows
+            .Where(item =>
+                EF.Property<string>(item, descriptor.IdField) == id
+                && EF.Property<long>(item, revisionField) == expectedRevision)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    item => EF.Property<long>(item, revisionField),
+                    item => EF.Property<long>(item, revisionField) + 1),
+                cancellationToken);
+        if (affected != 1)
+        {
+            return null;
+        }
+
+        var row = await rows.FirstAsync(
+            item => EF.Property<string>(item, descriptor.IdField) == id,
+            cancellationToken);
+        ApplyUpdateValues(modelKey, row, values, revisionField);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (ownedTransaction is not null)
+        {
+            await ownedTransaction.CommitAsync(cancellationToken);
+        }
+
+        return Project(row, descriptor.FieldSet.DetailFields);
+    }
+
+    // 条件 claim 已拥有 revision；后续只复制业务字段，避免客户端把版本写回旧值。
+    private void ApplyUpdateValues(
+        string modelKey,
+        IDictionary<string, object?> row,
+        IReadOnlyDictionary<string, object?> values,
+        string revisionField)
+    {
+        foreach (var pair in values)
+        {
+            if (!string.Equals(pair.Key, revisionField, StringComparison.Ordinal))
+            {
+                row[pair.Key] = NormalizeMappedValue(modelKey, pair.Key, pair.Value);
+            }
+        }
+    }
+
     // JSON 没有日期标量；在 EF 映射边界恢复 DateTime，避免 shared-type 字典携带字符串进入 ChangeTracker。
     private object? NormalizeMappedValue(string modelKey, string fieldName, object? value)
     {

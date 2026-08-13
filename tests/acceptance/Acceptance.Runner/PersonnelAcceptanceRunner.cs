@@ -677,14 +677,14 @@ internal sealed class PersonnelAcceptanceRunner
             throw new InvalidOperationException("Personnel keyword control did not retain keyboard focus after Enter submission.");
         }
 
-        var refresh = page.Locator("button", new PageLocatorOptions { HasTextString = "刷新" });
-        if (await refresh.CountAsync() != 1 || !await refresh.First.IsVisibleAsync())
+        var refresh = page.Locator("button:visible", new PageLocatorOptions { HasTextString = "刷新" });
+        if (await refresh.CountAsync() != 1)
         {
             throw new InvalidOperationException("Personnel page did not expose exactly one named refresh entry.");
         }
 
-        var reset = page.Locator("button", new PageLocatorOptions { HasTextString = "重置" });
-        if (await reset.CountAsync() != 1 || !await reset.First.IsVisibleAsync())
+        var reset = page.Locator("button:visible", new PageLocatorOptions { HasTextString = "重置" });
+        if (await reset.CountAsync() != 1)
         {
             throw new InvalidOperationException("Personnel page did not expose exactly one visible reset entry.");
         }

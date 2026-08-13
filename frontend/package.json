@@ -17,11 +17,17 @@
   ],
   "scripts": {
     "dev": "pnpm --filter @icp-platform/shell dev",
+    "lint": "eslint \"packages/**/*.{ts,tsx}\" \"modules/**/*.{ts,tsx}\" \"templates/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0",
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r build",
     "clean": "pnpm -r exec rimraf dist node_modules .vite"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
     "rimraf": "^6.0.1",
     "typescript": "^5.4.2"
   }

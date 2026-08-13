@@ -917,6 +917,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     if (!drawer) {
       closeDrawer({ syncRoute: false });
     }
+    // URL 是抽屉兼容状态的唯一触发源，handler 身份变化不应重复打开或关闭抽屉。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
   const tableRequest = useMemo(
@@ -941,6 +943,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         },
         mapRow: (row) => row,
       }),
+    // reloadTick 是显式请求失效令牌，即使不进入闭包也必须重建 request。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [client, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter, listRequestFields],
   );
 

@@ -33,6 +33,8 @@ export function loadRuntimeLocalizationManifest(
   }
 
   let trackedLoad!: Promise<RuntimeLocalizationManifest>;
+  // finally 必须按 Promise 身份清理当前 in-flight 记录，因此需要先声明再赋值。
+  // eslint-disable-next-line prefer-const
   trackedLoad = loadRuntimeLocalizationManifestOnce(fetcher).finally(() => {
     if (inFlightLoads.get(fetcher) === trackedLoad) {
       inFlightLoads.delete(fetcher);

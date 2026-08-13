@@ -9,7 +9,6 @@ import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import StandardListPageHost from '../pages/StandardListPageHost';
 import { buildCustomPageRegistry } from '../registries/customPageRegistry';
-import { buildListViewRegistry } from '../registries/listViewRegistry';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

@@ -40,6 +40,8 @@ export function loadRuntimeMetadata(fetcher: typeof fetch = fetch): Promise<Runt
   }
 
   let trackedLoad!: Promise<RuntimeMetadataState>;
+  // finally 必须按 Promise 身份清理当前 in-flight 记录，因此需要先声明再赋值。
+  // eslint-disable-next-line prefer-const
   trackedLoad = loadRuntimeMetadataOnce(fetcher).finally(() => {
     if (inFlightLoads.get(fetcher) === trackedLoad) {
       inFlightLoads.delete(fetcher);

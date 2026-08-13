@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 export interface LocalizationLanguage {
   code: string;
@@ -122,7 +122,10 @@ export function LocalizationProvider({
   enumerationDefinitions = {},
   enumerationCatalogs = {},
 }: LocalizationProviderProps) {
-  const supportedLanguageCodes = new Set(supportedLanguages.map((language) => language.code));
+  const supportedLanguageCodes = useMemo(
+    () => new Set(supportedLanguages.map((language) => language.code)),
+    [supportedLanguages],
+  );
   const normalizedInitialLanguage = initialLanguage && supportedLanguageCodes.has(initialLanguage)
     ? initialLanguage
     : defaultLanguage;

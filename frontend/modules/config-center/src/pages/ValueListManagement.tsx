@@ -56,6 +56,8 @@ export default function ValueListManagement() {
     if (canView) {
       void loadItems();
     }
+    // loadItems 使用当前 render 的选择状态；这里只由查看权限边界触发初始加载。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView]);
 
   async function loadItems() {

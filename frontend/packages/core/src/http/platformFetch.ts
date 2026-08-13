@@ -29,6 +29,8 @@ async function getRequestToken(): Promise<string> {
   const generation = tokenGeneration;
   if (!requestTokenPromise || requestTokenPromise.generation !== generation) {
     let pending!: Promise<string>;
+    // Promise 的 finally 闭包需要引用当前 Promise 本身，不能改成直接 const 初始化。
+    // eslint-disable-next-line prefer-const
     pending = (async () => {
       const response = await fetch(ANTIFORGERY_ENDPOINT, {
         method: 'GET',

@@ -30,6 +30,8 @@ export default function FileList({ entityType, entityId, refreshTrigger }: FileL
 
   useEffect(() => {
     void loadFiles();
+    // 请求参数和显式刷新信号是唯一重新加载条件，函数身份不参与调度。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityType, entityId, refreshTrigger]);
 
   const handleDownload = async (fileId: string) => {

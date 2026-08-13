@@ -28,6 +28,8 @@ export default function SettingDefinitionManagement() {
 
   useEffect(() => {
     void loadModules();
+    // 模块目录只在页面首次挂载时加载；后续选择变化由第二个 effect 处理。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

@@ -156,6 +156,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         requestIdRef.current += 1;
       }
     };
+    // 查询对象可能由调用方每次 render 重建；只以可序列化字段和重试令牌触发请求。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection, retryVersion]);
 
   const tableColumns = useMemo(() => {

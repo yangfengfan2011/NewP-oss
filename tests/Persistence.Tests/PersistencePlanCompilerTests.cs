@@ -719,7 +719,7 @@ public sealed class PersistencePlanCompilerTests
     [Fact]
     public void Compile_AuthenticatedBuiltInModelDirectoryReplacedWithJunctionAfterPlanIssued_UsesSignedSnapshot()
     {
-        using var package = TestPackage.Create("Identity", "User");
+        using var package = TestPackage.Create("Identity", "IdentityAccount");
         var plan = BuildCanonicalPlan(package.BuildBuiltInModule());
         var sentinelPath = package.ReplaceDirectoryWithExternalJunction(package.ModelDirectory);
 
@@ -735,7 +735,7 @@ public sealed class PersistencePlanCompilerTests
     [Fact]
     public void Compile_AuthenticatedBuiltInMigrationDirectoryReplacedWithJunctionAfterPlanIssued_UsesSignedSnapshot()
     {
-        using var package = TestPackage.Create("Identity", "User");
+        using var package = TestPackage.Create("Identity", "IdentityAccount");
         var plan = BuildCanonicalPlan(package.BuildBuiltInModule());
         var sentinelPath = package.ReplaceDirectoryWithExternalJunction(package.MigrationDirectory);
 
@@ -751,7 +751,7 @@ public sealed class PersistencePlanCompilerTests
     [Fact]
     public async Task Execute_CompiledAssemblyPathReplacedByPreloadedImage_UsesVerifiedPlanImage()
     {
-        using var package = TestPackage.Create("Identity", "User");
+        using var package = TestPackage.Create("Identity", "IdentityAccount");
         var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
             BuildCanonicalPlan(package.BuildBuiltInModule()),
             PersistenceProvider.SqlServer);
@@ -786,7 +786,7 @@ public sealed class PersistencePlanCompilerTests
     [Fact]
     public void Compile_BuiltInModuleOwnedStreams_ExcludeModelsFromLegacyAndFollowDependencies()
     {
-        using var identity = TestPackage.Create("Identity", "User");
+        using var identity = TestPackage.Create("Identity", "IdentityAccount");
         using var authentication = TestPackage.Create("Authentication", "AuthenticationSession");
         authentication.RewriteManifest(manifest =>
             manifest["migrations"]!.AsArray()[0]!["migrationId"] =

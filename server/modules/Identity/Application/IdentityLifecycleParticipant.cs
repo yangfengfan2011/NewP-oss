@@ -50,27 +50,27 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         }
 
         var reason = IdentityInputNormalizer.NormalizeReason(registration.Reason);
-        var user = await GetRequiredUserAsync(registration.UserEid, cancellationToken);
-        EnsureAvailableOrdinaryUser(user);
-        if (user.IsPersonnelBound)
+        var account = await GetRequiredAccountAsync(registration.AccountEid, cancellationToken);
+        EnsureAvailableOrdinaryAccount(account);
+        if (account.IsPersonnelBound)
         {
-            return Result(user, changed: false);
+            return Result(account, changed: false);
         }
 
-        EnsureRevision(user, registration.ExpectedRevision);
-        var expectedRevision = user.Revision;
+        EnsureRevision(account, registration.ExpectedRevision);
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        user.IsPersonnelBound = true;
-        Stamp(user, registration.ActorId, now);
-        await ReplaceUserOrThrowConflictAsync(user, expectedRevision, cancellationToken);
+        account.IsPersonnelBound = true;
+        Stamp(account, registration.ActorId, now);
+        await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, cancellationToken);
         _repository.AddSecurityEvent(CreateEvent(
-            user.EID,
+            account.EID,
             IdentitySecurityEventTypes.PersonnelBound,
             reason,
             registration.ActorId,
             registration.TraceId,
             now));
-        return Result(user, changed: true);
+        return Result(account, changed: true);
     }
 
     public async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableAsync(
@@ -97,28 +97,28 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         ArgumentNullException.ThrowIfNull(registration);
         ValidateCaller(registration.ActorId, registration.TraceId);
         var reason = IdentityInputNormalizer.NormalizeReason(registration.Reason);
-        var user = await GetRequiredUserAsync(registration.UserEid, cancellationToken);
-        EnsureAvailableOrdinaryUser(user);
-        if (user.Status == IdentityAccountStatus.Disabled && user.PersonnelDisableHold)
+        var account = await GetRequiredAccountAsync(registration.AccountEid, cancellationToken);
+        EnsureAvailableOrdinaryAccount(account);
+        if (account.Status == IdentityAccountStatus.Disabled && account.PersonnelDisableHold)
         {
-            return Result(user, changed: false);
+            return Result(account, changed: false);
         }
 
-        EnsureRevision(user, registration.ExpectedRevision);
-        var expectedRevision = user.Revision;
+        EnsureRevision(account, registration.ExpectedRevision);
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        user.Status = IdentityAccountStatus.Disabled;
-        user.PersonnelDisableHold = true;
-        Stamp(user, registration.ActorId, now);
-        await ReplaceUserOrThrowConflictAsync(user, expectedRevision, cancellationToken);
+        account.Status = IdentityAccountStatus.Disabled;
+        account.PersonnelDisableHold = true;
+        Stamp(account, registration.ActorId, now);
+        await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, cancellationToken);
         _repository.AddSecurityEvent(CreateEvent(
-            user.EID,
+            account.EID,
             IdentitySecurityEventTypes.PersonnelDisabled,
             reason,
             registration.ActorId,
             registration.TraceId,
             now));
-        return Result(user, changed: true);
+        return Result(account, changed: true);
     }
 
     public async ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelDisableHoldReleaseAsync(
@@ -144,77 +144,77 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
     {
         ArgumentNullException.ThrowIfNull(registration);
         ValidateCaller(registration.ActorId, registration.TraceId);
-        var user = await GetRequiredUserAsync(registration.UserEid, cancellationToken);
-        EnsureAvailableOrdinaryUser(user);
-        if (!user.PersonnelDisableHold)
+        var account = await GetRequiredAccountAsync(registration.AccountEid, cancellationToken);
+        EnsureAvailableOrdinaryAccount(account);
+        if (!account.PersonnelDisableHold)
         {
-            return Result(user, changed: false);
+            return Result(account, changed: false);
         }
 
-        EnsureRevision(user, registration.ExpectedRevision);
-        var expectedRevision = user.Revision;
+        EnsureRevision(account, registration.ExpectedRevision);
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        user.PersonnelDisableHold = false;
-        Stamp(user, registration.ActorId, now);
-        await ReplaceUserOrThrowConflictAsync(user, expectedRevision, cancellationToken);
+        account.PersonnelDisableHold = false;
+        Stamp(account, registration.ActorId, now);
+        await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, cancellationToken);
         _repository.AddSecurityEvent(CreateEvent(
-            user.EID,
+            account.EID,
             IdentitySecurityEventTypes.PersonnelDisableHoldReleased,
             "人员恢复并解除停用阻断",
             registration.ActorId,
             registration.TraceId,
             now));
-        return Result(user, changed: true);
+        return Result(account, changed: true);
     }
 
-    private static IdentityLifecycleRegistrationResult Result(User user, bool changed) => new()
+    private static IdentityLifecycleRegistrationResult Result(IdentityAccount account, bool changed) => new()
     {
-        Account = IdentityAccountApplicationService.ToSnapshot(user),
+        Account = IdentityAccountApplicationService.ToSnapshot(account),
         Changed = changed
     };
 
-    private async ValueTask<User> GetRequiredUserAsync(string userEid, CancellationToken cancellationToken) =>
-        await _repository.FindUserAsync(userEid, cancellationToken)
+    private async ValueTask<IdentityAccount> GetRequiredAccountAsync(string accountEid, CancellationToken cancellationToken) =>
+        await _repository.FindAccountAsync(accountEid, cancellationToken)
         ?? throw new IdentityApplicationException(IdentityFailureCodes.AccountNotFound);
 
-    private static void EnsureAvailableOrdinaryUser(User user)
+    private static void EnsureAvailableOrdinaryAccount(IdentityAccount account)
     {
-        if (user.Status == IdentityAccountStatus.Deleted)
+        if (account.Status == IdentityAccountStatus.Deleted)
         {
             throw new IdentityApplicationException(
                 IdentityFailureCodes.DeletedAccount,
-                IdentityAccountApplicationService.ToSnapshot(user));
+                IdentityAccountApplicationService.ToSnapshot(account));
         }
 
-        if (user.IsLocalAdministrator)
+        if (account.IsLocalAdministrator)
         {
             throw new IdentityApplicationException(
                 IdentityFailureCodes.LocalAdministratorProtected,
-                IdentityAccountApplicationService.ToSnapshot(user));
+                IdentityAccountApplicationService.ToSnapshot(account));
         }
     }
 
-    private static void EnsureRevision(User user, long expectedRevision)
+    private static void EnsureRevision(IdentityAccount account, long expectedRevision)
     {
-        if (user.Revision != expectedRevision)
+        if (account.Revision != expectedRevision)
         {
             throw new IdentityApplicationException(
                 IdentityFailureCodes.RevisionConflict,
-                IdentityAccountApplicationService.ToSnapshot(user));
+                IdentityAccountApplicationService.ToSnapshot(account));
         }
     }
 
-    private async ValueTask ReplaceUserOrThrowConflictAsync(
-        User user,
+    private async ValueTask ReplaceAccountOrThrowConflictAsync(
+        IdentityAccount account,
         long expectedRevision,
         CancellationToken cancellationToken)
     {
-        if (await _repository.TryReplaceUserAsync(user, expectedRevision, cancellationToken))
+        if (await _repository.TryReplaceAccountAsync(account, expectedRevision, cancellationToken))
         {
             return;
         }
 
-        var latest = await _repository.FindUserAsync(user.EID, cancellationToken);
+        var latest = await _repository.FindAccountAsync(account.EID, cancellationToken);
         throw new IdentityApplicationException(
             IdentityFailureCodes.RevisionConflict,
             latest is null ? null : IdentityAccountApplicationService.ToSnapshot(latest));
@@ -228,15 +228,15 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         }
     }
 
-    private static void Stamp(User user, string actorId, DateTime occurredAt)
+    private static void Stamp(IdentityAccount account, string actorId, DateTime occurredAt)
     {
-        user.Revision++;
-        user.UpdatedBy = actorId;
-        user.UpdatedAt = occurredAt;
+        account.Revision++;
+        account.UpdatedBy = actorId;
+        account.UpdatedAt = occurredAt;
     }
 
     private IdentitySecurityEvent CreateEvent(
-        string targetUserEid,
+        string targetAccountEid,
         string eventType,
         string reason,
         string actorId,
@@ -244,13 +244,13 @@ public sealed class IdentityLifecycleParticipant : IIdentityLifecycleParticipant
         DateTime occurredAt) => new()
     {
         EID = _objectIdGenerator.NewId(nameof(IdentitySecurityEvent)),
-        TargetUserEID = targetUserEid,
+        TargetAccountEID = targetAccountEid,
         EventType = eventType,
         Reason = reason,
         OccurredAt = occurredAt,
         TraceId = traceId,
-        ActorKind = IdentitySecurityActorKind.User,
-        ActorUserEID = actorId,
+        ActorKind = IdentitySecurityActorKind.IdentityAccount,
+        ActorAccountEID = actorId,
         CreatedBy = actorId,
         CreatedAt = occurredAt,
         UpdatedBy = actorId,

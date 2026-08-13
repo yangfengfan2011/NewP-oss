@@ -5,7 +5,7 @@
     "kind": "Entity",
     "fields": [
       {
-        "name": "TargetUserEID",
+        "name": "TargetAccountEID",
         "storage": { "type": "guid" }
       },
       {
@@ -30,31 +30,31 @@
         "contract": { "valueType": "enum", "clrType": "IdentitySecurityActorKind" }
       },
       {
-        "name": "ActorUserEID",
+        "name": "ActorAccountEID",
         "storage": { "type": "guid", "nullable": true }
       }
     ],
     "indexes": [
       {
-        "name": "IX_IdentitySecurityEvent_TargetUser_OccurredAt",
-        "fields": ["TargetUserEID", "OccurredAt"],
+        "name": "IX_IdentitySecurityEvent_TargetAccount_OccurredAt",
+        "fields": ["TargetAccountEID", "OccurredAt"],
         "unique": false
       }
     ],
     "foreignKeys": [
       {
-        "name": "FK_IdentitySecurityEvent_TargetUser",
-        "fields": ["TargetUserEID"],
+        "name": "FK_IdentitySecurityEvent_TargetIdentityAccount",
+        "fields": ["TargetAccountEID"],
         "principalModuleId": "Identity",
-        "principalModel": "User",
+        "principalModel": "IdentityAccount",
         "principalFields": ["EID"],
         "onDelete": "Restrict"
       },
       {
-        "name": "FK_IdentitySecurityEvent_ActorUser",
-        "fields": ["ActorUserEID"],
+        "name": "FK_IdentitySecurityEvent_ActorIdentityAccount",
+        "fields": ["ActorAccountEID"],
         "principalModuleId": "Identity",
-        "principalModel": "User",
+        "principalModel": "IdentityAccount",
         "principalFields": ["EID"],
         "onDelete": "Restrict"
       }

@@ -61,7 +61,7 @@ public sealed class IdentitySqlServerIntegrationTests
                     new EfPlatformTransactionExecutor(context),
                     new NoOpSessionRegistry(),
                     new EfLocalAdministratorRoleAssignment(context, ids),
-                    new PasswordHasher<User>(),
+                    new PasswordHasher<IdentityAccount>(),
                     new FixedCredentialIssuer(),
                     ids,
                     TimeProvider.System);
@@ -79,7 +79,7 @@ public sealed class IdentitySqlServerIntegrationTests
             }
 
             await using var verification = CreateIdentityAndAuthorizationContext(applicationConnectionString);
-            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/User")).ToListAsync());
+            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentityAccount")).ToListAsync());
             Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/LocalCredential")).ToListAsync());
             Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentitySecurityEvent")).ToListAsync());
             Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("UserRole")).ToListAsync());
@@ -137,7 +137,7 @@ public sealed class IdentitySqlServerIntegrationTests
             Assert.Single(outcomes, static result => result == "success");
             Assert.Single(outcomes, static result => result == IdentityMaintenanceFailureCodes.BootstrapAlreadyCompleted);
             await using var verification = CreateIdentityAndAuthorizationContext(applicationConnectionString);
-            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/User")).ToListAsync());
+            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentityAccount")).ToListAsync());
             Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/LocalCredential")).ToListAsync());
             Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentitySecurityEvent")).ToListAsync());
             Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("UserRole")).ToListAsync());
@@ -177,11 +177,11 @@ public sealed class IdentitySqlServerIntegrationTests
                 var now = new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc);
                 await transaction.ExecuteAsync<string>(_ =>
                 {
-                    repository.AddUser(UserAtRevision(1, "Alice", now));
+                    repository.AddAccount(AccountAtRevision(1, "Alice", now));
                     repository.AddCredential(new LocalCredential
                     {
                         EID = "LocalCredential_1",
-                        UserEID = "User_1",
+                        AccountEID = "User_1",
                         PasswordHash = "hash-only",
                         IsTemporary = true,
                         CreatedBy = "actor",
@@ -200,8 +200,8 @@ public sealed class IdentitySqlServerIntegrationTests
                 var transaction = new EfPlatformTransactionExecutor(failing);
                 await Assert.ThrowsAsync<InvalidOperationException>(() => transaction.ExecuteAsync<string>(async token =>
                 {
-                    var changed = UserAtRevision(2, "Rolled back", new DateTime(2026, 8, 10, 8, 1, 0, DateTimeKind.Utc));
-                    Assert.True(await repository.TryReplaceUserAsync(changed, 1, token));
+                    var changed = AccountAtRevision(2, "Rolled back", new DateTime(2026, 8, 10, 8, 1, 0, DateTimeKind.Utc));
+                    Assert.True(await repository.TryReplaceAccountAsync(changed, 1, token));
                     repository.AddSecurityEvent(Event(
                         "IdentitySecurityEvent_rollback",
                         "DisplayNameChanged",
@@ -213,7 +213,7 @@ public sealed class IdentitySqlServerIntegrationTests
             await using (var verification = CreateContext(applicationConnectionString))
             {
                 var repository = new EfIdentityRepository(verification);
-                var rolledBack = Assert.IsType<User>(await repository.FindUserAsync("User_1"));
+                var rolledBack = Assert.IsType<IdentityAccount>(await repository.FindAccountAsync("User_1"));
                 Assert.Equal(1, rolledBack.Revision);
                 Assert.Equal("Alice", rolledBack.ENAME);
                 Assert.Single(await verification
@@ -227,8 +227,8 @@ public sealed class IdentitySqlServerIntegrationTests
                 var transaction = new EfPlatformTransactionExecutor(success);
                 await transaction.ExecuteAsync<string>(async token =>
                 {
-                    var changed = UserAtRevision(2, "Committed", new DateTime(2026, 8, 10, 8, 2, 0, DateTimeKind.Utc));
-                    Assert.True(await repository.TryReplaceUserAsync(changed, 1, token));
+                    var changed = AccountAtRevision(2, "Committed", new DateTime(2026, 8, 10, 8, 2, 0, DateTimeKind.Utc));
+                    Assert.True(await repository.TryReplaceAccountAsync(changed, 1, token));
                     repository.AddSecurityEvent(Event(
                         "IdentitySecurityEvent_2",
                         "DisplayNameChanged",
@@ -240,7 +240,7 @@ public sealed class IdentitySqlServerIntegrationTests
             await using (var finalVerification = CreateContext(applicationConnectionString))
             {
                 var repository = new EfIdentityRepository(finalVerification);
-                var committed = Assert.IsType<User>(await repository.FindUserAsync("User_1"));
+                var committed = Assert.IsType<IdentityAccount>(await repository.FindAccountAsync("User_1"));
                 Assert.Equal(2, committed.Revision);
                 Assert.Equal("Committed", committed.ENAME);
                 Assert.Equal(2, await finalVerification
@@ -276,34 +276,34 @@ public sealed class IdentitySqlServerIntegrationTests
         try
         {
             AuthenticationSessionIssuance oldSession;
-            var passwordHasher = new PasswordHasher<User>();
+            var passwordHasher = new PasswordHasher<IdentityAccount>();
             await using (var setup = CreateIdentityAndAuthenticationContext(applicationConnectionString))
             {
                 await setup.Database.EnsureCreatedAsync();
                 var repository = new EfIdentityRepository(setup);
                 var transaction = new EfPlatformTransactionExecutor(setup);
-                var user = UserAtRevision(1, "Alice", new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc));
+                var account = AccountAtRevision(1, "Alice", new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc));
                 oldSession = await transaction.ExecuteAsync(async token =>
                 {
-                    repository.AddUser(user);
+                    repository.AddAccount(account);
                     repository.AddCredential(new LocalCredential
                     {
                         EID = "LocalCredential_1",
-                        UserEID = user.EID,
-                        PasswordHash = passwordHasher.HashPassword(user, "initial-secret"),
+                        AccountEID = account.EID,
+                        PasswordHash = passwordHasher.HashPassword(account, "initial-secret"),
                         IsTemporary = true,
-                        CreatedBy = user.EID,
-                        CreatedAt = user.CreatedAt,
-                        UpdatedBy = user.EID,
-                        UpdatedAt = user.CreatedAt
+                        CreatedBy = account.EID,
+                        CreatedAt = account.CreatedAt,
+                        UpdatedBy = account.EID,
+                        UpdatedAt = account.CreatedAt
                     });
-                    repository.AddSecurityEvent(Event("IdentitySecurityEvent_1", "AccountCreated", user.CreatedAt));
+                    repository.AddSecurityEvent(Event("IdentitySecurityEvent_1", "AccountCreated", account.CreatedAt));
                     return await CreateSessionRegistry(setup, repository).RegisterAsync(
                         new AuthenticationSessionRegistration
                         {
-                            UserEid = user.EID,
+                            AccountEid = account.EID,
                             Type = AuthenticationSessionType.Restricted,
-                            ActorId = user.EID
+                            ActorId = account.EID
                         },
                         token);
                 });
@@ -320,7 +320,7 @@ public sealed class IdentitySqlServerIntegrationTests
                         "initial-secret",
                         "replacement-secret",
                         1,
-                        new IdentityActorContext("User_1", IdentitySecurityActorKind.User, "trace-change")));
+                        new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-change")));
             }
 
             await using (var verification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
@@ -329,11 +329,11 @@ public sealed class IdentitySqlServerIntegrationTests
                 var registry = CreateSessionRegistry(verification, repository);
                 Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await registry.ValidateAsync(oldSession.Credential)).Status);
                 Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(changed.Session.Credential)).Status);
-                var user = Assert.IsType<User>(await repository.FindUserAsync("User_1"));
+                var account = Assert.IsType<IdentityAccount>(await repository.FindAccountAsync("User_1"));
                 var credential = Assert.IsType<LocalCredential>(await repository.FindCredentialAsync("User_1"));
-                Assert.Equal(2, user.Revision);
+                Assert.Equal(2, account.Revision);
                 Assert.False(credential.IsTemporary);
-                Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, "replacement-secret"));
+                Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, "replacement-secret"));
                 var detail = await new IdentityManagementQueryService(repository).FindAsync("User_1", 1, 1);
                 Assert.Equal(2, detail?.Events.TotalCount);
                 Assert.Equal(IdentitySecurityEventTypes.PasswordChanged, Assert.Single(detail!.Events.Items).EventType);
@@ -352,17 +352,17 @@ public sealed class IdentitySqlServerIntegrationTests
                         "replacement-secret",
                         "second-replacement",
                         2,
-                        new IdentityActorContext("User_1", IdentitySecurityActorKind.User, "trace-rollback"))).AsTask());
+                        new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-rollback"))).AsTask());
             }
 
             await using (var rollbackVerification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
             {
                 var repository = new EfIdentityRepository(rollbackVerification);
                 var registry = CreateSessionRegistry(rollbackVerification, repository);
-                var user = Assert.IsType<User>(await repository.FindUserAsync("User_1"));
+                var account = Assert.IsType<IdentityAccount>(await repository.FindAccountAsync("User_1"));
                 var credential = Assert.IsType<LocalCredential>(await repository.FindCredentialAsync("User_1"));
-                Assert.Equal(2, user.Revision);
-                Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, "replacement-secret"));
+                Assert.Equal(2, account.Revision);
+                Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, "replacement-secret"));
                 Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(changed.Session.Credential)).Status);
                 Assert.Equal(2, (await repository.SearchSecurityEventsAsync("User_1")).Count);
             }
@@ -419,7 +419,7 @@ public sealed class IdentitySqlServerIntegrationTests
         EfPlatformDbContext context,
         EfIdentityRepository repository,
         IAuthenticationSessionRegistry sessionRegistry,
-        IPasswordHasher<User> passwordHasher) => new(
+        IPasswordHasher<IdentityAccount> passwordHasher) => new(
             repository,
             new EfPlatformTransactionExecutor(context),
             sessionRegistry,
@@ -438,7 +438,7 @@ public sealed class IdentitySqlServerIntegrationTests
             new EfPlatformTransactionExecutor(context),
             new NoOpSessionRegistry(),
             new EfLocalAdministratorRoleAssignment(context, ids),
-            new PasswordHasher<User>(),
+            new PasswordHasher<IdentityAccount>(),
             new FixedCredentialIssuer(),
             ids,
             TimeProvider.System);
@@ -475,7 +475,7 @@ public sealed class IdentitySqlServerIntegrationTests
         public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credentialDigest, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => ValueTask.FromResult(0);
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => ValueTask.FromResult(0);
     }
 
     private sealed class FailAfterRegisterSessionRegistry(IAuthenticationSessionRegistry inner) : IAuthenticationSessionRegistry
@@ -494,11 +494,11 @@ public sealed class IdentitySqlServerIntegrationTests
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) =>
             inner.RevokeCurrentAsync(revocation, cancellationToken);
 
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) =>
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) =>
             inner.RevokeAllAsync(revocation, cancellationToken);
     }
 
-    private static User UserAtRevision(long revision, string name, DateTime updatedAt) => new()
+    private static IdentityAccount AccountAtRevision(long revision, string name, DateTime updatedAt) => new()
     {
         EID = "User_1",
         ECODE = "alice",
@@ -515,13 +515,13 @@ public sealed class IdentitySqlServerIntegrationTests
     private static IdentitySecurityEvent Event(string eid, string eventType, DateTime now) => new()
     {
         EID = eid,
-        TargetUserEID = "User_1",
+        TargetAccountEID = "User_1",
         EventType = eventType,
         Reason = "test reason",
         OccurredAt = now,
         TraceId = "trace",
-        ActorKind = IdentitySecurityActorKind.User,
-        ActorUserEID = "User_1",
+        ActorKind = IdentitySecurityActorKind.IdentityAccount,
+        ActorAccountEID = "User_1",
         CreatedBy = "User_1",
         CreatedAt = now,
         UpdatedBy = "User_1",

@@ -28,11 +28,11 @@ public sealed class PersonUserBindingSummaryProvider(
 
         IdentityAccountSnapshot? account = null;
         var accountAvailable = true;
-        if (person.UserEid is not null)
+        if (person.AccountEid is not null)
         {
             try
             {
-                account = await accountDirectory.FindAsync(person.UserEid, cancellationToken);
+                account = await accountDirectory.FindAsync(person.AccountEid, cancellationToken);
                 accountAvailable = account is not null;
             }
             catch (OperationCanceledException)
@@ -53,14 +53,14 @@ public sealed class PersonUserBindingSummaryProvider(
                 person.PersonEid,
                 person.PersonName,
                 person.IsEnabled,
-                person.UserEid,
+                person.AccountEid,
                 person.BoundAt,
                 person.BoundBy,
                 person.BindingReason,
                 account is null
                     ? null
                     : new PersonUserBindingAccountDto(
-                        account.UserEid,
+                        account.AccountEid,
                         account.ECODE,
                         account.ENAME,
                         account.Status.ToString(),

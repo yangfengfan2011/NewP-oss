@@ -25,7 +25,7 @@ public sealed class RequiredBuiltinReadinessContributor : IReadinessContributor
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
             ["Identity"] = new HashSet<string>(
-                ["User", "LocalCredential", "IdentitySecurityEvent"],
+                ["IdentityAccount", "LocalCredential", "IdentitySecurityEvent"],
                 StringComparer.Ordinal),
             ["Authentication"] = new HashSet<string>(["AuthenticationSession"], StringComparer.Ordinal)
         };

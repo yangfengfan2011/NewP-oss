@@ -94,16 +94,16 @@ public sealed class AuthController : ControllerBase
         }
 
         var permissions = await _authorizationService.GetUserPermissionsAsync(
-            authentication.Account.UserEid,
+            authentication.Account.AccountEid,
             cancellationToken);
         var issuance = await _transactionExecutor.ExecuteAsync(
             token => _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
             {
-                UserEid = authentication.Account.UserEid,
+                AccountEid = authentication.Account.AccountEid,
                 Type = authentication.IsTemporary
                     ? AuthenticationSessionType.Restricted
                     : AuthenticationSessionType.Regular,
-                ActorId = authentication.Account.UserEid
+                ActorId = authentication.Account.AccountEid
             }, token),
             cancellationToken);
         _cookie.Append(HttpContext, issuance.Credential, issuance.Session.ExpiresAtUtc);
@@ -116,15 +116,15 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         var sessionEid = User.FindFirstValue(HostSessionAuthenticationHandler.SessionEidClaim);
-        var userEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!string.IsNullOrWhiteSpace(sessionEid) && !string.IsNullOrWhiteSpace(userEid))
+        var accountEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(sessionEid) && !string.IsNullOrWhiteSpace(accountEid))
         {
             await _transactionExecutor.ExecuteAsync(
                 token => _sessionRegistry.RevokeCurrentAsync(new AuthenticationSessionRevocation
                 {
                     SessionEid = sessionEid,
                     Reason = "UserLogout",
-                    ActorId = userEid
+                    ActorId = accountEid
                 }, token),
                 cancellationToken);
         }
@@ -196,7 +196,7 @@ public sealed class AuthController : ControllerBase
         IReadOnlyList<string> permissions,
         bool mustChangePassword) =>
         new(
-            account.UserEid,
+            account.AccountEid,
             account.ECODE,
             account.ENAME,
             permissions,

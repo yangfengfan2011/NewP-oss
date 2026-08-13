@@ -16,7 +16,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     private readonly IIdentityRepository _repository;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
     private readonly IAuthenticationSessionRegistry _sessionRegistry;
-    private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly IPasswordHasher<IdentityAccount> _passwordHasher;
     private readonly ITemporaryCredentialIssuer _temporaryCredentialIssuer;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
     private readonly TimeProvider _timeProvider;
@@ -25,7 +25,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         IIdentityRepository repository,
         IPlatformTransactionExecutor transactionExecutor,
         IAuthenticationSessionRegistry sessionRegistry,
-        IPasswordHasher<User> passwordHasher,
+        IPasswordHasher<IdentityAccount> passwordHasher,
         ITemporaryCredentialIssuer temporaryCredentialIssuer,
         IPlatformObjectIdGenerator objectIdGenerator,
         TimeProvider timeProvider)
@@ -49,15 +49,15 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         var ename = IdentityInputNormalizer.NormalizeDisplayName(command.ENAME);
         ValidateActor(command.Actor);
 
-        if (await _repository.FindUserByNormalizedCodeAsync(normalizedCode, cancellationToken) is not null)
+        if (await _repository.FindAccountByNormalizedCodeAsync(normalizedCode, cancellationToken) is not null)
         {
             throw new IdentityApplicationException(IdentityFailureCodes.AccountCodeConflict);
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var user = new User
+        var account = new IdentityAccount
         {
-            EID = _objectIdGenerator.NewId(nameof(User)),
+            EID = _objectIdGenerator.NewId(nameof(IdentityAccount)),
             ECODE = ecode,
             NormalizedECODE = normalizedCode,
             ENAME = ename,
@@ -72,8 +72,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         var credential = new LocalCredential
         {
             EID = _objectIdGenerator.NewId(nameof(LocalCredential)),
-            UserEID = user.EID,
-            PasswordHash = _passwordHasher.HashPassword(user, temporaryCredential),
+            AccountEID = account.EID,
+            PasswordHash = _passwordHasher.HashPassword(account, temporaryCredential),
             IsTemporary = true,
             CreatedBy = command.Actor.ActorId,
             CreatedAt = now,
@@ -86,15 +86,15 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             return await _transactionExecutor.ExecuteAsync(
                 _ =>
                 {
-                    _repository.AddUser(user);
+                    _repository.AddAccount(account);
                     _repository.AddCredential(credential);
                     _repository.AddSecurityEvent(CreateEvent(
-                        user.EID,
+                        account.EID,
                         IdentitySecurityEventTypes.AccountCreated,
                         "创建账号",
                         command.Actor,
                         now));
-                    return ValueTask.FromResult(new IdentityAccountCreationResult(ToSnapshot(user), temporaryCredential));
+                    return ValueTask.FromResult(new IdentityAccountCreationResult(ToSnapshot(account), temporaryCredential));
                 },
                 cancellationToken);
         }
@@ -111,25 +111,25 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
         var ename = IdentityInputNormalizer.NormalizeDisplayName(command.ENAME);
-        var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
-        EnsureNotDeleted(user);
-        EnsureExpectedRevision(user, command.ExpectedRevision);
-        var expectedRevision = user.Revision;
+        var account = await GetRequiredAccountAsync(command.AccountEid, cancellationToken);
+        EnsureNotDeleted(account);
+        EnsureExpectedRevision(account, command.ExpectedRevision);
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        user.ENAME = ename;
-        StampSecurityChange(user, command.Actor.ActorId, now);
+        account.ENAME = ename;
+        StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
             async token =>
             {
-                await ReplaceUserOrThrowConflictAsync(user, expectedRevision, token);
+                await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
                 _repository.AddSecurityEvent(CreateEvent(
-                    user.EID,
+                    account.EID,
                     IdentitySecurityEventTypes.DisplayNameChanged,
                     "修改显示名称",
                     command.Actor,
                     now));
-                return ToSnapshot(user);
+                return ToSnapshot(account);
             },
             cancellationToken);
     }
@@ -146,28 +146,28 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             throw new IdentityApplicationException(IdentityFailureCodes.InvalidTargetStatus);
         }
 
-        var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
-        EnsureNotDeleted(user);
-        if (user.Status == command.TargetStatus)
+        var account = await GetRequiredAccountAsync(command.AccountEid, cancellationToken);
+        EnsureNotDeleted(account);
+        if (account.Status == command.TargetStatus)
         {
-            return ToSnapshot(user);
+            return ToSnapshot(account);
         }
 
-        if (user.IsLocalAdministrator)
+        if (account.IsLocalAdministrator)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.LocalAdministratorProtected, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.LocalAdministratorProtected, ToSnapshot(account));
         }
 
-        if (command.TargetStatus == IdentityAccountStatus.Enabled && user.PersonnelDisableHold)
+        if (command.TargetStatus == IdentityAccountStatus.Enabled && account.PersonnelDisableHold)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.PersonnelDisableHold, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.PersonnelDisableHold, ToSnapshot(account));
         }
 
-        EnsureExpectedRevision(user, command.ExpectedRevision);
-        var expectedRevision = user.Revision;
+        EnsureExpectedRevision(account, command.ExpectedRevision);
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        user.Status = command.TargetStatus;
-        StampSecurityChange(user, command.Actor.ActorId, now);
+        account.Status = command.TargetStatus;
+        StampSecurityChange(account, command.Actor.ActorId, now);
         var eventType = command.TargetStatus == IdentityAccountStatus.Enabled
             ? IdentitySecurityEventTypes.AccountEnabled
             : IdentitySecurityEventTypes.AccountDisabled;
@@ -175,14 +175,14 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         return await _transactionExecutor.ExecuteAsync(
             async token =>
             {
-                await ReplaceUserOrThrowConflictAsync(user, expectedRevision, token);
+                await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
                 if (command.TargetStatus == IdentityAccountStatus.Disabled)
                 {
-                    await RevokeAllSessionsAsync(user.EID, reason, command.Actor.ActorId, token);
+                    await RevokeAllSessionsAsync(account.EID, reason, command.Actor.ActorId, token);
                 }
 
-                _repository.AddSecurityEvent(CreateEvent(user.EID, eventType, reason, command.Actor, now));
-                return ToSnapshot(user);
+                _repository.AddSecurityEvent(CreateEvent(account.EID, eventType, reason, command.Actor, now));
+                return ToSnapshot(account);
             },
             cancellationToken);
     }
@@ -194,37 +194,37 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
         var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
-        var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
-        EnsureNotDeleted(user);
-        if (user.IsLocalAdministrator)
+        var account = await GetRequiredAccountAsync(command.AccountEid, cancellationToken);
+        EnsureNotDeleted(account);
+        if (account.IsLocalAdministrator)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.LocalAdministratorProtected, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.LocalAdministratorProtected, ToSnapshot(account));
         }
 
-        EnsureExpectedRevision(user, command.ExpectedRevision);
-        var credential = await GetRequiredCredentialAsync(user.EID, cancellationToken);
+        EnsureExpectedRevision(account, command.ExpectedRevision);
+        var credential = await GetRequiredCredentialAsync(account.EID, cancellationToken);
         var temporaryCredential = _temporaryCredentialIssuer.Issue();
-        var expectedRevision = user.Revision;
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        credential.PasswordHash = _passwordHasher.HashPassword(user, temporaryCredential);
+        credential.PasswordHash = _passwordHasher.HashPassword(account, temporaryCredential);
         credential.IsTemporary = true;
         credential.UpdatedBy = command.Actor.ActorId;
         credential.UpdatedAt = now;
-        StampSecurityChange(user, command.Actor.ActorId, now);
+        StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
             async token =>
             {
-                await ReplaceUserOrThrowConflictAsync(user, expectedRevision, token);
+                await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
                 await _repository.ReplaceCredentialAsync(credential, token);
-                await RevokeAllSessionsAsync(user.EID, reason, command.Actor.ActorId, token);
+                await RevokeAllSessionsAsync(account.EID, reason, command.Actor.ActorId, token);
                 _repository.AddSecurityEvent(CreateEvent(
-                    user.EID,
+                    account.EID,
                     IdentitySecurityEventTypes.CredentialReset,
                     reason,
                     command.Actor,
                     now));
-                return new IdentityCredentialResetResult(ToSnapshot(user), temporaryCredential);
+                return new IdentityCredentialResetResult(ToSnapshot(account), temporaryCredential);
             },
             cancellationToken);
     }
@@ -236,51 +236,51 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
         ValidatePermanentPassword(command.NewPassword);
-        var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
-        EnsureNotDeleted(user);
-        EnsureExpectedRevision(user, command.ExpectedRevision);
-        var credential = await GetRequiredCredentialAsync(user.EID, cancellationToken);
-        if (_passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, command.CurrentPassword)
+        var account = await GetRequiredAccountAsync(command.AccountEid, cancellationToken);
+        EnsureNotDeleted(account);
+        EnsureExpectedRevision(account, command.ExpectedRevision);
+        var credential = await GetRequiredCredentialAsync(account.EID, cancellationToken);
+        if (_passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, command.CurrentPassword)
             == PasswordVerificationResult.Failed)
         {
             throw new IdentityApplicationException(IdentityFailureCodes.InvalidCurrentCredential);
         }
 
-        if (_passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, command.NewPassword)
+        if (_passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, command.NewPassword)
             != PasswordVerificationResult.Failed)
         {
             throw new IdentityApplicationException(IdentityFailureCodes.CredentialUnchanged);
         }
 
-        var expectedRevision = user.Revision;
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        credential.PasswordHash = _passwordHasher.HashPassword(user, command.NewPassword);
+        credential.PasswordHash = _passwordHasher.HashPassword(account, command.NewPassword);
         credential.IsTemporary = false;
         credential.UpdatedBy = command.Actor.ActorId;
         credential.UpdatedAt = now;
-        StampSecurityChange(user, command.Actor.ActorId, now);
+        StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
             async token =>
             {
-                await ReplaceUserOrThrowConflictAsync(user, expectedRevision, token);
+                await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
                 await _repository.ReplaceCredentialAsync(credential, token);
-                await RevokeAllSessionsAsync(user.EID, "password-changed", command.Actor.ActorId, token);
+                await RevokeAllSessionsAsync(account.EID, "password-changed", command.Actor.ActorId, token);
                 var session = await _sessionRegistry.RegisterAsync(
                     new AuthenticationSessionRegistration
                     {
-                        UserEid = user.EID,
+                        AccountEid = account.EID,
                         Type = AuthenticationSessionType.Regular,
                         ActorId = command.Actor.ActorId
                     },
                     token);
                 _repository.AddSecurityEvent(CreateEvent(
-                    user.EID,
+                    account.EID,
                     IdentitySecurityEventTypes.PasswordChanged,
                     "用户修改密码",
                     command.Actor,
                     now));
-                return new IdentityPasswordChangeResult(ToSnapshot(user), session);
+                return new IdentityPasswordChangeResult(ToSnapshot(account), session);
             },
             cancellationToken);
     }
@@ -292,72 +292,72 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         ArgumentNullException.ThrowIfNull(command);
         ValidateActor(command.Actor);
         var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
-        var user = await GetRequiredUserAsync(command.UserEid, cancellationToken);
-        if (user.Status == IdentityAccountStatus.Deleted)
+        var account = await GetRequiredAccountAsync(command.AccountEid, cancellationToken);
+        if (account.Status == IdentityAccountStatus.Deleted)
         {
-            return ToSnapshot(user);
+            return ToSnapshot(account);
         }
 
-        if (user.IsLocalAdministrator)
+        if (account.IsLocalAdministrator)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.LocalAdministratorProtected, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.LocalAdministratorProtected, ToSnapshot(account));
         }
 
-        if (user.IsPersonnelBound)
+        if (account.IsPersonnelBound)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.PersonnelBound, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.PersonnelBound, ToSnapshot(account));
         }
 
-        EnsureExpectedRevision(user, command.ExpectedRevision);
-        var expectedRevision = user.Revision;
+        EnsureExpectedRevision(account, command.ExpectedRevision);
+        var expectedRevision = account.Revision;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        user.Status = IdentityAccountStatus.Deleted;
-        StampSecurityChange(user, command.Actor.ActorId, now);
+        account.Status = IdentityAccountStatus.Deleted;
+        StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
             async token =>
             {
-                await ReplaceUserOrThrowConflictAsync(user, expectedRevision, token);
-                await _repository.RemoveCredentialAsync(user.EID, token);
-                await RevokeAllSessionsAsync(user.EID, reason, command.Actor.ActorId, token);
+                await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
+                await _repository.RemoveCredentialAsync(account.EID, token);
+                await RevokeAllSessionsAsync(account.EID, reason, command.Actor.ActorId, token);
                 _repository.AddSecurityEvent(CreateEvent(
-                    user.EID,
+                    account.EID,
                     IdentitySecurityEventTypes.AccountDeleted,
                     reason,
                     command.Actor,
                     now));
-                return ToSnapshot(user);
+                return ToSnapshot(account);
             },
             cancellationToken);
     }
 
-    internal static IdentityAccountSnapshot ToSnapshot(User user) => new()
+    internal static IdentityAccountSnapshot ToSnapshot(IdentityAccount account) => new()
     {
-        UserEid = user.EID,
-        ECODE = user.ECODE,
-        ENAME = user.ENAME,
-        Status = user.Status,
-        Revision = user.Revision,
-        IsLocalAdministrator = user.IsLocalAdministrator,
-        IsPersonnelBound = user.IsPersonnelBound,
-        PersonnelDisableHold = user.PersonnelDisableHold
+        AccountEid = account.EID,
+        ECODE = account.ECODE,
+        ENAME = account.ENAME,
+        Status = account.Status,
+        Revision = account.Revision,
+        IsLocalAdministrator = account.IsLocalAdministrator,
+        IsPersonnelBound = account.IsPersonnelBound,
+        PersonnelDisableHold = account.PersonnelDisableHold
     };
 
     private IdentitySecurityEvent CreateEvent(
-        string targetUserEid,
+        string targetAccountEid,
         string eventType,
         string reason,
         IdentityActorContext actor,
         DateTime occurredAt) => new()
         {
             EID = _objectIdGenerator.NewId(nameof(IdentitySecurityEvent)),
-            TargetUserEID = targetUserEid,
+            TargetAccountEID = targetAccountEid,
             EventType = eventType,
             Reason = reason,
             OccurredAt = occurredAt,
             TraceId = actor.TraceId,
             ActorKind = actor.ActorKind,
-            ActorUserEID = actor.ActorKind == IdentitySecurityActorKind.User ? actor.ActorId : null,
+            ActorAccountEID = actor.ActorKind == IdentitySecurityActorKind.IdentityAccount ? actor.ActorId : null,
             CreatedBy = actor.ActorId,
             CreatedAt = occurredAt,
             UpdatedBy = actor.ActorId,
@@ -374,69 +374,69 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         }
     }
 
-    private async ValueTask<User> GetRequiredUserAsync(string userEid, CancellationToken cancellationToken)
+    private async ValueTask<IdentityAccount> GetRequiredAccountAsync(string accountEid, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(userEid))
+        if (string.IsNullOrWhiteSpace(accountEid))
         {
             throw new IdentityApplicationException(IdentityFailureCodes.AccountNotFound);
         }
 
-        return await _repository.FindUserAsync(userEid, cancellationToken)
+        return await _repository.FindAccountAsync(accountEid, cancellationToken)
             ?? throw new IdentityApplicationException(IdentityFailureCodes.AccountNotFound);
     }
 
-    private async ValueTask<LocalCredential> GetRequiredCredentialAsync(string userEid, CancellationToken cancellationToken) =>
-        await _repository.FindCredentialAsync(userEid, cancellationToken)
+    private async ValueTask<LocalCredential> GetRequiredCredentialAsync(string accountEid, CancellationToken cancellationToken) =>
+        await _repository.FindCredentialAsync(accountEid, cancellationToken)
         ?? throw new IdentityApplicationException(IdentityFailureCodes.InvalidCurrentCredential);
 
-    private static void EnsureNotDeleted(User user)
+    private static void EnsureNotDeleted(IdentityAccount account)
     {
-        if (user.Status == IdentityAccountStatus.Deleted)
+        if (account.Status == IdentityAccountStatus.Deleted)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.DeletedAccount, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.DeletedAccount, ToSnapshot(account));
         }
     }
 
-    private static void EnsureExpectedRevision(User user, long expectedRevision)
+    private static void EnsureExpectedRevision(IdentityAccount account, long expectedRevision)
     {
-        if (user.Revision != expectedRevision)
+        if (account.Revision != expectedRevision)
         {
-            throw new IdentityApplicationException(IdentityFailureCodes.RevisionConflict, ToSnapshot(user));
+            throw new IdentityApplicationException(IdentityFailureCodes.RevisionConflict, ToSnapshot(account));
         }
     }
 
-    private static void StampSecurityChange(User user, string actorId, DateTime occurredAt)
+    private static void StampSecurityChange(IdentityAccount account, string actorId, DateTime occurredAt)
     {
-        user.Revision++;
-        user.UpdatedBy = actorId;
-        user.UpdatedAt = occurredAt;
+        account.Revision++;
+        account.UpdatedBy = actorId;
+        account.UpdatedAt = occurredAt;
     }
 
-    private async ValueTask ReplaceUserOrThrowConflictAsync(
-        User user,
+    private async ValueTask ReplaceAccountOrThrowConflictAsync(
+        IdentityAccount account,
         long expectedRevision,
         CancellationToken cancellationToken)
     {
-        if (await _repository.TryReplaceUserAsync(user, expectedRevision, cancellationToken))
+        if (await _repository.TryReplaceAccountAsync(account, expectedRevision, cancellationToken))
         {
             return;
         }
 
-        var latest = await _repository.FindUserAsync(user.EID, cancellationToken);
+        var latest = await _repository.FindAccountAsync(account.EID, cancellationToken);
         throw new IdentityApplicationException(
             IdentityFailureCodes.RevisionConflict,
             latest is null ? null : ToSnapshot(latest));
     }
 
     private async ValueTask RevokeAllSessionsAsync(
-        string userEid,
+        string accountEid,
         string reason,
         string actorId,
         CancellationToken cancellationToken) =>
         _ = await _sessionRegistry.RevokeAllAsync(
-            new UserAuthenticationSessionsRevocation
+            new AccountAuthenticationSessionsRevocation
             {
-                UserEid = userEid,
+                AccountEid = accountEid,
                 Reason = reason,
                 ActorId = actorId
             },
@@ -457,7 +457,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     {
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {
-            if (current.Message.Contains("UX_User_NormalizedECODE", StringComparison.OrdinalIgnoreCase))
+            if (current.Message.Contains("UX_IdentityAccount_NormalizedECODE", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

@@ -483,13 +483,13 @@ public sealed class HostAuthenticationSecurityTests
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) =>
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 
     private sealed class UnusedAccountDirectory : IIdentityAccountDirectory
     {
-        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default) =>
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(IdentityAccountSearch search, CancellationToken cancellationToken = default) =>

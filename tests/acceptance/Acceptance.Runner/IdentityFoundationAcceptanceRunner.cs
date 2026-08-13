@@ -206,7 +206,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
 
         var accountCode = $"acct.{_runId[..8]}";
         var account = await CreateUserAsync(admin, accountCode, "Acceptance Account", cancellationToken);
-        var initialDetail = await GetJsonAsync(admin, $"/api/identity/users/{account.UserEid}?eventPage=1&eventPageSize=20", cancellationToken);
+        var initialDetail = await GetJsonAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=20", cancellationToken);
         var initialCreatedAt = ReadDateTime(ReadObject(initialDetail.RootElement, "account"), "createdAt");
         var temporaryPassword = account.TemporaryCredential;
         _secretTokens.Add(temporaryPassword);
@@ -214,7 +214,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         using var restricted = CreateSession(_hostPort);
         var restrictedLogin = await LoginAsync(restricted, accountCode, temporaryPassword, cancellationToken);
         EnsureBoolean(restrictedLogin.Body.RootElement, "mustChangePassword", true, "temporary credential login");
-        using (var denied = await restricted.Client.GetAsync("/api/identity/users", cancellationToken))
+        using (var denied = await restricted.Client.GetAsync("/api/identity/accounts", cancellationToken))
         {
             await EnsureProblemAsync(denied, HttpStatusCode.Forbidden, "AUTH_PASSWORD_CHANGE_REQUIRED", "restricted management access", cancellationToken);
         }
@@ -233,24 +233,24 @@ internal sealed class IdentityFoundationAcceptanceRunner
         var updated = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
-            $"/api/identity/users/{Uri.EscapeDataString(account.UserEid)}",
+            $"/api/identity/accounts/{Uri.EscapeDataString(account.AccountEid)}",
             new { ename = "Acceptance Account Updated", expectedRevision = changed.Revision },
             HttpStatusCode.OK,
             cancellationToken);
         var disabled = await SetUserStatusAsync(
             admin,
-            account.UserEid,
+            account.AccountEid,
             "Disabled",
             ReadLong(updated.RootElement, "revision"),
             "纵向验收停用",
             cancellationToken);
         await EnsureSessionInvalidAsync(restricted, cancellationToken);
         await EnsureSessionInvalidAsync(secondSession, cancellationToken);
-        var enabled = await SetUserStatusAsync(admin, account.UserEid, "Enabled", disabled.Revision, "纵向验收恢复", cancellationToken);
+        var enabled = await SetUserStatusAsync(admin, account.AccountEid, "Enabled", disabled.Revision, "纵向验收恢复", cancellationToken);
 
         using var resetVictim = CreateSession(_hostPort);
         await LoginAsync(resetVictim, accountCode, accountPassword, cancellationToken);
-        var reset = await ResetCredentialAsync(admin, account.UserEid, enabled.Revision, cancellationToken);
+        var reset = await ResetCredentialAsync(admin, account.AccountEid, enabled.Revision, cancellationToken);
         _secretTokens.Add(reset.TemporaryCredential);
         await EnsureSessionInvalidAsync(resetVictim, cancellationToken);
 
@@ -267,18 +267,18 @@ internal sealed class IdentityFoundationAcceptanceRunner
 
         var list = await GetJsonAsync(
             admin,
-            $"/api/identity/users?query={Uri.EscapeDataString(accountCode)}&status=Enabled&page=1&pageSize=20",
+            $"/api/identity/accounts?query={Uri.EscapeDataString(accountCode)}&status=Enabled&page=1&pageSize=20",
             cancellationToken);
         if (ReadArray(list.RootElement, "items").GetArrayLength() != 1)
         {
             throw new InvalidOperationException("Identity query/filter did not return the expected account.");
         }
-        var detail = await GetJsonAsync(admin, $"/api/identity/users/{account.UserEid}?eventPage=1&eventPageSize=100", cancellationToken);
+        var detail = await GetJsonAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=100", cancellationToken);
         var detailAccount = ReadObject(detail.RootElement, "account");
         if (ReadDateTime(detailAccount, "createdAt") != initialCreatedAt
             || ReadDateTime(detailAccount, "updatedAt") < initialCreatedAt)
         {
-            throw new InvalidOperationException("User audit creation/update semantics were not preserved.");
+            throw new InvalidOperationException("IdentityAccount audit creation/update semantics were not preserved.");
         }
 
         var deleteCode = $"delete.{_runId[..8]}";
@@ -287,12 +287,12 @@ internal sealed class IdentityFoundationAcceptanceRunner
         var tombstone = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Post,
-            $"/api/identity/users/{deleted.UserEid}/delete",
+            $"/api/identity/accounts/{deleted.AccountEid}/delete",
             new { expectedRevision = deleted.Revision, reason = "纵向验收墓碑删除" },
             HttpStatusCode.OK,
             cancellationToken);
         EnsureString(tombstone.RootElement, "status", "Deleted", "deleted tombstone status");
-        using (var duplicate = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/users", new { ecode = deleteCode, ename = "Reuse" }, cancellationToken))
+        using (var duplicate = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/accounts", new { ecode = deleteCode, ename = "Reuse" }, cancellationToken))
         {
             await EnsureProblemAsync(duplicate, HttpStatusCode.Conflict, "IDENTITY_ECODE_CONFLICT", "deleted ECODE reuse", cancellationToken);
         }
@@ -335,7 +335,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}/user-binding",
-            new { userEid = bound.UserEid, expectedRevision = boundRegular.Revision, reason = "纵向验收永久绑定" },
+            new { accountEid = bound.AccountEid, expectedRevision = boundRegular.Revision, reason = "纵向验收永久绑定" },
             HttpStatusCode.OK,
             cancellationToken);
         var boundAfterBindingRevision = ReadNestedLong(binding.RootElement, "account", "revision");
@@ -345,7 +345,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
                    admin,
                    HttpMethod.Put,
                    $"/api/organization/persons/{personEid}/user-binding",
-                   new { userEid = competing.UserEid, expectedRevision = competing.Revision, reason = "禁止改绑" },
+                   new { accountEid = competing.AccountEid, expectedRevision = competing.Revision, reason = "禁止改绑" },
                    cancellationToken))
         {
             await EnsureProblemAsync(conflict, HttpStatusCode.Conflict, "ORGANIZATION_PERSON_ALREADY_BOUND", "permanent binding conflict", cancellationToken);
@@ -372,7 +372,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         var recoveredAccount = ReadObject(recoveredPerson.RootElement, "account");
         await SetUserStatusAsync(
             admin,
-            bound.UserEid,
+            bound.AccountEid,
             "Enabled",
             ReadLong(recoveredAccount, "revision"),
             "Hold 清除后的显式恢复",
@@ -438,7 +438,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         page.SetDefaultTimeout(120_000);
         page.SetDefaultNavigationTimeout(120_000);
         await LoginBrowserAsync(page, "admin", adminPassword);
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/users", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "账号管理", Exact = true }).WaitForAsync();
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).ClickAsync();
         await page.Locator("#create-ecode").FillAsync(browserCode);
@@ -463,7 +463,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         restrictedPage.SetDefaultNavigationTimeout(120_000);
         await LoginBrowserAsync(restrictedPage, browserCode, browserTemporaryPassword);
         await restrictedPage.WaitForURLAsync("**/account/change-password");
-        await restrictedPage.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/users");
+        await restrictedPage.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts");
         await restrictedPage.WaitForURLAsync("**/account/change-password");
         await restrictedPage.Locator("#current-password").FillAsync(browserTemporaryPassword);
         await restrictedPage.Locator("#new-password").FillAsync(browserPassword);
@@ -516,7 +516,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }
         using var admin = CreateSession(_hostPort);
         await LoginAsync(admin, "admin", adminPassword, cancellationToken);
-        var persisted = await GetJsonAsync(admin, "/api/identity/users?isLocalAdministrator=true&page=1&pageSize=20", cancellationToken);
+        var persisted = await GetJsonAsync(admin, "/api/identity/accounts?isLocalAdministrator=true&page=1&pageSize=20", cancellationToken);
         if (ReadArray(persisted.RootElement, "items").GetArrayLength() != 1)
         {
             throw new InvalidOperationException("Identity state did not survive Host restart.");
@@ -942,7 +942,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         string ename,
         CancellationToken cancellationToken)
     {
-        using var response = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/users", new { ecode, ename }, cancellationToken);
+        using var response = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/accounts", new { ecode, ename }, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.Created, body, "create identity user");
         EnsureNoStore(response, "create identity user");
@@ -957,14 +957,14 @@ internal sealed class IdentityFoundationAcceptanceRunner
 
     private async Task<CreatedAccount> ResetCredentialAsync(
         HttpSession admin,
-        string userEid,
+        string accountEid,
         long revision,
         CancellationToken cancellationToken)
     {
         using var response = await SendJsonAsync(
             admin,
             HttpMethod.Post,
-            $"/api/identity/users/{userEid}/credential-reset",
+            $"/api/identity/accounts/{accountEid}/credential-reset",
             new { expectedRevision = revision, reason = "纵向验收凭据重置" },
             cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -981,7 +981,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
 
     private async Task<AccountResult> SetUserStatusAsync(
         HttpSession admin,
-        string userEid,
+        string accountEid,
         string targetStatus,
         long revision,
         string reason,
@@ -990,12 +990,12 @@ internal sealed class IdentityFoundationAcceptanceRunner
         var response = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
-            $"/api/identity/users/{userEid}/status",
+            $"/api/identity/accounts/{accountEid}/status",
             new { targetStatus, expectedRevision = revision, reason },
             HttpStatusCode.OK,
             cancellationToken);
         EnsureString(response.RootElement, "status", targetStatus, "identity target status");
-        return new AccountResult(userEid, ReadLong(response.RootElement, "revision"));
+        return new AccountResult(accountEid, ReadLong(response.RootElement, "revision"));
     }
 
     private static async Task EnsureSessionInvalidAsync(HttpSession session, CancellationToken cancellationToken)
@@ -1100,7 +1100,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT
-              (SELECT COUNT(*) FROM [dbo].[User] WHERE [CreatedBy] = '' OR [UpdatedBy] = '' OR [UpdatedAt] < [CreatedAt]) +
+              (SELECT COUNT(*) FROM [dbo].[IdentityAccount] WHERE [CreatedBy] = '' OR [UpdatedBy] = '' OR [UpdatedAt] < [CreatedAt]) +
               (SELECT COUNT(*) FROM [dbo].[LocalCredential] WHERE [CreatedBy] = '' OR [UpdatedBy] = '' OR [UpdatedAt] < [CreatedAt]) +
               (SELECT COUNT(*) FROM [dbo].[AuthenticationSession] WHERE [CreatedBy] = '' OR [UpdatedBy] = '' OR [UpdatedAt] < [CreatedAt]) +
               (SELECT COUNT(*) FROM [dbo].[IdentitySecurityEvent] WHERE [CreatedBy] = '' OR [UpdatedBy] = '' OR [UpdatedAt] < [CreatedAt]),
@@ -1536,8 +1536,8 @@ internal sealed class IdentityFoundationAcceptanceRunner
     {
         public void Dispose() => Body.Dispose();
     }
-    private sealed record AccountResult(string UserEid, long Revision);
-    private sealed record CreatedAccount(string UserEid, long Revision, string TemporaryCredential, JsonElement Account);
+    private sealed record AccountResult(string AccountEid, long Revision);
+    private sealed record CreatedAccount(string AccountEid, long Revision, string TemporaryCredential, JsonElement Account);
     private sealed record AuditEvidence(int InvalidRows, int EntityKinds);
     private sealed record NotReadyObservation(string FailureCode);
     private sealed record IntegrationCommand(string Name, string Project, string EnableVariable, string AdminConnectionVariable);

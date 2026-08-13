@@ -15,7 +15,7 @@ public sealed class IdentityFoundation : Migration
         migrationBuilder.EnsureSchema(name: "dbo");
 
         migrationBuilder.CreateTable(
-            name: "User",
+            name: "IdentityAccount",
             schema: "dbo",
             columns: table => new
             {
@@ -33,7 +33,7 @@ public sealed class IdentityFoundation : Migration
                 UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
             },
-            constraints: table => table.PrimaryKey("PK_User", x => x.EID));
+            constraints: table => table.PrimaryKey("PK_IdentityAccount", x => x.EID));
 
         migrationBuilder.CreateTable(
             name: "IdentitySecurityEvent",
@@ -41,14 +41,14 @@ public sealed class IdentityFoundation : Migration
             columns: table => new
             {
                 EID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                ActorAccountEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
                 ActorKind = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                ActorUserEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
                 CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 CreatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 EventType = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 OccurredAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 Reason = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                TargetUserEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                TargetAccountEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 TraceId = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
@@ -57,17 +57,17 @@ public sealed class IdentityFoundation : Migration
             {
                 table.PrimaryKey("PK_IdentitySecurityEvent", x => x.EID);
                 table.ForeignKey(
-                    name: "FK_IdentitySecurityEvent_ActorUser",
-                    column: x => x.ActorUserEID,
+                    name: "FK_IdentitySecurityEvent_ActorIdentityAccount",
+                    column: x => x.ActorAccountEID,
                     principalSchema: "dbo",
-                    principalTable: "User",
+                    principalTable: "IdentityAccount",
                     principalColumn: "EID",
                     onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
-                    name: "FK_IdentitySecurityEvent_TargetUser",
-                    column: x => x.TargetUserEID,
+                    name: "FK_IdentitySecurityEvent_TargetIdentityAccount",
+                    column: x => x.TargetAccountEID,
                     principalSchema: "dbo",
-                    principalTable: "User",
+                    principalTable: "IdentityAccount",
                     principalColumn: "EID",
                     onDelete: ReferentialAction.Restrict);
             });
@@ -78,36 +78,36 @@ public sealed class IdentityFoundation : Migration
             columns: table => new
             {
                 EID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                AccountEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 CreatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 IsTemporary = table.Column<bool>(type: "bit", nullable: false),
                 PasswordHash = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                UserEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
                 table.PrimaryKey("PK_LocalCredential", x => x.EID);
                 table.ForeignKey(
-                    name: "FK_LocalCredential_User",
-                    column: x => x.UserEID,
+                    name: "FK_LocalCredential_IdentityAccount",
+                    column: x => x.AccountEID,
                     principalSchema: "dbo",
-                    principalTable: "User",
+                    principalTable: "IdentityAccount",
                     principalColumn: "EID",
                     onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(
-            name: "IX_IdentitySecurityEvent_ActorUserEID",
+            name: "IX_IdentitySecurityEvent_ActorAccountEID",
             schema: "dbo",
             table: "IdentitySecurityEvent",
-            column: "ActorUserEID");
+            column: "ActorAccountEID");
         migrationBuilder.CreateIndex(
-            name: "IX_IdentitySecurityEvent_TargetUser_OccurredAt",
+            name: "IX_IdentitySecurityEvent_TargetAccount_OccurredAt",
             schema: "dbo",
             table: "IdentitySecurityEvent",
-            columns: ["TargetUserEID", "OccurredAt"]);
+            columns: ["TargetAccountEID", "OccurredAt"]);
         migrationBuilder.CreateIndex(
             name: "UX_IdentitySecurityEvent_EID",
             schema: "dbo",
@@ -121,21 +121,21 @@ public sealed class IdentityFoundation : Migration
             column: "EID",
             unique: true);
         migrationBuilder.CreateIndex(
-            name: "UX_LocalCredential_UserEID",
+            name: "UX_LocalCredential_AccountEID",
             schema: "dbo",
             table: "LocalCredential",
-            column: "UserEID",
+            column: "AccountEID",
             unique: true);
         migrationBuilder.CreateIndex(
-            name: "UX_User_EID",
+            name: "UX_IdentityAccount_EID",
             schema: "dbo",
-            table: "User",
+            table: "IdentityAccount",
             column: "EID",
             unique: true);
         migrationBuilder.CreateIndex(
-            name: "UX_User_NormalizedECODE",
+            name: "UX_IdentityAccount_NormalizedECODE",
             schema: "dbo",
-            table: "User",
+            table: "IdentityAccount",
             column: "NormalizedECODE",
             unique: true);
     }

@@ -62,26 +62,26 @@ public sealed class IdentityFoundationModelTests
     {
         var definitions = new IdentityModelMetadataProvider().GetDefinitions();
 
-        Assert.Equal(["User", "LocalCredential", "IdentitySecurityEvent"], definitions.Select(static model => model.Name));
-        var user = Assert.Single(definitions, static model => model.Name == "User");
-        AssertAuditFields(user);
-        Assert.Contains(user.Fields, static field => field is { Name: "ECODE", Required: true });
-        Assert.Contains(user.Fields, static field => field is { Name: "ENAME", Required: true });
-        Assert.Contains(user.Fields, static field => field is { Name: "NormalizedECODE", Required: true });
-        Assert.Contains(user.Fields, static field => field is { Name: "Status", ValueType: FieldValueType.Enum, Required: true });
-        Assert.Contains(user.Fields, static field => field is { Name: "Revision", ValueType: FieldValueType.Integer, Required: true });
-        Assert.Contains(user.Indexes, static index => index is { Name: "UX_User_NormalizedECODE", IsUnique: true });
+        Assert.Equal(["IdentityAccount", "LocalCredential", "IdentitySecurityEvent"], definitions.Select(static model => model.Name));
+        var account = Assert.Single(definitions, static model => model.Name == "IdentityAccount");
+        AssertAuditFields(account);
+        Assert.Contains(account.Fields, static field => field is { Name: "ECODE", Required: true });
+        Assert.Contains(account.Fields, static field => field is { Name: "ENAME", Required: true });
+        Assert.Contains(account.Fields, static field => field is { Name: "NormalizedECODE", Required: true });
+        Assert.Contains(account.Fields, static field => field is { Name: "Status", ValueType: FieldValueType.Enum, Required: true });
+        Assert.Contains(account.Fields, static field => field is { Name: "Revision", ValueType: FieldValueType.Integer, Required: true });
+        Assert.Contains(account.Indexes, static index => index is { Name: "UX_IdentityAccount_NormalizedECODE", IsUnique: true });
 
         var credential = Assert.Single(definitions, static model => model.Name == "LocalCredential");
         AssertAuditFields(credential);
-        Assert.Contains(credential.Indexes, static index => index is { Name: "UX_LocalCredential_UserEID", IsUnique: true });
+        Assert.Contains(credential.Indexes, static index => index is { Name: "UX_LocalCredential_AccountEID", IsUnique: true });
         Assert.Contains(credential.ForeignKeys, static foreignKey =>
-            foreignKey is { Name: "FK_LocalCredential_User", PrincipalModelKey: "Identity/User" });
+            foreignKey is { Name: "FK_LocalCredential_IdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
 
         var securityEvent = Assert.Single(definitions, static model => model.Name == "IdentitySecurityEvent");
         AssertAuditFields(securityEvent);
         Assert.Contains(securityEvent.ForeignKeys, static foreignKey =>
-            foreignKey is { Name: "FK_IdentitySecurityEvent_TargetUser", PrincipalModelKey: "Identity/User" });
+            foreignKey is { Name: "FK_IdentitySecurityEvent_TargetIdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
     }
 
     private static void AssertAuditFields(ModelDefinition definition)

@@ -35,7 +35,7 @@ public sealed class AuthenticationSessionRegistryTests
         var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(
             token => registry.RegisterAsync(new AuthenticationSessionRegistration
             {
-                UserEid = "User_1",
+                AccountEid = "User_1",
                 Type = AuthenticationSessionType.Regular,
                 ActorId = "User_1"
             }, token));
@@ -113,7 +113,7 @@ public sealed class AuthenticationSessionRegistryTests
         var transaction = new EfPlatformTransactionExecutor(context);
         var first = await transaction.ExecuteAsync(token => IssueAsync(registry, cancellationToken: token));
         var second = await transaction.ExecuteAsync(token => IssueAsync(registry, cancellationToken: token));
-        var otherUser = await transaction.ExecuteAsync(token => IssueAsync(registry, userEid: "User_2", cancellationToken: token));
+        var otherUser = await transaction.ExecuteAsync(token => IssueAsync(registry, accountEid: "User_2", cancellationToken: token));
 
         Assert.True(await transaction.ExecuteAsync(token => registry.RevokeCurrentAsync(new AuthenticationSessionRevocation
         {
@@ -127,9 +127,9 @@ public sealed class AuthenticationSessionRegistryTests
         Assert.Equal(new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc), revoked.Session.RevokedAtUtc);
         Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(second.Credential)).Status);
 
-        Assert.Equal(1, await transaction.ExecuteAsync(token => registry.RevokeAllAsync(new UserAuthenticationSessionsRevocation
+        Assert.Equal(1, await transaction.ExecuteAsync(token => registry.RevokeAllAsync(new AccountAuthenticationSessionsRevocation
         {
-            UserEid = "User_1",
+            AccountEid = "User_1",
             Reason = "credential changed",
             ActorId = "User_1"
         }, token)));
@@ -188,10 +188,10 @@ public sealed class AuthenticationSessionRegistryTests
     private static ValueTask<AuthenticationSessionIssuance> IssueAsync(
         IAuthenticationSessionRegistry registry,
         AuthenticationSessionType type = AuthenticationSessionType.Regular,
-        string userEid = "User_1",
+        string accountEid = "User_1",
         CancellationToken cancellationToken = default) => registry.RegisterAsync(new AuthenticationSessionRegistration
         {
-            UserEid = userEid,
+            AccountEid = accountEid,
             Type = type,
             ActorId = "User_1"
         }, cancellationToken);
@@ -210,10 +210,10 @@ public sealed class AuthenticationSessionRegistryTests
 
     private sealed class FixedAccountDirectory(IdentityAccountStatus status) : IIdentityAccountDirectory
     {
-        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default) =>
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<IdentityAccountSnapshot?>(new IdentityAccountSnapshot
             {
-                UserEid = userEid,
+                AccountEid = accountEid,
                 ECODE = "alice",
                 ENAME = "Alice",
                 Status = status,
@@ -227,7 +227,7 @@ public sealed class AuthenticationSessionRegistryTests
 
     private sealed class ThrowingAccountDirectory : IIdentityAccountDirectory
     {
-        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default) =>
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
             throw new SimulatedStoreException();
 
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(

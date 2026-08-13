@@ -15,33 +15,33 @@ public sealed record CreateIdentityAccountCommand(
     IdentityActorContext Actor);
 
 public sealed record UpdateIdentityAccountNameCommand(
-    string UserEid,
+    string AccountEid,
     string ENAME,
     long ExpectedRevision,
     IdentityActorContext Actor);
 
 public sealed record SetIdentityAccountStatusCommand(
-    string UserEid,
+    string AccountEid,
     IdentityAccountStatus TargetStatus,
     long ExpectedRevision,
     string Reason,
     IdentityActorContext Actor);
 
 public sealed record ResetIdentityCredentialCommand(
-    string UserEid,
+    string AccountEid,
     long ExpectedRevision,
     string Reason,
     IdentityActorContext Actor);
 
 public sealed record ChangeIdentityPasswordCommand(
-    string UserEid,
+    string AccountEid,
     string CurrentPassword,
     string NewPassword,
     long ExpectedRevision,
     IdentityActorContext Actor);
 
 public sealed record DeleteIdentityAccountCommand(
-    string UserEid,
+    string AccountEid,
     long ExpectedRevision,
     string Reason,
     IdentityActorContext Actor);

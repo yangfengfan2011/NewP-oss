@@ -18,7 +18,7 @@
     "entry": "identity",
     "bindingMode": "behavior-bindings",
     "bindings": [
-      "identity.users.page"
+      "identity.accounts.page"
     ]
   },
   "security": {
@@ -26,7 +26,7 @@
   },
   "persistence": {
     "models": [
-      "metadata/models/User.model.json",
+      "metadata/models/IdentityAccount.model.json",
       "metadata/models/LocalCredential.model.json",
       "metadata/models/IdentitySecurityEvent.model.json"
     ],

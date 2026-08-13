@@ -23,15 +23,15 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
             "首次初始化",
             fixture.Actor));
 
-        var user = Assert.Single(fixture.Repository.Users);
-        Assert.Equal(result.Account.UserEid, user.EID);
-        Assert.Equal("admin", user.ECODE);
-        Assert.True(user.IsLocalAdministrator);
-        Assert.Equal(IdentityAccountStatus.Enabled, user.Status);
-        Assert.True(fixture.Repository.VerifyPassword(user.EID, result.TemporaryCredential));
+        var account = Assert.Single(fixture.Repository.Accounts);
+        Assert.Equal(result.Account.AccountEid, account.EID);
+        Assert.Equal("admin", account.ECODE);
+        Assert.True(account.IsLocalAdministrator);
+        Assert.Equal(IdentityAccountStatus.Enabled, account.Status);
+        Assert.True(fixture.Repository.VerifyPassword(account.EID, result.TemporaryCredential));
         Assert.True(Assert.Single(fixture.Repository.Credentials).IsTemporary);
         Assert.Equal(IdentitySecurityEventTypes.LocalAdministratorBootstrapped, Assert.Single(fixture.Repository.SecurityEvents).EventType);
-        Assert.Equal(LocalAdministratorAssignmentState.Assigned, await fixture.Assignment.InspectAsync(user.EID));
+        Assert.Equal(LocalAdministratorAssignmentState.Assigned, await fixture.Assignment.InspectAsync(account.EID));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
             new BootstrapLocalAdministratorCommand("second", "Second", "重复初始化", fixture.Actor)).AsTask());
 
         Assert.Equal(IdentityMaintenanceFailureCodes.BootstrapAlreadyCompleted, exception.FailureCode);
-        Assert.Single(fixture.Repository.Users);
+        Assert.Single(fixture.Repository.Accounts);
         Assert.Single(fixture.Repository.Credentials);
         Assert.Single(fixture.Repository.SecurityEvents);
     }
@@ -62,7 +62,7 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.BootstrapAsync(
             new BootstrapLocalAdministratorCommand("admin", "Local Administrator", "首次初始化", fixture.Actor)).AsTask());
 
-        Assert.Empty(fixture.Repository.Users);
+        Assert.Empty(fixture.Repository.Accounts);
         Assert.Empty(fixture.Repository.Credentials);
         Assert.Empty(fixture.Repository.SecurityEvents);
         Assert.Empty(fixture.Assignment.Assignments);
@@ -82,15 +82,15 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
             "离线重置",
             fixture.Actor));
 
-        Assert.Equal(created.Account.UserEid, reset.Account.UserEid);
+        Assert.Equal(created.Account.AccountEid, reset.Account.AccountEid);
         Assert.Equal(created.Account.Revision + 1, reset.Account.Revision);
-        Assert.False(fixture.Repository.VerifyPassword(reset.Account.UserEid, created.TemporaryCredential));
-        Assert.True(fixture.Repository.VerifyPassword(reset.Account.UserEid, reset.TemporaryCredential));
+        Assert.False(fixture.Repository.VerifyPassword(reset.Account.AccountEid, created.TemporaryCredential));
+        Assert.True(fixture.Repository.VerifyPassword(reset.Account.AccountEid, reset.TemporaryCredential));
         Assert.Equal("reset-secret", reset.TemporaryCredential);
         Assert.Single(fixture.Sessions.Revocations);
         Assert.Equal(IdentitySecurityEventTypes.LocalAdministratorCredentialReset, fixture.Repository.SecurityEvents.Last().EventType);
-        Assert.True(fixture.Repository.Users.Single().IsLocalAdministrator);
-        Assert.Equal("admin", fixture.Repository.Users.Single().ECODE);
+        Assert.True(fixture.Repository.Accounts.Single().IsLocalAdministrator);
+        Assert.Equal("admin", fixture.Repository.Accounts.Single().ECODE);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
         var invalid = await fixture.Probe.InspectAsync();
         Assert.Equal(LocalAdministratorReadinessState.InvariantInvalid, invalid.State);
         Assert.Equal("local-admin-role-assignment-invalid", invalid.Diagnostic);
-        Assert.Equal(created.Account.UserEid, invalid.UserEid);
+        Assert.Equal(created.Account.AccountEid, invalid.AccountEid);
     }
 
     [Fact]
@@ -162,8 +162,8 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
             "Local Administrator",
             "首次初始化",
             fixture.Actor));
-        var duplicate = fixture.Repository.Users.Single();
-        fixture.Repository.Users.Add(new User
+        var duplicate = fixture.Repository.Accounts.Single();
+        fixture.Repository.Accounts.Add(new IdentityAccount
         {
             EID = "User_duplicate",
             ECODE = "other-admin",
@@ -200,7 +200,7 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
                 transaction,
                 Sessions,
                 Assignment,
-                new PasswordHasher<User>(),
+                new PasswordHasher<IdentityAccount>(),
                 issuer,
                 objectIds,
                 time);
@@ -224,21 +224,21 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
         public HashSet<string> Assignments { get; } = new(StringComparer.Ordinal);
         public bool FailAssignment { get; set; }
 
-        public ValueTask AssignAsync(string userEid, string actorId, CancellationToken cancellationToken = default)
+        public ValueTask AssignAsync(string accountEid, string actorId, CancellationToken cancellationToken = default)
         {
             if (FailAssignment)
             {
                 throw new InvalidOperationException("injected assignment failure");
             }
 
-            Assignments.Add(userEid);
+            Assignments.Add(accountEid);
             return ValueTask.CompletedTask;
         }
 
         public ValueTask<LocalAdministratorAssignmentState> InspectAsync(
-            string userEid,
+            string accountEid,
             CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(Assignments.Contains(userEid)
+            ValueTask.FromResult(Assignments.Contains(accountEid)
                 ? LocalAdministratorAssignmentState.Assigned
                 : LocalAdministratorAssignmentState.NotAssigned);
     }
@@ -290,18 +290,18 @@ public sealed class IdentityLocalAdministratorMaintenanceServiceTests
 
     private sealed class RecordingSessionRegistry : IAuthenticationSessionRegistry
     {
-        public List<UserAuthenticationSessionsRevocation> Revocations { get; } = [];
+        public List<AccountAuthenticationSessionsRevocation> Revocations { get; } = [];
         public object CreateSnapshot() => Revocations.ToArray();
         public void Restore(object snapshot)
         {
             Revocations.Clear();
-            Revocations.AddRange((UserAuthenticationSessionsRevocation[])snapshot);
+            Revocations.AddRange((AccountAuthenticationSessionsRevocation[])snapshot);
         }
 
         public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credentialDigest, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
         {
             Revocations.Add(revocation);
             return ValueTask.FromResult(1);

@@ -207,7 +207,7 @@ internal sealed class PersonnelAcceptanceRunner
         using (var created = await SendJsonWithAntiforgeryAsync(
                    administrator,
                    HttpMethod.Post,
-                   "/api/identity/users",
+                   "/api/identity/accounts",
                    new { ecode = _readOnlyECode, ename = "Personnel Acceptance Read Only" },
                    cancellationToken))
         {
@@ -215,7 +215,7 @@ internal sealed class PersonnelAcceptanceRunner
             EnsureStatus(created, HttpStatusCode.Created, createdBody, "create read-only identity account");
             using var createdJson = JsonDocument.Parse(createdBody);
             var account = ReadObject(createdJson.RootElement, "account");
-            var readOnlyUserEid = ReadString(account, "eid");
+            var readOnlyAccountEid = ReadString(account, "eid");
             var temporaryCredential = ReadString(createdJson.RootElement, "temporaryCredential");
             _secretTokens.Add(temporaryCredential);
             using var readOnly = CreateClient(_hostPort);
@@ -237,7 +237,7 @@ internal sealed class PersonnelAcceptanceRunner
                 administrator,
                 HttpMethod.Post,
                 "/api/acceptance/personnel/prepare",
-                new { readOnlyUserEid },
+                new { readOnlyAccountEid },
                 cancellationToken,
                 request => request.Headers.Add("X-NewP-Acceptance-Secret", fixtureSecret));
             var body = await response.Content.ReadAsStringAsync(cancellationToken);

@@ -12,11 +12,11 @@ public sealed class EfLocalAdministratorRoleAssignment(
     private const string LocalAdministratorRoleCode = "LocalAdmin";
 
     public async ValueTask AssignAsync(
-        string userEid,
+        string accountEid,
         string actorId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userEid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountEid);
         ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         if (dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null)
         {
@@ -31,7 +31,7 @@ public sealed class EfLocalAdministratorRoleAssignment(
 
         var roleId = GetString(role, "EID");
         var existing = await UserRoles
-            .Where(item => EF.Property<string>(item, "UserId") == userEid
+            .Where(item => EF.Property<string>(item, "UserId") == accountEid
                 && EF.Property<string>(item, "RoleId") == roleId)
             .ToListAsync(cancellationToken);
         if (existing.Count == 1)
@@ -48,7 +48,7 @@ public sealed class EfLocalAdministratorRoleAssignment(
         UserRoles.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["EID"] = objectIdGenerator.NewId("UserRole"),
-            ["UserId"] = userEid,
+            ["UserId"] = accountEid,
             ["RoleId"] = roleId,
             ["AssignedAt"] = DateTime.UtcNow,
             ["AssignedBy"] = actorId
@@ -56,10 +56,10 @@ public sealed class EfLocalAdministratorRoleAssignment(
     }
 
     public async ValueTask<LocalAdministratorAssignmentState> InspectAsync(
-        string userEid,
+        string accountEid,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userEid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountEid);
         var role = await FindRoleAsync(cancellationToken);
         if (role is null)
         {
@@ -68,7 +68,7 @@ public sealed class EfLocalAdministratorRoleAssignment(
 
         var roleId = GetString(role, "EID");
         var count = await UserRoles.CountAsync(
-            item => EF.Property<string>(item, "UserId") == userEid
+            item => EF.Property<string>(item, "UserId") == accountEid
                 && EF.Property<string>(item, "RoleId") == roleId,
             cancellationToken);
         return count switch

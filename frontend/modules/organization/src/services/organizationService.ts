@@ -48,7 +48,7 @@ export interface PositionDto {
 export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
 
 export interface PersonUserBindingAccountDto {
-  userEid: string;
+  accountEid: string;
   ecode: string;
   ename: string;
   status: IdentityAccountStatus;
@@ -60,7 +60,7 @@ export interface PersonUserBindingCandidateDto extends PersonUserBindingAccountD
 
 export interface PersonUserBindingDto {
   personEid: string;
-  userEid: string;
+  accountEid: string;
   boundAt: string;
   boundBy: string;
   reason: string;
@@ -71,7 +71,7 @@ export interface PersonUserBindingSummaryData {
   personEid: string;
   personName: string;
   isPersonEnabled: boolean;
-  userEid: string | null;
+  accountEid: string | null;
   boundAt: string | null;
   boundBy: string | null;
   reason: string | null;
@@ -260,12 +260,12 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
         personEid: readStandardCrudString(binding, ['PersonEid', 'personEid']),
         personName: readStandardCrudString(binding, ['PersonName', 'personName']),
         isPersonEnabled: readStandardCrudBoolean(binding, ['IsPersonEnabled', 'isPersonEnabled'], false),
-        userEid: readStandardCrudNullableString(binding, ['UserEid', 'userEid']),
+        accountEid: readStandardCrudNullableString(binding, ['AccountEid', 'accountEid']),
         boundAt: readStandardCrudNullableString(binding, ['BoundAt', 'boundAt']),
         boundBy: readStandardCrudNullableString(binding, ['BoundBy', 'boundBy']),
         reason: readStandardCrudNullableString(binding, ['Reason', 'reason']),
         account: rawAccount ? {
-          userEid: readStandardCrudString(rawAccount, ['UserEid', 'userEid']),
+          accountEid: readStandardCrudString(rawAccount, ['AccountEid', 'accountEid']),
           ecode: readStandardCrudString(rawAccount, ['ECODE', 'ecode']),
           ename: readStandardCrudString(rawAccount, ['ENAME', 'ename']),
           status: readStandardCrudString(rawAccount, ['Status', 'status']) as IdentityAccountStatus,
@@ -402,7 +402,7 @@ export async function searchPersonUserBindingCandidates(
 
 export async function bindPersonUser(
   personEid: string,
-  input: { userEid: string; expectedRevision: number; reason: string },
+  input: { accountEid: string; expectedRevision: number; reason: string },
 ): Promise<PersonUserBindingDto> {
   return requestJson<PersonUserBindingDto>(
     `/api/organization/persons/${encodeURIComponent(personEid)}/user-binding`,

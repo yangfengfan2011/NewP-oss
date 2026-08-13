@@ -47,7 +47,7 @@ public static class PersonnelAcceptanceFixture
                 return Results.NotFound();
             }
 
-            var readOnlyAccount = await accountDirectory.FindAsync(request.ReadOnlyUserEid, cancellationToken);
+            var readOnlyAccount = await accountDirectory.FindAsync(request.ReadOnlyAccountEid, cancellationToken);
             if (readOnlyAccount is null || readOnlyAccount.IsLocalAdministrator)
             {
                 return Results.Problem(statusCode: 400, title: "ACCEPTANCE_READ_ONLY_ACCOUNT_INVALID");
@@ -64,7 +64,7 @@ public static class PersonnelAcceptanceFixture
             {
                 PermissionCodes = []
             }, "acceptance", cancellationToken);
-            await roleService.AssignUserRolesAsync(readOnlyAccount.UserEid, new AssignUserRolesRequest
+            await roleService.AssignUserRolesAsync(readOnlyAccount.AccountEid, new AssignUserRolesRequest
             {
                 RoleCodes = [role.Code]
             }, "acceptance", cancellationToken);
@@ -91,15 +91,15 @@ public static class PersonnelAcceptanceFixture
                 }, cancellationToken);
 
             var administrator = await localAdministrator.InspectAsync(cancellationToken);
-            if (administrator is not { State: LocalAdministratorReadinessState.Ready, UserEid: not null })
+            if (administrator is not { State: LocalAdministratorReadinessState.Ready, AccountEid: not null })
             {
                 return Results.Problem(statusCode: 503, title: "IDENTITY_LOCAL_ADMIN_INVARIANT");
             }
 
             return Results.Ok(new PersonnelAcceptanceFixtureResponse(
                 options.RunId,
-                administrator.UserEid,
-                readOnlyAccount.UserEid,
+                administrator.AccountEid,
+                readOnlyAccount.AccountEid,
                 company.Id,
                 company.DisplayName,
                 department.Id,
@@ -160,4 +160,4 @@ public sealed record PersonnelAcceptanceFixtureResponse(
     string DepartmentId,
     string DepartmentName);
 
-public sealed record PersonnelAcceptanceFixtureRequest(string ReadOnlyUserEid);
+public sealed record PersonnelAcceptanceFixtureRequest(string ReadOnlyAccountEid);

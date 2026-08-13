@@ -37,7 +37,7 @@ public sealed class IdentityContractsArchitectureTests
     {
         var assembly = typeof(IdentityModule).Assembly;
 
-        Assert.Null(assembly.GetType("ICP.Platform.Modules.Identity.DTOs.UserDto"));
+        Assert.Null(assembly.GetType("ICP.Platform.Modules.Identity.DTOs.IdentityAccountDto"));
         Assert.Null(assembly.GetType("ICP.Platform.Modules.Identity.DTOs.LocalCredentialDto"));
     }
 

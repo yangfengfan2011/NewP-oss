@@ -68,7 +68,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
 
         try
         {
-            var account = await _accountDirectory.FindAsync(validation.Session.UserEid, Context.RequestAborted);
+            var account = await _accountDirectory.FindAsync(validation.Session.AccountEid, Context.RequestAborted);
             if (account is not { Status: IdentityAccountStatus.Enabled })
             {
                 _cookie.Delete(Context);
@@ -77,7 +77,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
 
             var claims = new List<Claim>
             {
-                new(ClaimTypes.NameIdentifier, account.UserEid),
+                new(ClaimTypes.NameIdentifier, account.AccountEid),
                 new(ClaimTypes.Name, account.ECODE),
                 new("ename", account.ENAME),
                 new(SessionEidClaim, validation.Session.SessionEid),
@@ -85,7 +85,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
                 new(AccountRevisionClaim, account.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("is_local_administrator", account.IsLocalAdministrator ? "true" : "false")
             };
-            foreach (var role in await _authorizationService.GetUserRolesAsync(account.UserEid, Context.RequestAborted))
+            foreach (var role in await _authorizationService.GetUserRolesAsync(account.AccountEid, Context.RequestAborted))
             {
                 claims.Add(new Claim(ClaimTypes.Role, role));
             }

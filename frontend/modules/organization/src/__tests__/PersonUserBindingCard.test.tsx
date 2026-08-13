@@ -38,12 +38,12 @@ describe('PersonUserBindingCard', () => {
 
   it('searches scoped candidates and submits an irreversible binding confirmation', async () => {
     searchMock.mockResolvedValue([{
-      userEid: 'User_1', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 7,
+      accountEid: 'User_1', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 7,
     }]);
     bindMock.mockResolvedValue({
-      personEid: 'Person_1', userEid: 'User_1', boundAt: '2026-08-10T10:30:00Z',
+      personEid: 'Person_1', accountEid: 'User_1', boundAt: '2026-08-10T10:30:00Z',
       boundBy: 'User_Admin', reason: '入职绑定',
-      account: { userEid: 'User_1', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 8 },
+      account: { accountEid: 'User_1', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 8 },
     });
     await render(true);
 
@@ -61,7 +61,7 @@ describe('PersonUserBindingCard', () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(bindMock).toHaveBeenCalledWith('Person_1', {
-      userEid: 'User_1', expectedRevision: 7, reason: '入职绑定',
+      accountEid: 'User_1', expectedRevision: 7, reason: '入职绑定',
     });
     expect(document.body.textContent).toContain('已永久绑定');
     expect(document.body.textContent).toContain('alice');
@@ -77,7 +77,7 @@ describe('PersonUserBindingCard', () => {
       root.render(<PersonUserBindingCard summary={{
         status: 'ready',
         data: {
-          personEid: 'Person_1', personName: '张三', isPersonEnabled, userEid: null,
+          personEid: 'Person_1', personName: '张三', isPersonEnabled, accountEid: null,
           boundAt: null, boundBy: null, reason: null, account: null, isAccountAvailable: true,
         },
       }} />);

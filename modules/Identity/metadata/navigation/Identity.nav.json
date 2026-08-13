@@ -11,14 +11,14 @@
         "localAdministratorOnly": true
       },
       {
-        "key": "identity.users",
-        "titleKey": "Navigation.IdentityUsers",
+        "key": "identity.accounts",
+        "titleKey": "Navigation.IdentityAccounts",
         "icon": "user-group",
         "parentKey": "identity",
-        "path": "/identity/users",
+        "path": "/identity/accounts",
         "order": 90,
         "entryType": "custom",
-        "targetKey": "identity.users.page",
+        "targetKey": "identity.accounts.page",
         "localAdministratorOnly": true
       }
     ]

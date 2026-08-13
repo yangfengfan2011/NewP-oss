@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "type": "model",
-  "User": {
+  "IdentityAccount": {
     "kind": "Entity",
     "builtinFields": [
       "ECODE",
@@ -37,7 +37,7 @@
     ],
     "indexes": [
       {
-        "name": "UX_User_NormalizedECODE",
+        "name": "UX_IdentityAccount_NormalizedECODE",
         "fields": ["NormalizedECODE"],
         "unique": true
       }

@@ -159,7 +159,7 @@ public class RepositoryTestEntrypointTests
             "IdentityFoundationAcceptanceRunner.cs"));
 
         Assert.Contains("bootstrap-local-admin", runner, StringComparison.Ordinal);
-        Assert.Contains("/api/identity/users", runner, StringComparison.Ordinal);
+        Assert.Contains("/api/identity/accounts", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/persons", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("/api/acceptance", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO", runner, StringComparison.OrdinalIgnoreCase);

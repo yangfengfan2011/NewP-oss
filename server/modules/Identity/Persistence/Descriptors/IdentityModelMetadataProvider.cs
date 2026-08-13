@@ -31,7 +31,7 @@ public sealed class IdentityModelMetadataProvider : IModelDefinitionProvider
         var validator = new ModelMetadataValidator();
         var projector = new ModelMetadataProjector();
 
-        return new[] { "User.model.json", "LocalCredential.model.json", "IdentitySecurityEvent.model.json" }
+        return new[] { "IdentityAccount.model.json", "LocalCredential.model.json", "IdentitySecurityEvent.model.json" }
             .Select(fileName =>
             {
                 var document = loader.LoadFromFile(Path.Combine(_modelDirectory, fileName));

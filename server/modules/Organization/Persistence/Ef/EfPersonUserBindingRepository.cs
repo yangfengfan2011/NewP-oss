@@ -21,7 +21,7 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
 
     public async ValueTask<bool> TryBindAsync(
         string personEid,
-        string userEid,
+        string accountEid,
         DateTime boundAt,
         string actorId,
         string reason,
@@ -35,13 +35,13 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
         var affected = await Persons
             .Where(row => EF.Property<string>(row, "EID") == personEid
                 && EF.Property<bool>(row, "IsEnabled")
-                && EF.Property<string?>(row, "UserEID") == null)
+                && EF.Property<string?>(row, "AccountEID") == null)
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => EF.Property<string?>(row, "UserEID"), userEid)
-                    .SetProperty(row => EF.Property<DateTime?>(row, "UserBoundAt"), boundAt)
-                    .SetProperty(row => EF.Property<string?>(row, "UserBoundBy"), actorId)
-                    .SetProperty(row => EF.Property<string?>(row, "UserBindingReason"), reason)
+                    .SetProperty(row => EF.Property<string?>(row, "AccountEID"), accountEid)
+                    .SetProperty(row => EF.Property<DateTime?>(row, "AccountBoundAt"), boundAt)
+                    .SetProperty(row => EF.Property<string?>(row, "AccountBoundBy"), actorId)
+                    .SetProperty(row => EF.Property<string?>(row, "AccountBindingReason"), reason)
                     .SetProperty(row => EF.Property<long>(row, "Revision"), row => EF.Property<long>(row, "Revision") + 1)
                     .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), boundAt),
@@ -85,10 +85,10 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
         PersonName = GetString(entity, "ENAME") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
         Revision = GetLong(entity, "Revision"),
-        UserEid = GetString(entity, "UserEID"),
-        BoundAt = GetDateTime(entity, "UserBoundAt"),
-        BoundBy = GetString(entity, "UserBoundBy"),
-        BindingReason = GetString(entity, "UserBindingReason"),
+        AccountEid = GetString(entity, "AccountEID"),
+        BoundAt = GetDateTime(entity, "AccountBoundAt"),
+        BoundBy = GetString(entity, "AccountBoundBy"),
+        BindingReason = GetString(entity, "AccountBindingReason"),
         UpdatedBy = GetString(entity, "UpdatedBy"),
         UpdatedAt = GetDateTime(entity, "UpdatedAt")
     };

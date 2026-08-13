@@ -11,7 +11,7 @@ public sealed class AuthenticationSessionDto
     public DateTime CreatedAt { get; init; }
     public string UpdatedBy { get; init; }
     public DateTime UpdatedAt { get; init; }
-    public string UserEID { get; init; }
+    public string AccountEID { get; init; }
     public string TokenHash { get; init; }
     public ICP.Platform.Authentication.Contracts.AuthenticationSessionType SessionType { get; init; }
     public string? SessionType_DisplayValue { get; init; }

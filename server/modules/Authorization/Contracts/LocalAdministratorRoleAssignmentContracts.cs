@@ -20,7 +20,7 @@ public interface ILocalAdministratorRoleAssignment
     /// 在调用方拥有的共享事务中，把指定用户分配给既有 LocalAdmin 角色。
     /// </summary>
     ValueTask AssignAsync(
-        string userEid,
+        string accountEid,
         string actorId,
         CancellationToken cancellationToken = default);
 
@@ -28,6 +28,6 @@ public interface ILocalAdministratorRoleAssignment
     /// 检查指定用户是否精确获得一个有效的 LocalAdmin 角色分配。
     /// </summary>
     ValueTask<LocalAdministratorAssignmentState> InspectAsync(
-        string userEid,
+        string accountEid,
         CancellationToken cancellationToken = default);
 }

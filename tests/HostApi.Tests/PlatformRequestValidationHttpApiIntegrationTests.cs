@@ -62,7 +62,7 @@ public sealed class PlatformRequestValidationHttpApiIntegrationTests
     public void CurrentIdentityAuthenticationAndBindingControllersExplicitlyOptIn()
     {
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(AuthController), typeof(PlatformRequestValidationAttribute)));
-        Assert.NotNull(Attribute.GetCustomAttribute(typeof(IdentityUsersController), typeof(PlatformRequestValidationAttribute)));
+        Assert.NotNull(Attribute.GetCustomAttribute(typeof(IdentityAccountsController), typeof(PlatformRequestValidationAttribute)));
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(IdentitySelfServiceController), typeof(PlatformRequestValidationAttribute)));
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(PersonUserBindingsController), typeof(PlatformRequestValidationAttribute)));
         Assert.NotNull(Attribute.GetCustomAttribute(typeof(PersonLifecycleController), typeof(PlatformRequestValidationAttribute)));
@@ -99,7 +99,7 @@ public sealed class PlatformRequestValidationHttpApiIntegrationTests
         public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credential, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class UnusedTransactionExecutor : IPlatformTransactionExecutor

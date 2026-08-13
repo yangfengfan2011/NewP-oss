@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const platformFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', () => ({ platformFetch: platformFetchMock }));
 
-import { listUsers, resetCredential } from '../api/identityClient';
+import { listAccounts, resetCredential } from '../api/identityClient';
 import { closeOneTimeSecret, revealOneTimeSecret } from '../state/oneTimeSecret';
 import { availableIdentityActions } from '../state/accountActions';
 
@@ -16,10 +16,10 @@ describe('identity management client', () => {
       headers: { 'Content-Type': 'application/json' },
     }));
 
-    await listUsers({ query: 'alice', status: 'Disabled', isPersonnelBound: false, page: 2, pageSize: 20 });
+    await listAccounts({ query: 'alice', status: 'Disabled', isPersonnelBound: false, page: 2, pageSize: 20 });
 
     expect(platformFetchMock).toHaveBeenCalledWith(
-      '/api/identity/users?query=alice&status=Disabled&isPersonnelBound=false&page=2&pageSize=20',
+      '/api/identity/accounts?query=alice&status=Disabled&isPersonnelBound=false&page=2&pageSize=20',
       expect.objectContaining({ method: 'GET' }),
     );
   });

@@ -231,7 +231,7 @@ public class EfOrganizationRepositoryTests
 
         var sqlServerPerson = ExtractPersonSection(sqlServerSnapshot);
         Assert.DoesNotContain("PersonUserLink", sqlServerSnapshot, StringComparison.Ordinal);
-        Assert.Contains("b.Property<string>(\"UserEID\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.Contains("b.Property<string>(\"AccountEID\")", sqlServerPerson, StringComparison.Ordinal);
         Assert.Contains("b.Property<long>(\"Revision\")", sqlServerPerson, StringComparison.Ordinal);
     }
 
@@ -303,8 +303,8 @@ public class EfOrganizationRepositoryTests
             Path.Combine("modules", "Organization", "Migrations.SqlServer"),
             "Organization_000001_Foundation");
 
-        Assert.Contains("UserEID = table.Column<string>", migration, StringComparison.Ordinal);
-        Assert.Contains("name: \"UX_Person_UserEID\"", migration, StringComparison.Ordinal);
+        Assert.Contains("AccountEID = table.Column<string>", migration, StringComparison.Ordinal);
+        Assert.Contains("name: \"UX_Person_AccountEID\"", migration, StringComparison.Ordinal);
         Assert.DoesNotContain("PersonUserLink", migration, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT", migration, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("INSERT", migration, StringComparison.OrdinalIgnoreCase);

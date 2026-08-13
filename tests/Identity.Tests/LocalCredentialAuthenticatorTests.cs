@@ -13,21 +13,21 @@ public sealed class LocalCredentialAuthenticatorTests
     {
         const string password = "real password";
         var repository = new InMemoryIdentityRepository();
-        var user = User("user-1", IdentityAccountStatus.Enabled);
-        repository.Users.Add(user);
+        var account = Account("account-1", IdentityAccountStatus.Enabled);
+        repository.Accounts.Add(account);
         repository.Credentials.Add(new LocalCredential
         {
             EID = "credential-1",
-            UserEID = user.EID,
-            PasswordHash = new PasswordHasher<User>().HashPassword(user, password),
+            AccountEID = account.EID,
+            PasswordHash = new PasswordHasher<IdentityAccount>().HashPassword(account, password),
             IsTemporary = true
         });
-        var authenticator = new LocalCredentialAuthenticator(repository, new PasswordHasher<User>());
+        var authenticator = new LocalCredentialAuthenticator(repository, new PasswordHasher<IdentityAccount>());
 
         var result = await authenticator.AuthenticateAsync("  admin  ", password);
 
         Assert.Equal(LocalCredentialAuthenticationStatus.Succeeded, result.Status);
-        Assert.Equal("user-1", result.Account?.UserEid);
+        Assert.Equal("account-1", result.Account?.AccountEid);
         Assert.True(result.IsTemporary);
         Assert.DoesNotContain(password, System.Text.Json.JsonSerializer.Serialize(result), StringComparison.Ordinal);
     }
@@ -41,15 +41,15 @@ public sealed class LocalCredentialAuthenticatorTests
         string suppliedPassword)
     {
         var repository = new InMemoryIdentityRepository();
-        var user = User("user-1", status);
-        repository.Users.Add(user);
+        var account = Account("account-1", status);
+        repository.Accounts.Add(account);
         repository.Credentials.Add(new LocalCredential
         {
             EID = "credential-1",
-            UserEID = user.EID,
-            PasswordHash = new PasswordHasher<User>().HashPassword(user, "real password")
+            AccountEID = account.EID,
+            PasswordHash = new PasswordHasher<IdentityAccount>().HashPassword(account, "real password")
         });
-        var authenticator = new LocalCredentialAuthenticator(repository, new PasswordHasher<User>());
+        var authenticator = new LocalCredentialAuthenticator(repository, new PasswordHasher<IdentityAccount>());
 
         var result = await authenticator.AuthenticateAsync("admin", suppliedPassword);
 
@@ -57,7 +57,7 @@ public sealed class LocalCredentialAuthenticatorTests
         Assert.Null(result.Account);
     }
 
-    private static User User(string eid, IdentityAccountStatus status) => new()
+    private static IdentityAccount Account(string eid, IdentityAccountStatus status) => new()
     {
         EID = eid,
         ECODE = "admin",

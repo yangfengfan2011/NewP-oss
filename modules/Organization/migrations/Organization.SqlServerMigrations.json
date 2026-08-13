@@ -2,16 +2,16 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Organization",
-  "modelDigest": "0aa9f2e2956c6f4e094224d65b65ca182c980278cfcf95ff368d9f4f67b9de58",
-  "bundleChecksum": "f0126f309cb4bd3a23296449c9a5f535d0d5b454853e0728c8de567e37eeb17c",
+  "modelDigest": "24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f",
+  "bundleChecksum": "fae9144d40783a38eacc4dfec57556b49d5fa26bd280845a12dada5dff968b04",
   "migrations": [
     {
       "sequence": "000001",
       "migrationId": "20260812144235_Organization_000001_Foundation",
       "previousContentDigest": null,
-      "contentDigest": "0e4e43ff86e73ca5eaa6530ca447d2feaea3e89f1546ab2556e36998d8561b7b",
+      "contentDigest": "3698ef812e3f3ec6a6d5f3c2121f14d43d444fb68256bd2efc4fb8804f53e606",
       "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
-      "toModelDigest": "0aa9f2e2956c6f4e094224d65b65ca182c980278cfcf95ff368d9f4f67b9de58",
+      "toModelDigest": "24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f",
       "compatibility": "safe-expand"
     }
   ]

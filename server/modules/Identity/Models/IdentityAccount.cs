@@ -2,7 +2,7 @@ using ICP.Platform.Identity.Contracts;
 
 namespace ICP.Platform.Modules.Identity.Models;
 
-public sealed class User
+public sealed class IdentityAccount
 {
     public string EID { get; set; } = string.Empty;
     public string ECODE { get; set; } = string.Empty;

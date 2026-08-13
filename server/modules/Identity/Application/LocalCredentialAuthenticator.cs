@@ -10,9 +10,9 @@ namespace ICP.Platform.Modules.Identity.Application;
 public sealed class LocalCredentialAuthenticator : ILocalCredentialAuthenticator
 {
     private readonly IIdentityRepository _repository;
-    private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly IPasswordHasher<IdentityAccount> _passwordHasher;
 
-    public LocalCredentialAuthenticator(IIdentityRepository repository, IPasswordHasher<User> passwordHasher)
+    public LocalCredentialAuthenticator(IIdentityRepository repository, IPasswordHasher<IdentityAccount> passwordHasher)
     {
         _repository = repository;
         _passwordHasher = passwordHasher;
@@ -29,19 +29,19 @@ public sealed class LocalCredentialAuthenticator : ILocalCredentialAuthenticator
                 .Trim()
                 .Normalize(NormalizationForm.FormKC)
                 .ToUpperInvariant();
-            var user = await _repository.FindUserByNormalizedCodeAsync(normalizedCode, cancellationToken);
-            if (user is not { Status: IdentityAccountStatus.Enabled })
+            var account = await _repository.FindAccountByNormalizedCodeAsync(normalizedCode, cancellationToken);
+            if (account is not { Status: IdentityAccountStatus.Enabled })
             {
                 return Invalid();
             }
 
-            var credential = await _repository.FindCredentialAsync(user.EID, cancellationToken);
+            var credential = await _repository.FindCredentialAsync(account.EID, cancellationToken);
             if (credential is null)
             {
                 return Invalid();
             }
 
-            var verification = _passwordHasher.VerifyHashedPassword(user, credential.PasswordHash, password ?? string.Empty);
+            var verification = _passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, password ?? string.Empty);
             if (verification == PasswordVerificationResult.Failed)
             {
                 return Invalid();
@@ -50,7 +50,7 @@ public sealed class LocalCredentialAuthenticator : ILocalCredentialAuthenticator
             return new LocalCredentialAuthenticationResult
             {
                 Status = LocalCredentialAuthenticationStatus.Succeeded,
-                Account = IdentityAccountApplicationService.ToSnapshot(user),
+                Account = IdentityAccountApplicationService.ToSnapshot(account),
                 IsTemporary = credential.IsTemporary
             };
         }

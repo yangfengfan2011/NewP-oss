@@ -30,7 +30,7 @@ public class ModelDtoSyncRunnerTests
             var positionDtoPath = GeneratedPath(repositoryRoot, "Organization", "PositionDto.g.cs");
             var signaturePath = GeneratedPath(repositoryRoot, "Authorization", "AuthorizationBaseDtoSignatureProvider.g.cs");
             var authenticationSessionDtoPath = GeneratedPath(repositoryRoot, "Authentication", "AuthenticationSessionDto.g.cs");
-            var userDtoPath = GeneratedPath(repositoryRoot, "Identity", "UserDto.g.cs");
+            var userDtoPath = GeneratedPath(repositoryRoot, "Identity", "IdentityAccountDto.g.cs");
 
             Assert.Contains(roleDtoPath, writtenFiles);
             Assert.Contains(signaturePath, writtenFiles);
@@ -92,7 +92,7 @@ public class ModelDtoSyncRunnerTests
         {
             ModuleDtoSyncRunner.Run(repositoryRoot);
             var changedPath = GeneratedPath(repositoryRoot, "Authorization", "RoleDto.g.cs");
-            var missingPath = GeneratedPath(repositoryRoot, "Identity", "UserDto.g.cs");
+            var missingPath = GeneratedPath(repositoryRoot, "Identity", "IdentityAccountDto.g.cs");
             var unexpectedPath = GeneratedPath(repositoryRoot, "Authorization", "UnexpectedDto.g.cs");
             File.WriteAllText(changedPath, "drifted");
             File.Delete(missingPath);
@@ -102,7 +102,7 @@ public class ModelDtoSyncRunnerTests
 
             Assert.Contains("server/modules/Authorization/DTOs/Generated/RoleDto.g.cs", driftedFiles);
             Assert.Contains("server/modules/Authorization/DTOs/Generated/UnexpectedDto.g.cs", driftedFiles);
-            Assert.Contains("server/modules/Identity/DTOs/Generated/UserDto.g.cs", driftedFiles);
+            Assert.Contains("server/modules/Identity/DTOs/Generated/IdentityAccountDto.g.cs", driftedFiles);
             Assert.Equal("drifted", File.ReadAllText(changedPath));
             Assert.False(File.Exists(missingPath));
         }

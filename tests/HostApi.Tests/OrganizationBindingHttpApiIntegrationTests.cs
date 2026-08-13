@@ -64,14 +64,14 @@ public sealed class OrganizationBindingHttpApiIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var binding = await response.Content.ReadFromJsonAsync<PersonUserBindingDto>();
-        Assert.Equal("User_1", binding?.UserEid);
+        Assert.Equal("User_1", binding?.AccountEid);
         Assert.Equal("User_Admin", service.Actor?.ActorId);
         Assert.False(string.IsNullOrWhiteSpace(service.Actor?.TraceId));
 
         using var invalidRevision = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_2/user-binding")
         {
             Content = new StringContent(
-                """{"userEid":"User_2","expectedRevision":-1,"reason":"invalid revision"}""",
+                """{"accountEid":"User_2","expectedRevision":-1,"reason":"invalid revision"}""",
                 Encoding.UTF8,
                 "application/json")
         };
@@ -113,11 +113,11 @@ public sealed class OrganizationBindingHttpApiIntegrationTests
             Actor = actor;
             return ValueTask.FromResult(new PersonUserBindingDto(
                 personEid,
-                request.UserEid,
+                request.AccountEid,
                 DateTime.UtcNow,
                 actor.ActorId,
                 request.Reason,
-                new PersonUserBindingAccountDto(request.UserEid, "alice", "Alice", "Enabled", 8)));
+                new PersonUserBindingAccountDto(request.AccountEid, "alice", "Alice", "Enabled", 8)));
         }
     }
 
@@ -130,13 +130,13 @@ public sealed class OrganizationBindingHttpApiIntegrationTests
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            if (!Request.Headers.TryGetValue("X-Test-User", out var userEid))
+            if (!Request.Headers.TryGetValue("X-Test-User", out var accountEid))
             {
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
             var principal = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, userEid.ToString())],
+                [new Claim(ClaimTypes.NameIdentifier, accountEid.ToString())],
                 SchemeName));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
         }

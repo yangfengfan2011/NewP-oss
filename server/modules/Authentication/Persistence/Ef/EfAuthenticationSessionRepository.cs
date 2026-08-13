@@ -63,7 +63,7 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
     }
 
     public async ValueTask<int> RevokeAllAsync(
-        string userEid,
+        string accountEid,
         DateTime revokedAtUtc,
         string reason,
         string actorId,
@@ -73,7 +73,7 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
         {
             EnsureRelationalTransaction();
             return await Sessions
-                .Where(row => EF.Property<string>(row, "UserEID") == userEid
+                .Where(row => EF.Property<string>(row, "AccountEID") == accountEid
                     && EF.Property<DateTime?>(row, "RevokedAt") == null)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => EF.Property<DateTime?>(row, "RevokedAt"), revokedAtUtc)
@@ -84,7 +84,7 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
         }
 
         var entities = await Sessions
-            .Where(row => EF.Property<string>(row, "UserEID") == userEid
+            .Where(row => EF.Property<string>(row, "AccountEID") == accountEid
                 && EF.Property<DateTime?>(row, "RevokedAt") == null)
             .ToListAsync(cancellationToken);
         foreach (var entity in entities)
@@ -147,7 +147,7 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
     private static Dictionary<string, object?> ToEntity(AuthenticationSession session) => new(StringComparer.Ordinal)
     {
         ["EID"] = session.EID,
-        ["UserEID"] = session.UserEID,
+        ["AccountEID"] = session.AccountEID,
         ["TokenHash"] = session.TokenHash,
         ["SessionType"] = session.SessionType.ToString(),
         ["ExpiresAt"] = session.ExpiresAt,
@@ -162,7 +162,7 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
     private static AuthenticationSession Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         EID = GetString(entity, "EID"),
-        UserEID = GetString(entity, "UserEID"),
+        AccountEID = GetString(entity, "AccountEID"),
         TokenHash = GetString(entity, "TokenHash"),
         SessionType = Enum.Parse<AuthenticationSessionType>(GetString(entity, "SessionType"), ignoreCase: false),
         ExpiresAt = GetDateTime(entity, "ExpiresAt"),

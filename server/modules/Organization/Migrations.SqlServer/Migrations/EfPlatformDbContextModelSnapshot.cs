@@ -229,23 +229,23 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
 
-                    b.Property<string>("UserBindingReason")
+                    b.Property<string>("AccountBindingReason")
                         .HasColumnType("nvarchar(max)")
-                        .HasColumnName("UserBindingReason");
+                        .HasColumnName("AccountBindingReason");
 
-                    b.Property<DateTime?>("UserBoundAt")
+                    b.Property<DateTime?>("AccountBoundAt")
                         .HasColumnType("datetime2")
-                        .HasColumnName("UserBoundAt");
+                        .HasColumnName("AccountBoundAt");
 
-                    b.Property<string>("UserBoundBy")
+                    b.Property<string>("AccountBoundBy")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("UserBoundBy");
+                        .HasColumnName("AccountBoundBy");
 
-                    b.Property<string>("UserEID")
+                    b.Property<string>("AccountEID")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("UserEID");
+                        .HasColumnName("AccountEID");
 
                     b.HasKey("EID");
 
@@ -253,10 +253,10 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Person_EID");
 
-                    b.HasIndex("UserEID")
+                    b.HasIndex("AccountEID")
                         .IsUnique()
-                        .HasDatabaseName("UX_Person_UserEID")
-                        .HasFilter("[UserEID] IS NOT NULL");
+                        .HasDatabaseName("UX_Person_AccountEID")
+                        .HasFilter("[AccountEID] IS NOT NULL");
 
                     b.ToTable("Person", "dbo");
                 });

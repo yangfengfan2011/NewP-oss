@@ -29,7 +29,7 @@ public sealed class IdentityHttpApiIntegrationTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers(options => options.Filters.Add<AuthenticationSessionCookieResultFilter>())
-            .AddApplicationPart(typeof(IdentityUsersController).Assembly);
+            .AddApplicationPart(typeof(IdentityAccountsController).Assembly);
         builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
         builder.Services.AddAuthorization(options =>
@@ -46,11 +46,11 @@ public sealed class IdentityHttpApiIntegrationTests
         await app.StartAsync();
         using var client = app.GetTestClient();
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/identity/users")).StatusCode);
-        using var ordinary = new HttpRequestMessage(HttpMethod.Get, "/api/identity/users");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/identity/accounts")).StatusCode);
+        using var ordinary = new HttpRequestMessage(HttpMethod.Get, "/api/identity/accounts");
         ordinary.Headers.Add("X-Test-User", "user-1");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(ordinary)).StatusCode);
-        using var administrator = new HttpRequestMessage(HttpMethod.Get, "/api/identity/users");
+        using var administrator = new HttpRequestMessage(HttpMethod.Get, "/api/identity/accounts");
         administrator.Headers.Add("X-Test-User", "admin-1");
         administrator.Headers.Add("X-Test-Role", "LocalAdmin");
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(administrator)).StatusCode);
@@ -66,7 +66,7 @@ public sealed class IdentityHttpApiIntegrationTests
         Assert.Equal("rotated-session-secret", cookie.Credential);
         Assert.DoesNotContain("rotated-session-secret", await changed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        using var invalidStatus = new HttpRequestMessage(HttpMethod.Put, "/api/identity/users/user-1/status")
+        using var invalidStatus = new HttpRequestMessage(HttpMethod.Put, "/api/identity/accounts/user-1/status")
         {
             Content = new StringContent(
                 """{"targetStatus":"Archived","expectedRevision":1,"reason":"invalid enum"}""",
@@ -87,25 +87,25 @@ public sealed class IdentityHttpApiIntegrationTests
 
     private sealed class EmptyQueries : IIdentityManagementQueryService
     {
-        public ValueTask<IdentityManagementUserPage> SearchAsync(IdentityManagementUserSearch search, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(new IdentityManagementUserPage([], search.Page, search.PageSize, 0));
+        public ValueTask<IdentityManagementAccountPage> SearchAsync(IdentityManagementAccountSearch search, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new IdentityManagementAccountPage([], search.Page, search.PageSize, 0));
 
-        public ValueTask<IdentityManagementUserDetail?> FindAsync(string userEid, int eventPage, int eventPageSize, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<IdentityManagementUserDetail?>(null);
+        public ValueTask<IdentityManagementAccountDetail?> FindAsync(string accountEid, int eventPage, int eventPageSize, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IdentityManagementAccountDetail?>(null);
     }
 
     private sealed class PasswordChangingAccounts : IIdentityAccountApplicationService
     {
         public ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(ChangeIdentityPasswordCommand command, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(new IdentityPasswordChangeResult(
-                Account(command.UserEid),
+                Account(command.AccountEid),
                 new AuthenticationSessionIssuance
                 {
                     Credential = "rotated-session-secret",
                     Session = new AuthenticationSessionSnapshot
                     {
                         SessionEid = "session-2",
-                        UserEid = command.UserEid,
+                        AccountEid = command.AccountEid,
                         Type = AuthenticationSessionType.Regular,
                         ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
                     }
@@ -117,9 +117,9 @@ public sealed class IdentityHttpApiIntegrationTests
         public ValueTask<IdentityCredentialResetResult> ResetCredentialAsync(ResetIdentityCredentialCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<IdentityAccountSnapshot> DeleteAsync(DeleteIdentityAccountCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        private static IdentityAccountSnapshot Account(string userEid) => new()
+        private static IdentityAccountSnapshot Account(string accountEid) => new()
         {
-            UserEid = userEid,
+            AccountEid = accountEid,
             ECODE = "alice",
             ENAME = "Alice",
             Status = IdentityAccountStatus.Enabled,
@@ -145,12 +145,12 @@ public sealed class IdentityHttpApiIntegrationTests
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            if (!Request.Headers.TryGetValue("X-Test-User", out var userEid))
+            if (!Request.Headers.TryGetValue("X-Test-User", out var accountEid))
             {
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
-            var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userEid.ToString()) };
+            var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, accountEid.ToString()) };
             if (Request.Headers.TryGetValue("X-Test-Role", out var role))
             {
                 claims.Add(new Claim(ClaimTypes.Role, role.ToString()));

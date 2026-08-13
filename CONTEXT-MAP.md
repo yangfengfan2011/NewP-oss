@@ -15,7 +15,7 @@
 - **Identity → LocalAuth**：Identity 拥有用户账号与账号状态；LocalAuth 只管理和验证与账号一对一关联的本地凭据。
 - **Identity → Authentication**：Identity 与 Authentication 都是 Host readiness 的必需内建能力。账号停用、删除或凭据重置会撤销该账号的全部认证会话；账号恢复不会恢复旧会话。
 - **Authentication → Host**：Authentication 拥有服务端认证会话及其有效性；Host 只负责 Cookie 接入和逐请求验证，不拥有会话状态。首阶段只支持单个活动 Host，Host 使用稳定应用名和受保护的持久化 Data Protection 密钥环保证正常重启后仍能解析既有 Cookie，多实例共享认证不在本阶段范围内。
-- **Organization → Identity / Authentication**：Organization 通过账号目录查询用户账号，并由 Person 保存不可变的 User EID 来拥有永久一对一绑定；Identity 不保存 Person EID，Person.Name 与 User.ENAME 分别维护且不自动同步。账号目录暂时不可用时，已绑定人员仍可降级读取 Organization 自有绑定事实，但新绑定安全关闭。Organization 应用层通过 Identity.Contracts、Authentication.Contracts 与平台事务执行器编排人员停用、关联账号停用、人员停用阻断和全部会话撤销的单事务提交；Host 不承载该业务流程。人员恢复只解除阻断条件，不会自动恢复账号或旧会话。
+- **Organization → Identity / Authentication**：Organization 通过账号目录查询用户账号，并由 Person 保存不可变的 IdentityAccount EID 来拥有永久一对一绑定；Identity 不保存 Person EID，Person.Name 与 IdentityAccount.ENAME 分别维护且不自动同步。账号目录暂时不可用时，已绑定人员仍可降级读取 Organization 自有绑定事实，但新绑定安全关闭。Organization 应用层通过 Identity.Contracts、Authentication.Contracts 与平台事务执行器编排人员停用、关联账号停用、人员停用阻断和全部会话撤销的单事务提交；Host 不承载该业务流程。人员恢复只解除阻断条件，不会自动恢复账号或旧会话。
 - **Organization → Authorization**：Organization 声明业务权限和 endpoint access rule，并只通过稳定契约读取授权摘要；它不拥有角色、权限分配或授权存储实现。
 - **Plugin Platform → Host / Shell**：Plugin Platform 产生活动插件快照；Host 和 Shell 只消费同一快照，不分别决定插件版本或启用状态。
 - **Plugin Platform → Persistence**：Plugin Platform 把插件拥有的模型与 migration stream 纳入候选计划；它不直接执行迁移。Platform Persistence 负责 provider adapter、统一 history 和执行保障，不拥有插件业务模型。

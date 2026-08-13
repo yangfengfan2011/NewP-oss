@@ -22,7 +22,7 @@ public sealed class ModelRelationshipProjectionTests
                 [
                     new ModelMetadataField
                     {
-                        Name = "UserEID",
+                        Name = "AccountEID",
                         Storage = new ModelMetadataStorageSection { Type = "guid" }
                     },
                     new ModelMetadataField
@@ -35,10 +35,10 @@ public sealed class ModelRelationshipProjectionTests
                 [
                     new ModelMetadataForeignKey
                     {
-                        Name = "FK_LocalCredential_User",
-                        Fields = ["UserEID"],
+                        Name = "FK_LocalCredential_IdentityAccount",
+                        Fields = ["AccountEID"],
                         PrincipalModuleId = "Identity",
-                        PrincipalModel = "User",
+                        PrincipalModel = "IdentityAccount",
                         PrincipalFields = ["EID"],
                         OnDelete = "Restrict"
                     }
@@ -51,9 +51,9 @@ public sealed class ModelRelationshipProjectionTests
         Assert.Contains(definition.Fields, static field =>
             field is { Name: "Revision", ValueType: FieldValueType.Integer });
         var foreignKey = Assert.Single(definition.ForeignKeys);
-        Assert.Equal("FK_LocalCredential_User", foreignKey.Name);
-        Assert.Equal(["UserEID"], foreignKey.Fields);
-        Assert.Equal("Identity/User", foreignKey.PrincipalModelKey);
+        Assert.Equal("FK_LocalCredential_IdentityAccount", foreignKey.Name);
+        Assert.Equal(["AccountEID"], foreignKey.Fields);
+        Assert.Equal("Identity/IdentityAccount", foreignKey.PrincipalModelKey);
         Assert.Equal(["EID"], foreignKey.PrincipalFields);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, foreignKey.DeleteBehavior);
     }

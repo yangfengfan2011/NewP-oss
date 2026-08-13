@@ -9,7 +9,7 @@ public sealed record PersonUserBindingState
     public required string PersonName { get; init; }
     public bool IsEnabled { get; init; }
     public long Revision { get; init; }
-    public string? UserEid { get; init; }
+    public string? AccountEid { get; init; }
     public DateTime? BoundAt { get; init; }
     public string? BoundBy { get; init; }
     public string? BindingReason { get; init; }

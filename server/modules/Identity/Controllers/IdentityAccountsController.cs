@@ -12,15 +12,15 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.Identity.Controllers;
 
 [ApiController]
-[Route("api/identity/users")]
+[Route("api/identity/accounts")]
 [Authorize(Policy = "AdminOnly")]
 [PlatformRequestValidation]
-public sealed class IdentityUsersController : ControllerBase
+public sealed class IdentityAccountsController : ControllerBase
 {
     private readonly IIdentityManagementQueryService _queries;
     private readonly IIdentityAccountApplicationService _accounts;
 
-    public IdentityUsersController(
+    public IdentityAccountsController(
         IIdentityManagementQueryService queries,
         IIdentityAccountApplicationService accounts)
     {
@@ -30,7 +30,7 @@ public sealed class IdentityUsersController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<IdentityCredentialIssuanceResponse>> Create(
-        [FromBody] CreateIdentityUserRequest request,
+        [FromBody] CreateIdentityAccountRequest request,
         CancellationToken cancellationToken)
     {
         try
@@ -41,7 +41,7 @@ public sealed class IdentityUsersController : ControllerBase
             Response.Headers.CacheControl = "no-store";
             return CreatedAtAction(
                 nameof(Get),
-                new { userEid = result.Account.UserEid },
+                new { accountEid = result.Account.AccountEid },
                 new IdentityCredentialIssuanceResponse(
                     IdentityAccountResponse.From(result.Account),
                     result.TemporaryCredential));
@@ -52,9 +52,9 @@ public sealed class IdentityUsersController : ControllerBase
         }
     }
 
-    [HttpGet("{userEid}")]
-    public async Task<ActionResult<IdentityUserDetailResponse>> Get(
-        string userEid,
+    [HttpGet("{accountEid}")]
+    public async Task<ActionResult<IdentityAccountDetailResponse>> Get(
+        string accountEid,
         [FromQuery] int? eventPage,
         [FromQuery] int? eventPageSize,
         CancellationToken cancellationToken)
@@ -66,20 +66,20 @@ public sealed class IdentityUsersController : ControllerBase
             return ProblemResult(400, "IDENTITY_QUERY_INVALID");
         }
 
-        var detail = await _queries.FindAsync(userEid, normalizedPage, normalizedPageSize, cancellationToken);
-        return detail is null ? ProblemResult(404, IdentityFailureCodes.AccountNotFound) : Ok(IdentityUserDetailResponse.From(detail));
+        var detail = await _queries.FindAsync(accountEid, normalizedPage, normalizedPageSize, cancellationToken);
+        return detail is null ? ProblemResult(404, IdentityFailureCodes.AccountNotFound) : Ok(IdentityAccountDetailResponse.From(detail));
     }
 
-    [HttpPut("{userEid}")]
+    [HttpPut("{accountEid}")]
     public async Task<ActionResult<IdentityAccountResponse>> UpdateName(
-        string userEid,
-        [FromBody] UpdateIdentityUserRequest request,
+        string accountEid,
+        [FromBody] UpdateIdentityAccountRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
             var account = await _accounts.UpdateNameAsync(
-                new UpdateIdentityAccountNameCommand(userEid, request.ENAME, request.ExpectedRevision, Actor()),
+                new UpdateIdentityAccountNameCommand(accountEid, request.ENAME, request.ExpectedRevision, Actor()),
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
         }
@@ -89,17 +89,17 @@ public sealed class IdentityUsersController : ControllerBase
         }
     }
 
-    [HttpPut("{userEid}/status")]
+    [HttpPut("{accountEid}/status")]
     public async Task<ActionResult<IdentityAccountResponse>> SetStatus(
-        string userEid,
-        [FromBody] SetIdentityUserStatusRequest request,
+        string accountEid,
+        [FromBody] SetIdentityAccountStatusRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
             var account = await _accounts.SetStatusAsync(
                 new SetIdentityAccountStatusCommand(
-                    userEid,
+                    accountEid,
                     request.TargetStatus,
                     request.ExpectedRevision,
                     request.Reason,
@@ -113,16 +113,16 @@ public sealed class IdentityUsersController : ControllerBase
         }
     }
 
-    [HttpPost("{userEid}/delete")]
+    [HttpPost("{accountEid}/delete")]
     public async Task<ActionResult<IdentityAccountResponse>> Delete(
-        string userEid,
-        [FromBody] IdentityUserSecurityCommandRequest request,
+        string accountEid,
+        [FromBody] IdentityAccountSecurityCommandRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
             var account = await _accounts.DeleteAsync(
-                new DeleteIdentityAccountCommand(userEid, request.ExpectedRevision, request.Reason, Actor()),
+                new DeleteIdentityAccountCommand(accountEid, request.ExpectedRevision, request.Reason, Actor()),
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
         }
@@ -132,16 +132,16 @@ public sealed class IdentityUsersController : ControllerBase
         }
     }
 
-    [HttpPost("{userEid}/credential-reset")]
+    [HttpPost("{accountEid}/credential-reset")]
     public async Task<ActionResult<IdentityCredentialIssuanceResponse>> ResetCredential(
-        string userEid,
-        [FromBody] IdentityUserSecurityCommandRequest request,
+        string accountEid,
+        [FromBody] IdentityAccountSecurityCommandRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
             var result = await _accounts.ResetCredentialAsync(
-                new ResetIdentityCredentialCommand(userEid, request.ExpectedRevision, request.Reason, Actor()),
+                new ResetIdentityCredentialCommand(accountEid, request.ExpectedRevision, request.Reason, Actor()),
                 cancellationToken);
             Response.Headers.CacheControl = "no-store";
             return Ok(new IdentityCredentialIssuanceResponse(
@@ -155,7 +155,7 @@ public sealed class IdentityUsersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IdentityUserPageResponse>> List(
+    public async Task<ActionResult<IdentityAccountPageResponse>> List(
         [FromQuery] string? query,
         [FromQuery] IdentityAccountStatus? status,
         [FromQuery] bool? isPersonnelBound,
@@ -172,7 +172,7 @@ public sealed class IdentityUsersController : ControllerBase
         }
 
         var result = await _queries.SearchAsync(
-            new IdentityManagementUserSearch(
+            new IdentityManagementAccountSearch(
                 string.IsNullOrWhiteSpace(query) ? null : query.Trim(),
                 status,
                 isPersonnelBound,
@@ -180,7 +180,7 @@ public sealed class IdentityUsersController : ControllerBase
                 normalizedPage,
                 normalizedPageSize),
             cancellationToken);
-        return Ok(IdentityUserPageResponse.From(result));
+        return Ok(IdentityAccountPageResponse.From(result));
     }
 
     private ObjectResult ProblemResult(int status, string code)
@@ -209,22 +209,22 @@ public sealed class IdentityUsersController : ControllerBase
             throw new IdentityApplicationException(IdentityFailureCodes.InvalidActor);
         }
 
-        return new IdentityActorContext(actorId, IdentitySecurityActorKind.User, HttpContext.TraceIdentifier);
+        return new IdentityActorContext(actorId, IdentitySecurityActorKind.IdentityAccount, HttpContext.TraceIdentifier);
     }
 }
 
-public sealed record CreateIdentityUserRequest(string ECODE, string ENAME);
+public sealed record CreateIdentityAccountRequest(string ECODE, string ENAME);
 
-public sealed record UpdateIdentityUserRequest(
+public sealed record UpdateIdentityAccountRequest(
     string ENAME,
     [Range(0, long.MaxValue)] long ExpectedRevision);
 
-public sealed record SetIdentityUserStatusRequest(
+public sealed record SetIdentityAccountStatusRequest(
     IdentityAccountStatus TargetStatus,
     [Range(0, long.MaxValue)] long ExpectedRevision,
     string Reason);
 
-public sealed record IdentityUserSecurityCommandRequest(
+public sealed record IdentityAccountSecurityCommandRequest(
     [Range(0, long.MaxValue)] long ExpectedRevision,
     string Reason);
 
@@ -239,7 +239,7 @@ public sealed record IdentityAccountResponse(
     bool PersonnelDisableHold)
 {
     internal static IdentityAccountResponse From(IdentityAccountSnapshot account) => new(
-        account.UserEid,
+        account.AccountEid,
         account.ECODE,
         account.ENAME,
         account.Status,
@@ -260,7 +260,7 @@ public sealed record IdentitySecurityEventResponse(
     DateTime OccurredAt,
     string TraceId,
     IdentitySecurityActorKind ActorKind,
-    string? ActorUserEID,
+    string? ActorAccountEID,
     string CreatedBy,
     DateTime CreatedAt,
     string UpdatedBy,
@@ -273,7 +273,7 @@ public sealed record IdentitySecurityEventResponse(
         view.OccurredAt,
         view.TraceId,
         view.ActorKind,
-        view.ActorUserEid,
+        view.ActorAccountEid,
         view.CreatedBy,
         view.CreatedAt,
         view.UpdatedBy,
@@ -293,16 +293,16 @@ public sealed record IdentitySecurityEventPageResponse(
         page.TotalCount);
 }
 
-public sealed record IdentityUserDetailResponse(
-    IdentityUserResponse Account,
+public sealed record IdentityAccountDetailResponse(
+    IdentityAccountViewResponse Account,
     IdentitySecurityEventPageResponse Events)
 {
-    internal static IdentityUserDetailResponse From(IdentityManagementUserDetail detail) => new(
-        IdentityUserResponse.From(detail.Account),
+    internal static IdentityAccountDetailResponse From(IdentityManagementAccountDetail detail) => new(
+        IdentityAccountViewResponse.From(detail.Account),
         IdentitySecurityEventPageResponse.From(detail.Events));
 }
 
-public sealed record IdentityUserResponse(
+public sealed record IdentityAccountViewResponse(
     string EID,
     string ECODE,
     string ENAME,
@@ -316,8 +316,8 @@ public sealed record IdentityUserResponse(
     string UpdatedBy,
     DateTime UpdatedAt)
 {
-    internal static IdentityUserResponse From(IdentityManagementUserView view) => new(
-        view.UserEid,
+    internal static IdentityAccountViewResponse From(IdentityManagementAccountView view) => new(
+        view.AccountEid,
         view.ECODE,
         view.ENAME,
         view.Status,
@@ -331,14 +331,14 @@ public sealed record IdentityUserResponse(
         view.UpdatedAt);
 }
 
-public sealed record IdentityUserPageResponse(
-    IReadOnlyList<IdentityUserResponse> Items,
+public sealed record IdentityAccountPageResponse(
+    IReadOnlyList<IdentityAccountViewResponse> Items,
     int Page,
     int PageSize,
     int TotalCount)
 {
-    internal static IdentityUserPageResponse From(IdentityManagementUserPage page) => new(
-        page.Items.Select(IdentityUserResponse.From).ToArray(),
+    internal static IdentityAccountPageResponse From(IdentityManagementAccountPage page) => new(
+        page.Items.Select(IdentityAccountViewResponse.From).ToArray(),
         page.Page,
         page.PageSize,
         page.TotalCount);

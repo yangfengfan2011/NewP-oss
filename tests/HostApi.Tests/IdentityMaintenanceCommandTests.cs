@@ -121,7 +121,7 @@ public sealed class IdentityMaintenanceCommandTests
 
         private static IdentityAccountSnapshot Account() => new()
         {
-            UserEid = "User_1",
+            AccountEid = "User_1",
             ECODE = "admin",
             ENAME = "Local Administrator",
             Status = IdentityAccountStatus.Enabled,

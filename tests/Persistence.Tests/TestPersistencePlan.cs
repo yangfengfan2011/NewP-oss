@@ -215,7 +215,7 @@ internal static class TestPersistencePlan
     }
 
     private static string GetPrincipalOwner(string ownerModuleId, string logicalKey) =>
-        ownerModuleId == "Authentication" && string.Equals(GetModelName(logicalKey), "User", StringComparison.Ordinal)
+        ownerModuleId == "Authentication" && string.Equals(GetModelName(logicalKey), "IdentityAccount", StringComparison.Ordinal)
             ? "Identity"
             : ownerModuleId;
 

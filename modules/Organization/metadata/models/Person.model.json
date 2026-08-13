@@ -219,28 +219,28 @@
         }
       },
       {
-        "name": "UserEID",
+        "name": "AccountEID",
         "storage": {
           "type": "string",
           "nullable": true
         }
       },
       {
-        "name": "UserBoundAt",
+        "name": "AccountBoundAt",
         "storage": {
           "type": "datetime",
           "nullable": true
         }
       },
       {
-        "name": "UserBoundBy",
+        "name": "AccountBoundBy",
         "storage": {
           "type": "string",
           "nullable": true
         }
       },
       {
-        "name": "UserBindingReason",
+        "name": "AccountBindingReason",
         "storage": {
           "type": "text",
           "nullable": true
@@ -249,9 +249,9 @@
     ],
     "indexes": [
       {
-        "name": "UX_Person_UserEID",
+        "name": "UX_Person_AccountEID",
         "fields": [
-          "UserEID"
+          "AccountEID"
         ],
         "unique": true
       }

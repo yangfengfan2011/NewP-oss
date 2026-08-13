@@ -78,8 +78,8 @@ public sealed class IdentityFoundationMigrationTests
                 ? definition with { Fields = definition.Fields.Where(static field => field.Name != "Revision").ToArray() }
                 : definition));
 
-        Assert.Equal("0aa9f2e2956c6f4e094224d65b65ca182c980278cfcf95ff368d9f4f67b9de58", finalDigest);
-        Assert.Equal("967cfb3295a645bf6d85d90a9e25523297e75171176732263f437fd27cb3e6b3", intermediateDigest);
+        Assert.Equal("24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f", finalDigest);
+        Assert.Equal("734d79d78bc146534d6b7199e775540998b5356b69f780ebf0749b38d0e4c3dc", intermediateDigest);
     }
 
     [Fact]
@@ -126,16 +126,16 @@ public sealed class IdentityFoundationMigrationTests
             "*_Foundation.cs"));
         var source = File.ReadAllText(identityPath) + File.ReadAllText(authenticationPath);
 
-        foreach (var table in new[] { "User", "LocalCredential", "IdentitySecurityEvent", "AuthenticationSession" })
+        foreach (var table in new[] { "IdentityAccount", "LocalCredential", "IdentitySecurityEvent", "AuthenticationSession" })
         {
             Assert.Contains($"name: \"{table}\"", source, StringComparison.Ordinal);
         }
 
-        Assert.Contains("name: \"UX_User_NormalizedECODE\"", source, StringComparison.Ordinal);
-        Assert.Contains("name: \"UX_LocalCredential_UserEID\"", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"UX_IdentityAccount_NormalizedECODE\"", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"UX_LocalCredential_AccountEID\"", source, StringComparison.Ordinal);
         Assert.Contains("name: \"UX_AuthenticationSession_TokenHash\"", source, StringComparison.Ordinal);
-        Assert.Contains("name: \"FK_LocalCredential_User\"", source, StringComparison.Ordinal);
-        Assert.Contains("name: \"FK_AuthenticationSession_User\"", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"FK_LocalCredential_IdentityAccount\"", source, StringComparison.Ordinal);
+        Assert.Contains("name: \"FK_AuthenticationSession_IdentityAccount\"", source, StringComparison.Ordinal);
         Assert.Contains("RevokedAt = table.Column<DateTime>(type: \"datetime2\", nullable: true)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("AlterColumn", source, StringComparison.Ordinal);
         Assert.DoesNotContain("RenameTable", source, StringComparison.Ordinal);

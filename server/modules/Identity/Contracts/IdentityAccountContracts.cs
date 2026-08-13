@@ -21,7 +21,7 @@ public enum IdentityAccountStatus
 public sealed record IdentityAccountSnapshot
 {
     /// <summary>账号的稳定 EID。</summary>
-    public required string UserEid { get; init; }
+    public required string AccountEid { get; init; }
 
     /// <summary>不可修改的登录账号。</summary>
     public required string ECODE { get; init; }
@@ -69,9 +69,9 @@ public sealed record IdentityAccountSearch
 public interface IIdentityAccountDirectory
 {
     /// <summary>
-    /// 按稳定 User EID 读取一个可供跨上下文使用的账号快照。
+    /// 按稳定账号 EID 读取一个可供跨上下文使用的账号快照。
     /// </summary>
-    ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default);
+    ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 按受限条件搜索账号目录，不返回已删除账号，除非查询明确指定该状态。

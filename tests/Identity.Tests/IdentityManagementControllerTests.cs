@@ -19,7 +19,7 @@ public sealed class IdentityManagementControllerTests
     public async Task List_DefaultsToFirstTwentyAndForwardsConfirmedFilters()
     {
         var queries = new RecordingManagementQueryService();
-        var controller = new IdentityUsersController(queries, new UnusedAccountApplicationService());
+        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
 
         var result = await controller.List(
             query: "  ali  ",
@@ -31,10 +31,10 @@ public sealed class IdentityManagementControllerTests
             cancellationToken: CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result);
-        var page = Assert.IsType<IdentityUserPageResponse>(response.Value);
+        var page = Assert.IsType<IdentityAccountPageResponse>(response.Value);
         Assert.Equal(1, page.Page);
         Assert.Equal(20, page.PageSize);
-        Assert.Equal(new IdentityManagementUserSearch(
+        Assert.Equal(new IdentityManagementAccountSearch(
             "ali",
             IdentityAccountStatus.Disabled,
             true,
@@ -53,7 +53,7 @@ public sealed class IdentityManagementControllerTests
         var controller = Controller(accounts);
 
         var result = await controller.Create(
-            new CreateIdentityUserRequest("alice", "Alice"),
+            new CreateIdentityAccountRequest("alice", "Alice"),
             CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
@@ -61,7 +61,7 @@ public sealed class IdentityManagementControllerTests
         Assert.Equal("temporary-once", response.TemporaryCredential);
         Assert.Equal("no-store", controller.Response.Headers.CacheControl);
         Assert.DoesNotContain("temporary-once", JsonSerializer.Serialize(response.Account), StringComparison.Ordinal);
-        Assert.Equal("user-1", accounts.LastCreate?.Actor.ActorId);
+        Assert.Equal("account-1", accounts.LastCreate?.Actor.ActorId);
     }
 
     [Fact]
@@ -74,8 +74,8 @@ public sealed class IdentityManagementControllerTests
         var controller = Controller(accounts);
 
         var result = await controller.UpdateName(
-            "user-1",
-            new UpdateIdentityUserRequest("New Name", 1),
+            "account-1",
+            new UpdateIdentityAccountRequest("New Name", 1),
             CancellationToken.None);
 
         var conflict = Assert.IsType<ObjectResult>(result.Result);
@@ -83,7 +83,7 @@ public sealed class IdentityManagementControllerTests
         Assert.Equal("application/problem+json", Assert.Single(conflict.ContentTypes));
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal(IdentityFailureCodes.RevisionConflict, problem.Extensions["code"]);
-        Assert.Equal("user-1", Assert.IsType<IdentityAccountResponse>(problem.Extensions["current"]).EID);
+        Assert.Equal("account-1", Assert.IsType<IdentityAccountResponse>(problem.Extensions["current"]).EID);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class IdentityManagementControllerTests
                     Session = new AuthenticationSessionSnapshot
                     {
                         SessionEid = "session-2",
-                        UserEid = "user-1",
+                        AccountEid = "account-1",
                         Type = AuthenticationSessionType.Regular,
                         ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
                     }
@@ -118,7 +118,7 @@ public sealed class IdentityManagementControllerTests
         var response = Assert.IsAssignableFrom<IAuthenticationSessionCookieResponse>(ok.Value);
         Assert.Equal("new-session-secret", response.GetSessionCredential());
         Assert.DoesNotContain("new-session-secret", JsonSerializer.Serialize(ok.Value), StringComparison.Ordinal);
-        Assert.Equal("user-1", accounts.LastPasswordChange?.UserEid);
+        Assert.Equal("account-1", accounts.LastPasswordChange?.AccountEid);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public sealed class IdentityManagementControllerTests
     [Fact]
     public void Routes_SeparateLocalAdministratorManagementFromAuthenticatedSelfService()
     {
-        var usersPolicy = Assert.Single(typeof(IdentityUsersController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>());
+        var usersPolicy = Assert.Single(typeof(IdentityAccountsController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>());
         Assert.Equal("AdminOnly", usersPolicy.Policy);
         Assert.Single(typeof(IdentitySelfServiceController).GetCustomAttributes(typeof(AuthenticatedOnlyAttribute), true));
     }
@@ -159,7 +159,7 @@ public sealed class IdentityManagementControllerTests
     public async Task Detail_IncludesDeletedTombstoneAndReversePagedReadOnlyEvents()
     {
         var repository = new InMemoryIdentityRepository();
-        repository.Users.Add(new User
+        repository.Accounts.Add(new IdentityAccount
         {
             EID = "deleted-1",
             ECODE = "retired",
@@ -177,13 +177,13 @@ public sealed class IdentityManagementControllerTests
             repository.SecurityEvents.Add(new IdentitySecurityEvent
             {
                 EID = $"event-{index}",
-                TargetUserEID = "deleted-1",
+                TargetAccountEID = "deleted-1",
                 EventType = $"Event{index}",
                 Reason = "safe reason",
                 OccurredAt = new DateTime(2029, 1, index, 0, 0, 0, DateTimeKind.Utc),
                 TraceId = $"trace-{index}",
-                ActorKind = IdentitySecurityActorKind.User,
-                ActorUserEID = "actor-1",
+                ActorKind = IdentitySecurityActorKind.IdentityAccount,
+                ActorAccountEID = "actor-1",
                 CreatedBy = "actor-1",
                 CreatedAt = new DateTime(2029, 1, index, 0, 0, 0, DateTimeKind.Utc),
                 UpdatedBy = "actor-1",
@@ -199,7 +199,7 @@ public sealed class IdentityManagementControllerTests
         Assert.Equal("event-1", Assert.Single(detail!.Events.Items).EventEid);
     }
 
-    private static IdentityUsersController Controller(RecordingAccountApplicationService accounts) => new(
+    private static IdentityAccountsController Controller(RecordingAccountApplicationService accounts) => new(
         new RecordingManagementQueryService(),
         accounts)
     {
@@ -212,7 +212,7 @@ public sealed class IdentityManagementControllerTests
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
             [
-                new Claim(ClaimTypes.NameIdentifier, "user-1"),
+                new Claim(ClaimTypes.NameIdentifier, "account-1"),
                 new Claim(ClaimTypes.Name, "alice"),
                 new Claim(ClaimTypes.Role, "LocalAdmin")
             ], "test"))
@@ -223,7 +223,7 @@ public sealed class IdentityManagementControllerTests
 
     private static IdentityAccountSnapshot Account() => new()
     {
-        UserEid = "user-1",
+        AccountEid = "account-1",
         ECODE = "alice",
         ENAME = "Alice",
         Status = IdentityAccountStatus.Enabled,
@@ -232,18 +232,18 @@ public sealed class IdentityManagementControllerTests
 
     private sealed class RecordingManagementQueryService : IIdentityManagementQueryService
     {
-        public IdentityManagementUserSearch? LastSearch { get; private set; }
+        public IdentityManagementAccountSearch? LastSearch { get; private set; }
 
-        public ValueTask<IdentityManagementUserPage> SearchAsync(
-            IdentityManagementUserSearch search,
+        public ValueTask<IdentityManagementAccountPage> SearchAsync(
+            IdentityManagementAccountSearch search,
             CancellationToken cancellationToken = default)
         {
             LastSearch = search;
-            return ValueTask.FromResult(new IdentityManagementUserPage([], search.Page, search.PageSize, 0));
+            return ValueTask.FromResult(new IdentityManagementAccountPage([], search.Page, search.PageSize, 0));
         }
 
-        public ValueTask<IdentityManagementUserDetail?> FindAsync(
-            string userEid,
+        public ValueTask<IdentityManagementAccountDetail?> FindAsync(
+            string accountEid,
             int eventPage,
             int eventPageSize,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

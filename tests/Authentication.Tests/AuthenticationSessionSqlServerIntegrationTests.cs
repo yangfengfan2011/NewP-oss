@@ -44,7 +44,7 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
             await using (var setup = CreateContext(applicationConnectionString))
             {
                 await setup.Database.EnsureCreatedAsync();
-                setup.Set<Dictionary<string, object?>>(setup.ResolveModelKey("Identity/User")).Add(User("User_1"));
+                setup.Set<Dictionary<string, object?>>(setup.ResolveModelKey("Identity/IdentityAccount")).Add(Account("User_1"));
                 await setup.SaveChangesAsync();
             }
 
@@ -76,9 +76,9 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
                 await Assert.ThrowsAsync<InvalidOperationException>(() =>
                     new EfPlatformTransactionExecutor(rollbackContext).ExecuteAsync<string>(async token =>
                     {
-                        Assert.Equal(2, await registry.RevokeAllAsync(new UserAuthenticationSessionsRevocation
+                        Assert.Equal(2, await registry.RevokeAllAsync(new AccountAuthenticationSessionsRevocation
                         {
-                            UserEid = "User_1",
+                            AccountEid = "User_1",
                             Reason = "injected rollback",
                             ActorId = "User_1"
                         }, token));
@@ -175,7 +175,7 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
         IAuthenticationSessionRegistry registry,
         CancellationToken cancellationToken) => registry.RegisterAsync(new AuthenticationSessionRegistration
         {
-            UserEid = "User_1",
+            AccountEid = "User_1",
             Type = AuthenticationSessionType.Regular,
             ActorId = "User_1"
         }, cancellationToken);
@@ -191,9 +191,9 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
             IdentityModelDefinitions.All.Concat(AuthenticationModelDefinitions.All).ToArray());
     }
 
-    private static Dictionary<string, object?> User(string userEid) => new(StringComparer.Ordinal)
+    private static Dictionary<string, object?> Account(string accountEid) => new(StringComparer.Ordinal)
     {
-        ["EID"] = userEid,
+        ["EID"] = accountEid,
         ["ECODE"] = "alice",
         ["NormalizedECODE"] = "ALICE",
         ["ENAME"] = "Alice",
@@ -259,10 +259,10 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
 
     private sealed class EnabledAccountDirectory : IIdentityAccountDirectory
     {
-        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default) =>
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<IdentityAccountSnapshot?>(new IdentityAccountSnapshot
             {
-                UserEid = userEid,
+                AccountEid = accountEid,
                 ECODE = "alice",
                 ENAME = "Alice",
                 Status = IdentityAccountStatus.Enabled,

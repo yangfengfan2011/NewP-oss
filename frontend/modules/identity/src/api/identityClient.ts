@@ -24,7 +24,7 @@ export interface IdentitySecurityEvent {
   occurredAt: string;
   traceId: string;
   actorKind: string;
-  actorUserEID?: string;
+  actorAccountEID?: string;
 }
 
 export interface IdentityPage<T> {
@@ -34,7 +34,7 @@ export interface IdentityPage<T> {
   totalCount: number;
 }
 
-export interface IdentityUserDetail {
+export interface IdentityAccountDetail {
   account: IdentityAccount;
   events: IdentityPage<IdentitySecurityEvent>;
 }
@@ -70,7 +70,7 @@ export class IdentityApiError extends Error {
   }
 }
 
-export async function listUsers(filters: IdentityListFilters): Promise<IdentityPage<IdentityAccount>> {
+export async function listAccounts(filters: IdentityListFilters): Promise<IdentityPage<IdentityAccount>> {
   const query = new URLSearchParams();
   if (filters.query) query.set('query', filters.query);
   if (filters.status) query.set('status', filters.status);
@@ -78,42 +78,42 @@ export async function listUsers(filters: IdentityListFilters): Promise<IdentityP
   if (filters.isLocalAdministrator !== undefined) query.set('isLocalAdministrator', String(filters.isLocalAdministrator));
   query.set('page', String(filters.page));
   query.set('pageSize', String(filters.pageSize));
-  return requestJson(`/api/identity/users?${query.toString()}`, { method: 'GET' });
+  return requestJson(`/api/identity/accounts?${query.toString()}`, { method: 'GET' });
 }
 
-export function getUser(userEid: string, eventPage = 1): Promise<IdentityUserDetail> {
-  return requestJson(`/api/identity/users/${encodeURIComponent(userEid)}?eventPage=${eventPage}&eventPageSize=20`, {
+export function getAccount(accountEid: string, eventPage = 1): Promise<IdentityAccountDetail> {
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}?eventPage=${eventPage}&eventPageSize=20`, {
     method: 'GET',
   });
 }
 
-export function createUser(input: { ecode: string; ename: string }): Promise<IdentityCredentialIssuance> {
-  return requestJson('/api/identity/users', jsonRequest('POST', input));
+export function createAccount(input: { ecode: string; ename: string }): Promise<IdentityCredentialIssuance> {
+  return requestJson('/api/identity/accounts', jsonRequest('POST', input));
 }
 
-export function updateUserName(
-  userEid: string,
+export function updateAccountName(
+  accountEid: string,
   input: { ename: string; expectedRevision: number },
 ): Promise<IdentityAccount> {
-  return requestJson(`/api/identity/users/${encodeURIComponent(userEid)}`, jsonRequest('PUT', input));
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}`, jsonRequest('PUT', input));
 }
 
-export function setUserStatus(
-  userEid: string,
+export function setAccountStatus(
+  accountEid: string,
   input: IdentitySecurityCommand & { targetStatus: Exclude<IdentityAccountStatus, 'Deleted'> },
 ): Promise<IdentityAccount> {
-  return requestJson(`/api/identity/users/${encodeURIComponent(userEid)}/status`, jsonRequest('PUT', input));
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/status`, jsonRequest('PUT', input));
 }
 
 export function resetCredential(
-  userEid: string,
+  accountEid: string,
   input: IdentitySecurityCommand,
 ): Promise<IdentityCredentialIssuance> {
-  return requestJson(`/api/identity/users/${encodeURIComponent(userEid)}/credential-reset`, jsonRequest('POST', input));
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/credential-reset`, jsonRequest('POST', input));
 }
 
-export function deleteUser(userEid: string, input: IdentitySecurityCommand): Promise<IdentityAccount> {
-  return requestJson(`/api/identity/users/${encodeURIComponent(userEid)}/delete`, jsonRequest('POST', input));
+export function deleteAccount(accountEid: string, input: IdentitySecurityCommand): Promise<IdentityAccount> {
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/delete`, jsonRequest('POST', input));
 }
 
 function jsonRequest(method: string, body: unknown): RequestInit {

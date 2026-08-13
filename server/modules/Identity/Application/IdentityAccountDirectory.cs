@@ -13,18 +13,18 @@ public sealed class IdentityAccountDirectory : IIdentityAccountDirectory
     }
 
     public async ValueTask<IdentityAccountSnapshot?> FindAsync(
-        string userEid,
+        string accountEid,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(userEid))
+        if (string.IsNullOrWhiteSpace(accountEid))
         {
             return null;
         }
 
-        var user = await _repository.FindUserAsync(userEid, cancellationToken);
-        return user is null || user.Status == IdentityAccountStatus.Deleted
+        var account = await _repository.FindAccountAsync(accountEid, cancellationToken);
+        return account is null || account.Status == IdentityAccountStatus.Deleted
             ? null
-            : IdentityAccountApplicationService.ToSnapshot(user);
+            : IdentityAccountApplicationService.ToSnapshot(account);
     }
 
     public async ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(
@@ -34,17 +34,17 @@ public sealed class IdentityAccountDirectory : IIdentityAccountDirectory
         ArgumentNullException.ThrowIfNull(search);
         var limit = Math.Clamp(search.Limit, 1, 100);
         var query = search.Query?.Trim();
-        var users = await _repository.SearchUsersAsync(cancellationToken);
+        var accounts = await _repository.SearchAccountsAsync(cancellationToken);
 
-        return users
-            .Where(user => search.Status is null
-                ? user.Status != IdentityAccountStatus.Deleted
-                : user.Status == search.Status)
-            .Where(user => search.IsPersonnelBound is null || user.IsPersonnelBound == search.IsPersonnelBound)
-            .Where(user => string.IsNullOrWhiteSpace(query)
-                || user.ECODE.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || user.ENAME.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(user => user.ECODE, StringComparer.OrdinalIgnoreCase)
+        return accounts
+            .Where(account => search.Status is null
+                ? account.Status != IdentityAccountStatus.Deleted
+                : account.Status == search.Status)
+            .Where(account => search.IsPersonnelBound is null || account.IsPersonnelBound == search.IsPersonnelBound)
+            .Where(account => string.IsNullOrWhiteSpace(query)
+                || account.ECODE.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || account.ENAME.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(account => account.ECODE, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
             .Select(IdentityAccountApplicationService.ToSnapshot)
             .ToArray();

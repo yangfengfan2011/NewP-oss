@@ -76,14 +76,14 @@ public sealed class PersonLifecycleService(
                     }
 
                     IdentityAccountSnapshot? changedAccount = account;
-                    if (person.UserEid is not null)
+                    if (person.AccountEid is not null)
                     {
                         if (request.IsEnabled)
                         {
                             changedAccount = (await identityParticipant.RegisterPersonnelDisableHoldReleaseAsync(
                                 new PersonnelDisableHoldReleaseRegistration
                                 {
-                                    UserEid = person.UserEid,
+                                    AccountEid = person.AccountEid,
                                     ExpectedRevision = account!.Revision,
                                     ActorId = actor.ActorId,
                                     TraceId = actor.TraceId
@@ -95,7 +95,7 @@ public sealed class PersonLifecycleService(
                             var identityResult = await identityParticipant.RegisterPersonnelDisableAsync(
                                 new PersonnelAccountDisableRegistration
                                 {
-                                    UserEid = person.UserEid,
+                                    AccountEid = person.AccountEid,
                                     ExpectedRevision = account!.Revision,
                                     Reason = reason,
                                     ActorId = actor.ActorId,
@@ -106,9 +106,9 @@ public sealed class PersonLifecycleService(
                             if (identityResult.Changed)
                             {
                                 _ = await sessionRegistry.RevokeAllAsync(
-                                    new UserAuthenticationSessionsRevocation
+                                    new AccountAuthenticationSessionsRevocation
                                     {
-                                        UserEid = person.UserEid,
+                                        AccountEid = person.AccountEid,
                                         Reason = reason,
                                         ActorId = actor.ActorId
                                     },
@@ -121,7 +121,7 @@ public sealed class PersonLifecycleService(
                         person.PersonEid,
                         request.IsEnabled,
                         person.Revision + 1,
-                        person.UserEid,
+                        person.AccountEid,
                         ToAccount(changedAccount));
                 },
                 cancellationToken);
@@ -152,14 +152,14 @@ public sealed class PersonLifecycleService(
         PersonUserBindingState person,
         CancellationToken cancellationToken)
     {
-        if (person.UserEid is null)
+        if (person.AccountEid is null)
         {
             return null;
         }
 
         try
         {
-            return await accountDirectory.FindAsync(person.UserEid, cancellationToken)
+            return await accountDirectory.FindAsync(person.AccountEid, cancellationToken)
                 ?? throw new PersonLifecycleException(PersonLifecycleFailureCodes.DependencyUnavailable);
         }
         catch (PersonLifecycleException)
@@ -186,7 +186,7 @@ public sealed class PersonLifecycleService(
             return false;
         }
 
-        return person.UserEid is null || (targetEnabled
+        return person.AccountEid is null || (targetEnabled
             ? account is { PersonnelDisableHold: false }
             : account is { Status: IdentityAccountStatus.Disabled, PersonnelDisableHold: true });
     }
@@ -212,9 +212,9 @@ public sealed class PersonLifecycleService(
     }
 
     private static PersonLifecycleDto ToDto(PersonUserBindingState person, IdentityAccountSnapshot? account) =>
-        new(person.PersonEid, person.IsEnabled, person.Revision, person.UserEid, ToAccount(account));
+        new(person.PersonEid, person.IsEnabled, person.Revision, person.AccountEid, ToAccount(account));
 
     private static PersonLifecycleAccountDto? ToAccount(IdentityAccountSnapshot? account) => account is null
         ? null
-        : new(account.UserEid, account.Status.ToString(), account.Revision, account.PersonnelDisableHold);
+        : new(account.AccountEid, account.Status.ToString(), account.Revision, account.PersonnelDisableHold);
 }

@@ -51,7 +51,7 @@ public sealed class PersonUserBindingService(
             .Where(static account => !account.IsPersonnelBound && !account.IsLocalAdministrator)
             .Take(20)
             .Select(static account => new PersonUserBindingCandidateDto(
-                account.UserEid,
+                account.AccountEid,
                 account.ECODE,
                 account.ENAME,
                 account.Status.ToString(),
@@ -67,20 +67,20 @@ public sealed class PersonUserBindingService(
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateActor(actor);
-        if (string.IsNullOrWhiteSpace(personEid) || string.IsNullOrWhiteSpace(request.UserEid))
+        if (string.IsNullOrWhiteSpace(personEid) || string.IsNullOrWhiteSpace(request.AccountEid))
         {
             throw new PersonUserBindingException(PersonUserBindingFailureCodes.InvalidRequest);
         }
 
         var reason = NormalizeReason(request.Reason);
         var initialPerson = await GetRequiredPersonAsync(personEid, cancellationToken);
-        if (initialPerson.UserEid is not null)
+        if (initialPerson.AccountEid is not null)
         {
-            return EnsureSameBindingOrThrow(initialPerson, request.UserEid);
+            return EnsureSameBindingOrThrow(initialPerson, request.AccountEid);
         }
 
         EnsurePersonCanStartBinding(initialPerson);
-        var account = await FindAccountAsync(request.UserEid, cancellationToken);
+        var account = await FindAccountAsync(request.AccountEid, cancellationToken);
         EnsureCandidate(account, request.ExpectedRevision);
         var boundAt = timeProvider.GetUtcNow().UtcDateTime;
 
@@ -88,15 +88,15 @@ public sealed class PersonUserBindingService(
             async transactionCancellationToken =>
             {
                 var person = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-                if (person.UserEid is not null)
+                if (person.AccountEid is not null)
                 {
-                    return EnsureSameBindingOrThrow(person, request.UserEid);
+                    return EnsureSameBindingOrThrow(person, request.AccountEid);
                 }
 
                 EnsurePersonCanStartBinding(person);
                 var bound = await repository.TryBindAsync(
                     personEid,
-                    request.UserEid,
+                    request.AccountEid,
                     boundAt,
                     actor.ActorId,
                     reason,
@@ -104,9 +104,9 @@ public sealed class PersonUserBindingService(
                 if (!bound)
                 {
                     var latest = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-                    if (latest.UserEid is not null)
+                    if (latest.AccountEid is not null)
                     {
-                        return EnsureSameBindingOrThrow(latest, request.UserEid);
+                        return EnsureSameBindingOrThrow(latest, request.AccountEid);
                     }
 
                     EnsurePersonCanStartBinding(latest);
@@ -120,7 +120,7 @@ public sealed class PersonUserBindingService(
                         new PersonnelBindingRegistration
                         {
                             PersonEid = personEid,
-                            UserEid = request.UserEid,
+                            AccountEid = request.AccountEid,
                             ExpectedRevision = request.ExpectedRevision,
                             Reason = reason,
                             ActorId = actor.ActorId,
@@ -153,7 +153,7 @@ public sealed class PersonUserBindingService(
 
                 return new PersonUserBindingDto(
                     personEid,
-                    request.UserEid,
+                    request.AccountEid,
                     boundAt,
                     actor.ActorId,
                     reason,
@@ -163,12 +163,12 @@ public sealed class PersonUserBindingService(
     }
 
     private async ValueTask<IdentityAccountSnapshot> FindAccountAsync(
-        string userEid,
+        string accountEid,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await accountDirectory.FindAsync(userEid, cancellationToken)
+            return await accountDirectory.FindAsync(accountEid, cancellationToken)
                 ?? throw new PersonUserBindingException(PersonUserBindingFailureCodes.UserNotAvailable);
         }
         catch (PersonUserBindingException)
@@ -195,7 +195,7 @@ public sealed class PersonUserBindingService(
 
     private static void EnsurePersonCanStartBinding(PersonUserBindingState person)
     {
-        if (person.UserEid is not null)
+        if (person.AccountEid is not null)
         {
             throw new PersonUserBindingException(PersonUserBindingFailureCodes.PersonAlreadyBound, person);
         }
@@ -231,16 +231,16 @@ public sealed class PersonUserBindingService(
 
     private static PersonUserBindingDto EnsureSameBindingOrThrow(
         PersonUserBindingState person,
-        string requestedUserEid)
+        string requestedAccountEid)
     {
-        if (!string.Equals(person.UserEid, requestedUserEid, StringComparison.Ordinal))
+        if (!string.Equals(person.AccountEid, requestedAccountEid, StringComparison.Ordinal))
         {
             throw new PersonUserBindingException(PersonUserBindingFailureCodes.PersonAlreadyBound, person);
         }
 
         return new PersonUserBindingDto(
             person.PersonEid,
-            person.UserEid!,
+            person.AccountEid!,
             person.BoundAt ?? default,
             person.BoundBy ?? string.Empty,
             person.BindingReason ?? string.Empty,
@@ -270,7 +270,7 @@ public sealed class PersonUserBindingService(
     }
 
     private static PersonUserBindingAccountDto ToAccount(IdentityAccountSnapshot account) => new(
-        account.UserEid,
+        account.AccountEid,
         account.ECODE,
         account.ENAME,
         account.Status.ToString(),

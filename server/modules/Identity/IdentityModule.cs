@@ -47,7 +47,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
         services.AddScoped<IIdentityRepository, EfIdentityRepository>();
         services.AddScoped<IIdentityAccountDirectory, IdentityAccountDirectory>();
         services.AddScoped<IIdentityManagementQueryService, IdentityManagementQueryService>();
-        services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+        services.AddScoped<IPasswordHasher<IdentityAccount>, PasswordHasher<IdentityAccount>>();
         services.AddScoped<ILocalCredentialAuthenticator, LocalCredentialAuthenticator>();
         services.AddSingleton<ITemporaryCredentialIssuer>(serviceProvider =>
         {
@@ -64,7 +64,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IIdentityRepository>(),
                 serviceProvider.GetRequiredService<IPlatformTransactionExecutor>(),
                 serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
-                serviceProvider.GetRequiredService<IPasswordHasher<User>>(),
+                serviceProvider.GetRequiredService<IPasswordHasher<IdentityAccount>>(),
                 serviceProvider.GetRequiredService<ITemporaryCredentialIssuer>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
                 serviceProvider.GetRequiredService<TimeProvider>()));
@@ -79,7 +79,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IPlatformTransactionExecutor>(),
                 serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
                 serviceProvider.GetRequiredService<ILocalAdministratorRoleAssignment>(),
-                serviceProvider.GetRequiredService<IPasswordHasher<User>>(),
+                serviceProvider.GetRequiredService<IPasswordHasher<IdentityAccount>>(),
                 serviceProvider.GetRequiredService<ITemporaryCredentialIssuer>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
                 serviceProvider.GetRequiredService<TimeProvider>()));

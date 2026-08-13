@@ -209,7 +209,7 @@ public sealed class RequiredBuiltinReadinessTests : IDisposable
     {
         var models = new List<ModelDefinition>
         {
-            Model("Identity", "User"),
+            Model("Identity", "IdentityAccount"),
             Model("Identity", "LocalCredential"),
             Model("Identity", "IdentitySecurityEvent")
         };

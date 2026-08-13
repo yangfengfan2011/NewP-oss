@@ -42,7 +42,7 @@ public enum AuthenticationSessionValidationStatus
 public sealed record AuthenticationSessionRegistration
 {
     /// <summary>会话所属 User EID。</summary>
-    public required string UserEid { get; init; }
+    public required string AccountEid { get; init; }
 
     /// <summary>会话类型。</summary>
     public AuthenticationSessionType Type { get; init; }
@@ -85,7 +85,7 @@ public sealed record AuthenticationSessionSnapshot
     public required string SessionEid { get; init; }
 
     /// <summary>会话所属 User EID。</summary>
-    public required string UserEid { get; init; }
+    public required string AccountEid { get; init; }
 
     /// <summary>会话类型。</summary>
     public AuthenticationSessionType Type { get; init; }
@@ -140,10 +140,10 @@ public sealed record AuthenticationSessionRevocation
 /// <summary>
 /// 撤销一个账号全部会话所需的事实。
 /// </summary>
-public sealed record UserAuthenticationSessionsRevocation
+public sealed record AccountAuthenticationSessionsRevocation
 {
     /// <summary>目标 User EID。</summary>
-    public required string UserEid { get; init; }
+    public required string AccountEid { get; init; }
 
     /// <summary>稳定撤销原因。</summary>
     public required string Reason { get; init; }
@@ -183,6 +183,6 @@ public interface IAuthenticationSessionRegistry
     /// 登记目标账号全部认证会话的撤销变化。
     /// </summary>
     ValueTask<int> RevokeAllAsync(
-        UserAuthenticationSessionsRevocation revocation,
+        AccountAuthenticationSessionsRevocation revocation,
         CancellationToken cancellationToken = default);
 }

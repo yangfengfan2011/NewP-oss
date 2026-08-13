@@ -43,7 +43,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(FilesController).Assembly)
             .AddApplicationPart(typeof(MetadataModulesController).Assembly)
             .AddApplicationPart(typeof(SampleStatusController).Assembly)
-            .AddApplicationPart(typeof(IdentityUsersController).Assembly)
+            .AddApplicationPart(typeof(IdentityAccountsController).Assembly)
             .AddApplicationPart(typeof(CompaniesController).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());

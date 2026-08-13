@@ -13,7 +13,7 @@ public interface IPersonUserBindingRepository
     /// </summary>
     ValueTask<bool> TryBindAsync(
         string personEid,
-        string userEid,
+        string accountEid,
         DateTime boundAt,
         string actorId,
         string reason,

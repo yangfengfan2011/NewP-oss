@@ -184,7 +184,7 @@ public sealed class AuthControllerTests
 
     private static IdentityAccountSnapshot Account() => new()
     {
-        UserEid = "user-1",
+        AccountEid = "user-1",
         ECODE = "admin",
         ENAME = "Administrator",
         Status = IdentityAccountStatus.Enabled,
@@ -217,7 +217,7 @@ public sealed class AuthControllerTests
                 Session = new AuthenticationSessionSnapshot
                 {
                     SessionEid = "session-1",
-                    UserEid = registration.UserEid,
+                    AccountEid = registration.AccountEid,
                     Type = registration.Type,
                     ExpiresAtUtc = DateTime.UtcNow.AddHours(8)
                 }
@@ -232,7 +232,7 @@ public sealed class AuthControllerTests
             return ValueTask.FromResult(true);
         }
 
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RecordingCookie : IHostAuthenticationCookie

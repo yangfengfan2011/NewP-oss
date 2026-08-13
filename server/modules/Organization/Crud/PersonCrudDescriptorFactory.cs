@@ -20,7 +20,7 @@ public static class PersonCrudDescriptorFactory
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
             ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "CreatedAt", "UpdatedAt", "UserEID", "UserBoundAt", "UserBoundBy", "UserBindingReason"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "CreatedAt", "UpdatedAt", "AccountEID", "AccountBoundAt", "AccountBoundBy", "AccountBindingReason"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "UpdatedAt"]),
         OptionLabelFields = ["PersonNo", "ENAME"],

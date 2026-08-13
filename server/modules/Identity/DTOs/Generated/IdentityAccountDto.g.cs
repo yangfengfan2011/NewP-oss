@@ -4,7 +4,7 @@ using ICP.Platform.Modules.Identity.Models;
 
 namespace ICP.Platform.Modules.Identity.DTOs;
 
-public sealed class UserDto
+public sealed class IdentityAccountDto
 {
     public string Id { get; init; }
     public string CreatedBy { get; init; }

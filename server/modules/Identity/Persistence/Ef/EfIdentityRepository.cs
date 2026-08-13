@@ -27,7 +27,7 @@ public sealed class EfIdentityRepository : IIdentityRepository
 
         var transaction = _dbContext.Database.CurrentTransaction
             ?? throw new InvalidOperationException("Identity bootstrap lock requires IPlatformTransactionExecutor.");
-        // Transaction owner 让锁与 User/Credential/Event/角色分配共用提交边界；事务结束后 SQL Server 自动释放。
+        // Transaction owner 让锁与 IdentityAccount/Credential/Event/角色分配共用提交边界；事务结束后 SQL Server 自动释放。
         var connection = _dbContext.Database.GetDbConnection();
         await using var command = connection.CreateCommand();
         command.Transaction = transaction.GetDbTransaction();
@@ -45,56 +45,56 @@ public sealed class EfIdentityRepository : IIdentityRepository
         }
     }
 
-    public async ValueTask<User?> FindUserAsync(
-        string userEid,
+    public async ValueTask<IdentityAccount?> FindAccountAsync(
+        string accountEid,
         CancellationToken cancellationToken = default)
     {
-        var entity = await Users
+        var entity = await Accounts
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                row => EF.Property<string>(row, "EID") == userEid,
+                row => EF.Property<string>(row, "EID") == accountEid,
                 cancellationToken);
-        return entity is null ? null : MapUser(entity);
+        return entity is null ? null : MapAccount(entity);
     }
 
-    public async ValueTask<User?> FindUserByNormalizedCodeAsync(
+    public async ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(
         string normalizedCode,
         CancellationToken cancellationToken = default)
     {
-        var entity = await Users
+        var entity = await Accounts
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 row => EF.Property<string>(row, "NormalizedECODE") == normalizedCode,
                 cancellationToken);
-        return entity is null ? null : MapUser(entity);
+        return entity is null ? null : MapAccount(entity);
     }
 
-    public async ValueTask<IReadOnlyList<User>> SearchUsersAsync(CancellationToken cancellationToken = default) =>
-        (await Users.AsNoTracking().ToListAsync(cancellationToken)).Select(MapUser).ToArray();
+    public async ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) =>
+        (await Accounts.AsNoTracking().ToListAsync(cancellationToken)).Select(MapAccount).ToArray();
 
     public async ValueTask<LocalCredential?> FindCredentialAsync(
-        string userEid,
+        string accountEid,
         CancellationToken cancellationToken = default)
     {
         var entity = await Credentials
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                row => EF.Property<string>(row, "UserEID") == userEid,
+                row => EF.Property<string>(row, "AccountEID") == accountEid,
                 cancellationToken);
         return entity is null ? null : MapCredential(entity);
     }
 
     public async ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
-        string targetUserEid,
+        string targetAccountEid,
         CancellationToken cancellationToken = default) =>
         (await SecurityEvents
             .AsNoTracking()
-            .Where(row => EF.Property<string>(row, "TargetUserEID") == targetUserEid)
+            .Where(row => EF.Property<string>(row, "TargetAccountEID") == targetAccountEid)
             .ToListAsync(cancellationToken))
         .Select(MapSecurityEvent)
         .ToArray();
 
-    public void AddUser(User user) => Users.Add(ToEntity(user));
+    public void AddAccount(IdentityAccount account) => Accounts.Add(ToEntity(account));
 
     public void AddCredential(LocalCredential credential) => Credentials.Add(ToEntity(credential));
 
@@ -103,7 +103,7 @@ public sealed class EfIdentityRepository : IIdentityRepository
         CancellationToken cancellationToken = default)
     {
         var entity = await Credentials.FirstOrDefaultAsync(
-            row => EF.Property<string>(row, "UserEID") == credential.UserEID,
+            row => EF.Property<string>(row, "AccountEID") == credential.AccountEID,
             cancellationToken);
         if (entity is null)
         {
@@ -114,11 +114,11 @@ public sealed class EfIdentityRepository : IIdentityRepository
     }
 
     public async ValueTask RemoveCredentialAsync(
-        string userEid,
+        string accountEid,
         CancellationToken cancellationToken = default)
     {
         var entity = await Credentials.FirstOrDefaultAsync(
-            row => EF.Property<string>(row, "UserEID") == userEid,
+            row => EF.Property<string>(row, "AccountEID") == accountEid,
             cancellationToken);
         if (entity is not null)
         {
@@ -129,15 +129,15 @@ public sealed class EfIdentityRepository : IIdentityRepository
     public void AddSecurityEvent(IdentitySecurityEvent securityEvent) =>
         SecurityEvents.Add(ToEntity(securityEvent));
 
-    public async ValueTask<bool> TryReplaceUserAsync(
-        User user,
+    public async ValueTask<bool> TryReplaceAccountAsync(
+        IdentityAccount account,
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         if (!_dbContext.Database.IsRelational())
         {
-            var entity = await Users.FirstOrDefaultAsync(
-                row => EF.Property<string>(row, "EID") == user.EID
+            var entity = await Accounts.FirstOrDefaultAsync(
+                row => EF.Property<string>(row, "EID") == account.EID
                     && EF.Property<long>(row, "Revision") == expectedRevision,
                 cancellationToken);
             if (entity is null)
@@ -145,7 +145,7 @@ public sealed class EfIdentityRepository : IIdentityRepository
                 return false;
             }
 
-            CopyToEntity(user, entity);
+            CopyToEntity(account, entity);
             return true;
         }
 
@@ -156,25 +156,25 @@ public sealed class EfIdentityRepository : IIdentityRepository
 
         // Revision 是账号安全聚合的唯一并发版本；条件更新在 provider 内完成 claim，
         // 后续凭据、会话和事件变化仍由外层共享事务统一提交或回滚。
-        var affected = await Users
-            .Where(row => EF.Property<string>(row, "EID") == user.EID
+        var affected = await Accounts
+            .Where(row => EF.Property<string>(row, "EID") == account.EID
                 && EF.Property<long>(row, "Revision") == expectedRevision)
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(row => EF.Property<string>(row, "ENAME"), user.ENAME)
-                    .SetProperty(row => EF.Property<string>(row, "Status"), user.Status.ToString())
-                    .SetProperty(row => EF.Property<bool>(row, "IsLocalAdministrator"), user.IsLocalAdministrator)
-                    .SetProperty(row => EF.Property<bool>(row, "IsPersonnelBound"), user.IsPersonnelBound)
-                    .SetProperty(row => EF.Property<bool>(row, "PersonnelDisableHold"), user.PersonnelDisableHold)
-                    .SetProperty(row => EF.Property<long>(row, "Revision"), user.Revision)
-                    .SetProperty(row => EF.Property<string>(row, "UpdatedBy"), user.UpdatedBy)
-                    .SetProperty(row => EF.Property<DateTime>(row, "UpdatedAt"), user.UpdatedAt),
+                    .SetProperty(row => EF.Property<string>(row, "ENAME"), account.ENAME)
+                    .SetProperty(row => EF.Property<string>(row, "Status"), account.Status.ToString())
+                    .SetProperty(row => EF.Property<bool>(row, "IsLocalAdministrator"), account.IsLocalAdministrator)
+                    .SetProperty(row => EF.Property<bool>(row, "IsPersonnelBound"), account.IsPersonnelBound)
+                    .SetProperty(row => EF.Property<bool>(row, "PersonnelDisableHold"), account.PersonnelDisableHold)
+                    .SetProperty(row => EF.Property<long>(row, "Revision"), account.Revision)
+                    .SetProperty(row => EF.Property<string>(row, "UpdatedBy"), account.UpdatedBy)
+                    .SetProperty(row => EF.Property<DateTime>(row, "UpdatedAt"), account.UpdatedAt),
                 cancellationToken);
         return affected == 1;
     }
 
-    private DbSet<Dictionary<string, object?>> Users =>
-        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/User"));
+    private DbSet<Dictionary<string, object?>> Accounts =>
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/IdentityAccount"));
 
     private DbSet<Dictionary<string, object?>> Credentials =>
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/LocalCredential"));
@@ -182,7 +182,7 @@ public sealed class EfIdentityRepository : IIdentityRepository
     private DbSet<Dictionary<string, object?>> SecurityEvents =>
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/IdentitySecurityEvent"));
 
-    private static User MapUser(IReadOnlyDictionary<string, object?> entity) => new()
+    private static IdentityAccount MapAccount(IReadOnlyDictionary<string, object?> entity) => new()
     {
         EID = GetString(entity, "EID"),
         ECODE = GetString(entity, "ECODE"),
@@ -202,7 +202,7 @@ public sealed class EfIdentityRepository : IIdentityRepository
     private static LocalCredential MapCredential(IReadOnlyDictionary<string, object?> entity) => new()
     {
         EID = GetString(entity, "EID"),
-        UserEID = GetString(entity, "UserEID"),
+        AccountEID = GetString(entity, "AccountEID"),
         PasswordHash = GetString(entity, "PasswordHash"),
         IsTemporary = GetBool(entity, "IsTemporary"),
         CreatedBy = GetString(entity, "CreatedBy"),
@@ -214,41 +214,41 @@ public sealed class EfIdentityRepository : IIdentityRepository
     private static IdentitySecurityEvent MapSecurityEvent(IReadOnlyDictionary<string, object?> entity) => new()
     {
         EID = GetString(entity, "EID"),
-        TargetUserEID = GetString(entity, "TargetUserEID"),
+        TargetAccountEID = GetString(entity, "TargetAccountEID"),
         EventType = GetString(entity, "EventType"),
         Reason = GetString(entity, "Reason"),
         OccurredAt = GetDateTime(entity, "OccurredAt"),
         TraceId = GetString(entity, "TraceId"),
         ActorKind = Enum.Parse<IdentitySecurityActorKind>(GetString(entity, "ActorKind"), ignoreCase: false),
-        ActorUserEID = GetNullableString(entity, "ActorUserEID"),
+        ActorAccountEID = GetNullableString(entity, "ActorAccountEID"),
         CreatedBy = GetString(entity, "CreatedBy"),
         CreatedAt = GetDateTime(entity, "CreatedAt"),
         UpdatedBy = GetString(entity, "UpdatedBy"),
         UpdatedAt = GetDateTime(entity, "UpdatedAt")
     };
 
-    private static Dictionary<string, object?> ToEntity(User user)
+    private static Dictionary<string, object?> ToEntity(IdentityAccount account)
     {
         var entity = new Dictionary<string, object?>(StringComparer.Ordinal);
-        CopyToEntity(user, entity);
+        CopyToEntity(account, entity);
         return entity;
     }
 
-    private static void CopyToEntity(User user, IDictionary<string, object?> entity)
+    private static void CopyToEntity(IdentityAccount account, IDictionary<string, object?> entity)
     {
-        entity["EID"] = user.EID;
-        entity["ECODE"] = user.ECODE;
-        entity["NormalizedECODE"] = user.NormalizedECODE;
-        entity["ENAME"] = user.ENAME;
-        entity["Status"] = user.Status.ToString();
-        entity["IsLocalAdministrator"] = user.IsLocalAdministrator;
-        entity["IsPersonnelBound"] = user.IsPersonnelBound;
-        entity["PersonnelDisableHold"] = user.PersonnelDisableHold;
-        entity["Revision"] = user.Revision;
-        entity["CreatedBy"] = user.CreatedBy;
-        entity["CreatedAt"] = user.CreatedAt;
-        entity["UpdatedBy"] = user.UpdatedBy;
-        entity["UpdatedAt"] = user.UpdatedAt;
+        entity["EID"] = account.EID;
+        entity["ECODE"] = account.ECODE;
+        entity["NormalizedECODE"] = account.NormalizedECODE;
+        entity["ENAME"] = account.ENAME;
+        entity["Status"] = account.Status.ToString();
+        entity["IsLocalAdministrator"] = account.IsLocalAdministrator;
+        entity["IsPersonnelBound"] = account.IsPersonnelBound;
+        entity["PersonnelDisableHold"] = account.PersonnelDisableHold;
+        entity["Revision"] = account.Revision;
+        entity["CreatedBy"] = account.CreatedBy;
+        entity["CreatedAt"] = account.CreatedAt;
+        entity["UpdatedBy"] = account.UpdatedBy;
+        entity["UpdatedAt"] = account.UpdatedAt;
     }
 
     private static Dictionary<string, object?> ToEntity(LocalCredential credential)
@@ -261,7 +261,7 @@ public sealed class EfIdentityRepository : IIdentityRepository
     private static void CopyToEntity(LocalCredential credential, IDictionary<string, object?> entity)
     {
         entity["EID"] = credential.EID;
-        entity["UserEID"] = credential.UserEID;
+        entity["AccountEID"] = credential.AccountEID;
         entity["PasswordHash"] = credential.PasswordHash;
         entity["IsTemporary"] = credential.IsTemporary;
         entity["CreatedBy"] = credential.CreatedBy;
@@ -273,13 +273,13 @@ public sealed class EfIdentityRepository : IIdentityRepository
     private static Dictionary<string, object?> ToEntity(IdentitySecurityEvent securityEvent) => new(StringComparer.Ordinal)
     {
         ["EID"] = securityEvent.EID,
-        ["TargetUserEID"] = securityEvent.TargetUserEID,
+        ["TargetAccountEID"] = securityEvent.TargetAccountEID,
         ["EventType"] = securityEvent.EventType,
         ["Reason"] = securityEvent.Reason,
         ["OccurredAt"] = securityEvent.OccurredAt,
         ["TraceId"] = securityEvent.TraceId,
         ["ActorKind"] = securityEvent.ActorKind.ToString(),
-        ["ActorUserEID"] = securityEvent.ActorUserEID,
+        ["ActorAccountEID"] = securityEvent.ActorAccountEID,
         ["CreatedBy"] = securityEvent.CreatedBy,
         ["CreatedAt"] = securityEvent.CreatedAt,
         ["UpdatedBy"] = securityEvent.UpdatedBy,

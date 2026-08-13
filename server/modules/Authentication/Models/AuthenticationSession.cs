@@ -5,7 +5,7 @@ namespace ICP.Platform.Modules.Authentication.Models;
 public sealed class AuthenticationSession
 {
     public string EID { get; set; } = string.Empty;
-    public string UserEID { get; set; } = string.Empty;
+    public string AccountEID { get; set; } = string.Empty;
     public string TokenHash { get; set; } = string.Empty;
     public AuthenticationSessionType SessionType { get; set; }
     public DateTime ExpiresAt { get; set; }

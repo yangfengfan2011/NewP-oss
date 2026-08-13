@@ -69,7 +69,7 @@ public sealed class PersonLifecycleServiceTests
     [Fact]
     public async Task SetStatusAsync_UnboundPersonUsesOwnLifecycleWithoutIdentityDependency()
     {
-        var fixture = Fixture(person: Person() with { UserEid = null }, directoryUnavailable: true);
+        var fixture = Fixture(person: Person() with { AccountEid = null }, directoryUnavailable: true);
 
         var result = await fixture.Service.SetStatusAsync(
             "Person_1",
@@ -226,7 +226,7 @@ public sealed class PersonLifecycleServiceTests
         PersonName = "张三",
         IsEnabled = true,
         Revision = 4,
-        UserEid = "User_1",
+        AccountEid = "User_1",
         BoundAt = ChangedAt.AddDays(-1),
         BoundBy = "User_Admin",
         BindingReason = "入职绑定",
@@ -236,7 +236,7 @@ public sealed class PersonLifecycleServiceTests
 
     private static IdentityAccountSnapshot Account() => new()
     {
-        UserEid = "User_1",
+        AccountEid = "User_1",
         ECODE = "alice",
         ENAME = "Alice",
         Status = IdentityAccountStatus.Enabled,
@@ -259,7 +259,7 @@ public sealed class PersonLifecycleServiceTests
         public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
 
-        public ValueTask<bool> TryBindAsync(string personEid, string userEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
+        public ValueTask<bool> TryBindAsync(string personEid, string accountEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask<bool> TrySetEnablementAsync(
@@ -294,14 +294,14 @@ public sealed class PersonLifecycleServiceTests
 
     private sealed class RecordingAccountDirectory(RecordingIdentityParticipant identity, bool unavailable) : IIdentityAccountDirectory
     {
-        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default)
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default)
         {
             if (unavailable)
             {
                 throw new TimeoutException("identity-directory-unavailable");
             }
 
-            return ValueTask.FromResult<IdentityAccountSnapshot?>(identity.Account.UserEid == userEid ? identity.Account with { } : null);
+            return ValueTask.FromResult<IdentityAccountSnapshot?>(identity.Account.AccountEid == accountEid ? identity.Account with { } : null);
         }
 
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(IdentityAccountSearch search, CancellationToken cancellationToken = default) =>
@@ -369,7 +369,7 @@ public sealed class PersonLifecycleServiceTests
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
         {
             SessionRevocations++;
             stages.Add("authentication");

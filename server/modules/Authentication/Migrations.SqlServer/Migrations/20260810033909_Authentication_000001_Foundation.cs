@@ -19,6 +19,7 @@ public sealed class AuthenticationFoundation : Migration
             columns: table => new
             {
                 EID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                AccountEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 CreatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -27,17 +28,16 @@ public sealed class AuthenticationFoundation : Migration
                 SessionType = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 TokenHash = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                UserEID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
                 table.PrimaryKey("PK_AuthenticationSession", x => x.EID);
                 table.ForeignKey(
-                    name: "FK_AuthenticationSession_User",
-                    column: x => x.UserEID,
+                    name: "FK_AuthenticationSession_IdentityAccount",
+                    column: x => x.AccountEID,
                     principalSchema: "dbo",
-                    principalTable: "User",
+                    principalTable: "IdentityAccount",
                     principalColumn: "EID",
                     onDelete: ReferentialAction.Restrict);
             });
@@ -47,10 +47,10 @@ public sealed class AuthenticationFoundation : Migration
             table: "AuthenticationSession",
             column: "ExpiresAt");
         migrationBuilder.CreateIndex(
-            name: "IX_AuthenticationSession_UserEID",
+            name: "IX_AuthenticationSession_AccountEID",
             schema: "dbo",
             table: "AuthenticationSession",
-            column: "UserEID");
+            column: "AccountEID");
         migrationBuilder.CreateIndex(
             name: "UX_AuthenticationSession_EID",
             schema: "dbo",

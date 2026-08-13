@@ -4,7 +4,7 @@ using ICP.Platform.Modules.Identity.Repositories;
 
 namespace ICP.Platform.Modules.Identity.Application;
 
-public sealed record IdentityManagementUserSearch(
+public sealed record IdentityManagementAccountSearch(
     string? Query,
     IdentityAccountStatus? Status,
     bool? IsPersonnelBound,
@@ -12,8 +12,8 @@ public sealed record IdentityManagementUserSearch(
     int Page,
     int PageSize);
 
-public sealed record IdentityManagementUserView(
-    string UserEid,
+public sealed record IdentityManagementAccountView(
+    string AccountEid,
     string ECODE,
     string ENAME,
     IdentityAccountStatus Status,
@@ -33,14 +33,14 @@ public sealed record IdentityManagementSecurityEventView(
     DateTime OccurredAt,
     string TraceId,
     IdentitySecurityActorKind ActorKind,
-    string? ActorUserEid,
+    string? ActorAccountEid,
     string CreatedBy,
     DateTime CreatedAt,
     string UpdatedBy,
     DateTime UpdatedAt);
 
-public sealed record IdentityManagementUserPage(
-    IReadOnlyList<IdentityManagementUserView> Items,
+public sealed record IdentityManagementAccountPage(
+    IReadOnlyList<IdentityManagementAccountView> Items,
     int Page,
     int PageSize,
     int TotalCount);
@@ -51,18 +51,18 @@ public sealed record IdentityManagementSecurityEventPage(
     int PageSize,
     int TotalCount);
 
-public sealed record IdentityManagementUserDetail(
-    IdentityManagementUserView Account,
+public sealed record IdentityManagementAccountDetail(
+    IdentityManagementAccountView Account,
     IdentityManagementSecurityEventPage Events);
 
 public interface IIdentityManagementQueryService
 {
-    ValueTask<IdentityManagementUserPage> SearchAsync(
-        IdentityManagementUserSearch search,
+    ValueTask<IdentityManagementAccountPage> SearchAsync(
+        IdentityManagementAccountSearch search,
         CancellationToken cancellationToken = default);
 
-    ValueTask<IdentityManagementUserDetail?> FindAsync(
-        string userEid,
+    ValueTask<IdentityManagementAccountDetail?> FindAsync(
+        string accountEid,
         int eventPage,
         int eventPageSize,
         CancellationToken cancellationToken = default);
@@ -77,22 +77,22 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         _repository = repository;
     }
 
-    public async ValueTask<IdentityManagementUserPage> SearchAsync(
-        IdentityManagementUserSearch search,
+    public async ValueTask<IdentityManagementAccountPage> SearchAsync(
+        IdentityManagementAccountSearch search,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(search);
-        var users = await _repository.SearchUsersAsync(cancellationToken);
-        var query = users
-            .Where(user => search.Status is null
-                ? user.Status != IdentityAccountStatus.Deleted
-                : user.Status == search.Status)
-            .Where(user => search.IsPersonnelBound is null || user.IsPersonnelBound == search.IsPersonnelBound)
-            .Where(user => search.IsLocalAdministrator is null || user.IsLocalAdministrator == search.IsLocalAdministrator)
-            .Where(user => string.IsNullOrWhiteSpace(search.Query)
-                || user.ECODE.Contains(search.Query, StringComparison.OrdinalIgnoreCase)
-                || user.ENAME.Contains(search.Query, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(user => user.ECODE, StringComparer.OrdinalIgnoreCase)
+        var accounts = await _repository.SearchAccountsAsync(cancellationToken);
+        var query = accounts
+            .Where(account => search.Status is null
+                ? account.Status != IdentityAccountStatus.Deleted
+                : account.Status == search.Status)
+            .Where(account => search.IsPersonnelBound is null || account.IsPersonnelBound == search.IsPersonnelBound)
+            .Where(account => search.IsLocalAdministrator is null || account.IsLocalAdministrator == search.IsLocalAdministrator)
+            .Where(account => string.IsNullOrWhiteSpace(search.Query)
+                || account.ECODE.Contains(search.Query, StringComparison.OrdinalIgnoreCase)
+                || account.ENAME.Contains(search.Query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(account => account.ECODE, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var skip = (long)(search.Page - 1) * search.PageSize;
         var items = skip >= query.Length
@@ -102,27 +102,27 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
                 .Take(search.PageSize)
                 .Select(ToView)
                 .ToArray();
-        return new IdentityManagementUserPage(items, search.Page, search.PageSize, query.Length);
+        return new IdentityManagementAccountPage(items, search.Page, search.PageSize, query.Length);
     }
 
-    public async ValueTask<IdentityManagementUserDetail?> FindAsync(
-        string userEid,
+    public async ValueTask<IdentityManagementAccountDetail?> FindAsync(
+        string accountEid,
         int eventPage,
         int eventPageSize,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(userEid))
+        if (string.IsNullOrWhiteSpace(accountEid))
         {
             return null;
         }
 
-        var user = await _repository.FindUserAsync(userEid, cancellationToken);
-        if (user is null)
+        var account = await _repository.FindAccountAsync(accountEid, cancellationToken);
+        if (account is null)
         {
             return null;
         }
 
-        var events = (await _repository.SearchSecurityEventsAsync(userEid, cancellationToken))
+        var events = (await _repository.SearchSecurityEventsAsync(accountEid, cancellationToken))
             .OrderByDescending(item => item.OccurredAt)
             .ThenByDescending(item => item.EID, StringComparer.Ordinal)
             .ToArray();
@@ -134,24 +134,24 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
                 .Take(eventPageSize)
                 .Select(ToView)
                 .ToArray();
-        return new IdentityManagementUserDetail(
-            ToView(user),
+        return new IdentityManagementAccountDetail(
+            ToView(account),
             new IdentityManagementSecurityEventPage(page, eventPage, eventPageSize, events.Length));
     }
 
-    internal static IdentityManagementUserView ToView(User user) => new(
-        user.EID,
-        user.ECODE,
-        user.ENAME,
-        user.Status,
-        user.Revision,
-        user.IsLocalAdministrator,
-        user.IsPersonnelBound,
-        user.PersonnelDisableHold,
-        user.CreatedBy,
-        user.CreatedAt,
-        user.UpdatedBy,
-        user.UpdatedAt);
+    internal static IdentityManagementAccountView ToView(IdentityAccount account) => new(
+        account.EID,
+        account.ECODE,
+        account.ENAME,
+        account.Status,
+        account.Revision,
+        account.IsLocalAdministrator,
+        account.IsPersonnelBound,
+        account.PersonnelDisableHold,
+        account.CreatedBy,
+        account.CreatedAt,
+        account.UpdatedBy,
+        account.UpdatedAt);
 
     private static IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent) => new(
         securityEvent.EID,
@@ -160,7 +160,7 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         securityEvent.OccurredAt,
         securityEvent.TraceId,
         securityEvent.ActorKind,
-        securityEvent.ActorUserEID,
+        securityEvent.ActorAccountEID,
         securityEvent.CreatedBy,
         securityEvent.CreatedAt,
         securityEvent.UpdatedBy,

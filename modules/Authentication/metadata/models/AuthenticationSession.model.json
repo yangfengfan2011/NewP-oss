@@ -5,7 +5,7 @@
     "kind": "Entity",
     "fields": [
       {
-        "name": "UserEID",
+        "name": "AccountEID",
         "storage": { "type": "guid" }
       },
       {
@@ -37,8 +37,8 @@
         "unique": true
       },
       {
-        "name": "IX_AuthenticationSession_UserEID",
-        "fields": ["UserEID"],
+        "name": "IX_AuthenticationSession_AccountEID",
+        "fields": ["AccountEID"],
         "unique": false
       },
       {
@@ -49,10 +49,10 @@
     ],
     "foreignKeys": [
       {
-        "name": "FK_AuthenticationSession_User",
-        "fields": ["UserEID"],
+        "name": "FK_AuthenticationSession_IdentityAccount",
+        "fields": ["AccountEID"],
         "principalModuleId": "Identity",
-        "principalModel": "User",
+        "principalModel": "IdentityAccount",
         "principalFields": ["EID"],
         "onDelete": "Restrict"
       }

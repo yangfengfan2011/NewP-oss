@@ -63,7 +63,7 @@ public sealed class AuthenticationFoundationModelTests
         var session = Assert.Single(new AuthenticationModelMetadataProvider().GetDefinitions());
 
         Assert.Equal("AuthenticationSession", session.Name);
-        Assert.Contains(session.Fields, static field => field is { Name: "UserEID", Required: true });
+        Assert.Contains(session.Fields, static field => field is { Name: "AccountEID", Required: true });
         Assert.Contains(session.Fields, static field => field is { Name: "TokenHash", Required: true });
         Assert.DoesNotContain(session.Fields, static field => field.Name.Contains("RawToken", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(session.Fields, static field => field is { Name: "SessionType", ValueType: FieldValueType.Enum, Required: true });
@@ -73,6 +73,6 @@ public sealed class AuthenticationFoundationModelTests
         Assert.Contains(session.Fields, static field => field is { Name: "UpdatedAt", Required: true, IsAuditField: true });
         Assert.Contains(session.Indexes, static index => index is { Name: "UX_AuthenticationSession_TokenHash", IsUnique: true });
         Assert.Contains(session.ForeignKeys, static foreignKey =>
-            foreignKey is { Name: "FK_AuthenticationSession_User", PrincipalModelKey: "Identity/User" });
+            foreignKey is { Name: "FK_AuthenticationSession_IdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
     }
 }

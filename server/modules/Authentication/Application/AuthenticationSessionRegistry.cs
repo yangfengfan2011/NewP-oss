@@ -39,7 +39,7 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(registration);
-        ArgumentException.ThrowIfNullOrWhiteSpace(registration.UserEid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(registration.AccountEid);
         ArgumentException.ThrowIfNullOrWhiteSpace(registration.ActorId);
         if (!Enum.IsDefined(registration.Type))
         {
@@ -56,7 +56,7 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
         var session = new AuthenticationSession
         {
             EID = _objectIdGenerator.NewId(nameof(AuthenticationSession)),
-            UserEID = registration.UserEid,
+            AccountEID = registration.AccountEid,
             TokenHash = ComputeHash(credential),
             SessionType = registration.Type,
             ExpiresAt = now.Add(_options.Lifetime),
@@ -100,7 +100,7 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
                 return Result(AuthenticationSessionValidationStatus.Expired, session);
             }
 
-            var account = await _accountDirectory.FindAsync(session.UserEID, cancellationToken);
+            var account = await _accountDirectory.FindAsync(session.AccountEID, cancellationToken);
             return account is { Status: IdentityAccountStatus.Enabled }
                 ? Result(AuthenticationSessionValidationStatus.Active, session)
                 : Result(AuthenticationSessionValidationStatus.AccountUnavailable, session);
@@ -136,15 +136,15 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
     }
 
     public ValueTask<int> RevokeAllAsync(
-        UserAuthenticationSessionsRevocation revocation,
+        AccountAuthenticationSessionsRevocation revocation,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(revocation);
-        ArgumentException.ThrowIfNullOrWhiteSpace(revocation.UserEid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(revocation.AccountEid);
         var reason = NormalizeReason(revocation.Reason);
         ArgumentException.ThrowIfNullOrWhiteSpace(revocation.ActorId);
         return _repository.RevokeAllAsync(
-            revocation.UserEid,
+            revocation.AccountEid,
             _timeProvider.GetUtcNow().UtcDateTime,
             reason,
             revocation.ActorId,
@@ -194,7 +194,7 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
     private static AuthenticationSessionSnapshot ToSnapshot(AuthenticationSession session) => new()
     {
         SessionEid = session.EID,
-        UserEid = session.UserEID,
+        AccountEid = session.AccountEID,
         Type = session.SessionType,
         ExpiresAtUtc = session.ExpiresAt,
         RevokedAtUtc = session.RevokedAt,

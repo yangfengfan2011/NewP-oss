@@ -8,8 +8,8 @@ public sealed record PersonnelBindingRegistration
     /// <summary>发起绑定的 Person EID。</summary>
     public required string PersonEid { get; init; }
 
-    /// <summary>目标 User EID。</summary>
-    public required string UserEid { get; init; }
+    /// <summary>目标账号 EID。</summary>
+    public required string AccountEid { get; init; }
 
     /// <summary>调用方观察到的账号 Revision。</summary>
     public long ExpectedRevision { get; init; }
@@ -29,8 +29,8 @@ public sealed record PersonnelBindingRegistration
 /// </summary>
 public sealed record PersonnelAccountDisableRegistration
 {
-    /// <summary>目标 User EID。</summary>
-    public required string UserEid { get; init; }
+    /// <summary>目标账号 EID。</summary>
+    public required string AccountEid { get; init; }
 
     /// <summary>调用方观察到的账号 Revision。</summary>
     public long ExpectedRevision { get; init; }
@@ -50,8 +50,8 @@ public sealed record PersonnelAccountDisableRegistration
 /// </summary>
 public sealed record PersonnelDisableHoldReleaseRegistration
 {
-    /// <summary>目标 User EID。</summary>
-    public required string UserEid { get; init; }
+    /// <summary>目标账号 EID。</summary>
+    public required string AccountEid { get; init; }
 
     /// <summary>调用方观察到的账号 Revision。</summary>
     public long ExpectedRevision { get; init; }

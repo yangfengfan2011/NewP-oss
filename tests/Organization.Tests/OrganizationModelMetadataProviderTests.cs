@@ -54,11 +54,11 @@ public class OrganizationModelMetadataProviderTests
 
         var person = Assert.Single(definitions, definition => definition.Name == "Person");
 
-        Assert.Contains(person.Fields, static field => field.Name == "UserEID" && !field.Required);
-        Assert.Contains(person.Fields, static field => field.Name == "UserBoundAt" && !field.Required);
-        Assert.Contains(person.Fields, static field => field.Name == "UserBoundBy" && !field.Required);
-        Assert.Contains(person.Fields, static field => field.Name == "UserBindingReason" && !field.Required);
-        Assert.Contains(person.Indexes, static index => index.Name == "UX_Person_UserEID" && index.IsUnique);
+        Assert.Contains(person.Fields, static field => field.Name == "AccountEID" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "AccountBoundAt" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "AccountBoundBy" && !field.Required);
+        Assert.Contains(person.Fields, static field => field.Name == "AccountBindingReason" && !field.Required);
+        Assert.Contains(person.Indexes, static index => index.Name == "UX_Person_AccountEID" && index.IsUnique);
     }
 
     [Fact]

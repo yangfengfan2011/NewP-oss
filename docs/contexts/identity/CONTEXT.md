@@ -4,7 +4,7 @@ Identity 是 Host 的必需内建上下文，管理可登录主体对应的用�
 
 ## Language
 
-**用户账号（User）**：
+**用户账号（IdentityAccount）**：
 由 Identity 拥有、以 EID 作为稳定用户标识的账号安全聚合根；它以 ECODE 表达登录账号、以 ENAME 表达显示名称，可以被认证机制识别，也可以由其他上下文按 EID 引用。账号、显示名称、绑定标记和凭据安全变化共同递增其公开 Revision，LocalCredential 不另行暴露 Revision。
 _Avoid_: 人员档案、已认证主体、角色
 
@@ -13,7 +13,7 @@ _Avoid_: 人员档案、已认证主体、角色
 _Avoid_: 用户标识、显示名称、人员编号
 
 **登录账号保留（Account Code Reservation）**：
-ECODE 首次分配后形成的永久占用规则；它由包含已删除墓碑在内的 User 记录及其规范账号唯一约束保证，不建立独立实体或数据表。
+ECODE 首次分配后形成的永久占用规则；它由包含已删除墓碑在内的 IdentityAccount 记录及其规范账号唯一约束保证，不建立独立实体或数据表。
 _Avoid_: 账号保留实体、可回收账号、显示名称占用
 
 **显示名称（ENAME）**：
@@ -40,12 +40,12 @@ _Avoid_: 自动恢复、账号权限、人员账号关联
 账号曾经完成人员账号永久绑定的单调事实；它不包含 Person EID，初始为否，绑定后永久为是，并独立阻止该账号被删除。
 _Avoid_: 人员引用、可解除绑定、人员停用阻断
 
-**已删除账号（Deleted User）**：
+**已删除账号（Deleted IdentityAccount）**：
 仅从未绑定人员的账号可以进入并保留 EID 的不可恢复账号墓碑；它不能登录、出现在账号目录中或建立人员账号绑定，已经绑定人员的账号永远不能删除。管理员只能通过显式筛选查看其只读详情和安全事件。
 _Avoid_: 物理删除、停用账号、可恢复账号
 
 **本地凭据（Local Credential）**：
-与一个用户账号一对一关联并由 LocalAuth 独立管理的认证凭据；它只保留可验证的密码哈希和临时凭据状态，不保存可找回的明文秘密。用户自助修改凭据时必须再次验证当前凭据且新密码必须不同；User 删除时凭据在同一事务中物理删除。
+与一个用户账号一对一关联并由 LocalAuth 独立管理的认证凭据；它只保留可验证的密码哈希和临时凭据状态，不保存可找回的明文秘密。用户自助修改凭据时必须再次验证当前凭据且新密码必须不同；IdentityAccount 删除时凭据在同一事务中物理删除。
 _Avoid_: 权限、角色、Cookie、明文密码
 
 **正式密码（Permanent Password）**：
@@ -65,5 +65,5 @@ Identity 为空时通过服务器本机命令一次性初始化的受保护用�
 _Avoid_: 可删除管理员、自动恢复账号、权限绕过主体
 
 **身份安全事件（Identity Security Event）**：
-Identity 对 ECODE、ENAME 与凭据生命周期变化永久保留的不可修改事实；操作者使用 `User`、`LocalMaintenance` 或 `System` 类型表达，并按需引用 Actor User EID。事件还包含固定事件类型、原因、时间、目标 User EID 与 TraceId，但不包含操作者名称副本或任何明文凭据；首阶段不提供删除或自动清理。
+Identity 对 ECODE、ENAME 与凭据生命周期变化永久保留的不可修改事实；操作者使用 `IdentityAccount`、`LocalMaintenance` 或 `System` 类型表达，并按需引用 Actor Account EID。事件还包含固定事件类型、原因、时间、目标 Account EID 与 TraceId，但不包含操作者名称副本或任何明文凭据；首阶段不提供删除或自动清理。
 _Avoid_: 普通访问日志、可编辑备注、明文秘密

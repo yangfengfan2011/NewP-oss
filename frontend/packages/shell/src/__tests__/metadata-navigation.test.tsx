@@ -137,9 +137,9 @@ describe('metadata navigation', () => {
     const menus = buildMenusFromNavDocuments([{
       type: 'nav',
       navigation: { items: [{
-        key: 'identity.users',
+        key: 'identity.accounts',
         titleKey: 'Navigation.IdentityUsers',
-        path: '/identity/users',
+        path: '/identity/accounts',
         localAdministratorOnly: true,
       }] },
     }], () => '账号管理');

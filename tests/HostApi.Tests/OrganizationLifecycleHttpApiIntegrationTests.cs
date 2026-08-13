@@ -133,13 +133,13 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            if (!Request.Headers.TryGetValue("X-Test-User", out var userEid))
+            if (!Request.Headers.TryGetValue("X-Test-User", out var accountEid))
             {
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
             var principal = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, userEid.ToString())],
+                [new Claim(ClaimTypes.NameIdentifier, accountEid.ToString())],
                 SchemeName));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
         }

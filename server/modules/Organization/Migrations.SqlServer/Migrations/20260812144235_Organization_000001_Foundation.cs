@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -62,6 +62,10 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                 columns: table => new
                 {
                     EID = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    AccountBindingReason = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    AccountBoundAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    AccountBoundBy = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                    AccountEID = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     CompanyId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     CreatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
@@ -73,11 +77,7 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                     PositionId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
                     Revision = table.Column<long>(type: "bigint", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    UserBindingReason = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    UserBoundAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UserBoundBy = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    UserEID = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true)
+                    UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -154,12 +154,12 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "UX_Person_UserEID",
+                name: "UX_Person_AccountEID",
                 schema: "dbo",
                 table: "Person",
-                column: "UserEID",
+                column: "AccountEID",
                 unique: true,
-                filter: "[UserEID] IS NOT NULL");
+                filter: "[AccountEID] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Position_Company",

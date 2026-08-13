@@ -30,7 +30,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
     public async Task BoundPersonLifecycle_OldCookieIs401AfterDisableAndNeverRevivesAfterRestoreOrExplicitUserEnable()
     {
         var now = new DateTime(2026, 8, 10, 16, 0, 0, DateTimeKind.Utc);
-        var identity = new RecordingIdentityRepository(User(now));
+        var identity = new RecordingIdentityRepository(Account(now));
         var sessions = new RecordingSessionRegistry("session-secret", now.AddHours(8));
         var directory = new RepositoryAccountDirectory(identity);
         var person = new RecordingPersonRepository(Person(now));
@@ -46,7 +46,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
             identity,
             transaction,
             sessions,
-            new PasswordHasher<User>(),
+            new PasswordHasher<IdentityAccount>(),
             new UnusedTemporaryCredentialIssuer(),
             new PlatformObjectIdGenerator(),
             new FixedTimeProvider(now));
@@ -72,7 +72,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
                 IdentityAccountStatus.Enabled,
                 identity.Current.Revision,
                 "管理员显式恢复",
-                new IdentityActorContext("User_Admin", IdentitySecurityActorKind.User, "trace-blocked"))));
+                new IdentityActorContext("User_Admin", IdentitySecurityActorKind.IdentityAccount, "trace-blocked"))));
         Assert.Equal(IdentityFailureCodes.PersonnelDisableHold, blocked.FailureCode);
 
         await lifecycle.SetStatusAsync(
@@ -89,7 +89,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
             IdentityAccountStatus.Enabled,
             identity.Current.Revision,
             "管理员显式恢复",
-            new IdentityActorContext("User_Admin", IdentitySecurityActorKind.User, "trace-enable")));
+            new IdentityActorContext("User_Admin", IdentitySecurityActorKind.IdentityAccount, "trace-enable")));
 
         Assert.Equal(IdentityAccountStatus.Enabled, enabled.Status);
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendProtectedAsync(client, cookieHeader)).StatusCode);
@@ -140,7 +140,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         return client.SendAsync(request);
     }
 
-    private static User User(DateTime now) => new()
+    private static IdentityAccount Account(DateTime now) => new()
     {
         EID = "User_1",
         ECODE = "alice",
@@ -162,7 +162,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         PersonName = "张三",
         IsEnabled = true,
         Revision = 4,
-        UserEid = "User_1",
+        AccountEid = "User_1",
         BoundAt = now.AddDays(-1),
         BoundBy = "User_Admin",
         BindingReason = "入职绑定",
@@ -177,7 +177,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
 
-        public ValueTask<bool> TryBindAsync(string personEid, string userEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
+        public ValueTask<bool> TryBindAsync(string personEid, string accountEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask<bool> TrySetEnablementAsync(string personEid, bool isEnabled, long expectedRevision, string actorId, DateTime changedAt, CancellationToken cancellationToken = default)
@@ -198,24 +198,24 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         }
     }
 
-    private sealed class RecordingIdentityRepository(User user) : IIdentityRepository
+    private sealed class RecordingIdentityRepository(IdentityAccount user) : IIdentityRepository
     {
-        public User Current { get; set; } = Clone(user);
+        public IdentityAccount Current { get; set; } = Clone(user);
         public List<IdentitySecurityEvent> Events { get; } = [];
 
         public ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
-        public ValueTask<User?> FindUserAsync(string userEid, CancellationToken cancellationToken = default) => ValueTask.FromResult<User?>(Current.EID == userEid ? Clone(Current) : null);
-        public ValueTask<User?> FindUserByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) => ValueTask.FromResult<User?>(Current.NormalizedECODE == normalizedCode ? Clone(Current) : null);
-        public ValueTask<IReadOnlyList<User>> SearchUsersAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<User>>([Clone(Current)]);
-        public ValueTask<LocalCredential?> FindCredentialAsync(string userEid, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(string targetUserEid, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(Events.ToArray());
-        public void AddUser(User user) => throw new NotSupportedException();
+        public ValueTask<IdentityAccount?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default) => ValueTask.FromResult<IdentityAccount?>(Current.EID == accountEid ? Clone(Current) : null);
+        public ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) => ValueTask.FromResult<IdentityAccount?>(Current.NormalizedECODE == normalizedCode ? Clone(Current) : null);
+        public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<IdentityAccount>>([Clone(Current)]);
+        public ValueTask<LocalCredential?> FindCredentialAsync(string accountEid, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(string targetAccountEid, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(Events.ToArray());
+        public void AddAccount(IdentityAccount user) => throw new NotSupportedException();
         public void AddCredential(LocalCredential credential) => throw new NotSupportedException();
         public ValueTask ReplaceCredentialAsync(LocalCredential credential, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public ValueTask RemoveCredentialAsync(string userEid, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask RemoveCredentialAsync(string accountEid, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public void AddSecurityEvent(IdentitySecurityEvent securityEvent) => Events.Add(securityEvent);
 
-        public ValueTask<bool> TryReplaceUserAsync(User replacement, long expectedRevision, CancellationToken cancellationToken = default)
+        public ValueTask<bool> TryReplaceAccountAsync(IdentityAccount replacement, long expectedRevision, CancellationToken cancellationToken = default)
         {
             if (Current.Revision != expectedRevision)
             {
@@ -226,7 +226,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
             return ValueTask.FromResult(true);
         }
 
-        public static User Clone(User source) => new()
+        public static IdentityAccount Clone(IdentityAccount source) => new()
         {
             EID = source.EID,
             ECODE = source.ECODE,
@@ -246,12 +246,12 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
 
     private sealed class RepositoryAccountDirectory(RecordingIdentityRepository repository) : IIdentityAccountDirectory
     {
-        public async ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default)
+        public async ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default)
         {
-            var user = await repository.FindUserAsync(userEid, cancellationToken);
+            var user = await repository.FindAccountAsync(accountEid, cancellationToken);
             return user is null ? null : new IdentityAccountSnapshot
             {
-                UserEid = user.EID,
+                AccountEid = user.EID,
                 ECODE = user.ECODE,
                 ENAME = user.ENAME,
                 Status = user.Status,
@@ -282,7 +282,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
                     Session = new AuthenticationSessionSnapshot
                     {
                         SessionEid = "Session_1",
-                        UserEid = "User_1",
+                        AccountEid = "User_1",
                         Type = AuthenticationSessionType.Regular,
                         ExpiresAtUtc = expiresAt,
                         RevokedAtUtc = Revoked ? expiresAt.AddHours(-7) : null,
@@ -292,7 +292,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
 
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default)
         {
             var changed = !Revoked;
             Revoked = true;

@@ -162,7 +162,7 @@ public sealed class SqlServerPersistenceSmokeTests
         foreach (var table in new[]
         {
             "ConfigItem", "ValueListItem", "Role", "Permission", "RolePermission", "UserRole",
-            "User", "LocalCredential", "IdentitySecurityEvent", "AuthenticationSession",
+            "IdentityAccount", "LocalCredential", "IdentitySecurityEvent", "AuthenticationSession",
             "Company", "Department", "Person", "Position"
         })
         {

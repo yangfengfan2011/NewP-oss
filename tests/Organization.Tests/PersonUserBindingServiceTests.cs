@@ -28,7 +28,7 @@ public sealed class PersonUserBindingServiceTests
 
         Assert.Equal(20, result.Count);
         Assert.All(result, candidate => Assert.Contains(candidate.Status, new[] { "Enabled", "Disabled" }));
-        Assert.DoesNotContain(result, candidate => candidate.UserEid is "User_01" or "User_02" or "User_03");
+        Assert.DoesNotContain(result, candidate => candidate.AccountEid is "User_01" or "User_02" or "User_03");
         Assert.Equal("user", fixture.Directory.LastSearch?.Query);
         Assert.Equal(false, fixture.Directory.LastSearch?.IsPersonnelBound);
         Assert.Equal(20, fixture.Directory.LastSearch?.Limit);
@@ -44,21 +44,21 @@ public sealed class PersonUserBindingServiceTests
             new BindPersonUserRequest("User_1", 7, "  入职账号绑定  "),
             new PersonUserBindingActor("User_Admin", "trace-39"));
 
-        Assert.Equal("User_1", result.UserEid);
+        Assert.Equal("User_1", result.AccountEid);
         Assert.Equal(BoundAt, result.BoundAt);
         Assert.Equal("User_Admin", result.BoundBy);
         Assert.Equal("入职账号绑定", result.Reason);
         Assert.Equal(1, fixture.Transaction.ExecutionCount);
         Assert.Equal(8, fixture.Identity.Account.Revision);
         Assert.True(fixture.Identity.Account.IsPersonnelBound);
-        Assert.Equal("User_1", fixture.Repository.Current.UserEid);
+        Assert.Equal("User_1", fixture.Repository.Current.AccountEid);
         Assert.Equal("张三", fixture.Repository.Current.PersonName);
     }
 
     [Fact]
     public async Task BindAsync_SameCombinationIsIdempotentButDifferentCombinationConflicts()
     {
-        var fixture = Fixture(person: Person(userEid: "User_1"));
+        var fixture = Fixture(person: Person(accountEid: "User_1"));
 
         var idempotent = await fixture.Service.BindAsync(
             "Person_1",
@@ -90,7 +90,7 @@ public sealed class PersonUserBindingServiceTests
 
         Assert.Equal(PersonUserBindingFailureCodes.PersonDisabled, exception.FailureCode);
         Assert.False(fixture.Identity.Account.IsPersonnelBound);
-        Assert.Null(fixture.Repository.Current.UserEid);
+        Assert.Null(fixture.Repository.Current.AccountEid);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class PersonUserBindingServiceTests
                 new PersonUserBindingActor("User_Admin", "trace-contract-conflict")));
 
         Assert.Equal(PersonUserBindingFailureCodes.RevisionConflict, exception.FailureCode);
-        Assert.Null(fixture.Repository.Current.UserEid);
+        Assert.Null(fixture.Repository.Current.AccountEid);
     }
 
     [Theory]
@@ -147,28 +147,28 @@ public sealed class PersonUserBindingServiceTests
         return new TestFixture(service, repository, directory, identity, transaction);
     }
 
-    private static PersonUserBindingState Person(bool isEnabled = true, string? userEid = null) => new()
+    private static PersonUserBindingState Person(bool isEnabled = true, string? accountEid = null) => new()
     {
         PersonEid = "Person_1",
         PersonName = "张三",
         IsEnabled = isEnabled,
-        UserEid = userEid,
-        BoundAt = userEid is null ? null : BoundAt,
-        BoundBy = userEid is null ? null : "User_Admin",
-        BindingReason = userEid is null ? null : "首次绑定",
+        AccountEid = accountEid,
+        BoundAt = accountEid is null ? null : BoundAt,
+        BoundBy = accountEid is null ? null : "User_Admin",
+        BindingReason = accountEid is null ? null : "首次绑定",
         UpdatedBy = "User_Creator",
         UpdatedAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
     };
 
     private static IdentityAccountSnapshot Account(
-        string userEid,
+        string accountEid,
         IdentityAccountStatus status = IdentityAccountStatus.Enabled,
         bool isLocalAdministrator = false,
         bool isPersonnelBound = false) => new()
     {
-        UserEid = userEid,
-        ECODE = userEid.ToLowerInvariant(),
-        ENAME = $"账号 {userEid}",
+        AccountEid = accountEid,
+        ECODE = accountEid.ToLowerInvariant(),
+        ENAME = $"账号 {accountEid}",
         Status = status,
         Revision = 7,
         IsLocalAdministrator = isLocalAdministrator,
@@ -194,8 +194,8 @@ public sealed class PersonUserBindingServiceTests
     {
         public IdentityAccountSearch? LastSearch { get; private set; }
 
-        public ValueTask<IdentityAccountSnapshot?> FindAsync(string userEid, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(accounts.FirstOrDefault(account => account.UserEid == userEid));
+        public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(accounts.FirstOrDefault(account => account.AccountEid == accountEid));
 
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(
             IdentityAccountSearch search,
@@ -254,7 +254,7 @@ public sealed class PersonUserBindingServiceTests
 
         public ValueTask<bool> TryBindAsync(
             string personEid,
-            string userEid,
+            string accountEid,
             DateTime boundAt,
             string actorId,
             string reason,
@@ -265,14 +265,14 @@ public sealed class PersonUserBindingServiceTests
                 throw new InvalidOperationException("person-write-failed");
             }
 
-            if (Current.PersonEid != personEid || !Current.IsEnabled || Current.UserEid is not null)
+            if (Current.PersonEid != personEid || !Current.IsEnabled || Current.AccountEid is not null)
             {
                 return ValueTask.FromResult(false);
             }
 
             Current = Current with
             {
-                UserEid = userEid,
+                AccountEid = accountEid,
                 BoundAt = boundAt,
                 BoundBy = actorId,
                 BindingReason = reason,

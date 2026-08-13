@@ -67,7 +67,7 @@ public enum LocalAdministratorReadinessState
 public sealed record LocalAdministratorReadiness(
     LocalAdministratorReadinessState State,
     string Diagnostic,
-    string? UserEid = null);
+    string? AccountEid = null);
 
 public interface IIdentityLocalAdministratorReadinessProbe
 {
@@ -80,13 +80,13 @@ public sealed class IdentityLocalAdministratorReadinessProbe(
 {
     public async ValueTask<LocalAdministratorReadiness> InspectAsync(CancellationToken cancellationToken = default)
     {
-        var users = await repository.SearchUsersAsync(cancellationToken);
-        if (users.Count == 0)
+        var accounts = await repository.SearchAccountsAsync(cancellationToken);
+        if (accounts.Count == 0)
         {
             return new(LocalAdministratorReadinessState.BootstrapRequired, "identity-bootstrap-required");
         }
 
-        var administrators = users.Where(static user => user.IsLocalAdministrator).ToArray();
+        var administrators = accounts.Where(static account => account.IsLocalAdministrator).ToArray();
         if (administrators.Length != 1)
         {
             return new(LocalAdministratorReadinessState.InvariantInvalid, "local-administrator-count-invalid");
@@ -153,7 +153,7 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
     IPlatformTransactionExecutor transactionExecutor,
     IAuthenticationSessionRegistry sessionRegistry,
     ILocalAdministratorRoleAssignment roleAssignment,
-    IPasswordHasher<User> passwordHasher,
+    IPasswordHasher<IdentityAccount> passwordHasher,
     ITemporaryCredentialIssuer temporaryCredentialIssuer,
     IPlatformObjectIdGenerator objectIdGenerator,
     TimeProvider timeProvider) : IIdentityLocalAdministratorMaintenanceService
@@ -171,15 +171,15 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
         return transactionExecutor.ExecuteAsync(async token =>
         {
             await repository.AcquireLocalAdministratorBootstrapLockAsync(token);
-            if ((await repository.SearchUsersAsync(token)).Count != 0)
+            if ((await repository.SearchAccountsAsync(token)).Count != 0)
             {
                 throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.BootstrapAlreadyCompleted);
             }
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
-            var user = new User
+            var account = new IdentityAccount
             {
-                EID = objectIdGenerator.NewId(nameof(User)),
+                EID = objectIdGenerator.NewId(nameof(IdentityAccount)),
                 ECODE = ecode,
                 NormalizedECODE = ecode.ToUpperInvariant(),
                 ENAME = ename,
@@ -192,12 +192,12 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
                 UpdatedAt = now
             };
             var temporaryCredential = temporaryCredentialIssuer.Issue();
-            repository.AddUser(user);
+            repository.AddAccount(account);
             repository.AddCredential(new LocalCredential
             {
                 EID = objectIdGenerator.NewId(nameof(LocalCredential)),
-                UserEID = user.EID,
-                PasswordHash = passwordHasher.HashPassword(user, temporaryCredential),
+                AccountEID = account.EID,
+                PasswordHash = passwordHasher.HashPassword(account, temporaryCredential),
                 IsTemporary = true,
                 CreatedBy = command.Actor.ActorId,
                 CreatedAt = now,
@@ -205,13 +205,13 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
                 UpdatedAt = now
             });
             repository.AddSecurityEvent(CreateEvent(
-                user.EID,
+                account.EID,
                 IdentitySecurityEventTypes.LocalAdministratorBootstrapped,
                 reason,
                 command.Actor,
                 now));
-            await roleAssignment.AssignAsync(user.EID, command.Actor.ActorId, token);
-            return new IdentityAccountCreationResult(IdentityAccountApplicationService.ToSnapshot(user), temporaryCredential);
+            await roleAssignment.AssignAsync(account.EID, command.Actor.ActorId, token);
+            return new IdentityAccountCreationResult(IdentityAccountApplicationService.ToSnapshot(account), temporaryCredential);
         }, cancellationToken);
     }
 
@@ -222,8 +222,8 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
         ArgumentNullException.ThrowIfNull(command);
         ValidateMaintenanceActor(command.Actor);
         var reason = IdentityInputNormalizer.NormalizeReason(command.Reason);
-        var users = await repository.SearchUsersAsync(cancellationToken);
-        var administrators = users.Where(static user => user.IsLocalAdministrator).ToArray();
+        var accounts = await repository.SearchAccountsAsync(cancellationToken);
+        var administrators = accounts.Where(static account => account.IsLocalAdministrator).ToArray();
         if (administrators.Length != 1)
         {
             throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.LocalAdministratorInvariant);
@@ -251,15 +251,15 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
 
         return await transactionExecutor.ExecuteAsync(async token =>
         {
-            if (!await repository.TryReplaceUserAsync(administrator, expectedRevision, token))
+            if (!await repository.TryReplaceAccountAsync(administrator, expectedRevision, token))
             {
                 throw new IdentityMaintenanceException(IdentityMaintenanceFailureCodes.LocalAdministratorInvariant);
             }
 
             await repository.ReplaceCredentialAsync(credential, token);
-            await sessionRegistry.RevokeAllAsync(new UserAuthenticationSessionsRevocation
+            await sessionRegistry.RevokeAllAsync(new AccountAuthenticationSessionsRevocation
             {
-                UserEid = administrator.EID,
+                AccountEid = administrator.EID,
                 Reason = reason,
                 ActorId = command.Actor.ActorId
             }, token);
@@ -274,20 +274,20 @@ public sealed class IdentityLocalAdministratorMaintenanceService(
     }
 
     private IdentitySecurityEvent CreateEvent(
-        string userEid,
+        string accountEid,
         string eventType,
         string reason,
         IdentityActorContext actor,
         DateTime now) => new()
         {
             EID = objectIdGenerator.NewId(nameof(IdentitySecurityEvent)),
-            TargetUserEID = userEid,
+            TargetAccountEID = accountEid,
             EventType = eventType,
             Reason = reason,
             OccurredAt = now,
             TraceId = actor.TraceId,
             ActorKind = actor.ActorKind,
-            ActorUserEID = null,
+            ActorAccountEID = null,
             CreatedBy = actor.ActorId,
             CreatedAt = now,
             UpdatedBy = actor.ActorId,

@@ -11,18 +11,18 @@ import {
   StatusBadge,
 } from '@icp-platform/ui';
 import {
-  createUser,
-  deleteUser,
-  getUser,
+  createAccount,
+  deleteAccount,
+  getAccount,
   IdentityApiError,
-  listUsers,
+  listAccounts,
   resetCredential,
-  setUserStatus,
-  updateUserName,
+  setAccountStatus,
+  updateAccountName,
   type IdentityAccount,
   type IdentityAccountStatus,
   type IdentityListFilters,
-  type IdentityUserDetail,
+  type IdentityAccountDetail,
 } from '../api/identityClient';
 import { availableIdentityActions, type IdentityAccountAction } from '../state/accountActions';
 import { closeOneTimeSecret, revealOneTimeSecret, type OneTimeSecretState } from '../state/oneTimeSecret';
@@ -45,14 +45,14 @@ const initialDraft: FilterDraft = {
   isLocalAdministrator: '',
 };
 
-export default function IdentityUsersPage() {
+export default function IdentityAccountsPage() {
   const [draft, setDraft] = useState<FilterDraft>(initialDraft);
   const [filters, setFilters] = useState<IdentityListFilters>({ page: 1, pageSize: PAGE_SIZE });
   const [items, setItems] = useState<IdentityAccount[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [detail, setDetail] = useState<IdentityUserDetail>();
+  const [detail, setDetail] = useState<IdentityAccountDetail>();
   const [detailLoading, setDetailLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createECODE, setCreateECODE] = useState('');
@@ -70,7 +70,7 @@ export default function IdentityUsersPage() {
     setLoading(true);
     setError('');
     try {
-      const page = await listUsers(nextFilters);
+      const page = await listAccounts(nextFilters);
       setItems(page.items);
       setTotal(page.totalCount);
     } catch (cause) {
@@ -88,7 +88,7 @@ export default function IdentityUsersPage() {
     setDetailLoading(true);
     setOperationError('');
     try {
-      setDetail(await getUser(eid, eventPage));
+      setDetail(await getAccount(eid, eventPage));
     } catch (cause) {
       setOperationError(toMessage(cause));
     } finally {
@@ -139,7 +139,7 @@ export default function IdentityUsersPage() {
     setSubmitting(true);
     setOperationError('');
     try {
-      const issuance = await createUser({ ecode: createECODE, ename: createENAME });
+      const issuance = await createAccount({ ecode: createECODE, ename: createENAME });
       setCreateOpen(false);
       setCreateECODE('');
       setCreateENAME('');
@@ -160,9 +160,9 @@ export default function IdentityUsersPage() {
     try {
       const { account, type } = operation;
       if (type === 'edit') {
-        await updateUserName(account.eid, { ename: editName, expectedRevision: account.revision });
+        await updateAccountName(account.eid, { ename: editName, expectedRevision: account.revision });
       } else if (type === 'enable' || type === 'disable') {
-        await setUserStatus(account.eid, {
+        await setAccountStatus(account.eid, {
           targetStatus: type === 'enable' ? 'Enabled' : 'Disabled',
           expectedRevision: account.revision,
           reason: operationReason,
@@ -174,7 +174,7 @@ export default function IdentityUsersPage() {
         });
         setSecret(revealOneTimeSecret(issuance.temporaryCredential));
       } else {
-        await deleteUser(account.eid, {
+        await deleteAccount(account.eid, {
           expectedRevision: account.revision,
           reason: operationReason,
         });

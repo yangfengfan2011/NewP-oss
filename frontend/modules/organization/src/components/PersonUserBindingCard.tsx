@@ -20,19 +20,19 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState<PersonUserBindingCandidateDto[]>([]);
-  const [selectedUserEid, setSelectedUserEid] = useState('');
+  const [selectedAccountEid, setSelectedAccountEid] = useState('');
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const selected = useMemo(
-    () => candidates.find((candidate) => candidate.userEid === selectedUserEid),
-    [candidates, selectedUserEid],
+    () => candidates.find((candidate) => candidate.accountEid === selectedAccountEid),
+    [candidates, selectedAccountEid],
   );
 
   if (summary.status !== 'ready' || !binding) return null;
-  const isBound = Boolean(binding.userEid);
+  const isBound = Boolean(binding.accountEid);
   const maySubmit = !isBound && binding.isPersonEnabled && canBind;
 
   async function search() {
@@ -41,7 +41,7 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
       setError('');
       const result = await searchPersonUserBindingCandidates(binding!.personEid, query);
       setCandidates(result);
-      setSelectedUserEid('');
+      setSelectedAccountEid('');
     } catch (failure) {
       setCandidates([]);
       setError(failure instanceof Error ? failure.message : '加载可绑定账号失败');
@@ -57,13 +57,13 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
       setSubmitting(true);
       setError('');
       const result = await bindPersonUser(binding!.personEid, {
-        userEid: selected.userEid,
+        accountEid: selected.accountEid,
         expectedRevision: selected.revision,
         reason,
       });
       setBinding({
         ...binding!,
-        userEid: result.userEid,
+        accountEid: result.accountEid,
         boundAt: result.boundAt,
         boundBy: result.boundBy,
         reason: result.reason,
@@ -82,7 +82,7 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
     setOpen(false);
     setQuery('');
     setCandidates([]);
-    setSelectedUserEid('');
+    setSelectedAccountEid('');
     setReason('');
     setConfirmed(false);
     setError('');
@@ -103,7 +103,7 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
           {isBound ? (
             <dl className="sh-meta-block">
               <Fact label="人员姓名" value={binding.personName} />
-              <Fact label="User EID" value={binding.userEid ?? ''} code />
+              <Fact label="User EID" value={binding.accountEid ?? ''} code />
               <Fact label="ECODE" value={binding.account?.ecode ?? (binding.isAccountAvailable ? '—' : 'Identity 暂不可用')} code />
               <Fact label="ENAME" value={binding.account?.ename ?? (binding.isAccountAvailable ? '—' : 'Identity 暂不可用')} />
               <Fact label="账号状态" value={binding.account?.status ?? '暂不可用'} />
@@ -134,8 +134,8 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
           {loading ? <LoadingState message="正在加载最多 20 个可绑定账号…" /> : null}
           {error ? <ErrorState message={error} /> : null}
           {!loading && candidates.length === 0 ? <EmptyState message="请搜索尚未绑定的普通账号。" /> : null}
-          {candidates.length > 0 ? <div className="sh-table-wrap"><table className="sh-table"><thead><tr><th>选择</th><th>ECODE</th><th>ENAME</th><th>状态</th><th>Revision</th></tr></thead><tbody>{candidates.map((candidate) => <tr key={candidate.userEid}><td><input type="radio" name="binding-candidate" aria-label={`选择 ${candidate.ecode}`} checked={selectedUserEid === candidate.userEid} onChange={() => setSelectedUserEid(candidate.userEid)} /></td><td className="sh-code">{candidate.ecode}</td><td>{candidate.ename}</td><td><StatusBadge variant={candidate.status === 'Enabled' ? 'success' : 'warning'} label={candidate.status} /></td><td>{candidate.revision}</td></tr>)}</tbody></table></div> : null}
-          {selected ? <div className="sh-helper-block"><strong>绑定预览：{binding.personName} → {selected.ecode} · {selected.ename}</strong><p>User EID：<span className="sh-code">{selected.userEid}</span> · {selected.status} · Revision {selected.revision}</p></div> : null}
+          {candidates.length > 0 ? <div className="sh-table-wrap"><table className="sh-table"><thead><tr><th>选择</th><th>ECODE</th><th>ENAME</th><th>状态</th><th>Revision</th></tr></thead><tbody>{candidates.map((candidate) => <tr key={candidate.accountEid}><td><input type="radio" name="binding-candidate" aria-label={`选择 ${candidate.ecode}`} checked={selectedAccountEid === candidate.accountEid} onChange={() => setSelectedAccountEid(candidate.accountEid)} /></td><td className="sh-code">{candidate.ecode}</td><td>{candidate.ename}</td><td><StatusBadge variant={candidate.status === 'Enabled' ? 'success' : 'warning'} label={candidate.status} /></td><td>{candidate.revision}</td></tr>)}</tbody></table></div> : null}
+          {selected ? <div className="sh-helper-block"><strong>绑定预览：{binding.personName} → {selected.ecode} · {selected.ename}</strong><p>User EID：<span className="sh-code">{selected.accountEid}</span> · {selected.status} · Revision {selected.revision}</p></div> : null}
           <label className="sh-form-group sh-form-group-lg"><span className="sh-form-label">绑定原因</span><textarea className="sh-form-input" rows={4} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required /></label>
           <label className="sh-form-inline"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>我已核对人员与账号，理解绑定提交后不能解绑、改绑或重绑。</span></label>
         </form>

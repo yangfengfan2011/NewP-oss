@@ -36,7 +36,7 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
         }
 
         var person = await _bindingRepository.FindAsync(id, cancellationToken);
-        return person?.UserEid is null
+        return person?.AccountEid is null
             ? null
             : BoundError();
     }
@@ -54,7 +54,7 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
         var persons = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName));
         var affected = await persons
             .Where(row => EF.Property<string>(row, descriptor.IdField) == id
-                && EF.Property<string?>(row, "UserEID") == null)
+                && EF.Property<string?>(row, "AccountEID") == null)
             .ExecuteDeleteAsync(cancellationToken);
         if (affected == 1)
         {
@@ -62,7 +62,7 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
         }
 
         var remaining = await _bindingRepository.FindAsync(id, cancellationToken);
-        return remaining?.UserEid is not null
+        return remaining?.AccountEid is not null
             ? StandardCrudMutationResult.Failure(BoundError())
             : StandardCrudMutationResult.Failure(new StandardCrudError
             {

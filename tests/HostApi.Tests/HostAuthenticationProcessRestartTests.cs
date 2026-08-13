@@ -241,7 +241,7 @@ public sealed class HostAuthenticationProcessRestartTests
             new EfPlatformTransactionExecutor(context),
             new NoOpSessionRegistry(),
             new EfLocalAdministratorRoleAssignment(context, ids),
-            new PasswordHasher<User>(),
+            new PasswordHasher<IdentityAccount>(),
             new FixedCredentialIssuer(),
             ids,
             TimeProvider.System);
@@ -320,6 +320,6 @@ public sealed class HostAuthenticationProcessRestartTests
         public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<AuthenticationSessionValidation> ValidateAsync(string credential, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> RevokeCurrentAsync(AuthenticationSessionRevocation revocation, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public ValueTask<int> RevokeAllAsync(UserAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => ValueTask.FromResult(0);
+        public ValueTask<int> RevokeAllAsync(AccountAuthenticationSessionsRevocation revocation, CancellationToken cancellationToken = default) => ValueTask.FromResult(0);
     }
 }

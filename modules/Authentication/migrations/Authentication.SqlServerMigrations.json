@@ -2,16 +2,16 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Authentication",
-  "modelDigest": "8b7a0d3a86eb2b60ed3df260502f508acf2de198874ce84ceb30c14f180d5a80",
-  "bundleChecksum": "4d4e4dc0634017c06a3dddbc840ac4f906ed6b428dc68c55960245afe449a626",
+  "modelDigest": "0e0a9cb6d4c2cc231e1c5aecc0c0dbfb0d254085216aafdc5a7dcc0e399b1ca6",
+  "bundleChecksum": "f8971248565254411be2594dfd21814991f673640d7038a31f14603392167ffa",
   "migrations": [
     {
       "sequence": "000001",
       "migrationId": "20260810033909_Authentication_000001_Foundation",
       "previousContentDigest": null,
-      "contentDigest": "3b81eaade86814bd4e8a0269560cec782c4208669d1f1315663c801966ef5dc4",
+      "contentDigest": "fdb7d27a3e5ec872331ff094ff0757fff6f80d78000e8de22f302e6d6a2ba0d0",
       "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
-      "toModelDigest": "8b7a0d3a86eb2b60ed3df260502f508acf2de198874ce84ceb30c14f180d5a80",
+      "toModelDigest": "0e0a9cb6d4c2cc231e1c5aecc0c0dbfb0d254085216aafdc5a7dcc0e399b1ca6",
       "compatibility": "safe-expand"
     }
   ]

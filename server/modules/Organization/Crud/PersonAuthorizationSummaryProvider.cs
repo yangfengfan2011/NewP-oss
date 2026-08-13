@@ -32,12 +32,12 @@ public sealed class PersonAuthorizationSummaryProvider : IStandardCrudSummaryPro
     {
         var personId = detail[descriptor.IdField]?.ToString() ?? string.Empty;
         var person = await _bindingRepository.FindAsync(personId, cancellationToken);
-        if (person?.UserEid is null)
+        if (person?.AccountEid is null)
         {
             return new StandardCrudSummaryBlock { Status = "notConfigured" };
         }
 
-        var roles = await _authorizationSummaryReader.GetRoleNamesAsync(person.UserEid, cancellationToken);
+        var roles = await _authorizationSummaryReader.GetRoleNamesAsync(person.AccountEid, cancellationToken);
         return new StandardCrudSummaryBlock { Status = "ready", Data = roles };
     }
 }

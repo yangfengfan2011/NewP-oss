@@ -30,8 +30,8 @@ public sealed class IdentitySelfServiceController : ControllerBase
         [FromBody] ChangeIdentityPasswordRequest request,
         CancellationToken cancellationToken)
     {
-        var userEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(userEid))
+        var accountEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(accountEid))
         {
             return ProblemResult(StatusCodes.Status401Unauthorized, "AUTH_SESSION_INVALID");
         }
@@ -40,13 +40,13 @@ public sealed class IdentitySelfServiceController : ControllerBase
         {
             var result = await _accounts.ChangePasswordAsync(
                 new ChangeIdentityPasswordCommand(
-                    userEid,
+                    accountEid,
                     request.CurrentPassword,
                     request.NewPassword,
                     request.ExpectedRevision,
                     new IdentityActorContext(
-                        userEid,
-                        IdentitySecurityActorKind.User,
+                        accountEid,
+                        IdentitySecurityActorKind.IdentityAccount,
                         HttpContext.TraceIdentifier)),
                 cancellationToken);
             Response.Headers.CacheControl = "no-store";

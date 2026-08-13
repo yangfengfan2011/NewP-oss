@@ -18,7 +18,7 @@ public interface IAuthenticationSessionRepository
         CancellationToken cancellationToken = default);
 
     ValueTask<int> RevokeAllAsync(
-        string userEid,
+        string accountEid,
         DateTime revokedAtUtc,
         string reason,
         string actorId,

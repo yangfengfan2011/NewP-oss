@@ -6,27 +6,27 @@ public interface IIdentityRepository
 {
     ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default);
 
-    ValueTask<User?> FindUserAsync(string userEid, CancellationToken cancellationToken = default);
+    ValueTask<IdentityAccount?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default);
 
-    ValueTask<User?> FindUserByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default);
+    ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default);
 
-    ValueTask<IReadOnlyList<User>> SearchUsersAsync(CancellationToken cancellationToken = default);
+    ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default);
 
-    ValueTask<LocalCredential?> FindCredentialAsync(string userEid, CancellationToken cancellationToken = default);
+    ValueTask<LocalCredential?> FindCredentialAsync(string accountEid, CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
-        string targetUserEid,
+        string targetAccountEid,
         CancellationToken cancellationToken = default);
 
-    void AddUser(User user);
+    void AddAccount(IdentityAccount account);
 
     void AddCredential(LocalCredential credential);
 
     ValueTask ReplaceCredentialAsync(LocalCredential credential, CancellationToken cancellationToken = default);
 
-    ValueTask RemoveCredentialAsync(string userEid, CancellationToken cancellationToken = default);
+    ValueTask RemoveCredentialAsync(string accountEid, CancellationToken cancellationToken = default);
 
     void AddSecurityEvent(IdentitySecurityEvent securityEvent);
 
-    ValueTask<bool> TryReplaceUserAsync(User user, long expectedRevision, CancellationToken cancellationToken = default);
+    ValueTask<bool> TryReplaceAccountAsync(IdentityAccount account, long expectedRevision, CancellationToken cancellationToken = default);
 }

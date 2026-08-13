@@ -6,7 +6,7 @@ namespace ICP.Platform.Identity.Tests;
 
 internal sealed class InMemoryIdentityRepository : IIdentityRepository
 {
-    public List<User> Users { get; } = [];
+    public List<IdentityAccount> Accounts { get; } = [];
 
     public List<LocalCredential> Credentials { get; } = [];
 
@@ -17,48 +17,48 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
     public ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default) =>
         ValueTask.CompletedTask;
 
-    public ValueTask<User?> FindUserAsync(string userEid, CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult(Clone(Users.SingleOrDefault(item => item.EID == userEid)));
+    public ValueTask<IdentityAccount?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Clone(Accounts.SingleOrDefault(item => item.EID == accountEid)));
 
-    public ValueTask<User?> FindUserByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult(Clone(Users.SingleOrDefault(item => item.NormalizedECODE == normalizedCode)));
+    public ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Clone(Accounts.SingleOrDefault(item => item.NormalizedECODE == normalizedCode)));
 
-    public ValueTask<IReadOnlyList<User>> SearchUsersAsync(CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult<IReadOnlyList<User>>(Users.Select(item => Clone(item)!).ToArray());
+    public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<IReadOnlyList<IdentityAccount>>(Accounts.Select(item => Clone(item)!).ToArray());
 
-    public ValueTask<LocalCredential?> FindCredentialAsync(string userEid, CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult(Clone(Credentials.SingleOrDefault(item => item.UserEID == userEid)));
+    public ValueTask<LocalCredential?> FindCredentialAsync(string accountEid, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Clone(Credentials.SingleOrDefault(item => item.AccountEID == accountEid)));
 
     public ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
-        string targetUserEid,
+        string targetAccountEid,
         CancellationToken cancellationToken = default) =>
         ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(SecurityEvents
-            .Where(item => item.TargetUserEID == targetUserEid)
+            .Where(item => item.TargetAccountEID == targetAccountEid)
             .Select(Clone)
             .ToArray());
 
-    public void AddUser(User user)
+    public void AddAccount(IdentityAccount account)
     {
-        if (Users.Any(item => item.NormalizedECODE == user.NormalizedECODE))
+        if (Accounts.Any(item => item.NormalizedECODE == account.NormalizedECODE))
         {
             throw new InvalidOperationException("duplicate account code");
         }
 
-        Users.Add(Clone(user)!);
+        Accounts.Add(Clone(account)!);
     }
 
     public void AddCredential(LocalCredential credential) => Credentials.Add(Clone(credential)!);
 
     public ValueTask ReplaceCredentialAsync(LocalCredential credential, CancellationToken cancellationToken = default)
     {
-        var index = Credentials.FindIndex(item => item.UserEID == credential.UserEID);
+        var index = Credentials.FindIndex(item => item.AccountEID == credential.AccountEID);
         Credentials[index] = Clone(credential)!;
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask RemoveCredentialAsync(string userEid, CancellationToken cancellationToken = default)
+    public ValueTask RemoveCredentialAsync(string accountEid, CancellationToken cancellationToken = default)
     {
-        Credentials.RemoveAll(item => item.UserEID == userEid);
+        Credentials.RemoveAll(item => item.AccountEID == accountEid);
         return ValueTask.CompletedTask;
     }
 
@@ -72,43 +72,43 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
         SecurityEvents.Add(Clone(securityEvent));
     }
 
-    public ValueTask<bool> TryReplaceUserAsync(User user, long expectedRevision, CancellationToken cancellationToken = default)
+    public ValueTask<bool> TryReplaceAccountAsync(IdentityAccount account, long expectedRevision, CancellationToken cancellationToken = default)
     {
-        var index = Users.FindIndex(item => item.EID == user.EID && item.Revision == expectedRevision);
+        var index = Accounts.FindIndex(item => item.EID == account.EID && item.Revision == expectedRevision);
         if (index < 0)
         {
             return ValueTask.FromResult(false);
         }
 
-        Users[index] = Clone(user)!;
+        Accounts[index] = Clone(account)!;
         return ValueTask.FromResult(true);
     }
 
-    public bool VerifyPassword(string userEid, string password)
+    public bool VerifyPassword(string accountEid, string password)
     {
-        var user = Users.Single(item => item.EID == userEid);
-        var credential = Credentials.Single(item => item.UserEID == userEid);
-        return new PasswordHasher<User>().VerifyHashedPassword(user, credential.PasswordHash, password)
+        var account = Accounts.Single(item => item.EID == accountEid);
+        var credential = Credentials.Single(item => item.AccountEID == accountEid);
+        return new PasswordHasher<IdentityAccount>().VerifyHashedPassword(account, credential.PasswordHash, password)
             != PasswordVerificationResult.Failed;
     }
 
     public object CreateSnapshot() => new Snapshot(
-        Users.Select(item => Clone(item)!).ToArray(),
+        Accounts.Select(item => Clone(item)!).ToArray(),
         Credentials.Select(item => Clone(item)!).ToArray(),
         SecurityEvents.Select(Clone).ToArray());
 
     public void Restore(object snapshotObject)
     {
         var snapshot = (Snapshot)snapshotObject;
-        Users.Clear();
-        Users.AddRange(snapshot.Users.Select(item => Clone(item)!));
+        Accounts.Clear();
+        Accounts.AddRange(snapshot.Accounts.Select(item => Clone(item)!));
         Credentials.Clear();
         Credentials.AddRange(snapshot.Credentials.Select(item => Clone(item)!));
         SecurityEvents.Clear();
         SecurityEvents.AddRange(snapshot.Events.Select(Clone));
     }
 
-    private static User? Clone(User? item) => item is null ? null : new User
+    private static IdentityAccount? Clone(IdentityAccount? item) => item is null ? null : new IdentityAccount
     {
         EID = item.EID,
         ECODE = item.ECODE,
@@ -128,7 +128,7 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
     private static LocalCredential? Clone(LocalCredential? item) => item is null ? null : new LocalCredential
     {
         EID = item.EID,
-        UserEID = item.UserEID,
+        AccountEID = item.AccountEID,
         PasswordHash = item.PasswordHash,
         IsTemporary = item.IsTemporary,
         CreatedBy = item.CreatedBy,
@@ -140,18 +140,18 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
     private static IdentitySecurityEvent Clone(IdentitySecurityEvent item) => new()
     {
         EID = item.EID,
-        TargetUserEID = item.TargetUserEID,
+        TargetAccountEID = item.TargetAccountEID,
         EventType = item.EventType,
         Reason = item.Reason,
         OccurredAt = item.OccurredAt,
         TraceId = item.TraceId,
         ActorKind = item.ActorKind,
-        ActorUserEID = item.ActorUserEID,
+        ActorAccountEID = item.ActorAccountEID,
         CreatedBy = item.CreatedBy,
         CreatedAt = item.CreatedAt,
         UpdatedBy = item.UpdatedBy,
         UpdatedAt = item.UpdatedAt
     };
 
-    private sealed record Snapshot(User[] Users, LocalCredential[] Credentials, IdentitySecurityEvent[] Events);
+    private sealed record Snapshot(IdentityAccount[] Accounts, LocalCredential[] Credentials, IdentitySecurityEvent[] Events);
 }

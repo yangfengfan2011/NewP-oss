@@ -57,6 +57,19 @@ public sealed record UnifiedMigrationHistoryReconciliation(
 /// </summary>
 public static class UnifiedMigrationHistoryReconciler
 {
+    /// <summary>
+    /// 校验数据库已应用事实是否为候选计划的严格有序前缀，并返回已应用前缀与待执行后缀。
+    /// 所有不一致均在返回结果前以稳定失败码关闭执行路径。
+    /// </summary>
+    /// <param name="historyVersion">数据库 history 使用的 reconciliation 契约版本。</param>
+    /// <param name="applied">按全局位置读取的数据库已应用迁移事实。</param>
+    /// <param name="target">按全局位置排列的候选计划迁移事实。</param>
+    /// <returns>已验证的应用前缀与尚待执行的目标后缀。</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="applied"/> 或 <paramref name="target"/> 为 <see langword="null"/>。</exception>
+    /// <exception cref="PersistenceHistoryException">
+    /// 契约版本不受支持，history 或目标含重复、未知、非前缀或 frontier 不一致的迁移，
+    /// 或已应用事实的 owner、bundle、content、model、plan、Provider Target/Transition 与目标不一致。
+    /// </exception>
     public static UnifiedMigrationHistoryReconciliation Reconcile(
         string historyVersion,
         IReadOnlyList<CompiledMigrationHistoryEntry> applied,

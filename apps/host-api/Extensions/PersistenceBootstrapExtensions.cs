@@ -106,7 +106,8 @@ public static class PersistenceBootstrapExtensions
             current = current.Parent;
         }
 
-        // 开发态发布输出可只携带复制后的 modules；此时仍以 AppBase 为根，缺失的 authoring/DTO 依赖会由 coordinator 给出阻断信号。
+        // 开发态发布输出可只携带复制后的 modules；此时以 AppBase 生成数据库身份。
+        // 缺失的 authoring/DTO 输入由激活会话的计划编译在 Host 完成构建前阻断。
         return AppContext.BaseDirectory;
     }
 }

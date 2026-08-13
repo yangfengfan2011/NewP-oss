@@ -81,6 +81,8 @@ export type {
   StandardCrudActionContext,
   StandardCrudActionDefinition,
   StandardCrudActionHandler,
+  StandardCrudActionInputRenderer,
+  StandardCrudActionInputRenderContext,
   StandardCrudDetail,
   StandardCrudDetailExtensionContext,
   StandardCrudExportColumnRequest,
@@ -131,6 +133,7 @@ export {
   readStandardCrudString,
   resolveStandardCrudSummaryMessage,
   useStandardCrudLookupRuntime,
+  StandardCrudRequestError,
 } from './standardCrud';
 
 export interface I18nResource {

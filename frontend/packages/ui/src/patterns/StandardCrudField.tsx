@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Checkbox, Input, Select, Switch } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
+import { Checkbox, DatePicker, Form, Input, InputNumber, Select, Switch, Typography } from 'antd';
 import type { StandardCrudFieldDefinition, StandardCrudFormMode, StandardCrudOption } from '@icp-platform/sdk';
 
 export interface StandardCrudFieldProps {
@@ -16,9 +17,13 @@ function formatReadonlyValue(
   field: StandardCrudFieldDefinition,
   value: unknown,
   options: StandardCrudOption[],
-): ReactElement | string {
-  if (field.kind === 'boolean') {
+): string {
+  if (field.kind === 'boolean' || field.kind === 'switch' || field.kind === 'checkbox') {
     return value === true ? '是' : '否';
+  }
+
+  if (field.kind === 'dateRange' && Array.isArray(value)) {
+    return value.filter((item) => typeof item === 'string' && item.length > 0).join(' 至 ') || '未填写';
   }
 
   const matched = options.find((option) => option.value === value);
@@ -33,13 +38,21 @@ function formatReadonlyValue(
   return String(value);
 }
 
-function renderLabel(field: StandardCrudFieldDefinition, readOnly: boolean): ReactElement {
+/** 查看模式只输出展示语义，避免把禁用输入框伪装成只读详情。 */
+export function StandardCrudReadonlyValue({
+  field,
+  value,
+  options = field.options ?? [],
+}: Pick<StandardCrudFieldProps, 'field' | 'value' | 'options'>): ReactElement {
   return (
-    <label className="sh-form-label np-standard-crud-field-label" htmlFor={field.key}>
-      <span>{field.labelKey}</span>
-      {field.required && !readOnly ? <span className="np-required-mark" aria-hidden="true">*</span> : null}
-    </label>
+    <Typography.Text className="np-standard-crud-readonly-value">
+      {formatReadonlyValue(field, value, options)}
+    </Typography.Text>
   );
+}
+
+function toDayjs(value: unknown): Dayjs | null {
+  return typeof value === 'string' && value.length > 0 ? dayjs(value) : null;
 }
 
 export function StandardCrudField({
@@ -51,170 +64,127 @@ export function StandardCrudField({
   error = null,
   onChange,
 }: StandardCrudFieldProps): ReactElement {
-  const readOnly = mode === 'view' || field.readOnly === true;
-  const fieldError = error ?? null;
-  const isBooleanField = field.kind === 'boolean' || field.kind === 'switch' || field.kind === 'checkbox';
-  const isSelectField = field.kind === 'enum' || field.kind === 'select' || field.kind === 'lookup';
-  const fieldClassName = [
-    'sh-form-group',
-    'np-standard-crud-field',
-    isBooleanField ? 'np-standard-crud-field-boolean' : '',
-    fieldError ? 'np-standard-crud-field-invalid' : '',
-    readOnly ? 'np-standard-crud-field-readonly' : '',
-  ].filter(Boolean).join(' ');
+  const readOnly = mode === 'view' || field.readOnly === true || field.kind === 'readonly';
+  if (readOnly) {
+    return <StandardCrudReadonlyValue field={field} value={value} options={options} />;
+  }
 
-  if (isBooleanField) {
-    if (field.kind === 'checkbox') {
-      return (
-        <div className={fieldClassName}>
-          {renderLabel(field, readOnly)}
-          <label className="np-standard-crud-checkbox-row" htmlFor={field.key}>
-            <Checkbox
-              id={field.key}
-              checked={value === true}
-              disabled={readOnly}
-              onChange={(event) => onChange(field.key, event.target.checked)}
-            />
-            <span>{value === true ? '是' : '否'}</span>
-          </label>
-          {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-        </div>
-      );
-    }
+  const commonItemProps = {
+    label: field.labelKey,
+    htmlFor: field.key,
+    required: field.required,
+    validateStatus: error ? 'error' as const : undefined,
+    help: error ?? undefined,
+    className: 'np-standard-crud-field',
+  };
 
+  if (field.kind === 'boolean' || field.kind === 'switch') {
     return (
-      <div className={fieldClassName}>
-        {renderLabel(field, readOnly)}
-        <div className="np-standard-crud-switch-row">
-          <Switch
-            id={field.key}
-            className="np-standard-crud-switch"
-            checked={value === true}
-            disabled={readOnly}
-            onChange={(checked) => onChange(field.key, checked)}
-          />
-          <span>{value === true ? '启用' : '停用'}</span>
-        </div>
-        {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-      </div>
+      <Form.Item {...commonItemProps}>
+        <Switch
+          id={field.key}
+          checked={value === true}
+          checkedChildren="启用"
+          unCheckedChildren="停用"
+          onChange={(checked) => onChange(field.key, checked)}
+        />
+      </Form.Item>
     );
   }
 
-  if (isSelectField) {
-    const placeholder = loading ? '正在加载...' : field.lookup?.placeholder ?? field.placeholder;
-    const hasCurrentValue = typeof value === 'string' && value.length > 0;
-    const fallbackEnumValue = field.kind === 'enum' && !placeholder ? options[0]?.value : undefined;
-    const selectValue = hasCurrentValue ? value : fallbackEnumValue;
-
+  if (field.kind === 'checkbox') {
     return (
-      <div className={fieldClassName}>
-        {renderLabel(field, readOnly)}
+      <Form.Item {...commonItemProps}>
+        <Checkbox checked={value === true} onChange={(event) => onChange(field.key, event.target.checked)}>
+          {value === true ? '是' : '否'}
+        </Checkbox>
+      </Form.Item>
+    );
+  }
+
+  if (field.kind === 'enum' || field.kind === 'select' || field.kind === 'lookup') {
+    const placeholder = loading ? '正在加载...' : field.lookup?.placeholder ?? field.placeholder;
+    const fallbackEnumValue = field.kind === 'enum' && !placeholder ? options[0]?.value : undefined;
+    const selectValue = typeof value === 'string' && value.length > 0 ? value : fallbackEnumValue;
+    return (
+      <Form.Item {...commonItemProps}>
         <Select
           id={field.key}
           className="np-standard-crud-select"
           value={selectValue}
           data-value={selectValue ?? ''}
-          aria-required={!readOnly && field.required ? 'true' : undefined}
+          aria-required={field.required ? 'true' : undefined}
           placeholder={placeholder}
-          disabled={readOnly || loading}
           loading={loading}
-          options={options.map((option) => ({
-            value: option.value,
-            label: option.label,
-            disabled: option.disabled,
-          }))}
+          disabled={loading}
+          options={options}
           onChange={(nextValue) => onChange(field.key, nextValue)}
         />
-        {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-      </div>
+      </Form.Item>
     );
   }
 
   if (field.kind === 'textarea') {
     return (
-      <div className={fieldClassName}>
-        {renderLabel(field, readOnly)}
+      <Form.Item {...commonItemProps}>
         <Input.TextArea
           id={field.key}
-          className="sh-form-input np-standard-crud-input"
           value={value == null ? '' : String(value)}
           placeholder={field.placeholder}
-          required={!readOnly && field.required}
-          disabled={readOnly}
           onChange={(event) => onChange(field.key, event.target.value)}
         />
-        {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-      </div>
+      </Form.Item>
+    );
+  }
+
+  if (field.kind === 'number') {
+    return (
+      <Form.Item {...commonItemProps}>
+        <InputNumber
+          id={field.key}
+          value={typeof value === 'number' ? value : null}
+          placeholder={field.placeholder}
+          onChange={(nextValue) => onChange(field.key, nextValue ?? undefined)}
+        />
+      </Form.Item>
     );
   }
 
   if (field.kind === 'dateRange') {
-    const [start, end] = Array.isArray(value) ? value : ['', ''];
-
+    const range = Array.isArray(value) ? value : [];
     return (
-      <div className={fieldClassName}>
-        {renderLabel(field, readOnly)}
-        <div className="np-standard-crud-date-range">
-          <Input
-            id={`${field.key}-start`}
-            className="sh-form-input np-standard-crud-input"
-            type="date"
-            value={typeof start === 'string' ? start : ''}
-            required={!readOnly && field.required}
-            disabled={readOnly}
-            onChange={(event) => onChange(field.key, [event.target.value, typeof end === 'string' ? end : ''])}
-          />
-          <Input
-            id={`${field.key}-end`}
-            className="sh-form-input np-standard-crud-input"
-            type="date"
-            value={typeof end === 'string' ? end : ''}
-            required={!readOnly && field.required}
-            disabled={readOnly}
-            onChange={(event) => onChange(field.key, [typeof start === 'string' ? start : '', event.target.value])}
-          />
-        </div>
-        {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-      </div>
+      <Form.Item {...commonItemProps}>
+        <DatePicker.RangePicker
+          id={field.key}
+          value={[toDayjs(range[0]), toDayjs(range[1])]}
+          onChange={(dates) => onChange(field.key, dates
+            ? dates.map((date) => date?.format('YYYY-MM-DD') ?? '')
+            : ['', ''])}
+        />
+      </Form.Item>
     );
   }
 
-  if (field.kind === 'readonly') {
+  if (field.kind === 'date') {
     return (
-      <div className={fieldClassName}>
-        {renderLabel(field, true)}
-        <div id={field.key} className="sh-form-input np-standard-crud-input np-standard-crud-readonly-value">
-          {formatReadonlyValue(field, value, options)}
-        </div>
-        {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-      </div>
+      <Form.Item {...commonItemProps}>
+        <DatePicker
+          id={field.key}
+          value={toDayjs(value)}
+          onChange={(date) => onChange(field.key, date?.format('YYYY-MM-DD') ?? '')}
+        />
+      </Form.Item>
     );
   }
-
-  const inputValue = value == null ? '' : String(value);
 
   return (
-    <div className={fieldClassName}>
-      {renderLabel(field, readOnly)}
+    <Form.Item {...commonItemProps}>
       <Input
         id={field.key}
-        className="sh-form-input np-standard-crud-input"
-        type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
-        value={String(inputValue)}
+        value={value == null ? '' : String(value)}
         placeholder={field.placeholder}
-        required={!readOnly && field.required}
-        disabled={readOnly}
-        onChange={(event) => {
-          if (field.kind === 'number') {
-            const nextValue = event.target.value;
-            onChange(field.key, nextValue === '' ? undefined : Number(nextValue));
-            return;
-          }
-
-          onChange(field.key, event.target.value);
-        }}
+        onChange={(event) => onChange(field.key, event.target.value)}
       />
-      {fieldError ? <div className="sh-form-error np-standard-crud-field-error">{fieldError}</div> : null}
-    </div>
+    </Form.Item>
   );
 }

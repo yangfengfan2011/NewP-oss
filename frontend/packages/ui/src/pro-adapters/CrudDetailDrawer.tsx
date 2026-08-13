@@ -32,10 +32,10 @@ export function CrudDetailDrawer<TRecord extends Record<string, unknown>>({
     <Drawer
       open={open}
       title={title}
-      width={720}
+      width="min(720px, calc(100vw - 16px))"
       onClose={onClose}
       extra={actions ? <Space>{actions}</Space> : null}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? <LoadingBlock message="正在加载详情..." /> : null}
       {!loading && error ? <AlertState type="error" message={error} /> : null}

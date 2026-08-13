@@ -79,13 +79,13 @@ async function flushAsync() {
 }
 
 function findAntdButtonByText(container: ParentNode, text: string): HTMLElement | undefined {
-  return Array.from(container.querySelectorAll<HTMLElement>('button, a, [role="button"]')).find(
+  return Array.from(container.querySelectorAll<HTMLElement>('button, a, [role="button"], [role="menuitem"]')).find(
     (button) => button.textContent?.replace(/\s+/g, '').includes(text.replace(/\s+/g, '')),
   );
 }
 
 function findAntdButtonsByText(container: ParentNode, text: string): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>('button, a, [role="button"]')).filter(
+  return Array.from(container.querySelectorAll<HTMLElement>('button, a, [role="button"], [role="menuitem"]')).filter(
     (button) => button.textContent?.replace(/\s+/g, '').includes(text.replace(/\s+/g, '')),
   );
 }
@@ -120,7 +120,10 @@ async function findOverflowRowActionButton(container: ParentNode, rowText: strin
   });
   await flushAsync();
 
-  return findAntdButtonByText(document.body, buttonText);
+  const visibleDropdown = Array.from(document.body.querySelectorAll<HTMLElement>('.ant-dropdown'))
+    .filter((dropdown) => !dropdown.classList.contains('ant-dropdown-hidden'))
+    .at(-1);
+  return findAntdButtonByText(visibleDropdown ?? document.body, buttonText);
 }
 
 async function clickPopconfirmButton(label: '确认' | '取消') {
@@ -335,6 +338,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
 
     const createButton = findAntdButtonByText(container, '新建');
+    createButton?.focus();
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
     expect(document.body.textContent).toContain('新建人员');
@@ -348,13 +352,13 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.textContent).not.toContain('编辑人员');
     expect(document.body.querySelector('.ant-drawer')).toBeNull();
 
-    const viewButton = findRowActionButton(container, '张三', '查看');
+    const viewButton = await findOverflowRowActionButton(container, '张三', '查看');
     expect(viewButton).toBeDefined();
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
     expect(document.body.textContent).toContain('查看人员');
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
-    expect(findInputByLabel(document.body, '姓名')?.disabled).toBe(true);
+    expect(document.body.querySelector('.ant-descriptions')?.textContent).toContain('张三');
 
     const editButton = findAntdButtonByText(document.body, '编辑');
     expect(editButton?.textContent?.replace(/\s+/g, '')).toContain('编辑');
@@ -409,19 +413,17 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const viewButton = findRowActionButton(container, '张三', '查看');
+    const viewButton = await findOverflowRowActionButton(container, '张三', '查看');
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
-    const companyField = Array.from(document.body.querySelectorAll('.np-standard-crud-field'))
-      .find((field) => field.querySelector('label')?.textContent?.includes('公司'));
-    const departmentField = Array.from(document.body.querySelectorAll('.np-standard-crud-field'))
-      .find((field) => field.querySelector('label')?.textContent?.includes('部门'));
-
-    expect(companyField?.textContent).toContain('示例公司');
-    expect(companyField?.textContent).not.toContain('Company_1');
-    expect(departmentField?.textContent).toContain('研发部');
-    expect(departmentField?.textContent).not.toContain('Department_1');
+    const descriptionsText = Array.from(document.body.querySelectorAll('.ant-descriptions'))
+      .map((section) => section.textContent ?? '')
+      .join('');
+    expect(descriptionsText).toContain('示例公司');
+    expect(descriptionsText).not.toContain('Company_1');
+    expect(descriptionsText).toContain('研发部');
+    expect(descriptionsText).not.toContain('Department_1');
   });
 
   it('高级筛选通过右侧抽屉展示并复用本地化标签', async () => {
@@ -693,6 +695,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
 
     const createButton = findAntdButtonByText(container, '新建');
+    createButton?.focus();
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
@@ -704,6 +707,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
 
     expect(currentLocationSearch).toBe('?tab=active');
+    expect(document.activeElement).toBe(createButton);
   });
 
   it('人员中心声明删除时按危险确认动作渲染', async () => {
@@ -771,7 +775,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const enabledOverflowMenu = document.body.querySelector('.np-row-actions-overflow-menu');
+    const enabledOverflowMenu = document.body.querySelector('.ant-dropdown-menu');
     expect(enabledOverflowMenu?.textContent).toContain('删除');
     expect(enabledOverflowMenu?.textContent).toContain('停用');
     expect(enabledOverflowMenu?.textContent).not.toContain('启用');
@@ -781,7 +785,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const disabledOverflowMenu = Array.from(document.body.querySelectorAll('.np-row-actions-overflow-menu'))
+    const disabledOverflowMenu = Array.from(document.body.querySelectorAll('.ant-dropdown-menu'))
       .find((menu) => menu.textContent?.includes('启用'));
     expect(disabledOverflowMenu?.textContent).toContain('删除');
     expect(disabledOverflowMenu?.textContent).toContain('启用');
@@ -821,7 +825,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const overflowMenu = document.body.querySelector('.np-row-actions-overflow-menu');
+    const overflowMenu = document.body.querySelector('.ant-dropdown-menu');
     expect(overflowMenu?.textContent).toContain('停用');
     expect(overflowMenu?.textContent).not.toContain('删除');
   });
@@ -930,7 +934,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const viewButton = findRowActionButton(container, '张三', '查看');
+    const viewButton = await findOverflowRowActionButton(container, '张三', '查看');
     expect(viewButton).toBeDefined();
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -1063,7 +1067,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const firstViewButton = findRowActionButton(container, '张三', '查看');
+    const firstViewButton = await findOverflowRowActionButton(container, '张三', '查看');
     expect(firstViewButton).toBeDefined();
     await act(async () => firstViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -1076,7 +1080,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await clickPopconfirmButton('确认');
     await flushAsync();
 
-    const secondViewButton = findRowActionButton(container, '李四', '查看');
+    const secondViewButton = await findOverflowRowActionButton(container, '李四', '查看');
     expect(secondViewButton).toBeDefined();
     await act(async () => secondViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();

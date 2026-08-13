@@ -48,28 +48,28 @@ describe('StandardCrudField and StandardCrudForm', () => {
     ];
 
     await render(
-      <>
-        {fields.map((field) => (
-          <StandardCrudField
-            key={field.key}
-            field={field}
-            value={field.key === 'enabled' ? true : field.key === 'status' ? 'active' : `${field.key}-value`}
-            mode="view"
-            onChange={vi.fn()}
-          />
-        ))}
-      </>,
+      <StandardCrudForm
+        formId="readonly-form"
+        mode="view"
+        fields={fields}
+        sections={[]}
+        values={Object.fromEntries(fields.map((field) => [
+          field.key,
+          field.key === 'enabled' ? true : field.key === 'status' ? 'active' : `${field.key}-value`,
+        ]))}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        saving={false}
+        titleForSection={(titleKey) => titleKey}
+      />,
     );
 
-    expect(container.querySelector('input[value="name-value"]')).not.toBeNull();
-    expect(container.querySelector('input[value="birthday-value"]')).not.toBeNull();
-    expect(container.querySelector('.np-standard-crud-readonly-value')?.textContent).toBe('lockedCode-value');
-    expect(container.querySelector('.np-standard-crud-field-boolean .np-standard-crud-field-label')).not.toBeNull();
-    expect(container.querySelector('.np-standard-crud-field-boolean .np-standard-crud-switch-row')).not.toBeNull();
-    expect(container.querySelector('.np-standard-crud-switch.ant-switch')).not.toBeNull();
-    expect(container.querySelector('.np-standard-crud-select.ant-select')).not.toBeNull();
-    expect(container.querySelector('.np-standard-crud-select[data-value="active"]')).not.toBeNull();
-    expect(container.querySelectorAll('[disabled]')).toHaveLength(4);
+    expect(container.querySelector('.ant-descriptions')).not.toBeNull();
+    expect(container.querySelector('input')).toBeNull();
+    expect(Array.from(container.querySelectorAll('.np-standard-crud-readonly-value')).some((item) => item.textContent === 'lockedCode-value')).toBe(true);
+    expect(container.textContent).toContain('name-value');
+    expect(container.textContent).toContain('birthday-value');
+    expect(container.textContent).toContain('有效');
   });
 
   it('renders sections, editable controls and edit submit action', async () => {
@@ -108,7 +108,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
 
     expect(container.textContent).toContain('基本信息');
     expect(container.querySelector('.np-standard-crud-form')).not.toBeNull();
-    expect(container.querySelector('.np-required-mark')?.textContent).toBe('*');
+    expect(container.querySelector('.ant-form-item-required')).not.toBeNull();
     expect(container.querySelector('input[value="张三"]')).not.toBeNull();
     const select = container.querySelector('.np-standard-crud-select.ant-select');
     expect(select).not.toBeNull();
@@ -183,10 +183,10 @@ describe('StandardCrudField and StandardCrudForm', () => {
       />,
     );
 
-    expect(container.querySelector('textarea')).not.toBeNull();
-    expect(container.querySelector('input[type="number"]')).not.toBeNull();
+    expect(container.querySelector('textarea.ant-input')).not.toBeNull();
+    expect(container.querySelector('.ant-input-number')).not.toBeNull();
     expect(container.textContent).toContain('主岗');
-    expect(container.querySelectorAll('input[type="date"]')).toHaveLength(2);
+    expect(container.querySelector('.ant-picker-range')).not.toBeNull();
     expect(container.textContent).toContain('2026-01-01');
   });
 
@@ -208,7 +208,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
       />,
     );
 
-    const input = container.querySelector('input[type="number"]') as HTMLInputElement;
+    const input = container.querySelector('.ant-input-number-input') as HTMLInputElement;
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       valueSetter?.call(input, '');
@@ -244,7 +244,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     });
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(container.querySelector('.np-standard-crud-field-error')?.textContent).toBe('请填写此字段');
+    expect(container.querySelector('.ant-form-item-explain-error')?.textContent).toBe('请填写此字段');
   });
 
   it('shows field-level required validation below empty fields', async () => {
@@ -274,7 +274,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     });
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(container.querySelectorAll('.np-standard-crud-field-error')).toHaveLength(2);
+    expect(container.querySelectorAll('.ant-form-item-explain-error')).toHaveLength(2);
     expect(container.textContent).toContain('请填写此字段');
   });
 

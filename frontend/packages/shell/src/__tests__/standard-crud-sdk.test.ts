@@ -6,6 +6,7 @@ import {
   normalizeStandardCrudSummaryBlock,
   readStandardCrudBoolean,
   readStandardCrudString,
+  StandardCrudRequestError,
 } from '@icp-platform/sdk';
 
 describe('standard CRUD SDK helpers', () => {
@@ -120,5 +121,32 @@ describe('standard CRUD SDK helpers', () => {
       columns: [{ key: 'name', field: 'ENAME', title: '名称' }],
       query: { pageIndex: 1, pageSize: 20, filters: {} },
     })).rejects.toThrow('筛选结果超过同步导出上限 10000 行');
+  });
+
+  it('preserves conflict status and field errors from standard CRUD problem details', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      title: '记录已经变化',
+      errors: { ENAME: ['姓名不能为空'] },
+    }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/problem+json' },
+    }));
+    const client = createStandardCrudClient('/api/sample-items', fetcher as unknown as typeof fetch);
+
+    await expect(client.update('item-1', { ENAME: '' })).rejects.toMatchObject<Partial<StandardCrudRequestError>>({
+      status: 409,
+      fieldErrors: { ENAME: '姓名不能为空' },
+    });
+  });
+
+  it.each([
+    [401, '登录状态已失效'],
+    [403, '权限已变化'],
+  ])('keeps %s authentication feedback explicit', async (status, expectedMessage) => {
+    const client = createStandardCrudClient('/api/sample-items', vi.fn().mockResolvedValue(
+      new Response(null, { status }),
+    ) as unknown as typeof fetch);
+
+    await expect(client.update('item-1', {})).rejects.toThrow(expectedMessage);
   });
 });

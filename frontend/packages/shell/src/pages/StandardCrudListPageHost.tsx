@@ -8,6 +8,7 @@ import {
   createStandardCrudClient,
   normalizeStandardCrudListResult,
   normalizeStandardCrudSubmitValues,
+  StandardCrudRequestError,
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type {
@@ -16,7 +17,7 @@ import type {
   StandardCrudListQueryRequest,
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { Button as AntdButton, Drawer, Dropdown, Input, Popconfirm, Popover, Select, Space, Tag, message } from 'antd';
+import { Button as AntdButton, Drawer, Dropdown, Input, Modal, Select, Space, Tag, message } from 'antd';
 import {
   CrudFormDrawer,
   CrudSearchBar,
@@ -72,6 +73,7 @@ interface RowActionItem {
   disabled?: boolean;
   loading?: boolean;
   confirmMessage?: string;
+  inline?: boolean;
   onClick: () => void | Promise<void>;
 }
 
@@ -100,7 +102,6 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
   source: 'user-action',
 };
 
-const STANDARD_CRUD_INLINE_ACTION_LIMIT = 3;
 const STANDARD_CRUD_ACTION_COLUMN_WIDTH = 176;
 function readRowActionValue(row: Record<string, unknown>, field: string): unknown {
   return row[field];
@@ -318,15 +319,9 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
 }
 
 function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
-  const inlineCandidates = actions.filter((action) => !action.danger);
-  const dangerActions = actions.filter((action) => action.danger);
-  const hasOverflow = dangerActions.length > 0 || inlineCandidates.length > STANDARD_CRUD_INLINE_ACTION_LIMIT;
-  const inlineLimit = hasOverflow ? STANDARD_CRUD_INLINE_ACTION_LIMIT - 1 : STANDARD_CRUD_INLINE_ACTION_LIMIT;
-  const inlineActions = inlineCandidates.slice(0, inlineLimit);
-  const overflowActions = [
-    ...inlineCandidates.slice(inlineLimit),
-    ...dangerActions,
-  ];
+  const [confirmAction, setConfirmAction] = useState<RowActionItem | null>(null);
+  const inlineActions = actions.filter((action) => action.inline).slice(0, 1);
+  const overflowActions = actions.filter((action) => !inlineActions.includes(action));
   const renderActionButton = (action: RowActionItem, className: string) => {
     const button = (
       <AntdButton
@@ -344,38 +339,56 @@ function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
       </AntdButton>
     );
 
-    return action.confirmMessage ? (
-      <Popconfirm
-        key={action.key}
-        title={action.confirmMessage}
-        okText="确认"
-        cancelText="取消"
-        okButtonProps={{ danger: action.danger, loading: action.loading }}
-        onConfirm={action.onClick}
-      >
-        {button}
-      </Popconfirm>
-    ) : button;
+    return button;
+  };
+
+  const runOverflowAction = (action: RowActionItem) => {
+    if (!action.confirmMessage) {
+      void action.onClick();
+      return;
+    }
+    setConfirmAction(action);
   };
 
   return (
     <div className="np-row-actions">
       {inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
       {overflowActions.length > 0 ? (
-        <Popover
-          placement="bottomRight"
-          trigger="click"
-          content={(
-            <div className="np-row-actions-overflow-menu">
-              {overflowActions.map((action) => renderActionButton(action, 'np-row-action-menu-button'))}
-            </div>
-          )}
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: overflowActions.map((action) => ({
+              key: action.key,
+              label: action.loading ? '处理中...' : action.label,
+              danger: action.danger,
+              disabled: action.disabled || action.loading,
+            })),
+            onClick: ({ key }) => {
+              const action = overflowActions.find((item) => item.key === key);
+              if (action) runOverflowAction(action);
+            },
+          }}
         >
           <AntdButton className="np-row-actions-more" type="link">
             更多
           </AntdButton>
-        </Popover>
+        </Dropdown>
       ) : null}
+      <Modal
+        open={confirmAction !== null}
+        title={confirmAction?.confirmMessage}
+        okText="确认"
+        cancelText="取消"
+        confirmLoading={confirmAction?.loading}
+        okButtonProps={{ danger: confirmAction?.danger }}
+        destroyOnHidden
+        onCancel={() => setConfirmAction(null)}
+        onOk={async () => {
+          if (!confirmAction) return;
+          await confirmAction.onClick();
+          setConfirmAction(null);
+        }}
+      />
     </div>
   );
 }
@@ -600,11 +613,22 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [detailLoading, setDetailLoading] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string>>({});
+  const [hasSaveConflict, setHasSaveConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteActionError, setDeleteActionError] = useState<DeleteActionErrorState | null>(null);
   const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
   const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
   const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
+  const [rowInputAction, setRowInputAction] = useState<{
+    action: StandardCrudRuntimeActionSchema;
+    row: TRow;
+    rowId: string;
+    pendingKey: string;
+    label: string;
+  } | null>(null);
+  const [rowInputValue, setRowInputValue] = useState<unknown>(undefined);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
   const exportRequestPendingRef = useRef(false);
@@ -612,6 +636,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const handledRouteSearchRef = useRef<string | null>(null);
   const handledListRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
+  const formValuesRef = useRef(formValues);
+  const initialFormValuesRef = useRef<Record<string, unknown>>({});
+  const drawerTriggerRef = useRef<HTMLElement | null>(null);
+  const discardProceedRef = useRef<(() => void) | null>(null);
   const committedListStateRef = useRef<StandardCrudListState>({
     filters: appliedFilters,
     page: tableQuery.current,
@@ -620,6 +648,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     sortDirection: tableQuery.sortDirection,
   });
   drawerStateRef.current = drawerState;
+  formValuesRef.current = formValues;
   committedListStateRef.current = {
     filters: appliedFilters,
     page: tableQuery.current,
@@ -750,8 +779,34 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     invalidateDetailRequests();
     setDetailLoading(false);
     setDrawerState(CLOSED_DRAWER_STATE);
+    setSaveFieldErrors({});
+    setHasSaveConflict(false);
     if (options.syncRoute !== false) {
       clearDrawerRoute();
+    }
+  };
+
+  const isDrawerDirty = () => (
+    (drawerStateRef.current.mode === 'create' || drawerStateRef.current.mode === 'edit')
+    && JSON.stringify(formValuesRef.current) !== JSON.stringify(initialFormValuesRef.current)
+  );
+
+  // 所有离开编辑态的入口共用同一个 Ant Modal，避免关闭、切换记录和浏览器返回出现不同保护语义。
+  const confirmDiscardIfNeeded = (proceed: () => void): void => {
+    if (!isDrawerDirty()) {
+      proceed();
+      return;
+    }
+    discardProceedRef.current = proceed;
+    setDiscardConfirmOpen(true);
+  };
+
+  const requestCloseDrawer = () => confirmDiscardIfNeeded(() => closeDrawer());
+
+  const restoreDrawerTriggerFocus = (open: boolean) => {
+    if (!open) {
+      drawerTriggerRef.current?.focus();
+      drawerTriggerRef.current = null;
     }
   };
 
@@ -796,11 +851,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const openCreateDrawer = (source: CrudDrawerState['source'] = 'user-action') => {
     invalidateDetailRequests();
     const initialValues = Object.fromEntries(createFields.map((field) => [field.key, field.defaultValue ?? '']));
+    if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     setDetailFields({});
     setDetailLoading(false);
     setFormValues(initialValues);
+    initialFormValuesRef.current = initialValues;
     setDetailError(null);
     setSaveError(null);
+    setSaveFieldErrors({});
+    setHasSaveConflict(false);
     setDrawerState({ mode: 'create', source });
     if (source === 'user-action') {
       syncDrawerRoute('create');
@@ -815,6 +874,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const requestId = detailRequestIdRef.current + 1;
     detailRequestIdRef.current = requestId;
     setDrawerState({ mode: 'view', id, source });
+    if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     if (source === 'user-action' && options.syncRoute !== false) {
       syncDrawerRoute('view', id);
     }
@@ -829,6 +889,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
       setDetailFields(detail.fields);
       setFormValues(buildStandardCrudDetailFormValues(detail.fields, editFields));
+      initialFormValuesRef.current = buildStandardCrudDetailFormValues(detail.fields, editFields);
       return true;
     } catch (loadError) {
       if (detailRequestIdRef.current !== requestId) {
@@ -863,9 +924,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const handleDrawerSave = async () => {
+    if (saving) {
+      return;
+    }
     try {
       setSaving(true);
       setSaveError(null);
+      setSaveFieldErrors({});
+      setHasSaveConflict(false);
       const mutationFields = drawerState.mode === 'create' ? createFields : editFields;
       const values = registration.buildMutationValues
         ? registration.buildMutationValues(formValues)
@@ -880,7 +946,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       context.refresh();
       closeDrawer();
     } catch (saveFailure) {
-      setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
+      if (saveFailure instanceof StandardCrudRequestError) {
+        const fields = drawerState.mode === 'create' ? createFields : editFields;
+        const fieldByModel = new Map(fields.map((field) => [field.modelField, field.key]));
+        setSaveFieldErrors(Object.fromEntries(Object.entries(saveFailure.fieldErrors).map(([key, value]) => [fieldByModel.get(key) ?? key, value])));
+        setHasSaveConflict(saveFailure.status === 409);
+        setSaveError(saveFailure.status === 409
+          ? '记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。'
+          : saveFailure.message);
+      } else {
+        setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
+      }
     } finally {
       setSaving(false);
     }
@@ -889,6 +965,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const handleFormChange = (fieldKey: string, value: unknown) => {
     const fields = drawerState.mode === 'create' ? createFields : editFields;
     setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
+    setSaveFieldErrors((current) => {
+      if (!current[fieldKey]) return current;
+      const { [fieldKey]: _removed, ...rest } = current;
+      return rest;
+    });
   };
 
   useEffect(() => {
@@ -915,7 +996,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       return;
     }
     if (!drawer) {
-      closeDrawer({ syncRoute: false });
+      if (isDrawerDirty()) {
+        const current = drawerStateRef.current;
+        const searchWithoutDrawer = location.search;
+        confirmDiscardIfNeeded(() => {
+          closeDrawer({ syncRoute: false });
+          handledRouteSearchRef.current = searchWithoutDrawer;
+          navigate({ pathname: location.pathname, search: searchWithoutDrawer }, { replace: true });
+        });
+        if (current.mode !== 'closed') syncDrawerRoute(current.mode, current.id);
+      } else {
+        closeDrawer({ syncRoute: false });
+      }
     }
     // URL 是抽屉兼容状态的唯一触发源，handler 身份变化不应重复打开或关闭抽屉。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1010,18 +1102,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 return {
                   key: action.key,
                   label,
-                  onClick: () => {
-                    void openViewDrawer(rowId);
-                  },
+                  onClick: () => confirmDiscardIfNeeded(() => { void openViewDrawer(rowId); }),
                 };
               }
               if (action.standardAction === 'edit') {
                 return {
                   key: action.key,
                   label,
-                  onClick: () => {
-                    void openEditDrawer(rowId);
-                  },
+                  inline: true,
+                  onClick: () => confirmDiscardIfNeeded(() => { void openEditDrawer(rowId); }),
                 };
               }
               if (action.standardAction === 'delete') {
@@ -1060,6 +1149,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               }
 
               const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+              const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
 
               return {
                 key: action.key,
@@ -1070,6 +1160,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 disabled: rowActionPendingKey !== null || !handler,
                 onClick: async () => {
                   if (!handler) {
+                    return;
+                  }
+
+                  if (inputRenderer) {
+                    setRowInputValue(undefined);
+                    setRowInputAction({ action, row, rowId, pendingKey, label });
                     return;
                   }
 
@@ -1253,6 +1349,19 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     resolveDrawerTitle(undefined, '查看', pageTitle, createActionLabel),
   );
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
+  const canEdit = Boolean(editAction && hasActionPermission(editAction, grantedPermissions));
+
+  const reloadConflictedRecord = async () => {
+    if (drawerState.mode !== 'edit' || !drawerState.id) return;
+    const id = drawerState.id;
+    const loaded = await openViewDrawer(id, 'route-compatibility', { syncRoute: false });
+    if (loaded) {
+      setDrawerState({ mode: 'edit', id, source: 'route-compatibility' });
+      setSaveError(null);
+      setSaveFieldErrors({});
+      setHasSaveConflict(false);
+    }
+  };
 
   const handleTableQueryChange = (nextQuery: SearchTableQueryState) => {
     const sortBy = nextQuery.sortBy ?? schema.query.defaultSort?.field;
@@ -1385,12 +1494,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         loading={detailLoading}
         error={detailError}
         primaryLabel="编辑"
+        hidePrimary={!canEdit}
         primaryAction={() => {
           if (drawerState.id) {
             void openEditDrawer(drawerState.id);
           }
         }}
-        onClose={closeDrawer}
+        onClose={requestCloseDrawer}
+        afterOpenChange={restoreDrawerTriggerFocus}
       >
         {!detailError ? (
           <StandardCrudForm
@@ -1415,9 +1526,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         title={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
         saving={saving}
         error={saveError}
+        errorActions={hasSaveConflict ? (
+          <AntdButton onClick={() => void reloadConflictedRecord()} disabled={saving}>
+            重新加载当前数据
+          </AntdButton>
+        ) : undefined}
         submitFormId={drawerFormId}
         primaryLabel={drawerState.mode === 'create' ? '保存并关闭' : '保存修改'}
-        onClose={closeDrawer}
+        onClose={requestCloseDrawer}
+        afterOpenChange={restoreDrawerTriggerFocus}
       >
         <StandardCrudForm
           formId={drawerFormId}
@@ -1428,14 +1545,77 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           lookupOptions={lookupOptions}
           lookupLoading={lookupLoading}
           lookupErrors={lookupErrors}
+          fieldErrors={saveFieldErrors}
           onChange={handleFormChange}
           onSubmit={() => void handleDrawerSave()}
           saving={saving}
-          error={saveError}
+          error={null}
           showSubmitAction={false}
           titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
         />
       </CrudFormDrawer>
+      <Modal
+        open={rowInputAction !== null}
+        title={rowInputAction?.label}
+        okText="确认"
+        cancelText="取消"
+        confirmLoading={rowInputAction ? rowActionPendingKey === rowInputAction.pendingKey : false}
+        destroyOnHidden
+        onCancel={() => {
+          if (rowActionPendingKey === null) setRowInputAction(null);
+        }}
+        onOk={() => {
+          if (!rowInputAction) return;
+          const { action, row, rowId, pendingKey } = rowInputAction;
+          const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+          if (!handler) return;
+          void (async () => {
+            try {
+              setRowActionPendingKey(pendingKey);
+              setRowActionError(null);
+              await handler({ id: rowId, row, input: rowInputValue, refresh: () => undefined });
+              context.refresh();
+              setRowInputAction(null);
+            } catch (actionError) {
+              setRowActionError({
+                key: pendingKey,
+                message: actionError instanceof Error ? actionError.message : '执行操作失败',
+              });
+            } finally {
+              setRowActionPendingKey(null);
+            }
+          })();
+        }}
+      >
+        {rowInputAction?.action.inputKey
+          ? registration.actionInputRenderers?.[rowInputAction.action.inputKey]?.({
+            action: rowInputAction.action,
+            value: rowInputValue,
+            onChange: setRowInputValue,
+          })
+          : null}
+      </Modal>
+      <Modal
+        open={discardConfirmOpen}
+        title="放弃未保存的更改？"
+        okText="放弃更改"
+        cancelText="继续编辑"
+        okButtonProps={{ danger: true }}
+        destroyOnHidden
+        onCancel={() => {
+          discardProceedRef.current = null;
+          setDiscardConfirmOpen(false);
+        }}
+        onOk={() => {
+          const proceed = discardProceedRef.current;
+          discardProceedRef.current = null;
+          setDiscardConfirmOpen(false);
+          initialFormValuesRef.current = formValuesRef.current;
+          proceed?.();
+        }}
+      >
+        当前修改尚未保存，继续将丢失这些内容。
+      </Modal>
     </>
   );
 }

@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, useNavigate, type NavigateFunction } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -19,9 +19,11 @@ vi.mock('@icp-platform/core', async (importOriginal) => ({
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let testNavigate: NavigateFunction | undefined;
+let currentLocationSearch = '';
 
 function NavigationProbe() {
   testNavigate = useNavigate();
+  currentLocationSearch = useLocation().search;
   return null;
 }
 
@@ -203,6 +205,7 @@ describe('StandardCrudListPageHost', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     window.localStorage.clear();
+    currentLocationSearch = '';
     if (root) {
       await act(async () => root.unmount());
     }
@@ -774,20 +777,21 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
-    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(0);
     expect(container.querySelector('.np-table-row-view-button')).toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '编辑')).toBe(1);
     expect(container.textContent).not.toContain('删除');
     expect(container.textContent).toContain('更多');
     expect(container.textContent).not.toContain('停用');
     expect(container.textContent).not.toContain('启用');
-    expect(container.querySelectorAll('.np-row-action-button')).toHaveLength(2);
+    expect(container.querySelectorAll('.np-row-action-button')).toHaveLength(1);
     await act(async () => {
       const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
         button.textContent?.replace(/\s+/g, '') === '更多');
       moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(document.body.textContent).toContain('删除');
+    expect(document.body.textContent).toContain('查看');
     expect(document.body.textContent).toContain('停用');
     expect(document.body.textContent).toContain('启用');
     expect(container.textContent).not.toContain('公司');
@@ -803,6 +807,103 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.textContent).toContain('组织信息');
     expect(document.body.textContent).toContain('人员编号');
     expect(document.body.textContent).toContain('姓名');
+  });
+
+  it('protects dirty drawer values with Ant Modal before closing', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }], total: 1, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三' }, summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost();
+    await flushProTableRequest();
+    const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '编辑');
+    await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    const nameInput = document.body.querySelector('input[value="张三"]') as HTMLInputElement;
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(nameInput, '李四');
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const cancelButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.replace(/\s+/g, '') === '取消');
+    await act(async () => cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    expect(document.body.textContent).toContain('放弃未保存的更改？');
+    expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
+  });
+
+  it('restores dirty drawer URL on browser back and clears it after discard', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }], total: 1, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三' }, summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost();
+    await flushProTableRequest();
+    const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '编辑');
+    await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    const nameInput = document.body.querySelector('input[value="张三"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, '李四');
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      testNavigate?.(-1);
+    });
+    await flushProTableRequest();
+
+    expect(document.body.textContent).toContain('放弃未保存的更改？');
+    expect(currentLocationSearch).toContain('drawer=edit');
+
+    const discardButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '放弃更改');
+    await act(async () => discardButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    expect(currentLocationSearch).not.toContain('drawer=');
+  });
+
+  it('keeps input and exposes reload after a 409 save conflict', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }], total: 1, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三' }, summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        title: '记录已经变化', errors: { ENAME: ['姓名已被其他人修改'] },
+      }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }));
+
+    await renderHost();
+    await flushProTableRequest();
+    const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '编辑');
+    await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    const nameInput = document.body.querySelector('input[value="张三"]') as HTMLInputElement;
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(nameInput, '李四');
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.trim() === '保存修改');
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(document.body.textContent).toContain('记录已发生变化');
+    expect(document.body.textContent).toContain('姓名已被其他人修改');
+    expect(document.body.textContent).toContain('重新加载当前数据');
+    expect((document.body.querySelector('input[value="李四"]') as HTMLInputElement | null)).not.toBeNull();
   });
 
   it('renders a clear error when registration is missing', async () => {

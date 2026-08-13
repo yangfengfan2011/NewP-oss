@@ -566,6 +566,48 @@ describe('standard CRUD schema resolver and registry', () => {
     )).toThrow('action handler "missingDisable" is not registered on resource "organization.person"');
   });
 
+  it('accepts a module registered action input and rejects a missing renderer', () => {
+    const view = {
+      key: 'organization.person.list',
+      dicKey: 'PersonListView',
+      titleKey: 'Title',
+      mode: 'list',
+      model: 'Person',
+      rowActions: [{
+        key: 'disable',
+        labelKey: 'Action_Disable',
+        standardAction: 'disable',
+        handlerKey: 'disable',
+        inputKey: 'lifecycle-reason',
+      }],
+    };
+    const options = {
+      modelDocuments: [{ type: 'model', Person: { fields: [] } }],
+      defaultLanguageCatalog: {
+        'PersonListView.Title': '人员中心',
+        'PersonListView.Description': '维护组织模块中的人员基础信息。',
+        'PersonListView.Action_Disable': '停用',
+      },
+    };
+
+    expect(() => buildStandardCrudListSchema(
+      view,
+      { ...personRegistration, actionHandlers: { disable: async () => undefined } },
+      options,
+    )).toThrow('action input renderer "lifecycle-reason" is not registered on resource "organization.person"');
+
+    const schema = buildStandardCrudListSchema(
+      view,
+      {
+        ...personRegistration,
+        actionHandlers: { disable: async () => undefined },
+        actionInputRenderers: { 'lifecycle-reason': () => null },
+      },
+      options,
+    );
+    expect(schema.rowActions[0]).toMatchObject({ inputKey: 'lifecycle-reason', handlerKey: 'disable' });
+  });
+
   it('fails when metadata declares an unsupported dataSource type', () => {
     expect(() => buildStandardCrudListSchema(
       {

@@ -136,6 +136,7 @@ export interface StandardCrudActionDefinition {
   confirmMessageKey?: string;
   requiredPermissions?: string[];
   handlerKey?: string;
+  inputKey?: string;
 }
 
 /** 标准动作上下文；Shell 提供当前资源和数据快照，模块处理器不得依赖 Shell 内部状态。 */
@@ -143,8 +144,19 @@ export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> {
   id?: string;
   detail?: TDetail;
   row?: TRow;
+  input?: unknown;
   refresh: () => void;
 }
+
+/** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
+export interface StandardCrudActionInputRenderContext {
+  action: StandardCrudActionDefinition;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}
+
+/** 模块动作输入渲染器；弹层、权限、pending、错误、刷新和关闭生命周期仍归 Shell。 */
+export type StandardCrudActionInputRenderer = (context: StandardCrudActionInputRenderContext) => ReactNode;
 
 /** 标准动作处理器；执行流程、错误边界和刷新策略由 Shell 运行时收口。 */
 export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = (
@@ -215,6 +227,7 @@ export interface StandardCrudResourceRegistration<
   listActions?: StandardCrudActionDefinition[];
   detailActions?: StandardCrudActionDefinition[];
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
+  actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
   validateMutationValues?: (values: Record<string, unknown>, mode: StandardCrudFormMode) => string | null;
@@ -250,6 +263,18 @@ export interface StandardCrudClient {
   update: (id: string, values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   delete: (id: string) => Promise<void>;
   disable: (id: string) => Promise<StandardCrudDetail>;
+}
+
+/** 标准 CRUD 请求错误保留 HTTP 状态与字段错误，供 Shell 做冲突、鉴权和 Form.Item 反馈。 */
+export class StandardCrudRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly fieldErrors: Record<string, string> = {},
+  ) {
+    super(message);
+    this.name = 'StandardCrudRequestError';
+  }
 }
 
 /** 标准 CRUD 导出范围；前端只传递用户意图，最终分页边界由后端导出内核裁剪。 */
@@ -682,7 +707,29 @@ export function buildStandardCrudPath(
 async function requestJson<T>(fetcher: typeof fetch, path: string, init: RequestInit, errorMessage: string): Promise<T> {
   const response = await fetcher(path, init);
   if (!response.ok) {
-    throw new Error(errorMessage);
+    let problem: { message?: unknown; title?: unknown; errors?: unknown } = {};
+    try {
+      problem = await response.clone().json() as typeof problem;
+    } catch {
+      problem = {};
+    }
+    const fieldErrors = typeof problem.errors === 'object' && problem.errors !== null && !Array.isArray(problem.errors)
+      ? Object.fromEntries(Object.entries(problem.errors).flatMap(([key, value]) => {
+        if (typeof value === 'string') return [[key, value]];
+        if (Array.isArray(value) && typeof value[0] === 'string') return [[key, value[0]]];
+        return [];
+      }))
+      : {};
+    const backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
+      ? problem.message
+      : typeof problem.title === 'string' && problem.title.trim().length > 0
+        ? problem.title
+        : response.status === 401
+          ? '登录状态已失效，请重新登录后重试'
+          : response.status === 403
+            ? '权限已变化，当前操作已被拒绝'
+            : errorMessage;
+    throw new StandardCrudRequestError(backendMessage, response.status, fieldErrors);
   }
 
   if (response.status === 204) {

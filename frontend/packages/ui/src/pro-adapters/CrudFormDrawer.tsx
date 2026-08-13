@@ -9,6 +9,7 @@ export interface CrudFormDrawerProps {
   loading?: boolean;
   saving?: boolean;
   error?: string | null;
+  errorActions?: ReactNode;
   children: ReactNode;
   submitFormId?: string;
   primaryLabel?: ReactNode;
@@ -16,6 +17,7 @@ export interface CrudFormDrawerProps {
   hidePrimary?: boolean;
   onSubmit?: () => void;
   onClose: () => void;
+  afterOpenChange?: (open: boolean) => void;
 }
 
 export function CrudFormDrawer({
@@ -24,6 +26,7 @@ export function CrudFormDrawer({
   loading = false,
   saving = false,
   error = null,
+  errorActions,
   children,
   submitFormId,
   primaryLabel = '保存',
@@ -31,6 +34,7 @@ export function CrudFormDrawer({
   hidePrimary = false,
   onSubmit,
   onClose,
+  afterOpenChange,
 }: CrudFormDrawerProps) {
   const primaryButton = hidePrimary ? null : (
     <Button
@@ -49,9 +53,10 @@ export function CrudFormDrawer({
     <Drawer
       open={open}
       title={title}
-      width={720}
+      width="min(720px, calc(100vw - 16px))"
       onClose={onClose}
-      destroyOnClose
+      afterOpenChange={afterOpenChange}
+      destroyOnHidden
       footer={
         <Space className="np-crud-form-drawer-footer">
           <Button onClick={onClose} disabled={saving}>
@@ -62,7 +67,12 @@ export function CrudFormDrawer({
       }
     >
       {loading ? <LoadingBlock message="正在加载详情..." /> : null}
-      {error ? <AlertState type="error" message={error} /> : null}
+      {error ? (
+        <div className="np-crud-form-drawer-error">
+          <AlertState type="error" message={error} />
+          {errorActions}
+        </div>
+      ) : null}
       {!loading ? children : null}
     </Drawer>
   );

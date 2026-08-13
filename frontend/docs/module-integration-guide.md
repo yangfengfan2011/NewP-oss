@@ -40,6 +40,12 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 `FrontendModule`、逐项 registry 注册和 Host 私有 `plugin.json` 只服务于未完成 cutover 的既有模块。新增模块不得复制这些兼容接口。
 
+## 标准 CRUD 动作输入
+
+需要短确认的标准动作继续在 metadata 声明 `confirmMessageKey`。需要额外业务输入时，metadata 只声明稳定 `inputKey`，模块在对应 `StandardCrudResourceRegistration.actionInputRenderers` 注册受控 renderer，并在 `actionHandlers` 中从 `context.input` 读取提交值。renderer 只负责呈现输入并调用 `onChange`；Shell 统一负责权限投影、弹层、pending、成功刷新、错误反馈和关闭生命周期。不要在 Shell 中根据 module id、resource id 或业务字段名选择输入组件。
+
+不声明 `inputKey` 的既有动作和 handler 保持兼容。声明了 `inputKey` 但缺少对应 renderer 时，活动标准 CRUD 注册会 fail closed，避免动作在缺失业务输入的情况下执行。
+
 ## 验证
 
 - 模块构建证明 TypeScript binding 与依赖完整。

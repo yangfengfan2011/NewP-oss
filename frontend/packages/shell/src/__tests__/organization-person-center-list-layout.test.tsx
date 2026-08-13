@@ -277,20 +277,21 @@ describe('organization person center list layout', () => {
     expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(false);
     expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(false);
     const firstActionCell = bodyRows[0]?.querySelector('td:last-child');
-    expect(firstActionCell?.textContent).toContain('查看');
+    expect(firstActionCell?.textContent).not.toContain('查看');
     expect(firstActionCell?.textContent).toContain('编辑');
     expect(firstActionCell?.textContent).toContain('更多');
     expect(firstActionCell?.textContent).not.toContain('删除');
     expect(firstActionCell?.textContent).not.toContain('停用');
     expect(firstActionCell?.textContent).not.toContain('启用');
-    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(2);
+    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(1);
     expect(firstActionCell?.querySelector('.np-row-actions-more')).not.toBeNull();
     expect(bodyRows[0]?.querySelector('.np-table-row-view-button')).toBeNull();
     await act(async () => {
       firstActionCell?.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushProTableRequest();
-    const overflowMenu = document.body.querySelector('.np-row-actions-overflow-menu');
+    const overflowMenu = document.body.querySelector('.ant-dropdown-menu');
+    expect(overflowMenu?.textContent).toContain('查看');
     expect(overflowMenu?.textContent).toContain('删除');
     expect(overflowMenu?.textContent).toContain('停用');
     expect(overflowMenu?.textContent).not.toContain('启用');
@@ -359,7 +360,7 @@ describe('organization person center list layout', () => {
     await act(async () => {
       container.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    const disableMenuItem = Array.from(document.body.querySelectorAll('.np-row-action-menu-button')).find(
+    const disableMenuItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
       (item) => item.textContent?.includes('停用'),
     );
     await act(async () => {

@@ -31,6 +31,7 @@ export interface StandardCrudRuntimeActionSchema {
   variant?: StandardCrudActionDefinition['variant'];
   confirmMessageKey?: string;
   handlerKey?: string;
+  inputKey?: string;
   requiredPermissions?: string[];
   visibleWhen?: StandardCrudRowActionVisibilitySchema;
 }
@@ -148,6 +149,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   const variant = readString(value.variant);
   const confirmMessageKey = readString(value.confirmMessageKey);
   const handlerKey = readString(value.handlerKey);
+  const inputKey = readString(value.inputKey);
   const requiredPermissions = readPermissions(value.requiredPermissions ?? value.permissions);
   const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
     ? readActionVisibility(value.visibleWhen)
@@ -160,6 +162,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(variant.length > 0 ? { variant: variant as StandardCrudRuntimeActionSchema['variant'] } : {}),
     ...(confirmMessageKey.length > 0 ? { confirmMessageKey } : {}),
     ...(handlerKey.length > 0 ? { handlerKey } : {}),
+    ...(inputKey.length > 0 ? { inputKey } : {}),
     ...(requiredPermissions.length > 0 ? { requiredPermissions } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),
   };
@@ -438,6 +441,9 @@ function assertAction<TFilter, TRow, TDetail>(
 
   if (action.handlerKey && !registration.actionHandlers?.[action.handlerKey]) {
     throw new Error(`action handler "${action.handlerKey}" is not registered on resource "${registration.resourceKey}"`);
+  }
+  if (action.inputKey && !registration.actionInputRenderers?.[action.inputKey]) {
+    throw new Error(`action input renderer "${action.inputKey}" is not registered on resource "${registration.resourceKey}"`);
   }
 }
 

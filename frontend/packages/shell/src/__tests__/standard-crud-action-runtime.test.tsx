@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
-import type { StandardCrudActionDefinition, StandardCrudActionHandler } from '@icp-platform/sdk';
+import type { StandardCrudActionDefinition, StandardCrudActionHandler, StandardCrudActionInputRenderer } from '@icp-platform/sdk';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -26,10 +26,12 @@ describe('standard CRUD action runtime', () => {
     actions,
     grantedPermissions = [],
     handlers,
+    actionInputs,
   }: {
     actions: StandardCrudActionDefinition[];
     grantedPermissions?: string[];
     handlers?: Record<string, StandardCrudActionHandler>;
+    actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   }) {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -41,6 +43,7 @@ describe('standard CRUD action runtime', () => {
           actions={actions}
           grantedPermissions={grantedPermissions}
           handlers={handlers}
+          actionInputs={actionInputs}
           context={{ id: 'Person_1', refresh: vi.fn() }}
         />,
       );
@@ -206,5 +209,34 @@ describe('standard CRUD action runtime', () => {
     });
 
     expect(container.querySelector('button')?.disabled).toBe(true);
+  });
+
+  it('runs a registered controlled input action through the shared dialog lifecycle', async () => {
+    const handler = vi.fn();
+
+    await renderActions({
+      actions: [{ key: 'archive', labelKey: '归档', inputKey: 'archive-input' }],
+      handlers: { archive: handler },
+      actionInputs: {
+        'archive-input': ({ value, onChange }) => (
+          <input aria-label="归档说明" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+        ),
+      },
+    });
+
+    await clickActionButton('归档');
+    const input = document.body.querySelector('input[aria-label="归档说明"]') as HTMLInputElement;
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, '季度归档');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await clickPopconfirmButton('确认');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ input: '季度归档' }));
+    expect(document.body.querySelector('input[aria-label="归档说明"]')).toBeNull();
   });
 });

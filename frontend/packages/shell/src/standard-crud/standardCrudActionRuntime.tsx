@@ -1,11 +1,18 @@
 import { useState, type ReactElement } from 'react';
 import { Button, CrudDangerAction } from '@icp-platform/ui';
-import type { StandardCrudActionContext, StandardCrudActionDefinition, StandardCrudActionHandler } from '@icp-platform/sdk';
+import { Modal } from 'antd';
+import type {
+  StandardCrudActionContext,
+  StandardCrudActionDefinition,
+  StandardCrudActionHandler,
+  StandardCrudActionInputRenderer,
+} from '@icp-platform/sdk';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actions: StandardCrudActionDefinition[];
   grantedPermissions?: string[];
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
+  actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   context: StandardCrudActionContext<TDetail, TRow>;
 }
 
@@ -25,27 +32,41 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actions,
   grantedPermissions = [],
   handlers = {},
+  actionInputs = {},
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
+  const [inputValue, setInputValue] = useState<unknown>(undefined);
   const visibleActions = actions.filter((action) => hasPermission(action, grantedPermissions));
 
-  async function runAction(action: StandardCrudActionDefinition) {
+  async function runAction(action: StandardCrudActionDefinition, input?: unknown): Promise<boolean> {
     const handler = resolveActionHandler(action, handlers);
     if (!handler) {
-      return;
+      return false;
     }
 
     try {
       setPendingKey(action.key);
       setError(null);
-      await handler(context);
+      await handler({ ...context, ...(action.inputKey ? { input } : {}) });
+      return true;
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : '执行操作失败');
+      return false;
     } finally {
       setPendingKey(null);
     }
+  }
+
+  function requestAction(action: StandardCrudActionDefinition) {
+    if (action.inputKey && actionInputs[action.inputKey]) {
+      setInputValue(undefined);
+      setInputAction(action);
+      return;
+    }
+    void runAction(action);
   }
 
   return (
@@ -61,7 +82,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
               confirmMessage={action.confirmMessage}
               loading={pendingKey === action.key}
               disabled={pendingKey !== null || !resolveActionHandler(action, handlers)}
-              onConfirm={() => runAction(action)}
+              onConfirm={() => requestAction(action)}
             >
               {pendingKey === action.key ? '处理中...' : action.labelKey}
             </CrudDangerAction>
@@ -74,7 +95,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
               size="sm"
               variant={action.variant}
               disabled={pendingKey !== null || !resolveActionHandler(action, handlers)}
-              onClick={() => void runAction(action)}
+              onClick={() => requestAction(action)}
             >
               {pendingKey === action.key ? '处理中...' : action.labelKey}
             </Button>
@@ -86,6 +107,27 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           {error}
         </span>
       ) : null}
+      <Modal
+        open={inputAction !== null}
+        title={inputAction?.labelKey}
+        okText="确认"
+        cancelText="取消"
+        destroyOnHidden
+        confirmLoading={inputAction ? pendingKey === inputAction.key : false}
+        onCancel={() => {
+          if (pendingKey === null) setInputAction(null);
+        }}
+        onOk={() => {
+          if (!inputAction) return;
+          void runAction(inputAction, inputValue).then((succeeded) => {
+            if (succeeded) setInputAction(null);
+          });
+        }}
+      >
+        {inputAction?.inputKey
+          ? actionInputs[inputAction.inputKey]?.({ action: inputAction, value: inputValue, onChange: setInputValue })
+          : null}
+      </Modal>
     </div>
   );
 }

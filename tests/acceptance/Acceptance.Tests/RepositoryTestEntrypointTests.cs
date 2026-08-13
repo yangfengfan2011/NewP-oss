@@ -127,6 +127,33 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void PersonnelAcceptanceRunner_DeclaresIssue57AutomationMatrix()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        foreach (var requiredCheck in new[]
+        {
+            "page-and-query",
+            "toolbar-and-preferences",
+            "crud-and-actions",
+            "permissions-and-security",
+            "responsive-and-accessibility",
+            "browser-tablet.png",
+            "browser-narrow.png",
+            "browser-restricted.png"
+        })
+        {
+            Assert.Contains(requiredCheck, runner, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void PersonnelAcceptanceRunner_UsesFormalIdentityChainOnly()
     {
         var repositoryRoot = GetRepositoryRoot();

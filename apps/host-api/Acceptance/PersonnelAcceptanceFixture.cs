@@ -4,6 +4,7 @@ using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -62,7 +63,7 @@ public static class PersonnelAcceptanceFixture
                 }, "acceptance", cancellationToken);
             await roleService.AssignRolePermissionsAsync(role.Id, new AssignRolePermissionsRequest
             {
-                PermissionCodes = []
+                PermissionCodes = [OrganizationPermissions.PersonView]
             }, "acceptance", cancellationToken);
             await roleService.AssignUserRolesAsync(readOnlyAccount.AccountEid, new AssignUserRolesRequest
             {

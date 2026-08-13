@@ -22,6 +22,8 @@ internal sealed class PersonnelAcceptanceRunner
     internal const string RestartScenario = "personnel.restart";
 
     private const string AuthenticationCookieName = "ICP.Platform.PersonnelAcceptance";
+    private const string TabletScreenshotName = "browser-tablet.png";
+    private const string NarrowScreenshotName = "browser-narrow.png";
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _repositoryRoot;
     private readonly string _runDirectory;
@@ -282,6 +284,9 @@ internal sealed class PersonnelAcceptanceRunner
                 _readOnlyECode ?? throw new InvalidOperationException("Read-only ECODE was not prepared."),
                 _readOnlyPassword ?? throw new InvalidOperationException("Read-only password was not prepared."),
                 cancellationToken);
+            using var allowed = await readOnly.GetAsync("/api/organization/persons?pageIndex=1&pageSize=20", cancellationToken);
+            EnsureStatus(allowed, HttpStatusCode.OK, await allowed.Content.ReadAsStringAsync(cancellationToken), "read-only list");
+            checks.Add(new { check = "read-only-list", status = 200 });
             using var denied = await SendJsonWithAntiforgeryAsync(
                 readOnly,
                 HttpMethod.Post,
@@ -295,17 +300,14 @@ internal sealed class PersonnelAcceptanceRunner
         using var admin = CreateClient(_hostPort);
         await LoginAdminAsync(admin, cancellationToken);
 
-        using (var unaffiliated = await SendJsonWithAntiforgeryAsync(
-                   admin,
-                   HttpMethod.Post,
-                   "/api/organization/persons",
-                   PersonPayload($"ACC-U-{_runId[..8]}", "Unaffiliated Person", null, null),
-                   cancellationToken))
-        {
-            var unaffiliatedBody = await unaffiliated.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(unaffiliated, HttpStatusCode.Created, unaffiliatedBody, "create person without affiliation");
-            checks.Add(new { check = "create-without-affiliation", status = 201 });
-        }
+        var unaffiliated = await CreatePersonAsync(
+            admin,
+            $"ACC-U-{_runId[..8]}",
+            "Unaffiliated Person",
+            null,
+            null,
+            cancellationToken);
+        checks.Add(new { check = "create-without-affiliation", status = 201 });
 
         var secondCompany = await PostAndReadIdAsync(admin, "/api/organization/companies", new
         {
@@ -339,36 +341,182 @@ internal sealed class PersonnelAcceptanceRunner
 
         var personNo = $"ACC-{_runId[..10]}";
         var personName = $"Personnel Gate Person {_runId[..8]}";
-        using var created = await SendJsonWithAntiforgeryAsync(
+        var createdPerson = await CreatePersonAsync(
             admin,
-            HttpMethod.Post,
-            "/api/organization/persons",
-            PersonPayload(personNo, personName, fixture.CompanyId, fixture.DepartmentId),
+            personNo,
+            personName,
+            fixture.CompanyId,
+            fixture.DepartmentId,
             cancellationToken);
-        var createdBody = await created.Content.ReadAsStringAsync(cancellationToken);
-        EnsureStatus(created, HttpStatusCode.Created, createdBody, "admin create person");
-        using var createdJson = JsonDocument.Parse(createdBody);
-        var personId = ReadNestedString(createdJson.RootElement, "fields", "EID");
-        _person = new PersonData(personId, personNo, personName);
+        var updatedName = $"{personName} Updated";
+        var updatePayload = PersonPayload(personNo, updatedName, fixture.CompanyId, fixture.DepartmentId);
+        updatePayload["Revision"] = createdPerson.Revision;
+        using (var updated = await SendJsonWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Put,
+                   $"/api/organization/persons/{Uri.EscapeDataString(createdPerson.Id)}",
+                   updatePayload,
+                   cancellationToken))
+        {
+            var updatedBody = await updated.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(updated, HttpStatusCode.OK, updatedBody, "admin edit person");
+            _person = ReadPerson(updatedBody, personNo, updatedName);
+        }
+        var person = _person;
 
-        using var detail = await admin.GetAsync($"/api/organization/persons/{Uri.EscapeDataString(personId)}", cancellationToken);
+        using var detail = await admin.GetAsync($"/api/organization/persons/{Uri.EscapeDataString(person.Id)}", cancellationToken);
         var detailBody = await detail.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(detail, HttpStatusCode.OK, detailBody, "admin detail");
-        AssertPersonBody(detailBody, _person, fixture);
+        AssertPersonBody(detailBody, person, fixture);
         using var list = await admin.GetAsync($"/api/organization/persons?keyword={Uri.EscapeDataString(personNo)}&pageIndex=1&pageSize=20", cancellationToken);
         var listBody = await list.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(list, HttpStatusCode.OK, listBody, "admin list");
-        if (!listBody.Contains(personId, StringComparison.Ordinal) || !listBody.Contains(personNo, StringComparison.Ordinal))
+        if (!listBody.Contains(person.Id, StringComparison.Ordinal) || !listBody.Contains(personNo, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Personnel list did not contain the created person.");
         }
 
-        checks.Add(new { check = "admin-create-detail-list", status = 201, personId, personNo });
+        for (var index = 0; index < 19; index++)
+        {
+            await CreatePersonAsync(
+                admin,
+                $"ACC-PG-{_runId[..6]}-{index:00}",
+                $"Pagination Person {index:00}",
+                fixture.CompanyId,
+                fixture.DepartmentId,
+                cancellationToken);
+        }
+
+        using (var secondPage = await admin.GetAsync(
+                   "/api/organization/persons?pageIndex=2&pageSize=20&sortBy=PersonNo&sortDirection=asc",
+                   cancellationToken))
+        {
+            var secondPageBody = await secondPage.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(secondPage, HttpStatusCode.OK, secondPageBody, "server pagination and sorting");
+            using var pageJson = JsonDocument.Parse(secondPageBody);
+            if (ReadInt(pageJson.RootElement, "total") < 21 || ReadArray(pageJson.RootElement, "items").GetArrayLength() == 0)
+            {
+                throw new InvalidOperationException("Personnel server pagination did not expose a populated second page.");
+            }
+            checks.Add(new { check = "server-pagination-sorting-stable-order", status = 200 });
+        }
+
+        var exportColumns = new[]
+        {
+            new { key = "PersonNo", field = "PersonNo", title = "人员编号" },
+            new { key = "ENAME", field = "ENAME", title = "姓名" },
+            new { key = "CompanyName", field = "CompanyName", title = "公司" }
+        };
+        foreach (var mode in new[] { "current", "all" })
+        {
+            using var exported = await SendJsonWithAntiforgeryAsync(
+                admin,
+                HttpMethod.Post,
+                "/api/organization/persons/export",
+                new
+                {
+                    mode,
+                    columns = exportColumns,
+                    query = new { pageIndex = 1, pageSize = 20, sortBy = "PersonNo", sortDirection = "asc" }
+                },
+                cancellationToken);
+            var bytes = await exported.Content.ReadAsByteArrayAsync(cancellationToken);
+            if (exported.StatusCode != HttpStatusCode.OK
+                || bytes.Length == 0
+                || !string.Equals(
+                    exported.Content.Headers.ContentType?.MediaType,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Personnel {mode} export did not return a non-empty XLSX file.");
+            }
+            checks.Add(new { check = $"export-{mode}-with-filter-sort-column-order", status = 200, bytes = bytes.Length });
+        }
+
+        using var disabled = await SendJsonWithAntiforgeryAsync(
+            admin,
+            HttpMethod.Put,
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+            new { isEnabled = false, expectedRevision = person.Revision, reason = "Personnel acceptance disable" },
+            cancellationToken);
+        var disabledBody = await disabled.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(disabled, HttpStatusCode.OK, disabledBody, "disable person");
+        using var disabledJson = JsonDocument.Parse(disabledBody);
+        var disabledRevision = ReadLong(disabledJson.RootElement, "revision");
+
+        using (var conflict = await SendJsonWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Put,
+                   $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+                   new { isEnabled = true, expectedRevision = person.Revision, reason = "Stale personnel acceptance enable" },
+                   cancellationToken))
+        {
+            EnsureStatus(conflict, HttpStatusCode.Conflict, await conflict.Content.ReadAsStringAsync(cancellationToken), "stale lifecycle update");
+            checks.Add(new { check = "lifecycle-stale-revision", status = 409 });
+        }
+
+        using var enabled = await SendJsonWithAntiforgeryAsync(
+            admin,
+            HttpMethod.Put,
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+            new { isEnabled = true, expectedRevision = disabledRevision, reason = "Personnel acceptance enable" },
+            cancellationToken);
+        var enabledBody = await enabled.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(enabled, HttpStatusCode.OK, enabledBody, "enable person");
+        using var enabledJson = JsonDocument.Parse(enabledBody);
+        var enabledRevision = ReadLong(enabledJson.RootElement, "revision");
+        _person = person with { Revision = enabledRevision };
+        checks.Add(new { check = "disable-reason-and-enable", status = 200 });
+
+        using (var bound = await SendJsonWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Put,
+                   $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/user-binding",
+                   new
+                   {
+                       accountEid = fixture.ReadOnlyUserId,
+                       expectedRevision = enabledRevision,
+                       reason = "Personnel acceptance permanent binding"
+                   },
+                   cancellationToken))
+        {
+            EnsureStatus(bound, HttpStatusCode.OK, await bound.Content.ReadAsStringAsync(cancellationToken), "bind person account");
+        }
+        using (var blockedDelete = await SendWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Delete,
+                   $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+                   cancellationToken))
+        {
+            var blockedDeleteBody = await blockedDelete.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(blockedDelete, HttpStatusCode.Conflict, blockedDeleteBody, "bound person delete guard");
+            AssertContains(blockedDeleteBody, "Organization.Person.DeleteBlockedByUserBinding", "bound delete guard code");
+            checks.Add(new { check = "bound-person-delete-guard", status = 409 });
+        }
+        using (var deleted = await SendWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Delete,
+                   $"/api/organization/persons/{Uri.EscapeDataString(unaffiliated.Id)}",
+                   cancellationToken))
+        {
+            EnsureStatus(deleted, HttpStatusCode.NoContent, string.Empty, "delete unbound person");
+            checks.Add(new { check = "delete-unbound-person", status = 204 });
+        }
+
+        checks.Add(new { check = "admin-create-edit-detail-list", status = 200, personId = person.Id, personNo });
         await RecordScenarioSuccessAsync(ApiScenario, "personnel/api.json", new
         {
             status = "passed",
             checks,
-            person = new { id = personId, personNo, name = personName },
+            matrix = new[]
+            {
+                "page-and-query",
+                "toolbar-and-preferences",
+                "crud-and-actions",
+                "permissions-and-security",
+                "responsive-and-accessibility"
+            },
+            person = new { id = person.Id, personNo, name = updatedName },
             organization = new { fixture.CompanyId, fixture.CompanyName, fixture.DepartmentId, fixture.DepartmentName }
         }, cancellationToken);
     }
@@ -410,10 +558,53 @@ internal sealed class PersonnelAcceptanceRunner
         });
 
         await AssertPersonListAndDrawerAsync(page, person, fixture);
+        var browserAssertions = new List<string>
+        {
+            "canonical-list-row-visible",
+            "canonical-view-drawer-visible",
+            "company-display-name-readable",
+            "department-display-name-readable"
+        };
         if (phase == "initial")
         {
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await AssertPersonListAndDrawerAsync(page, person, fixture);
+            await AssertSubmittedQueryAndKeyboardAsync(page, person);
+            browserAssertions.AddRange([
+                "hard-refresh-canonical-list-and-drawer",
+                "enter-submits-query-and-updates-url",
+                "reset-restores-default-query",
+                "single-refresh-entry",
+                "named-keyboard-query-control"
+            ]);
+
+            await CaptureResponsiveBrowserEvidenceAsync(
+                browser,
+                person,
+                adminPassword,
+                "tablet",
+                900,
+                900,
+                cancellationToken);
+            await CaptureResponsiveBrowserEvidenceAsync(
+                browser,
+                person,
+                adminPassword,
+                "narrow",
+                390,
+                844,
+                cancellationToken);
+            await CaptureRestrictedBrowserEvidenceAsync(browser, person, cancellationToken);
+            await AssertPersonListAndDrawerAsync(page, person, fixture);
+            browserAssertions.AddRange([
+                "tablet-table-with-responsive-columns",
+                "narrow-table-with-horizontal-scroll",
+                "restricted-view-only-actions-hidden"
+            ]);
+        }
+        else
+        {
+            browserAssertions.Add("restart-relogin-canonical-list-and-drawer");
         }
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
         _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
@@ -423,13 +614,39 @@ internal sealed class PersonnelAcceptanceRunner
             status = "passed",
             phase,
             url = page.Url,
-            assertions = new[]
+            assertions = browserAssertions,
+            coverage = new[]
             {
-                "canonical-list-row-visible",
-                "canonical-view-drawer-visible",
-                "company-display-name-readable",
-                "department-display-name-readable",
-                phase == "initial" ? "hard-refresh-canonical-list-and-drawer" : "restart-relogin-canonical-list-and-drawer"
+                new
+                {
+                    area = "page-and-query",
+                    browser = new[] { "initial", "query-enter", "reset", "url-hard-refresh", "restart" },
+                    automated = new[] { "standard-crud-list-host", "standard-crud-metadata-query", "standard-crud-pro-adapter" }
+                },
+                new
+                {
+                    area = "toolbar-and-preferences",
+                    browser = new[] { "single-refresh-entry" },
+                    automated = new[] { "standard-crud-column-preference", "standard-crud-list-host-export" }
+                },
+                new
+                {
+                    area = "crud-and-actions",
+                    browser = new[] { "view-drawer", "bound-delete-disabled" },
+                    automated = new[] { "standard-crud-action-runtime", "standard-crud-field-form", "organization-person-center-list-layout" }
+                },
+                new
+                {
+                    area = "permissions-and-security",
+                    browser = new[] { "administrator", "restricted-view-only" },
+                    automated = new[] { "organization-permission-pipeline", "organization-lifecycle-http-api" }
+                },
+                new
+                {
+                    area = "responsive-and-accessibility",
+                    browser = new[] { "desktop", "tablet", "narrow", "keyboard-enter", "named-controls" },
+                    automated = new[] { "standard-crud-component-source-contract", "organization-person-center-list-layout" }
+                }
             },
             screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath)
         }, cancellationToken);
@@ -437,6 +654,127 @@ internal sealed class PersonnelAcceptanceRunner
         var scenario = phase == "initial" ? BrowserScenario : RestartScenario;
         await _recorder.RecordAsync(AcceptanceGateKind.Personnel, AcceptanceEventType.ScenarioCompleted, scenario: scenario, cancellationToken: cancellationToken);
         await _recorder.RecordAsync(AcceptanceGateKind.Personnel, AcceptanceEventType.EvidenceRecorded, scenario: scenario, evidenceRef: evidenceRef, cancellationToken: cancellationToken);
+    }
+
+    private async Task AssertSubmittedQueryAndKeyboardAsync(IPage page, PersonData person)
+    {
+        var drawer = page.Locator(".ant-drawer-content").Last;
+        if (await drawer.IsVisibleAsync())
+        {
+            await drawer.Locator(".ant-drawer-close").ClickAsync();
+            await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        }
+
+        var keyword = page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true });
+        await keyword.FillAsync(person.PersonNo);
+        await keyword.PressAsync("Enter");
+        await page.WaitForFunctionAsync("() => new URL(window.location.href).searchParams.has('keyword')");
+        await page.Locator("tr", new PageLocatorOptions { HasTextString = person.PersonNo }).Last
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        if (!await keyword.EvaluateAsync<bool>("element => element === document.activeElement"))
+        {
+            throw new InvalidOperationException("Personnel keyword control did not retain keyboard focus after Enter submission.");
+        }
+
+        var refresh = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "刷新", Exact = true });
+        if (await refresh.CountAsync() != 1)
+        {
+            throw new InvalidOperationException("Personnel page did not expose exactly one named refresh entry.");
+        }
+
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "重置", Exact = true }).ClickAsync();
+        await page.WaitForFunctionAsync("() => !new URL(window.location.href).searchParams.has('keyword')");
+    }
+
+    private async Task CaptureResponsiveBrowserEvidenceAsync(
+        IBrowser browser,
+        PersonData person,
+        string adminPassword,
+        string viewportName,
+        int width,
+        int height,
+        CancellationToken cancellationToken)
+    {
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            Locale = "zh-CN",
+            ViewportSize = new ViewportSize { Width = width, Height = height }
+        });
+        await using (context)
+        {
+            var page = await LoginAndOpenPersonnelAsync(context, "admin", adminPassword, cancellationToken);
+            var row = page.Locator("tr", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
+            await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            AssertContains(await row.InnerTextAsync(), person.Name, $"{viewportName} person row");
+            var tableContent = page.Locator(".ant-table-content").First;
+            await tableContent.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            if (viewportName == "narrow"
+                && !await tableContent.EvaluateAsync<bool>("element => element.scrollWidth > element.clientWidth"))
+            {
+                throw new InvalidOperationException("Personnel narrow viewport did not retain horizontal table scrolling.");
+            }
+
+            var screenshotName = viewportName == "tablet" ? TabletScreenshotName : NarrowScreenshotName;
+            var screenshotPath = Path.Combine(_runDirectory, "personnel", screenshotName);
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+        }
+    }
+
+    private async Task CaptureRestrictedBrowserEvidenceAsync(
+        IBrowser browser,
+        PersonData person,
+        CancellationToken cancellationToken)
+    {
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            Locale = "zh-CN",
+            ViewportSize = new ViewportSize { Width = 1280, Height = 900 }
+        });
+        await using (context)
+        {
+            var page = await LoginAndOpenPersonnelAsync(
+                context,
+                _readOnlyECode ?? throw new InvalidOperationException("Read-only ECODE was not prepared."),
+                _readOnlyPassword ?? throw new InvalidOperationException("Read-only password was not prepared."),
+                cancellationToken);
+            var row = page.Locator("tr", new PageLocatorOptions { HasTextString = person.PersonNo }).Last;
+            await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            if (await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "新建人员", Exact = true }).CountAsync() != 0
+                || await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "编辑", Exact = true }).CountAsync() != 0)
+            {
+                throw new InvalidOperationException("Restricted Personnel subject received a write action in the Shell projection.");
+            }
+
+            var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-restricted.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+        }
+    }
+
+    private async Task<IPage> LoginAndOpenPersonnelAsync(
+        IBrowserContext context,
+        string ecode,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var page = await context.NewPageAsync();
+        page.SetDefaultTimeout(120_000);
+        page.SetDefaultNavigationTimeout(120_000);
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login", new PageGotoOptions
+        {
+            WaitUntil = WaitUntilState.DOMContentLoaded
+        });
+        await page.Locator("#ecode").FillAsync(ecode);
+        await page.Locator("#password").FillAsync(password);
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
+        await page.WaitForFunctionAsync("() => window.location.pathname !== '/login'");
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons", new PageGotoOptions
+        {
+            WaitUntil = WaitUntilState.DOMContentLoaded
+        });
+        return page;
     }
 
     private static async Task AssertPersonListAndDrawerAsync(
@@ -1053,11 +1391,11 @@ internal sealed class PersonnelAcceptanceRunner
             HttpMethod.Put,
             $"/api/organization/companies/{Uri.EscapeDataString(id)}",
             new
-        {
-            displayName = name,
-            isEnabled = enabled,
-            sortOrder = "10"
-        }, cancellationToken);
+            {
+                displayName = name,
+                isEnabled = enabled,
+                sortOrder = "10"
+            }, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.OK, body, "update company state");
     }
@@ -1075,13 +1413,13 @@ internal sealed class PersonnelAcceptanceRunner
             HttpMethod.Put,
             $"/api/organization/departments/{Uri.EscapeDataString(id)}",
             new
-        {
-            displayName = name,
-            companyId,
-            parentDepartmentId = (string?)null,
-            isEnabled = enabled,
-            sortOrder = "10"
-        }, cancellationToken);
+            {
+                displayName = name,
+                companyId,
+                parentDepartmentId = (string?)null,
+                isEnabled = enabled,
+                sortOrder = "10"
+            }, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.OK, body, "update department state");
     }
@@ -1106,6 +1444,50 @@ internal sealed class PersonnelAcceptanceRunner
         request.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", requestToken);
         configure?.Invoke(request);
         return await client.SendAsync(request, cancellationToken);
+    }
+
+    private static async Task<HttpResponseMessage> SendWithAntiforgeryAsync(
+        HttpClient client,
+        HttpMethod method,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        using var tokenResponse = await client.GetAsync("/api/auth/antiforgery-token", cancellationToken);
+        var tokenBody = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(tokenResponse, HttpStatusCode.OK, tokenBody, "issue antiforgery token");
+        using var tokenJson = JsonDocument.Parse(tokenBody);
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.TryAddWithoutValidation("X-CSRF-TOKEN", ReadString(tokenJson.RootElement, "requestToken"));
+        return await client.SendAsync(request, cancellationToken);
+    }
+
+    private static async Task<PersonData> CreatePersonAsync(
+        HttpClient client,
+        string personNo,
+        string name,
+        string? companyId,
+        string? departmentId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            HttpMethod.Post,
+            "/api/organization/persons",
+            PersonPayload(personNo, name, companyId, departmentId),
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.Created, body, $"create person {personNo}");
+        return ReadPerson(body, personNo, name);
+    }
+
+    private static PersonData ReadPerson(string body, string personNo, string name)
+    {
+        using var json = JsonDocument.Parse(body);
+        return new PersonData(
+            ReadNestedString(json.RootElement, "fields", "EID"),
+            personNo,
+            name,
+            ReadNestedLong(json.RootElement, "fields", "Revision"));
     }
 
     private static Dictionary<string, object?> PersonPayload(
@@ -1183,6 +1565,32 @@ internal sealed class PersonnelAcceptanceRunner
         throw new InvalidOperationException($"JSON integer {property} was missing.");
     }
 
+    private static int ReadInt(JsonElement element, string property)
+    {
+        foreach (var item in element.EnumerateObject())
+        {
+            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
+                && item.Value.TryGetInt32(out var value))
+            {
+                return value;
+            }
+        }
+        throw new InvalidOperationException($"JSON integer {property} was missing.");
+    }
+
+    private static JsonElement ReadArray(JsonElement element, string property)
+    {
+        foreach (var item in element.EnumerateObject())
+        {
+            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
+                && item.Value.ValueKind == JsonValueKind.Array)
+            {
+                return item.Value;
+            }
+        }
+        throw new InvalidOperationException($"JSON array {property} was missing.");
+    }
+
     private static string ReadNestedString(JsonElement element, string parent, string property)
     {
         foreach (var item in element.EnumerateObject())
@@ -1190,6 +1598,18 @@ internal sealed class PersonnelAcceptanceRunner
             if (string.Equals(item.Name, parent, StringComparison.OrdinalIgnoreCase))
             {
                 return ReadString(item.Value, property);
+            }
+        }
+        throw new InvalidOperationException($"JSON property {parent}.{property} was missing.");
+    }
+
+    private static long ReadNestedLong(JsonElement element, string parent, string property)
+    {
+        foreach (var item in element.EnumerateObject())
+        {
+            if (string.Equals(item.Name, parent, StringComparison.OrdinalIgnoreCase))
+            {
+                return ReadLong(item.Value, property);
             }
         }
         throw new InvalidOperationException($"JSON property {parent}.{property} was missing.");
@@ -1279,7 +1699,7 @@ internal sealed class PersonnelAcceptanceRunner
         string CompanyName,
         string DepartmentId,
         string DepartmentName);
-    private sealed record PersonData(string Id, string PersonNo, string Name);
+    private sealed record PersonData(string Id, string PersonNo, string Name, long Revision);
     private sealed record EntityId(string Id);
     private sealed record DatabaseOwnershipSnapshot(
         int Version,

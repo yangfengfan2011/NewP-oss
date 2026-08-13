@@ -129,6 +129,7 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("WaitForPostLoginNavigationAsync(page)", runner, StringComparison.Ordinal);
         Assert.Contains("SubmitPersonnelKeywordAsync(page, person.PersonNo)", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\"button:visible\"", runner, StringComparison.Ordinal);
+        Assert.Contains("Locator(\"tr:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("HasTextString = \"刷新\"", runner, StringComparison.Ordinal);
         Assert.Contains("HasTextString = \"重置\"", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("Name = \"查看\"", runner, StringComparison.Ordinal);

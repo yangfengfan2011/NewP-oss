@@ -20,7 +20,7 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
         {...tableProps}
         toolbar={
           <Space>
-            <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh} loading={loading}>
+            <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh} loading={loading} aria-label="刷新">
               刷新
             </Button>
             {toolbar}

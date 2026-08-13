@@ -29,4 +29,19 @@ describe('standard CRUD component source contract', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('gives shared query toolbar actions stable accessible names', () => {
+    const searchBar = readFileSync(fileURLToPath(new URL(
+      '../../../ui/src/pro-adapters/CrudSearchBar.tsx',
+      import.meta.url,
+    )), 'utf8');
+    const tableSection = readFileSync(fileURLToPath(new URL(
+      '../../../ui/src/pro-adapters/CrudTableSection.tsx',
+      import.meta.url,
+    )), 'utf8');
+
+    expect(searchBar).toContain('aria-label="搜索"');
+    expect(searchBar).toContain('aria-label="重置"');
+    expect(tableSection).toContain('aria-label="刷新"');
+  });
 });

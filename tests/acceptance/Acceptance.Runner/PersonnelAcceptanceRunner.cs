@@ -677,8 +677,8 @@ internal sealed class PersonnelAcceptanceRunner
             throw new InvalidOperationException("Personnel keyword control did not retain keyboard focus after Enter submission.");
         }
 
-        var refresh = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "刷新", Exact = true });
-        if (await refresh.CountAsync() != 1)
+        var refresh = page.Locator("button", new PageLocatorOptions { HasTextString = "刷新" });
+        if (await refresh.CountAsync() != 1 || !await refresh.First.IsVisibleAsync())
         {
             throw new InvalidOperationException("Personnel page did not expose exactly one named refresh entry.");
         }

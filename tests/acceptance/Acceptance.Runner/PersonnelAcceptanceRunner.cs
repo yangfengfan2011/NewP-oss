@@ -794,7 +794,9 @@ internal sealed class PersonnelAcceptanceRunner
         // 硬刷新会按 URL 恢复已打开的查看抽屉；此时遮罩仍在，不能再次点击行内入口。
         if (!await drawer.IsVisibleAsync())
         {
-            await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "查看" }).ClickAsync();
+            await row.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = person.Name, Exact = true }).ClickAsync();
         }
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await page.WaitForFunctionAsync(

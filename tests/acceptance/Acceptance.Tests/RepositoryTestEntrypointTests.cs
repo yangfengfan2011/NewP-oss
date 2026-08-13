@@ -124,6 +124,8 @@ public class RepositoryTestEntrypointTests
             "PersonnelAcceptanceRunner.cs"));
 
         Assert.Contains("ReloadAsync", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = person.Name", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("Name = \"查看\"", runner, StringComparison.Ordinal);
     }
 
     [Fact]

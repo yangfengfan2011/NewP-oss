@@ -235,12 +235,12 @@
       "en": "Create Person"
     },
     "Export_Current": {
-      "zhs": "导出当前",
-      "en": "Export Current"
+      "zhs": "导出本页",
+      "en": "Export Current Page"
     },
     "Export_All": {
-      "zhs": "导出全部",
-      "en": "Export All"
+      "zhs": "导出筛选结果",
+      "en": "Export Filtered Results"
     },
     "Pagination_Prev": {
       "zhs": "上一页",

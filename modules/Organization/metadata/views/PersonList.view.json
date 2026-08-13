@@ -73,40 +73,47 @@
         "source": "model",
         "field": "PersonNo",
         "width": 140,
-        "sortable": true
+        "sortable": true,
+        "hideable": false,
+        "responsivePriority": "high"
       },
       {
         "key": "name",
         "labelKey": "Column_Name",
         "source": "model",
         "field": "ENAME",
-        "sortable": true
+        "sortable": true,
+        "responsivePriority": "high"
       },
       {
         "key": "companyName",
         "labelKey": "Column_CompanyName",
         "source": "projection",
-        "field": "CompanyName"
+        "field": "CompanyName",
+        "responsivePriority": "medium"
       },
       {
         "key": "departmentName",
         "labelKey": "Column_DepartmentName",
         "source": "projection",
-        "field": "DepartmentName"
+        "field": "DepartmentName",
+        "responsivePriority": "medium"
       },
       {
         "key": "employmentStatus",
         "labelKey": "Column_EmploymentStatus",
         "source": "model",
         "field": "EmploymentStatus",
-        "sortable": true
+        "sortable": true,
+        "responsivePriority": "low"
       },
       {
         "key": "isEnabled",
         "labelKey": "Column_IsEnabled",
         "source": "model",
         "field": "IsEnabled",
-        "sortable": true
+        "sortable": true,
+        "responsivePriority": "high"
       }
     ],
     "pageActions": [

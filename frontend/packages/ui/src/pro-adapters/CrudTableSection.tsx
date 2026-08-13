@@ -1,5 +1,5 @@
 import { ReloadOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
+import { Button, Space } from 'antd';
 import type { SearchTablePageProps } from './SearchTablePage';
 import { SearchTablePage } from './SearchTablePage';
 
@@ -19,12 +19,12 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
       <SearchTablePage<TRow>
         {...tableProps}
         toolbar={
-          <>
+          <Space>
             <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh} loading={loading}>
               刷新
             </Button>
             {toolbar}
-          </>
+          </Space>
         }
       />
     </div>

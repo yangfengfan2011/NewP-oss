@@ -9,6 +9,8 @@ import {
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { Pagination } from 'antd';
+import type { StandardCrudColumnState } from './StandardCrudColumnPreference';
+import { StandardCrudListState } from './StandardCrudListState';
 
 export interface SearchTableResult<TRow> {
   items: TRow[];
@@ -63,6 +65,10 @@ export interface SearchTablePageProps<TRow> {
   onLoadResult?: (result: { data: TRow[]; total: number; success: boolean }) => void;
   onLoadError?: (error: unknown) => void;
   onLoadingChange?: (loading: boolean) => void;
+  columnState?: StandardCrudColumnState;
+  defaultColumnState?: StandardCrudColumnState;
+  onColumnStateChange?: (state: StandardCrudColumnState) => void;
+  filteredEmpty?: boolean;
   className?: string;
 }
 
@@ -90,11 +96,18 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   onLoadResult,
   onLoadError,
   onLoadingChange,
+  columnState,
+  defaultColumnState,
+  onColumnStateChange,
+  filteredEmpty = false,
   className,
 }: SearchTablePageProps<TRow>) {
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [uncontrolledQuery, setUncontrolledQuery] = useState<SearchTableQueryState>({ current: 1, pageSize: 20 });
   const requestIdRef = useRef(0);
@@ -116,12 +129,16 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         if (requestIdRef.current === requestId) {
           setData(result.data);
           setTotal(result.total);
+          setHasLoaded(true);
+          setLoadError(null);
           eventHandlersRef.current.onLoadResult?.(result);
         }
       } catch (error) {
         if (requestIdRef.current === requestId) {
           setData([]);
           setTotal(0);
+          setHasLoaded(true);
+          setLoadError(error instanceof Error ? error.message : '加载列表失败');
           eventHandlersRef.current.onLoadError?.(error);
         }
       } finally {
@@ -139,7 +156,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         requestIdRef.current += 1;
       }
     };
-  }, [request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection]);
+  }, [request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection, retryVersion]);
 
   const tableColumns = useMemo(() => {
     return columns.map((column) => ({
@@ -164,6 +181,11 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         cardBordered={false}
         size="middle"
         options={{ density: true, fullScreen: false, reload: false, setting: true }}
+        columnsState={columnState && onColumnStateChange ? {
+          value: columnState,
+          defaultValue: defaultColumnState,
+          onChange: (value) => onColumnStateChange(value as StandardCrudColumnState),
+        } : undefined}
         toolBarRender={toolbar ? () => [toolbar] : false}
         rowSelection={selectableRows ? {
           selectedRowKeys,
@@ -173,6 +195,16 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         tableAlertOptionRender={false}
         tableLayout="fixed"
         scroll={{ x: 'max-content' }}
+        locale={{
+          emptyText: (
+            <StandardCrudListState
+              initialLoading={loading && !hasLoaded}
+              error={loadError}
+              filtered={filteredEmpty}
+              onRetry={() => setRetryVersion((current) => current + 1)}
+            />
+          ),
+        }}
         pagination={false}
         onChange={(_, __, sorter) => {
           const activeSorter = Array.isArray(sorter) ? sorter[0] : sorter;

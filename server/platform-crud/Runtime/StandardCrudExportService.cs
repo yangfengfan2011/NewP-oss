@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -10,18 +11,31 @@ namespace ICP.Platform.Crud.Runtime;
 /// </summary>
 public sealed class StandardCrudExportService
 {
-    public const int ExportAllPageSize = 100_000;
+    public const int DefaultMaxRows = 10_000;
     public const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     private readonly IStandardCrudService _service;
     private readonly StandardCrudXlsxWriter _writer;
+    private readonly int _maxRows;
 
-    public StandardCrudExportService(IStandardCrudService service, StandardCrudXlsxWriter writer)
+    /// <summary>
+    /// 创建导出服务，并从平台配置读取同步导出上限。
+    /// </summary>
+    public StandardCrudExportService(
+        IStandardCrudService service,
+        StandardCrudXlsxWriter writer,
+        IConfiguration configuration)
     {
         _service = service;
         _writer = writer;
+        _maxRows = configuration.GetValue<int?>("Platform:StandardCrud:Export:MaxRows") is > 0 and var configured
+            ? configured
+            : DefaultMaxRows;
     }
 
+    /// <summary>
+    /// 按请求中的已提交查询和可见业务列生成同步 XLSX 文件。
+    /// </summary>
     public async Task<StandardCrudExportFile> ExportAsync(
         StandardCrudDescriptor descriptor,
         StandardCrudExportRequest request,
@@ -29,8 +43,12 @@ public sealed class StandardCrudExportService
     {
         var mode = NormalizeMode(request.Mode);
         var columns = NormalizeColumns(descriptor, request.Columns);
-        var query = BuildQuery(request.Query, mode, columns);
+        var query = BuildQuery(request.Query, mode, columns, _maxRows);
         var result = await _service.ListAsync(descriptor, query, cancellationToken);
+        if (mode == "all" && result.Total > _maxRows)
+        {
+            throw new StandardCrudExportLimitExceededException(_maxRows);
+        }
         var content = _writer.Write("Export", columns, result.Items);
 
         return new StandardCrudExportFile(
@@ -39,6 +57,7 @@ public sealed class StandardCrudExportService
             content);
     }
 
+    // 导出范围只接受公开契约中的两个稳定值。
     private static string NormalizeMode(string mode) =>
         mode switch
         {
@@ -47,6 +66,7 @@ public sealed class StandardCrudExportService
             _ => throw new ArgumentException("不支持的标准 CRUD 导出模式。", nameof(mode))
         };
 
+    // 列投影按 descriptor 白名单收口，并保留调用方提交的可见顺序。
     private static IReadOnlyList<StandardCrudExportColumn> NormalizeColumns(
         StandardCrudDescriptor descriptor,
         IReadOnlyList<StandardCrudExportColumn> columns)
@@ -70,10 +90,12 @@ public sealed class StandardCrudExportService
         return normalized;
     }
 
+    // current 继承当前分页；all 从第一页读取上限加一行，以便可靠判定超限。
     private static StandardCrudListQuery BuildQuery(
         StandardCrudExportListQuery? query,
         string mode,
-        IReadOnlyList<StandardCrudExportColumn> columns)
+        IReadOnlyList<StandardCrudExportColumn> columns,
+        int maxRows)
     {
         var pageIndex = query?.PageIndex > 0 ? query.PageIndex : 1;
         var pageSize = query?.PageSize > 0 ? query.PageSize : 20;
@@ -81,7 +103,11 @@ public sealed class StandardCrudExportService
         if (mode == "all")
         {
             pageIndex = 1;
-            pageSize = ExportAllPageSize;
+            pageSize = checked(maxRows + 1);
+        }
+        else if (pageSize > maxRows)
+        {
+            throw new StandardCrudExportLimitExceededException(maxRows);
         }
 
         return new StandardCrudListQuery(

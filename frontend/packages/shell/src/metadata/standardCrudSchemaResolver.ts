@@ -42,6 +42,8 @@ export interface StandardCrudRuntimeColumnSchema {
   field: string;
   width?: number;
   sortable?: boolean;
+  hideable?: boolean;
+  responsivePriority?: 'high' | 'medium' | 'low';
 }
 
 export interface StandardCrudAdvancedFilterSectionSchema {
@@ -244,6 +246,12 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
   const field = readString(value.field);
   const width = typeof value.width === 'number' ? value.width : undefined;
   const sortable = typeof value.sortable === 'boolean' ? value.sortable : undefined;
+  const hideable = typeof value.hideable === 'boolean' ? value.hideable : undefined;
+  const responsivePriority = value.responsivePriority === 'high'
+    || value.responsivePriority === 'medium'
+    || value.responsivePriority === 'low'
+    ? value.responsivePriority
+    : undefined;
 
   return {
     key: readString(value.key),
@@ -252,6 +260,8 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
     field,
     ...(width !== undefined ? { width } : {}),
     ...(sortable !== undefined ? { sortable } : {}),
+    ...(hideable !== undefined ? { hideable } : {}),
+    ...(responsivePriority ? { responsivePriority } : {}),
   };
 }
 

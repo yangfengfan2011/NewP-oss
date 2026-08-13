@@ -173,7 +173,45 @@ public sealed class StandardCrudEndpointRouteBuilderTests
 
         response.EnsureSuccessStatusCode();
         Assert.Equal(1, recording.LastListQuery!.Page);
-        Assert.True(recording.LastListQuery.PageSize > 20);
+        Assert.Equal(StandardCrudExportService.DefaultMaxRows + 1, recording.LastListQuery.PageSize);
+        Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
+        Assert.Equal(["ENAME"], recording.LastListQuery.Fields);
+    }
+
+    [Fact]
+    public async Task MapStandardCrudResources_WhenFilteredExportExceedsConfiguredLimit_ReturnsStableError()
+    {
+        var recording = new RecordingStandardCrudService
+        {
+            ListResult = new StandardCrudListResult([], 3, 1, 3, "PersonNo", "asc")
+        };
+        await using var app = BuildApp(recording, exportMaxRows: 2);
+        await app.StartAsync();
+
+        var response = await app.GetTestClient().PostAsJsonAsync(
+            "/api/organization/persons/export",
+            new
+            {
+                mode = "all",
+                query = new
+                {
+                    pageIndex = 4,
+                    pageSize = 20,
+                    sortBy = "PersonNo",
+                    sortDirection = "asc",
+                    filters = new Dictionary<string, string?> { ["keyword"] = "张" }
+                },
+                columns = new[] { new { key = "name", field = "ENAME", title = "姓名" } }
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<StandardCrudError>();
+        Assert.Equal("StandardCrud.Export.LimitExceeded", error!.Code);
+        Assert.Contains("2", error.Message, StringComparison.Ordinal);
+        Assert.Equal(1, recording.LastListQuery!.Page);
+        Assert.Equal(3, recording.LastListQuery.PageSize);
+        Assert.Equal("PersonNo", recording.LastListQuery.SortBy);
+        Assert.Equal("asc", recording.LastListQuery.SortDirection);
         Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
         Assert.Equal(["ENAME"], recording.LastListQuery.Fields);
     }
@@ -266,9 +304,13 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             ex.Message);
     }
 
-    private static WebApplication BuildApp(RecordingStandardCrudService recording)
+    private static WebApplication BuildApp(RecordingStandardCrudService recording, int? exportMaxRows = null)
     {
         var builder = CreateBuilder(recording);
+        if (exportMaxRows is not null)
+        {
+            builder.Configuration["Platform:StandardCrud:Export:MaxRows"] = exportMaxRows.Value.ToString();
+        }
 
         var app = builder.Build();
         app.Use(async (context, next) =>

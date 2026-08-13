@@ -202,6 +202,7 @@ describe('StandardCrudListPageHost', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
     if (root) {
       await act(async () => root.unmount());
     }
@@ -564,8 +565,15 @@ describe('StandardCrudListPageHost', () => {
 
     await act(async () => {
       const exportButton = Array.from(container.querySelectorAll('button')).find((button) =>
-        button.textContent?.replace(/\s+/g, '') === '导出当前');
+        button.textContent?.replace(/\s+/g, '') === '导出');
       exportButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      const currentPageItem = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item')).find((item) =>
+        item.textContent?.replace(/\s+/g, '') === '导出当前');
+      currentPageItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      currentPageItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushProTableRequest();
 
@@ -583,6 +591,73 @@ describe('StandardCrudListPageHost', () => {
     ]);
   });
 
+  it('exports only visible columns in the persisted preference order', async () => {
+    mockStandardCrudModule();
+    window.localStorage.setItem(
+      'icp.standard-crud.columns:anonymous:organization.person.list',
+      JSON.stringify({
+        name: { show: true, order: 0 },
+        personNo: { show: true, order: 1 },
+        departmentName: { show: false, order: 2 },
+      }),
+    );
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:standard-crud-export'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([80, 75]), { status: 200 }));
+
+    await renderHost({}, createExportablePersonListViewDocument());
+    await flushProTableRequest();
+    await act(async () => {
+      const exportButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '导出');
+      exportButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      const currentPageItem = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item')).find((item) =>
+        item.textContent?.replace(/\s+/g, '') === '导出当前');
+      currentPageItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    const body = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body));
+    expect(body.columns).toEqual([
+      { key: 'name', field: 'ENAME', title: '姓名' },
+      { key: 'personNo', field: 'PersonNo', title: '人员编号' },
+    ]);
+  });
+
+  it('renders the dedicated initial loading state before the first response', async () => {
+    mockStandardCrudModule();
+    let resolveRequest: ((response: Response) => void) | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    }));
+
+    await renderHost();
+    expect(container.textContent).toContain('正在加载列表');
+
+    await act(async () => {
+      resolveRequest?.(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    });
+    await flushProTableRequest();
+  });
+
   it('renders error state without an empty state after load failure', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('列表接口不可用'));
@@ -592,6 +667,52 @@ describe('StandardCrudListPageHost', () => {
 
     expect(container.textContent).toContain('列表接口不可用');
     expect(container.textContent).not.toContain('暂无符合筛选条件的数据。');
+    expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.replace(/\s+/g, '') === '重试')).toBe(true);
+  });
+
+  it('distinguishes an empty dataset from a filtered empty result', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost();
+    await flushProTableRequest();
+    expect(container.textContent).toContain('当前数据集为空');
+
+    await act(async () => root.unmount());
+    container.remove();
+    await renderHost({}, personListViewDocument, '/organization/persons?keyword=missing');
+    await flushProTableRequest();
+    expect(container.textContent).toContain('暂无符合筛选条件的数据');
+    expect(container.textContent).not.toContain('当前数据集为空');
+  });
+
+  it('retries a failed request without changing the committed query context', async () => {
+    mockStandardCrudModule();
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new Error('列表接口不可用'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [], total: 0, page: 2, pageSize: 20 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+    await renderHost({}, personListViewDocument, '/organization/persons?keyword=missing&page=2');
+    await flushProTableRequest();
+    await act(async () => {
+      const retryButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.replace(/\s+/g, '') === '重试');
+      retryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('keyword=missing');
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('pageIndex=2');
   });
 
   it('uses normalized paging metadata in the footer without a duplicate top summary', async () => {

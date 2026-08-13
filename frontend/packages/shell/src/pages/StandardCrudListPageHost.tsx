@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
-import { DownloadOutlined } from '@ant-design/icons';
+import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -16,7 +16,7 @@ import type {
   StandardCrudListQueryRequest,
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { Button as AntdButton, Drawer, Input, Popconfirm, Popover, Select, Space, Tag, message } from 'antd';
+import { Button as AntdButton, Drawer, Dropdown, Input, Popconfirm, Popover, Select, Space, Tag, message } from 'antd';
 import {
   CrudFormDrawer,
   CrudSearchBar,
@@ -25,8 +25,11 @@ import {
   ErrorState,
   StandardCrudForm,
   createSearchTableRequest,
+  loadStandardCrudColumnPreference,
+  saveStandardCrudColumnPreference,
 } from '@icp-platform/ui';
-import type { SearchTableQueryState } from '@icp-platform/ui';
+import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui';
+import { useAuth } from '../contexts/AuthContext';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
@@ -440,6 +443,27 @@ function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): stri
   }
 }
 
+function useOptionalCurrentSubjectId(): string {
+  try {
+    return useAuth().user?.id ?? 'anonymous';
+  } catch {
+    return 'anonymous';
+  }
+}
+
+function resolveResponsiveBreakpoints(priority: 'high' | 'medium' | 'low' | undefined): Array<'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'> | undefined {
+  if (priority === 'high') {
+    return ['xs', 'sm', 'md', 'lg', 'xl', 'xxl'];
+  }
+  if (priority === 'medium') {
+    return ['md', 'lg', 'xl', 'xxl'];
+  }
+  if (priority === 'low') {
+    return ['lg', 'xl', 'xxl'];
+  }
+  return undefined;
+}
+
 function hasActionPermission(action: { requiredPermissions?: string[] }, grantedPermissions: string[] = []): boolean {
   return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
 }
@@ -503,12 +527,30 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useLocalization();
+  const currentSubjectId = useOptionalCurrentSubjectId();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute, platformFetch), [schema.apiRoute]);
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
+  const shouldRenderActionColumn = Boolean(
+    registration.renderRowActions
+    || schema.rowActions.length > 0
+    || registration.getRowId,
+  );
+  const defaultColumnState = useMemo<StandardCrudColumnState>(() => Object.fromEntries([
+    ...schema.columns.map((column, index) => [column.key, {
+      order: index,
+      ...(column.hideable === false ? { disable: true } : {}),
+    }]),
+    ...(shouldRenderActionColumn ? [['actions', { order: schema.columns.length, disable: true }]] : []),
+  ]), [schema.columns, shouldRenderActionColumn]);
+  const [columnState, setColumnState] = useState<StandardCrudColumnState>(() => (
+    typeof window === 'undefined'
+      ? defaultColumnState
+      : loadStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, defaultColumnState)
+  ));
   const createFormSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
     mode: 'create',
     enumOptions: registration.enumOptions ?? {},
@@ -551,7 +593,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [rows, setRows] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [drawerState, setDrawerState] = useState<CrudDrawerState>(CLOSED_DRAWER_STATE);
   const [detailFields, setDetailFields] = useState<Record<string, unknown>>({});
@@ -566,6 +607,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
+  const exportRequestPendingRef = useRef(false);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const handledListRouteSearchRef = useRef<string | null>(null);
@@ -585,6 +627,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     sortBy: tableQuery.sortBy,
     sortDirection: tableQuery.sortDirection,
   };
+
+  useEffect(() => {
+    setColumnState(typeof window === 'undefined'
+      ? defaultColumnState
+      : loadStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, defaultColumnState));
+  }, [currentSubjectId, schema.viewKey, defaultColumnState]);
 
   const syncCommittedListState = (
     next: StandardCrudListState,
@@ -900,11 +948,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
   const refreshAction = schema.pageActions.find((action) => action.standardAction === 'refresh');
   const rowActionDefinitions = schema.rowActions;
-  const shouldRenderActionColumn = Boolean(
-    registration.renderRowActions
-    || rowActionDefinitions.length > 0
-    || registration.getRowId,
-  );
   const registeredColumns = registration.buildColumns?.(context) ?? [];
   const registeredColumnByKey = new Map(registeredColumns.map((column) => [column.key, column]));
   const metadataColumns = schema.columns.map((column) => {
@@ -916,16 +959,20 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       width: column.width,
       fixed: undefined,
       sorter: column.sortable === true,
+      responsive: resolveResponsiveBreakpoints(column.responsivePriority),
       render: registeredColumn?.render,
       metadataField: column.field,
       metadataSource: column.source,
     };
   });
-  const exportColumns = schema.columns.map((column) => ({
-    key: column.key,
-    field: column.field,
-    title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
-  }));
+  const exportColumns = schema.columns
+    .filter((column) => columnState[column.key]?.show !== false)
+    .sort((left, right) => (columnState[left.key]?.order ?? 0) - (columnState[right.key]?.order ?? 0))
+    .map((column) => ({
+      key: column.key,
+      field: column.field,
+      title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
+    }));
   const standardColumns = shouldRenderActionColumn
     ? [
       ...metadataColumns,
@@ -936,6 +983,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         width: STANDARD_CRUD_ACTION_COLUMN_WIDTH,
         fixed: 'right' as const,
         sorter: false,
+        responsive: undefined,
         render: (row: TRow) => {
           const rowId = registration.getRowId(row);
           const rowDeleteActionError = rowActionDefinitions.some((action) => action.standardAction === 'delete' && deleteActionError?.key === `${action.key}:${rowId}`)
@@ -1061,6 +1109,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     width: column.width,
     fixed: column.fixed,
     sorter: column.sorter,
+    responsive: column.responsive,
     render: (_: unknown, row: TRow) => (column.render
       ? column.render(row)
       : renderMetadataTableCell(
@@ -1074,7 +1123,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, grantedPermissions));
   const visibleHeaderActions = visiblePageActions.filter((action) => action.standardAction === 'create');
   const handleExport = async (mode: StandardCrudExportMode) => {
+    if (exportRequestPendingRef.current) {
+      return;
+    }
+
     try {
+      exportRequestPendingRef.current = true;
       setExportingMode(mode);
       const filtersQuery = buildStandardCrudListQuery(
         schema.query,
@@ -1100,34 +1154,31 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     } catch (exportError) {
       void message.error(exportError instanceof Error ? exportError.message : '导出标准列表失败');
     } finally {
+      exportRequestPendingRef.current = false;
       setExportingMode(null);
     }
   };
   const exportToolbar = schema.exportModes.length > 0 ? (
-    <Space>
-      {schema.exportModes.includes('current') ? (
-        <AntdButton
-          size="small"
-          icon={<DownloadOutlined />}
-          loading={exportingMode === 'current'}
-          disabled={exportingMode !== null}
-          onClick={() => void handleExport('current')}
-        >
-          {t(`${schema.dicKey}.Export_Current`, '导出当前')}
-        </AntdButton>
-      ) : null}
-      {schema.exportModes.includes('all') ? (
-        <AntdButton
-          size="small"
-          icon={<DownloadOutlined />}
-          loading={exportingMode === 'all'}
-          disabled={exportingMode !== null}
-          onClick={() => void handleExport('all')}
-        >
-          {t(`${schema.dicKey}.Export_All`, '导出全部')}
-        </AntdButton>
-      ) : null}
-    </Space>
+    <Dropdown
+      trigger={['click']}
+      disabled={exportingMode !== null}
+      menu={{
+        items: [
+          ...(schema.exportModes.includes('current') ? [{ key: 'current', label: t(`${schema.dicKey}.Export_Current`, '导出本页') }] : []),
+          ...(schema.exportModes.includes('all') ? [{ key: 'all', label: t(`${schema.dicKey}.Export_All`, '导出筛选结果') }] : []),
+        ],
+        onClick: ({ key }) => void handleExport(key as StandardCrudExportMode),
+      }}
+    >
+      <AntdButton
+        size="small"
+        icon={<DownloadOutlined />}
+        loading={exportingMode !== null}
+        disabled={exportingMode !== null}
+      >
+        导出 <DownOutlined />
+      </AntdButton>
+    </Dropdown>
   ) : undefined;
   const headerActions = visibleHeaderActions.length > 0
     ? (
@@ -1226,12 +1277,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
     setRows(result.data);
     setTotal(result.total);
-    setError(null);
   };
 
   const content = (
     <div className="np-standard-crud-table">
-      {error ? <ErrorState message={error} /> : null}
       <CrudTableSection<TRow>
         rowKey={registration.getRowId}
         columns={columns}
@@ -1239,12 +1288,27 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         query={tableQuery}
         onQueryChange={handleTableQueryChange}
         onLoadResult={handleTableResult}
-        onLoadError={(loadError) => {
+        onLoadError={() => {
           setRows([]);
           setTotal(0);
-          setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
         }}
         onLoadingChange={setLoading}
+        columnState={columnState}
+        defaultColumnState={defaultColumnState}
+        onColumnStateChange={(next) => {
+          const protectedState = Object.fromEntries(Object.entries(defaultColumnState).map(([key, defaultItem]) => [
+            key,
+            {
+              ...(next[key] ?? defaultItem),
+              ...(defaultItem.disable === true ? { disable: true, show: true } : {}),
+            },
+          ]));
+          setColumnState(protectedState);
+          if (typeof window !== 'undefined') {
+            saveStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, protectedState);
+          }
+        }}
+        filteredEmpty={Object.values(appliedFilters).some((value) => value !== undefined && value !== null && value !== '')}
         loading={loading}
         toolbar={exportToolbar}
         onRefresh={() => void handleRefresh()}

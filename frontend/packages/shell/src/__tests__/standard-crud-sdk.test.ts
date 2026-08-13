@@ -104,4 +104,21 @@ describe('standard CRUD SDK helpers', () => {
 
     expect(fetcher).toHaveBeenCalledWith('/api/sample-items/item-1', { method: 'DELETE' });
   });
+
+  it('surfaces the backend export limit message', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'StandardCrud.Export.LimitExceeded',
+      message: '筛选结果超过同步导出上限 10000 行，请缩小筛选范围后重试。',
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const client = createStandardCrudClient('/api/sample-items', fetcher as unknown as typeof fetch);
+
+    await expect(client.exportList({
+      mode: 'all',
+      columns: [{ key: 'name', field: 'ENAME', title: '名称' }],
+      query: { pageIndex: 1, pageSize: 20, filters: {} },
+    })).rejects.toThrow('筛选结果超过同步导出上限 10000 行');
+  });
 });

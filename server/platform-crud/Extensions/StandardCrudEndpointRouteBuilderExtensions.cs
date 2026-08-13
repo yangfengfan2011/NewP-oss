@@ -47,6 +47,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         return endpoints;
     }
 
+    // 单个 descriptor 的派生路由在这里统一映射，权限和错误形状不能由模块自行分叉。
     private static void MapResource(IEndpointRouteBuilder endpoints, StandardCrudDescriptor descriptor)
     {
         var route = "/" + descriptor.Route.Trim().Trim('/');
@@ -120,6 +121,15 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 {
                     StatusCode = StatusCodes.Status400BadRequest,
                     Code = "StandardCrud.Export.InvalidRequest",
+                    Message = ex.Message
+                });
+            }
+            catch (StandardCrudExportLimitExceededException ex)
+            {
+                return Results.BadRequest(new StandardCrudError
+                {
+                    StatusCode = StatusCodes.Status400BadRequest,
+                    Code = "StandardCrud.Export.LimitExceeded",
                     Message = ex.Message
                 });
             }

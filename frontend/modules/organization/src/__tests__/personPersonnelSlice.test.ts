@@ -11,7 +11,7 @@ describe('personnel center first vertical slice', () => {
     expect(personStandardCrudResource.permissions).toEqual(['Organization.Person.View']);
   });
 
-  it('loads only enabled companies and departments as human-readable lookup options', async () => {
+  it('includes disabled organization only for query lookup and marks its state', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify([
         { id: 'company-1', name: '总部', isEnabled: true },
@@ -20,6 +20,10 @@ describe('personnel center first vertical slice', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify([
         { id: 'department-1', companyId: 'company-1', name: '研发部', isEnabled: true },
         { id: 'department-2', companyId: 'company-1', name: '停用部门', isEnabled: false },
+      ]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 'company-1', name: '总部', isEnabled: true },
+        { id: 'company-2', name: '停用公司', isEnabled: false },
       ]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 
     const companyProvider = personStandardCrudResource.lookupProviders?.find(
@@ -29,15 +33,21 @@ describe('personnel center first vertical slice', () => {
       provider => provider.key === 'organization.departments',
     );
 
-    await expect(companyProvider?.load({ fieldKey: 'CompanyId', values: {}, dependencyValues: {} })).resolves.toEqual([
+    await expect(companyProvider?.load({ fieldKey: 'companyId', values: {}, dependencyValues: {} })).resolves.toEqual([
       { value: 'company-1', label: '总部' },
+      { value: 'company-2', label: '停用公司（已停用）' },
     ]);
     await expect(departmentProvider?.load({
-      fieldKey: 'DepartmentId',
-      values: { CompanyId: 'company-1' },
-      dependencyValues: { CompanyId: 'company-1' },
+      fieldKey: 'departmentId',
+      values: { companyId: 'company-1' },
+      dependencyValues: { companyId: 'company-1' },
     })).resolves.toEqual([
       { value: 'department-1', label: '研发部' },
+      { value: 'department-2', label: '停用部门（已停用）' },
+    ]);
+
+    await expect(companyProvider?.load({ fieldKey: 'CompanyId', values: {}, dependencyValues: {} })).resolves.toEqual([
+      { value: 'company-1', label: '总部' },
     ]);
   });
 
@@ -67,5 +77,16 @@ describe('personnel center first vertical slice', () => {
     expect(row.DepartmentName).toBe('研发部');
     expect(unresolved.companyName).toBe('');
     expect(unresolved.departmentName).toBe('');
+  });
+
+  it('requires an explicit disable reason before invoking the lifecycle command', async () => {
+    const handler = personStandardCrudResource.actionHandlers?.disable;
+
+    await expect(handler?.({
+      id: 'person-1',
+      row: { id: 'person-1', revision: 4 } as never,
+      input: '   ',
+      refresh: vi.fn(),
+    })).rejects.toThrow('请填写停用原因');
   });
 });

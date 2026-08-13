@@ -215,7 +215,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CEmploymentStatus%2CIsEnabled&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
       { method: 'GET' },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
@@ -249,7 +249,7 @@ describe('organization person center list layout', () => {
     const settingColumnTexts = Array.from(
       document.body.querySelectorAll('.ant-pro-table-column-setting-list .ant-tree-treenode'),
     ).map((node) => node.textContent?.replace(/\s+/g, '') ?? '');
-    expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '公司', '部门', '在职状态', '启用状态', '操作']);
+    expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '公司', '部门', '岗位', '任职状态', '启用状态', '操作']);
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
@@ -291,7 +291,7 @@ describe('organization person center list layout', () => {
     });
     await flushProTableRequest();
     const overflowMenu = document.body.querySelector('.ant-dropdown-menu');
-    expect(overflowMenu?.textContent).toContain('查看');
+    expect(overflowMenu?.textContent).not.toContain('查看');
     expect(overflowMenu?.textContent).toContain('删除');
     expect(overflowMenu?.textContent).toContain('停用');
     expect(overflowMenu?.textContent).not.toContain('启用');
@@ -321,6 +321,69 @@ describe('organization person center list layout', () => {
     });
 
     expect(container.textContent).toContain('人员中心主列表已由 Shell 标准 CRUD 宿主接管');
+  });
+
+  it('opens the basic drawer from the name and exposes the full detail boundary', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 },
+        summaries: {
+          userBinding: { status: 'ready', data: { AccountEid: 'account-1' } },
+          authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => renderStandardCrudListHost());
+    await flushProTableRequest();
+    await act(async () => {
+      container.querySelector('.np-standard-crud-cell-action')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(document.body.textContent).toContain('查看人员');
+    expect(document.body.textContent).toContain('查看完整详情');
+    expect(document.body.textContent).not.toContain('账号绑定');
+    expect(document.body.textContent).not.toContain('授权摘要');
+  });
+
+  it('disables deletion for a permanently bound person and explains the guard', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{
+        EID: 'person-1',
+        PersonNo: 'P0001',
+        ENAME: '张三',
+        IsEnabled: true,
+        Revision: 4,
+        AccountEID: 'account-1',
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => renderStandardCrudListHost());
+    await flushProTableRequest();
+    await act(async () => {
+      container.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+      (item) => item.textContent?.includes('删除'),
+    );
+    expect(deleteItem?.getAttribute('aria-disabled')).toBe('true');
+    expect(deleteItem?.textContent).toContain('已绑定用户账号，永久禁止删除');
   });
 
   it('shows a row action error when disabling a person fails', async () => {
@@ -365,6 +428,12 @@ describe('organization person center list layout', () => {
     );
     await act(async () => {
       disableMenuItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+    const reasonInput = document.body.querySelector('textarea[aria-label="停用原因"]') as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reasonInput, '人员中心停用人员');
+      reasonInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const confirmButton = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent?.replace(/\s+/g, '') === '确认',

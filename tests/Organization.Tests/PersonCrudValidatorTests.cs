@@ -181,14 +181,45 @@ public sealed class PersonCrudValidatorTests
         Assert.Null(error);
     }
 
+    [Theory]
+    [InlineData("position-missing", "Organization.Person.PositionNotFound")]
+    [InlineData("position-disabled", "Organization.Person.PositionDisabled")]
+    [InlineData("position-mismatch", "Organization.Person.PositionDepartmentMismatch")]
+    public async Task ValidateCreateAsync_WithInvalidPosition_ReturnsStableFieldError(
+        string scenario,
+        string expectedCode)
+    {
+        var positions = scenario switch
+        {
+            "position-missing" => Array.Empty<Position>(),
+            "position-disabled" => [Position("Position_1", DepartmentId, enabled: false)],
+            _ => [Position("Position_1", OtherDepartmentId, enabled: true)]
+        };
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: true)],
+            [Department(DepartmentId, CompanyId, enabled: true)],
+            positions: positions);
+        var values = Values(CompanyId, DepartmentId);
+        values["PositionId"] = "Position_1";
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            values,
+            CancellationToken.None);
+
+        AssertError(error, expectedCode, "PositionId");
+    }
+
     private static PersonCrudValidator CreateValidator(
         IEnumerable<Company> companies,
         IEnumerable<Department> departments,
         IReadOnlyDictionary<string, object?>? existing = null,
-        FakeStandardCrudRepository? repository = null) =>
+        FakeStandardCrudRepository? repository = null,
+        IEnumerable<Position>? positions = null) =>
         new(
             new FakeCompanyRepository(companies),
             new FakeDepartmentRepository(departments),
+            new FakePositionRepository(positions ?? []),
             repository ?? new FakeStandardCrudRepository(existing));
 
     private static Dictionary<string, object?> Values(string? companyId, string? departmentId) => new(StringComparer.Ordinal)
@@ -214,6 +245,16 @@ public sealed class PersonCrudValidatorTests
     {
         Id = id,
         CompanyId = companyId,
+        Code = id,
+        Name = id,
+        IsEnabled = enabled
+    };
+
+    private static Position Position(string id, string departmentId, bool enabled) => new()
+    {
+        Id = id,
+        CompanyId = CompanyId,
+        DepartmentId = departmentId,
         Code = id,
         Name = id,
         IsEnabled = enabled
@@ -274,5 +315,19 @@ public sealed class PersonCrudValidatorTests
         public Task<IReadOnlyDictionary<string, object?>> CreateAsync(StandardCrudDescriptor descriptor, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(StandardCrudDescriptor descriptor, string id, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class FakePositionRepository(IEnumerable<Position> positions) : IPositionRepository
+    {
+        private readonly IReadOnlyDictionary<string, Position> _positions =
+            positions.ToDictionary(position => position.Id, StringComparer.Ordinal);
+
+        public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_positions.GetValueOrDefault(positionId));
+
+        public Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(IReadOnlyCollection<string> positionIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task CreateAsync(Position position, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task UpdateAsync(Position position, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

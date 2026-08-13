@@ -328,7 +328,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       { method: 'GET' },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
-      'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,EmploymentStatus,IsEnabled',
+      'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID',
     );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
@@ -352,7 +352,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(document.body.textContent).not.toContain('编辑人员');
     expect(document.body.querySelector('.ant-drawer')).toBeNull();
 
-    const viewButton = await findOverflowRowActionButton(container, '张三', '查看');
+    const viewButton = findTableRowByText(container, '张三')?.querySelector('.np-standard-crud-cell-action');
     expect(viewButton).toBeDefined();
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -413,7 +413,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const viewButton = await findOverflowRowActionButton(container, '张三', '查看');
+    const viewButton = findTableRowByText(container, '张三')?.querySelector('.np-standard-crud-cell-action');
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
@@ -934,7 +934,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const viewButton = await findOverflowRowActionButton(container, '张三', '查看');
+    const viewButton = findTableRowByText(container, '张三')?.querySelector('.np-standard-crud-cell-action');
     expect(viewButton).toBeDefined();
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -1067,7 +1067,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
     await flushAsync();
 
-    const firstViewButton = await findOverflowRowActionButton(container, '张三', '查看');
+    const firstViewButton = findTableRowByText(container, '张三')?.querySelector('.np-standard-crud-cell-action');
     expect(firstViewButton).toBeDefined();
     await act(async () => firstViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
@@ -1080,7 +1080,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await clickPopconfirmButton('确认');
     await flushAsync();
 
-    const secondViewButton = await findOverflowRowActionButton(container, '李四', '查看');
+    const secondViewButton = findTableRowByText(container, '李四')?.querySelector('.np-standard-crud-cell-action');
     expect(secondViewButton).toBeDefined();
     await act(async () => secondViewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();

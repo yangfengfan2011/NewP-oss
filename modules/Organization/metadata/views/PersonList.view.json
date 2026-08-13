@@ -42,18 +42,32 @@
           "titleKey": "AdvancedFilter_Organization",
           "fields": [
             {
+              "key": "companyId",
+              "labelKey": "Query_Company",
+              "source": "model",
+              "field": "CompanyId",
+              "operator": "=",
+              "dependsOn": []
+            },
+            {
               "key": "departmentId",
               "labelKey": "Query_Department",
               "source": "model",
               "field": "DepartmentId",
-              "operator": "="
+              "operator": "=",
+              "dependsOn": [
+                "companyId"
+              ]
             },
             {
               "key": "positionId",
               "labelKey": "Query_Position",
               "source": "model",
               "field": "PositionId",
-              "operator": "="
+              "operator": "=",
+              "dependsOn": [
+                "departmentId"
+              ]
             },
             {
               "key": "isEnabled",
@@ -83,6 +97,7 @@
         "source": "model",
         "field": "ENAME",
         "sortable": true,
+        "standardAction": "view",
         "responsivePriority": "high"
       },
       {
@@ -98,6 +113,13 @@
         "source": "projection",
         "field": "DepartmentName",
         "responsivePriority": "medium"
+      },
+      {
+        "key": "positionName",
+        "labelKey": "Column_PositionName",
+        "source": "projection",
+        "field": "PositionName",
+        "responsivePriority": "low"
       },
       {
         "key": "employmentStatus",
@@ -134,11 +156,6 @@
     ],
     "rowActions": [
       {
-        "key": "view",
-        "labelKey": "Action_View",
-        "standardAction": "view"
-      },
-      {
         "key": "edit",
         "labelKey": "Action_Edit",
         "standardAction": "edit",
@@ -155,7 +172,12 @@
         "handlerKey": "delete",
         "permissions": [
           "Organization.Person.Delete"
-        ]
+        ],
+        "disabledWhen": {
+          "field": "AccountEID",
+          "operator": "notEmpty",
+          "reasonKey": "Action_Delete_BoundDisabled"
+        }
       },
       {
         "key": "disable",
@@ -164,6 +186,7 @@
         "variant": "danger",
         "confirmMessageKey": "Action_Disable_Confirm",
         "handlerKey": "disable",
+        "inputKey": "disableReason",
         "permissions": [
           "Organization.Person.Update"
         ],

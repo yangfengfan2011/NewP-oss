@@ -16,12 +16,19 @@ export interface StandardCrudRuntimeFieldSchema {
   preset?: string;
   operator?: string;
   dataSourceKey?: string;
+  dependsOn?: string[];
 }
 
 export interface StandardCrudRowActionVisibilitySchema {
   field: string;
   operator: 'equals';
   value: boolean | string | number | null;
+}
+
+export interface StandardCrudRowActionDisabledSchema {
+  field: string;
+  operator: 'notEmpty';
+  reasonKey: string;
 }
 
 export interface StandardCrudRuntimeActionSchema {
@@ -34,6 +41,7 @@ export interface StandardCrudRuntimeActionSchema {
   inputKey?: string;
   requiredPermissions?: string[];
   visibleWhen?: StandardCrudRowActionVisibilitySchema;
+  disabledWhen?: StandardCrudRowActionDisabledSchema;
 }
 
 export interface StandardCrudRuntimeColumnSchema {
@@ -45,6 +53,7 @@ export interface StandardCrudRuntimeColumnSchema {
   sortable?: boolean;
   hideable?: boolean;
   responsivePriority?: 'high' | 'medium' | 'low';
+  standardAction?: 'view';
 }
 
 export interface StandardCrudAdvancedFilterSectionSchema {
@@ -154,6 +163,12 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
     ? readActionVisibility(value.visibleWhen)
     : undefined;
+  const disabledWhenRecord = readRecord(value.disabledWhen);
+  const disabledWhen = Object.keys(disabledWhenRecord).length > 0 ? {
+    field: readString(disabledWhenRecord.field),
+    operator: readString(disabledWhenRecord.operator) as StandardCrudRowActionDisabledSchema['operator'],
+    reasonKey: readString(disabledWhenRecord.reasonKey),
+  } : undefined;
 
   return {
     key: readString(value.key),
@@ -165,6 +180,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(inputKey.length > 0 ? { inputKey } : {}),
     ...(requiredPermissions.length > 0 ? { requiredPermissions } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),
+    ...(disabledWhen ? { disabledWhen } : {}),
   };
 }
 
@@ -204,6 +220,8 @@ function readField(value: MetadataRecord, model: MetadataRecord = {}): StandardC
   const preset = readString(value.preset);
   const operator = readString(value.operator);
   const declaredDataSourceKey = readString(value.dataSourceKey);
+  const dependsOn = readArray<unknown>(value.dependsOn)
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
 
   if (sourceField.length > 0) {
     field.field = sourceField;
@@ -217,6 +235,9 @@ function readField(value: MetadataRecord, model: MetadataRecord = {}): StandardC
   const resolvedDataSourceKey = declaredDataSourceKey || resolveFieldDataSourceKey(field, model);
   if (resolvedDataSourceKey) {
     field.dataSourceKey = resolvedDataSourceKey;
+  }
+  if (dependsOn.length > 0) {
+    field.dependsOn = dependsOn;
   }
 
   return field;
@@ -250,6 +271,7 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
   const width = typeof value.width === 'number' ? value.width : undefined;
   const sortable = typeof value.sortable === 'boolean' ? value.sortable : undefined;
   const hideable = typeof value.hideable === 'boolean' ? value.hideable : undefined;
+  const standardAction = value.standardAction === 'view' ? 'view' : undefined;
   const responsivePriority = value.responsivePriority === 'high'
     || value.responsivePriority === 'medium'
     || value.responsivePriority === 'low'
@@ -265,6 +287,7 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
     ...(sortable !== undefined ? { sortable } : {}),
     ...(hideable !== undefined ? { hideable } : {}),
     ...(responsivePriority ? { responsivePriority } : {}),
+    ...(standardAction ? { standardAction } : {}),
   };
 }
 
@@ -488,6 +511,23 @@ function assertActionVisibility(action: StandardCrudRuntimeActionSchema, modelFi
   );
 }
 
+function assertActionDisabledState(action: StandardCrudRuntimeActionSchema, modelFields: Set<string>): void {
+  if (!action.disabledWhen) {
+    return;
+  }
+  if (action.disabledWhen.operator !== 'notEmpty') {
+    throw new Error(`row action "${action.key}" disabledWhen uses unsupported operator "${action.disabledWhen.operator}"`);
+  }
+  if (action.disabledWhen.reasonKey.length === 0) {
+    throw new Error(`row action "${action.key}" disabledWhen must declare reasonKey`);
+  }
+  assertModelFieldReference(
+    action.disabledWhen.field,
+    modelFields,
+    `row action "${action.key}" disabledWhen references unknown model field "${action.disabledWhen.field}"`,
+  );
+}
+
 function assertQuery(query: StandardCrudRuntimeQuerySchema, advancedFilter?: StandardCrudAdvancedFilterSchema): void {
   const fields = collectStandardCrudQueryFields(query, advancedFilter);
   const declaredKeys = new Set(fields.map((field) => field.key));
@@ -597,6 +637,8 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
 
   for (const action of schema.rowActions) {
     assertActionVisibility(action, modelFields);
+    assertActionDisabledState(action, modelFields);
+    assertDictionaryKey(dicKey, action.disabledWhen?.reasonKey ?? '', context?.defaultLanguageCatalog);
   }
 
   if (Object.keys(model).length > 0) {

@@ -22,7 +22,7 @@ public static class PersonCrudDescriptorFactory
         Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PersonStem),
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision"],
+            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "AccountEID"],
             DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled", "Revision", "CreatedAt", "UpdatedAt", "AccountEID", "AccountBoundAt", "AccountBoundBy", "AccountBindingReason"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "UpdatedAt"]),
@@ -66,7 +66,7 @@ public static class PersonCrudDescriptorFactory
                 Field = "EmploymentStatus",
                 Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
                 ErrorCode = "Organization.Person.EmploymentStatusRequired",
-                Message = "在职状态不能为空。",
+                Message = "任职状态不能为空。",
                 ReasonKey = "organization.person.employmentStatusRequired"
             }
         ],

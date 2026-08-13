@@ -205,6 +205,9 @@ importers:
       '@icp-platform/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      antd:
+        specifier: ^5.29.3
+        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1

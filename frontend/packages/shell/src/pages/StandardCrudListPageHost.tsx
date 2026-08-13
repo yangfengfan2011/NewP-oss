@@ -71,6 +71,7 @@ interface RowActionItem {
   label: ReactNode;
   danger?: boolean;
   disabled?: boolean;
+  disabledReason?: string;
   loading?: boolean;
   confirmMessage?: string;
   inline?: boolean;
@@ -120,6 +121,22 @@ function isRowActionVisibleForRow(
   }
 
   return readRowActionValue(row, action.visibleWhen.field) === action.visibleWhen.value;
+}
+
+function resolveRowActionDisabledReason(
+  action: Pick<StandardCrudRuntimeActionSchema, 'disabledWhen'>,
+  row: Record<string, unknown>,
+  textFor: (key: string) => string,
+): string | undefined {
+  if (!action.disabledWhen) {
+    return undefined;
+  }
+
+  const value = readRowActionValue(row, action.disabledWhen.field);
+  const isNotEmpty = value !== null && value !== undefined && String(value).trim().length > 0;
+  return action.disabledWhen.operator === 'notEmpty' && isNotEmpty
+    ? textFor(action.disabledWhen.reasonKey)
+    : undefined;
 }
 
 function isDangerRowAction(action: Pick<StandardCrudRuntimeActionSchema, 'standardAction' | 'variant'>): boolean {
@@ -205,11 +222,18 @@ function renderMetadataFilterField(
   value: unknown,
   onChange: (key: string, value: unknown) => void,
   textFor: (labelKey: string, fallback?: string) => string,
+  lookupOptions: Record<string, Array<{ value: string; label: string; disabled?: boolean }>>,
+  lookupLoading: Record<string, boolean>,
+  lookupErrors: Record<string, string | null>,
 ): ReactElement {
   const fieldLabel = textFor(field.labelKey, field.labelKey);
   const placeholder = textFor(`${field.labelKey}_Placeholder`, '');
   const enumOptions = field.dataSourceKey ? registration.enumOptions?.[field.dataSourceKey] : undefined;
-  if (enumOptions) {
+  const providerOptions = field.dataSourceKey ? lookupOptions[field.key] : undefined;
+  const usesProvider = Boolean(field.dataSourceKey && registration.lookupProviders?.some(
+    (provider) => provider.key === field.dataSourceKey,
+  ));
+  if (enumOptions || usesProvider) {
     return (
       <label key={field.key} className="np-filter-field">
         <span className="sh-form-label">{fieldLabel}</span>
@@ -218,7 +242,9 @@ function renderMetadataFilterField(
           value={typeof value === 'string' && value.length > 0 ? value : undefined}
           allowClear
           placeholder={placeholder}
-          options={enumOptions}
+          loading={lookupLoading[field.key] === true}
+          status={lookupErrors[field.key] ? 'error' : undefined}
+          options={enumOptions ?? providerOptions ?? []}
           onChange={(nextValue) => onChange(field.key, nextValue ?? '')}
         />
       </label>
@@ -230,7 +256,9 @@ function renderMetadataFilterField(
     ? (modelField.storage as Record<string, unknown>).type
     : undefined;
   if (storageType === 'bool') {
-    const selectedValue = typeof value === 'boolean' ? String(value) : undefined;
+    const selectedValue = typeof value === 'boolean' || value === 'true' || value === 'false'
+      ? String(value)
+      : undefined;
     return (
       <label key={field.key} className="np-filter-field">
         <span className="sh-form-label">{fieldLabel}</span>
@@ -359,7 +387,11 @@ function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
           menu={{
             items: overflowActions.map((action) => ({
               key: action.key,
-              label: action.loading ? '处理中...' : action.label,
+              label: action.loading
+                ? '处理中...'
+                : action.disabledReason
+                  ? `${String(action.label)}（${action.disabledReason}）`
+                  : action.label,
               danger: action.danger,
               disabled: action.disabled || action.loading,
             })),
@@ -597,6 +629,30 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
   const [filters, setFilters] = useState<TFilter>(() => initialListState.filters as TFilter);
   const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialListState.filters as TFilter);
+  const queryLookupFields = useMemo<StandardCrudFieldDefinition[]>(() => (
+    [
+      ...schema.query.fields,
+      ...schema.advancedFilter.sections.flatMap((section) => section.fields),
+    ]
+      .filter((field) => field.dataSourceKey && registration.lookupProviders?.some(
+        (provider) => provider.key === field.dataSourceKey,
+      ))
+      .map((field) => ({
+        key: field.key,
+        labelKey: field.labelKey,
+        modelField: field.field ?? field.key,
+        kind: 'lookup' as const,
+        lookup: {
+          providerKey: field.dataSourceKey ?? '',
+          dependsOn: field.dependsOn ?? [],
+        },
+      }))
+  ), [registration.lookupProviders, schema.advancedFilter.sections, schema.query.fields]);
+  const queryLookupRuntime = useStandardCrudLookupRuntime({
+    fields: queryLookupFields,
+    providers: registration.lookupProviders ?? [],
+    values: filters,
+  });
   const [tableQuery, setTableQuery] = useState<SearchTableQueryState>(() => ({
     current: initialListState.page,
     pageSize: initialListState.pageSize,
@@ -1048,6 +1104,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const registeredColumnByKey = new Map(registeredColumns.map((column) => [column.key, column]));
   const metadataColumns = schema.columns.map((column) => {
     const registeredColumn = registeredColumnByKey.get(column.key);
+    const renderColumn = registeredColumn?.render ?? (column.standardAction === 'view'
+      ? (row: TRow) => (
+        <AntdButton
+          className="np-standard-crud-cell-action"
+          type="link"
+          onClick={() => confirmDiscardIfNeeded(() => { void openViewDrawer(registration.getRowId(row)); })}
+        >
+          {String(readRowActionValue(row, column.field) ?? '-')}
+        </AntdButton>
+      )
+      : undefined);
     return {
       key: column.key,
       dataIndex: column.field,
@@ -1056,7 +1123,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       fixed: undefined,
       sorter: column.sortable === true,
       responsive: resolveResponsiveBreakpoints(column.responsivePriority),
-      render: registeredColumn?.render,
+      render: renderColumn,
       metadataField: column.field,
       metadataSource: column.source,
     };
@@ -1094,6 +1161,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             .map((action): RowActionItem => {
               const pendingKey = `${action.key}:${rowId}`;
               const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
+              const disabledReason = resolveRowActionDisabledReason(
+                action,
+                row as Record<string, unknown>,
+                (key) => t(`${schema.dicKey}.${key}`, key),
+              );
               const confirmMessage = action.confirmMessageKey
                 ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
                 : undefined;
@@ -1120,7 +1192,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   danger: isDangerRowAction(action),
                   confirmMessage,
                   loading: deletingActionKey === pendingKey,
-                  disabled: deletingActionKey !== null,
+                  disabled: deletingActionKey !== null || disabledReason !== undefined,
+                  disabledReason,
                   onClick: async () => {
                     try {
                       setDeletingActionKey(pendingKey);
@@ -1155,7 +1228,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 key: action.key,
                 label,
                 danger: isDangerRowAction(action),
-                confirmMessage,
+                confirmMessage: inputRenderer ? undefined : confirmMessage,
                 loading: rowActionPendingKey === pendingKey,
                 disabled: rowActionPendingKey !== null || !handler,
                 onClick: async () => {
@@ -1308,8 +1381,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             modelDocument,
             registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
             filters[field.key],
-            (key, value) => setFilters((current) => ({ ...current, [key]: value })),
+            (key, value) => setFilters((current) => applyStandardCrudLookupValueChange(
+              current,
+              key,
+              value,
+              queryLookupFields,
+            ) as TFilter),
             (labelKey, fallback) => t(`${schema.dicKey}.${labelKey}`, fallback ?? labelKey),
+            queryLookupRuntime.lookupOptions,
+            queryLookupRuntime.lookupLoading,
+            queryLookupRuntime.lookupErrors,
           ))}
         </div>
       )}
@@ -1479,8 +1560,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                     modelDocument,
                     registration as StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
                     filters[field.key],
-                    (key, value) => setFilters((current) => ({ ...current, [key]: value })),
+                    (key, value) => setFilters((current) => applyStandardCrudLookupValueChange(
+                      current,
+                      key,
+                      value,
+                      queryLookupFields,
+                    ) as TFilter),
                     (labelKey, fallback) => t(`${schema.dicKey}.${labelKey}`, fallback ?? labelKey),
+                    queryLookupRuntime.lookupOptions,
+                    queryLookupRuntime.lookupLoading,
+                    queryLookupRuntime.lookupErrors,
                   ))}
                 </div>
               </section>
@@ -1494,6 +1583,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         loading={detailLoading}
         error={detailError}
         primaryLabel="编辑"
+        secondaryAction={drawerState.id && registration.detailRoutePath ? (
+          <AntdButton
+            onClick={() => {
+              const fullDetailPath = registration.detailRoutePath?.replace(':id', encodeURIComponent(drawerState.id ?? ''));
+              if (fullDetailPath) navigate(fullDetailPath);
+            }}
+          >
+            {t(`${schema.dicKey}.Action_ViewFullDetail`, '查看完整详情')}
+          </AntdButton>
+        ) : undefined}
         hidePrimary={!canEdit}
         primaryAction={() => {
           if (drawerState.id) {
@@ -1587,6 +1686,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           })();
         }}
       >
+        {rowInputAction?.action.confirmMessageKey ? (
+          <p>{t(
+            `${schema.dicKey}.${rowInputAction.action.confirmMessageKey}`,
+            rowInputAction.action.confirmMessageKey,
+          )}</p>
+        ) : null}
         {rowInputAction?.action.inputKey
           ? registration.actionInputRenderers?.[rowInputAction.action.inputKey]?.({
             action: rowInputAction.action,

@@ -170,7 +170,7 @@ const personListCatalog = {
   'PersonListView.Title': '人员中心',
   'PersonListView.Description': '维护组织模块中的人员基础信息。',
   'PersonListView.Query_Keyword': '关键字',
-  'PersonListView.Query_EmploymentStatus': '在职状态',
+  'PersonListView.Query_EmploymentStatus': '任职状态',
   'PersonListView.Query_Department': '部门',
   'PersonListView.Query_IsEnabled': '启用状态',
   'PersonListView.AdvancedFilter_More': '更多筛选',
@@ -194,7 +194,7 @@ const personListCatalog = {
   'PersonListView.Field_PersonNo': '人员编号',
   'PersonListView.Field_ENAME': '姓名',
   'PersonListView.Field_DepartmentId': '部门',
-  'PersonListView.Field_EmploymentStatus': '在职状态',
+  'PersonListView.Field_EmploymentStatus': '任职状态',
   'PersonListView.Field_IsEnabled': '启用状态',
 };
 
@@ -770,7 +770,7 @@ describe('StandardCrudListPageHost', () => {
       { method: 'GET' },
     );
     expect(container.textContent).toContain('关键字');
-    expect(container.textContent).toContain('在职状态');
+    expect(container.textContent).toContain('任职状态');
     expect(container.textContent).toContain('更多筛选');
     expect(container.textContent).toContain('新建人员');
     expect(container.textContent).toContain('刷新');

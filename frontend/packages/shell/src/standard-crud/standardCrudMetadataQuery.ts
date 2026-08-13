@@ -6,6 +6,7 @@ export interface StandardCrudQueryFieldSchema {
   preset?: string;
   operator?: string;
   dataSourceKey?: string;
+  dependsOn?: string[];
   hidden?: boolean;
 }
 
@@ -37,6 +38,7 @@ export interface StandardCrudListFieldColumnSource {
 
 export interface StandardCrudListFieldActionSource {
   visibleWhen?: { field?: string };
+  disabledWhen?: { field?: string };
 }
 
 export interface StandardCrudListState {
@@ -226,6 +228,7 @@ export function collectStandardCrudListRequestFields(
   }
   for (const action of rowActions) {
     add(action.visibleWhen?.field);
+    add(action.disabledWhen?.field);
   }
 
   return fields;

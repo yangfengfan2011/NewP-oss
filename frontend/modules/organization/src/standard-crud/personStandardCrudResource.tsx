@@ -3,6 +3,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
+import { Input } from 'antd';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
 import PersonUserBindingCard from '../components/PersonUserBindingCard';
 import {
@@ -23,12 +24,20 @@ interface PersonListFilters {
   [key: string]: string;
   keyword: string;
   employmentStatus: string;
+  companyId: string;
+  departmentId: string;
+  positionId: string;
+  isEnabled: string;
 }
 
 function createEmptyFilters(): PersonListFilters {
   return {
     keyword: '',
     employmentStatus: '',
+    companyId: '',
+    departmentId: '',
+    positionId: '',
+    isEnabled: '',
   };
 }
 
@@ -36,38 +45,53 @@ function buildListQuery(filters: PersonListFilters): Record<string, string | nul
   return {
     keyword: filters.keyword,
     employmentStatus: filters.employmentStatus,
+    companyId: filters.companyId,
+    departmentId: filters.departmentId,
+    positionId: filters.positionId,
+    isEnabled: filters.isEnabled,
   };
 }
 
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.companies',
-    load: async () => (await getCompanies())
-      .filter((company) => company.isEnabled)
-      .map((company) => ({ value: company.id, label: company.name })),
+    load: async ({ fieldKey }) => (await getCompanies())
+      .filter((company) => fieldKey === 'companyId' || company.isEnabled)
+      .map((company) => ({
+        value: company.id,
+        label: company.isEnabled ? company.name : `${company.name}（已停用）`,
+      })),
   },
   {
     key: 'organization.departments',
-    load: async ({ dependencyValues }) => {
+    load: async ({ fieldKey, dependencyValues }) => {
       const companyId = dependencyValues.CompanyId ?? dependencyValues.companyId;
       if (typeof companyId !== 'string' || companyId.length === 0) {
         return [];
       }
 
       return (await getDepartments(companyId))
-        .filter((department) => department.isEnabled)
-        .map((department) => ({ value: department.id, label: department.name }));
+        .filter((department) => fieldKey === 'departmentId' || department.isEnabled)
+        .map((department) => ({
+          value: department.id,
+          label: department.isEnabled ? department.name : `${department.name}（已停用）`,
+        }));
     },
   },
   {
     key: 'organization.positions',
-    load: async ({ dependencyValues }) => {
+    load: async ({ fieldKey, dependencyValues }) => {
       const departmentId = dependencyValues.DepartmentId ?? dependencyValues.departmentId;
       if (typeof departmentId !== 'string' || departmentId.length === 0) {
         return [];
       }
 
-      return (await getPositions(departmentId)).map((position) => ({ value: position.id, label: position.name }));
+      return (await getPositions(departmentId))
+        .filter((position) => fieldKey === 'positionId' || position.isEnabled)
+        .map((position) => ({
+          value: position.id,
+          label: position.isEnabled ? position.name : `${position.name}（已停用）`,
+        }));
     },
   },
 ];
@@ -95,6 +119,19 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
     EmploymentStatus: employmentStatusOptions,
   },
   summaryRenderers: personSummaryRenderers,
+  actionInputRenderers: {
+    disableReason: ({ value, onChange }) => (
+      <Input.TextArea
+        aria-label="停用原因"
+        autoSize={{ minRows: 3, maxRows: 6 }}
+        maxLength={500}
+        showCount
+        placeholder="请输入停用原因（必填）"
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    ),
+  },
   actionHandlers: {
     refresh: ({ refresh }) => {
       refresh();
@@ -107,15 +144,20 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       await deletePerson(id);
       refresh();
     },
-    disable: async ({ id, detail, row, refresh }) => {
+    disable: async ({ id, detail, row, input, refresh }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法停用。');
+      }
+
+      const reason = typeof input === 'string' ? input.trim() : '';
+      if (reason.length === 0) {
+        throw new Error('请填写停用原因。');
       }
 
       await setPersonLifecycleStatus(id, {
         isEnabled: false,
         expectedRevision: detail?.revision ?? row?.revision ?? 0,
-        reason: '人员中心停用人员',
+        reason,
       });
       refresh();
     },

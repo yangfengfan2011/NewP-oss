@@ -15,6 +15,7 @@ export interface CrudFormDrawerProps {
   primaryLabel?: ReactNode;
   primaryAction?: () => void;
   hidePrimary?: boolean;
+  secondaryAction?: ReactNode;
   onSubmit?: () => void;
   onClose: () => void;
   afterOpenChange?: (open: boolean) => void;
@@ -32,6 +33,7 @@ export function CrudFormDrawer({
   primaryLabel = '保存',
   primaryAction,
   hidePrimary = false,
+  secondaryAction,
   onSubmit,
   onClose,
   afterOpenChange,
@@ -62,6 +64,7 @@ export function CrudFormDrawer({
           <Button onClick={onClose} disabled={saving}>
             取消
           </Button>
+          {secondaryAction}
           {primaryButton}
         </Space>
       }

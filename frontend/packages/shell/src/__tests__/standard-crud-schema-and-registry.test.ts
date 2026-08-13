@@ -196,7 +196,7 @@ describe('standard CRUD schema resolver and registry', () => {
           'PersonListView.Title': '人员中心',
           'PersonListView.Description': '维护组织模块中的人员基础信息。',
           'PersonListView.Query_Keyword': '关键字',
-          'PersonListView.Query_EmploymentStatus': '在职状态',
+          'PersonListView.Query_EmploymentStatus': '任职状态',
           'PersonListView.Query_Department': '部门',
           'PersonListView.Query_Position': '岗位',
           'PersonListView.Query_IsEnabled': '启用状态',

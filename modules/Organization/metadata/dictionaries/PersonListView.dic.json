@@ -59,11 +59,11 @@
       "en": "Select position"
     },
     "Field_EmploymentStatus": {
-      "zhs": "在职状态",
+      "zhs": "任职状态",
       "en": "Employment Status"
     },
     "Field_EmploymentStatus_Placeholder": {
-      "zhs": "请选择在职状态",
+      "zhs": "请选择任职状态",
       "en": "Select employment status"
     },
     "Field_IsEnabled": {
@@ -103,11 +103,11 @@
       "en": "All positions"
     },
     "Query_EmploymentStatus": {
-      "zhs": "在职状态",
+      "zhs": "任职状态",
       "en": "Employment Status"
     },
     "Query_EmploymentStatus_Placeholder": {
-      "zhs": "全部在职状态",
+      "zhs": "全部任职状态",
       "en": "All employment statuses"
     },
     "Query_IsEnabled": {
@@ -146,8 +146,12 @@
       "zhs": "部门",
       "en": "Department"
     },
+    "Column_PositionName": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
     "Column_EmploymentStatus": {
-      "zhs": "在职状态",
+      "zhs": "任职状态",
       "en": "Employment Status"
     },
     "Column_IsEnabled": {
@@ -178,12 +182,16 @@
       "zhs": "确认删除该人员吗？",
       "en": "Delete this person?"
     },
+    "Action_Delete_BoundDisabled": {
+      "zhs": "已绑定用户账号，永久禁止删除",
+      "en": "A person permanently bound to a user account cannot be deleted"
+    },
     "Action_Disable": {
       "zhs": "停用",
       "en": "Disable"
     },
     "Action_Disable_Confirm": {
-      "zhs": "确认停用该人员？",
+      "zhs": "停用会同时停用绑定账号并终止其会话，请填写停用原因。",
       "en": "Disable this person?"
     },
     "Action_Enable": {
@@ -191,7 +199,7 @@
       "en": "Enable"
     },
     "Action_Enable_Confirm": {
-      "zhs": "确认启用该人员？",
+      "zhs": "启用人员不会自动恢复绑定账号或已终止会话，确认继续？",
       "en": "Enable this person?"
     },
     "Action_Processing": {
@@ -233,6 +241,10 @@
     "Drawer_Create": {
       "zhs": "新建人员",
       "en": "Create Person"
+    },
+    "Action_ViewFullDetail": {
+      "zhs": "查看完整详情",
+      "en": "View Full Details"
     },
     "Export_Current": {
       "zhs": "导出本页",

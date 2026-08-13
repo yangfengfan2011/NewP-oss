@@ -11,6 +11,7 @@ namespace ICP.Platform.Modules.Organization.Crud;
 public sealed class PersonCrudValidator(
     ICompanyRepository companyRepository,
     IDepartmentRepository departmentRepository,
+    IPositionRepository positionRepository,
     IStandardCrudRepository standardCrudRepository) : IStandardCrudValidator
 {
     public string ResourceKey => "organization.person";
@@ -100,8 +101,30 @@ public sealed class PersonCrudValidator(
             return FieldError("DepartmentId", "Organization.Person.DepartmentDisabled", "所属部门已停用。", "organization.person.departmentDisabled");
         }
 
-        return !string.Equals(department.CompanyId, company.Id, StringComparison.Ordinal)
-            ? FieldError("DepartmentId", "Organization.Person.DepartmentCompanyMismatch", "所属部门不属于所选公司。", "organization.person.departmentCompanyMismatch")
+        if (!string.Equals(department.CompanyId, company.Id, StringComparison.Ordinal))
+        {
+            return FieldError("DepartmentId", "Organization.Person.DepartmentCompanyMismatch", "所属部门不属于所选公司。", "organization.person.departmentCompanyMismatch");
+        }
+
+        var positionId = ReadOptionalId(values, "PositionId");
+        if (positionId is null)
+        {
+            return null;
+        }
+
+        var position = await positionRepository.GetByIdAsync(positionId, cancellationToken);
+        if (position is null)
+        {
+            return FieldError("PositionId", "Organization.Person.PositionNotFound", "岗位不存在。", "organization.person.positionNotFound");
+        }
+
+        if (!position.IsEnabled)
+        {
+            return FieldError("PositionId", "Organization.Person.PositionDisabled", "岗位已停用。", "organization.person.positionDisabled");
+        }
+
+        return !string.Equals(position.DepartmentId, department.Id, StringComparison.Ordinal)
+            ? FieldError("PositionId", "Organization.Person.PositionDepartmentMismatch", "岗位不属于所选部门。", "organization.person.positionDepartmentMismatch")
             : null;
     }
 

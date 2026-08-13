@@ -86,6 +86,7 @@ export interface PersonListRow {
   EmploymentStatus: string;
   IsEnabled: boolean;
   Revision: number;
+  AccountEID?: string | null;
   CompanyName: string;
   DepartmentName: string;
   PositionName?: string | null;
@@ -101,6 +102,7 @@ export interface PersonListRow {
   employmentStatusLabel: string;
   isEnabled: boolean;
   revision: number;
+  accountEid?: string | null;
 }
 
 export interface PersonDetailView {
@@ -212,6 +214,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     EmploymentStatus: employmentStatus,
     IsEnabled: isEnabled,
     Revision: revision,
+    AccountEID: readStandardCrudNullableString(row, ['AccountEID']),
     CompanyName: companyName,
     DepartmentName: departmentName,
     PositionName: positionName,
@@ -227,6 +230,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled,
     revision,
+    accountEid: readStandardCrudNullableString(row, ['AccountEID']),
   };
 }
 

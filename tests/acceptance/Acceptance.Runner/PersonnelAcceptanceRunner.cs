@@ -683,7 +683,12 @@ internal sealed class PersonnelAcceptanceRunner
             throw new InvalidOperationException("Personnel page did not expose exactly one named refresh entry.");
         }
 
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "重置", Exact = true }).ClickAsync();
+        var reset = page.Locator("button", new PageLocatorOptions { HasTextString = "重置" });
+        if (await reset.CountAsync() != 1 || !await reset.First.IsVisibleAsync())
+        {
+            throw new InvalidOperationException("Personnel page did not expose exactly one visible reset entry.");
+        }
+        await reset.First.ClickAsync();
         await page.WaitForFunctionAsync("() => !new URL(window.location.href).searchParams.has('keyword')");
     }
 

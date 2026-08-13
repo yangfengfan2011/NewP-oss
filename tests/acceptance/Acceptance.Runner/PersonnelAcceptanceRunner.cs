@@ -551,7 +551,7 @@ internal sealed class PersonnelAcceptanceRunner
         await page.Locator("#ecode").FillAsync("admin");
         await page.Locator("#password").FillAsync(adminPassword);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-        await page.WaitForFunctionAsync("() => window.location.pathname !== '/login'");
+        await WaitForPostLoginNavigationAsync(page);
         await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons", new PageGotoOptions
         {
             WaitUntil = WaitUntilState.DOMContentLoaded
@@ -769,12 +769,19 @@ internal sealed class PersonnelAcceptanceRunner
         await page.Locator("#ecode").FillAsync(ecode);
         await page.Locator("#password").FillAsync(password);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-        await page.WaitForFunctionAsync("() => window.location.pathname !== '/login'");
+        await WaitForPostLoginNavigationAsync(page);
         await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons", new PageGotoOptions
         {
             WaitUntil = WaitUntilState.DOMContentLoaded
         });
         return page;
+    }
+
+    private async Task WaitForPostLoginNavigationAsync(IPage page)
+    {
+        await page.WaitForURLAsync(
+            $"http://127.0.0.1:{_shellPort}/",
+            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
     private static async Task AssertPersonListAndDrawerAsync(

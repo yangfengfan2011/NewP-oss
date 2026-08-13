@@ -799,20 +799,14 @@ internal sealed class PersonnelAcceptanceRunner
                 new LocatorGetByRoleOptions { Name = person.Name, Exact = true }).ClickAsync();
         }
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await page.WaitForFunctionAsync(
-            "args => document.querySelector(args[0])?.value === args[1]",
-            new[] { ".ant-drawer-content #PersonNo", person.PersonNo });
-        await page.WaitForFunctionAsync(
-            "args => document.querySelector(args[0])?.value === args[1]",
-            new[] { ".ant-drawer-content #ENAME", person.Name });
-        foreach (var expected in new[] { fixture.CompanyName, fixture.DepartmentName })
+        foreach (var expected in new[] { person.PersonNo, person.Name, fixture.CompanyName, fixture.DepartmentName })
         {
             await drawer.GetByText(expected, new LocatorGetByTextOptions { Exact = true }).First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         }
-        AssertContains(await drawer.Locator("#PersonNo").InputValueAsync(), person.PersonNo, "person number in view drawer");
-        AssertContains(await drawer.Locator("#ENAME").InputValueAsync(), person.Name, "person name in view drawer");
         var drawerText = await drawer.InnerTextAsync();
+        AssertContains(drawerText, person.PersonNo, "person number in view drawer");
+        AssertContains(drawerText, person.Name, "person name in view drawer");
         AssertContains(drawerText, fixture.CompanyName, "company display name in view drawer");
         AssertContains(drawerText, fixture.DepartmentName, "department display name in view drawer");
     }

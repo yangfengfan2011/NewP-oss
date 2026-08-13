@@ -125,7 +125,9 @@ public class RepositoryTestEntrypointTests
 
         Assert.Contains("ReloadAsync", runner, StringComparison.Ordinal);
         Assert.Contains("Name = person.Name", runner, StringComparison.Ordinal);
+        Assert.Contains("person.PersonNo, person.Name, fixture.CompanyName", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("Name = \"查看\"", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ant-drawer-content #PersonNo", runner, StringComparison.Ordinal);
     }
 
     [Fact]

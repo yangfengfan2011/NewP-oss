@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { Select, Switch } from 'antd';
+import { Checkbox, Input, Select, Switch } from 'antd';
 import type { StandardCrudFieldDefinition, StandardCrudFormMode, StandardCrudOption } from '@icp-platform/sdk';
 
 export interface StandardCrudFieldProps {
@@ -69,12 +69,11 @@ export function StandardCrudField({
         <div className={fieldClassName}>
           {renderLabel(field, readOnly)}
           <label className="np-standard-crud-checkbox-row" htmlFor={field.key}>
-            <input
+            <Checkbox
               id={field.key}
-              type="checkbox"
               checked={value === true}
               disabled={readOnly}
-              onChange={(event) => onChange(field.key, event.currentTarget.checked)}
+              onChange={(event) => onChange(field.key, event.target.checked)}
             />
             <span>{value === true ? '是' : '否'}</span>
           </label>
@@ -135,7 +134,7 @@ export function StandardCrudField({
     return (
       <div className={fieldClassName}>
         {renderLabel(field, readOnly)}
-        <textarea
+        <Input.TextArea
           id={field.key}
           className="sh-form-input np-standard-crud-input"
           value={value == null ? '' : String(value)}
@@ -156,7 +155,7 @@ export function StandardCrudField({
       <div className={fieldClassName}>
         {renderLabel(field, readOnly)}
         <div className="np-standard-crud-date-range">
-          <input
+          <Input
             id={`${field.key}-start`}
             className="sh-form-input np-standard-crud-input"
             type="date"
@@ -165,7 +164,7 @@ export function StandardCrudField({
             disabled={readOnly}
             onChange={(event) => onChange(field.key, [event.target.value, typeof end === 'string' ? end : ''])}
           />
-          <input
+          <Input
             id={`${field.key}-end`}
             className="sh-form-input np-standard-crud-input"
             type="date"
@@ -197,7 +196,7 @@ export function StandardCrudField({
   return (
     <div className={fieldClassName}>
       {renderLabel(field, readOnly)}
-      <input
+      <Input
         id={field.key}
         className="sh-form-input np-standard-crud-input"
         type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}

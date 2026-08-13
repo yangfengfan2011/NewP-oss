@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Space, Typography } from 'antd';
+import { Card, Space, Typography } from 'antd';
 
 const { Title, Paragraph } = Typography;
 
@@ -35,8 +35,14 @@ export function CrudWorkspacePage({
           {primaryActions ? <Space className="np-crud-workspace-actions">{primaryActions}</Space> : null}
         </div>
       ) : null}
-      {filterBar ? <div className="np-crud-workspace-filter">{filterBar}</div> : null}
-      <div className="np-crud-workspace-content">{children}</div>
+      {filterBar ? (
+        <Card size="small" className="np-crud-workspace-filter">
+          {filterBar}
+        </Card>
+      ) : null}
+      <Card size="small" className="np-crud-workspace-content">
+        {children}
+      </Card>
     </div>
   );
 }

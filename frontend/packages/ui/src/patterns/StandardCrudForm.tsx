@@ -5,7 +5,7 @@ import type {
   StandardCrudOption,
   StandardCrudFormSection,
 } from '@icp-platform/sdk';
-import { Button } from '../components/Button';
+import { Button } from 'antd';
 import { ErrorState } from '../components/ErrorState';
 import { Panel } from './Panel';
 import { StandardCrudField } from './StandardCrudField';
@@ -141,7 +141,7 @@ export function StandardCrudForm({
         const title = titleForSection(section.titleKey);
         const actions = showSubmitAction && index === 0 && mode !== 'view'
           ? (
-            <Button size="sm" type="submit" form={formId} variant="primary" disabled={saving}>
+            <Button size="small" type="primary" htmlType="submit" form={formId} disabled={saving}>
               {saving ? '保存中...' : (saveLabel ?? resolveSubmitText(mode, false))}
             </Button>
           )

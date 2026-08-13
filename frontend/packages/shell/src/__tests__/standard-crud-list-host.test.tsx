@@ -343,7 +343,7 @@ describe('StandardCrudListPageHost', () => {
     );
   });
 
-  it('keeps runtime title and description out of the single-list workspace chrome', async () => {
+  it('renders the metadata title once without expanding the compact header with description text', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
@@ -355,8 +355,8 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(container.querySelector('.np-crud-workspace-title')).toBeNull();
-    expect(container.textContent).not.toContain('人员中心');
+    expect(container.querySelectorAll('.np-crud-workspace-title')).toHaveLength(1);
+    expect(container.querySelector('.np-crud-workspace-title')?.textContent).toBe('人员中心');
     expect(container.textContent).not.toContain('维护组织模块中的人员基础信息。');
     expect(container.textContent).not.toContain('人员中心列表');
     expect(container.textContent).not.toContain('Title');
@@ -513,13 +513,13 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
-    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(0);
-    expect(container.querySelector('.np-table-row-view-button')).not.toBeNull();
+    expect(countTextOccurrences(container.textContent ?? '', '查看')).toBe(1);
+    expect(container.querySelector('.np-table-row-view-button')).toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '编辑')).toBe(1);
     expect(container.textContent).not.toContain('删除');
     expect(container.textContent).toContain('更多');
     expect(container.textContent).not.toContain('停用');
-    expect(container.textContent).toContain('启用');
+    expect(container.textContent).not.toContain('启用');
     expect(container.querySelectorAll('.np-row-action-button')).toHaveLength(2);
     await act(async () => {
       const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -530,7 +530,7 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.textContent).toContain('停用');
     expect(document.body.textContent).toContain('启用');
     expect(container.textContent).not.toContain('公司');
-    expect(container.querySelector('.np-person-filter-grid .ant-select')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-filter-grid .ant-select')).not.toBeNull();
 
     await act(async () => {
       const createButton = Array.from(container.querySelectorAll('button')).find((button) =>

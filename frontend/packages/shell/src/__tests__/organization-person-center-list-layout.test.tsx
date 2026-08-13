@@ -220,41 +220,27 @@ describe('organization person center list layout', () => {
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
+    expect(container.querySelectorAll('.np-crud-workspace-title')).toHaveLength(1);
+    expect(container.querySelector('.np-crud-workspace-title')?.textContent).toBe('人员中心');
+    expect(container.querySelectorAll('.np-crud-workspace-header .ant-btn')).toHaveLength(1);
     expect(container.querySelector('.np-crud-workspace-header .ant-btn-primary')?.textContent).toContain('新建人员');
-    expect(container.querySelector('.np-crud-workspace-filter .ant-btn-primary')?.textContent?.replace(/\s+/g, '')).toContain('搜索');
-    expect(container.querySelector('.np-crud-table-section-fill')).not.toBeNull();
+    expect(container.querySelectorAll('.ant-btn-primary')).toHaveLength(1);
+    expect(container.querySelector('.np-crud-workspace-filter.ant-card')).not.toBeNull();
+    expect(container.querySelector('.np-crud-workspace-content.ant-card')).not.toBeNull();
+    expect(container.querySelector('.np-crud-table-section-fill')).toBeNull();
     expect(container.querySelector('.ant-table')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.np-search-table-footer')).not.toBeNull();
-    expect(container.querySelector('.ant-table-selection-column')).not.toBeNull();
+    expect(container.querySelector('.ant-table-selection-column')).toBeNull();
     expect(container.querySelector('.ant-table-column-sorters')).not.toBeNull();
-    expect(container.querySelector('.np-table-column-resize-handle')).not.toBeNull();
-    expect(container.querySelector('.np-table-row-icon')).not.toBeNull();
+    expect(container.querySelector('.np-table-column-resize-handle')).toBeNull();
+    expect(container.querySelector('.np-table-row-icon')).toBeNull();
+    expect(container.querySelector('.np-table-row-number-cell')).toBeNull();
     const tableHeaderTexts = Array.from(container.querySelectorAll('.ant-table-thead th')).map((node) =>
       node.textContent?.replace(/\s+/g, ''),
     );
     expect(tableHeaderTexts).not.toContain('序号');
     expect(tableHeaderTexts).not.toContain('图标');
-    const tableColumnWidths = Array.from(container.querySelectorAll('col')).map(
-      (node) => (node as HTMLTableColElement).style.width,
-    );
-    expect(tableColumnWidths).toEqual(expect.arrayContaining(['30px', '40px', '176px']));
-    const rowNumberHeaderCell = container.querySelector<HTMLTableCellElement>('th.np-table-row-number-cell');
-    const rowIconHeaderCell = container.querySelector<HTMLTableCellElement>('th.np-table-row-icon-cell');
-    const rowNumberBodyCell = container.querySelector<HTMLTableCellElement>('td.np-table-row-number-cell');
-    const rowIconBodyCell = container.querySelector<HTMLTableCellElement>('td.np-table-row-icon-cell');
-    expect(rowNumberHeaderCell?.style.width).toBe('30px');
-    expect(rowNumberHeaderCell?.style.minWidth).toBe('30px');
-    expect(rowNumberHeaderCell?.style.maxWidth).toBe('30px');
-    expect(rowIconHeaderCell?.style.width).toBe('40px');
-    expect(rowIconHeaderCell?.style.minWidth).toBe('40px');
-    expect(rowIconHeaderCell?.style.maxWidth).toBe('40px');
-    expect(rowNumberBodyCell?.style.width).toBe('30px');
-    expect(rowNumberBodyCell?.style.minWidth).toBe('30px');
-    expect(rowNumberBodyCell?.style.maxWidth).toBe('30px');
-    expect(rowIconBodyCell?.style.width).toBe('40px');
-    expect(rowIconBodyCell?.style.minWidth).toBe('40px');
-    expect(rowIconBodyCell?.style.maxWidth).toBe('40px');
     const columnSettingIcon = container.querySelector('.anticon-setting');
     expect(columnSettingIcon).not.toBeNull();
     await act(async () => {
@@ -265,14 +251,12 @@ describe('organization person center list layout', () => {
       document.body.querySelectorAll('.ant-pro-table-column-setting-list .ant-tree-treenode'),
     ).map((node) => node.textContent?.replace(/\s+/g, '') ?? '');
     expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '公司', '部门', '在职状态', '启用状态', '操作']);
-    expect(settingColumnTexts.filter((text) => text.length === 0)).toHaveLength(2);
-    expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
     expect(container.querySelector('.ant-select')).not.toBeNull();
     expect(container.textContent).not.toContain('全部公司');
-    const filterSelects = Array.from(container.querySelectorAll('.np-person-filter-grid .ant-select'));
+    const filterSelects = Array.from(container.querySelectorAll('.np-standard-crud-filter-grid .ant-select'));
     expect(filterSelects).toHaveLength(1);
     expect(filterSelects[0]?.classList.contains('np-filter-select')).toBe(true);
     expect(filterSelects[0]?.classList.contains('np-filter-control')).toBe(false);
@@ -291,23 +275,24 @@ describe('organization person center list layout', () => {
     expect(container.textContent).not.toContain('PartTime');
     expect(container.textContent).not.toContain('FullTime');
     expect(container.textContent).not.toContain('true');
+    expect(container.querySelectorAll('.ant-tag')).not.toHaveLength(0);
     const bodyRows = Array.from(container.querySelectorAll('.ant-table-tbody > tr.ant-table-row'));
-    expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(true);
-    expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(true);
+    expect(bodyRows[0]?.classList.contains('np-table-row-odd')).toBe(false);
+    expect(bodyRows[1]?.classList.contains('np-table-row-even')).toBe(false);
     const firstActionCell = bodyRows[0]?.querySelector('td:last-child');
     expect(firstActionCell?.className).toContain('ant-table-cell-fix-right');
-    expect(firstActionCell?.textContent).not.toContain('查看');
+    expect(firstActionCell?.textContent).toContain('查看');
     expect(firstActionCell?.textContent).toContain('编辑');
     expect(firstActionCell?.textContent).toContain('更多');
     expect(firstActionCell?.textContent).not.toContain('删除');
     expect(firstActionCell?.textContent).not.toContain('停用');
     expect(firstActionCell?.textContent).not.toContain('启用');
-    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(1);
+    expect(firstActionCell?.querySelectorAll('.np-row-action-button')).toHaveLength(2);
     expect(firstActionCell?.querySelector('.np-row-actions-more')).not.toBeNull();
     const actionHeader = container.querySelector('th:last-child');
     expect(actionHeader?.className).toContain('ant-table-cell-fix-right');
     expect(actionHeader?.getAttribute('style') ?? '').toContain('right: 0px');
-    expect(bodyRows[0]?.querySelector('.np-table-row-view-button')).not.toBeNull();
+    expect(bodyRows[0]?.querySelector('.np-table-row-view-button')).toBeNull();
     await act(async () => {
       firstActionCell?.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

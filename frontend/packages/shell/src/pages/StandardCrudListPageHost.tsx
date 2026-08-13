@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
-import { DownloadOutlined, UserOutlined } from '@ant-design/icons';
+import { DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
@@ -11,7 +11,7 @@ import {
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type { StandardCrudExportMode, StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { Button as AntdButton, Drawer, Popconfirm, Popover, Select, Space, message } from 'antd';
+import { Button as AntdButton, Drawer, Input, Popconfirm, Popover, Select, Space, Tag, message } from 'antd';
 import {
   CrudFormDrawer,
   CrudSearchBar,
@@ -260,7 +260,7 @@ function renderMetadataFilterField(
   return (
     <label key={field.key} className="np-filter-field">
       <span className="sh-form-label">{fieldLabel}</span>
-      <input
+      <Input
         className="np-filter-control"
         value={value == null ? '' : String(value)}
         placeholder={placeholder}
@@ -280,13 +280,9 @@ function renderBooleanTableCell(value: unknown): ReactElement | string {
   }
 
   return (
-    <span
-      className={value
-        ? 'np-standard-crud-cell-status np-standard-crud-cell-status-enabled'
-        : 'np-standard-crud-cell-status np-standard-crud-cell-status-disabled'}
-    >
+    <Tag color={value ? 'success' : 'default'} bordered={false}>
       {value ? '启用' : '停用'}
-    </span>
+    </Tag>
   );
 }
 
@@ -823,7 +819,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
 
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
-  const viewAction = schema.rowActions.find((action) => action.standardAction === 'view');
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
   const refreshAction = schema.pageActions.find((action) => action.standardAction === 'refresh');
   const rowActionDefinitions = schema.rowActions;
@@ -874,7 +869,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           const rowActions: RowActionItem[] = rowActionDefinitions
             .filter((action) => hasActionPermission(action, grantedPermissions))
             .filter((action) => isRowActionVisibleForRow(action, row as Record<string, unknown>))
-            .filter((action) => action.standardAction !== 'view')
             .map((action): RowActionItem => {
               const pendingKey = `${action.key}:${rowId}`;
               const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
@@ -882,6 +876,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
                 : undefined;
 
+              if (action.standardAction === 'view') {
+                return {
+                  key: action.key,
+                  label,
+                  onClick: () => {
+                    void openViewDrawer(rowId);
+                  },
+                };
+              }
               if (action.standardAction === 'edit') {
                 return {
                   key: action.key,
@@ -991,6 +994,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }));
 
   const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, grantedPermissions));
+  const visibleHeaderActions = visiblePageActions.filter((action) => action.standardAction === 'create');
   const handleExport = async (mode: StandardCrudExportMode) => {
     try {
       setExportingMode(mode);
@@ -1045,45 +1049,29 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ) : null}
     </Space>
   ) : undefined;
-  const headerActions = visiblePageActions.length > 0
+  const headerActions = visibleHeaderActions.length > 0
     ? (
       <>
-        {visiblePageActions.map((action) => {
-          if (action.standardAction === 'create') {
-            return (
-              <AntdButton
-                key={action.key}
-                type={action.variant === 'primary' ? 'primary' : 'default'}
-                size="middle"
-                onClick={() => openCreateDrawer()}
-              >
-                {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
-              </AntdButton>
-            );
-          }
-
-          if (action.standardAction === 'refresh') {
-            return (
-              <AntdButton
-                key={action.key}
-                size="middle"
-                onClick={() => void handleRefresh()}
-              >
-                {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
-              </AntdButton>
-            );
-          }
-
-          return null;
-        })}
+        {visibleHeaderActions.map((action) => (
+          <AntdButton
+            key={action.key}
+            type={action.variant === 'primary' ? 'primary' : 'default'}
+            size="middle"
+            onClick={() => openCreateDrawer()}
+          >
+            {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
+          </AntdButton>
+        ))}
       </>
     )
-    : registration.renderHeaderActions ? registration.renderHeaderActions(context) : undefined;
+    : schema.pageActions.length === 0 && registration.renderHeaderActions
+      ? registration.renderHeaderActions(context)
+      : undefined;
 
   const filterBar = (
     <CrudSearchBar
       fields={(
-        <div className="np-person-filter-grid">
+        <div className="np-standard-crud-filter-grid">
           {schema.query.fields.map((field) => renderMetadataFilterField(
             field,
             modelDocument,
@@ -1139,22 +1127,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         columns={columns}
         request={tableRequest}
         loading={loading}
-        selectableRows
-        showRowNumber
         toolbar={exportToolbar}
         onPageChange={setTablePagination}
-        rowIcon={(row) => (
-          <button
-            type="button"
-            className="np-table-row-view-button"
-            aria-label={viewAction ? t(`${schema.dicKey}.${viewAction.labelKey}`, viewAction.labelKey) : '查看'}
-            onClick={() => {
-              void openViewDrawer(registration.getRowId(row));
-            }}
-          >
-            <UserOutlined />
-          </button>
-        )}
         onRefresh={() => void handleRefresh()}
       />
     </div>
@@ -1163,6 +1137,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       <CrudWorkspacePage
+        title={pageTitle}
         primaryActions={headerActions}
         filterBar={filterBar}
       >

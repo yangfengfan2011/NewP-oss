@@ -11,14 +11,12 @@ export interface CrudSearchBarProps {
 }
 
 export function CrudSearchBar({ fields, primaryAction, loading = false, onSearch, onReset, more }: CrudSearchBarProps) {
-  const searchButtonType = primaryAction ? 'default' : 'primary';
-
   return (
     <div className="np-crud-search-bar">
       <div className="np-crud-search-fields">{fields}</div>
       <Space className="np-crud-search-actions">
         {primaryAction}
-        <Button type={searchButtonType} onClick={onSearch} loading={loading}>
+        <Button onClick={onSearch} loading={loading}>
           搜索
         </Button>
         <Button onClick={onReset} disabled={loading}>

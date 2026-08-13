@@ -2,11 +2,8 @@ import {
   useEffect,
   useMemo,
   useState,
-  type CSSProperties,
   type Key,
-  type MouseEvent,
   type ReactNode,
-  type ThHTMLAttributes,
 } from 'react';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -48,88 +45,9 @@ export interface SearchTablePageProps<TRow> {
   request: (params: Record<string, unknown>) => Promise<{ data: TRow[]; total: number; success: boolean }>;
   headerTitle?: ReactNode;
   toolbar?: ReactNode;
-  footerFill?: ReactNode;
   selectableRows?: boolean;
-  showRowNumber?: boolean;
-  rowIcon?: ReactNode | ((row: TRow) => ReactNode);
   onPageChange?: (pagination: { current: number; pageSize: number }) => void;
   className?: string;
-}
-
-const DEFAULT_COLUMN_WIDTH = 160;
-const MIN_COLUMN_WIDTH = 96;
-const ROW_NUMBER_COLUMN_WIDTH = 30;
-const ROW_ICON_COLUMN_WIDTH = 40;
-const FIXED_CHROME_COLUMN_KEYS = new Set(['__rowNumber', '__rowIcon']);
-
-interface ResizableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {
-  columnKey?: string;
-  onColumnResize?: (columnKey: string, width: number) => void;
-  resizable?: boolean;
-  width?: number;
-}
-
-function ResizableHeaderCell({
-  children,
-  columnKey,
-  onColumnResize,
-  resizable = true,
-  width,
-  style,
-  ...restProps
-}: ResizableHeaderCellProps) {
-  const canResize = resizable && Boolean(columnKey && onColumnResize);
-
-  const handleMouseDown = (event: MouseEvent<HTMLSpanElement>) => {
-    if (!canResize || !columnKey || !onColumnResize) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const startX = event.clientX;
-    const startWidth = width ?? event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? DEFAULT_COLUMN_WIDTH;
-
-    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      onColumnResize(columnKey, Math.max(MIN_COLUMN_WIDTH, startWidth + moveEvent.clientX - startX));
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
-
-  return (
-    <th
-      {...restProps}
-      style={{
-        ...style,
-        width,
-        minWidth: canResize ? MIN_COLUMN_WIDTH : width,
-        maxWidth: canResize ? undefined : width,
-      }}
-    >
-      <div className="np-table-column-header">
-        <span className="np-table-column-header-content">{children}</span>
-        {canResize ? (
-          <span
-            aria-hidden="true"
-            className="np-table-column-resize-handle"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            onMouseDown={handleMouseDown}
-          />
-        ) : null}
-      </div>
-    </th>
-  );
 }
 
 function resolveColumnKey<TRow>(column: ProColumns<TRow>): string {
@@ -142,27 +60,6 @@ function resolveColumnKey<TRow>(column: ProColumns<TRow>): string {
   }
 
   return String(column.title ?? 'column');
-}
-
-function normalizeColumnWidth(width: ProColumns<Record<string, unknown>>['width']): number | undefined {
-  if (typeof width === 'number') {
-    return width;
-  }
-
-  if (typeof width === 'string') {
-    const parsed = Number.parseInt(width, 10);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-
-  return undefined;
-}
-
-function buildFixedChromeColumnStyle(width: number): CSSProperties {
-  return {
-    width,
-    minWidth: width,
-    maxWidth: width,
-  };
 }
 
 function compareSortValue(left: unknown, right: unknown): number {
@@ -191,10 +88,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   request,
   headerTitle,
   toolbar,
-  footerFill,
   selectableRows = false,
-  showRowNumber = false,
-  rowIcon,
   onPageChange,
   className,
 }: SearchTablePageProps<TRow>) {
@@ -203,7 +97,6 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   const [current, setCurrent] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
 
   useEffect(() => {
@@ -238,92 +131,17 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   }, [request, current, pageSize]);
 
   const tableColumns = useMemo(() => {
-    const chromeColumns: ProColumns<TRow>[] = [];
-
-    if (showRowNumber) {
-      chromeColumns.push({
-        key: '__rowNumber',
-        dataIndex: '__rowNumber',
-        title: '',
-        width: ROW_NUMBER_COLUMN_WIDTH,
-        align: 'center',
-        className: 'np-table-chrome-cell np-table-row-number-cell',
-        hideInSetting: true,
-        sorter: false,
-        render: (_: ReactNode, __: TRow, index: number) => (current - 1) * pageSize + index + 1,
-      });
-    }
-
-    if (rowIcon) {
-      chromeColumns.push({
-        key: '__rowIcon',
-        dataIndex: '__rowIcon',
-        title: '',
-        width: ROW_ICON_COLUMN_WIDTH,
-        align: 'center',
-        className: 'np-table-chrome-cell np-table-row-icon-cell',
-        hideInSetting: true,
-        sorter: false,
-        render: (_: ReactNode, row: TRow) => (
-          <span className="np-table-row-icon">
-            {typeof rowIcon === 'function' ? rowIcon(row) : rowIcon}
-          </span>
-        ),
-      });
-    }
-
-    const rawColumns = [...chromeColumns, ...columns];
-    // 保留一个普通数据列吸收表格剩余宽度，避免序号、图标等 chrome 列被浏览器按比例拉伸。
-    const elasticColumnKey = rawColumns
-      .map((column) => resolveColumnKey(column))
-      .find((columnKey) => !FIXED_CHROME_COLUMN_KEYS.has(columnKey) && columnKey !== 'actions');
-
-    return rawColumns.map((column) => {
+    return columns.map((column) => {
       const columnKey = resolveColumnKey(column);
-      const baseWidth = normalizeColumnWidth(column.width) ?? (columnKey === 'actions' ? 220 : DEFAULT_COLUMN_WIDTH);
-      const fixedChromeColumn = FIXED_CHROME_COLUMN_KEYS.has(columnKey);
-      const width = columnKey === elasticColumnKey && columnWidths[columnKey] === undefined ? undefined : columnWidths[columnKey] ?? baseWidth;
-      const existingOnHeaderCell = column.onHeaderCell as ((nextColumn: unknown) => Record<string, unknown>) | undefined;
-      const existingOnCell = column.onCell as ((row: TRow, rowIndex?: number) => Record<string, unknown>) | undefined;
-      const fixedChromeColumnStyle = fixedChromeColumn ? buildFixedChromeColumnStyle(width ?? baseWidth) : undefined;
 
       return {
         ...column,
-        width,
-        sorter: ['actions', '__rowNumber', '__rowIcon'].includes(columnKey)
+        sorter: columnKey === 'actions'
           ? false
           : column.sorter ?? ((left: TRow, right: TRow) => compareSortValue(left[columnKey], right[columnKey])),
-        onHeaderCell: (nextColumn: unknown) => ({
-          ...(existingOnHeaderCell ? existingOnHeaderCell(nextColumn) : {}),
-          columnKey,
-          resizable: !fixedChromeColumn,
-          width,
-          onColumnResize: fixedChromeColumn
-            ? undefined
-            : (targetColumnKey: string, nextWidth: number) => {
-                setColumnWidths((currentWidths) => ({ ...currentWidths, [targetColumnKey]: nextWidth }));
-              },
-        }),
-        onCell: fixedChromeColumn
-          ? (row: TRow, rowIndex?: number) => {
-              const existingCellProps = existingOnCell ? existingOnCell(row, rowIndex) : {};
-              const existingStyle =
-                existingCellProps.style && typeof existingCellProps.style === 'object'
-                  ? (existingCellProps.style as CSSProperties)
-                  : undefined;
-
-              return {
-                ...existingCellProps,
-                style: {
-                  ...existingStyle,
-                  ...fixedChromeColumnStyle,
-                },
-              };
-            }
-          : column.onCell,
       } as ProColumns<TRow>;
     });
-  }, [columnWidths, columns, current, pageSize, rowIcon, showRowNumber]);
+  }, [columns]);
 
   return (
     <div className="np-search-table-page">
@@ -336,21 +154,19 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         headerTitle={headerTitle}
         search={false}
         cardBordered={false}
-        components={{ header: { cell: ResizableHeaderCell } }}
+        size="middle"
         options={{ density: true, fullScreen: false, reload: false, setting: true }}
         toolBarRender={toolbar ? () => [toolbar] : false}
         rowSelection={selectableRows ? {
           selectedRowKeys,
           onChange: (nextSelectedRowKeys) => setSelectedRowKeys(nextSelectedRowKeys),
         } : undefined}
-        rowClassName={(_, index) => (index % 2 === 0 ? 'np-table-row-odd' : 'np-table-row-even')}
         tableAlertRender={false}
         tableAlertOptionRender={false}
         tableLayout="fixed"
         scroll={{ x: 'max-content' }}
         pagination={false}
       />
-      {footerFill}
       <div className="np-search-table-footer">
         <Pagination
           current={current}

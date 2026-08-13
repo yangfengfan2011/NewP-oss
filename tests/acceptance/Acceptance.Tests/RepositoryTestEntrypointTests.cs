@@ -127,6 +127,7 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("Name = person.Name", runner, StringComparison.Ordinal);
         Assert.Contains("person.PersonNo, person.Name, fixture.CompanyName", runner, StringComparison.Ordinal);
         Assert.Contains("WaitForPostLoginNavigationAsync(page)", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"人员中心\", Exact = true", runner, StringComparison.Ordinal);
         Assert.Contains("SubmitPersonnelKeywordAsync(page, person.PersonNo)", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\"button:visible\"", runner, StringComparison.Ordinal);
         Assert.Contains("Locator(\"tr:visible\"", runner, StringComparison.Ordinal);
@@ -140,6 +141,7 @@ public class RepositoryTestEntrypointTests
         Assert.DoesNotContain("Name = \"查看\"", runner, StringComparison.Ordinal);
         Assert.DoesNotContain(".ant-drawer-content #PersonNo", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("window.location.pathname !== '/login'", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("page.GotoAsync($\"http://127.0.0.1:{_shellPort}/organization/persons\"", runner, StringComparison.Ordinal);
     }
 
     [Fact]

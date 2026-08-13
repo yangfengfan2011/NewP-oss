@@ -552,10 +552,7 @@ internal sealed class PersonnelAcceptanceRunner
         await page.Locator("#password").FillAsync(adminPassword);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await WaitForPostLoginNavigationAsync(page);
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons", new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.DOMContentLoaded
-        });
+        await OpenPersonnelFromShellAsync(page);
 
         await AssertPersonListAndDrawerAsync(page, person, fixture);
         var browserAssertions = new List<string>
@@ -779,10 +776,7 @@ internal sealed class PersonnelAcceptanceRunner
         await page.Locator("#password").FillAsync(password);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await WaitForPostLoginNavigationAsync(page);
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons", new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.DOMContentLoaded
-        });
+        await OpenPersonnelFromShellAsync(page);
         return page;
     }
 
@@ -790,6 +784,18 @@ internal sealed class PersonnelAcceptanceRunner
     {
         await page.WaitForURLAsync(
             $"http://127.0.0.1:{_shellPort}/",
+            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    }
+
+    private async Task OpenPersonnelFromShellAsync(IPage page)
+    {
+        var personnelEntry = page.GetByRole(
+            AriaRole.Link,
+            new PageGetByRoleOptions { Name = "人员中心", Exact = true }).First;
+        await personnelEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await personnelEntry.ClickAsync();
+        await page.WaitForURLAsync(
+            $"http://127.0.0.1:{_shellPort}/organization/persons",
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 

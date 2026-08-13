@@ -16,6 +16,9 @@ public static class PersonCrudDescriptorFactory
         Route = "api/organization/persons",
         IdField = "EID",
         DisplayField = "ENAME",
+        SortableFields = ["PersonNo", "ENAME", "EmploymentStatus", "IsEnabled"],
+        DefaultSortField = "PersonNo",
+        DefaultSortDirection = "asc",
         Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PersonStem),
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(

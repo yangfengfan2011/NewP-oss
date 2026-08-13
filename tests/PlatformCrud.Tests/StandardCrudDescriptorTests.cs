@@ -245,9 +245,36 @@ public sealed class StandardCrudDescriptorTests
 
         Assert.Equal(["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"], queryDescriptor.AllowedModelFields);
         Assert.Equal(["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled", "CompanyName"], queryDescriptor.DefaultFields);
+        Assert.Equal(["PersonNo", "ENAME"], queryDescriptor.SortableFields);
+        Assert.Equal("PersonNo", queryDescriptor.DefaultSortField);
+        Assert.Equal("desc", queryDescriptor.DefaultSortDirection);
         var display = Assert.Single(queryDescriptor.DisplayValueFields);
         Assert.Equal("CompanyName", display.Field);
         Assert.Equal("CompanyId", display.SourceField);
+    }
+
+    [Fact]
+    public void Validate_WhenSortableFieldIsNotAListField_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithSort(["SecretField"], defaultSortField: null);
+
+        var error = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的排序字段 SecretField 未纳入列表字段白名单。",
+            error.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenDefaultSortIsNotSortable_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithSort(["PersonNo"], defaultSortField: "ENAME");
+
+        var error = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的默认排序字段 ENAME 未纳入排序白名单。",
+            error.Message);
     }
 
     [Fact]
@@ -333,9 +360,31 @@ public sealed class StandardCrudDescriptorTests
             DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "IsEnabled"]),
+        SortableFields = ["PersonNo", "ENAME"],
+        DefaultSortField = "PersonNo",
+        DefaultSortDirection = "desc",
         DisplayValueFields =
         [
             new PlatformDisplayValueField("CompanyName", sourceField, "Company", "EID", "ENAME")
         ]
+    };
+
+    private static StandardCrudDescriptor DescriptorWithSort(
+        IReadOnlyList<string> sortableFields,
+        string? defaultSortField) => new()
+    {
+        ResourceKey = "organization.person",
+        ModuleId = "Organization",
+        ModelName = "Person",
+        Route = "api/organization/persons",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "PersonNo", "ENAME"],
+            DetailFields: ["EID", "PersonNo", "ENAME"],
+            CreateFields: ["PersonNo", "ENAME"],
+            UpdateFields: ["PersonNo", "ENAME"]),
+        SortableFields = sortableFields,
+        DefaultSortField = defaultSortField
     };
 }

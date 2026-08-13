@@ -51,10 +51,9 @@ public static class PlatformQueryFieldPlanner
             AddField(dbFields, field);
         }
 
-        var sortField = string.IsNullOrWhiteSpace(request.SortBy) ? descriptor.DefaultSortField : request.SortBy.Trim();
+        var (sortField, _) = ResolveSort(descriptor, request, allowedModelFields, displayFields);
         if (!string.IsNullOrWhiteSpace(sortField))
         {
-            ValidateModelField(descriptor, allowedModelFields, displayFields, sortField, "sort");
             AddField(dbFields, sortField);
         }
 
@@ -87,6 +86,52 @@ public static class PlatformQueryFieldPlanner
             DbSelectFields: dbFields,
             InternalOnlyFields: internalOnlyFields,
             RequestedDisplayFields: requestedDisplayFields);
+    }
+
+    /// <summary>
+    /// 解析并校验单列排序请求；字段必须属于 descriptor 排序白名单，方向只允许 asc/desc。
+    /// </summary>
+    internal static (string? Field, string? Direction) ResolveSort(
+        PlatformQueryDescriptor descriptor,
+        PlatformQueryRequest request)
+    {
+        var allowedModelFields = descriptor.AllowedModelFields.ToHashSet(StringComparer.Ordinal);
+        var displayFields = ValidateDescriptorInvariants(descriptor, allowedModelFields);
+        return ResolveSort(descriptor, request, allowedModelFields, displayFields);
+    }
+
+    // 排序解析复用已建立的 descriptor 集合，避免字段规划重复创建白名单。
+    private static (string? Field, string? Direction) ResolveSort(
+        PlatformQueryDescriptor descriptor,
+        PlatformQueryRequest request,
+        ISet<string> allowedModelFields,
+        IReadOnlyDictionary<string, PlatformDisplayValueField> displayFields)
+    {
+        var sortField = string.IsNullOrWhiteSpace(request.SortBy) ? descriptor.DefaultSortField : request.SortBy.Trim();
+        if (string.IsNullOrWhiteSpace(sortField))
+        {
+            return (null, null);
+        }
+
+        ValidateModelField(descriptor, allowedModelFields, displayFields, sortField, "sort");
+        if (!descriptor.SortableFields.Contains(sortField, StringComparer.Ordinal))
+        {
+            throw new PlatformQueryValidationException(
+                "PlatformQuery.UnknownSortField",
+                $"查询资源 {descriptor.ResourceKey} 不允许按字段 {sortField} 排序。");
+        }
+
+        var direction = string.IsNullOrWhiteSpace(request.SortDirection)
+            ? descriptor.DefaultSortDirection
+            : request.SortDirection.Trim().ToLowerInvariant();
+        if (direction is not ("asc" or "desc"))
+        {
+            throw new PlatformQueryValidationException(
+                "PlatformQuery.InvalidSortDirection",
+                $"查询资源 {descriptor.ResourceKey} 不支持排序方向 {direction}。");
+        }
+
+        return (sortField, direction);
     }
 
     /// <summary>

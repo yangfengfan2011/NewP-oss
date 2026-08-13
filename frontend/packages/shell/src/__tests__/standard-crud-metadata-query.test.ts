@@ -3,6 +3,8 @@ import {
   buildStandardCrudDefaultFilters,
   buildStandardCrudEmptyFilters,
   buildStandardCrudListQuery,
+  parseStandardCrudListState,
+  serializeStandardCrudListState,
   collectStandardCrudListRequestFields,
 } from '../standard-crud/standardCrudMetadataQuery';
 
@@ -72,5 +74,73 @@ describe('standard CRUD metadata query helpers', () => {
         {},
       ],
     )).toEqual(['EID', 'PersonNo', 'DepartmentName', 'IsEnabled']);
+  });
+
+  it('restores only declared filters paging and sortable metadata from URL', () => {
+    expect(parseStandardCrudListState(
+      querySchema,
+      new URLSearchParams('keyword=%E5%BC%A0&departmentId=Dept_1&secret=leak&page=3&pageSize=50&sortBy=ENAME&sortDirection=desc'),
+      [
+        { field: 'PersonNo', sortable: true },
+        { field: 'ENAME', sortable: true },
+        { field: 'DepartmentName', sortable: false },
+      ],
+    )).toEqual({
+      filters: {
+        keyword: '张',
+        employmentStatus: '',
+        departmentId: 'Dept_1',
+        positionId: '',
+        isEnabled: true,
+      },
+      page: 3,
+      pageSize: 50,
+      sortBy: 'ENAME',
+      sortDirection: 'desc',
+    });
+  });
+
+  it('falls back to metadata defaults for invalid URL paging and sorting', () => {
+    expect(parseStandardCrudListState(
+      {
+        ...querySchema,
+        defaultSort: { field: 'PersonNo', direction: 'asc' as const },
+      },
+      new URLSearchParams('page=0&pageSize=200&sortBy=DepartmentName&sortDirection=sideways'),
+      [
+        { field: 'PersonNo', sortable: true },
+        { field: 'DepartmentName', sortable: false },
+      ],
+    )).toMatchObject({
+      page: 1,
+      pageSize: 20,
+      sortBy: 'PersonNo',
+      sortDirection: 'asc',
+    });
+  });
+
+  it('serializes committed state without leaking drafts and preserves unrelated route params', () => {
+    const params = serializeStandardCrudListState(
+      querySchema,
+      {
+        filters: {
+          keyword: '张',
+          employmentStatus: '',
+          departmentId: 'Dept_1',
+          positionId: '',
+          isEnabled: true,
+          secret: 'must-not-leak',
+        },
+        page: 2,
+        pageSize: 50,
+        sortBy: 'ENAME',
+        sortDirection: 'desc',
+      },
+      new URLSearchParams('drawer=view&id=Person_1&oldFilter=remove-me'),
+    );
+
+    expect(params.toString()).toBe(
+      'drawer=view&id=Person_1&keyword=%E5%BC%A0&departmentId=Dept_1&isEnabled=true&page=2&pageSize=50&sortBy=ENAME&sortDirection=desc',
+    );
   });
 });

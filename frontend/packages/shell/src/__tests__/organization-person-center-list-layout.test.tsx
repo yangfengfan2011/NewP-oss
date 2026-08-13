@@ -215,7 +215,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CEmploymentStatus%2CIsEnabled&pageIndex=1&pageSize=20',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CEmploymentStatus%2CIsEnabled&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
       { method: 'GET' },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
@@ -229,8 +229,8 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('.np-crud-workspace-content.ant-card')).not.toBeNull();
     expect(container.querySelector('.np-crud-table-section-fill')).toBeNull();
     expect(container.querySelector('.ant-table')).not.toBeNull();
-    expect(container.querySelector('.ant-pagination')).not.toBeNull();
-    expect(container.querySelector('.np-search-table-footer')).not.toBeNull();
+    expect(container.querySelector('.ant-pagination')).toBeNull();
+    expect(container.querySelector('.np-search-table-footer')).toBeNull();
     expect(container.querySelector('.ant-table-selection-column')).toBeNull();
     expect(container.querySelector('.ant-table-column-sorters')).not.toBeNull();
     expect(container.querySelector('.np-table-column-resize-handle')).toBeNull();
@@ -302,7 +302,7 @@ describe('organization person center list layout', () => {
     expect(overflowMenu?.textContent).toContain('停用');
     expect(overflowMenu?.textContent).not.toContain('启用');
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
-    expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(0);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
   });
 

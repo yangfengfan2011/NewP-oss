@@ -79,7 +79,8 @@
         "key": "name",
         "labelKey": "Column_Name",
         "source": "model",
-        "field": "ENAME"
+        "field": "ENAME",
+        "sortable": true
       },
       {
         "key": "companyName",
@@ -97,13 +98,15 @@
         "key": "employmentStatus",
         "labelKey": "Column_EmploymentStatus",
         "source": "model",
-        "field": "EmploymentStatus"
+        "field": "EmploymentStatus",
+        "sortable": true
       },
       {
         "key": "isEnabled",
         "labelKey": "Column_IsEnabled",
         "source": "model",
-        "field": "IsEnabled"
+        "field": "IsEnabled",
+        "sortable": true
       }
     ],
     "pageActions": [

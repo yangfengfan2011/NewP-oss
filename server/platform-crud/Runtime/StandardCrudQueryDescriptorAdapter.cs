@@ -32,7 +32,9 @@ public static class StandardCrudQueryDescriptorAdapter
                 .Distinct(StringComparer.Ordinal)
                 .ToList(),
             DefaultFields = defaultFields,
-            DefaultSortField = descriptor.DisplayField,
+            SortableFields = descriptor.SortableFields,
+            DefaultSortField = descriptor.DefaultSortField,
+            DefaultSortDirection = descriptor.DefaultSortDirection,
             DisplayValueFields = descriptor.DisplayValueFields
         };
     }

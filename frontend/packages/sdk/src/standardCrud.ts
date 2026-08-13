@@ -232,8 +232,18 @@ export interface StandardCrudResourceRegistration<
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
+export interface StandardCrudListQueryRequest {
+  [key: string]: string | number | boolean | null | undefined;
+  pageIndex?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  fields?: string;
+}
+
+/** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudClient {
-  list: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>;
+  list: (query?: StandardCrudListQueryRequest) => Promise<unknown>;
   exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
   getDetail: (id: string) => Promise<StandardCrudDetail>;
   create: (values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;

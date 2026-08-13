@@ -27,6 +27,7 @@ public static class StandardCrudDescriptorValidator
         }
 
         ValidateDisplayValueFields(descriptor);
+        ValidateSort(descriptor);
         ValidateRequiredFields(descriptor);
         ValidateUniqueConstraints(descriptor);
     }
@@ -75,6 +76,31 @@ public static class StandardCrudDescriptorValidator
                 !string.IsNullOrWhiteSpace(displayField.TargetDisplayField),
                 $"标准 CRUD 资源 {descriptor.ResourceKey} 的 display value 字段 {displayField.Field} 未声明目标显示字段。");
         }
+    }
+
+    // 排序字段必须停留在真实列表字段内，默认排序也必须属于显式白名单。
+    private static void ValidateSort(StandardCrudDescriptor descriptor)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in descriptor.SortableFields)
+        {
+            Require(!string.IsNullOrWhiteSpace(field), $"标准 CRUD 资源 {descriptor.ResourceKey} 的排序字段不能为空。");
+            Require(names.Add(field), $"标准 CRUD 资源 {descriptor.ResourceKey} 的排序字段 {field} 重复。");
+            Require(
+                descriptor.FieldSet.ListFields.Contains(field, StringComparer.Ordinal),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的排序字段 {field} 未纳入列表字段白名单。");
+        }
+
+        if (!string.IsNullOrWhiteSpace(descriptor.DefaultSortField))
+        {
+            Require(
+                names.Contains(descriptor.DefaultSortField),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的默认排序字段 {descriptor.DefaultSortField} 未纳入排序白名单。");
+        }
+
+        Require(
+            descriptor.DefaultSortDirection is "asc" or "desc",
+            $"标准 CRUD 资源 {descriptor.ResourceKey} 的默认排序方向 {descriptor.DefaultSortDirection} 无效。");
     }
 
     // 必填声明只做静态边界校验：字段归属和错误契约必须清晰，运行时缺失判断由服务内核统一接管。

@@ -69,6 +69,22 @@ public sealed class PlatformQueryFieldPlannerTests
         Assert.Equal("PlatformQuery.UnknownConditionField", error.Code);
     }
 
+    [Theory]
+    [InlineData("CompanyId", "asc", "PlatformQuery.UnknownSortField")]
+    [InlineData("PersonNo", "sideways", "PlatformQuery.InvalidSortDirection")]
+    public void Build_WhenSortIsOutsideDescriptorBoundary_ThrowsStableCode(
+        string sortBy,
+        string sortDirection,
+        string expectedCode)
+    {
+        var error = Assert.Throws<PlatformQueryValidationException>(() =>
+            PlatformQueryFieldPlanner.Build(
+                Descriptor(),
+                new PlatformQueryRequest(Fields: ["EID"], SortBy: sortBy, SortDirection: sortDirection)));
+
+        Assert.Equal(expectedCode, error.Code);
+    }
+
     [Fact]
     public void Build_WhenIdFieldIsNotAllowedModelField_ThrowsStableCode()
     {
@@ -135,7 +151,9 @@ public sealed class PlatformQueryFieldPlannerTests
         IdField = idField,
         AllowedModelFields = ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "EmploymentStatus", "IsEnabled"],
         DefaultFields = ["EID", "PersonNo", "ENAME", "CompanyName"],
+        SortableFields = ["PersonNo", "ENAME", "IsEnabled"],
         DefaultSortField = "ENAME",
+        DefaultSortDirection = "asc",
         DisplayValueFields = displayValueFields ??
         [
             new PlatformDisplayValueField(

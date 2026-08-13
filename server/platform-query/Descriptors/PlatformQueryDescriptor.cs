@@ -37,7 +37,17 @@ public sealed class PlatformQueryDescriptor
     public IReadOnlyList<string> DefaultFields { get; init; } = [];
 
     /// <summary>
+    /// 获取或设置允许进入数据库排序的真实模型字段白名单。
+    /// </summary>
+    public IReadOnlyList<string> SortableFields { get; init; } = [];
+
+    /// <summary>
     /// 获取或设置默认排序字段。
     /// </summary>
     public string? DefaultSortField { get; init; }
+
+    /// <summary>
+    /// 获取或设置默认排序方向；只允许 asc 或 desc。
+    /// </summary>
+    public string DefaultSortDirection { get; init; } = "asc";
 }

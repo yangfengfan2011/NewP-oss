@@ -19,6 +19,21 @@ public sealed class StandardCrudDescriptor
     public IReadOnlyList<PlatformDisplayValueField> DisplayValueFields { get; init; } = [];
 
     /// <summary>
+    /// 获取或设置允许客户端请求的服务端单列排序字段。
+    /// </summary>
+    public IReadOnlyList<string> SortableFields { get; init; } = [];
+
+    /// <summary>
+    /// 获取或设置列表默认排序字段。
+    /// </summary>
+    public string? DefaultSortField { get; init; }
+
+    /// <summary>
+    /// 获取或设置列表默认排序方向。
+    /// </summary>
+    public string DefaultSortDirection { get; init; } = "asc";
+
+    /// <summary>
     /// 标准写入前置必填字段声明；这里只描述字段、作用范围和错误契约，缺失判断由运行时内核执行。
     /// </summary>
     public IReadOnlyList<StandardCrudRequiredField> RequiredFields { get; init; } = [];

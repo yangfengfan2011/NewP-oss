@@ -24,6 +24,9 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
     private static readonly MethodInfo QueryableOrderByDescendingMethod = typeof(Queryable)
         .GetMethods()
         .Single(method => method.Name == nameof(Queryable.OrderByDescending) && method.GetParameters().Length == 2);
+    private static readonly MethodInfo QueryableThenByMethod = typeof(Queryable)
+        .GetMethods()
+        .Single(method => method.Name == nameof(Queryable.ThenBy) && method.GetParameters().Length == 2);
     private static readonly MethodInfo StringContainsMethod = typeof(string)
         .GetMethod(nameof(string.Contains), [typeof(string)])!;
 
@@ -48,6 +51,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         var page = request.Page <= 0 ? 1 : request.Page;
         var pageSize = request.PageSize <= 0 ? 20 : request.PageSize;
         var plan = PlatformQueryFieldPlanner.Build(descriptor, request);
+        var sort = PlatformQueryFieldPlanner.ResolveSort(descriptor, request);
         var entityType = ResolveEntityType(descriptor);
 
         IQueryable<Dictionary<string, object?>> query = _dbContext
@@ -57,7 +61,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         query = ApplyConditions(query, descriptor, entityType, request.Conditions ?? []);
         var total = await query.CountAsync(cancellationToken);
 
-        query = ApplySort(query, descriptor, entityType, request);
+        query = ApplySort(query, descriptor, entityType, sort.Field, sort.Direction);
         query = query.Skip((page - 1) * pageSize).Take(pageSize);
 
         var selector = BuildSelector(plan.DbSelectFields, descriptor, entityType);
@@ -71,8 +75,8 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
             Total: total,
             Page: page,
             PageSize: pageSize,
-            SortBy: request.SortBy,
-            SortDirection: request.SortDirection,
+            SortBy: sort.Field,
+            SortDirection: sort.Direction,
             ResponseFields: plan.ResponseFields,
             RequestedDisplayFields: plan.RequestedDisplayFields);
     }
@@ -250,13 +254,14 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
                 $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 无法转换为 {fieldType.Name}。");
     }
 
+    // 主排序后固定追加 EID 升序，保证重复主排序值跨页时仍有确定次序。
     private static IQueryable<Dictionary<string, object?>> ApplySort(
         IQueryable<Dictionary<string, object?>> source,
         PlatformQueryDescriptor descriptor,
         IEntityType entityType,
-        PlatformQueryRequest request)
+        string? sortField,
+        string? sortDirection)
     {
-        var sortField = string.IsNullOrWhiteSpace(request.SortBy) ? descriptor.DefaultSortField : request.SortBy.Trim();
         if (string.IsNullOrWhiteSpace(sortField))
         {
             return source;
@@ -266,12 +271,22 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
         var property = BuildPropertyExpression(row, sortField, fieldType);
         var keySelector = Expression.Lambda(property, row);
-        var method = string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+        var method = string.Equals(sortDirection, "desc", StringComparison.Ordinal)
             ? QueryableOrderByDescendingMethod
             : QueryableOrderByMethod;
         var genericMethod = method.MakeGenericMethod(typeof(Dictionary<string, object?>), fieldType);
+        var ordered = (IOrderedQueryable<Dictionary<string, object?>>)genericMethod.Invoke(null, [source, keySelector])!;
+        if (string.Equals(sortField, descriptor.IdField, StringComparison.Ordinal))
+        {
+            return ordered;
+        }
 
-        return (IQueryable<Dictionary<string, object?>>)genericMethod.Invoke(null, [source, keySelector])!;
+        var idType = ResolveFieldType(descriptor, entityType, descriptor.IdField);
+        var idSelector = Expression.Lambda(
+            BuildPropertyExpression(row, descriptor.IdField, idType),
+            row);
+        var thenBy = QueryableThenByMethod.MakeGenericMethod(typeof(Dictionary<string, object?>), idType);
+        return (IQueryable<Dictionary<string, object?>>)thenBy.Invoke(null, [ordered, idSelector])!;
     }
 
     private static Expression<Func<Dictionary<string, object?>, object?[]>> BuildSelector(

@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -17,6 +17,13 @@ vi.mock('@icp-platform/core', async (importOriginal) => ({
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+let testNavigate: NavigateFunction | undefined;
+
+function NavigationProbe() {
+  testNavigate = useNavigate();
+  return null;
+}
 
 function countTextOccurrences(text: string, keyword: string): number {
   return text.split(keyword).length - 1;
@@ -204,6 +211,7 @@ describe('StandardCrudListPageHost', () => {
   async function renderHost(
     catalogOverrides: Record<string, string> = {},
     viewDocument: typeof personListViewDocument = personListViewDocument,
+    initialEntry = '/organization/persons',
   ) {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -211,7 +219,8 @@ describe('StandardCrudListPageHost', () => {
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <MemoryRouter initialEntries={['/organization/persons']}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <NavigationProbe />
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
@@ -246,6 +255,25 @@ describe('StandardCrudListPageHost', () => {
         export: {
           modes: ['current', 'all'],
         },
+      },
+    };
+  }
+
+  function createSortablePersonListViewDocument(): typeof personListViewDocument {
+    return {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        query: {
+          ...personListViewDocument.view.query,
+          defaultSort: { field: 'PersonNo', direction: 'asc' },
+          defaultPageSize: 20,
+        },
+        columns: personListViewDocument.view.columns.map((column) => (
+          column.key === 'personNo' || column.key === 'name'
+            ? { ...column, sortable: true }
+            : column
+        )),
       },
     };
   }
@@ -311,7 +339,119 @@ describe('StandardCrudListPageHost', () => {
       { method: 'GET' },
     );
     expect(container.textContent).toContain('张三');
-    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
+    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(0);
+    expect(container.querySelector('.ant-pagination')).toBeNull();
+  });
+
+  it('restores committed filters paging and server sorting from the URL', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 80,
+        page: 2,
+        pageSize: 50,
+        sortBy: 'ENAME',
+        sortDirection: 'desc',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost(
+      {},
+      createSortablePersonListViewDocument(),
+      '/organization/persons?keyword=%E5%BC%A0&page=2&pageSize=50&sortBy=ENAME&sortDirection=desc',
+    );
+    await flushProTableRequest();
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons?keyword=%E5%BC%A0&fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=2&pageSize=50&sortBy=ENAME&sortDirection=desc',
+      { method: 'GET' },
+    );
+    expect(container.querySelector('.ant-pagination')?.textContent).toContain('共 80 条');
+  });
+
+  it('falls back to the last valid page when refreshed data no longer reaches the URL page', async () => {
+    mockStandardCrudModule();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+      new Response(JSON.stringify({ items: [], total: 20, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    ));
+
+    await renderHost(
+      {},
+      createSortablePersonListViewDocument(),
+      '/organization/persons?page=3&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+    );
+    await flushProTableRequest();
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('pageIndex=3');
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('pageIndex=1');
+  });
+
+  it('submits Enter through the shared query path and resets paging to the first page', async () => {
+    mockStandardCrudModule();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total: 80, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost(
+      {},
+      createSortablePersonListViewDocument(),
+      '/organization/persons?keyword=old&page=2&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+    );
+    await flushProTableRequest();
+
+    const keywordInput = container.querySelector('input.np-filter-control') as HTMLInputElement;
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(keywordInput, 'new');
+      keywordInput.dispatchEvent(new Event('input', { bubbles: true }));
+      keywordInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/organization/persons?keyword=new&fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+      { method: 'GET' },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores browser history without duplicate or drifting requests', async () => {
+    mockStandardCrudModule();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total: 80, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    await renderHost({}, createSortablePersonListViewDocument());
+    await flushProTableRequest();
+
+    await act(async () => {
+      testNavigate?.('?keyword=%E5%BC%A0&page=2&pageSize=20&sortBy=ENAME&sortDirection=desc');
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      testNavigate?.(-1);
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('keyword=%E5%BC%A0');
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('pageIndex=2');
+    expect(fetchMock.mock.calls[2]?.[0]).not.toContain('keyword=');
+    expect(fetchMock.mock.calls[2]?.[0]).toContain('pageIndex=1');
   });
 
   it('requests view columns and row action state fields through fields parameter', async () => {

@@ -48,6 +48,7 @@ public sealed class PlatformQueryExecutorTests
         Assert.Contains("PersonNo", executedSql, StringComparison.Ordinal);
         Assert.Contains("CompanyId", executedSql, StringComparison.Ordinal);
         Assert.DoesNotContain("CreatedAt", executedSql, StringComparison.Ordinal);
+        Assert.Contains("COUNT", executedSql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", executedSql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OFFSET", executedSql, StringComparison.OrdinalIgnoreCase);
     }
@@ -99,6 +100,31 @@ public sealed class PlatformQueryExecutorTests
         Assert.Equal("PlatformQuery.MixedConditionGroupOperator", error.Code);
     }
 
+    [Fact]
+    public async Task QueryAsync_UsesIdAsStableSecondarySortAcrossPages()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("Person_3", "P003", "同名", "FullTime", true),
+            Row("Person_1", "P001", "同名", "FullTime", true),
+            Row("Person_2", "P002", "同名", "FullTime", true));
+        await dbContext.SaveChangesAsync();
+        var executor = new EfPlatformQueryExecutor(dbContext);
+
+        var firstPage = await executor.QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(Fields: ["EID", "ENAME"], Page: 1, PageSize: 2, SortBy: "ENAME", SortDirection: "asc"));
+        var secondPage = await executor.QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(Fields: ["EID", "ENAME"], Page: 2, PageSize: 2, SortBy: "ENAME", SortDirection: "asc"));
+
+        Assert.Equal(["Person_1", "Person_2"], firstPage.Items.Select(row => row["EID"]));
+        Assert.Equal("Person_3", Assert.Single(secondPage.Items)["EID"]);
+    }
+
     private static EfPlatformDbContext BuildDbContext(SqliteConnection connection, List<string> sql)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -131,7 +157,9 @@ public sealed class PlatformQueryExecutorTests
         IdField = "EID",
         AllowedModelFields = ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],
         DefaultFields = ["EID", "PersonNo", "ENAME"],
+        SortableFields = ["PersonNo", "ENAME", "IsEnabled"],
         DefaultSortField = "ENAME",
+        DefaultSortDirection = "asc",
         DisplayValueFields =
         [
             new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")

@@ -10,7 +10,12 @@ import {
   normalizeStandardCrudSubmitValues,
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
-import type { StandardCrudExportMode, StandardCrudFieldDefinition, StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import type {
+  StandardCrudExportMode,
+  StandardCrudFieldDefinition,
+  StandardCrudListQueryRequest,
+  StandardCrudResourceRegistration,
+} from '@icp-platform/sdk';
 import { Button as AntdButton, Drawer, Input, Popconfirm, Popover, Select, Space, Tag, message } from 'antd';
 import {
   CrudFormDrawer,
@@ -21,16 +26,19 @@ import {
   StandardCrudForm,
   createSearchTableRequest,
 } from '@icp-platform/ui';
+import type { SearchTableQueryState } from '@icp-platform/ui';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import {
-  buildStandardCrudDefaultFilters,
   buildStandardCrudListQuery,
   collectStandardCrudListRequestFields,
+  parseStandardCrudListState,
+  serializeStandardCrudListState,
 } from '../standard-crud/standardCrudMetadataQuery';
+import type { StandardCrudListState } from '../standard-crud/standardCrudMetadataQuery';
 import {
   buildStandardCrudDetailFormValues,
 } from '../standard-crud/standardCrudDetailView';
@@ -52,11 +60,6 @@ interface CrudDrawerState {
 interface DeleteActionErrorState {
   key: string;
   message: string;
-}
-
-interface TablePaginationState {
-  current: number;
-  pageSize: number;
 }
 
 interface RowActionItem {
@@ -96,11 +99,6 @@ const CLOSED_DRAWER_STATE: CrudDrawerState = {
 
 const STANDARD_CRUD_INLINE_ACTION_LIMIT = 3;
 const STANDARD_CRUD_ACTION_COLUMN_WIDTH = 176;
-const DEFAULT_TABLE_PAGINATION: TablePaginationState = {
-  current: 1,
-  pageSize: 20,
-};
-
 function readRowActionValue(row: Record<string, unknown>, field: string): unknown {
   return row[field];
 }
@@ -529,16 +527,27 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     () => localizeStandardCrudFields(editFormSchema.fields, schema.dicKey, t),
     [editFormSchema.fields, schema.dicKey, t],
   );
-  const initialFilters = useMemo(
-    () => buildStandardCrudDefaultFilters(schema.query, schema.advancedFilter),
-    [schema.query, schema.advancedFilter],
+  const initialListState = useMemo(
+    () => parseStandardCrudListState(
+      schema.query,
+      new URLSearchParams(location.search),
+      schema.columns,
+      schema.advancedFilter,
+    ),
+    [location.search, schema.query, schema.columns, schema.advancedFilter],
   );
   const listRequestFields = useMemo(
     () => collectStandardCrudListRequestFields(schema.columns, schema.rowActions),
     [schema.columns, schema.rowActions],
   );
-  const [filters, setFilters] = useState<TFilter>(() => initialFilters as TFilter);
-  const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialFilters as TFilter);
+  const [filters, setFilters] = useState<TFilter>(() => initialListState.filters as TFilter);
+  const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialListState.filters as TFilter);
+  const [tableQuery, setTableQuery] = useState<SearchTableQueryState>(() => ({
+    current: initialListState.page,
+    pageSize: initialListState.pageSize,
+    sortBy: initialListState.sortBy,
+    sortDirection: initialListState.sortDirection,
+  }));
   const [rows, setRows] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -556,21 +565,79 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
   const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
-  const [tablePagination, setTablePagination] = useState<TablePaginationState>(DEFAULT_TABLE_PAGINATION);
   const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
+  const handledListRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
+  const committedListStateRef = useRef<StandardCrudListState>({
+    filters: appliedFilters,
+    page: tableQuery.current,
+    pageSize: tableQuery.pageSize,
+    sortBy: tableQuery.sortBy,
+    sortDirection: tableQuery.sortDirection,
+  });
   drawerStateRef.current = drawerState;
+  committedListStateRef.current = {
+    filters: appliedFilters,
+    page: tableQuery.current,
+    pageSize: tableQuery.pageSize,
+    sortBy: tableQuery.sortBy,
+    sortDirection: tableQuery.sortDirection,
+  };
+
+  const syncCommittedListState = (
+    next: StandardCrudListState,
+    options: { replace?: boolean } = {},
+  ) => {
+    committedListStateRef.current = next;
+    setAppliedFilters(next.filters as TFilter);
+    setTableQuery({
+      current: next.page,
+      pageSize: next.pageSize,
+      sortBy: next.sortBy,
+      sortDirection: next.sortDirection,
+    });
+    const params = serializeStandardCrudListState(
+      schema.query,
+      next,
+      new URLSearchParams(location.search),
+      schema.advancedFilter,
+    );
+    const search = params.toString().length > 0 ? `?${params.toString()}` : '';
+    if (search !== location.search) {
+      handledListRouteSearchRef.current = search;
+      navigate({ pathname: location.pathname, search }, { replace: options.replace === true });
+    }
+  };
+
+  const applyFilters = () => {
+    syncCommittedListState({
+      filters,
+      page: 1,
+      pageSize: tableQuery.pageSize,
+      sortBy: tableQuery.sortBy,
+      sortDirection: tableQuery.sortDirection,
+    });
+  };
+
+  const resetFilters = () => {
+    const defaults = parseStandardCrudListState(
+      schema.query,
+      new URLSearchParams(),
+      schema.columns,
+      schema.advancedFilter,
+    );
+    const next = { ...defaults, pageSize: tableQuery.pageSize };
+    setFilters(next.filters as TFilter);
+    syncCommittedListState(next);
+  };
 
   const context = {
     filters,
     setFilters,
-    applyFilters: () => setAppliedFilters(filters),
-    resetFilters: () => {
-      setFilters(initialFilters as TFilter);
-      setAppliedFilters(initialFilters as TFilter);
-    },
+    applyFilters,
+    resetFilters,
     refresh: () => setReloadTick((current) => current + 1),
     loading,
     rows,
@@ -641,9 +708,34 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   useEffect(() => {
-    setFilters(initialFilters as TFilter);
-    setAppliedFilters(initialFilters as TFilter);
-  }, [initialFilters]);
+    if (handledListRouteSearchRef.current === location.search) {
+      handledListRouteSearchRef.current = null;
+      return;
+    }
+
+    const current = committedListStateRef.current;
+    const currentFilters = buildStandardCrudListQuery(schema.query, current.filters, schema.advancedFilter);
+    const nextFilters = buildStandardCrudListQuery(schema.query, initialListState.filters, schema.advancedFilter);
+    if (
+      JSON.stringify(currentFilters) === JSON.stringify(nextFilters)
+      && current.page === initialListState.page
+      && current.pageSize === initialListState.pageSize
+      && current.sortBy === initialListState.sortBy
+      && current.sortDirection === initialListState.sortDirection
+    ) {
+      return;
+    }
+
+    committedListStateRef.current = initialListState;
+    setFilters(initialListState.filters as TFilter);
+    setAppliedFilters(initialListState.filters as TFilter);
+    setTableQuery({
+      current: initialListState.page,
+      pageSize: initialListState.pageSize,
+      sortBy: initialListState.sortBy,
+      sortDirection: initialListState.sortDirection,
+    });
+  }, [initialListState, location.search, schema.query, schema.advancedFilter]);
 
   const closeDrawerForRow = (rowId: string) => {
     if (drawerStateRef.current.id !== rowId) {
@@ -791,27 +883,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ...(listRequestFields.length > 0 ? { fields: listRequestFields.join(',') } : {}),
         }),
         load: async (query) => {
-          try {
-            setLoading(true);
-            setError(null);
-            const rawResult = await client.list(query as Record<string, string | number | boolean | null | undefined>);
-            const result = normalizeStandardCrudListResult(rawResult, registration.mapListItem);
+          const rawResult = await client.list(query as StandardCrudListQueryRequest);
+          const result = normalizeStandardCrudListResult(rawResult, registration.mapListItem);
 
-            setRows(result.items);
-            setTotal(result.total);
-
-            return {
-              items: result.items,
-              total: result.total,
-            };
-          } catch (loadError) {
-            setRows([]);
-            setTotal(0);
-            setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
-            throw loadError;
-          } finally {
-            setLoading(false);
-          }
+          return {
+            items: result.items,
+            total: result.total,
+          };
         },
         mapRow: (row) => row,
       }),
@@ -1007,8 +1085,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         mode,
         columns: exportColumns,
         query: {
-          pageIndex: tablePagination.current,
-          pageSize: tablePagination.pageSize,
+          pageIndex: tableQuery.current,
+          pageSize: tableQuery.pageSize,
+          sortBy: tableQuery.sortBy,
+          sortDirection: tableQuery.sortDirection,
           filters: filtersQuery,
         },
       });
@@ -1119,6 +1199,36 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
 
+  const handleTableQueryChange = (nextQuery: SearchTableQueryState) => {
+    const sortBy = nextQuery.sortBy ?? schema.query.defaultSort?.field;
+    const sortDirection = nextQuery.sortDirection ?? (sortBy ? schema.query.defaultSort?.direction ?? 'asc' : undefined);
+    syncCommittedListState({
+      filters: appliedFilters,
+      page: nextQuery.current,
+      pageSize: nextQuery.pageSize,
+      sortBy,
+      sortDirection,
+    });
+  };
+
+  const handleTableResult = (result: { data: TRow[]; total: number; success: boolean }) => {
+    const lastPage = Math.max(1, Math.ceil(result.total / tableQuery.pageSize));
+    if (tableQuery.current > lastPage) {
+      syncCommittedListState({
+        filters: appliedFilters,
+        page: lastPage,
+        pageSize: tableQuery.pageSize,
+        sortBy: tableQuery.sortBy,
+        sortDirection: tableQuery.sortDirection,
+      }, { replace: true });
+      return;
+    }
+
+    setRows(result.data);
+    setTotal(result.total);
+    setError(null);
+  };
+
   const content = (
     <div className="np-standard-crud-table">
       {error ? <ErrorState message={error} /> : null}
@@ -1126,9 +1236,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         rowKey={registration.getRowId}
         columns={columns}
         request={tableRequest}
+        query={tableQuery}
+        onQueryChange={handleTableQueryChange}
+        onLoadResult={handleTableResult}
+        onLoadError={(loadError) => {
+          setRows([]);
+          setTotal(0);
+          setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 列表失败');
+        }}
+        onLoadingChange={setLoading}
         loading={loading}
         toolbar={exportToolbar}
-        onPageChange={setTablePagination}
         onRefresh={() => void handleRefresh()}
       />
     </div>

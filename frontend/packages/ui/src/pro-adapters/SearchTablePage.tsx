@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Key,
   type ReactNode,
@@ -20,14 +21,25 @@ export interface SearchTableRequestConfig<TFilter, TSourceRow, TRow> {
   mapRow: (row: TSourceRow) => TRow;
 }
 
+export interface SearchTableQueryState {
+  [key: string]: unknown;
+  current: number;
+  pageSize: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+}
+
 export function createSearchTableRequest<TFilter extends Record<string, unknown>, TSourceRow, TRow>(
   config: SearchTableRequestConfig<TFilter, TSourceRow, TRow>,
 ) {
-  return async (params: TFilter & { current?: number; pageSize?: number }) => {
+  return async (params: TFilter & Partial<SearchTableQueryState>) => {
     const query = {
       ...config.buildQuery(params),
       pageIndex: params.current ?? 1,
       pageSize: params.pageSize ?? 20,
+      ...(params.sortBy && params.sortDirection
+        ? { sortBy: params.sortBy, sortDirection: params.sortDirection }
+        : {}),
     };
     const result = await config.load(query);
 
@@ -46,40 +58,24 @@ export interface SearchTablePageProps<TRow> {
   headerTitle?: ReactNode;
   toolbar?: ReactNode;
   selectableRows?: boolean;
-  onPageChange?: (pagination: { current: number; pageSize: number }) => void;
+  query?: SearchTableQueryState;
+  onQueryChange?: (query: SearchTableQueryState) => void;
+  onLoadResult?: (result: { data: TRow[]; total: number; success: boolean }) => void;
+  onLoadError?: (error: unknown) => void;
+  onLoadingChange?: (loading: boolean) => void;
   className?: string;
 }
 
 function resolveColumnKey<TRow>(column: ProColumns<TRow>): string {
-  if (typeof column.key === 'string') {
-    return column.key;
-  }
-
   if (typeof column.dataIndex === 'string') {
     return column.dataIndex;
   }
 
+  if (typeof column.key === 'string') {
+    return column.key;
+  }
+
   return String(column.title ?? 'column');
-}
-
-function compareSortValue(left: unknown, right: unknown): number {
-  if (left === right) {
-    return 0;
-  }
-
-  if (left == null) {
-    return -1;
-  }
-
-  if (right == null) {
-    return 1;
-  }
-
-  if (typeof left === 'number' && typeof right === 'number') {
-    return left - right;
-  }
-
-  return String(left).localeCompare(String(right), 'zh-Hans-CN', { numeric: true });
 }
 
 export function SearchTablePage<TRow extends Record<string, unknown>>({
@@ -89,36 +85,49 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   headerTitle,
   toolbar,
   selectableRows = false,
-  onPageChange,
+  query,
+  onQueryChange,
+  onLoadResult,
+  onLoadError,
+  onLoadingChange,
   className,
 }: SearchTablePageProps<TRow>) {
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [current, setCurrent] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [uncontrolledQuery, setUncontrolledQuery] = useState<SearchTableQueryState>({ current: 1, pageSize: 20 });
+  const requestIdRef = useRef(0);
+  const eventHandlersRef = useRef({ onLoadResult, onLoadError, onLoadingChange });
+  eventHandlersRef.current = { onLoadResult, onLoadError, onLoadingChange };
+  const effectiveQuery = query ?? uncontrolledQuery;
+  const updateQuery = onQueryChange ?? setUncontrolledQuery;
 
   useEffect(() => {
-    let cancelled = false;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
 
     async function loadTableData() {
       try {
         setLoading(true);
-        const result = await request({ current, pageSize });
+        eventHandlersRef.current.onLoadingChange?.(true);
+        const result = await request(effectiveQuery);
 
-        if (!cancelled) {
+        if (requestIdRef.current === requestId) {
           setData(result.data);
           setTotal(result.total);
+          eventHandlersRef.current.onLoadResult?.(result);
         }
-      } catch {
-        if (!cancelled) {
+      } catch (error) {
+        if (requestIdRef.current === requestId) {
           setData([]);
           setTotal(0);
+          eventHandlersRef.current.onLoadError?.(error);
         }
       } finally {
-        if (!cancelled) {
+        if (requestIdRef.current === requestId) {
           setLoading(false);
+          eventHandlersRef.current.onLoadingChange?.(false);
         }
       }
     }
@@ -126,22 +135,21 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
     void loadTableData();
 
     return () => {
-      cancelled = true;
+      if (requestIdRef.current === requestId) {
+        requestIdRef.current += 1;
+      }
     };
-  }, [request, current, pageSize]);
+  }, [request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection]);
 
   const tableColumns = useMemo(() => {
-    return columns.map((column) => {
-      const columnKey = resolveColumnKey(column);
-
-      return {
-        ...column,
-        sorter: columnKey === 'actions'
-          ? false
-          : column.sorter ?? ((left: TRow, right: TRow) => compareSortValue(left[columnKey], right[columnKey])),
-      } as ProColumns<TRow>;
-    });
-  }, [columns]);
+    return columns.map((column) => ({
+      ...column,
+      sorter: column.sorter === true,
+      sortOrder: resolveColumnKey(column) === effectiveQuery.sortBy
+        ? effectiveQuery.sortDirection === 'desc' ? 'descend' : 'ascend'
+        : undefined,
+    } as ProColumns<TRow>));
+  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection]);
 
   return (
     <div className="np-search-table-page">
@@ -166,23 +174,43 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         tableLayout="fixed"
         scroll={{ x: 'max-content' }}
         pagination={false}
+        onChange={(_, __, sorter) => {
+          const activeSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+          const sortBy = typeof activeSorter?.field === 'string'
+            ? activeSorter.field
+            : typeof activeSorter?.columnKey === 'string'
+              ? activeSorter.columnKey
+              : undefined;
+          const sortDirection = activeSorter?.order === 'descend'
+            ? 'desc'
+            : activeSorter?.order === 'ascend'
+              ? 'asc'
+              : undefined;
+          updateQuery({
+            ...effectiveQuery,
+            current: 1,
+            ...(sortBy && sortDirection ? { sortBy, sortDirection } : { sortBy: undefined, sortDirection: undefined }),
+          });
+        }}
       />
-      <div className="np-search-table-footer">
+      {total > effectiveQuery.pageSize ? <div className="np-search-table-footer">
         <Pagination
-          current={current}
-          pageSize={pageSize}
+          current={effectiveQuery.current}
+          pageSize={effectiveQuery.pageSize}
           total={total}
           showSizeChanger
-          pageSizeOptions={[20, 50, 100, 200]}
+          pageSizeOptions={[20, 50, 100]}
           showTotal={(value) => `共 ${value} 条`}
           locale={{ items_per_page: '条/页' }}
           onChange={(nextCurrent, nextPageSize) => {
-            setCurrent(nextCurrent);
-            setPageSize(nextPageSize);
-            onPageChange?.({ current: nextCurrent, pageSize: nextPageSize });
+            updateQuery({
+              ...effectiveQuery,
+              current: nextPageSize === effectiveQuery.pageSize ? nextCurrent : 1,
+              pageSize: nextPageSize,
+            });
           }}
         />
-      </div>
+      </div> : null}
     </div>
   );
 }

@@ -93,6 +93,7 @@ export type {
   StandardCrudFormMode,
   StandardCrudFormSection,
   StandardCrudListExtensionContext,
+  StandardCrudListQueryRequest,
   StandardCrudListResult,
   LoadStandardCrudLookupOptionsInput,
   LoadStandardCrudLookupOptionsResult,

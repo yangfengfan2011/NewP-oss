@@ -41,6 +41,9 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
         Assert.Contains("userBinding", descriptor.SummaryBlockKeys);
         Assert.Contains("authorizationSummary", descriptor.SummaryBlockKeys);
+        Assert.Equal(["PersonNo", "ENAME", "EmploymentStatus", "IsEnabled"], descriptor.SortableFields);
+        Assert.Equal("PersonNo", descriptor.DefaultSortField);
+        Assert.Equal("asc", descriptor.DefaultSortDirection);
         var constraint = Assert.Single(descriptor.UniqueConstraints);
         Assert.Equal("personNo", constraint.Key);
         Assert.Equal(["PersonNo"], constraint.Fields);

@@ -64,7 +64,14 @@
     {
       "id": "rc-picker",
       "sourceContains": "/node_modules/.pnpm/rc-picker@",
-      "scenarios": ["anonymous", "authenticatedShell"],
+      "scenarios": ["anonymous"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "rc-picker-authenticated-shell",
+      "sourceContains": "/node_modules/.pnpm/rc-picker@",
+      "scenarios": ["authenticatedShell"],
+      "enforcement": "report-only",
       "attribution": "shell-initial"
     },
     {

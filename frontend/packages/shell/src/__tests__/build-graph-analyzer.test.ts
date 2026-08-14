@@ -46,6 +46,33 @@ afterEach(() => {
 })
 
 describe('Shell production build graph CLI', () => {
+  it('keeps rc-picker enforced before authentication and report-only in the authenticated shell', () => {
+    const config = JSON.parse(readFileSync(
+      join(repositoryRoot, 'scripts', 'performance', 'shell-build-graph.config.json'),
+      'utf8',
+    )) as {
+      forbiddenDependencies: Array<{
+        id: string
+        scenarios: string[]
+        enforcement?: 'enforced' | 'report-only'
+      }>
+    }
+    const rules = new Map(config.forbiddenDependencies.map((rule) => [rule.id, rule]))
+
+    expect(rules.get('rc-picker')).toMatchObject({
+      scenarios: ['anonymous'],
+    })
+    expect(rules.get('rc-picker')?.enforcement ?? 'enforced').toBe('enforced')
+    expect(rules.get('rc-picker-authenticated-shell')).toMatchObject({
+      scenarios: ['authenticatedShell'],
+      enforcement: 'report-only',
+    })
+    expect(rules.get('module-binding-eager-rc-picker')).toMatchObject({
+      scenarios: ['moduleBindingEager'],
+    })
+    expect(rules.get('module-binding-eager-rc-picker')?.enforcement ?? 'enforced').toBe('enforced')
+  })
+
   it('computes static closures and a route delta without double-counting shared or cyclic edges', () => {
     const outputRoot = mkdtempSync(join(tmpdir(), 'newp-build-graph-'))
     temporaryRoots.push(outputRoot)

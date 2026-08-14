@@ -1,15 +1,17 @@
 import {
+  createRecoverableCapabilityLoader,
   type FrontendBehaviorBindings,
   type StandardCrudCapabilityModule,
-  type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 
-async function loadPersonStandardCrudResource(): Promise<StandardCrudCapabilityModule> {
-  const { personStandardCrudResource } = await import('./standard-crud/personStandardCrudResource');
-  return {
-    default: personStandardCrudResource as unknown as StandardCrudResourceRegistration,
-  };
-}
+const loadPersonStandardCrudResource = createRecoverableCapabilityLoader<StandardCrudCapabilityModule>(
+  async () => ({
+    default: (await import('./standard-crud/personStandardCrudResource.primary')).primary,
+  }),
+  async () => ({
+    default: (await import('./standard-crud/personStandardCrudResource.recovery')).recovery,
+  }),
+);
 
 export const organizationBindings: FrontendBehaviorBindings = {
   behaviorKey: 'organization.frontend',

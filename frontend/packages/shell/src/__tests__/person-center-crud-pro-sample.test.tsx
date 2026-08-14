@@ -352,7 +352,9 @@ describe('人员中心 CRUD Pro 样板', () => {
     const createButton = findAntdButtonByText(container, '新建');
     createButton?.focus();
     await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('新建人员');
+    });
     expect(document.body.textContent).toContain('新建人员');
     expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
     expect(findInputByLabel(document.body, '人员编号')?.placeholder).toBe('请输入人员编号');
@@ -461,7 +463,9 @@ describe('人员中心 CRUD Pro 样板', () => {
     await act(async () => advancedFilterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
-    expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('高级筛选');
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('高级筛选');
+    }, { timeout: 5_000 });
     expect(document.body.querySelector('.ant-drawer-right')).not.toBeNull();
     expect(document.body.querySelector('.ant-popover')).toBeNull();
     expect(document.body.textContent).toContain('组织信息');

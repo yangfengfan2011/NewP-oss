@@ -247,6 +247,22 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("public long Revision { get; init; }", personDto, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProductionColdStartConfiguration_UsesFrozenCandidateBudgets()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "scripts",
+            "performance",
+            "production-cold-start.config.json")));
+        var budgets = document.RootElement.GetProperty("budgets");
+
+        AssertBudget(budgets, "anonymous-login", 1000, 1500, null);
+        AssertBudget(budgets, "authenticated-home", 3700, 3900, 0.30m);
+        AssertBudget(budgets, "authenticated-personnel", 6200, 6500, null);
+    }
+
     private static string GetRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -262,5 +278,28 @@ public class RepositoryTestEntrypointTests
         }
 
         throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
+    private static void AssertBudget(
+        JsonElement budgets,
+        string scenario,
+        int expectedP50,
+        int expectedP95,
+        decimal? expectedP50Improvement)
+    {
+        var budget = budgets.GetProperty(scenario);
+        Assert.Equal(expectedP50, budget.GetProperty("maxP50Ms").GetInt32());
+        Assert.Equal(expectedP95, budget.GetProperty("maxP95Ms").GetInt32());
+
+        Assert.False(budget.TryGetProperty("minimumImprovementRatio", out _));
+        if (expectedP50Improvement is null)
+        {
+            Assert.False(budget.TryGetProperty("minimumP50ImprovementRatio", out _));
+            return;
+        }
+
+        Assert.Equal(
+            expectedP50Improvement,
+            budget.GetProperty("minimumP50ImprovementRatio").GetDecimal());
     }
 }

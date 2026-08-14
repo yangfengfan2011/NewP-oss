@@ -3,7 +3,8 @@ namespace ICP.Platform.Acceptance;
 public enum ProductionColdStartMode
 {
     Baseline,
-    Candidate
+    Candidate,
+    Qualification
 }
 
 public static class ProductionColdStartScenarios
@@ -72,7 +73,7 @@ public sealed record ProductionColdStartSample(
 public sealed record ProductionColdStartBudget(
     long MaxP50Ms,
     long MaxP95Ms,
-    decimal? MinimumImprovementRatio = null);
+    decimal? MinimumP50ImprovementRatio = null);
 
 public sealed record ProductionColdStartScenarioSummary(
     int SampleCount,
@@ -81,13 +82,36 @@ public sealed record ProductionColdStartScenarioSummary(
     long JsTransferP50Bytes,
     long JsTransferP95Bytes,
     long LongTaskP50Ms,
-    long LongTaskP95Ms);
+    long LongTaskP95Ms,
+    decimal? InteractiveP50ImprovementRatio = null,
+    decimal? InteractiveP95ImprovementRatio = null);
 
 public sealed record ProductionColdStartViolation(
     string Code,
     string? Scenario,
     int? Iteration,
     string Diagnostic);
+
+public sealed record ProductionColdStartCapabilityRecoveryProbe(
+    string SchemaVersion,
+    bool ContainsSecrets,
+    string? TargetCapabilityAsset,
+    string? RecoveryCapabilityAsset,
+    string? FailedRequestPath,
+    string? RecoveryRequestPath,
+    int TargetRequestCount,
+    bool FirstRequestAborted,
+    int? SecondRequestStatus,
+    string? ErrorCode,
+    bool RetryRequested,
+    string RetryResult,
+    bool FreshAuthorizedContext,
+    bool CacheCleared,
+    bool ServiceWorkersBlocked,
+    bool ShellRemainedInteractive,
+    bool PersonnelRecovered,
+    bool RegistryNavigationAvailable,
+    string? Diagnostic);
 
 public sealed record ProductionColdStartReductionRequest(
     ProductionColdStartMode Mode,
@@ -97,7 +121,8 @@ public sealed record ProductionColdStartReductionRequest(
     IReadOnlyList<string> TargetCapabilityAssets,
     IReadOnlyDictionary<string, ProductionColdStartBudget> Budgets,
     IReadOnlyDictionary<string, ProductionColdStartScenarioSummary>? BaselineSummaries,
-    AcceptanceCleanupResult Cleanup);
+    AcceptanceCleanupResult Cleanup,
+    ProductionColdStartCapabilityRecoveryProbe? CapabilityRecovery = null);
 
 public sealed record ProductionColdStartReductionResult(
     string SchemaVersion,
@@ -106,4 +131,5 @@ public sealed record ProductionColdStartReductionResult(
     string? FailureCode,
     IReadOnlyDictionary<string, ProductionColdStartScenarioSummary> Scenarios,
     IReadOnlyList<ProductionColdStartViolation> Violations,
-    AcceptanceCleanupResult Cleanup);
+    AcceptanceCleanupResult Cleanup,
+    ProductionColdStartCapabilityRecoveryProbe? CapabilityRecovery = null);

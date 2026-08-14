@@ -19,6 +19,7 @@ internal sealed record PersonnelProductionColdStartExecution(
     IReadOnlyList<string> ProcessIdentities,
     IReadOnlyList<string> ArtifactRefs,
     IReadOnlyList<ProductionColdStartSample> Samples,
+    ProductionColdStartCapabilityRecoveryProbe? CapabilityRecovery,
     string ChromiumVersion,
     AcceptanceCleanupResult Cleanup,
     string? FailureDiagnostic);
@@ -166,7 +167,8 @@ internal sealed class PersonnelAcceptanceRunner
                     targetCapabilityAssets,
                     rawSamplesPath),
                 cancellationToken);
-            failureDiagnostic = browserExecution.FailureDiagnostic;
+            failureDiagnostic = browserExecution.FailureDiagnostic
+                ?? browserExecution.CapabilityRecovery?.Diagnostic;
             if (!string.Equals(browserExecution.ProductionServerIdentity, "unavailable", StringComparison.Ordinal))
             {
                 _processIdentities.Add(browserExecution.ProductionServerIdentity);
@@ -174,6 +176,7 @@ internal sealed class PersonnelAcceptanceRunner
             foreach (var path in new[]
                      {
                          rawSamplesPath,
+                         Path.Combine(_runDirectory, "capability-recovery.json"),
                          Path.Combine(_runDirectory, "production-shell", "ready.json"),
                          Path.Combine(_runDirectory, "production-shell", "stdout.log"),
                          Path.Combine(_runDirectory, "production-shell", "stderr.log")
@@ -225,6 +228,7 @@ internal sealed class PersonnelAcceptanceRunner
             _processIdentities,
             _artifactRefs,
             browserExecution?.Samples ?? [],
+            browserExecution?.CapabilityRecovery,
             browserExecution?.ChromiumVersion ?? "unavailable",
             cleanup,
             failureDiagnostic);

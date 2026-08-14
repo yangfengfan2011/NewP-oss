@@ -5,6 +5,37 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public class ProductionColdStartReducerTests
 {
+    private const string TargetAsset = "assets/personnel.primary.js";
+    private const string RecoveryAsset = "assets/personnel.recovery.js";
+
+    [Fact]
+    public void Reduce_QualificationUsesOneCompleteSamplePerScenarioWithoutBecomingAFormalBudgetSample()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .Select(scenario => CompleteSample(scenario, 1, 1000))
+            .ToArray();
+
+        var result = ProductionColdStartReducer.Reduce(new ProductionColdStartReductionRequest(
+            Mode: ProductionColdStartMode.Qualification,
+            ExpectedSamplesPerScenario: 1,
+            ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
+            Samples: samples,
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
+            Budgets: ProductionColdStartScenarios.All.ToDictionary(
+                static scenario => scenario,
+                static _ => new ProductionColdStartBudget(1, 1),
+                StringComparer.Ordinal),
+            BaselineSummaries: null,
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe()));
+
+        Assert.Equal(AcceptanceVerdict.Passed, result.Verdict);
+        Assert.Null(result.FailureCode);
+        Assert.All(result.Scenarios, pair => Assert.Equal(1, pair.Value.SampleCount));
+        Assert.Contains(result.Violations, item =>
+            item.Code == AcceptanceFailureCodes.ProductionColdStartBudgetExceeded);
+    }
+
     [Fact]
     public void Reduce_WithTwentyCompleteSamplesPerScenario_ComputesNearestRankPercentiles()
     {
@@ -18,10 +49,11 @@ public class ProductionColdStartReducerTests
             ExpectedSamplesPerScenario: 20,
             ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
             Samples: samples,
-            TargetCapabilityAssets: [],
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
             Budgets: new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal),
             BaselineSummaries: null,
-            Cleanup: new AcceptanceCleanupResult("completed", null)));
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe()));
 
         Assert.Equal(AcceptanceVerdict.Passed, result.Verdict);
         Assert.Null(result.FailureCode);
@@ -54,10 +86,11 @@ public class ProductionColdStartReducerTests
             ExpectedSamplesPerScenario: 20,
             ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
             Samples: samples,
-            TargetCapabilityAssets: [],
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
             Budgets: new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal),
             BaselineSummaries: null,
-            Cleanup: new AcceptanceCleanupResult("completed", null)));
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe()));
 
         Assert.Equal(AcceptanceVerdict.Failed, result.Verdict);
         Assert.Equal(AcceptanceFailureCodes.ProductionColdStartSampleCount, result.FailureCode);
@@ -86,10 +119,11 @@ public class ProductionColdStartReducerTests
             ExpectedSamplesPerScenario: 20,
             ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
             Samples: samples,
-            TargetCapabilityAssets: [],
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
             Budgets: new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal),
             BaselineSummaries: null,
-            Cleanup: new AcceptanceCleanupResult("completed", null)));
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe()));
 
         Assert.Equal(AcceptanceVerdict.Failed, result.Verdict);
         Assert.Equal(AcceptanceFailureCodes.ProductionColdStartScenarioSkipped, result.FailureCode);
@@ -119,10 +153,11 @@ public class ProductionColdStartReducerTests
             ExpectedSamplesPerScenario: 20,
             ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
             Samples: samples,
-            TargetCapabilityAssets: [],
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
             Budgets: new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal),
             BaselineSummaries: null,
-            Cleanup: new AcceptanceCleanupResult("completed", null)));
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe()));
 
         Assert.Equal(AcceptanceFailureCodes.ProductionColdStartCacheNotCleared, result.FailureCode);
         Assert.Contains(result.Violations, item =>
@@ -153,10 +188,11 @@ public class ProductionColdStartReducerTests
             ExpectedSamplesPerScenario: 20,
             ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
             Samples: samples,
-            TargetCapabilityAssets: [],
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
             Budgets: new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal),
             BaselineSummaries: null,
-            Cleanup: new AcceptanceCleanupResult("completed", null)));
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe()));
 
         Assert.Equal(AcceptanceFailureCodes.ProductionColdStartThrottleMismatch, result.FailureCode);
         Assert.Contains(result.Violations, item =>
@@ -299,9 +335,85 @@ public class ProductionColdStartReducerTests
     }
 
     [Fact]
+    public void Reduce_WhenCandidateHomeP50MeetsRelativeBudget_P95ComparisonRemainsReportOnly()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .SelectMany(scenario => Enumerable.Range(1, 20)
+                .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
+            .ToArray();
+        var request = RequestFor(samples) with
+        {
+            Mode = ProductionColdStartMode.Candidate,
+            Budgets = new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal)
+            {
+                [ProductionColdStartScenarios.AuthenticatedHome] = new(2200, 3000, 0.30m)
+            },
+            BaselineSummaries = new Dictionary<string, ProductionColdStartScenarioSummary>(StringComparer.Ordinal)
+            {
+                [ProductionColdStartScenarios.AuthenticatedHome] = new(
+                    SampleCount: 20,
+                    InteractiveP50Ms: 1500,
+                    InteractiveP95Ms: 2200,
+                    JsTransferP50Bytes: 8192,
+                    JsTransferP95Bytes: 8192,
+                    LongTaskP50Ms: 0,
+                    LongTaskP95Ms: 0)
+            }
+        };
+
+        var result = ProductionColdStartReducer.Reduce(request);
+
+        Assert.Equal(AcceptanceVerdict.Passed, result.Verdict);
+        var summary = result.Scenarios[ProductionColdStartScenarios.AuthenticatedHome];
+        Assert.Equal(1m - 1000m / 1500m, summary.InteractiveP50ImprovementRatio);
+        Assert.Equal(1m - 1900m / 2200m, summary.InteractiveP95ImprovementRatio);
+        Assert.DoesNotContain(
+            result.Violations,
+            item => item.Scenario == ProductionColdStartScenarios.AuthenticatedHome);
+    }
+
+    [Fact]
+    public void Reduce_WhenCandidateHasNoRelativeBudget_ReportsComparisonWithoutEnforcingIt()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .SelectMany(scenario => Enumerable.Range(1, 20)
+                .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
+            .ToArray();
+        var request = RequestFor(samples) with
+        {
+            Mode = ProductionColdStartMode.Candidate,
+            Budgets = new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal)
+            {
+                [ProductionColdStartScenarios.AuthenticatedPersonnel] = new(2200, 3000)
+            },
+            BaselineSummaries = new Dictionary<string, ProductionColdStartScenarioSummary>(StringComparer.Ordinal)
+            {
+                [ProductionColdStartScenarios.AuthenticatedPersonnel] = new(
+                    SampleCount: 20,
+                    InteractiveP50Ms: 1200,
+                    InteractiveP95Ms: 2200,
+                    JsTransferP50Bytes: 8192,
+                    JsTransferP95Bytes: 8192,
+                    LongTaskP50Ms: 0,
+                    LongTaskP95Ms: 0)
+            }
+        };
+
+        var result = ProductionColdStartReducer.Reduce(request);
+
+        Assert.Equal(AcceptanceVerdict.Passed, result.Verdict);
+        var summary = result.Scenarios[ProductionColdStartScenarios.AuthenticatedPersonnel];
+        Assert.Equal(1m - 1000m / 1200m, summary.InteractiveP50ImprovementRatio);
+        Assert.Equal(1m - 1900m / 2200m, summary.InteractiveP95ImprovementRatio);
+        Assert.DoesNotContain(
+            result.Violations,
+            item => item.Scenario == ProductionColdStartScenarios.AuthenticatedPersonnel);
+    }
+
+    [Fact]
     public void Reduce_WhenUnauthorizedRouteRequestsTargetCapability_FailsInBaselineAndCandidateModes()
     {
-        var targetAsset = "/assets/personnel.js";
+        var targetAsset = TargetAsset;
         var samples = ProductionColdStartScenarios.All
             .SelectMany(scenario => Enumerable.Range(1, 20)
                 .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
@@ -313,13 +425,123 @@ public class ProductionColdStartReducerTests
                 ? sample with { RequestedTargetCapabilityAssets = [targetAsset] }
                 : sample)
             .ToArray();
-        var request = RequestFor(samples) with { TargetCapabilityAssets = [targetAsset] };
+        var request = RequestFor(samples) with { TargetCapabilityAssets = [targetAsset, RecoveryAsset] };
 
         var baseline = ProductionColdStartReducer.Reduce(request);
         var candidate = ProductionColdStartReducer.Reduce(request with { Mode = ProductionColdStartMode.Candidate });
 
         Assert.Equal(AcceptanceFailureCodes.ProductionColdStartTargetCapabilityRequested, baseline.FailureCode);
         Assert.Equal(AcceptanceFailureCodes.ProductionColdStartTargetCapabilityRequested, candidate.FailureCode);
+    }
+
+    [Fact]
+    public void Reduce_WhenCapabilityRecoveryProbeIsMissing_FailsClosed()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .SelectMany(scenario => Enumerable.Range(1, 20)
+                .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
+            .ToArray();
+        var request = RequestFor(samples) with
+        {
+            TargetCapabilityAssets = [TargetAsset, RecoveryAsset],
+            CapabilityRecovery = null
+        };
+
+        var result = ProductionColdStartReducer.Reduce(request);
+
+        Assert.Equal(AcceptanceVerdict.Failed, result.Verdict);
+        Assert.Equal(AcceptanceFailureCodes.ProductionColdStartCapabilityRecoveryFailed, result.FailureCode);
+    }
+
+    [Fact]
+    public void Reduce_WhenNormalPersonnelSampleRequestsRecoveryAsset_FailsClosed()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .SelectMany(scenario => Enumerable.Range(1, 20)
+                .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
+            .Select(sample => sample is
+            {
+                Scenario: ProductionColdStartScenarios.AuthenticatedPersonnel,
+                Iteration: 1
+            }
+                ? sample with { RequestedTargetCapabilityAssets = [TargetAsset, RecoveryAsset] }
+                : sample)
+            .ToArray();
+
+        var result = ProductionColdStartReducer.Reduce(RequestFor(samples));
+
+        Assert.Equal(AcceptanceVerdict.Failed, result.Verdict);
+        Assert.Equal(AcceptanceFailureCodes.ProductionColdStartCapabilityRecoveryFailed, result.FailureCode);
+    }
+
+    [Fact]
+    public void Reduce_WhenCapabilityTargetAssetIsNotUnique_FailsClosed()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .SelectMany(scenario => Enumerable.Range(1, 20)
+                .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
+            .ToArray();
+
+        var withoutTarget = ProductionColdStartReducer.Reduce(RequestFor(samples) with
+        {
+            TargetCapabilityAssets = [],
+            CapabilityRecovery = CompleteRecoveryProbe()
+        });
+        var withMultipleTargets = ProductionColdStartReducer.Reduce(RequestFor(samples) with
+        {
+            TargetCapabilityAssets = [TargetAsset, RecoveryAsset, "assets/personnel-other.js"],
+            CapabilityRecovery = CompleteRecoveryProbe()
+        });
+
+        Assert.Equal(
+            AcceptanceFailureCodes.ProductionColdStartCapabilityRecoveryFailed,
+            withoutTarget.FailureCode);
+        Assert.Equal(
+            AcceptanceFailureCodes.ProductionColdStartCapabilityRecoveryFailed,
+            withMultipleTargets.FailureCode);
+    }
+
+    [Fact]
+    public void Reduce_WhenCapabilityRecoveryEvidenceIsIncomplete_FailsClosed()
+    {
+        var samples = ProductionColdStartScenarios.All
+            .SelectMany(scenario => Enumerable.Range(1, 20)
+                .Select(iteration => CompleteSample(scenario, iteration, iteration * 100L)))
+            .ToArray();
+        var complete = CompleteRecoveryProbe();
+        var incompleteProbes = new[]
+        {
+            complete with { SchemaVersion = "0.9" },
+            complete with { ContainsSecrets = true },
+            complete with { TargetCapabilityAsset = "assets/other.js" },
+            complete with { RecoveryCapabilityAsset = "assets/other.recovery.js" },
+            complete with { FailedRequestPath = "/assets/other.js" },
+            complete with { RecoveryRequestPath = "/assets/other.recovery.js" },
+            complete with { TargetRequestCount = 1 },
+            complete with { FirstRequestAborted = false },
+            complete with { SecondRequestStatus = 500 },
+            complete with { ErrorCode = "ROUTE_CAPABILITY_RENDER_FAILED" },
+            complete with { RetryRequested = false },
+            complete with { RetryResult = "failed" },
+            complete with { FreshAuthorizedContext = false },
+            complete with { CacheCleared = false },
+            complete with { ServiceWorkersBlocked = false },
+            complete with { ShellRemainedInteractive = false },
+            complete with { PersonnelRecovered = false },
+            complete with { RegistryNavigationAvailable = false }
+        };
+
+        foreach (var probe in incompleteProbes)
+        {
+            var result = ProductionColdStartReducer.Reduce(RequestFor(samples) with
+            {
+                CapabilityRecovery = probe
+            });
+
+            Assert.Equal(
+                AcceptanceFailureCodes.ProductionColdStartCapabilityRecoveryFailed,
+                result.FailureCode);
+        }
     }
 
     [Fact]
@@ -369,14 +591,37 @@ public class ProductionColdStartReducerTests
             LongTaskObserverSucceeded: true,
             RequestedTargetCapabilityAssets: []);
 
+    private static ProductionColdStartCapabilityRecoveryProbe CompleteRecoveryProbe() =>
+        new(
+            SchemaVersion: "1.0",
+            ContainsSecrets: false,
+            TargetCapabilityAsset: TargetAsset,
+            RecoveryCapabilityAsset: RecoveryAsset,
+            FailedRequestPath: "/" + TargetAsset,
+            RecoveryRequestPath: "/" + RecoveryAsset,
+            TargetRequestCount: 2,
+            FirstRequestAborted: true,
+            SecondRequestStatus: 200,
+            ErrorCode: "ROUTE_CAPABILITY_LOAD_FAILED",
+            RetryRequested: true,
+            RetryResult: "recovered",
+            FreshAuthorizedContext: true,
+            CacheCleared: true,
+            ServiceWorkersBlocked: true,
+            ShellRemainedInteractive: true,
+            PersonnelRecovered: true,
+            RegistryNavigationAvailable: true,
+            Diagnostic: null);
+
     private static ProductionColdStartReductionRequest RequestFor(IReadOnlyList<ProductionColdStartSample> samples) =>
         new(
             Mode: ProductionColdStartMode.Baseline,
             ExpectedSamplesPerScenario: 20,
             ExpectedThrottle: ProductionColdStartThrottleProfile.Required,
             Samples: samples,
-            TargetCapabilityAssets: [],
+            TargetCapabilityAssets: [TargetAsset, RecoveryAsset],
             Budgets: new Dictionary<string, ProductionColdStartBudget>(StringComparer.Ordinal),
             BaselineSummaries: null,
-            Cleanup: new AcceptanceCleanupResult("completed", null));
+            Cleanup: new AcceptanceCleanupResult("completed", null),
+            CapabilityRecovery: CompleteRecoveryProbe());
 }

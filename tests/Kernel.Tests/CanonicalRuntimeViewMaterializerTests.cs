@@ -323,6 +323,62 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void Stage_MetadataManifest_OnlyPublishesFrontendModulesWhileKeepingBackendOnlyModulesActive()
+    {
+        var identityRoot = CreateModulePackageWithMetadata("Identity", "models", "Account.model.json");
+        var organizationRoot = CreateModulePackageWithMetadata("Organization", "navigation", "Personnel.nav.json");
+        var authenticationRoot = CreateModulePackageWithMetadata("Authentication", "models", "Session.model.json");
+        var authorizationRoot = CreateModulePackageWithMetadata("Authorization", "models", "Permission.model.json");
+        var modules = new[]
+        {
+            CreatePublicBuiltInModule("Identity", identityRoot) with { FrontendEntry = "entry.js" },
+            CreatePublicBuiltInModule("Organization", organizationRoot) with { FrontendEntry = "entry.js" },
+            CreatePublicBuiltInModule("Authentication", authenticationRoot) with
+            {
+                PermissionCodes = ["authentication.session.read"]
+            },
+            CreatePublicBuiltInModule("Authorization", authorizationRoot) with
+            {
+                PermissionCodes = ["authorization.permission.read"]
+            }
+        };
+        var plan = new CanonicalModulePlan(
+            "candidate",
+            "1.0",
+            new string('a', 64),
+            new string('b', 64),
+            [],
+            modules);
+        var installRoot = Path.Combine(_root, "frontend-metadata-projection-install");
+
+        using var stage = new RuntimeViewMaterializer(new InstalledPluginStateStore(installRoot))
+            .Stage(installRoot, plan);
+
+        using var metadataManifest = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "metadata-runtime-manifest.json")));
+        Assert.Equal(
+            ["Identity", "Organization"],
+            metadataManifest.RootElement.GetProperty("modules").EnumerateArray()
+                .Select(static module => module.GetProperty("moduleId").GetString()!)
+                .ToArray());
+
+        using var activeCatalog = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "active-module-runtime.json")));
+        var activeModules = activeCatalog.RootElement.GetProperty("modules").EnumerateArray().ToArray();
+        Assert.Equal(4, activeModules.Length);
+        Assert.Contains(activeModules, module => module.GetProperty("moduleId").GetString() == "Authentication");
+        Assert.Contains(activeModules, module => module.GetProperty("moduleId").GetString() == "Authorization");
+        Assert.Contains(
+            "authentication.session.read",
+            activeModules.Single(module => module.GetProperty("moduleId").GetString() == "Authentication")
+                .GetProperty("permissionCodes").EnumerateArray().Select(static code => code.GetString()));
+        Assert.Contains(
+            "authorization.permission.read",
+            activeModules.Single(module => module.GetProperty("moduleId").GetString() == "Authorization")
+                .GetProperty("permissionCodes").EnumerateArray().Select(static code => code.GetString()));
+    }
+
+    [Fact]
     public void Materialize_BuiltInCapsule_WritesOneActiveCatalogAndHashBoundCompatibilityProjections()
     {
         var modulesRoot = Path.Combine(_root, "modules");
@@ -492,4 +548,16 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
             [],
             [],
             new ModulePlanProvenance("built-in", Path.Combine(packageRoot, "plugin.json"), "/"));
+
+    private string CreateModulePackageWithMetadata(
+        string moduleId,
+        string metadataDirectory,
+        string fileName)
+    {
+        var packageRoot = Path.Combine(_root, $"{moduleId}-{Guid.NewGuid():N}");
+        var metadataRoot = Path.Combine(packageRoot, "modules", moduleId, "metadata", metadataDirectory);
+        Directory.CreateDirectory(metadataRoot);
+        File.WriteAllText(Path.Combine(metadataRoot, fileName), "{}");
+        return packageRoot;
+    }
 }

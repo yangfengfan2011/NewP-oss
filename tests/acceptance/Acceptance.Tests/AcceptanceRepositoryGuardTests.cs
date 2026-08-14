@@ -44,6 +44,9 @@ public sealed class AcceptanceRepositoryGuardTests
             var ignoredArtifact = Path.Combine(repository, ".codex-temp", "acceptance", "runs", "run", "result.json");
             Directory.CreateDirectory(Path.GetDirectoryName(ignoredArtifact)!);
             await File.WriteAllTextAsync(ignoredArtifact, "{}");
+            var ignoredBuildArtifact = Path.Combine(repository, "frontend", "packages", "shell", "dist", "assets", "entry.js");
+            Directory.CreateDirectory(Path.GetDirectoryName(ignoredBuildArtifact)!);
+            await File.WriteAllTextAsync(ignoredBuildArtifact, "export default true;");
             var withIgnoredArtifact = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
             await File.WriteAllTextAsync(Path.Combine(repository, "untracked-input.ts"), "export const changed = true;");
             var withBuildInput = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
@@ -55,6 +58,75 @@ public sealed class AcceptanceRepositoryGuardTests
             Assert.False(withBuildInput.IsClean);
             Assert.NotEqual(clean.UntrackedBuildInputDigest, withBuildInput.UntrackedBuildInputDigest);
             Assert.NotEqual(withBuildInput.UntrackedBuildInputDigest, withChangedBuildInput.UntrackedBuildInputDigest);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task CaptureAsync_ExcludesOnlyIgnoredViteConfigTimestampArtifact()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            await AddShellGitIgnoreAsync(repository);
+            var clean = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
+            var shellRoot = Path.Combine(repository, "frontend", "packages", "shell");
+            var ignoredTimestamp = Path.Combine(shellRoot, "vite.config.ts.timestamp-1234-abcd.mjs");
+            await File.WriteAllTextAsync(ignoredTimestamp, "export default {};");
+
+            Assert.Equal(clean, await AcceptanceRepositorySnapshot.CaptureAsync(repository));
+
+            var adjacentSource = Path.Combine(shellRoot, "vite.config.ts.timestamped-1234-abcd.mjs");
+            await File.WriteAllTextAsync(adjacentSource, "export default {};");
+            var withAdjacentSource = await AcceptanceRepositorySnapshot.CaptureAsync(repository);
+
+            Assert.False(withAdjacentSource.IsClean);
+            Assert.Contains(
+                "frontend/packages/shell/vite.config.ts.timestamped-1234-abcd.mjs",
+                withAdjacentSource.UntrackedBuildInputs);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task Guard_DoesNotExcludeTrackedViteConfigTimestampArtifact()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            await AddShellGitIgnoreAsync(repository);
+            var trackedTimestamp = Path.Combine(
+                repository,
+                "frontend",
+                "packages",
+                "shell",
+                "vite.config.ts.timestamp-1234-abcd.mjs");
+            await File.WriteAllTextAsync(trackedTimestamp, "export const value = 1;");
+            await RunGitAsync(
+                repository,
+                "add",
+                "--force",
+                "frontend/packages/shell/vite.config.ts.timestamp-1234-abcd.mjs");
+            await RunGitAsync(repository, "commit", "-m", "track vite timestamp path");
+            await using var guard = await AcceptanceRepositoryGuard.StartAsync(
+                repository,
+                TimeSpan.FromMilliseconds(10));
+
+            await File.WriteAllTextAsync(trackedTimestamp, "export const value = 2;");
+            await WaitUntilAsync(() => guard.HasChanged, TimeSpan.FromSeconds(3));
+
+            Assert.False(await guard.StopAsync());
+            Assert.Contains(
+                guard.FirstChange!.TrackedStatus,
+                entry => entry.Contains(
+                    "frontend/packages/shell/vite.config.ts.timestamp-1234-abcd.mjs",
+                    StringComparison.Ordinal));
         }
         finally
         {
@@ -139,6 +211,128 @@ public sealed class AcceptanceRepositoryGuardTests
 
             Assert.False(matched);
             Assert.Equal(guard.Baseline, await AcceptanceRepositorySnapshot.CaptureAsync(repository));
+            Assert.Contains("transient.cs", guard.FirstChange!.UntrackedBuildInputs);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task Guard_ReportsTrackedSourceStatusAndStillFailsClosed()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            await using var guard = await AcceptanceRepositoryGuard.StartAsync(
+                repository,
+                TimeSpan.FromMilliseconds(10));
+            await File.WriteAllTextAsync(Path.Combine(repository, "Program.cs"), "internal static class Changed;");
+            await WaitUntilAsync(() => guard.HasChanged, TimeSpan.FromSeconds(3));
+
+            var matched = await guard.StopAsync();
+
+            Assert.False(matched);
+            Assert.Contains(guard.FirstChange!.TrackedStatus, entry => entry.Contains("Program.cs", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task Guard_DoesNotExcludeTrackedSourceInsideIgnoredBuildDirectory()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            var trackedBuildPath = Path.Combine(repository, "frontend", "packages", "shell", "dist", "tracked.ts");
+            Directory.CreateDirectory(Path.GetDirectoryName(trackedBuildPath)!);
+            await File.WriteAllTextAsync(trackedBuildPath, "export const value = 1;");
+            await RunGitAsync(repository, "add", "--force", "frontend/packages/shell/dist/tracked.ts");
+            await RunGitAsync(repository, "commit", "-m", "track build path source");
+            await using var guard = await AcceptanceRepositoryGuard.StartAsync(
+                repository,
+                TimeSpan.FromMilliseconds(10));
+
+            await File.WriteAllTextAsync(trackedBuildPath, "export const value = 2;");
+            await WaitUntilAsync(() => guard.HasChanged, TimeSpan.FromSeconds(3));
+
+            Assert.False(await guard.StopAsync());
+            Assert.Contains(
+                guard.FirstChange!.TrackedStatus,
+                entry => entry.Contains("frontend/packages/shell/dist/tracked.ts", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task Guard_RetriesOneCaptureFailureWithoutTreatingIgnoredArtifactsAsSourceChanges()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            var captures = 0;
+            await using var guard = await AcceptanceRepositoryGuard.StartAsync(
+                repository,
+                TimeSpan.FromMilliseconds(10),
+                snapshotCapture: async (root, cancellationToken) =>
+                {
+                    var attempt = Interlocked.Increment(ref captures);
+                    if (attempt == 2)
+                    {
+                        throw new IOException("simulated transient git read failure");
+                    }
+
+                    return await AcceptanceRepositorySnapshot.CaptureAsync(root, cancellationToken);
+                });
+            var ignoredArtifact = Path.Combine(repository, ".codex-temp", "acceptance", "result.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(ignoredArtifact)!);
+            await File.WriteAllTextAsync(ignoredArtifact, "{}");
+            await Task.Delay(100);
+
+            var matched = await guard.StopAsync();
+
+            Assert.True(matched);
+            Assert.Null(guard.FirstChange);
+            Assert.True(captures >= 3);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task Guard_WhenRepositoryCannotBeCapturedTwice_FailsClosedWithDiagnostic()
+    {
+        var repository = await CreateRepositoryAsync();
+        try
+        {
+            var baselineCaptured = false;
+            await using var guard = await AcceptanceRepositoryGuard.StartAsync(
+                repository,
+                TimeSpan.FromMilliseconds(10),
+                snapshotCapture: async (root, cancellationToken) =>
+                {
+                    if (!baselineCaptured)
+                    {
+                        baselineCaptured = true;
+                        return await AcceptanceRepositorySnapshot.CaptureAsync(root, cancellationToken);
+                    }
+
+                    throw new IOException("simulated persistent git read failure");
+                });
+            await WaitUntilAsync(() => guard.HasChanged, TimeSpan.FromSeconds(3));
+
+            Assert.False(await guard.StopAsync());
+            Assert.Equal("capture-error", guard.FirstChange!.Kind);
+            Assert.Contains("persistent git read failure", guard.FirstChange.Diagnostic, StringComparison.Ordinal);
         }
         finally
         {
@@ -153,11 +347,24 @@ public sealed class AcceptanceRepositoryGuardTests
         await RunGitAsync(repository, "init");
         await RunGitAsync(repository, "config", "user.email", "acceptance@example.invalid");
         await RunGitAsync(repository, "config", "user.name", "Acceptance Tests");
-        await File.WriteAllTextAsync(Path.Combine(repository, ".gitignore"), ".codex-temp/\n");
+        await File.WriteAllTextAsync(
+            Path.Combine(repository, ".gitignore"),
+            ".codex-temp/\ndist/\nbin/\nobj/\n");
         await File.WriteAllTextAsync(Path.Combine(repository, "Program.cs"), "internal static class Program;");
         await RunGitAsync(repository, "add", ".gitignore", "Program.cs");
         await RunGitAsync(repository, "commit", "-m", "baseline");
         return repository;
+    }
+
+    private static async Task AddShellGitIgnoreAsync(string repository)
+    {
+        var shellRoot = Path.Combine(repository, "frontend", "packages", "shell");
+        Directory.CreateDirectory(shellRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(shellRoot, ".gitignore"),
+            "vite.config.ts.timestamp-*.mjs\n");
+        await RunGitAsync(repository, "add", "frontend/packages/shell/.gitignore");
+        await RunGitAsync(repository, "commit", "-m", "ignore vite timestamp artifact");
     }
 
     private static async Task RunGitAsync(string repository, params string[] arguments)

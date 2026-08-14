@@ -85,6 +85,27 @@ public class ModelDtoSyncRunnerTests
     }
 
     [Fact]
+    public void Check_WhenGeneratedOutputsOnlyDifferByLineEndings_ReturnsNoDrift()
+    {
+        var repositoryRoot = CreateTemporaryRepositoryRoot();
+        try
+        {
+            var writtenFiles = ModuleDtoSyncRunner.Run(repositoryRoot);
+            foreach (var path in writtenFiles)
+            {
+                var source = File.ReadAllText(path);
+                File.WriteAllText(path, source.Replace("\n", "\r\n", StringComparison.Ordinal));
+            }
+
+            Assert.Empty(ModuleDtoSyncRunner.Check(repositoryRoot));
+        }
+        finally
+        {
+            DeleteTemporaryRepositoryRoot(repositoryRoot);
+        }
+    }
+
+    [Fact]
     public void Check_ReportsMissingChangedAndUnexpectedFilesWithoutRewriting()
     {
         var repositoryRoot = CreateTemporaryRepositoryRoot();

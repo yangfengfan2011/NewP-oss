@@ -1,18 +1,15 @@
-import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
-  applyStandardCrudLookupValueChange,
   createStandardCrudClient,
   normalizeStandardCrudDetail,
-  normalizeStandardCrudSubmitValues,
-  useStandardCrudLookupRuntime,
   type StandardCrudDetail,
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
-import { DetailPage, FormPage, StandardCrudForm } from '@icp-platform/ui/crud-detail';
+import { DetailPage } from '@icp-platform/ui/crud-detail';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
@@ -21,20 +18,19 @@ import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime'
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import {
   buildStandardCrudDetailColumns,
-  buildStandardCrudDetailFormValues,
   buildStandardCrudDetailPreviewData,
 } from '../standard-crud/standardCrudDetailView';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 type MetadataRecord = Record<string, unknown>;
 
+const StandardCrudDetailEditor = lazy(() => import('./StandardCrudDetailEditor'));
+
 interface StandardCrudDetailPageHostProps {
   viewKey: string;
   id: string | null;
   registration?: StandardCrudResourceRegistration;
 }
-
-const EMPTY_DETAIL_FIELDS: Record<string, unknown> = {};
 
 class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; message: string }, { error: string | null }> {
   state: { error: string | null } = { error: null };
@@ -166,12 +162,14 @@ function StandardCrudDetailPageContent<TDetail>({
     [formSchema.fields, schema.dicKey, t],
   );
   const [loadedDetail, setLoadedDetail] = useState<LoadedDetail<TDetail> | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, unknown>>({});
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setEditing(false);
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,12 +181,9 @@ function StandardCrudDetailPageContent<TDetail>({
         const rawDetail = await client.getDetail(id);
         const normalized = normalizeStandardCrudDetail(rawDetail);
         const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
-        const values = buildStandardCrudDetailFormValues(normalized.fields, editFields);
 
         if (!cancelled) {
           setLoadedDetail({ id, normalized, value: mapped });
-          setFormValues(values);
-          setSaveError(null);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -219,36 +214,46 @@ function StandardCrudDetailPageContent<TDetail>({
     () => (currentNormalizedDetail ? buildStandardCrudDetailColumns(currentNormalizedDetail.fields, editFields) : []),
     [currentNormalizedDetail, editFields],
   );
-  const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
-    fields: editFields,
-    providers: currentNormalizedDetail ? registration.lookupProviders : [],
-    values: formValues,
-    detailFields: currentNormalizedDetail?.fields ?? EMPTY_DETAIL_FIELDS,
-  });
+  const detailSections = useMemo(() => {
+    const sectionedFieldKeys = new Set(formSchema.sections.flatMap((section) => section.fields));
+    const sections = formSchema.sections
+      .map((section) => ({
+        key: section.key,
+        title: t(`${schema.dicKey}.${section.titleKey}`, section.titleKey),
+        columns: detailColumns.filter((column) => section.fields.includes(column.key)),
+      }))
+      .filter((section) => section.columns.length > 0);
+    const remainingColumns = detailColumns.filter((column) => !sectionedFieldKeys.has(column.key));
 
+    return remainingColumns.length > 0
+      ? [...sections, {
+          key: 'remaining',
+          title: t(`${schema.dicKey}.Detail_Title`, '详情信息'),
+          columns: remainingColumns,
+        }]
+      : sections;
+  }, [detailColumns, formSchema.sections, schema.dicKey, t]);
+  const detailSectionPages = detailSections.length > 0
+    ? detailSections.map((section) => (
+        <DetailPage
+          key={section.key}
+          title={section.title}
+          dataSource={detailPreviewData}
+          columns={section.columns}
+        />
+      ))
+    : (
+        <DetailPage
+          title={t(`${schema.dicKey}.Detail_Title`, '详情信息')}
+          dataSource={detailPreviewData}
+          columns={detailColumns}
+        />
+      );
   const refresh = () => setReloadTick((current) => current + 1);
   const detailActionHandlers = useMemo(() => ({
     ...registration.actionHandlers,
-    edit: () => undefined,
+    edit: () => setEditing(true),
   }), [registration.actionHandlers]);
-  const handleFormChange = (fieldKey: string, value: unknown) => {
-    setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, editFields));
-  };
-  const handleSave = async (fields: StandardCrudFieldDefinition[]) => {
-    try {
-      setSaving(true);
-      setSaveError(null);
-      const values = registration.buildMutationValues
-        ? registration.buildMutationValues(formValues)
-        : normalizeStandardCrudSubmitValues(fields, formValues);
-      await client.update(id, values);
-      refresh();
-    } catch (saveFailure) {
-      setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
-    } finally {
-      setSaving(false);
-    }
-  };
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
   const nonReadySummaryBlocks = currentNormalizedDetail
     ? schema.summaryBlocks.filter((blockKey) => currentNormalizedDetail.summaries[blockKey]?.status !== 'ready')
@@ -289,53 +294,13 @@ function StandardCrudDetailPageContent<TDetail>({
         <ErrorState message={error} />
       ) : currentDetail && registration.renderDetail ? (
         <div className="sh-page-stack">
-          <DetailPage
-            title="详情信息"
-            dataSource={detailPreviewData}
-            columns={detailColumns}
-          />
+          {detailSectionPages}
           <StandardCrudSummaryBlocks
             blocks={nonReadySummaryBlocks}
             summaries={currentNormalizedDetail?.summaries ?? {}}
             titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           {registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })}
-        </div>
-      ) : currentNormalizedDetail && editFields.length > 0 ? (
-        <div className="sh-page-stack">
-          <StandardCrudSummaryBlocks
-            blocks={schema.summaryBlocks}
-            summaries={currentNormalizedDetail.summaries}
-            renderers={registration.summaryRenderers}
-            titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
-          />
-          <DetailPage
-            title={t(`${schema.dicKey}.Detail_Title`, '详情信息')}
-            dataSource={detailPreviewData}
-            columns={detailColumns}
-          />
-          <FormPage<Record<string, unknown>>
-            component="div"
-            submitter={false}
-            initialValues={formValues}
-            onFinish={() => handleSave(editFields)}
-          >
-            <StandardCrudForm
-              formId={`${schema.resourceKey}-detail-form`}
-              mode="edit"
-              fields={editFields}
-              sections={formSchema.sections}
-              values={formValues}
-              lookupOptions={lookupOptions}
-              lookupLoading={lookupLoading}
-              lookupErrors={lookupErrors}
-              onChange={handleFormChange}
-              onSubmit={() => handleSave(editFields)}
-              saving={saving}
-              error={saveError}
-              titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
-            />
-          </FormPage>
         </div>
       ) : currentNormalizedDetail ? (
         <div className="sh-page-stack">
@@ -345,11 +310,26 @@ function StandardCrudDetailPageContent<TDetail>({
             renderers={registration.summaryRenderers}
             titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
-          <DetailPage
-            title={t(`${schema.dicKey}.Detail_Title`, '详情信息')}
-            dataSource={detailPreviewData}
-            columns={detailColumns}
-          />
+          {detailSectionPages}
+          {editing && editFields.length > 0 ? (
+            <Suspense fallback={<div className="sh-loading-state" role="status">正在加载编辑表单…</div>}>
+              <StandardCrudDetailEditor
+                key={id}
+                id={id}
+                resourceKey={schema.resourceKey}
+                detail={currentNormalizedDetail}
+                fields={editFields}
+                sections={formSchema.sections}
+                registration={registration}
+                onSave={(values) => client.update(id, values).then(() => undefined)}
+                onSaved={() => {
+                  setEditing(false);
+                  refresh();
+                }}
+                titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
+              />
+            </Suspense>
+          ) : null}
         </div>
       ) : (
         <ErrorState message="未找到详情。" />

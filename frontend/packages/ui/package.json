@@ -26,6 +26,10 @@
       "types": "./dist/crud-detail.d.ts",
       "import": "./dist/crud-detail.js"
     },
+    "./crud-form": {
+      "types": "./dist/crud-form.d.ts",
+      "import": "./dist/crud-form.js"
+    },
     "./crud-list": {
       "types": "./dist/crud-list.d.ts",
       "import": "./dist/crud-list.js"
@@ -43,6 +47,7 @@
   "dependencies": {
     "@ant-design/icons": "^6.2.3",
     "@ant-design/pro-components": "^2.8.10",
+    "@ant-design/pro-descriptions": "^2.6.10",
     "@icp-platform/sdk": "workspace:*",
     "antd": "^5.29.3"
   },

@@ -22,6 +22,7 @@ internal sealed record ProductionColdStartBrowserRequest(
 
 internal sealed record ProductionColdStartBrowserExecution(
     IReadOnlyList<ProductionColdStartSample> Samples,
+    ProductionColdStartCapabilityRecoveryProbe? CapabilityRecovery,
     string ChromiumVersion,
     string ProductionServerIdentity,
     AcceptanceCleanupResult ProductionServerCleanup,
@@ -88,6 +89,7 @@ internal sealed class ProductionColdStartBrowserRunner
         var serverCleanup = new AcceptanceCleanupResult("not-started", AcceptanceFailureCodes.CleanupIncomplete);
         var chromiumVersion = "unavailable";
         var serverIdentity = "unavailable";
+        ProductionColdStartCapabilityRecoveryProbe? capabilityRecovery = null;
         string? failureDiagnostic = null;
 
         try
@@ -112,6 +114,12 @@ internal sealed class ProductionColdStartBrowserRunner
                 origin,
                 request.UnauthorizedECode,
                 request.UnauthorizedPassword);
+            capabilityRecovery = await CaptureCapabilityRecoveryProbeAsync(
+                browser,
+                origin,
+                administratorStorage,
+                request,
+                cancellationToken);
 
             foreach (var scenario in ProductionColdStartScenarios.All)
             {
@@ -155,10 +163,177 @@ internal sealed class ProductionColdStartBrowserRunner
 
         return new ProductionColdStartBrowserExecution(
             samples,
+            capabilityRecovery,
             chromiumVersion,
             serverIdentity,
             serverCleanup,
             failureDiagnostic);
+    }
+
+    // 独立于性能样本验证 fail-once 后的局部错误、显式 retry、Personnel 恢复与 registry 导航存活。
+    private static async Task<ProductionColdStartCapabilityRecoveryProbe> CaptureCapabilityRecoveryProbeAsync(
+        IBrowser browser,
+        string origin,
+        string administratorStorage,
+        ProductionColdStartBrowserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var primaryAssets = request.TargetCapabilityAssets
+            .Where(static asset => asset.Contains(".primary-", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var recoveryAssets = request.TargetCapabilityAssets
+            .Where(static asset => asset.Contains(".recovery-", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var targetAsset = primaryAssets.Length == 1 ? primaryAssets[0] : null;
+        var recoveryAsset = recoveryAssets.Length == 1 ? recoveryAssets[0] : null;
+        string? failedRequestPath = null;
+        string? recoveryRequestPath = null;
+        var targetRequestCount = 0;
+        var firstRequestAborted = false;
+        int? secondRequestStatus = null;
+        string? errorCode = null;
+        var retryRequested = false;
+        var freshAuthorizedContext = false;
+        var cacheCleared = false;
+        var serviceWorkersBlocked = false;
+        var shellRemainedInteractive = false;
+        var personnelRecovered = false;
+        var registryNavigationAvailable = false;
+        string? diagnostic = null;
+
+        try
+        {
+            if (request.TargetCapabilityAssets.Count != 2 || targetAsset is null || recoveryAsset is null)
+            {
+                throw new InvalidOperationException(
+                    "Capability recovery requires exactly one primary and one recovery target asset; "
+                    + $"observed {primaryAssets.Length} primary, {recoveryAssets.Length} recovery, "
+                    + $"{request.TargetCapabilityAssets.Count} total.");
+            }
+
+            await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
+            {
+                Locale = "zh-CN",
+                ViewportSize = new ViewportSize { Width = 1440, Height = 900 },
+                ServiceWorkers = ServiceWorkerPolicy.Block,
+                StorageState = administratorStorage
+            });
+            freshAuthorizedContext = true;
+            serviceWorkersBlocked = true;
+            var page = await context.NewPageAsync();
+            page.SetDefaultTimeout(120_000);
+            page.SetDefaultNavigationTimeout(120_000);
+            var cdp = await context.NewCDPSessionAsync(page);
+            await ApplyThrottleAsync(cdp, request.Throttle);
+            cacheCleared = true;
+            var secondResponse = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            page.Response += (_, response) =>
+            {
+                if (AssetUrlMatches(response.Url, recoveryAsset))
+                {
+                    recoveryRequestPath = new Uri(response.Url).AbsolutePath;
+                    secondResponse.TrySetResult(response.Status);
+                }
+            };
+            await page.RouteAsync("**/*", async route =>
+            {
+                if (AssetUrlMatches(route.Request.Url, targetAsset))
+                {
+                    Interlocked.Increment(ref targetRequestCount);
+                    failedRequestPath = new Uri(route.Request.Url).AbsolutePath;
+                    firstRequestAborted = true;
+                    await route.AbortAsync("failed");
+                    return;
+                }
+
+                if (!AssetUrlMatches(route.Request.Url, recoveryAsset))
+                {
+                    await route.ContinueAsync();
+                    return;
+                }
+
+                Interlocked.Increment(ref targetRequestCount);
+                await route.ContinueAsync();
+            });
+
+            await page.GotoAsync(origin + "/organization/persons", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded
+            });
+            var localError = page.Locator("[data-route-capability-error]");
+            await localError.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            errorCode = await localError.GetAttributeAsync("data-route-capability-error");
+            var shellNavigation = page.GetByLabel("折叠菜单", new PageGetByLabelOptions { Exact = true });
+            await shellNavigation.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            shellRemainedInteractive = await shellNavigation.IsEnabledAsync();
+
+            var retry = page.GetByRole(
+                AriaRole.Button,
+                new PageGetByRoleOptions { Name = "重试当前页面", Exact = true });
+            await retry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            retryRequested = true;
+            await retry.ClickAsync();
+            secondRequestStatus = await secondResponse.Task.WaitAsync(
+                TimeSpan.FromSeconds(120),
+                cancellationToken);
+            var keyword = page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true });
+            var table = page.Locator(".ant-table").First;
+            await keyword.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            await table.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            personnelRecovered = await keyword.IsEnabledAsync();
+
+            var identityAccounts = page.GetByRole(
+                AriaRole.Link,
+                new PageGetByRoleOptions { Name = "账号管理", Exact = true }).First;
+            await identityAccounts.ClickAsync();
+            await page.WaitForURLAsync(origin + "/identity/accounts");
+            await page.GetByRole(
+                    AriaRole.Heading,
+                    new PageGetByRoleOptions { Name = "账号管理", Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            var personnel = page.GetByRole(
+                AriaRole.Link,
+                new PageGetByRoleOptions { Name = "人员中心", Exact = true }).First;
+            await personnel.ClickAsync();
+            await page.WaitForURLAsync(origin + "/organization/persons");
+            await page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            registryNavigationAvailable = true;
+        }
+        catch (Exception exception)
+        {
+            diagnostic = Redact(
+                $"{exception.GetType().Name}: {exception.Message}",
+                request.AdministratorPassword,
+                request.UnauthorizedPassword);
+        }
+
+        var probe = new ProductionColdStartCapabilityRecoveryProbe(
+            SchemaVersion: "1.0",
+            ContainsSecrets: false,
+            TargetCapabilityAsset: targetAsset,
+            RecoveryCapabilityAsset: recoveryAsset,
+            FailedRequestPath: failedRequestPath,
+            RecoveryRequestPath: recoveryRequestPath,
+            TargetRequestCount: targetRequestCount,
+            FirstRequestAborted: firstRequestAborted,
+            SecondRequestStatus: secondRequestStatus,
+            ErrorCode: errorCode,
+            RetryRequested: retryRequested,
+            RetryResult: personnelRecovered && registryNavigationAvailable ? "recovered" : "failed",
+            FreshAuthorizedContext: freshAuthorizedContext,
+            CacheCleared: cacheCleared,
+            ServiceWorkersBlocked: serviceWorkersBlocked,
+            ShellRemainedInteractive: shellRemainedInteractive,
+            PersonnelRecovered: personnelRecovered,
+            RegistryNavigationAvailable: registryNavigationAvailable,
+            Diagnostic: diagnostic);
+        await AcceptanceInfrastructure.WriteJsonAtomicallyAsync(
+            Path.Combine(request.RunDirectory, "capability-recovery.json"),
+            probe,
+            cancellationToken);
+        return probe;
     }
 
     // 每次样本使用新 context；cache、Service Worker、viewport 和节流都在导航前显式固定。
@@ -436,6 +611,13 @@ internal sealed class ProductionColdStartBrowserRunner
         requestedPath.Replace('\\', '/').EndsWith(
             "/" + asset.Replace('\\', '/').TrimStart('/'),
             StringComparison.OrdinalIgnoreCase);
+
+    // 网络拦截只比较 URL path 与 analyzer asset suffix，绝不读取 query、header 或 Cookie。
+    private static bool AssetUrlMatches(string requestedUrl, string asset)
+    {
+        return Uri.TryCreate(requestedUrl, UriKind.Absolute, out var uri)
+               && AssetPathMatches(uri.AbsolutePath, asset);
+    }
 
     // 所有可能带浏览器诊断的文本在落 evidence 前再次替换内存凭据。
     private static string Redact(string value, params string[] secrets)

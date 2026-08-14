@@ -145,13 +145,24 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         Assert.Contains("behaviorKey: 'canonical-sample.frontend'", frontendBinding, StringComparison.Ordinal);
         Assert.Contains("routeCapabilities:", frontendBinding, StringComparison.Ordinal);
         Assert.Contains("targetKey: 'canonical-sample.page'", frontendBinding, StringComparison.Ordinal);
-        Assert.Contains("load: () => import('./pages/CanonicalSamplePage')", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("createRecoverableCapabilityLoader", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("import('./CanonicalSamplePage.primary')", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("import('./CanonicalSamplePage.recovery')", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("import CanonicalSamplePage", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("customPages:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("metadata:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("routes:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("menus:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("permissions:", frontendBinding, StringComparison.Ordinal);
+
+        var frontendPrimaryEntry = File.ReadAllText(
+            Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "CanonicalSamplePage.primary.ts"));
+        var frontendRecoveryEntry = File.ReadAllText(
+            Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "CanonicalSamplePage.recovery.ts"));
+        Assert.Contains("export function primary()", frontendPrimaryEntry, StringComparison.Ordinal);
+        Assert.Contains("createElement(CanonicalSamplePage)", frontendPrimaryEntry, StringComparison.Ordinal);
+        Assert.Contains("export function recovery()", frontendRecoveryEntry, StringComparison.Ordinal);
+        Assert.Contains("createElement(CanonicalSamplePage)", frontendRecoveryEntry, StringComparison.Ordinal);
 
         var hostProject = File.ReadAllText(hostProjectPath);
         Assert.Contains(

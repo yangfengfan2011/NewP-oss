@@ -31,7 +31,7 @@
         { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
         {
           "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-          "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+          "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
         },
         {
           "dynamicImportsOf": { "sourceContains": "src/capabilities/StandardRouteCapabilityAdapters.tsx" },
@@ -44,7 +44,11 @@
   "targetCapabilityAssets": [
     {
       "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
+    },
+    {
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.recovery\\.ts$" }
     }
   ],
   "bindingEntries": [
@@ -132,6 +136,25 @@
   ],
   "budgets": {
     "maxChunkMinifiedBytes": 500000,
+    "chunkOverrides": [
+      {
+        "id": "standard-list-pro-table-static-runtime",
+        "scenario": "personnelRoute",
+        "targetRoots": [
+          {
+            "dynamicImportsOf": { "sourceContains": "src/capabilities/StandardRouteCapabilityAdapters.tsx" },
+            "match": { "sourceContains": "src/pages/StandardListPageHost.tsx" }
+          }
+        ],
+        "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-form@[^/]+/node_modules/@ant-design/pro-form/es/BaseForm/createField\\.js$",
+        "forbiddenSources": [
+          { "sourceRegex": "(?:^|/)modules/[^/]+/src/" },
+          { "sourceRegex": "(?:^|/)(?:packages/)?shell/src/pages/StandardCrudDetail" },
+          { "sourceRegex": "(?:^|/)(?:packages/)?ui/src/(?:crud-detail|crud-form)\\.ts$" }
+        ],
+        "maxMinifiedBytes": 550000
+      }
+    ],
     "maxBindingEntryGzipBytes": 20480,
     "maxAllBindingEntriesGzipBytes": 102400,
     "scenarios": {
@@ -144,7 +167,7 @@
         "maxGzipBytes": 358400
       },
       "personnelRoute": {
-        "maxDeltaGzipBytes": 460800
+        "maxDeltaGzipBytes": 620000
       }
     }
   }

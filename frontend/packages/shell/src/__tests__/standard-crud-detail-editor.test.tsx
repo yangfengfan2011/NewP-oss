@@ -17,6 +17,19 @@ vi.mock('@icp-platform/core', async (importOriginal) => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+async function waitForText(container: HTMLElement, expectedText: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (container.textContent?.includes(expectedText)) {
+      return;
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+
+  throw new Error(`Timed out waiting for text: ${expectedText}`);
+}
+
 describe('StandardCrudDetailPageHost editor fallback', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -60,6 +73,13 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
                     descriptionKey: 'Description',
                     mode: 'detail',
                     model: 'Person',
+                    pageActions: [
+                      {
+                        key: 'edit',
+                        labelKey: 'Action_Edit',
+                        standardAction: 'edit',
+                      },
+                    ],
                   },
                 },
               ],
@@ -73,7 +93,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     });
   }
 
-  it('renders a standard edit form when registration declares fields without a custom detail renderer', async () => {
+  it('loads the standard edit form only after the metadata edit action is selected', async () => {
     const modelDocument = createPersonModelDocument(
       [{ name: 'ENAME', storage: { type: 'string' }, uiType: 'text', form: { edit: { mode: 'editable' } } }],
       [{ key: 'basic', titleKey: '基础信息', fields: ['ENAME'] }],
@@ -106,8 +126,14 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
 
     await renderHost(modelDocument);
     await act(async () => undefined);
+    await waitForText(container, '基础信息');
 
     expect(container.textContent).toContain('基础信息');
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('input[value="张三"]')).toBeNull();
+
+    await openEditor(container);
+
     expect(container.querySelector('input[value="张三"]')).not.toBeNull();
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === '保存修改')).toBe(true);
   });
@@ -145,6 +171,8 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
 
     await renderHost(modelDocument);
     await act(async () => undefined);
+
+    await openEditor(container);
 
     await act(async () => {
       container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -211,6 +239,8 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     await renderHost(modelDocument);
     await flushAsyncWork();
 
+    await openEditor(container);
+
     const companySelect = container.querySelector('.np-standard-crud-select .ant-select-selector');
     expect(companySelect).not.toBeNull();
     await act(async () => {
@@ -262,4 +292,16 @@ async function flushAsyncWork(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+async function openEditor(container: HTMLDivElement): Promise<void> {
+  const editButton = Array.from(container.querySelectorAll('button')).find(
+    (button) => button.textContent?.trim() === 'Action_Edit',
+  );
+  expect(editButton).toBeDefined();
+  await act(async () => {
+    editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await flushAsyncWork();
+  await vi.waitFor(() => expect(container.querySelector('form')).not.toBeNull());
 }

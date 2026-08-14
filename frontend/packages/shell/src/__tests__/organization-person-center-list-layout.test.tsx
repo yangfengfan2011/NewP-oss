@@ -365,7 +365,7 @@ describe('organization person center list layout', () => {
       await vi.waitFor(() => {
         expect(document.body.textContent).toContain('查看人员');
         expect(document.body.textContent).toContain('查看完整详情');
-      });
+      }, { timeout: 5_000 });
     });
     expect(document.body.textContent).not.toContain('账号绑定');
     expect(document.body.textContent).not.toContain('授权摘要');

@@ -1,11 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const implementationState = vi.hoisted(() => ({ evaluations: 0 }));
+const implementationState = vi.hoisted(() => ({ primaryEvaluations: 0, recoveryEvaluations: 0 }));
 
-vi.mock('../standard-crud/personStandardCrudResource', () => {
-  implementationState.evaluations += 1;
+vi.mock('../standard-crud/personStandardCrudResource.primary', () => {
+  implementationState.primaryEvaluations += 1;
   return {
-    personStandardCrudResource: {
+    primary: {
+      resourceKey: 'organization.person',
+      listViewKey: 'organization.person.list',
+      detailViewKey: 'organization.person.detail',
+    },
+  };
+});
+
+vi.mock('../standard-crud/personStandardCrudResource.recovery', () => {
+  implementationState.recoveryEvaluations += 1;
+  return {
+    recovery: {
       resourceKey: 'organization.person',
       listViewKey: 'organization.person.list',
       detailViewKey: 'organization.person.detail',
@@ -27,7 +38,8 @@ describe('organization frontend bindings', () => {
       standardCrudCapabilities?: LazyStandardCrudDescriptor[];
     };
 
-    expect(implementationState.evaluations).toBe(0);
+    expect(implementationState.primaryEvaluations).toBe(0);
+    expect(implementationState.recoveryEvaluations).toBe(0);
     expect(bindings.standardCrudResources).toBeUndefined();
     expect(bindings.standardCrudCapabilities?.map(({ kind, targetKey }) => ({ kind, targetKey }))).toEqual([
       { kind: 'standard-list', targetKey: 'organization.person.list' },
@@ -35,7 +47,8 @@ describe('organization frontend bindings', () => {
     ]);
 
     const loaded = await bindings.standardCrudCapabilities?.[0]?.load();
-    expect(implementationState.evaluations).toBe(1);
+    expect(implementationState.primaryEvaluations).toBe(1);
+    expect(implementationState.recoveryEvaluations).toBe(0);
     expect(loaded?.default).toMatchObject({
       resourceKey: 'organization.person',
       listViewKey: 'organization.person.list',

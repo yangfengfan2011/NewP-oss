@@ -48,7 +48,7 @@ public sealed class MetadataRuntimeManifestBuilderTests : IDisposable
 
         var builder = new MetadataRuntimeManifestBuilder();
 
-        var manifest = builder.Build(runtimeRoot, ["Organization"]);
+        var manifest = builder.Build(runtimeRoot, ["Organization"], ["Organization"]);
 
         using var document = JsonDocument.Parse(manifest);
         var modules = document.RootElement.GetProperty("modules");
@@ -78,7 +78,7 @@ public sealed class MetadataRuntimeManifestBuilderTests : IDisposable
 
         var builder = new MetadataRuntimeManifestBuilder();
 
-        var manifest = builder.Build(runtimeRoot, ["Organization"]);
+        var manifest = builder.Build(runtimeRoot, ["Organization"], ["Organization"]);
 
         using var document = JsonDocument.Parse(manifest);
         Assert.Empty(document.RootElement.GetProperty("modules").EnumerateArray());
@@ -124,7 +124,10 @@ public sealed class MetadataRuntimeManifestBuilderTests : IDisposable
 
         var builder = new MetadataRuntimeManifestBuilder();
 
-        var manifest = builder.Build(runtimeRoot, ["Organization", "organization", "Audit"]);
+        var manifest = builder.Build(
+            runtimeRoot,
+            ["Organization", "organization", "Audit"],
+            ["Organization", "Audit"]);
 
         using var document = JsonDocument.Parse(manifest);
         var modules = document.RootElement.GetProperty("modules");
@@ -133,6 +136,46 @@ public sealed class MetadataRuntimeManifestBuilderTests : IDisposable
         Assert.Equal("Audit", modules[1].GetProperty("moduleId").GetString());
         Assert.Equal("views/a-first.view.json", modules[0].GetProperty("viewFiles")[0].GetString());
         Assert.Equal("views/z-last.view.json", modules[0].GetProperty("viewFiles")[1].GetString());
+    }
+
+    [Fact]
+    public void Build_WhenBackendOnlyModuleHasMetadata_DoesNotPublishItToFrontendManifest()
+    {
+        var runtimeRoot = CreateRuntimeRoot();
+        WriteMetadataFile(
+            runtimeRoot,
+            "Organization",
+            Path.Combine("navigation", "Organization.nav.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "nav",
+              "navigation": { "items": [] }
+            }
+            """);
+        WriteMetadataFile(
+            runtimeRoot,
+            "Authorization",
+            Path.Combine("models", "Permission.model.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "model",
+              "Permission": { "kind": "Entity" }
+            }
+            """);
+
+        var builder = new MetadataRuntimeManifestBuilder();
+
+        var manifest = builder.Build(
+            runtimeRoot,
+            ["Organization", "Authorization"],
+            ["Organization"]);
+
+        using var document = JsonDocument.Parse(manifest);
+        var modules = document.RootElement.GetProperty("modules");
+        Assert.Single(modules.EnumerateArray());
+        Assert.Equal("Organization", modules[0].GetProperty("moduleId").GetString());
     }
 
     public void Dispose()

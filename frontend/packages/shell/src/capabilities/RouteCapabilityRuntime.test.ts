@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ModuleRegistry, type FrontendModule } from '@icp-platform/sdk';
+import {
+  createRecoverableCapabilityLoader,
+  ModuleRegistry,
+  type FrontendModule,
+} from '@icp-platform/sdk';
 import { routeCapabilityRuntime } from './RouteCapabilityRuntime';
 
 vi.mock('../pages/StandardListPageHost', () => ({
@@ -91,9 +95,9 @@ describe('RouteCapabilityRuntime', () => {
       getRowId: () => 'record-1',
     };
     const failure = new Error('resource chunk unavailable');
-    const load = vi.fn()
-      .mockRejectedValueOnce(failure)
-      .mockResolvedValueOnce({ default: resource });
+    const primary = vi.fn().mockRejectedValue(failure);
+    const recovery = vi.fn().mockResolvedValue({ default: resource });
+    const load = createRecoverableCapabilityLoader(primary, recovery);
     ModuleRegistry.replaceAll([{
       metadata: { moduleId: 'retry-records', displayName: 'Retry Records', version: '1.0.0' },
       standardCrudCapabilities: [{
@@ -107,11 +111,26 @@ describe('RouteCapabilityRuntime', () => {
       kind: 'standard-list',
       targetKey: 'retry.records.list',
     })).rejects.toMatchObject({ code: 'ROUTE_CAPABILITY_LOAD_FAILED', cause: failure });
-    await expect(routeCapabilityRuntime.load({
+    const [firstRetry, concurrentRetry] = await Promise.all([
+      routeCapabilityRuntime.load({
+        kind: 'standard-list',
+        targetKey: 'retry.records.list',
+      }),
+      routeCapabilityRuntime.load({
+        kind: 'standard-list',
+        targetKey: 'retry.records.list',
+      }),
+    ]);
+    const cached = await routeCapabilityRuntime.load({
       kind: 'standard-list',
       targetKey: 'retry.records.list',
-    })).resolves.toEqual(expect.any(Function));
-    expect(load).toHaveBeenCalledTimes(2);
+    });
+
+    expect(firstRetry).toEqual(expect.any(Function));
+    expect(concurrentRetry).toBe(firstRetry);
+    expect(cached).toBe(firstRetry);
+    expect(primary).toHaveBeenCalledTimes(1);
+    expect(recovery).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a late lazy standard CRUD implementation from an old snapshot', async () => {

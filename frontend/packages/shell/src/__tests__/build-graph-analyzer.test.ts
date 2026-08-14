@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +11,33 @@ const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url)
 const analyzerPath = join(repositoryRoot, 'scripts', 'performance', 'analyze-shell-build.mjs')
 const fixtureRoot = join(repositoryRoot, 'scripts', 'performance', 'fixtures', 'build-graph-valid')
 const temporaryRoots: string[] = []
+
+interface MutableManifestEntry {
+  file: string
+  imports: string[]
+  [key: string]: unknown
+}
+
+interface MutableAnalyzerConfig {
+  scenarios: Record<string, { roots: unknown[] }>
+  budgets: {
+    maxChunkMinifiedBytes: number
+    chunkOverrides: Array<{
+      sourceContains: string
+      [key: string]: unknown
+    }>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+interface MutableSourceMap {
+  version: number
+  file: string
+  sources: string[]
+  names: string[]
+  mappings: string
+}
 
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
@@ -151,5 +178,111 @@ describe('Shell production build graph CLI', () => {
       failureCode: 'BUILD_GRAPH_INPUT_INVALID',
       diagnostic: expect.stringContaining("missing-route.ts"),
     }))
+  })
+
+  it('grants a larger chunk budget only to one source-attributed target-owned chunk', () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), 'newp-build-graph-'))
+    temporaryRoots.push(outputRoot)
+    const proTableSource = '../../node_modules/.pnpm/@ant-design+pro-table@3.21.0/node_modules/@ant-design/pro-table/es/index.js'
+    const forbiddenSource = '../../modules/organization/src/pages/LegacyPage.tsx'
+
+    const runCase = (
+      name: string,
+      mutate?: (input: {
+        root: string
+        manifest: Record<string, MutableManifestEntry>
+        config: MutableAnalyzerConfig
+        sourceMap: MutableSourceMap
+      }) => void,
+    ) => {
+      const root = join(outputRoot, name)
+      cpSync(fixtureRoot, root, { recursive: true })
+      const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')) as Record<string, MutableManifestEntry>
+      const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as MutableAnalyzerConfig
+      const sourceMap = {
+        version: 3,
+        file: 'pro-table.js',
+        sources: [proTableSource],
+        names: [],
+        mappings: '',
+      }
+      writeFileSync(join(root, 'assets', 'pro-table.js'), `export const proTableRuntime = '${'x'.repeat(64)}'\n`, 'utf8')
+      writeFileSync(join(root, 'assets', 'pro-table.js.map'), `${JSON.stringify(sourceMap)}\n`, 'utf8')
+      manifest['_pro-table.js'] = {
+        file: 'assets/pro-table.js',
+        imports: [],
+      }
+      manifest['src/personnel.ts'].imports.push('_pro-table.js')
+      config.budgets.maxChunkMinifiedBytes = 40
+      config.budgets.chunkOverrides = [{
+        id: 'standard-list-table-runtime',
+        scenario: 'personnelRoute',
+        targetRoots: [{
+          dynamicImportsOf: { sourceRegex: '(?:^|/)modules/[^/]+/src/index\\.ts$' },
+          match: { sourceRegex: '(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$' },
+        }],
+        sourceContains: '/node_modules/.pnpm/@ant-design+pro-table@',
+        forbiddenSources: [{ sourceRegex: '(?:^|/)modules/[^/]+/src/pages/' }],
+        maxMinifiedBytes: 200,
+      }]
+      mutate?.({ root, manifest, config, sourceMap })
+      writeFileSync(join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+      writeFileSync(join(root, 'config.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+      writeFileSync(join(root, 'assets', 'pro-table.js.map'), `${JSON.stringify(sourceMap)}\n`, 'utf8')
+      const resultPath = join(root, 'result.json')
+      const execution = spawnSync(process.execPath, [
+        analyzerPath,
+        '--manifest', join(root, 'manifest.json'),
+        '--config', join(root, 'config.json'),
+        '--assets-root', root,
+        '--mode', 'candidate',
+        '--output', resultPath,
+      ], {
+        cwd: repositoryRoot,
+        encoding: 'utf8',
+      })
+      return { execution, report: JSON.parse(readFileSync(resultPath, 'utf8')) }
+    }
+
+    const accepted = runCase('accepted')
+    expect(accepted.execution.status, accepted.execution.stderr).toBe(0)
+    expect(accepted.report.verdict).toBe('passed')
+    expect(accepted.report.chunkBudgetOverrides).toEqual([expect.objectContaining({
+      id: 'standard-list-table-runtime',
+      file: 'assets/pro-table.js',
+      scenario: 'personnelRoute',
+      limitBytes: 200,
+      source: proTableSource,
+      chain: ['src/personnel.ts', '_pro-table.js'],
+    })])
+
+    const zeroMatches = runCase('zero-matches', ({ config }) => {
+      config.budgets.chunkOverrides[0].sourceContains = '/not-emitted/'
+    })
+    expect(zeroMatches.execution.status).toBe(2)
+    expect(zeroMatches.report.diagnostic).toContain('matched 0 chunks')
+
+    const multipleMatches = runCase('multiple-matches', ({ root, manifest }) => {
+      copyFileSync(join(root, 'assets', 'pro-table.js'), join(root, 'assets', 'pro-table-copy.js'))
+      copyFileSync(join(root, 'assets', 'pro-table.js.map'), join(root, 'assets', 'pro-table-copy.js.map'))
+      manifest['_pro-table-copy.js'] = { file: 'assets/pro-table-copy.js', imports: [] }
+      manifest['src/personnel.ts'].imports.push('_pro-table-copy.js')
+    })
+    expect(multipleMatches.execution.status).toBe(2)
+    expect(multipleMatches.report.diagnostic).toContain('matched 2 chunks')
+
+    const outsideTarget = runCase('outside-target', ({ manifest, config }) => {
+      manifest['src/personnel.ts'].imports = manifest['src/personnel.ts'].imports.filter((key: string) => key !== '_pro-table.js')
+      manifest['src/detail.ts'].imports.push('_pro-table.js')
+      config.scenarios.personnelRoute.roots.push('src/detail.ts')
+    })
+    expect(outsideTarget.execution.status).toBe(2)
+    expect(outsideTarget.report.diagnostic).toContain('is not in the target static closure')
+
+    const forbiddenMix = runCase('forbidden-mix', ({ sourceMap }) => {
+      sourceMap.sources.push(forbiddenSource)
+    })
+    expect(forbiddenMix.execution.status).toBe(2)
+    expect(forbiddenMix.report.diagnostic).toContain(forbiddenSource)
   })
 })

@@ -442,7 +442,11 @@ if ($ExternalPlugin) {
     $frontendPackagePath = Join-Path $frontendTargetRoot 'package.json'
     $frontendIndexPath = Join-Path $frontendTargetRoot 'src\index.ts'
     $frontendPagePath = Join-Path $frontendTargetRoot "src\pages\$frontendPageName.tsx"
+    $frontendPrimaryEntryPath = Join-Path $frontendTargetRoot "src\$frontendPageName.primary.ts"
+    $frontendRecoveryEntryPath = Join-Path $frontendTargetRoot "src\$frontendPageName.recovery.ts"
     Rename-IfExists -FromPath (Join-Path $frontendTargetRoot 'src\pages\TemplatePage.tsx') -ToPath $frontendPagePath
+    Rename-IfExists -FromPath (Join-Path $frontendTargetRoot 'src\TemplatePage.primary.ts') -ToPath $frontendPrimaryEntryPath
+    Rename-IfExists -FromPath (Join-Path $frontendTargetRoot 'src\TemplatePage.recovery.ts') -ToPath $frontendRecoveryEntryPath
 
     Update-FileContent -Path $frontendPackagePath -Transform {
         param($content)
@@ -466,6 +470,14 @@ if ($ExternalPlugin) {
         $content = $content.Replace('TemplatePage', $frontendPageName)
         $content = $content.Replace('模板模块', $DisplayName)
         $content
+    }
+
+    foreach ($frontendCapabilityEntryPath in @($frontendPrimaryEntryPath, $frontendRecoveryEntryPath)) {
+        Update-FileContent -Path $frontendCapabilityEntryPath -Transform {
+            param($content)
+
+            $content.Replace('TemplatePage', $frontendPageName)
+        }
     }
 
     foreach ($readmePath in @(

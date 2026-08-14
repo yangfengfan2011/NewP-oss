@@ -180,6 +180,10 @@ public class RuntimeViewMaterializer
             var enabledModuleOrder = plan.Modules
                 .Select(static module => module.ModuleId)
                 .ToArray();
+            var frontendModuleIds = plan.Modules
+                .Where(static module => !string.IsNullOrWhiteSpace(module.FrontendEntry))
+                .Select(static module => module.ModuleId)
+                .ToArray();
             var localizationManifestPath = Path.Combine(stagedRuntimeRoot, "localization-manifest.json");
             File.WriteAllText(
                 localizationManifestPath,
@@ -188,7 +192,9 @@ public class RuntimeViewMaterializer
             var metadataRuntimeManifestPath = Path.Combine(stagedRuntimeRoot, "metadata-runtime-manifest.json");
             File.WriteAllText(
                 metadataRuntimeManifestPath,
-                BindProjection(_metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder), plan));
+                BindProjection(
+                    _metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder, frontendModuleIds),
+                    plan));
 
             File.WriteAllBytes(Path.Combine(stagedRuntimeRoot, "canonical-module-plan.json"), plan.CanonicalBytes);
             File.WriteAllText(

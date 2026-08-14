@@ -76,6 +76,7 @@ public static class AcceptanceFailureCodes
     public const string ProductionColdStartBudgetExceeded = "ACC_PRODUCTION_COLD_START_BUDGET_EXCEEDED";
     public const string ProductionColdStartBaselineMissing = "ACC_PRODUCTION_COLD_START_BASELINE_MISSING";
     public const string ProductionColdStartTargetCapabilityRequested = "ACC_PRODUCTION_COLD_START_TARGET_CAPABILITY_REQUESTED";
+    public const string ProductionColdStartCapabilityRecoveryFailed = "ACC_PRODUCTION_COLD_START_CAPABILITY_RECOVERY_FAILED";
     public const string ProductionColdStartBuildFailed = "ACC_PRODUCTION_COLD_START_BUILD_FAILED";
     public const string ProductionColdStartBrowserFailed = "ACC_PRODUCTION_COLD_START_BROWSER_FAILED";
 }

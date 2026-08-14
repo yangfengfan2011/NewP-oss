@@ -70,7 +70,7 @@ static ProductionColdStartRunnerOptions ParseProductionColdStartArguments(
     var (repositoryRoot, outputRoot) = ReadCommonPaths(values);
     if (!Enum.TryParse<ProductionColdStartMode>(modeText, ignoreCase: true, out var mode))
     {
-        throw new ArgumentException("--production-cold-start-mode 只能是 Baseline 或 Candidate。");
+        throw new ArgumentException("--production-cold-start-mode 只能是 Baseline、Candidate 或 Qualification。");
     }
     var baselineResult = values.GetValueOrDefault("--baseline-result");
     return new ProductionColdStartRunnerOptions(

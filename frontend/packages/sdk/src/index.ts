@@ -1,6 +1,8 @@
 import { ComponentType, ReactNode } from 'react';
 import type { StandardCrudResourceRegistration } from './standardCrud';
 
+export { createRecoverableCapabilityLoader } from './capabilityLoader';
+
 export interface ModuleMetadata {
   moduleId: string;
   displayName: string;

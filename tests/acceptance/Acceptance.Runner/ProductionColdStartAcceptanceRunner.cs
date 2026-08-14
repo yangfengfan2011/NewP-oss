@@ -84,6 +84,9 @@ public sealed class ProductionColdStartAcceptanceRunner
             "scripts",
             "performance",
             "production-cold-start.config.json"));
+        var samplesPerScenario = mode is ProductionColdStartMode.Qualification
+            ? 1
+            : settings.SamplesPerScenario;
 
         await AcceptanceInfrastructure.WriteJsonAsync(
             Path.Combine(runDirectory, "request.sanitized.json"),
@@ -92,7 +95,7 @@ public sealed class ProductionColdStartAcceptanceRunner
                 schemaVersion = "1.0",
                 mode,
                 baselineResult = baselineResultPath is null ? null : Path.GetFileName(baselineResultPath),
-                samplesPerScenario = settings.SamplesPerScenario,
+                samplesPerScenario,
                 throttle = settings.Throttle,
                 containsSecrets = false
             },
@@ -142,7 +145,7 @@ public sealed class ProductionColdStartAcceptanceRunner
                     execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
                         .RunProductionColdStartAsync(
                             Path.Combine(repositoryRoot, "frontend", "packages", "shell", "dist"),
-                            settings.SamplesPerScenario,
+                            samplesPerScenario,
                             settings.Throttle,
                             targetCapabilityAssets,
                             rawSamplesPath,
@@ -163,13 +166,14 @@ public sealed class ProductionColdStartAcceptanceRunner
                         : null;
                     reduction = ProductionColdStartReducer.Reduce(new ProductionColdStartReductionRequest(
                         mode,
-                        settings.SamplesPerScenario,
+                        samplesPerScenario,
                         settings.Throttle,
                         samples,
                         targetCapabilityAssets,
                         settings.Budgets,
                         baselineSummaries,
-                        cleanup));
+                        cleanup,
+                        execution.CapabilityRecovery));
                     terminalFailureCode = reduction.FailureCode;
                 }
             }
@@ -196,6 +200,20 @@ public sealed class ProductionColdStartAcceptanceRunner
 
         if (!repositoryMatched)
         {
+            await AcceptanceInfrastructure.WriteJsonAsync(
+                Path.Combine(runDirectory, "repository-guard.json"),
+                new
+                {
+                    schemaVersion = "1.0",
+                    baseline = new
+                    {
+                        repositoryGuard.Baseline.HeadCommit,
+                        repositoryGuard.Baseline.HeadTree
+                    },
+                    firstChange = repositoryGuard.FirstChange
+                },
+                CancellationToken.None);
+            artifacts.Add("repository-guard.json");
             terminalFailureCode = AcceptanceFailureCodes.TreeChanged;
         }
         var verdict = terminalFailureCode is null ? AcceptanceVerdict.Passed : AcceptanceVerdict.Failed;
@@ -227,7 +245,7 @@ public sealed class ProductionColdStartAcceptanceRunner
             BuildGraphVerdict: buildGraphVerdict,
             BuildGraphFailureCode: buildGraphFailureCode,
             RawSamplesArtifact: "raw-samples.json",
-            ExpectedSamples: settings.SamplesPerScenario * ProductionColdStartScenarios.All.Count,
+            ExpectedSamples: samplesPerScenario * ProductionColdStartScenarios.All.Count,
             CapturedSamples: samples.Length,
             DatabaseFingerprint: execution?.DatabaseFingerprint,
             ProcessIdentities: processIdentities.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
@@ -287,7 +305,9 @@ public sealed class ProductionColdStartAcceptanceRunner
                 "--manifest", Path.Combine(repositoryRoot, "frontend", "packages", "shell", "dist", ".vite", "manifest.json"),
                 "--config", Path.Combine(repositoryRoot, "scripts", "performance", "shell-build-graph.config.json"),
                 "--assets-root", Path.Combine(repositoryRoot, "frontend", "packages", "shell", "dist"),
-                "--mode", mode.ToString().ToLowerInvariant(),
+                "--mode", (mode is ProductionColdStartMode.Qualification
+                    ? ProductionColdStartMode.Candidate
+                    : mode).ToString().ToLowerInvariant(),
                 "--output", outputPath
             ],
             repositoryRoot,
@@ -327,7 +347,7 @@ public sealed class ProductionColdStartAcceptanceRunner
                 static property => new ProductionColdStartBudget(
                     property.Value.GetProperty("maxP50Ms").GetInt64(),
                     property.Value.GetProperty("maxP95Ms").GetInt64(),
-                    property.Value.TryGetProperty("minimumImprovementRatio", out var ratio)
+                    property.Value.TryGetProperty("minimumP50ImprovementRatio", out var ratio)
                         ? ratio.GetDecimal()
                         : null),
                 StringComparer.Ordinal);

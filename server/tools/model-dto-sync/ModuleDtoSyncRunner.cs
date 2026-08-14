@@ -49,7 +49,7 @@ public static class ModuleDtoSyncRunner
                 .Where(relativePath =>
                     !expectedByRelativePath.TryGetValue(relativePath, out var expectedPath)
                     || !actualByRelativePath.TryGetValue(relativePath, out var actualPath)
-                    || !File.ReadAllBytes(expectedPath).SequenceEqual(File.ReadAllBytes(actualPath)))
+                    || !ContentsEqualIgnoringLineEndings(expectedPath, actualPath))
                 .Order(StringComparer.Ordinal)
                 .ToArray();
         }
@@ -143,6 +143,36 @@ public static class ModuleDtoSyncRunner
     }
 
     private static string NormalizeRelativePath(string path) => path.Replace('\\', '/');
+
+    // Git checkout 可按本机策略把已跟踪 LF 文件物化为 CRLF；漂移检查只忽略这一物理换行差异。
+    private static bool ContentsEqualIgnoringLineEndings(string expectedPath, string actualPath)
+    {
+        return NormalizeLineEndings(File.ReadAllBytes(expectedPath))
+            .SequenceEqual(NormalizeLineEndings(File.ReadAllBytes(actualPath)));
+    }
+
+    // 在字节层规范化 CRLF/CR，保留 BOM、编码与其余内容差异的 fail-closed 行为。
+    private static byte[] NormalizeLineEndings(byte[] content)
+    {
+        using var normalized = new MemoryStream(content.Length);
+        for (var index = 0; index < content.Length; index++)
+        {
+            if (content[index] != '\r')
+            {
+                normalized.WriteByte(content[index]);
+                continue;
+            }
+
+            if (index + 1 < content.Length && content[index + 1] == '\n')
+            {
+                index++;
+            }
+
+            normalized.WriteByte((byte)'\n');
+        }
+
+        return normalized.ToArray();
+    }
 
     // DTO 生成必须回读 authoring 元数据中的 contract.clrType，避免 enum 字段退化为 string。
     private static IReadOnlyDictionary<string, string> LoadEnumClrTypeMap(

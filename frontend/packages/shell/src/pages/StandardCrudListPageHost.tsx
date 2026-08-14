@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -14,25 +14,22 @@ import {
 import type {
   StandardCrudExportMode,
   StandardCrudFieldDefinition,
+  StandardCrudFormSection,
   StandardCrudListQueryRequest,
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import AntdButton from 'antd/es/button';
-import Drawer from 'antd/es/drawer';
 import Dropdown from 'antd/es/dropdown';
 import Input from 'antd/es/input';
 import useMessage from 'antd/es/message/useMessage';
-import Modal from 'antd/es/modal';
 import Select from 'antd/es/select';
 import Space from 'antd/es/space';
 import Tag from 'antd/es/tag';
 import { ErrorState } from '@icp-platform/ui/core';
 import {
-  CrudFormDrawer,
   CrudSearchBar,
   CrudTableSection,
   CrudWorkspacePage,
-  StandardCrudForm,
   createSearchTableRequest,
   loadStandardCrudColumnPreference,
   saveStandardCrudColumnPreference,
@@ -44,7 +41,6 @@ import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } fro
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
-import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import {
   buildStandardCrudListQuery,
   collectStandardCrudListRequestFields,
@@ -52,11 +48,19 @@ import {
   serializeStandardCrudListState,
 } from '../standard-crud/standardCrudMetadataQuery';
 import type { StandardCrudListState } from '../standard-crud/standardCrudMetadataQuery';
-import {
-  buildStandardCrudDetailFormValues,
-} from '../standard-crud/standardCrudDetailView';
 
 type MetadataRecord = Record<string, unknown>;
+
+const loadStandardCrudListOverlayRuntime = () => import('./StandardCrudListOverlayRuntime');
+const Drawer = lazy(() => loadStandardCrudListOverlayRuntime().then(({ StandardCrudListDrawer }) => ({
+  default: StandardCrudListDrawer,
+})));
+const Modal = lazy(() => loadStandardCrudListOverlayRuntime().then(({ StandardCrudListModal }) => ({
+  default: StandardCrudListModal,
+})));
+const loadStandardCrudListDrawerRuntime = () => import('./StandardCrudListDrawerRuntime');
+const loadStandardCrudListFormRuntime = () => import('./StandardCrudListFormRuntime');
+const StandardCrudListDrawerRuntime = lazy(loadStandardCrudListDrawerRuntime);
 
 interface StandardCrudListPageHostProps {
   viewKey: string;
@@ -70,6 +74,30 @@ interface CrudDrawerState {
   id?: string;
   source: 'user-action' | 'route-compatibility';
 }
+
+interface StandardCrudDrawerFormSchema {
+  fields: StandardCrudFieldDefinition[];
+  sections: StandardCrudFormSection[];
+}
+
+interface StandardCrudDrawerFormSchemas {
+  create: StandardCrudDrawerFormSchema;
+  edit: StandardCrudDrawerFormSchema;
+}
+
+interface PreparedStandardCrudDrawerForms extends StandardCrudDrawerFormSchemas {
+  createFields: StandardCrudFieldDefinition[];
+  editFields: StandardCrudFieldDefinition[];
+  buildDetailFormValues: (
+    detailFields: Record<string, unknown>,
+    fields: StandardCrudFieldDefinition[],
+  ) => Record<string, unknown>;
+}
+
+const EMPTY_STANDARD_CRUD_FORM_SCHEMA: StandardCrudDrawerFormSchema = {
+  fields: [],
+  sections: [],
+};
 
 interface DeleteActionErrorState {
   key: string;
@@ -416,21 +444,24 @@ function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
           </AntdButton>
         </Dropdown>
       ) : null}
-      <Modal
-        open={confirmAction !== null}
-        title={confirmAction?.confirmMessage}
-        okText="确认"
-        cancelText="取消"
-        confirmLoading={confirmAction?.loading}
-        okButtonProps={{ danger: confirmAction?.danger }}
-        destroyOnHidden
-        onCancel={() => setConfirmAction(null)}
-        onOk={async () => {
-          if (!confirmAction) return;
-          await confirmAction.onClick();
-          setConfirmAction(null);
-        }}
-      />
+      {confirmAction ? (
+        <Suspense fallback={<span role="status">正在加载确认框…</span>}>
+          <Modal
+            open
+            title={confirmAction.confirmMessage}
+            okText="确认"
+            cancelText="取消"
+            confirmLoading={confirmAction.loading}
+            okButtonProps={{ danger: confirmAction.danger }}
+            destroyOnHidden
+            onCancel={() => setConfirmAction(null)}
+            onOk={async () => {
+              await confirmAction.onClick();
+              setConfirmAction(null);
+            }}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }
@@ -617,16 +648,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ? defaultColumnState
       : loadStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, defaultColumnState)
   ));
-  const createFormSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
-    mode: 'create',
-    enumOptions: registration.enumOptions ?? {},
-    lookupProviders: registration.lookupProviders ?? [],
-  }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
-  const editFormSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
-    mode: 'edit',
-    enumOptions: registration.enumOptions ?? {},
-    lookupProviders: registration.lookupProviders ?? [],
-  }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
+  const [drawerFormSchemas, setDrawerFormSchemas] = useState<StandardCrudDrawerFormSchemas | null>(null);
+  const createFormSchema = drawerFormSchemas?.create ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
+  const editFormSchema = drawerFormSchemas?.edit ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
   const createFields = useMemo(
     () => localizeStandardCrudFields(resolveCreateFormFields(createFormSchema.fields), schema.dicKey, t),
     [createFormSchema.fields, schema.dicKey, t],
@@ -925,9 +949,38 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     closeDrawer();
   };
 
-  const openCreateDrawer = (source: CrudDrawerState['source'] = 'user-action') => {
+  const prepareDrawerForms = async (): Promise<PreparedStandardCrudDrawerForms> => {
+    const runtime = await loadStandardCrudListFormRuntime();
+    const nextSchemas = {
+      create: runtime.buildStandardCrudFormSchemaFromModel(modelDocument, {
+        mode: 'create',
+        enumOptions: registration.enumOptions ?? {},
+        lookupProviders: registration.lookupProviders ?? [],
+      }),
+      edit: runtime.buildStandardCrudFormSchemaFromModel(modelDocument, {
+        mode: 'edit',
+        enumOptions: registration.enumOptions ?? {},
+        lookupProviders: registration.lookupProviders ?? [],
+      }),
+    };
+    setDrawerFormSchemas(nextSchemas);
+
+    return {
+      ...nextSchemas,
+      createFields: localizeStandardCrudFields(
+        resolveCreateFormFields(nextSchemas.create.fields),
+        schema.dicKey,
+        t,
+      ),
+      editFields: localizeStandardCrudFields(nextSchemas.edit.fields, schema.dicKey, t),
+      buildDetailFormValues: runtime.buildStandardCrudDetailFormValues,
+    };
+  };
+
+  const openCreateDrawer = async (source: CrudDrawerState['source'] = 'user-action') => {
+    const prepared = await prepareDrawerForms();
     invalidateDetailRequests();
-    const initialValues = Object.fromEntries(createFields.map((field) => [field.key, field.defaultValue ?? '']));
+    const initialValues = Object.fromEntries(prepared.createFields.map((field) => [field.key, field.defaultValue ?? '']));
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     setDetailFields({});
     setDetailLoading(false);
@@ -959,14 +1012,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setDetailError(null);
     setSaveError(null);
     try {
-      const detail = await client.getDetail(id);
+      const [detail, prepared] = await Promise.all([
+        client.getDetail(id),
+        prepareDrawerForms(),
+      ]);
       if (detailRequestIdRef.current !== requestId) {
         return false;
       }
 
+      const nextFormValues = prepared.buildDetailFormValues(detail.fields, prepared.editFields);
       setDetailFields(detail.fields);
-      setFormValues(buildStandardCrudDetailFormValues(detail.fields, editFields));
-      initialFormValuesRef.current = buildStandardCrudDetailFormValues(detail.fields, editFields);
+      setFormValues(nextFormValues);
+      initialFormValuesRef.current = nextFormValues;
       return true;
     } catch (loadError) {
       if (detailRequestIdRef.current !== requestId) {
@@ -1067,7 +1124,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
     // 旧入口只负责把 URL 查询参数投影成当前抽屉态；实际详情加载和错误边界仍由 Host 统一处理。
     if (drawer === 'create') {
-      openCreateDrawer('route-compatibility');
+      void openCreateDrawer('route-compatibility');
       return;
     }
     if (drawer === 'view' && id) {
@@ -1388,7 +1445,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             key={action.key}
             type={action.variant === 'primary' ? 'primary' : 'default'}
             size="middle"
-            onClick={() => openCreateDrawer()}
+            onClick={() => void openCreateDrawer()}
           >
             {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
           </AntdButton>
@@ -1547,15 +1604,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       >
         {content}
       </CrudWorkspacePage>
-      {schema.advancedFilter.enabled ? (
-        <Drawer
-          open={advancedFilterOpen}
-          title={t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
-          width={420}
-          placement="right"
-          destroyOnClose
-          onClose={() => setAdvancedFilterOpen(false)}
-        >
+      {schema.advancedFilter.enabled && advancedFilterOpen ? (
+        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载高级筛选…</div>}>
+          <Drawer
+            open
+            title={t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
+            width={420}
+            placement="right"
+            destroyOnClose
+            onClose={() => setAdvancedFilterOpen(false)}
+          >
           <div className="np-advanced-filter-drawer">
             <Space className="np-advanced-filter-drawer-actions">
               <AntdButton
@@ -1602,153 +1660,130 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 </div>
               </section>
             ))}
-          </div>
-        </Drawer>
+            </div>
+          </Drawer>
+        </Suspense>
       ) : null}
-      <CrudFormDrawer
-        open={drawerState.mode === 'view'}
-        title={viewDrawerTitle}
-        loading={detailLoading}
-        error={detailError}
-        primaryLabel="编辑"
-        secondaryAction={drawerState.id && detailRoutePath ? (
-          <AntdButton
-            onClick={() => {
-              const fullDetailPath = detailRoutePath.replace(':id', encodeURIComponent(drawerState.id ?? ''));
-              if (fullDetailPath) navigate(fullDetailPath);
-            }}
-          >
-            {t(`${schema.dicKey}.Action_ViewFullDetail`, '查看完整详情')}
-          </AntdButton>
-        ) : undefined}
-        hidePrimary={!canEdit}
-        primaryAction={() => {
-          if (drawerState.id) {
-            void openEditDrawer(drawerState.id);
-          }
-        }}
-        onClose={requestCloseDrawer}
-        afterOpenChange={restoreDrawerTriggerFocus}
-      >
-        {!detailError ? (
-          <StandardCrudForm
-            formId={`${drawerFormId}-view`}
-            mode="view"
-            fields={editFields}
-            sections={editFormSchema.sections}
+      {drawerState.mode !== 'closed' ? (
+        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作面板…</div>}>
+          <StandardCrudListDrawerRuntime
+            mode={drawerState.mode}
+            viewTitle={viewDrawerTitle}
+            mutationTitle={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
+            detailLoading={detailLoading}
+            detailError={detailError}
+            saving={saving}
+            saveError={saveError}
+            saveFieldErrors={saveFieldErrors}
+            formId={drawerFormId}
+            fields={drawerState.mode === 'create' ? createFields : editFields}
+            sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
             values={formValues}
             lookupOptions={lookupOptions}
             lookupLoading={lookupLoading}
             lookupErrors={lookupErrors}
+            canEdit={canEdit}
+            viewSecondaryAction={drawerState.id && detailRoutePath ? (
+              <AntdButton
+                onClick={() => {
+                  const fullDetailPath = detailRoutePath.replace(':id', encodeURIComponent(drawerState.id ?? ''));
+                  if (fullDetailPath) navigate(fullDetailPath);
+                }}
+              >
+                {t(`${schema.dicKey}.Action_ViewFullDetail`, '查看完整详情')}
+              </AntdButton>
+            ) : undefined}
+            saveErrorActions={hasSaveConflict ? (
+              <AntdButton onClick={() => void reloadConflictedRecord()} disabled={saving}>
+                重新加载当前数据
+              </AntdButton>
+            ) : undefined}
             onChange={handleFormChange}
-            onSubmit={() => undefined}
-            saving={false}
-            showSubmitAction={false}
+            onEdit={() => {
+              if (drawerState.id) void openEditDrawer(drawerState.id);
+            }}
+            onSubmit={() => void handleDrawerSave()}
+            onClose={requestCloseDrawer}
+            afterOpenChange={restoreDrawerTriggerFocus}
             titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
           />
-        ) : null}
-      </CrudFormDrawer>
-      <CrudFormDrawer
-        open={drawerState.mode === 'create' || drawerState.mode === 'edit'}
-        title={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
-        saving={saving}
-        error={saveError}
-        errorActions={hasSaveConflict ? (
-          <AntdButton onClick={() => void reloadConflictedRecord()} disabled={saving}>
-            重新加载当前数据
-          </AntdButton>
-        ) : undefined}
-        submitFormId={drawerFormId}
-        primaryLabel={drawerState.mode === 'create' ? '保存并关闭' : '保存修改'}
-        onClose={requestCloseDrawer}
-        afterOpenChange={restoreDrawerTriggerFocus}
-      >
-        <StandardCrudForm
-          formId={drawerFormId}
-          mode={drawerState.mode === 'create' ? 'create' : 'edit'}
-          fields={drawerState.mode === 'create' ? createFields : editFields}
-          sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
-          values={formValues}
-          lookupOptions={lookupOptions}
-          lookupLoading={lookupLoading}
-          lookupErrors={lookupErrors}
-          fieldErrors={saveFieldErrors}
-          onChange={handleFormChange}
-          onSubmit={() => void handleDrawerSave()}
-          saving={saving}
-          error={null}
-          showSubmitAction={false}
-          titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
-        />
-      </CrudFormDrawer>
-      <Modal
-        open={rowInputAction !== null}
-        title={rowInputAction?.label}
-        okText="确认"
-        cancelText="取消"
-        confirmLoading={rowInputAction ? rowActionPendingKey === rowInputAction.pendingKey : false}
-        destroyOnHidden
-        onCancel={() => {
-          if (rowActionPendingKey === null) setRowInputAction(null);
-        }}
-        onOk={() => {
-          if (!rowInputAction) return;
-          const { action, row, rowId, pendingKey } = rowInputAction;
-          const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
-          if (!handler) return;
-          void (async () => {
-            try {
-              setRowActionPendingKey(pendingKey);
-              setRowActionError(null);
-              await handler({ id: rowId, row, input: rowInputValue, refresh: () => undefined });
-              context.refresh();
-              setRowInputAction(null);
-            } catch (actionError) {
-              setRowActionError({
-                key: pendingKey,
-                message: actionError instanceof Error ? actionError.message : '执行操作失败',
-              });
-            } finally {
-              setRowActionPendingKey(null);
-            }
-          })();
-        }}
-      >
-        {rowInputAction?.action.confirmMessageKey ? (
-          <p>{t(
-            `${schema.dicKey}.${rowInputAction.action.confirmMessageKey}`,
-            rowInputAction.action.confirmMessageKey,
-          )}</p>
-        ) : null}
-        {rowInputAction?.action.inputKey
-          ? registration.actionInputRenderers?.[rowInputAction.action.inputKey]?.({
-            action: rowInputAction.action,
-            value: rowInputValue,
-            onChange: setRowInputValue,
-          })
-          : null}
-      </Modal>
-      <Modal
-        open={discardConfirmOpen}
-        title="放弃未保存的更改？"
-        okText="放弃更改"
-        cancelText="继续编辑"
-        okButtonProps={{ danger: true }}
-        destroyOnHidden
-        onCancel={() => {
-          discardProceedRef.current = null;
-          setDiscardConfirmOpen(false);
-        }}
-        onOk={() => {
-          const proceed = discardProceedRef.current;
-          discardProceedRef.current = null;
-          setDiscardConfirmOpen(false);
-          initialFormValuesRef.current = formValuesRef.current;
-          proceed?.();
-        }}
-      >
-        当前修改尚未保存，继续将丢失这些内容。
-      </Modal>
+        </Suspense>
+      ) : null}
+      {rowInputAction ? (
+        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作确认…</div>}>
+          <Modal
+            open
+            title={rowInputAction.label}
+            okText="确认"
+            cancelText="取消"
+            confirmLoading={rowActionPendingKey === rowInputAction.pendingKey}
+            destroyOnHidden
+            onCancel={() => {
+              if (rowActionPendingKey === null) setRowInputAction(null);
+            }}
+            onOk={() => {
+              const { action, row, rowId, pendingKey } = rowInputAction;
+              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+              if (!handler) return;
+              void (async () => {
+                try {
+                  setRowActionPendingKey(pendingKey);
+                  setRowActionError(null);
+                  await handler({ id: rowId, row, input: rowInputValue, refresh: () => undefined });
+                  context.refresh();
+                  setRowInputAction(null);
+                } catch (actionError) {
+                  setRowActionError({
+                    key: pendingKey,
+                    message: actionError instanceof Error ? actionError.message : '执行操作失败',
+                  });
+                } finally {
+                  setRowActionPendingKey(null);
+                }
+              })();
+            }}
+          >
+            {rowInputAction.action.confirmMessageKey ? (
+              <p>{t(
+                `${schema.dicKey}.${rowInputAction.action.confirmMessageKey}`,
+                rowInputAction.action.confirmMessageKey,
+              )}</p>
+            ) : null}
+            {rowInputAction.action.inputKey
+              ? registration.actionInputRenderers?.[rowInputAction.action.inputKey]?.({
+                action: rowInputAction.action,
+                value: rowInputValue,
+                onChange: setRowInputValue,
+              })
+              : null}
+          </Modal>
+        </Suspense>
+      ) : null}
+      {discardConfirmOpen ? (
+        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载放弃确认…</div>}>
+          <Modal
+            open
+            title="放弃未保存的更改？"
+            okText="放弃更改"
+            cancelText="继续编辑"
+            okButtonProps={{ danger: true }}
+            destroyOnHidden
+            onCancel={() => {
+              discardProceedRef.current = null;
+              setDiscardConfirmOpen(false);
+            }}
+            onOk={() => {
+              const proceed = discardProceedRef.current;
+              discardProceedRef.current = null;
+              setDiscardConfirmOpen(false);
+              initialFormValuesRef.current = formValuesRef.current;
+              proceed?.();
+            }}
+          >
+            当前修改尚未保存，继续将丢失这些内容。
+          </Modal>
+        </Suspense>
+      ) : null}
     </>
   );
 }

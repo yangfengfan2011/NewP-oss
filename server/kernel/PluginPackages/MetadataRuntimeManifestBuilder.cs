@@ -15,15 +15,21 @@ public sealed class MetadataRuntimeManifestBuilder
     };
 
     /// <summary>
-    /// 按调用方给定的模块顺序输出 metadata runtime 清单。
+    /// 按当前生效顺序输出具有前端投影的模块 metadata runtime 清单。
     /// </summary>
     /// <param name="runtimeRoot">staging 后的 runtime 根目录。</param>
     /// <param name="moduleOrder">当前生效模块顺序。</param>
-    /// <returns>只包含模块 metadata 索引的 manifest JSON。</returns>
-    public string Build(string runtimeRoot, IReadOnlyList<string> moduleOrder)
+    /// <param name="frontendModuleIds">Canonical Module Plan 中具有前端入口的模块。</param>
+    /// <returns>只包含可由前端发现的模块 metadata 索引的 manifest JSON。</returns>
+    public string Build(
+        string runtimeRoot,
+        IReadOnlyList<string> moduleOrder,
+        IReadOnlyCollection<string> frontendModuleIds)
     {
+        var frontendModules = frontendModuleIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var modules = moduleOrder
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(frontendModules.Contains)
             .Select(moduleId => new MetadataRuntimeModuleEntry(
                 moduleId,
                 $"/plugins/runtime/modules/{moduleId}/metadata",

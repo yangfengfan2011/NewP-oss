@@ -266,6 +266,112 @@ function summarizeCss(keys, metrics) {
   }
 }
 
+function compileSourceMatcher(definition, label) {
+  const hasContains = typeof definition?.sourceContains === 'string' && definition.sourceContains.length > 0
+  const hasRegex = typeof definition?.sourceRegex === 'string' && definition.sourceRegex.length > 0
+  if (hasContains === hasRegex) {
+    throw new Error(`${label} must declare exactly one of sourceContains or sourceRegex.`)
+  }
+  if (hasContains) {
+    return (source) => source.includes(definition.sourceContains)
+  }
+
+  let pattern
+  try {
+    pattern = new RegExp(definition.sourceRegex)
+  } catch (error) {
+    throw new Error(`${label} source regex '${definition.sourceRegex}' is invalid: ${error.message}`)
+  }
+  return (source) => pattern.test(source)
+}
+
+function resolveChunkBudgetOverrides({ definitions, defaultLimitBytes, metrics, manifest, scenarioClosures }) {
+  if (!Array.isArray(definitions)) {
+    throw new Error('Chunk budget overrides must be an array.')
+  }
+
+  const overrideByChunkKey = new Map()
+  const report = []
+  const ids = new Set()
+  for (const definition of definitions) {
+    const id = definition?.id
+    if (typeof id !== 'string' || id.length === 0 || ids.has(id)) {
+      throw new Error('Chunk budget overrides must declare unique non-empty ids.')
+    }
+    ids.add(id)
+    const scenario = definition.scenario
+    const scenarioClosure = scenarioClosures.get(scenario)
+    if (!scenarioClosure) {
+      throw new Error(`Chunk budget override '${id}' references unknown scenario '${scenario}'.`)
+    }
+    if (!Array.isArray(definition.targetRoots) || definition.targetRoots.length === 0) {
+      throw new Error(`Chunk budget override '${id}' must declare targetRoots.`)
+    }
+    const targetRoots = resolveSelectors(
+      definition.targetRoots,
+      metrics,
+      manifest,
+      `Chunk budget override '${id}' targetRoots`,
+    )
+    if (targetRoots.length !== 1) {
+      throw new Error(`Chunk budget override '${id}' targetRoots matched ${targetRoots.length} chunks; exactly 1 is required.`)
+    }
+    const limitBytes = definition.maxMinifiedBytes
+    if (!Number.isInteger(limitBytes) || limitBytes <= defaultLimitBytes || limitBytes > 550_000) {
+      throw new Error(
+        `Chunk budget override '${id}' maxMinifiedBytes must be an integer greater than ${defaultLimitBytes} and no greater than 550000.`,
+      )
+    }
+
+    const sourceMatches = compileSourceMatcher(definition, `Chunk budget override '${id}'`)
+    const matchingChunks = [...metrics.values()].filter((chunk) => chunk.sources.some(sourceMatches))
+    if (matchingChunks.length !== 1) {
+      throw new Error(`Chunk budget override '${id}' source matcher matched ${matchingChunks.length} chunks; exactly 1 is required.`)
+    }
+    const chunk = matchingChunks[0]
+    if (!scenarioClosure.has(chunk.key)) {
+      throw new Error(`Chunk budget override '${id}' chunk '${chunk.file}' is not in scenario '${scenario}' static closure.`)
+    }
+    const targetClosure = collectStaticClosure(manifest, targetRoots)
+    if (!targetClosure.has(chunk.key)) {
+      throw new Error(`Chunk budget override '${id}' chunk '${chunk.file}' is not in the target static closure.`)
+    }
+    if (!Array.isArray(definition.forbiddenSources) || definition.forbiddenSources.length === 0) {
+      throw new Error(`Chunk budget override '${id}' must declare forbiddenSources.`)
+    }
+    for (const [index, forbidden] of definition.forbiddenSources.entries()) {
+      const isForbidden = compileSourceMatcher(
+        forbidden,
+        `Chunk budget override '${id}' forbiddenSources[${index}]`,
+      )
+      const forbiddenSource = chunk.sources.find(isForbidden)
+      if (forbiddenSource) {
+        throw new Error(`Chunk budget override '${id}' chunk '${chunk.file}' contains forbidden source '${forbiddenSource}'.`)
+      }
+    }
+    if (overrideByChunkKey.has(chunk.key)) {
+      throw new Error(`Chunk '${chunk.file}' is claimed by multiple chunk budget overrides.`)
+    }
+
+    const matchingSource = chunk.sources.find(sourceMatches)
+    const resolved = {
+      id,
+      scenario,
+      targetRoots,
+      key: chunk.key,
+      file: chunk.file,
+      source: matchingSource,
+      chain: findStaticPath(manifest, targetRoots, chunk.key),
+      defaultLimitBytes,
+      limitBytes,
+    }
+    overrideByChunkKey.set(chunk.key, resolved)
+    report.push(resolved)
+  }
+
+  return { overrideByChunkKey, report }
+}
+
 function analyze(manifest, config, assetsRoot, mode) {
   if (config.schemaVersion !== '1.0' || !config.scenarios || typeof config.scenarios !== 'object') {
     throw new Error('Config must declare schemaVersion 1.0 and scenarios.')
@@ -390,13 +496,21 @@ function analyze(manifest, config, assetsRoot, mode) {
   const violations = []
   const budgets = config.budgets ?? {}
   const maxChunkBytes = Math.min(budgets.maxChunkMinifiedBytes ?? 500_000, 500_000)
+  const chunkBudgetOverrides = resolveChunkBudgetOverrides({
+    definitions: budgets.chunkOverrides ?? [],
+    defaultLimitBytes: maxChunkBytes,
+    metrics,
+    manifest,
+    scenarioClosures,
+  })
   for (const chunk of [...metrics.values()].sort((left, right) => left.file.localeCompare(right.file, 'en'))) {
-    if (chunk.minifiedBytes > maxChunkBytes) {
+    const limitBytes = chunkBudgetOverrides.overrideByChunkKey.get(chunk.key)?.limitBytes ?? maxChunkBytes
+    if (chunk.minifiedBytes > limitBytes) {
       violations.push({
         code: 'BUILD_GRAPH_CHUNK_TOO_LARGE',
         subject: chunk.file,
         actualBytes: chunk.minifiedBytes,
-        limitBytes: maxChunkBytes,
+        limitBytes,
       })
     }
   }
@@ -492,6 +606,7 @@ function analyze(manifest, config, assetsRoot, mode) {
     targetCapabilityAssets,
     bindingEntries,
     allBindingEntriesGzipBytes,
+    chunkBudgetOverrides: chunkBudgetOverrides.report,
     sharedDependencies,
     forbiddenReachability,
     violations,

@@ -40,6 +40,19 @@ async function flushProTableRequest(): Promise<void> {
   });
 }
 
+async function waitForBodyText(expectedText: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (document.body.textContent?.includes(expectedText)) {
+      return;
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+
+  throw new Error(`Timed out waiting for body text: ${expectedText}`);
+}
+
 const personModelDocument = {
   type: 'model' as const,
   Person: {
@@ -802,6 +815,7 @@ describe('StandardCrudListPageHost', () => {
         button.textContent?.replace(/\s+/g, '') === '新建人员');
       createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    await waitForBodyText('基础信息');
 
     expect(document.body.textContent).toContain('基础信息');
     expect(document.body.textContent).toContain('组织信息');
@@ -824,6 +838,7 @@ describe('StandardCrudListPageHost', () => {
     const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '编辑');
     await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushProTableRequest();
+    await waitForBodyText('基础信息');
     const nameInput = document.body.querySelector('input[value="张三"]') as HTMLInputElement;
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -833,6 +848,7 @@ describe('StandardCrudListPageHost', () => {
     const cancelButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.replace(/\s+/g, '') === '取消');
     await act(async () => cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushProTableRequest();
+    await waitForBodyText('放弃未保存的更改？');
 
     expect(document.body.textContent).toContain('放弃未保存的更改？');
     expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
@@ -853,6 +869,7 @@ describe('StandardCrudListPageHost', () => {
     const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '编辑');
     await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushProTableRequest();
+    await waitForBodyText('基础信息');
     const nameInput = document.body.querySelector('input[value="张三"]') as HTMLInputElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, '李四');
@@ -860,6 +877,7 @@ describe('StandardCrudListPageHost', () => {
       testNavigate?.(-1);
     });
     await flushProTableRequest();
+    await waitForBodyText('放弃未保存的更改？');
 
     expect(document.body.textContent).toContain('放弃未保存的更改？');
     expect(currentLocationSearch).toContain('drawer=edit');
@@ -892,6 +910,7 @@ describe('StandardCrudListPageHost', () => {
     const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '编辑');
     await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushProTableRequest();
+    await waitForBodyText('基础信息');
     const nameInput = document.body.querySelector('input[value="张三"]') as HTMLInputElement;
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -936,6 +955,7 @@ describe('StandardCrudListPageHost', () => {
         button.textContent?.replace(/\s+/g, '') === '更多筛选');
       advancedFilterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    await waitForBodyText('应用筛选');
 
     const drawerBody = document.body.querySelector('.ant-drawer-body');
     const actions = drawerBody?.querySelector('.np-advanced-filter-drawer-actions');

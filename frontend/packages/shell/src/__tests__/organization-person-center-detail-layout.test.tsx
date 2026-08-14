@@ -166,8 +166,10 @@ describe('organization person center detail layout', () => {
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/person-1', { method: 'GET' });
-    expect(container.querySelector('.ant-descriptions')).not.toBeNull();
-    expect(container.querySelector('.ant-form')).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(container.querySelector('.ant-descriptions')).not.toBeNull();
+    });
+    expect(container.querySelector('.ant-form')).toBeNull();
     expect(container.textContent).toContain('人员详情');
     expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('基础信息');

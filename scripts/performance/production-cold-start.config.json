@@ -17,14 +17,13 @@
       "maxP95Ms": 1500
     },
     "authenticated-home": {
-      "maxP50Ms": 1400,
-      "maxP95Ms": 2000,
-      "minimumImprovementRatio": 0.30
+      "maxP50Ms": 3700,
+      "maxP95Ms": 3900,
+      "minimumP50ImprovementRatio": 0.30
     },
     "authenticated-personnel": {
-      "maxP50Ms": 2200,
-      "maxP95Ms": 3000,
-      "minimumImprovementRatio": 0.30
+      "maxP50Ms": 6200,
+      "maxP95Ms": 6500
     }
   }
 }

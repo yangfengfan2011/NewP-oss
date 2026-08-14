@@ -9,7 +9,9 @@ internal sealed record AcceptanceRepositorySnapshot(
     string TrackedStateDigest,
     string UntrackedBuildInputDigest,
     bool HasTrackedChanges,
-    bool HasUntrackedBuildInputs)
+    bool HasUntrackedBuildInputs,
+    string TrackedStatus,
+    string UntrackedBuildInputs)
 {
     internal bool IsClean => !HasTrackedChanges && !HasUntrackedBuildInputs;
 
@@ -59,7 +61,9 @@ internal sealed record AcceptanceRepositorySnapshot(
             Digest($"{trackedStatus}\0{trackedDiff}"),
             await DigestBuildInputsAsync(repositoryRoot, buildInputs, cancellationToken),
             trackedStatus.Length != 0 || trackedDiff.Length != 0,
-            buildInputs.Length != 0);
+            buildInputs.Length != 0,
+            trackedStatus,
+            string.Join('\n', buildInputs));
     }
 
     private static bool IsBuildInput(string relativePath)
@@ -127,23 +131,36 @@ internal sealed record AcceptanceRepositorySnapshot(
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }
 
+internal sealed record AcceptanceRepositoryChangeEvidence(
+    DateTimeOffset ObservedAtUtc,
+    string Kind,
+    string? HeadCommit,
+    string? HeadTree,
+    IReadOnlyList<string> TrackedStatus,
+    IReadOnlyList<string> UntrackedBuildInputs,
+    string? Diagnostic);
+
 internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
 {
     private readonly string _repositoryRoot;
     private readonly TimeSpan _pollInterval;
+    private readonly Func<string, CancellationToken, Task<AcceptanceRepositorySnapshot>> _snapshotCapture;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _monitor;
+    private AcceptanceRepositoryChangeEvidence? _firstChange;
     private int _changed;
     private int _stopped;
 
     private AcceptanceRepositoryGuard(
         string repositoryRoot,
         AcceptanceRepositorySnapshot baseline,
-        TimeSpan pollInterval)
+        TimeSpan pollInterval,
+        Func<string, CancellationToken, Task<AcceptanceRepositorySnapshot>> snapshotCapture)
     {
         _repositoryRoot = repositoryRoot;
         Baseline = baseline;
         _pollInterval = pollInterval;
+        _snapshotCapture = snapshotCapture;
         _monitor = MonitorAsync();
     }
 
@@ -151,13 +168,17 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
 
     internal bool HasChanged => Volatile.Read(ref _changed) != 0;
 
+    internal AcceptanceRepositoryChangeEvidence? FirstChange => Volatile.Read(ref _firstChange);
+
     internal static async Task<AcceptanceRepositoryGuard> StartAsync(
         string repositoryRoot,
         TimeSpan? pollInterval = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, Task<AcceptanceRepositorySnapshot>>? snapshotCapture = null)
     {
         repositoryRoot = Path.GetFullPath(repositoryRoot);
-        var baseline = await AcceptanceRepositorySnapshot.CaptureAsync(repositoryRoot, cancellationToken);
+        snapshotCapture ??= AcceptanceRepositorySnapshot.CaptureAsync;
+        var baseline = await snapshotCapture(repositoryRoot, cancellationToken);
         if (!baseline.IsClean)
         {
             throw new InvalidOperationException(
@@ -167,7 +188,8 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
         return new AcceptanceRepositoryGuard(
             repositoryRoot,
             baseline,
-            pollInterval ?? TimeSpan.FromMilliseconds(100));
+            pollInterval ?? TimeSpan.FromMilliseconds(100),
+            snapshotCapture);
     }
 
     internal async Task<bool> StopAsync(CancellationToken cancellationToken = default)
@@ -191,7 +213,7 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
             }
             catch
             {
-                Interlocked.Exchange(ref _changed, 1);
+                LatchChange(CreateCaptureFailureEvidence("Final repository snapshot failed."));
             }
         }
 
@@ -206,7 +228,7 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
         }
         catch
         {
-            Interlocked.Exchange(ref _changed, 1);
+            LatchChange(CreateCaptureFailureEvidence("Explicit repository snapshot failed."));
         }
 
         return !HasChanged;
@@ -232,7 +254,7 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
             }
             catch
             {
-                Interlocked.Exchange(ref _changed, 1);
+                LatchChange(CreateCaptureFailureEvidence("Background repository snapshot failed."));
             }
 
             try
@@ -248,10 +270,68 @@ internal sealed class AcceptanceRepositoryGuard : IAsyncDisposable
 
     private async Task CompareCurrentAsync(CancellationToken cancellationToken)
     {
-        var current = await AcceptanceRepositorySnapshot.CaptureAsync(_repositoryRoot, cancellationToken);
+        AcceptanceRepositorySnapshot? current = null;
+        Exception? lastError = null;
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                current = await _snapshotCapture(_repositoryRoot, cancellationToken);
+                break;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                lastError = exception;
+                if (attempt < 2)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);
+                }
+            }
+        }
+
+        if (current is null)
+        {
+            LatchChange(CreateCaptureFailureEvidence(lastError?.Message ?? "Repository snapshot failed twice."));
+            return;
+        }
+
         if (current != Baseline)
         {
-            Interlocked.Exchange(ref _changed, 1);
+            LatchChange(new AcceptanceRepositoryChangeEvidence(
+                DateTimeOffset.UtcNow,
+                current.HeadCommit != Baseline.HeadCommit || current.HeadTree != Baseline.HeadTree
+                    ? "head-or-tree"
+                    : current.HasTrackedChanges
+                        ? "tracked"
+                        : "untracked-build-input",
+                current.HeadCommit,
+                current.HeadTree,
+                SplitEvidence(current.TrackedStatus, '\0'),
+                SplitEvidence(current.UntrackedBuildInputs, '\n'),
+                null));
         }
     }
+
+    private void LatchChange(AcceptanceRepositoryChangeEvidence evidence)
+    {
+        Interlocked.CompareExchange(ref _firstChange, evidence, null);
+        Interlocked.Exchange(ref _changed, 1);
+    }
+
+    private static AcceptanceRepositoryChangeEvidence CreateCaptureFailureEvidence(string diagnostic) =>
+        new(
+            DateTimeOffset.UtcNow,
+            "capture-error",
+            null,
+            null,
+            [],
+            [],
+            diagnostic);
+
+    private static IReadOnlyList<string> SplitEvidence(string value, char separator) =>
+        value.Split(separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

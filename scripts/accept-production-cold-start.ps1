@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Baseline", "Candidate")]
+    [ValidateSet("Baseline", "Candidate", "Qualification")]
     [string]$Mode,
     [string]$BaselineResult
 )

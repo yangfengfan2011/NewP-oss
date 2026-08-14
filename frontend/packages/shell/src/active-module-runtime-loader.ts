@@ -1,4 +1,5 @@
 import {
+  ROUTE_CAPABILITY_KINDS,
   createStandardCrudClient,
   type FrontendBehaviorBindings,
   type FrontendModule,
@@ -83,6 +84,96 @@ interface StandardDataProjectionResource {
 interface StandardDataProjection {
   moduleSlug: string;
   resources: StandardDataProjectionResource[];
+}
+
+function collectBehaviorBindingTargetKeys(bindings: FrontendBehaviorBindings): string[] {
+  return [
+    ...(bindings.routeCapabilities ?? []).map((binding) => binding.targetKey),
+    ...(bindings.standardCrudResources ?? []).flatMap((registration) => [
+      registration.listViewKey,
+      ...(registration.detailViewKey ? [registration.detailViewKey] : []),
+    ]),
+    ...(bindings.standardListViews ?? []).map((registration) => registration.viewKey),
+    ...(bindings.customPages ?? []).map((registration) => registration.pageKey),
+  ];
+}
+
+function collectModuleCapabilityTargetKeys(module: FrontendModule): string[] {
+  return [
+    ...(module.routeCapabilities ?? []).map((binding) => binding.targetKey),
+    ...(module.standardCrudResources ?? []).flatMap((registration) => [
+      registration.listViewKey,
+      ...(registration.detailViewKey ? [registration.detailViewKey] : []),
+    ]),
+    ...(module.standardListViews ?? []).map((registration) => registration.viewKey),
+    ...(module.customPages ?? []).map((registration) => registration.pageKey),
+    ...(module.routes ?? []).map((route) => route.path),
+  ];
+}
+
+function validateRouteCapabilityDescriptors(
+  moduleId: string,
+  bindings: FrontendBehaviorBindings['routeCapabilities'],
+): void {
+  const supportedKinds = new Set<string>(ROUTE_CAPABILITY_KINDS);
+  for (const binding of bindings ?? []) {
+    if (!supportedKinds.has(binding.kind)) {
+      throw new Error(`unknown route capability kind '${String(binding.kind)}' for '${moduleId}'`);
+    }
+    if (typeof binding.targetKey !== 'string'
+      || binding.targetKey.trim().length === 0
+      || typeof binding.load !== 'function') {
+      throw new Error(`invalid route capability descriptor for '${moduleId}'`);
+    }
+  }
+}
+
+function validateRouteCapabilityCandidate(modules: FrontendModule[]): void {
+  const ownerByTargetKey = new Map<string, string>();
+  for (const module of modules) {
+    const moduleId = module.metadata.moduleId;
+    validateRouteCapabilityDescriptors(moduleId, module.routeCapabilities);
+    for (const targetKey of collectModuleCapabilityTargetKeys(module)) {
+      const owner = ownerByTargetKey.get(targetKey);
+      if (owner) {
+        throw new Error(
+          `duplicate route capability target '${targetKey}' for '${owner}' and '${moduleId}'`,
+        );
+      }
+      ownerByTargetKey.set(targetKey, moduleId);
+    }
+  }
+}
+
+function validateBehaviorBindingCoverage(
+  entry: ActiveModuleRuntimeEntry,
+  frontend: ActiveModuleFrontendEntry,
+  bindings: FrontendBehaviorBindings,
+): void {
+  validateRouteCapabilityDescriptors(entry.moduleId, bindings.routeCapabilities);
+
+  const implementedTargetKeys = collectBehaviorBindingTargetKeys(bindings);
+  const duplicateDeclared = frontend.bindings.find(
+    (targetKey, index) => frontend.bindings.indexOf(targetKey) !== index,
+  );
+  const duplicateImplemented = implementedTargetKeys.find(
+    (targetKey, index) => implementedTargetKeys.indexOf(targetKey) !== index,
+  );
+  if (duplicateDeclared || duplicateImplemented) {
+    throw new Error(
+      `duplicate binding target for '${entry.moduleId}': ${duplicateDeclared ?? duplicateImplemented}`,
+    );
+  }
+
+  const declared = new Set(frontend.bindings);
+  const implemented = new Set(implementedTargetKeys);
+  const missing = frontend.bindings.filter((targetKey) => !implemented.has(targetKey));
+  const unexpected = [...implemented].filter((targetKey) => !declared.has(targetKey));
+  if (missing.length > 0 || unexpected.length > 0) {
+    throw new Error(
+      `binding coverage mismatch for '${entry.moduleId}': missing [${missing.join(', ')}], unexpected [${unexpected.join(', ')}]`,
+    );
+  }
 }
 
 function defaultImporter(url: string): Promise<Record<string, unknown>> {
@@ -286,8 +377,10 @@ export async function loadActiveModuleRuntimeWith(
                 `behavior key mismatch for '${entry.moduleId}': expected '${frontend.behaviorKey ?? ''}', got '${bindings.behaviorKey ?? ''}'`,
               );
             }
+            validateBehaviorBindingCoverage(entry, frontend, bindings);
             return {
               metadata,
+              routeCapabilities: bindings.routeCapabilities,
               standardCrudResources: bindings.standardCrudResources,
               standardListViews: bindings.standardListViews,
               customPages: bindings.customPages,
@@ -303,6 +396,7 @@ export async function loadActiveModuleRuntimeWith(
           } satisfies FrontendModule;
         }),
     );
+    validateRouteCapabilityCandidate(modules);
 
     return {
       snapshotId: catalog.snapshotId,

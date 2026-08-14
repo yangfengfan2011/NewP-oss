@@ -64,6 +64,27 @@ export interface CustomPageRegistration {
   component: ComponentType;
 }
 
+export const ROUTE_CAPABILITY_KINDS = [
+  'custom',
+  'standard-list',
+  'standard-crud-detail',
+] as const;
+
+export type RouteCapabilityKind = typeof ROUTE_CAPABILITY_KINDS[number];
+
+export interface RouteCapabilityRef {
+  kind: RouteCapabilityKind;
+  targetKey: string;
+}
+
+export interface RouteCapabilityModule {
+  default: ComponentType;
+}
+
+export interface RouteCapabilityBinding extends RouteCapabilityRef {
+  load: () => Promise<RouteCapabilityModule>;
+}
+
 export type {
   UserMessageArgValue,
   UserMessageArgs,
@@ -146,6 +167,7 @@ export interface I18nResource {
  */
 export interface FrontendBehaviorBindings {
   behaviorKey: string;
+  routeCapabilities?: RouteCapabilityBinding[];
   standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
@@ -155,6 +177,7 @@ export interface FrontendBehaviorBindings {
 
 export interface FrontendModule {
   metadata: ModuleMetadata;
+  routeCapabilities?: RouteCapabilityBinding[];
   standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];

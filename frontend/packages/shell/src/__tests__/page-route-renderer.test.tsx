@@ -26,9 +26,9 @@ describe('pageRouteRenderer', () => {
     }
   });
 
-  it('shows a missing custom page registration error when duplicate page keys are removed from the registry', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
+  it('shows a stable local conflict when duplicate custom page keys are registered', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    ModuleRegistry.replaceAll([
       {
         metadata: {
           moduleId: 'module-a',
@@ -49,7 +49,7 @@ describe('pageRouteRenderer', () => {
           { pageKey: 'same.page', component: () => null },
         ],
       },
-    ]);
+    ], 'snapshot-duplicate-custom-page');
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -61,10 +61,12 @@ describe('pageRouteRenderer', () => {
         entryType: 'custom',
         targetKey: 'same.page',
       }));
+      await Promise.resolve();
     });
 
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(String(errorSpy.mock.calls[0]?.[0])).toContain('same.page');
-    expect(container.textContent).toContain('未找到自定义页面注册项');
+    expect(container.querySelector('[data-route-capability-error]')?.getAttribute(
+      'data-route-capability-error',
+    )).toBe('ROUTE_CAPABILITY_CONFLICT');
+    expect(container.textContent).toContain('ROUTE_CAPABILITY_CONFLICT');
   });
 });

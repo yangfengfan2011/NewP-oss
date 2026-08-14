@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import {
   AuthorizationProvider,
@@ -9,6 +9,7 @@ import {
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
+import { RouteCapabilityOutlet } from './capabilities/RouteCapabilityOutlet';
 import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
 import Layout from './components/Layout';
 import { shellAntdTheme } from './config/antdTheme';
@@ -40,7 +41,6 @@ import {
 import { renderPageEntry } from './navigation/pageRouteRenderer';
 import Home from './pages/Home';
 import Login from './pages/Login';
-import StandardCrudDetailPageHost from './pages/StandardCrudDetailPageHost';
 import UiShowcase from './pages/UiShowcase';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -139,11 +139,6 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StandardCrudDetailRoute({ viewKey }: { viewKey: string }) {
-  const params = useParams();
-  return <StandardCrudDetailPageHost viewKey={viewKey} id={params.id ?? null} />;
-}
-
 function AppRoutes() {
   const auth = useAuth();
   const runtimeMetadata = useRuntimeMetadata();
@@ -210,12 +205,13 @@ function AppRoutes() {
           <Route
             key={entry.path}
             path={entry.path}
-            element={entry.permissions && entry.permissions.length > 0 ? (
-              <PermissionGuard permissions={entry.permissions}>
-                <StandardCrudDetailRoute viewKey={entry.viewKey} />
-              </PermissionGuard>
-            ) : (
-              <StandardCrudDetailRoute viewKey={entry.viewKey} />
+            element={(
+              <RouteAccess permissions={entry.permissions}>
+                <RouteCapabilityOutlet capability={{
+                  kind: 'standard-crud-detail',
+                  targetKey: entry.viewKey,
+                }} />
+              </RouteAccess>
             )}
           />
         ))}
@@ -228,7 +224,10 @@ function AppRoutes() {
                 permissions={route.permissions}
                 localAdministratorOnly={route.localAdministratorOnly}
               >
-                <route.component />
+                <RouteCapabilityOutlet capability={{
+                  kind: 'custom',
+                  targetKey: route.path,
+                }} />
               </RouteAccess>
             )}
           />

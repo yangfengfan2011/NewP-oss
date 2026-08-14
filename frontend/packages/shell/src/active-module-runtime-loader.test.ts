@@ -13,7 +13,7 @@ describe('active-module-runtime-loader', () => {
   it('loads every required frontend entry and binds behavior implementations to canonical identity', async () => {
     const organizationBindings: FrontendBehaviorBindings = {
       behaviorKey: 'organization.frontend',
-      customPages: [],
+      customPages: [{ pageKey: 'organization.tree.page', component: () => null }],
     };
     const pluginOps: FrontendModule = {
       metadata: {
@@ -128,6 +128,250 @@ describe('active-module-runtime-loader', () => {
 
     await expect(loadActiveModuleRuntimeWith({ fetchCatalog, internalModules: {} }))
       .rejects.toThrow('ACTIVE_MODULE_RUNTIME_UNAVAILABLE');
+  });
+
+  it('projects lazy capability bindings without executing their implementation loaders', async () => {
+    const capabilityLoad = vi.fn().mockResolvedValue({ default: () => null });
+    const bindings: FrontendBehaviorBindings = {
+      behaviorKey: 'lazy.frontend',
+      routeCapabilities: [{
+        kind: 'custom',
+        targetKey: 'lazy.page',
+        load: capabilityLoad,
+      }],
+    };
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-lazy',
+        planHash: 'snapshot-lazy',
+        modules: [{
+          moduleId: 'Lazy',
+          version: '1.0.0',
+          displayName: 'Lazy',
+          dependencies: [],
+          frontend: {
+            moduleId: 'lazy',
+            behaviorKey: 'lazy.frontend',
+            bindingMode: 'behavior-bindings',
+            bindings: ['lazy.page'],
+          },
+        }],
+      }),
+    });
+
+    const result = await loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        lazy: vi.fn().mockResolvedValue({ default: bindings }),
+      },
+    });
+
+    expect(result.modules[0].routeCapabilities).toEqual(bindings.routeCapabilities);
+    expect(capabilityLoad).not.toHaveBeenCalled();
+  });
+
+  it('rejects a behavior entry whose declared bindings are not covered by descriptors', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-missing-binding',
+        planHash: 'snapshot-missing-binding',
+        modules: [{
+          moduleId: 'MissingBinding',
+          version: '1.0.0',
+          displayName: 'Missing Binding',
+          dependencies: [],
+          frontend: {
+            moduleId: 'missing-binding',
+            behaviorKey: 'missing.frontend',
+            bindingMode: 'behavior-bindings',
+            bindings: ['missing.page'],
+          },
+        }],
+      }),
+    });
+
+    await expect(loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        'missing-binding': vi.fn().mockResolvedValue({
+          default: { behaviorKey: 'missing.frontend' } satisfies FrontendBehaviorBindings,
+        }),
+      },
+    })).rejects.toThrow('MODULE_PROJECTION_FAILED');
+  });
+
+  it('rejects an unknown route capability kind before publishing the candidate', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-unknown-kind',
+        planHash: 'snapshot-unknown-kind',
+        modules: [{
+          moduleId: 'UnknownKind',
+          version: '1.0.0',
+          displayName: 'Unknown Kind',
+          dependencies: [],
+          frontend: {
+            moduleId: 'unknown-kind',
+            behaviorKey: 'unknown.frontend',
+            bindingMode: 'behavior-bindings',
+            bindings: ['unknown.page'],
+          },
+        }],
+      }),
+    });
+    const untrustedBindings = {
+      behaviorKey: 'unknown.frontend',
+      routeCapabilities: [{
+        kind: 'future-pack',
+        targetKey: 'unknown.page',
+        load: vi.fn().mockResolvedValue({ default: () => null }),
+      }],
+    } as unknown as FrontendBehaviorBindings;
+
+    await expect(loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        'unknown-kind': vi.fn().mockResolvedValue({ default: untrustedBindings }),
+      },
+    })).rejects.toThrow('MODULE_PROJECTION_FAILED');
+  });
+
+  it('rejects duplicate capability target keys before publishing the candidate', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-duplicate-binding',
+        planHash: 'snapshot-duplicate-binding',
+        modules: [{
+          moduleId: 'DuplicateBinding',
+          version: '1.0.0',
+          displayName: 'Duplicate Binding',
+          dependencies: [],
+          frontend: {
+            moduleId: 'duplicate-binding',
+            behaviorKey: 'duplicate.frontend',
+            bindingMode: 'behavior-bindings',
+            bindings: ['duplicate.page'],
+          },
+        }],
+      }),
+    });
+    const load = vi.fn().mockResolvedValue({ default: () => null });
+
+    await expect(loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        'duplicate-binding': vi.fn().mockResolvedValue({
+          default: {
+            behaviorKey: 'duplicate.frontend',
+            routeCapabilities: [
+              { kind: 'custom', targetKey: 'duplicate.page', load },
+              { kind: 'custom', targetKey: 'duplicate.page', load },
+            ],
+          } satisfies FrontendBehaviorBindings,
+        }),
+      },
+    })).rejects.toThrow('MODULE_PROJECTION_FAILED');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('rejects a capability descriptor without a loader function', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-invalid-descriptor',
+        planHash: 'snapshot-invalid-descriptor',
+        modules: [{
+          moduleId: 'InvalidDescriptor',
+          version: '1.0.0',
+          displayName: 'Invalid Descriptor',
+          dependencies: [],
+          frontend: {
+            moduleId: 'invalid-descriptor',
+            behaviorKey: 'invalid.frontend',
+            bindingMode: 'behavior-bindings',
+            bindings: ['invalid.page'],
+          },
+        }],
+      }),
+    });
+    const untrustedBindings = {
+      behaviorKey: 'invalid.frontend',
+      routeCapabilities: [{
+        kind: 'custom',
+        targetKey: 'invalid.page',
+        load: 'not-a-loader',
+      }],
+    } as unknown as FrontendBehaviorBindings;
+
+    await expect(loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        'invalid-descriptor': vi.fn().mockResolvedValue({ default: untrustedBindings }),
+      },
+    })).rejects.toThrow('MODULE_PROJECTION_FAILED');
+  });
+
+  it('rejects capability target conflicts across modules before publishing the candidate', async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-cross-module-conflict',
+        planHash: 'snapshot-cross-module-conflict',
+        modules: ['First', 'Second'].map((moduleId) => ({
+          moduleId,
+          version: '1.0.0',
+          displayName: moduleId,
+          dependencies: [],
+          frontend: {
+            moduleId: moduleId.toLowerCase(),
+            behaviorKey: `${moduleId.toLowerCase()}.frontend`,
+            bindingMode: 'behavior-bindings',
+            bindings: ['shared.page'],
+          },
+        })),
+      }),
+    });
+    const page = () => null;
+
+    await expect(loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        first: vi.fn().mockResolvedValue({
+          default: {
+            behaviorKey: 'first.frontend',
+            customPages: [{ pageKey: 'shared.page', component: page }],
+          } satisfies FrontendBehaviorBindings,
+        }),
+        second: vi.fn().mockResolvedValue({
+          default: {
+            behaviorKey: 'second.frontend',
+            customPages: [{ pageKey: 'shared.page', component: page }],
+          } satisfies FrontendBehaviorBindings,
+        }),
+      },
+    })).rejects.toThrow('MODULE_PROJECTION_FAILED');
   });
 
   it('projects a standard-data entry without importing plugin runtime code', async () => {

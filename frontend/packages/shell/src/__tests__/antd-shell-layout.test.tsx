@@ -27,7 +27,7 @@ vi.mock('../contexts/AuthContext', () => ({
   }),
 }));
 
-describe('lightweight shell chrome', () => {
+describe('shell chrome', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -44,7 +44,7 @@ describe('lightweight shell chrome', () => {
     }
   });
 
-  it('renders an accessible sidebar with collapse control, hierarchy and current-page state', async () => {
+  it('renders an Ant Design sidebar with collapse control, hierarchy and current-page state', async () => {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -79,10 +79,10 @@ describe('lightweight shell chrome', () => {
     expect(container.textContent).toContain('组织用户');
     expect(container.textContent).toContain('人员中心');
     expect(container.querySelector('[aria-label="折叠菜单"]')).not.toBeNull();
-    expect(container.querySelector('nav[aria-label="主导航"]')).not.toBeNull();
-    expect(container.querySelector('a[aria-current="page"]')?.textContent).toContain('人员中心');
-    expect(container.querySelector('.np-sidebar-menu')).not.toBeNull();
-    expect(container.querySelectorAll('.np-sidebar-menu-icon').length).toBeGreaterThanOrEqual(2);
+    expect(container.querySelector('.ant-layout-sider')).not.toBeNull();
+    expect(container.querySelector('.ant-menu')).not.toBeNull();
+    expect(container.querySelector('.ant-menu-item-selected')?.textContent).toContain('人员中心');
+    expect(container.querySelectorAll('.anticon').length).toBeGreaterThanOrEqual(2);
   });
 
   it('renders a minimal full-width platform header chrome', async () => {

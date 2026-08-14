@@ -129,15 +129,9 @@ a:hover {
 }
 
 .np-app-sider {
-  flex: 0 0 216px;
   min-height: calc(100vh - 52px);
-  background: #fbfcfe;
+  background: #fbfcfe !important;
   border-right: 1px solid #e5e7eb;
-  transition: flex-basis 160ms ease;
-}
-
-.np-app-sider-collapsed {
-  flex-basis: 72px;
 }
 
 .np-sider-toolbar {
@@ -245,6 +239,7 @@ a:hover {
 
 .np-app-content {
   display: flex;
+  flex: 1 1 0%;
   flex-direction: column;
   min-width: 0;
   padding: 10px;
@@ -320,36 +315,18 @@ a:hover {
 }
 
 .np-sidebar-menu {
-  margin: 0;
   padding: 8px 0 12px;
-  background: transparent;
-  list-style: none;
-}
-
-.np-sidebar-menu ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  border-inline-end: none !important;
+  background: transparent !important;
 }
 
 .np-sidebar-menu .ant-menu-item,
 .np-sidebar-menu .ant-menu-submenu-title {
-  display: flex;
-  align-items: center;
   height: 40px;
   line-height: 40px;
   margin: 2px 8px;
   border-radius: 6px;
   color: #475569;
-}
-
-.np-sidebar-menu .ant-menu-item > a,
-.np-sidebar-menu .ant-menu-submenu-title {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  color: inherit;
-  text-decoration: none;
 }
 
 .np-sidebar-menu-icon {
@@ -396,15 +373,6 @@ a:hover {
   height: 24px;
   border-radius: 2px;
   background: #1677ff;
-}
-
-.np-app-sider-collapsed .np-sidebar-menu-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 .np-sidebar-menu .ant-menu-sub.ant-menu-inline {

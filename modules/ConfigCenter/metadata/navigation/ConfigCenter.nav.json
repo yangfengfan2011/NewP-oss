@@ -2,35 +2,6 @@
   "schemaVersion": "1.0",
   "type": "nav",
   "navigation": {
-    "items": [
-      {
-        "key": "config-center",
-        "titleKey": "Navigation.ConfigCenter",
-        "icon": "settings",
-        "order": 20
-      },
-      {
-        "key": "config-center.items",
-        "titleKey": "Navigation.ConfigItems",
-        "icon": "cog",
-        "parentKey": "config-center",
-        "path": "/config/items",
-        "order": 1,
-        "entryType": "custom",
-        "targetKey": "config-center.items.page",
-        "permissions": ["ConfigCenter.Config.View"]
-      },
-      {
-        "key": "config-center.value-lists",
-        "titleKey": "Navigation.ValueLists",
-        "icon": "list",
-        "parentKey": "config-center",
-        "path": "/config/value-lists",
-        "order": 2,
-        "entryType": "custom",
-        "targetKey": "config-center.value-lists.page",
-        "permissions": ["ConfigCenter.Config.View"]
-      }
-    ]
+    "items": []
   }
 }

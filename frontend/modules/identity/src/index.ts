@@ -1,10 +1,13 @@
 import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
-import IdentityAccountsPage from './pages/IdentityAccountsPage';
 
 const identityFrontendBindings: FrontendBehaviorBindings = {
   behaviorKey: 'identity.frontend',
-  customPages: [
-    { pageKey: 'identity.accounts.page', component: IdentityAccountsPage },
+  routeCapabilities: [
+    {
+      kind: 'custom',
+      targetKey: 'identity.accounts.page',
+      load: () => import('./pages/IdentityAccountsPage'),
+    },
   ],
 };
 

@@ -4,11 +4,11 @@
 
 ## 模板内容
 
-- `src/index.ts`：导出 `FrontendBehaviorBindings`，只绑定稳定 behavior key 与 page key；
+- `src/index.ts`：导出轻量 `FrontendBehaviorBindings` descriptor，只绑定稳定 behavior key、target key 与动态 loader；
 - `src/pages/TemplatePage.tsx`：最小页面实现；
 - `package.json`：仅依赖前端 SDK。
 
-模块身份、显示名、路由、菜单和权限不在 TypeScript 中声明，它们由 `modules/<ModuleId>/newp.plugin.json` 与 `modules/<ModuleId>/metadata/**` 拥有。
+模块身份、显示名、路由、菜单和权限不在 TypeScript 中声明，它们由 `modules/<ModuleId>/newp.plugin.json` 与 `modules/<ModuleId>/metadata/**` 拥有。注册阶段不得静态 import 页面；`RouteCapabilityRuntime` 只在授权路由命中后调用 loader。
 
 ## 推荐方式
 

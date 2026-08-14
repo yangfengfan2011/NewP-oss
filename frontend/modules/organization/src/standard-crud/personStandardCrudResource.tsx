@@ -3,9 +3,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
-import { Input } from 'antd';
-import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
-import PersonUserBindingCard from '../components/PersonUserBindingCard';
+import { lazy, Suspense } from 'react';
 import {
   deletePerson,
   employmentStatusOptions,
@@ -19,6 +17,19 @@ import {
   type PersonListRow,
   type PersonUserBindingSummaryData,
 } from '../services/organizationService';
+
+const LazyAuthorizationSummary = lazy(async () => {
+  const module = await import('./personStandardCrudRenderers');
+  return { default: module.AuthorizationSummary };
+});
+const LazyDisableReasonInput = lazy(async () => {
+  const module = await import('./personStandardCrudRenderers');
+  return { default: module.DisableReasonInput };
+});
+const LazyPersonUserBindingSummary = lazy(async () => {
+  const module = await import('./personStandardCrudRenderers');
+  return { default: module.PersonUserBindingSummary };
+});
 
 interface PersonListFilters {
   [key: string]: string;
@@ -98,10 +109,17 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
 
 const personSummaryRenderers = {
   userBinding: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
-    <PersonUserBindingCard summary={block as StandardCrudSummaryBlock<PersonUserBindingSummaryData>} title={title} />
+    <Suspense fallback={null}>
+      <LazyPersonUserBindingSummary
+        summary={block as StandardCrudSummaryBlock<PersonUserBindingSummaryData>}
+        title={title}
+      />
+    </Suspense>
   ),
   authorizationSummary: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
-    <AuthorizationSummaryCard summary={block as StandardCrudSummaryBlock<string[]>} title={title} />
+    <Suspense fallback={null}>
+      <LazyAuthorizationSummary summary={block as StandardCrudSummaryBlock<string[]>} title={title} />
+    </Suspense>
   ),
 };
 
@@ -110,11 +128,8 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   resourceKey: 'organization.person',
   apiRoute: '/api/organization/persons',
   listViewKey: 'organization.person.list',
-  listRoutePath: '/organization/persons',
   detailViewKey: 'organization.person.detail',
-  detailRoutePath: '/organization/persons/:id',
   concurrencyRevisionField: 'Revision',
-  permissions: ['Organization.Person.View'],
   lookupProviders: organizationLookupProviders,
   enumOptions: {
     EmploymentStatus: employmentStatusOptions,
@@ -122,15 +137,9 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   summaryRenderers: personSummaryRenderers,
   actionInputRenderers: {
     disableReason: ({ value, onChange }) => (
-      <Input.TextArea
-        aria-label="停用原因"
-        autoSize={{ minRows: 3, maxRows: 6 }}
-        maxLength={500}
-        showCount
-        placeholder="请输入停用原因（必填）"
-        value={typeof value === 'string' ? value : ''}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <Suspense fallback={null}>
+        <LazyDisableReasonInput value={value} onChange={onChange} />
+      </Suspense>
     ),
   },
   actionHandlers: {

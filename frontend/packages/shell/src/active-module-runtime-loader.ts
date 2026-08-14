@@ -4,6 +4,7 @@ import {
   type FrontendBehaviorBindings,
   type FrontendModule,
   type StandardCrudActionHandler,
+  type StandardCrudCapabilityBinding,
 } from '@icp-platform/sdk';
 import { platformFetch } from '@icp-platform/core';
 import internalModuleRegistry from 'virtual:newp-frontend-entry-registry';
@@ -89,6 +90,7 @@ interface StandardDataProjection {
 function collectBehaviorBindingTargetKeys(bindings: FrontendBehaviorBindings): string[] {
   return [
     ...(bindings.routeCapabilities ?? []).map((binding) => binding.targetKey),
+    ...(bindings.standardCrudCapabilities ?? []).map((binding) => binding.targetKey),
     ...(bindings.standardCrudResources ?? []).flatMap((registration) => [
       registration.listViewKey,
       ...(registration.detailViewKey ? [registration.detailViewKey] : []),
@@ -101,6 +103,7 @@ function collectBehaviorBindingTargetKeys(bindings: FrontendBehaviorBindings): s
 function collectModuleCapabilityTargetKeys(module: FrontendModule): string[] {
   return [
     ...(module.routeCapabilities ?? []).map((binding) => binding.targetKey),
+    ...(module.standardCrudCapabilities ?? []).map((binding) => binding.targetKey),
     ...(module.standardCrudResources ?? []).flatMap((registration) => [
       registration.listViewKey,
       ...(registration.detailViewKey ? [registration.detailViewKey] : []),
@@ -128,11 +131,26 @@ function validateRouteCapabilityDescriptors(
   }
 }
 
+function validateStandardCrudCapabilityDescriptors(
+  moduleId: string,
+  bindings: StandardCrudCapabilityBinding[] | undefined,
+): void {
+  for (const binding of bindings ?? []) {
+    if ((binding.kind !== 'standard-list' && binding.kind !== 'standard-crud-detail')
+      || typeof binding.targetKey !== 'string'
+      || binding.targetKey.trim().length === 0
+      || typeof binding.load !== 'function') {
+      throw new Error(`invalid standard CRUD capability descriptor for '${moduleId}'`);
+    }
+  }
+}
+
 function validateRouteCapabilityCandidate(modules: FrontendModule[]): void {
   const ownerByTargetKey = new Map<string, string>();
   for (const module of modules) {
     const moduleId = module.metadata.moduleId;
     validateRouteCapabilityDescriptors(moduleId, module.routeCapabilities);
+    validateStandardCrudCapabilityDescriptors(moduleId, module.standardCrudCapabilities);
     for (const targetKey of collectModuleCapabilityTargetKeys(module)) {
       const owner = ownerByTargetKey.get(targetKey);
       if (owner) {
@@ -151,6 +169,7 @@ function validateBehaviorBindingCoverage(
   bindings: FrontendBehaviorBindings,
 ): void {
   validateRouteCapabilityDescriptors(entry.moduleId, bindings.routeCapabilities);
+  validateStandardCrudCapabilityDescriptors(entry.moduleId, bindings.standardCrudCapabilities);
 
   const implementedTargetKeys = collectBehaviorBindingTargetKeys(bindings);
   const duplicateDeclared = frontend.bindings.find(
@@ -381,6 +400,7 @@ export async function loadActiveModuleRuntimeWith(
             return {
               metadata,
               routeCapabilities: bindings.routeCapabilities,
+              standardCrudCapabilities: bindings.standardCrudCapabilities,
               standardCrudResources: bindings.standardCrudResources,
               standardListViews: bindings.standardListViews,
               customPages: bindings.customPages,

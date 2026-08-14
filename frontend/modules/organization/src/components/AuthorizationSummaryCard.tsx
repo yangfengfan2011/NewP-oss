@@ -1,4 +1,4 @@
-import { Panel, StatusBadge } from '@icp-platform/ui';
+import { Panel, StatusBadge } from '@icp-platform/ui/core';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 
 interface AuthorizationSummaryCardProps {

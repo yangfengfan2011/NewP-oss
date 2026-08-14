@@ -1,21 +1,28 @@
-import { type FrontendBehaviorBindings, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import OrganizationTreePage from './pages/OrganizationTreePage';
-import PositionManagementPage from './pages/PositionManagementPage';
-import { personStandardCrudResource } from './standard-crud/personStandardCrudResource';
+import {
+  type FrontendBehaviorBindings,
+  type StandardCrudCapabilityModule,
+  type StandardCrudResourceRegistration,
+} from '@icp-platform/sdk';
+
+async function loadPersonStandardCrudResource(): Promise<StandardCrudCapabilityModule> {
+  const { personStandardCrudResource } = await import('./standard-crud/personStandardCrudResource');
+  return {
+    default: personStandardCrudResource as unknown as StandardCrudResourceRegistration,
+  };
+}
 
 export const organizationBindings: FrontendBehaviorBindings = {
   behaviorKey: 'organization.frontend',
-  standardCrudResources: [
-    personStandardCrudResource as unknown as StandardCrudResourceRegistration,
-  ],
-  customPages: [
+  standardCrudCapabilities: [
     {
-      pageKey: 'organization.tree.page',
-      component: OrganizationTreePage,
+      kind: 'standard-list',
+      targetKey: 'organization.person.list',
+      load: loadPersonStandardCrudResource,
     },
     {
-      pageKey: 'organization.positions.page',
-      component: PositionManagementPage,
+      kind: 'standard-crud-detail',
+      targetKey: 'organization.person.detail',
+      load: loadPersonStandardCrudResource,
     },
   ],
 };

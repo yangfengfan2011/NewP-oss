@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonDetailPage from '../../../../modules/organization/src/pages/PersonDetailPage';
 import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
@@ -22,16 +22,7 @@ const personDetailCatalog = Object.fromEntries(
   ]),
 );
 
-const organizationModuleWithPersonnelWrites = {
-  ...organizationModule,
-  standardCrudResources: organizationModule.standardCrudResources?.map((resource) =>
-    resource.resourceKey === 'organization.person'
-      ? {
-          ...resource,
-          permissions: ['Organization.Person.View', 'Organization.Person.Update'],
-        }
-      : resource),
-};
+let personResource: StandardCrudResourceRegistration;
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
@@ -51,6 +42,17 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
 describe('organization person center detail layout', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  beforeAll(async () => {
+    const capability = organizationModule.standardCrudCapabilities?.find(
+      (item) => item.kind === 'standard-crud-detail' && item.targetKey === 'organization.person.detail',
+    );
+    if (!capability) {
+      throw new Error('未找到人员标准 CRUD 详情 capability。');
+    }
+
+    personResource = (await capability.load()).default;
+  });
 
   beforeEach(() => {
     const getComputedStyle = window.getComputedStyle.bind(window);
@@ -83,7 +85,7 @@ describe('organization person center detail layout', () => {
     });
   });
 
-  async function renderStandardDetailHost() {
+  async function renderStandardDetailHost(registration: StandardCrudResourceRegistration = personResource) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -103,7 +105,7 @@ describe('organization person center detail layout', () => {
               modelDocuments: [personModelDocument],
             }}
           >
-            <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" />
+            <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" registration={registration} />
           </RuntimeMetadataProvider>
         </LocalizationProvider>,
       );
@@ -126,7 +128,6 @@ describe('organization person center detail layout', () => {
   });
 
   it('renders person detail through the standard CRUD detail host', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -159,7 +160,10 @@ describe('organization person center detail layout', () => {
       ),
     );
 
-    await renderStandardDetailHost();
+    await renderStandardDetailHost({
+      ...personResource,
+      permissions: ['Organization.Person.View', 'Organization.Person.Update'],
+    });
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/person-1', { method: 'GET' });
     expect(container.querySelector('.ant-descriptions')).not.toBeNull();
@@ -169,11 +173,10 @@ describe('organization person center detail layout', () => {
     expect(container.textContent).toContain('基础信息');
     expect(container.textContent).toContain('组织信息');
     expect(container.textContent).toContain('账号绑定');
-    expect(container.textContent).toContain('授权摘要');
+    await vi.waitFor(() => expect(container.textContent).toContain('授权摘要'));
   });
 
   it('keeps platform summary fallback during compatibility detail rendering', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModule]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({

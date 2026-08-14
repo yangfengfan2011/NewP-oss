@@ -29,13 +29,23 @@
         { "manifestKey": "index.html" },
         { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
         { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-        { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
+        {
+          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+          "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+        },
+        {
+          "dynamicImportsOf": { "sourceContains": "src/capabilities/StandardRouteCapabilityAdapters.tsx" },
+          "match": { "sourceContains": "src/pages/StandardListPageHost.tsx" }
+        }
       ],
       "relativeTo": "authenticatedHome"
     }
   },
   "targetCapabilityAssets": [
-    { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
+    {
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+    }
   ],
   "bindingEntries": [
     { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
@@ -93,22 +103,31 @@
       "id": "module-binding-eager-pro",
       "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-",
       "scenarios": ["moduleBindingEager"],
-      "enforcement": "report-only",
       "attribution": "module-binding-eager"
     },
     {
       "id": "module-binding-eager-rc-picker",
       "sourceContains": "/node_modules/.pnpm/rc-picker@",
       "scenarios": ["moduleBindingEager"],
-      "enforcement": "report-only",
       "attribution": "module-binding-eager"
     },
     {
       "id": "module-binding-eager-business-page",
-      "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|standard-crud)/",
+      "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|services|standard-crud)/",
       "scenarios": ["moduleBindingEager"],
-      "enforcement": "report-only",
       "attribution": "module-binding-eager"
+    },
+    {
+      "id": "retired-frontend-module",
+      "sourceRegex": "(?:^|/)modules/(?:audit|authorization|config-center|demo|files|metadata-config-center|module-template-sample|plugin-ops)/src/",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "retired-frontend"
+    },
+    {
+      "id": "retired-organization-page",
+      "sourceRegex": "(?:^|/)modules/organization/src/(?:pages/(?:OrganizationTreePage|PositionManagementPage)|components/OrganizationTreePanel)\\.tsx$",
+      "scenarios": ["moduleBindingEager"],
+      "attribution": "retired-frontend"
     }
   ],
   "budgets": {

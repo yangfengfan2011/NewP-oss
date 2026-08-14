@@ -124,13 +124,20 @@ a:hover {
 }
 
 .np-app-body {
+  display: flex;
   min-height: calc(100vh - 52px);
 }
 
 .np-app-sider {
+  flex: 0 0 216px;
   min-height: calc(100vh - 52px);
-  background: #fbfcfe !important;
+  background: #fbfcfe;
   border-right: 1px solid #e5e7eb;
+  transition: flex-basis 160ms ease;
+}
+
+.np-app-sider-collapsed {
+  flex-basis: 72px;
 }
 
 .np-sider-toolbar {
@@ -153,6 +160,9 @@ a:hover {
   height: 32px;
   color: #64748b;
   border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 
 .np-sider-collapse:hover,
@@ -200,6 +210,39 @@ a:hover {
   flex-shrink: 0;
 }
 
+.np-header-session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.np-header-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e6f4ff;
+  color: #1677ff;
+  font-size: 12px;
+}
+
+.np-header-logout {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+}
+
+.np-header-logout:hover,
+.np-header-logout:focus-visible {
+  color: #1677ff;
+  background: #f8fafc;
+}
+
 .np-app-content {
   display: flex;
   flex-direction: column;
@@ -218,6 +261,23 @@ a:hover {
 
 .np-page-breadcrumb {
   margin-bottom: 12px;
+}
+
+.np-page-breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: #64748b;
+  font-size: 14px;
+  list-style: none;
+}
+
+.np-page-breadcrumb-list li + li::before {
+  content: '/';
+  margin-right: 6px;
+  color: #cbd5e1;
 }
 
 .np-page-header {
@@ -260,18 +320,36 @@ a:hover {
 }
 
 .np-sidebar-menu {
+  margin: 0;
   padding: 8px 0 12px;
-  border-inline-end: none !important;
-  background: transparent !important;
+  background: transparent;
+  list-style: none;
+}
+
+.np-sidebar-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .np-sidebar-menu .ant-menu-item,
 .np-sidebar-menu .ant-menu-submenu-title {
+  display: flex;
+  align-items: center;
   height: 40px;
   line-height: 40px;
   margin: 2px 8px;
   border-radius: 6px;
   color: #475569;
+}
+
+.np-sidebar-menu .ant-menu-item > a,
+.np-sidebar-menu .ant-menu-submenu-title {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
 }
 
 .np-sidebar-menu-icon {
@@ -318,6 +396,15 @@ a:hover {
   height: 24px;
   border-radius: 2px;
   background: #1677ff;
+}
+
+.np-app-sider-collapsed .np-sidebar-menu-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .np-sidebar-menu .ant-menu-sub.ant-menu-inline {

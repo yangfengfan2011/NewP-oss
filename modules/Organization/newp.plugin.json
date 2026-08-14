@@ -22,9 +22,7 @@
     "bindingMode": "behavior-bindings",
     "bindings": [
       "organization.person.list",
-      "organization.person.detail",
-      "organization.tree.page",
-      "organization.positions.page"
+      "organization.person.detail"
     ]
   },
   "security": {

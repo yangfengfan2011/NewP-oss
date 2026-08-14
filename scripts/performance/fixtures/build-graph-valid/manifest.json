@@ -24,10 +24,15 @@
     "isDynamicEntry": true,
     "css": ["assets/module.css", "assets/main.css"],
     "imports": ["_shared.js"],
-    "dynamicImports": ["src/personnel.ts"]
+    "dynamicImports": ["src/personnel.ts", "src/detail.ts"]
   },
   "src/personnel.ts": {
     "file": "assets/personnel.js",
+    "isDynamicEntry": true,
+    "imports": ["_shared.js"]
+  },
+  "src/detail.ts": {
+    "file": "assets/detail.js",
     "isDynamicEntry": true,
     "imports": ["_shared.js"]
   }

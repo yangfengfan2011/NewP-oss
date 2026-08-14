@@ -9,6 +9,9 @@
     "min": "1.0.0",
     "max": "2.0.0"
   },
+  "frontend": {
+    "enabled": false
+  },
   "persistence": {
     "models": [
       "metadata/models/Permission.model.json",

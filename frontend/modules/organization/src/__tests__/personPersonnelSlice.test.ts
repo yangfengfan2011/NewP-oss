@@ -7,8 +7,10 @@ describe('personnel center first vertical slice', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps the resource route readable with View while metadata gates write actions', () => {
-    expect(personStandardCrudResource.permissions).toEqual(['Organization.Person.View']);
+  it('leaves route authorization to the runtime metadata projection', () => {
+    expect(personStandardCrudResource.permissions).toBeUndefined();
+    expect(personStandardCrudResource.listRoutePath).toBeUndefined();
+    expect(personStandardCrudResource.detailRoutePath).toBeUndefined();
   });
 
   it('includes disabled organization only for query lookup and marks its state', async () => {

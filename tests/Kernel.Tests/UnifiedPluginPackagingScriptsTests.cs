@@ -143,7 +143,11 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "index.ts"));
         Assert.Contains("FrontendBehaviorBindings", frontendBinding, StringComparison.Ordinal);
         Assert.Contains("behaviorKey: 'canonical-sample.frontend'", frontendBinding, StringComparison.Ordinal);
-        Assert.Contains("pageKey: 'canonical-sample.page'", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("routeCapabilities:", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("targetKey: 'canonical-sample.page'", frontendBinding, StringComparison.Ordinal);
+        Assert.Contains("load: () => import('./pages/CanonicalSamplePage')", frontendBinding, StringComparison.Ordinal);
+        Assert.DoesNotContain("import CanonicalSamplePage", frontendBinding, StringComparison.Ordinal);
+        Assert.DoesNotContain("customPages:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("metadata:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("routes:", frontendBinding, StringComparison.Ordinal);
         Assert.DoesNotContain("menus:", frontendBinding, StringComparison.Ordinal);
@@ -181,13 +185,13 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             repoRoot,
             Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"),
             [
-                "-ModuleName", "Audit",
+                "-ModuleName", "Identity",
                 "-Configuration", "Debug",
                 "-OutputRoot", outputRoot,
                 "-Force"
             ]);
 
-        var packageRoot = Path.Combine(outputRoot, "Audit");
+        var packageRoot = Path.Combine(outputRoot, "Identity");
         var frontendManifestPath = Path.Combine(packageRoot, "frontend", "plugin.frontend.json");
 
         Assert.Equal(0, result.ExitCode);
@@ -195,7 +199,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
 
         using var document = JsonDocument.Parse(File.ReadAllText(frontendManifestPath));
         Assert.Equal(
-            "/plugin-assets/Audit/1.0.0/",
+            "/plugin-assets/Identity/1.0.0/",
             document.RootElement.GetProperty("publicBasePath").GetString());
     }
 
@@ -211,28 +215,28 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             repoRoot,
             Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"),
             [
-                "-ModuleName", "ConfigCenter",
+                "-ModuleName", "Organization",
                 "-Configuration", "Debug",
                 "-OutputRoot", outputRoot,
                 "-Force"
             ]);
 
-        var packageRoot = Path.Combine(outputRoot, "ConfigCenter");
-        var modelMetadataPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "models", "ConfigItem.model.json");
-        var moduleSettingsPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
-        var valueListsDictionaryPath = Path.Combine(packageRoot, "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json");
+        var packageRoot = Path.Combine(outputRoot, "Organization");
+        var modelMetadataPath = Path.Combine(packageRoot, "modules", "Organization", "metadata", "models", "Person.model.json");
+        var navigationMetadataPath = Path.Combine(packageRoot, "modules", "Organization", "metadata", "navigation", "Organization.nav.json");
+        var personListDictionaryPath = Path.Combine(packageRoot, "modules", "Organization", "metadata", "dictionaries", "PersonListView.dic.json");
 
         Assert.True(result.ExitCode == 0, $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
         Assert.True(File.Exists(modelMetadataPath), $"Expected model metadata at {modelMetadataPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
-        Assert.True(File.Exists(moduleSettingsPath), $"Expected module settings at {moduleSettingsPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
-        Assert.True(File.Exists(valueListsDictionaryPath), $"Expected value list dictionary at {valueListsDictionaryPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(navigationMetadataPath), $"Expected navigation metadata at {navigationMetadataPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+        Assert.True(File.Exists(personListDictionaryPath), $"Expected personnel dictionary at {personListDictionaryPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
 
-        using var dictionaryDocument = JsonDocument.Parse(File.ReadAllText(valueListsDictionaryPath));
-        var valueLists = dictionaryDocument.RootElement.GetProperty("ValueLists");
-        Assert.Equal("值列表编码不能为空。", valueLists.GetProperty("CodeRequired").GetProperty("zhs").GetString());
-        Assert.Equal("Value list name is required.", valueLists.GetProperty("NameRequired").GetProperty("en").GetString());
-        Assert.Equal("值列表编码 {code} 已存在。", valueLists.GetProperty("CodeAlreadyExists").GetProperty("zhs").GetString());
-        Assert.Equal("Value list item {id} does not exist.", valueLists.GetProperty("ItemNotFound").GetProperty("en").GetString());
+        using var dictionaryDocument = JsonDocument.Parse(File.ReadAllText(personListDictionaryPath));
+        var personList = dictionaryDocument.RootElement.GetProperty("PersonListView");
+        Assert.Equal("人员中心", personList.GetProperty("Title").GetProperty("zhs").GetString());
+        Assert.Equal("Person Center", personList.GetProperty("Title").GetProperty("en").GetString());
+        Assert.Equal("查看完整详情", personList.GetProperty("Action_ViewFullDetail").GetProperty("zhs").GetString());
+        Assert.Equal("View Full Details", personList.GetProperty("Action_ViewFullDetail").GetProperty("en").GetString());
     }
 
     public void Dispose()

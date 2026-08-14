@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { usePermission } from '@icp-platform/core';
-import { Button, EmptyState, ErrorState, LoadingState, Modal, Panel, StatusBadge } from '@icp-platform/ui';
+import { Button, EmptyState, ErrorState, LoadingState, Modal, Panel, StatusBadge } from '@icp-platform/ui/core';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 import {
   bindPersonUser,

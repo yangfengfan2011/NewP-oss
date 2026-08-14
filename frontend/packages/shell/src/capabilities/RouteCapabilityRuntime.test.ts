@@ -49,6 +49,137 @@ describe('RouteCapabilityRuntime', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it('loads a lazy standard CRUD implementation once for concurrent authorized route requests', async () => {
+    const resource = {
+      resourceKey: 'records.resource',
+      apiRoute: '/api/records',
+      listViewKey: 'records.list',
+      detailViewKey: 'records.detail',
+      createEmptyFilters: () => ({}),
+      buildListQuery: () => ({}),
+      mapListItem: (value: unknown) => value as Record<string, unknown>,
+      getRowId: () => 'record-1',
+    };
+    const load = vi.fn().mockResolvedValue({ default: resource });
+    ModuleRegistry.replaceAll([{
+      metadata: { moduleId: 'records', displayName: 'Records', version: '1.0.0' },
+      standardCrudCapabilities: [{
+        kind: 'standard-list',
+        targetKey: 'records.list',
+        load,
+      }],
+    }], 'snapshot-lazy-standard-crud');
+
+    const [first, second] = await Promise.all([
+      routeCapabilityRuntime.load({ kind: 'standard-list', targetKey: 'records.list' }),
+      routeCapabilityRuntime.load({ kind: 'standard-list', targetKey: 'records.list' }),
+    ]);
+
+    expect(first).toBe(second);
+    expect(typeof first).toBe('function');
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes a lazy standard CRUD loader failure and allows a retry', async () => {
+    const resource = {
+      resourceKey: 'retry.records',
+      apiRoute: '/api/retry-records',
+      listViewKey: 'retry.records.list',
+      createEmptyFilters: () => ({}),
+      buildListQuery: () => ({}),
+      mapListItem: (value: unknown) => value as Record<string, unknown>,
+      getRowId: () => 'record-1',
+    };
+    const failure = new Error('resource chunk unavailable');
+    const load = vi.fn()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ default: resource });
+    ModuleRegistry.replaceAll([{
+      metadata: { moduleId: 'retry-records', displayName: 'Retry Records', version: '1.0.0' },
+      standardCrudCapabilities: [{
+        kind: 'standard-list',
+        targetKey: 'retry.records.list',
+        load,
+      }],
+    }], 'snapshot-lazy-standard-crud-retry');
+
+    await expect(routeCapabilityRuntime.load({
+      kind: 'standard-list',
+      targetKey: 'retry.records.list',
+    })).rejects.toMatchObject({ code: 'ROUTE_CAPABILITY_LOAD_FAILED', cause: failure });
+    await expect(routeCapabilityRuntime.load({
+      kind: 'standard-list',
+      targetKey: 'retry.records.list',
+    })).resolves.toEqual(expect.any(Function));
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a late lazy standard CRUD implementation from an old snapshot', async () => {
+    const resource = {
+      resourceKey: 'stale.records',
+      apiRoute: '/api/stale-records',
+      listViewKey: 'stale.records.list',
+      createEmptyFilters: () => ({}),
+      buildListQuery: () => ({}),
+      mapListItem: (value: unknown) => value as Record<string, unknown>,
+      getRowId: () => 'record-1',
+    };
+    let completeLoad!: (value: { default: typeof resource }) => void;
+    const load = vi.fn(() => new Promise<{ default: typeof resource }>((resolve) => {
+      completeLoad = resolve;
+    }));
+    ModuleRegistry.replaceAll([{
+      metadata: { moduleId: 'stale-records', displayName: 'Stale Records', version: '1.0.0' },
+      standardCrudCapabilities: [{
+        kind: 'standard-list',
+        targetKey: 'stale.records.list',
+        load,
+      }],
+    }], 'snapshot-lazy-standard-crud-old');
+
+    const result = routeCapabilityRuntime.load({
+      kind: 'standard-list',
+      targetKey: 'stale.records.list',
+    });
+    ModuleRegistry.replaceAll([], 'snapshot-lazy-standard-crud-current');
+    completeLoad({ default: resource });
+
+    await expect(result).rejects.toMatchObject({ code: 'ROUTE_CAPABILITY_STALE' });
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a lazy standard CRUD implementation whose loaded target does not match its descriptor', async () => {
+    const load = vi.fn().mockResolvedValue({
+      default: {
+        resourceKey: 'mismatched.records',
+        apiRoute: '/api/mismatched-records',
+        listViewKey: 'another.records.list',
+        createEmptyFilters: () => ({}),
+        buildListQuery: () => ({}),
+        mapListItem: (value: unknown) => value as Record<string, unknown>,
+        getRowId: () => 'record-1',
+      },
+    });
+    ModuleRegistry.replaceAll([{
+      metadata: { moduleId: 'mismatched-records', displayName: 'Mismatched Records', version: '1.0.0' },
+      standardCrudCapabilities: [{
+        kind: 'standard-list',
+        targetKey: 'expected.records.list',
+        load,
+      }],
+    }], 'snapshot-lazy-standard-crud-mismatch');
+
+    await expect(routeCapabilityRuntime.load({
+      kind: 'standard-list',
+      targetKey: 'expected.records.list',
+    })).rejects.toMatchObject({
+      code: 'ROUTE_CAPABILITY_LOAD_FAILED',
+      cause: expect.objectContaining({
+        message: "Standard CRUD capability target mismatch: expected 'expected.records.list', got 'another.records.list'.",
+      }),
+    });
+  });
+
   it('removes a failed load so a later request can retry the same capability', async () => {
     function RecoveredPage() {
       return null;

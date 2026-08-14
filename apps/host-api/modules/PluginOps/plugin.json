@@ -7,7 +7,6 @@
   "entryAssembly": null,
   "dependencies": [],
   "frontend": {
-    "entry": "plugin-ops",
-    "bindingMode": "legacy-module"
+    "enabled": false
   }
 }

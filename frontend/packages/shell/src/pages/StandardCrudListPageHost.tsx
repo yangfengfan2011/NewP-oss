@@ -17,7 +17,15 @@ import type {
   StandardCrudListQueryRequest,
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { Button as AntdButton, Drawer, Dropdown, Input, Modal, Select, Space, Tag, message } from 'antd';
+import AntdButton from 'antd/es/button';
+import Drawer from 'antd/es/drawer';
+import Dropdown from 'antd/es/dropdown';
+import Input from 'antd/es/input';
+import useMessage from 'antd/es/message/useMessage';
+import Modal from 'antd/es/modal';
+import Select from 'antd/es/select';
+import Space from 'antd/es/space';
+import Tag from 'antd/es/tag';
 import { ErrorState } from '@icp-platform/ui/core';
 import {
   CrudFormDrawer,
@@ -28,13 +36,14 @@ import {
   createSearchTableRequest,
   loadStandardCrudColumnPreference,
   saveStandardCrudColumnPreference,
-} from '@icp-platform/ui/crud';
-import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui/crud';
+} from '@icp-platform/ui/crud-list';
+import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui/crud-list';
 import { useAuth } from '../contexts/AuthContext';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
+import { resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import {
   buildStandardCrudListQuery,
@@ -51,6 +60,7 @@ type MetadataRecord = Record<string, unknown>;
 
 interface StandardCrudListPageHostProps {
   viewKey: string;
+  registration?: StandardCrudResourceRegistration;
 }
 
 type CrudDrawerMode = 'closed' | 'create' | 'view' | 'edit';
@@ -536,10 +546,15 @@ function downloadStandardCrudBlob(blob: Blob, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
-export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPageHostProps): ReactElement {
+export default function StandardCrudListPageHost({
+  viewKey,
+  registration: loadedRegistration,
+}: StandardCrudListPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveListViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
-  const registration = buildStandardCrudRegistry(ModuleRegistry.getAllModules()).findByListViewKey(viewKey);
+  const registration = loadedRegistration
+    ?? buildStandardCrudRegistry(ModuleRegistry.getAllModules()).findByListViewKey(viewKey);
+  const listRoute = resolveStandardCrudListRoute(runtimeMetadata?.navDocuments ?? [], viewKey);
 
   if (!viewDocument) {
     return <div className="sh-error-state">未找到列表视图元数据</div>;
@@ -555,6 +570,9 @@ export default function StandardCrudListPageHost({ viewKey }: StandardCrudListPa
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
+      detailRoutePath={listRoute && registration.detailViewKey
+        ? `${listRoute.path.replace(/\/$/, '')}/:id`
+        : undefined}
     />
     </StandardCrudHostErrorBoundary>
   );
@@ -564,13 +582,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   view,
   registration,
   modelDocuments,
+  detailRoutePath,
 }: {
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<TFilter, TRow>;
   modelDocuments: MetadataRecord[];
+  detailRoutePath?: string;
 }): ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
+  const [messageApi, messageContextHolder] = useMessage();
   const { t } = useLocalization();
   const currentSubjectId = useOptionalCurrentSubjectId();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
@@ -1331,7 +1352,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         response.fileName ?? `${pageTitle}-${fallbackModeLabel}-${formatTimestampForFileName()}.xlsx`,
       );
     } catch (exportError) {
-      void message.error(exportError instanceof Error ? exportError.message : '导出标准列表失败');
+      void messageApi.error(exportError instanceof Error ? exportError.message : '导出标准列表失败');
     } finally {
       exportRequestPendingRef.current = false;
       setExportingMode(null);
@@ -1518,6 +1539,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   return (
     <>
+      {messageContextHolder}
       <CrudWorkspacePage
         title={pageTitle}
         primaryActions={headerActions}
@@ -1589,10 +1611,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         loading={detailLoading}
         error={detailError}
         primaryLabel="编辑"
-        secondaryAction={drawerState.id && registration.detailRoutePath ? (
+        secondaryAction={drawerState.id && detailRoutePath ? (
           <AntdButton
             onClick={() => {
-              const fullDetailPath = registration.detailRoutePath?.replace(':id', encodeURIComponent(drawerState.id ?? ''));
+              const fullDetailPath = detailRoutePath.replace(':id', encodeURIComponent(drawerState.id ?? ''));
               if (fullDetailPath) navigate(fullDetailPath);
             }}
           >

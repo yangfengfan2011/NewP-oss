@@ -166,7 +166,7 @@ describe('UiShowcase page', () => {
     expect(document.body.textContent).not.toContain('当前输入：');
   });
 
-  it('renders successfully through the /ui-showcase route', async () => {
+  it('does not expose the development-only showcase through the production route table', async () => {
     window.history.replaceState({}, '', '/ui-showcase');
 
     await act(async () => {
@@ -174,8 +174,8 @@ describe('UiShowcase page', () => {
       root.render(<App />);
     });
 
-    expect(container.textContent).toContain('控件展示');
-    expect(container.textContent).toContain('DataTable');
-    expect(container.textContent).toContain('Uploader');
+    expect(container.textContent).not.toContain('控件展示');
+    expect(container.textContent).not.toContain('DataTable');
+    expect(container.textContent).not.toContain('Uploader');
   });
 });

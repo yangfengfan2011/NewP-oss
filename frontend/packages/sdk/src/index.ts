@@ -85,6 +85,22 @@ export interface RouteCapabilityBinding extends RouteCapabilityRef {
   load: () => Promise<RouteCapabilityModule>;
 }
 
+export type StandardCrudCapabilityKind = Extract<
+  RouteCapabilityKind,
+  'standard-list' | 'standard-crud-detail'
+>;
+
+export interface StandardCrudCapabilityModule {
+  default: StandardCrudResourceRegistration;
+}
+
+/** Standard CRUD 轻量绑定只在授权路由命中后装载可执行资源实现。 */
+export interface StandardCrudCapabilityBinding {
+  kind: StandardCrudCapabilityKind;
+  targetKey: string;
+  load: () => Promise<StandardCrudCapabilityModule>;
+}
+
 export type {
   UserMessageArgValue,
   UserMessageArgs,
@@ -168,6 +184,7 @@ export interface I18nResource {
 export interface FrontendBehaviorBindings {
   behaviorKey: string;
   routeCapabilities?: RouteCapabilityBinding[];
+  standardCrudCapabilities?: StandardCrudCapabilityBinding[];
   standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
@@ -178,6 +195,7 @@ export interface FrontendBehaviorBindings {
 export interface FrontendModule {
   metadata: ModuleMetadata;
   routeCapabilities?: RouteCapabilityBinding[];
+  standardCrudCapabilities?: StandardCrudCapabilityBinding[];
   standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];

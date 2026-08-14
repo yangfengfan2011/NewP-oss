@@ -1,12 +1,12 @@
 import { type FrontendBehaviorBindings } from '@icp-platform/sdk';
-import TemplatePage from './pages/TemplatePage';
 
 export const templateModuleBindings: FrontendBehaviorBindings = {
   behaviorKey: 'template-module.frontend',
-  customPages: [
+  routeCapabilities: [
     {
-      pageKey: 'template-module.page',
-      component: TemplatePage,
+      kind: 'custom',
+      targetKey: 'template-module.page',
+      load: () => import('./pages/TemplatePage'),
     },
   ],
 };

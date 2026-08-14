@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
 import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
@@ -56,28 +56,25 @@ function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<stri
 
 const standardCrudListViewMetadata = {
   manifest: { modules: [] },
-  navDocuments: [],
+  navDocuments: [{
+    type: 'nav' as const,
+    navigation: {
+      items: [{
+        key: 'organization.person.center',
+        path: '/organization/persons',
+        entryType: 'standard-list' as const,
+        targetKey: 'organization.person.list',
+        permissions: ['Organization.Person.View'],
+      }],
+    },
+  }],
   viewDocuments: [createPersonListViewDocumentWithRowActionVisibility()],
   modelDocuments: [personModelDocument],
 };
 
 const personListCatalog = flattenZhsCatalog(personListDictionary);
 
-const organizationModuleWithPersonnelWrites = {
-  ...organizationModule,
-  standardCrudResources: organizationModule.standardCrudResources?.map((resource) =>
-    resource.resourceKey === 'organization.person'
-      ? {
-          ...resource,
-          permissions: [
-            'Organization.Person.View',
-            'Organization.Person.Create',
-            'Organization.Person.Update',
-            'Organization.Person.Delete',
-          ],
-        }
-      : resource),
-};
+let personResource: StandardCrudResourceRegistration;
 
 function createPersonListViewDocumentWithRowActionVisibility(): typeof personListViewDocument {
   return {
@@ -108,6 +105,25 @@ describe('organization person center list layout', () => {
   let container: HTMLDivElement;
   let root: Root;
 
+  beforeAll(async () => {
+    const capability = organizationModule.standardCrudCapabilities?.find(
+      (item) => item.kind === 'standard-list' && item.targetKey === 'organization.person.list',
+    );
+    if (!capability) {
+      throw new Error('未找到人员标准 CRUD 列表 capability。');
+    }
+
+    personResource = {
+      ...(await capability.load()).default,
+      permissions: [
+        'Organization.Person.View',
+        'Organization.Person.Create',
+        'Organization.Person.Update',
+        'Organization.Person.Delete',
+      ],
+    };
+  });
+
   function renderStandardCrudListHost() {
     root = createRoot(container);
     root.render(
@@ -118,7 +134,7 @@ describe('organization person center list layout', () => {
           catalogs={{ zhs: personListCatalog }}
         >
           <RuntimeMetadataProvider value={standardCrudListViewMetadata}>
-            <StandardCrudListPageHost viewKey="organization.person.list" />
+            <StandardCrudListPageHost viewKey="organization.person.list" registration={personResource} />
           </RuntimeMetadataProvider>
         </LocalizationProvider>
       </MemoryRouter>,
@@ -172,7 +188,6 @@ describe('organization person center list layout', () => {
   });
 
   it('renders person center through the standard CRUD list host', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -300,10 +315,8 @@ describe('organization person center list layout', () => {
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
   });
 
-  it('registers person center as a standard CRUD frontend resource', () => {
-    const resource = organizationModule.standardCrudResources?.find((item) => item.resourceKey === 'organization.person');
-
-    expect(resource).toMatchObject({
+  it('loads person center as a standard CRUD frontend resource', () => {
+    expect(personResource).toMatchObject({
       resourceKey: 'organization.person',
       apiRoute: '/api/organization/persons',
       listViewKey: 'organization.person.list',
@@ -324,7 +337,6 @@ describe('organization person center list layout', () => {
   });
 
   it('opens the basic drawer from the name and exposes the full detail boundary', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({
         items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
@@ -349,14 +361,17 @@ describe('organization person center list layout', () => {
     });
     await flushProTableRequest();
 
-    expect(document.body.textContent).toContain('查看人员');
-    expect(document.body.textContent).toContain('查看完整详情');
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(document.body.textContent).toContain('查看人员');
+        expect(document.body.textContent).toContain('查看完整详情');
+      });
+    });
     expect(document.body.textContent).not.toContain('账号绑定');
     expect(document.body.textContent).not.toContain('授权摘要');
   });
 
   it('disables deletion for a permanently bound person and explains the guard', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       items: [{
         EID: 'person-1',
@@ -387,7 +402,6 @@ describe('organization person center list layout', () => {
   });
 
   it('shows a row action error when disabling a person fails', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([organizationModuleWithPersonnelWrites]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -430,6 +444,9 @@ describe('organization person center list layout', () => {
       disableMenuItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushProTableRequest();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('textarea[aria-label="停用原因"]')).toBeInstanceOf(HTMLTextAreaElement);
+    });
     const reasonInput = document.body.querySelector('textarea[aria-label="停用原因"]') as HTMLTextAreaElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reasonInput, '人员中心停用人员');

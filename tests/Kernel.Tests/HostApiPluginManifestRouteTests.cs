@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -107,6 +107,109 @@ public class HostApiPluginManifestRouteTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task ActiveModuleRuntimeCatalog_WhenUsingBuiltIns_ProjectsOnlySupportedFrontendBindings()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        var projectedBindings = document.RootElement
+            .GetProperty("modules")
+            .EnumerateArray()
+            .Where(module => module.TryGetProperty("frontend", out var frontend)
+                && frontend.ValueKind == JsonValueKind.Object)
+            .SelectMany(module => module
+                .GetProperty("frontend")
+                .GetProperty("bindings")
+                .EnumerateArray()
+                .Select(binding => binding.GetString()))
+            .Where(binding => binding is not null)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var expectedBindings = new[]
+        {
+            "identity.accounts.page",
+            "organization.person.detail",
+            "organization.person.list"
+        };
+        Assert.True(
+            expectedBindings.SequenceEqual(projectedBindings, StringComparer.Ordinal),
+            $"Expected bindings: [{string.Join(", ", expectedBindings)}]\n"
+            + $"Projected bindings: [{string.Join(", ", projectedBindings)}]");
+    }
+
+    [Fact]
+    public async Task ActiveModuleRuntimeCatalog_WhenUsingBuiltIns_ExposesOnlySupportedFrontendModules()
+    {
+        var installRoot = CreateTempRoot();
+
+        await using var host = await StartHostAsync(installRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(host.BaseAddress),
+            Timeout = TimeSpan.FromSeconds(2)
+        };
+
+        var response = await client.GetAsync("/plugins/active-module-runtime.json");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Status: {response.StatusCode}\nBody: {body}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
+
+        using var document = JsonDocument.Parse(body);
+        var modules = document.RootElement
+            .GetProperty("modules")
+            .EnumerateArray()
+            .ToArray();
+        var frontendModuleIds = modules
+            .Where(module => module.TryGetProperty("frontend", out var frontend)
+                && frontend.ValueKind == JsonValueKind.Object)
+            .Select(module => module.GetProperty("moduleId").GetString())
+            .Where(moduleId => moduleId is not null)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var expectedModuleIds = new[] { "Identity", "Organization" };
+        Assert.True(
+            expectedModuleIds.SequenceEqual(frontendModuleIds, StringComparer.Ordinal),
+            $"Expected frontend modules: [{string.Join(", ", expectedModuleIds)}]\n"
+            + $"Projected frontend modules: [{string.Join(", ", frontendModuleIds)}]");
+
+        var retiredFrontendModuleIds = new[]
+        {
+            "Audit",
+            "Authorization",
+            "ConfigCenter",
+            "Demo",
+            "Files",
+            "MetadataConfigCenter",
+            "ModuleTemplateSample",
+            "PluginOps"
+        };
+        foreach (var moduleId in retiredFrontendModuleIds)
+        {
+            var module = Assert.Single(modules, candidate =>
+                candidate.GetProperty("moduleId").GetString() == moduleId);
+            Assert.Equal(JsonValueKind.Null, module.GetProperty("frontend").ValueKind);
+        }
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(false)]
@@ -139,8 +242,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             module.GetProperty("moduleId").GetString() == "Audit");
 
         var auditFrontend = audit.GetProperty("frontend");
-        Assert.Equal("audit", auditFrontend.GetProperty("moduleId").GetString());
-        Assert.Equal(JsonValueKind.Null, auditFrontend.GetProperty("url").ValueKind);
+        Assert.Equal(JsonValueKind.Null, auditFrontend.ValueKind);
         Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
         Assert.DoesNotContain(modules, module => module.GetProperty("moduleId").GetString() == "PluginOps");
     }
@@ -168,7 +270,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
                          externalPluginsEnabled: false))
         {
             var audit = await ReadActiveModuleAsync(disabledHost, "Audit");
-            Assert.Equal("audit", audit.GetProperty("frontend").GetProperty("moduleId").GetString());
+            Assert.Equal(JsonValueKind.Null, audit.GetProperty("frontend").ValueKind);
         }
         AssertExternalPluginStateUnchanged(
             externalStateBeforeDisabledStartup,

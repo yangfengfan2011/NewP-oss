@@ -1,12 +1,8 @@
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
-import { Button, Layout as AntdLayout, Menu } from 'antd';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { MenuConfig } from '@icp-platform/sdk';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlatform } from '../contexts/PlatformContext';
 import { filterMenusByShellView } from '../config/uiConfig';
-import { projectMenusToAntdItems } from '../navigation/menuProjection';
-import { resolvePageChrome } from '../navigation/pageChrome';
 
 interface SidebarProps {
   menus: MenuConfig[];
@@ -14,73 +10,108 @@ interface SidebarProps {
   onCollapse: (collapsed: boolean) => void;
 }
 
-const uiShowcaseMenu: MenuConfig = {
-  id: 'ui-showcase',
-  label: '控件展示',
-  path: '/ui-showcase',
-};
-
-const { Sider } = AntdLayout;
-
 export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
   const location = useLocation();
   const auth = useAuth();
   const { shellView } = usePlatform();
   const visibleMenus = filterMenusByShellView(menus, shellView);
-  const navigationMenus = visibleMenus.some(menu => menu.path === uiShowcaseMenu.path)
-    ? visibleMenus
-    : [...visibleMenus, uiShowcaseMenu];
-  const chrome = resolvePageChrome(navigationMenus, location.pathname);
-  const defaultOpenKeys = Array.from(new Set([...collectExpandableKeys(navigationMenus), ...chrome.openKeys]));
-  const menuItems = projectMenusToAntdItems(navigationMenus, (menu) => {
-    if (menu.localAdministratorOnly && !auth.user?.isLocalAdministrator) {
-      return false;
-    }
-    if (!menu.permissions || menu.permissions.length === 0) {
-      return true;
-    }
-
-    return auth.hasAnyPermission(menu.permissions);
-  });
+  const permittedMenus = visibleMenus
+    .map((menu) => projectPermittedMenu(menu, auth.user?.isLocalAdministrator === true, auth.hasAnyPermission))
+    .filter((menu): menu is MenuConfig => menu !== null);
 
   return (
-    <Sider
-      collapsible
-      collapsed={collapsed}
-      trigger={null}
-      width={216}
-      collapsedWidth={72}
-      className="np-app-sider"
-    >
+    <aside className={`np-app-sider${collapsed ? ' np-app-sider-collapsed' : ''}`}>
       <div className="np-sider-toolbar">
         {!collapsed ? <span className="np-sider-toolbar-label">导航</span> : <span />}
-        <Button
-          type="text"
-          aria-label="折叠菜单"
-          icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+        <button
+          type="button"
+          aria-label={collapsed ? '展开菜单' : '折叠菜单'}
+          aria-expanded={!collapsed}
           onClick={() => onCollapse(!collapsed)}
           className="np-sider-collapse"
-        />
+        >
+          <span aria-hidden="true">{collapsed ? '»' : '«'}</span>
+        </button>
       </div>
-      <Menu
-        theme="light"
-        mode="inline"
-        items={menuItems}
-        selectedKeys={chrome.selectedKeys}
-        defaultOpenKeys={defaultOpenKeys}
-        inlineCollapsed={collapsed}
-        className="np-sidebar-menu"
-      />
-    </Sider>
+      <nav aria-label="主导航">
+        <ul className="np-sidebar-menu">
+          {permittedMenus.map((menu) => (
+            <SidebarItem
+              key={menu.path ?? menu.id}
+              menu={menu}
+              collapsed={collapsed}
+              pathname={location.pathname}
+              depth={0}
+            />
+          ))}
+        </ul>
+      </nav>
+    </aside>
   );
 }
 
-function collectExpandableKeys(menus: MenuConfig[]): string[] {
-  return menus.flatMap((menu) => {
-    const childKeys = menu.children ? collectExpandableKeys(menu.children) : [];
+function SidebarItem({
+  menu,
+  collapsed,
+  pathname,
+  depth,
+}: {
+  menu: MenuConfig;
+  collapsed: boolean;
+  pathname: string;
+  depth: number;
+}) {
+  const selected = menu.path === pathname;
+  const label = (
+    <>
+      <span className="np-sidebar-menu-icon" aria-hidden="true">{menu.label.slice(0, 1)}</span>
+      <span className="np-sidebar-menu-label">{menu.label}</span>
+    </>
+  );
 
-    return menu.children && menu.children.length > 0
-      ? [menu.path ?? menu.id, ...childKeys]
-      : childKeys;
-  });
+  return (
+    <li className={menu.children?.length ? 'ant-menu-submenu' : selected ? 'ant-menu-item ant-menu-item-selected' : 'ant-menu-item'}>
+      {menu.path ? (
+        <Link
+          to={menu.path}
+          aria-label={collapsed ? menu.label : undefined}
+          aria-current={selected ? 'page' : undefined}
+          style={{ paddingInlineStart: 16 + depth * 12 }}
+        >
+          {label}
+        </Link>
+      ) : (
+        <div className="ant-menu-submenu-title" style={{ paddingInlineStart: 16 + depth * 12 }}>
+          {label}
+        </div>
+      )}
+      {!collapsed && menu.children?.length ? (
+        <ul className="ant-menu-sub ant-menu-inline">
+          {menu.children.map((child) => (
+            <SidebarItem
+              key={child.path ?? child.id}
+              menu={child}
+              collapsed={collapsed}
+              pathname={pathname}
+              depth={depth + 1}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+function projectPermittedMenu(
+  menu: MenuConfig,
+  isLocalAdministrator: boolean,
+  hasAnyPermission: (permissions: string[]) => boolean,
+): MenuConfig | null {
+  if (menu.localAdministratorOnly && !isLocalAdministrator) return null;
+  if (menu.permissions?.length && !hasAnyPermission(menu.permissions)) return null;
+
+  const children = menu.children
+    ?.map((child) => projectPermittedMenu(child, isLocalAdministrator, hasAnyPermission))
+    .filter((child): child is MenuConfig => child !== null);
+  return { ...menu, ...(children ? { children } : {}) };
 }

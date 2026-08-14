@@ -8,7 +8,6 @@ import {
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
-import { LazyRouteOutlet } from './capabilities/LazyRouteOutlet';
 import { RouteCapabilityOutlet } from './capabilities/RouteCapabilityOutlet';
 import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
 import Layout from './components/Layout';
@@ -35,15 +34,11 @@ import {
   resolveRouteableMetadataEntries,
 } from './navigation/pageEntryAdapter';
 import {
-  buildStandardCrudDetailRouteEntries,
-  buildStandardCrudDrawerRouteRedirects,
-  filterFallbackRoutesByStandardCrudRoutes,
+  compileStandardCrudRouteProjection,
 } from './navigation/standardCrudRouteAdapter';
 import { renderPageEntry } from './navigation/pageRouteRenderer';
 import Home from './pages/Home';
 import Login from './pages/Login';
-
-const loadUiShowcase = () => import('./pages/UiShowcase');
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -114,23 +109,23 @@ function AppRoutes() {
   const { metadataEntries, standardCrudDetailEntries, standardCrudDrawerRedirects, fallbackRoutes } = useMemo(() => {
     const modules = ModuleRegistry.getAllModules();
     const moduleRoutes = ModuleRegistry.getRoutes();
-    const standardCrudRoutes = buildStandardCrudDetailRouteEntries(modules, moduleRoutes);
-    const standardCrudDrawerRedirects = buildStandardCrudDrawerRouteRedirects(modules);
     const projectedEntries = runtimeMetadata
       ? buildPageEntriesFromNavDocuments(runtimeMetadata.navDocuments)
       : [];
     const routeableMetadataEntries = resolveRouteableMetadataEntries(projectedEntries, moduleRoutes);
     const metadataFilteredRoutes = filterFallbackRoutesByMetadataEntries(moduleRoutes, routeableMetadataEntries);
+    const standardCrudProjection = compileStandardCrudRouteProjection(
+      modules,
+      runtimeMetadata?.navDocuments ?? [],
+      runtimeMetadata?.viewDocuments ?? [],
+      metadataFilteredRoutes,
+    );
 
     return {
       metadataEntries: routeableMetadataEntries,
-      standardCrudDetailEntries: standardCrudRoutes,
-      standardCrudDrawerRedirects,
-      fallbackRoutes: filterFallbackRoutesByStandardCrudRoutes(
-        metadataFilteredRoutes,
-        standardCrudRoutes,
-        standardCrudDrawerRedirects,
-      ),
+      standardCrudDetailEntries: standardCrudProjection.detailEntries,
+      standardCrudDrawerRedirects: standardCrudProjection.drawerRedirects,
+      fallbackRoutes: standardCrudProjection.fallbackRoutes,
     };
   }, [runtimeMetadata]);
 
@@ -151,7 +146,6 @@ function AppRoutes() {
         )}
       >
         <Route index element={<Home />} />
-        <Route path="ui-showcase" element={<LazyRouteOutlet load={loadUiShowcase} />} />
         {metadataEntries.map((entry) => (
           <Route
             key={entry.path}

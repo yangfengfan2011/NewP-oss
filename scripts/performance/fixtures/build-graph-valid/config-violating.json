@@ -16,7 +16,7 @@
       "roots": [
         { "manifestKey": "index.html" },
         { "sourceRegex": "modules/(?:demo|audit)/src/index\\.ts$" },
-        { "sourceContains": "modules/organization/src/personStandardCrudResource.tsx" }
+        { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
       ],
       "relativeTo": "authenticatedHome"
     }

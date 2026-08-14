@@ -8,12 +8,22 @@
       "roots": ["index.html", "src/module.ts"]
     },
     "personnelRoute": {
-      "roots": ["index.html", "src/module.ts", "src/personnel.ts"],
+      "roots": [
+        "index.html",
+        "src/module.ts",
+        {
+          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+          "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+        }
+      ],
       "relativeTo": "authenticatedHome"
     }
   },
   "targetCapabilityAssets": [
-    { "sourceContains": "modules/organization/src/personStandardCrudResource.tsx" }
+    {
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+    }
   ],
   "bindingEntries": ["src/module.ts"],
   "forbiddenDependencies": [],

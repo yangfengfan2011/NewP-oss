@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Layout as AntdLayout } from 'antd';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -10,8 +9,6 @@ import { PageContainer } from './PageContainer';
 import { buildMenusFromNavDocuments } from '../metadata/navigationAdapter';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageChrome } from '../navigation/pageChrome';
-
-const { Content } = AntdLayout;
 
 export default function Layout() {
   const { t } = useLocalization();
@@ -30,19 +27,19 @@ export default function Layout() {
   const chrome = useMemo(() => resolvePageChrome(menus, location.pathname), [menus, location.pathname]);
 
   return (
-    <AntdLayout className="np-app-layout">
+    <div className="np-app-layout">
       <Header />
-      <AntdLayout className="np-app-body">
+      <div className="np-app-body">
         <Sidebar menus={menus} collapsed={collapsed} onCollapse={setCollapsed} />
-        <Content className="np-app-content">
+        <main className="np-app-content">
           <PageContainer breadcrumbItems={chrome.breadcrumbItems}>
             {/* Shell 只提供统一页面 chrome；模块页面继续通过受控路由和标准 CRUD Host 承载业务内容。 */}
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>
           </PageContainer>
-        </Content>
-      </AntdLayout>
-    </AntdLayout>
+        </main>
+      </div>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/organization/src/services/organizationService';
 import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
 import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
+import organizationNavDocument from '../../../../../modules/Organization/metadata/navigation/Organization.nav.json';
 
 describe('organization person standard CRUD phase 2 registration', () => {
   it('shrinks registration to metadata-first runtime hooks only', () => {
@@ -22,7 +23,12 @@ describe('organization person standard CRUD phase 2 registration', () => {
   });
 
   it('retains metadata-compatible permissions and runtime adapters', () => {
-    expect(personStandardCrudResource.permissions).toEqual(['Organization.Person.View']);
+    const personnelNavigation = organizationNavDocument.navigation.items.find(
+      (item) => item.targetKey === personStandardCrudResource.listViewKey,
+    );
+
+    expect(personStandardCrudResource.permissions).toBeUndefined();
+    expect(personnelNavigation?.permissions).toEqual(['Organization.Person.View']);
     expect(personStandardCrudResource.createEmptyFilters?.()).toEqual({
       keyword: '',
       employmentStatus: '',

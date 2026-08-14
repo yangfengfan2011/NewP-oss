@@ -14,9 +14,21 @@
       "types": "./dist/core.d.ts",
       "import": "./dist/core.js"
     },
+    "./button": {
+      "types": "./dist/components/Button.d.ts",
+      "import": "./dist/components/Button.js"
+    },
     "./crud": {
       "types": "./dist/crud.d.ts",
       "import": "./dist/crud.js"
+    },
+    "./crud-detail": {
+      "types": "./dist/crud-detail.d.ts",
+      "import": "./dist/crud-detail.js"
+    },
+    "./crud-list": {
+      "types": "./dist/crud-list.d.ts",
+      "import": "./dist/crud-list.js"
     },
     "./styles": "./src/styles/index.css"
   },

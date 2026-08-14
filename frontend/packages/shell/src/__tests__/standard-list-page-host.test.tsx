@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import StandardListPageHost from '../pages/StandardListPageHost';
 import { buildCustomPageRegistry } from '../registries/customPageRegistry';
 
@@ -50,7 +50,10 @@ describe('StandardListPageHost', () => {
     }
   });
 
-  function renderHost(viewDocuments: Array<{ type: 'view'; view: Record<string, unknown> }>) {
+  function renderHost(
+    viewDocuments: Array<{ type: 'view'; view: Record<string, unknown> }>,
+    registration?: StandardCrudResourceRegistration,
+  ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -71,7 +74,7 @@ describe('StandardListPageHost', () => {
               modelDocuments: [{ type: 'model', Person: { fields: [{ name: 'name' }] } }],
               }}
             >
-              <StandardListPageHost viewKey="organization.person.list" />
+              <StandardListPageHost viewKey="organization.person.list" registration={registration} />
             </RuntimeMetadataProvider>
           </LocalizationProvider>
         </MemoryRouter>,
@@ -210,6 +213,42 @@ describe('StandardListPageHost', () => {
 
     expect(container.textContent).toContain('张三');
     expect(container.textContent).not.toContain('旧列表');
+  });
+
+  it('uses a route-loaded standard CRUD registration without publishing it to ModuleRegistry', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ items: [{ id: 'Person_2', name: '李四' }], total: 1, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>> = {
+      resourceKey: 'organization.person',
+      apiRoute: '/api/organization/persons',
+      listViewKey: 'organization.person.list',
+      detailViewKey: 'organization.person.detail',
+      createEmptyFilters: () => ({ keyword: '' }),
+      buildListQuery: (filters) => filters,
+      mapListItem: (value) => value as Record<string, unknown>,
+      getRowId: (row) => String(row.id),
+      buildColumns: () => [{ key: 'name', title: '姓名' }],
+    };
+
+    await renderHost([{
+      type: 'view',
+      view: {
+        key: 'organization.person.list',
+        mode: 'list',
+        title: '人员中心',
+        model: 'Person',
+        columns: [{ key: 'name', labelKey: 'Name', source: 'model', field: 'name' }],
+      },
+    }], registration);
+    await act(async () => undefined);
+
+    expect(container.textContent).toContain('李四');
+    expect(ModuleRegistry.getAllModules).toHaveBeenCalled();
   });
 
   it('rejects list metadata when mode is detail', async () => {

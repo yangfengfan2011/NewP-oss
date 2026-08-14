@@ -18,7 +18,7 @@ vi.mock('../contexts/AuthContext', () => ({
   }),
 }));
 
-describe('UI showcase navigation', () => {
+describe('production navigation inventory', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -34,7 +34,7 @@ describe('UI showcase navigation', () => {
     }
   });
 
-  it('shows ui showcase link in sidebar', async () => {
+  it('does not inject the development-only UI showcase into metadata navigation', async () => {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -47,10 +47,10 @@ describe('UI showcase navigation', () => {
       );
     });
 
-    expect(container.textContent).toContain('控件展示');
+    expect(container.textContent).not.toContain('控件展示');
     const link = Array.from(container.querySelectorAll('a')).find((item) =>
       item.textContent?.includes('控件展示'),
     );
-    expect(link?.getAttribute('href')).toBe('/ui-showcase');
+    expect(link).toBeUndefined();
   });
 });

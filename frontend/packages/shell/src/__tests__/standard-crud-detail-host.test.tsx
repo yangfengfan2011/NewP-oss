@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -107,17 +107,17 @@ describe('StandardCrudDetailPageHost', () => {
     container?.remove();
   });
 
-  async function renderHost(id: string | null) {
+  async function renderHost(id: string | null, registration?: StandardCrudResourceRegistration) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => {
       root = createRoot(container);
-      renderHostWithId(id);
+      renderHostWithId(id, registration);
     });
   }
 
-  function renderHostWithId(id: string | null) {
+  function renderHostWithId(id: string | null, registration?: StandardCrudResourceRegistration) {
     root.render(
       <LocalizationProvider
         defaultLanguage="zhs"
@@ -134,7 +134,11 @@ describe('StandardCrudDetailPageHost', () => {
             viewDocuments: [personDetailViewDocument],
           }}
         >
-          <StandardCrudDetailPageHost viewKey="organization.person.detail" id={id} />
+          <StandardCrudDetailPageHost
+            viewKey="organization.person.detail"
+            id={id}
+            registration={registration}
+          />
         </RuntimeMetadataProvider>
       </LocalizationProvider>,
     );
@@ -180,6 +184,38 @@ describe('StandardCrudDetailPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'GET' });
     expect(container.textContent).toContain('张三');
+  });
+
+  it('uses a route-loaded detail registration without publishing it to ModuleRegistry', async () => {
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ fields: { EID: 'Person_2', ENAME: '李四' }, summaries: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const registration: StandardCrudResourceRegistration = {
+      resourceKey: 'organization.person',
+      apiRoute: '/api/organization/persons',
+      listViewKey: 'organization.person.list',
+      detailViewKey: 'organization.person.detail',
+      createEmptyFilters: () => ({}),
+      buildListQuery: () => ({}),
+      mapListItem: (value) => value as Record<string, unknown>,
+      getRowId: () => 'Person_2',
+      lookupProviders: [{
+        key: 'organization.departments',
+        load: async () => [],
+      }],
+      actionHandlers: {
+        disablePerson: vi.fn(),
+      },
+      renderDetail: ({ detail }) => <div data-testid="loaded-detail">{String(detail.fields.ENAME)}</div>,
+    };
+
+    await renderHost('Person_2', registration);
+
+    expect(container.textContent).toContain('李四');
   });
 
   it('resolves detail title and description from the runtime dictionary', async () => {

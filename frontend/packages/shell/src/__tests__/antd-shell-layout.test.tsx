@@ -8,6 +8,8 @@ import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { PageContainer } from '../components/PageContainer';
 
+const logout = vi.fn(() => Promise.resolve());
+
 vi.mock('../contexts/PlatformContext', () => ({
   usePlatform: () => ({
     shellView: 'business',
@@ -21,15 +23,16 @@ vi.mock('../contexts/AuthContext', () => ({
     isAuthenticated: true,
     user: { ename: 'Local Administrator' },
     hasAnyPermission: () => true,
-    logout: vi.fn(),
+    logout,
   }),
 }));
 
-describe('Ant Design shell layout', () => {
+describe('lightweight shell chrome', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   afterEach(async () => {
+    logout.mockClear();
     if (root) {
       await act(async () => {
         root.unmount();
@@ -41,7 +44,7 @@ describe('Ant Design shell layout', () => {
     }
   });
 
-  it('renders an enterprise sidebar with collapse control and nested menus', async () => {
+  it('renders an accessible sidebar with collapse control, hierarchy and current-page state', async () => {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -66,7 +69,7 @@ describe('Ant Design shell layout', () => {
               },
             ]}
             collapsed={false}
-            onCollapse={() => undefined}
+            onCollapse={vi.fn()}
           />
         </MemoryRouter>,
       );
@@ -76,6 +79,8 @@ describe('Ant Design shell layout', () => {
     expect(container.textContent).toContain('组织用户');
     expect(container.textContent).toContain('人员中心');
     expect(container.querySelector('[aria-label="折叠菜单"]')).not.toBeNull();
+    expect(container.querySelector('nav[aria-label="主导航"]')).not.toBeNull();
+    expect(container.querySelector('a[aria-current="page"]')?.textContent).toContain('人员中心');
     expect(container.querySelector('.np-sidebar-menu')).not.toBeNull();
     expect(container.querySelectorAll('.np-sidebar-menu-icon').length).toBeGreaterThanOrEqual(2);
   });
@@ -96,6 +101,9 @@ describe('Ant Design shell layout', () => {
     expect(container.textContent).not.toContain('平台视图');
     expect(container.textContent).toContain('Local Administrator');
     expect(container.textContent).toContain('退出登录');
+    const logoutButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('退出登录'));
+    await act(async () => logoutButton?.click());
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 
   it('renders title, breadcrumb and content in PageContainer', async () => {
@@ -123,5 +131,6 @@ describe('Ant Design shell layout', () => {
     expect(container.textContent).toContain('工作台');
     expect(container.textContent).toContain('组织用户');
     expect(container.textContent).toContain('人员中心内容');
+    expect(container.querySelector('nav[aria-label="面包屑"]')).not.toBeNull();
   });
 });

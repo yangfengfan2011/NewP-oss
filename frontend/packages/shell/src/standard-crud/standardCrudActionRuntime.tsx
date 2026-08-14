@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { Button } from '@icp-platform/ui/core';
-import { CrudDangerAction } from '@icp-platform/ui/crud';
-import { Modal } from 'antd';
+import { CrudDangerAction } from '@icp-platform/ui/crud-detail';
+import Modal from 'antd/es/modal';
 import type {
   StandardCrudActionContext,
   StandardCrudActionDefinition,

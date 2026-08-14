@@ -146,7 +146,7 @@ function collectStaticClosure(manifest, roots) {
   return visited
 }
 
-function resolveSelectors(selectors, metrics, label) {
+function resolveSelectors(selectors, metrics, manifest, label) {
   const resolvedKeys = []
   for (const selector of selectors) {
     if (typeof selector === 'string') {
@@ -158,6 +158,31 @@ function resolveSelectors(selectors, metrics, label) {
     }
     if (!selector || typeof selector !== 'object') {
       throw new Error(`${label} contains an invalid selector.`)
+    }
+    if (selector.dynamicImportsOf) {
+      const loaderKeys = resolveSelectors(
+        [selector.dynamicImportsOf],
+        metrics,
+        manifest,
+        `${label} dynamicImportsOf`,
+      )
+      const candidates = new Set(loaderKeys.flatMap((key) => manifest[key].dynamicImports ?? []))
+      if (selector.match) {
+        const matchingKeys = new Set(resolveSelectors(
+          [selector.match],
+          metrics,
+          manifest,
+          `${label} match`,
+        ))
+        for (const key of [...candidates]) {
+          if (!matchingKeys.has(key)) candidates.delete(key)
+        }
+      }
+      if (candidates.size === 0) {
+        throw new Error(`${label} dynamicImportsOf selector matched no emitted dynamic import.`)
+      }
+      resolvedKeys.push(...[...candidates].sort())
+      continue
     }
     if (typeof selector.manifestKey === 'string') {
       if (!metrics.has(selector.manifestKey)) {
@@ -194,7 +219,7 @@ function resolveSelectors(selectors, metrics, label) {
       resolvedKeys.push(...matches)
       continue
     }
-    throw new Error(`${label} selector must declare manifestKey, sourceContains, or sourceRegex.`)
+    throw new Error(`${label} selector must declare manifestKey, sourceContains, sourceRegex, or dynamicImportsOf.`)
   }
   return [...new Set(resolvedKeys)]
 }
@@ -256,7 +281,7 @@ function analyze(manifest, config, assetsRoot, mode) {
     if (!Array.isArray(definition.roots) || definition.roots.length === 0) {
       throw new Error(`Scenario '${name}' must declare at least one root.`)
     }
-    const roots = resolveSelectors(definition.roots, metrics, `Scenario '${name}'`)
+    const roots = resolveSelectors(definition.roots, metrics, manifest, `Scenario '${name}'`)
     const closure = collectStaticClosure(manifest, roots)
     scenarioRoots.set(name, roots)
     scenarioClosures.set(name, closure)
@@ -284,10 +309,11 @@ function analyze(manifest, config, assetsRoot, mode) {
     }
   }
 
-  const bindingKeys = resolveSelectors(config.bindingEntries ?? [], metrics, 'Binding entries')
+  const bindingKeys = resolveSelectors(config.bindingEntries ?? [], metrics, manifest, 'Binding entries')
   const targetCapabilityAssets = [...new Set(resolveSelectors(
     config.targetCapabilityAssets ?? [],
     metrics,
+    manifest,
     'Target capability assets',
   ).map((key) => metrics.get(key).file))].sort()
   const bindingEntries = bindingKeys.map((key) => ({

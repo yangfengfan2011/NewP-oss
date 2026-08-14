@@ -114,6 +114,49 @@ function Resolve-ModuleMetadataPath {
     return $metadataPath
 }
 
+function Resolve-ModuleAuthoringManifestPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ModuleName
+    )
+
+    $modulesRoot = Join-Path $RepoRoot "modules"
+    if (-not (Test-Path -LiteralPath $modulesRoot)) {
+        return $null
+    }
+
+    $matchingDirectory = Get-ChildItem -LiteralPath $modulesRoot -Directory |
+        Where-Object { $_.Name.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
+    if (-not $matchingDirectory) {
+        return $null
+    }
+
+    $manifestPath = Join-Path $matchingDirectory.FullName "newp.plugin.json"
+    if (Test-Path -LiteralPath $manifestPath) {
+        return $manifestPath
+    }
+
+    return $null
+}
+
+function Read-ModuleMetadataFromAuthoringManifest {
+    param([Parameter(Mandatory = $true)][string]$ManifestPath)
+
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding utf8 | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace($manifest.moduleId) -or [string]::IsNullOrWhiteSpace($manifest.displayName)) {
+        throw "Failed to extract moduleId or displayName from '$ManifestPath'."
+    }
+
+    return @{
+        ModuleId = $manifest.moduleId
+        DisplayName = $manifest.displayName
+        Version = if ([string]::IsNullOrWhiteSpace($manifest.version)) { "1.0.0" } else { $manifest.version }
+        Description = if ($null -eq $manifest.description) { "" } else { $manifest.description }
+        Dependencies = @($manifest.dependencies)
+    }
+}
+
 function Format-ProcessArgument {
     param([Parameter(Mandatory = $true)][string]$Value)
 
@@ -623,7 +666,12 @@ Write-Host "Frontend module: $frontendModulePath" -ForegroundColor Cyan
 
 $projectDirectory = Split-Path -Parent $backendProjectPath
 $moduleSourcePath = Find-ModuleSourceFile -ProjectDirectory $projectDirectory
-$moduleMetadata = Read-ModuleMetadataFromSource -ModuleSourcePath $moduleSourcePath
+$moduleAuthoringManifestPath = Resolve-ModuleAuthoringManifestPath -RepoRoot $repoRoot -ModuleName $ModuleName
+$moduleMetadata = if ($moduleAuthoringManifestPath) {
+    Read-ModuleMetadataFromAuthoringManifest -ManifestPath $moduleAuthoringManifestPath
+} else {
+    Read-ModuleMetadataFromSource -ModuleSourcePath $moduleSourcePath
+}
 
 $frontendMetadata = $null
 $frontendMetadataReadError = $null

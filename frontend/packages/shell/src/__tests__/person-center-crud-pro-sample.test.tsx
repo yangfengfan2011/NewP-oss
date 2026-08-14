@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, type FrontendModule, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import baseOrganizationModule from '../../../../modules/organization/src/index';
 import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
 import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
@@ -41,21 +41,8 @@ const personListCatalog = {
 };
 
 // 该样板验证管理员写入交互；显式补齐授权，避免把资源路由的 View 门禁误当成当前主体权限。
-const organizationModule = {
-  ...baseOrganizationModule,
-  standardCrudResources: baseOrganizationModule.standardCrudResources?.map((resource) =>
-    resource.resourceKey === 'organization.person'
-      ? {
-          ...resource,
-          permissions: [
-            'Organization.Person.View',
-            'Organization.Person.Create',
-            'Organization.Person.Update',
-            'Organization.Person.Delete',
-          ],
-        }
-      : resource),
-};
+let organizationModule: FrontendModule;
+let personResource: StandardCrudResourceRegistration;
 let currentLocationSearch = '';
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -177,6 +164,7 @@ function renderHost(
   container: HTMLElement,
   initialEntries = ['/organization/persons'],
   viewDocument: typeof personListViewDocument = personListViewDocument,
+  registration: StandardCrudResourceRegistration = personResource,
 ) {
   const root = createRoot(container);
   root.render(
@@ -195,7 +183,7 @@ function renderHost(
             modelDocuments: [personModelDocument],
           }}
         >
-          <StandardCrudListPageHost viewKey="organization.person.list" />
+          <StandardCrudListPageHost viewKey="organization.person.list" registration={registration} />
         </RuntimeMetadataProvider>
       </LocalizationProvider>
     </MemoryRouter>,
@@ -237,6 +225,30 @@ function createPersonListViewDocumentWithRowActionVisibility(): typeof personLis
 describe('人员中心 CRUD Pro 样板', () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
+
+  beforeAll(async () => {
+    const capability = baseOrganizationModule.standardCrudCapabilities?.find(
+      (item) => item.kind === 'standard-list' && item.targetKey === 'organization.person.list',
+    );
+    if (!capability) {
+      throw new Error('未找到人员标准 CRUD 列表 capability。');
+    }
+
+    const loaded = await capability.load();
+    personResource = {
+      ...loaded.default,
+      permissions: [
+        'Organization.Person.View',
+        'Organization.Person.Create',
+        'Organization.Person.Update',
+        'Organization.Person.Delete',
+      ],
+    };
+    organizationModule = {
+      ...baseOrganizationModule,
+      standardCrudResources: [personResource],
+    };
+  });
 
   beforeEach(() => {
     organizationServiceMocks.getCompanies.mockResolvedValue([]);
@@ -513,7 +525,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     document.body.appendChild(container);
 
     await act(async () => {
-      root = renderHost(container);
+      root = renderHost(container, undefined, undefined, sampleModule.standardCrudResources[0]);
     });
     await flushAsync();
 
@@ -863,7 +875,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     document.body.appendChild(container);
 
     await act(async () => {
-      root = renderHost(container);
+      root = renderHost(container, undefined, undefined, sampleModule.standardCrudResources[0]);
     });
     await flushAsync();
 
@@ -930,7 +942,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     document.body.appendChild(container);
 
     await act(async () => {
-      root = renderHost(container);
+      root = renderHost(container, undefined, undefined, sampleModule.standardCrudResources[0]);
     });
     await flushAsync();
 
@@ -989,7 +1001,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     document.body.appendChild(container);
 
     await act(async () => {
-      root = renderHost(container);
+      root = renderHost(container, undefined, undefined, sampleModule.standardCrudResources[0]);
     });
     await flushAsync();
 
@@ -1063,7 +1075,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     document.body.appendChild(container);
 
     await act(async () => {
-      root = renderHost(container);
+      root = renderHost(container, undefined, undefined, sampleModule.standardCrudResources[0]);
     });
     await flushAsync();
 

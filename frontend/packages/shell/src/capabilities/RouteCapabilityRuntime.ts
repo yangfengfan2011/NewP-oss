@@ -2,6 +2,8 @@ import {
   ModuleRegistry,
   type RouteCapabilityBinding,
   type RouteCapabilityRef,
+  type StandardCrudCapabilityBinding,
+  type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import type { ComponentType } from 'react';
 import { createLegacyRouteCapabilityBinding } from './LegacyRouteCapabilityAdapter';
@@ -65,6 +67,9 @@ class ModuleRegistryRouteCapabilityRuntime implements RouteCapabilityRuntime {
     const allBindings = ModuleRegistry.getAllModules()
       .flatMap((module) => [
         ...(module.routeCapabilities ?? []),
+        ...(module.standardCrudCapabilities ?? []).map((binding) => (
+          createLazyStandardCrudRouteCapabilityBinding(binding)
+        )),
         ...(module.customPages ?? []).map((registration) => createLegacyRouteCapabilityBinding(
           { kind: 'custom', targetKey: registration.pageKey },
           registration.component,
@@ -122,6 +127,53 @@ class ModuleRegistryRouteCapabilityRuntime implements RouteCapabilityRuntime {
 }
 
 export const routeCapabilityRuntime: RouteCapabilityRuntime = new ModuleRegistryRouteCapabilityRuntime();
+
+function createLazyStandardCrudRouteCapabilityBinding(
+  binding: StandardCrudCapabilityBinding,
+): RouteCapabilityBinding {
+  return {
+    kind: binding.kind,
+    targetKey: binding.targetKey,
+    load: async () => {
+      const loaded = await binding.load();
+      const registration = typeof loaded === 'object' && loaded !== null
+        ? (loaded as { default?: unknown }).default
+        : undefined;
+      if (!isStandardCrudResourceRegistration(registration)) {
+        throw new TypeError('Standard CRUD capability module must have a resource registration default export.');
+      }
+
+      const implementedTargetKey = binding.kind === 'standard-list'
+        ? registration.listViewKey
+        : registration.detailViewKey;
+      if (implementedTargetKey !== binding.targetKey) {
+        throw new TypeError(
+          `Standard CRUD capability target mismatch: expected '${binding.targetKey}', got '${implementedTargetKey ?? ''}'.`,
+        );
+      }
+
+      const routeBinding = binding.kind === 'standard-list'
+        ? createStandardListRouteCapabilityBinding(binding.targetKey, registration)
+        : createStandardCrudDetailRouteCapabilityBinding(binding.targetKey, registration);
+      return routeBinding.load();
+    },
+  };
+}
+
+function isStandardCrudResourceRegistration(value: unknown): value is StandardCrudResourceRegistration {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const resource = value as Partial<StandardCrudResourceRegistration>;
+  return typeof resource.resourceKey === 'string'
+    && typeof resource.apiRoute === 'string'
+    && typeof resource.listViewKey === 'string'
+    && typeof resource.createEmptyFilters === 'function'
+    && typeof resource.buildListQuery === 'function'
+    && typeof resource.mapListItem === 'function'
+    && typeof resource.getRowId === 'function';
+}
 
 function isRenderableComponent(value: unknown): value is ComponentType {
   return typeof value === 'function';

@@ -1,4 +1,12 @@
-import type { FrontendModule, RouteConfig } from '@icp-platform/sdk';
+import type {
+  FrontendModule,
+  RouteConfig,
+  StandardCrudResourceRegistration,
+} from '@icp-platform/sdk';
+import type {
+  RuntimeNavItemDocument,
+  RuntimeViewDocument,
+} from '../metadata/runtimeMetadataManifest';
 
 export interface StandardCrudDetailRouteEntry {
   path: string;
@@ -11,74 +19,266 @@ export interface StandardCrudDrawerRouteRedirect {
   to: string;
 }
 
-export function buildStandardCrudDetailRouteEntries(
+export interface StandardCrudRouteProjection {
+  detailEntries: StandardCrudDetailRouteEntry[];
+  drawerRedirects: StandardCrudDrawerRouteRedirect[];
+  fallbackRoutes: RouteConfig[];
+}
+
+export type StandardCrudProjectionDiagnostic =
+  | 'STANDARD_CRUD_NAV_NOT_UNIQUE'
+  | 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE'
+  | 'STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING'
+  | 'STANDARD_CRUD_DETAIL_VIEW_KEY_MISMATCH'
+  | 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE'
+  | 'STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE'
+  | 'STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN'
+  | 'STANDARD_CRUD_DETAIL_PATH_CONFLICT'
+  | 'STANDARD_CRUD_DRAWER_PATH_CONFLICT'
+  | 'STANDARD_CRUD_PERMISSION_CONFLICT'
+  | 'STANDARD_CRUD_DETAIL_FALLBACK_CONFLICT'
+  | 'STANDARD_CRUD_DRAWER_FALLBACK_CONFLICT'
+  | 'STANDARD_CRUD_FALLBACK_OWNERSHIP_CONFLICT';
+
+export class ModuleProjectionError extends Error {
+  readonly name = 'ModuleProjectionError';
+  readonly code = 'MODULE_PROJECTION_FAILED';
+
+  constructor(
+    public readonly diagnostic: StandardCrudProjectionDiagnostic,
+    public readonly subject: string,
+  ) {
+    super(`MODULE_PROJECTION_FAILED: ${diagnostic}: ${subject}`);
+  }
+}
+
+interface StandardCrudProjectionOwner {
+  detailViewKey?: string;
+  path: string;
+  permissions?: string[];
+}
+
+/**
+ * 编译标准 CRUD 的路由所有权。任何歧义都会在路由树发布和 capability loader 执行前失败。
+ */
+export function compileStandardCrudRouteProjection(
   modules: FrontendModule[],
+  navDocuments: RuntimeNavItemDocument[],
+  viewDocuments: RuntimeViewDocument[],
   moduleRoutes: RouteConfig[],
-): StandardCrudDetailRouteEntry[] {
-  const moduleRouteByPath = new Map(moduleRoutes.map((route) => [route.path, route] as const));
-  const entriesByPath = new Map<string, StandardCrudDetailRouteEntry[]>();
+): StandardCrudRouteProjection {
+  const owners: StandardCrudProjectionOwner[] = [];
+  const lazyDetailTargets = modules.flatMap((module) =>
+    (module.standardCrudCapabilities ?? [])
+      .filter((binding) => binding.kind === 'standard-crud-detail')
+      .map((binding) => binding.targetKey),
+  );
+  const consumedLazyDetailTargets = new Set<string>();
 
   for (const module of modules) {
     for (const resource of module.standardCrudResources ?? []) {
-      if (!resource.detailRoutePath || !resource.detailViewKey) {
-        continue;
+      owners.push(compileLegacyResourceOwner(resource, navDocuments, viewDocuments));
+    }
+
+    for (const listBinding of (module.standardCrudCapabilities ?? []).filter(
+      (binding) => binding.kind === 'standard-list',
+    )) {
+      const nav = requireUniqueListNav(navDocuments, listBinding.targetKey);
+      const listView = requireUniqueView(viewDocuments, listBinding.targetKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
+      const detailViewKey = readNonEmptyString(listView.view.detailViewKey);
+      if (!detailViewKey) {
+        fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', listBinding.targetKey);
       }
 
-      const inheritedPermissions = resource.permissions && resource.permissions.length > 0
-        ? resource.permissions
-        : moduleRouteByPath.get(resource.detailRoutePath)?.permissions;
-
-      const entries = entriesByPath.get(resource.detailRoutePath) ?? [];
-      entries.push({
-        path: resource.detailRoutePath,
-        viewKey: resource.detailViewKey,
-        permissions: inheritedPermissions,
+      requireUniqueView(viewDocuments, detailViewKey, 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE');
+      const matchingDetailTargets = lazyDetailTargets.filter((targetKey) => targetKey === detailViewKey);
+      if (matchingDetailTargets.length !== 1) {
+        fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);
+      }
+      if (consumedLazyDetailTargets.has(detailViewKey)) {
+        fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);
+      }
+      consumedLazyDetailTargets.add(detailViewKey);
+      owners.push({
+        detailViewKey,
+        path: nav.path,
+        permissions: nav.permissions,
       });
-      entriesByPath.set(resource.detailRoutePath, entries);
     }
   }
 
-  const resolvedEntries: StandardCrudDetailRouteEntry[] = [];
-
-  for (const [path, entries] of entriesByPath) {
-    if (entries.length > 1) {
-      // 详情路由同路径冲突不能依赖模块注册顺序决胜；忽略全部冲突项，交由明确注册修正后再接管。
-      console.error(`Duplicate standard CRUD detail route path "${path}" was found. All conflicting entries are ignored.`);
-      continue;
+  for (const detailTarget of lazyDetailTargets) {
+    if (!consumedLazyDetailTargets.has(detailTarget)) {
+      fail('STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN', detailTarget);
     }
-
-    resolvedEntries.push(entries[0]);
   }
 
-  return resolvedEntries;
-}
-
-export function buildStandardCrudDrawerRouteRedirects(modules: FrontendModule[]): StandardCrudDrawerRouteRedirect[] {
-  return modules.flatMap((module) =>
-    (module.standardCrudResources ?? []).flatMap((resource) => {
-      if (!resource.listRoutePath) {
-        return [];
-      }
-
-      return [{
-        from: `${resource.listRoutePath}/new`,
-        to: `${resource.listRoutePath}?drawer=create`,
-      }];
-    }),
+  const detailEntries = owners.flatMap((owner) => owner.detailViewKey
+    ? [{
+        path: `${normalizeListPath(owner.path)}/:id`,
+        viewKey: owner.detailViewKey,
+        permissions: owner.permissions,
+      }]
+    : []);
+  requireUniquePaths(
+    detailEntries.map((entry) => entry.path),
+    'STANDARD_CRUD_DETAIL_PATH_CONFLICT',
   );
+
+  const drawerRedirects = owners.map((owner) => ({
+    from: `${normalizeListPath(owner.path)}/new`,
+    to: `${owner.path}?drawer=create`,
+  }));
+  requireUniquePaths(
+    drawerRedirects.map((entry) => entry.from),
+    'STANDARD_CRUD_DRAWER_PATH_CONFLICT',
+  );
+
+  const ownedRoutes = [
+    ...detailEntries.map((entry) => ({
+      path: entry.path,
+      permissions: entry.permissions,
+      diagnostic: 'STANDARD_CRUD_DETAIL_FALLBACK_CONFLICT' as const,
+    })),
+    ...drawerRedirects.map((entry, index) => ({
+      path: entry.from,
+      permissions: owners[index].permissions,
+      diagnostic: 'STANDARD_CRUD_DRAWER_FALLBACK_CONFLICT' as const,
+    })),
+  ];
+
+  for (const owned of ownedRoutes) {
+    const matchingFallbacks = moduleRoutes.filter((route) => route.path === owned.path);
+    if (matchingFallbacks.length > 1) {
+      fail('STANDARD_CRUD_FALLBACK_OWNERSHIP_CONFLICT', owned.path);
+    }
+    if (matchingFallbacks.length === 1
+      && !permissionSetsEqual(matchingFallbacks[0].permissions, owned.permissions)) {
+      fail(owned.diagnostic, owned.path);
+    }
+  }
+
+  const ownedPaths = new Set(ownedRoutes.map((route) => route.path));
+  return {
+    detailEntries,
+    drawerRedirects,
+    fallbackRoutes: moduleRoutes.filter((route) => !ownedPaths.has(route.path)),
+  };
 }
 
-export function filterFallbackRoutesByStandardCrudRoutes(
-  moduleRoutes: RouteConfig[],
-  standardCrudRoutes: StandardCrudDetailRouteEntry[],
-  drawerRouteRedirects: StandardCrudDrawerRouteRedirect[] = [],
-): RouteConfig[] {
-  // 标准 CRUD 一旦声明详情路由或旧入口抽屉重定向，即表示这些路径所有权已经被宿主接管；
-  // fallback route 必须整体让出，避免同一路径被重复渲染成页面与重定向。
-  const standardCrudOwnedPaths = new Set([
-    ...standardCrudRoutes.map((entry) => entry.path),
-    ...drawerRouteRedirects.map((entry) => entry.from),
-  ]);
+function compileLegacyResourceOwner(
+  resource: StandardCrudResourceRegistration,
+  navDocuments: RuntimeNavItemDocument[],
+  viewDocuments: RuntimeViewDocument[],
+): StandardCrudProjectionOwner {
+  const nav = requireUniqueListNav(navDocuments, resource.listViewKey);
+  if (resource.permissions && !permissionSetsEqual(resource.permissions, nav.permissions)) {
+    fail('STANDARD_CRUD_PERMISSION_CONFLICT', resource.listViewKey);
+  }
 
-  return moduleRoutes.filter((route) => !standardCrudOwnedPaths.has(route.path));
+  const listView = requireUniqueView(viewDocuments, resource.listViewKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
+  const metadataDetailViewKey = readNonEmptyString(listView.view.detailViewKey);
+  if (resource.detailViewKey !== metadataDetailViewKey) {
+    fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISMATCH', resource.listViewKey);
+  }
+  if (resource.detailViewKey) {
+    requireUniqueView(viewDocuments, resource.detailViewKey, 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE');
+  }
+
+  return {
+    detailViewKey: resource.detailViewKey,
+    path: nav.path,
+    permissions: nav.permissions,
+  };
+}
+
+function requireUniqueListNav(
+  navDocuments: RuntimeNavItemDocument[],
+  listViewKey: string,
+): { path: string; permissions?: string[] } {
+  const matches = navDocuments
+    .flatMap((document) => document.navigation.items)
+    .filter((item) => item.entryType === 'standard-list'
+      && item.targetKey === listViewKey
+      && typeof item.path === 'string'
+      && item.path.length > 0);
+  if (matches.length !== 1) {
+    fail('STANDARD_CRUD_NAV_NOT_UNIQUE', listViewKey);
+  }
+
+  return {
+    path: matches[0].path!,
+    permissions: matches[0].permissions,
+  };
+}
+
+function requireUniqueView(
+  viewDocuments: RuntimeViewDocument[],
+  viewKey: string,
+  diagnostic: Extract<
+    StandardCrudProjectionDiagnostic,
+    'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE' | 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE'
+  >,
+): RuntimeViewDocument {
+  const matches = viewDocuments.filter((document) => document.view.key === viewKey);
+  if (matches.length !== 1) {
+    fail(diagnostic, viewKey);
+  }
+  return matches[0];
+}
+
+function requireUniquePaths(
+  paths: string[],
+  diagnostic: Extract<
+    StandardCrudProjectionDiagnostic,
+    'STANDARD_CRUD_DETAIL_PATH_CONFLICT' | 'STANDARD_CRUD_DRAWER_PATH_CONFLICT'
+  >,
+): void {
+  const seen = new Set<string>();
+  for (const path of paths) {
+    if (seen.has(path)) {
+      fail(diagnostic, path);
+    }
+    seen.add(path);
+  }
+}
+
+function fail(diagnostic: StandardCrudProjectionDiagnostic, subject: string): never {
+  throw new ModuleProjectionError(diagnostic, subject);
+}
+
+function normalizeListPath(path: string): string {
+  return path.replace(/\/$/, '');
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function permissionSetsEqual(left: string[] | undefined, right: string[] | undefined): boolean {
+  const normalizedLeft = [...new Set(left ?? [])].sort();
+  const normalizedRight = [...new Set(right ?? [])].sort();
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((permission, index) => permission === normalizedRight[index]);
+}
+
+export function resolveStandardCrudListRoute(
+  navDocuments: RuntimeNavItemDocument[],
+  listViewKey: string,
+): { path: string; permissions?: string[] } | null {
+  const matches = navDocuments
+    .flatMap((document) => document.navigation.items)
+    .filter((item) => item.entryType === 'standard-list'
+      && item.targetKey === listViewKey
+      && typeof item.path === 'string'
+      && item.path.length > 0);
+
+  if (matches.length !== 1) {
+    return null;
+  }
+
+  return {
+    path: matches[0].path!,
+    permissions: matches[0].permissions,
+  };
 }

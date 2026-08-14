@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { StandardListPage } from '@icp-platform/ui/core';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildListViewRegistry } from '../registries/listViewRegistry';
@@ -9,9 +9,10 @@ import StandardCrudListPageHost from './StandardCrudListPageHost';
 
 interface StandardListPageHostProps {
   viewKey: string;
+  registration?: StandardCrudResourceRegistration;
 }
 
-export default function StandardListPageHost({ viewKey }: StandardListPageHostProps): ReactElement {
+export default function StandardListPageHost({ viewKey, registration }: StandardListPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocuments = runtimeMetadata?.viewDocuments ?? [];
   const viewDocument = resolveListViewDocument(viewDocuments, viewKey);
@@ -21,20 +22,21 @@ export default function StandardListPageHost({ viewKey }: StandardListPageHostPr
   }
 
   const modules = ModuleRegistry.getAllModules();
-  const standardCrudRegistration = buildStandardCrudRegistry(modules).findByListViewKey(viewKey);
+  const standardCrudRegistration = registration
+    ?? buildStandardCrudRegistry(modules).findByListViewKey(viewKey);
 
   if (standardCrudRegistration) {
-    return <StandardCrudListPageHost viewKey={viewKey} />;
+    return <StandardCrudListPageHost viewKey={viewKey} registration={standardCrudRegistration} />;
   }
 
-  // 旧 standardListViews 作为兼容机制保留；新标准 CRUD 资源优先通过 standardCrudResources 接入。
-  const registration = buildListViewRegistry(modules).get(viewKey);
+  // 旧 standardListViews 作为兼容机制保留；新标准 CRUD 资源优先由 capability loader 显式传入。
+  const listViewRegistration = buildListViewRegistry(modules).get(viewKey);
 
-  if (!registration) {
+  if (!listViewRegistration) {
     return <div className="sh-error-state">未找到列表页注册项</div>;
   }
 
-  const EntryComponent = registration.component;
+  const EntryComponent = listViewRegistration.component;
 
   return (
     <EntryComponent

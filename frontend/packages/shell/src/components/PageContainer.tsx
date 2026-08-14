@@ -1,8 +1,5 @@
 import type { ReactNode } from 'react';
-import { Breadcrumb, Typography } from 'antd';
 import { Link } from 'react-router-dom';
-
-const { Title, Paragraph } = Typography;
 
 export interface PageContainerProps {
   title?: string;
@@ -24,18 +21,21 @@ export function PageContainer({
   return (
     <section className="np-page-container">
       {breadcrumbItems.length > 0 ? (
-        <Breadcrumb
-          className="np-page-breadcrumb"
-          items={breadcrumbItems.map((item) => ({
-            title: item.path ? <Link to={item.path}>{item.title}</Link> : item.title,
-          }))}
-        />
+        <nav className="np-page-breadcrumb" aria-label="面包屑">
+          <ol className="np-page-breadcrumb-list">
+            {breadcrumbItems.map((item, index) => (
+              <li key={`${item.path ?? item.title}-${index}`}>
+                {item.path ? <Link to={item.path}>{item.title}</Link> : <span>{item.title}</span>}
+              </li>
+            ))}
+          </ol>
+        </nav>
       ) : null}
       {shouldRenderHeader ? (
         <div className="np-page-header">
           <div>
-            {title ? <Title level={3} className="np-page-title">{title}</Title> : null}
-            {subtitle ? <Paragraph className="np-page-subtitle">{subtitle}</Paragraph> : null}
+            {title ? <h3 className="np-page-title">{title}</h3> : null}
+            {subtitle ? <p className="np-page-subtitle">{subtitle}</p> : null}
           </div>
           {actions ? <div className="np-page-actions">{actions}</div> : null}
         </div>

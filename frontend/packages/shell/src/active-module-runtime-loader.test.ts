@@ -174,6 +174,61 @@ describe('active-module-runtime-loader', () => {
     expect(capabilityLoad).not.toHaveBeenCalled();
   });
 
+  it('validates lazy standard CRUD descriptor coverage without executing implementation loaders', async () => {
+    const resourceLoad = vi.fn().mockResolvedValue({
+      default: {
+        resourceKey: 'records.resource',
+        apiRoute: '/api/records',
+        listViewKey: 'records.list',
+        detailViewKey: 'records.detail',
+        createEmptyFilters: () => ({}),
+        buildListQuery: () => ({}),
+        mapListItem: (value: unknown) => value as Record<string, unknown>,
+        getRowId: () => 'record-1',
+      },
+    });
+    const bindings: FrontendBehaviorBindings = {
+      behaviorKey: 'records.frontend',
+      standardCrudCapabilities: [
+        { kind: 'standard-list', targetKey: 'records.list', load: resourceLoad },
+        { kind: 'standard-crud-detail', targetKey: 'records.detail', load: resourceLoad },
+      ],
+    };
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        schemaVersion: '1.0',
+        snapshotId: 'snapshot-lazy-standard-crud',
+        planHash: 'snapshot-lazy-standard-crud',
+        modules: [{
+          moduleId: 'Records',
+          version: '1.0.0',
+          displayName: 'Records',
+          dependencies: [],
+          frontend: {
+            moduleId: 'records',
+            behaviorKey: 'records.frontend',
+            bindingMode: 'behavior-bindings',
+            bindings: ['records.list', 'records.detail'],
+          },
+        }],
+      }),
+    });
+
+    const result = await loadActiveModuleRuntimeWith({
+      fetchCatalog,
+      internalModules: {
+        records: vi.fn().mockResolvedValue({ default: bindings }),
+      },
+    });
+
+    expect(result.modules[0].standardCrudCapabilities).toEqual(bindings.standardCrudCapabilities);
+    expect(result.modules[0].standardCrudResources).toBeUndefined();
+    expect(resourceLoad).not.toHaveBeenCalled();
+  });
+
   it('rejects a behavior entry whose declared bindings are not covered by descriptors', async () => {
     const fetchCatalog = vi.fn().mockResolvedValue({
       ok: true,

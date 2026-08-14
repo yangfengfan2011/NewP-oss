@@ -12,7 +12,7 @@ import {
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
-import { DetailPage, FormPage, StandardCrudForm } from '@icp-platform/ui/crud';
+import { DetailPage, FormPage, StandardCrudForm } from '@icp-platform/ui/crud-detail';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
@@ -31,6 +31,7 @@ type MetadataRecord = Record<string, unknown>;
 interface StandardCrudDetailPageHostProps {
   viewKey: string;
   id: string | null;
+  registration?: StandardCrudResourceRegistration;
 }
 
 const EMPTY_DETAIL_FIELDS: Record<string, unknown> = {};
@@ -103,10 +104,15 @@ function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): stri
   }
 }
 
-export default function StandardCrudDetailPageHost({ viewKey, id }: StandardCrudDetailPageHostProps): ReactElement {
+export default function StandardCrudDetailPageHost({
+  viewKey,
+  id,
+  registration: loadedRegistration,
+}: StandardCrudDetailPageHostProps): ReactElement {
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveDetailViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
-  const registration = buildStandardCrudRegistry(ModuleRegistry.getAllModules()).findByDetailViewKey(viewKey);
+  const registration = loadedRegistration
+    ?? buildStandardCrudRegistry(ModuleRegistry.getAllModules()).findByDetailViewKey(viewKey);
 
   if (!id) {
     return <ErrorState message="当前地址中没有有效的资源标识。" />;

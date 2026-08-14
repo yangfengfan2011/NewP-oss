@@ -1,18 +1,36 @@
 // @vitest-environment jsdom
 
-import { act } from 'react';
+import { act, Component, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { Outlet, useParams } from 'react-router-dom';
 import { ModuleRegistry, type AuthUser } from '@icp-platform/sdk';
+import organizationBindings from '../../../../modules/organization/src';
 import App from '../App';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+class ProjectionFailureBoundary extends Component<
+  { children: ReactNode },
+  { message: string | null }
+> {
+  state = { message: null as string | null };
+
+  static getDerivedStateFromError(error: unknown): { message: string } {
+    return { message: error instanceof Error ? error.message : String(error) };
+  }
+
+  render(): ReactNode {
+    return this.state.message ? <div>{this.state.message}</div> : this.props.children;
+  }
+}
 
 const state = vi.hoisted(() => ({
   user: undefined as AuthUser | undefined,
   isAuthenticated: false,
   localAdministratorOnly: false,
+  standardCrudTargetKey: undefined as string | undefined,
+  standardCrudDetailViewKey: undefined as string | undefined,
 }));
 
 vi.mock('@icp-platform/core', () => ({
@@ -52,10 +70,26 @@ vi.mock('../components/Layout', () => ({
 
 vi.mock('../pages/Home', () => ({ default: () => <div>home</div> }));
 vi.mock('../pages/Login', () => ({ default: () => <div>login</div> }));
-vi.mock('../pages/UiShowcase', () => ({ default: () => <div>showcase</div> }));
+vi.mock('../pages/StandardListPageHost', () => ({
+  default: ({
+    viewKey,
+    registration,
+  }: {
+    viewKey: string;
+    registration?: { resourceKey?: string };
+  }) => <div>{`list ${viewKey} ${registration?.resourceKey ?? 'missing'} ${window.location.search}`}</div>,
+}));
 vi.mock('../pages/StandardCrudDetailPageHost', () => ({
-  default: ({ viewKey, id }: { viewKey: string; id: string | null }) => (
-    <div>{`detail ${viewKey} ${id ?? 'missing'} ${window.location.search}`}</div>
+  default: ({
+    viewKey,
+    id,
+    registration,
+  }: {
+    viewKey: string;
+    id: string | null;
+    registration?: { resourceKey?: string };
+  }) => (
+    <div>{`detail ${viewKey} ${id ?? 'missing'}${registration?.resourceKey ? ` ${registration.resourceKey}` : ''} ${window.location.search}`}</div>
   ),
 }));
 
@@ -75,7 +109,13 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
     navDocuments: [{
       type: 'nav',
       navigation: {
-        items: [{
+        items: state.standardCrudTargetKey ? [{
+          key: `${state.standardCrudTargetKey}.center`,
+          path: '/records',
+          entryType: 'standard-list',
+          targetKey: state.standardCrudTargetKey,
+          permissions: ['Example.View'],
+        }] : [{
           key: 'example.page',
           path: '/example',
           entryType: 'custom',
@@ -85,7 +125,22 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
         }],
       },
     }],
-    viewDocuments: [],
+    viewDocuments: state.standardCrudTargetKey ? [{
+      type: 'view',
+      view: {
+        key: state.standardCrudTargetKey,
+        mode: 'list',
+        ...(state.standardCrudDetailViewKey
+          ? { detailViewKey: state.standardCrudDetailViewKey }
+          : {}),
+      },
+    }, ...(state.standardCrudDetailViewKey ? [{
+      type: 'view' as const,
+      view: {
+        key: state.standardCrudDetailViewKey,
+        mode: 'detail',
+      },
+    }] : [])] : [],
     modelDocuments: [],
   })),
 }));
@@ -99,6 +154,8 @@ describe('route capability authorization ordering', () => {
     document.body.appendChild(container);
     state.isAuthenticated = true;
     state.localAdministratorOnly = false;
+    state.standardCrudTargetKey = undefined;
+    state.standardCrudDetailViewKey = undefined;
     state.user = {
       id: 'user-1',
       ecode: 'user',
@@ -119,6 +176,13 @@ describe('route capability authorization ordering', () => {
     }
     container.remove();
   });
+
+  function registerOrganization(snapshotId: string) {
+    ModuleRegistry.replaceAll([{
+      metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1.0.0' },
+      standardCrudCapabilities: organizationBindings.standardCrudCapabilities,
+    }], snapshotId);
+  }
 
   it('loads the matched capability after access succeeds and preserves the query', async () => {
     function ExamplePage() {
@@ -172,18 +236,104 @@ describe('route capability authorization ordering', () => {
     expect(container.textContent).not.toContain('should not render');
   });
 
+  it('does not load the real Personnel list implementation for an unauthorized direct route', async () => {
+    window.history.replaceState({}, '', '/records?keyword=alice');
+    state.standardCrudTargetKey = 'organization.person.list';
+    state.standardCrudDetailViewKey = 'organization.person.detail';
+    state.user = { ...state.user!, permissions: [] };
+    const listBinding = organizationBindings.standardCrudCapabilities?.find(
+      (binding) => binding.kind === 'standard-list',
+    );
+    const listLoad = vi.spyOn(listBinding!, 'load');
+    registerOrganization('snapshot-organization-list-denied');
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(listLoad).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('organization.person');
+    listLoad.mockRestore();
+  });
+
+  it('loads the real Personnel list implementation only after access and preserves the query', async () => {
+    window.history.replaceState({}, '', '/records?keyword=alice&page=2');
+    state.standardCrudTargetKey = 'organization.person.list';
+    state.standardCrudDetailViewKey = 'organization.person.detail';
+    const listBinding = organizationBindings.standardCrudCapabilities?.find(
+      (binding) => binding.kind === 'standard-list',
+    );
+    const detailBinding = organizationBindings.standardCrudCapabilities?.find(
+      (binding) => binding.kind === 'standard-crud-detail',
+    );
+    const listLoad = vi.spyOn(listBinding!, 'load');
+    const detailLoad = vi.spyOn(detailBinding!, 'load');
+    registerOrganization('snapshot-organization-list-authorized');
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain(
+        'list organization.person.list organization.person ?keyword=alice&page=2',
+      );
+    });
+    expect(listLoad).toHaveBeenCalledTimes(1);
+    expect(detailLoad).not.toHaveBeenCalled();
+    listLoad.mockRestore();
+    detailLoad.mockRestore();
+  });
+
+  it('loads the real Personnel detail implementation only for an authorized detail route', async () => {
+    window.history.replaceState({}, '', '/records/person-42?tab=summary');
+    state.standardCrudTargetKey = 'organization.person.list';
+    state.standardCrudDetailViewKey = 'organization.person.detail';
+    const listBinding = organizationBindings.standardCrudCapabilities?.find(
+      (binding) => binding.kind === 'standard-list',
+    );
+    const detailBinding = organizationBindings.standardCrudCapabilities?.find(
+      (binding) => binding.kind === 'standard-crud-detail',
+    );
+    const listLoad = vi.spyOn(listBinding!, 'load');
+    const detailLoad = vi.spyOn(detailBinding!, 'load');
+    registerOrganization('snapshot-organization-detail-authorized');
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain(
+        'detail organization.person.detail person-42 organization.person ?tab=summary',
+      );
+    });
+    expect(detailLoad).toHaveBeenCalledTimes(1);
+    expect(listLoad).not.toHaveBeenCalled();
+    listLoad.mockRestore();
+    detailLoad.mockRestore();
+  });
+
   it('preserves :id and query semantics for a direct standard CRUD detail route', async () => {
     window.history.replaceState({}, '', '/records/record-42?tab=summary');
+    state.standardCrudTargetKey = 'records.list';
+    state.standardCrudDetailViewKey = 'records.detail';
     ModuleRegistry.replaceAll([{
       metadata: { moduleId: 'records', displayName: 'Records', version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: 'records.resource',
         apiRoute: '/api/records',
         listViewKey: 'records.list',
-        listRoutePath: '/records',
         detailViewKey: 'records.detail',
-        detailRoutePath: '/records/:id',
-        permissions: ['Example.View'],
         createEmptyFilters: () => ({}),
         buildListQuery: () => ({}),
         mapListItem: (value) => value as Record<string, unknown>,
@@ -203,13 +353,13 @@ describe('route capability authorization ordering', () => {
 
   it('keeps the legacy new route redirect to the standard CRUD drawer URL', async () => {
     window.history.replaceState({}, '', '/records/new');
+    state.standardCrudTargetKey = 'records-redirect.list';
     ModuleRegistry.replaceAll([{
       metadata: { moduleId: 'records-redirect', displayName: 'Records Redirect', version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: 'records-redirect.resource',
         apiRoute: '/api/records',
         listViewKey: 'records-redirect.list',
-        listRoutePath: '/records',
         createEmptyFilters: () => ({}),
         buildListQuery: () => ({}),
         mapListItem: (value) => value as Record<string, unknown>,
@@ -225,6 +375,38 @@ describe('route capability authorization ordering', () => {
     });
 
     expect(`${window.location.pathname}${window.location.search}`).toBe('/records?drawer=create');
+  });
+
+  it('blocks route publication and fallback loading when standard CRUD projection is invalid', async () => {
+    window.history.replaceState({}, '', '/records/item-42');
+    state.standardCrudTargetKey = 'invalid.records.list';
+    const load = vi.fn().mockResolvedValue({ default: () => <div>should not load</div> });
+    const fallback = vi.fn(() => <div>legacy fallback</div>);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    ModuleRegistry.replaceAll([{
+      metadata: { moduleId: 'invalid-records', displayName: 'Invalid Records', version: '1.0.0' },
+      standardCrudCapabilities: [
+        { kind: 'standard-list', targetKey: 'invalid.records.list', load },
+        { kind: 'standard-crud-detail', targetKey: 'invalid.records.detail', load },
+      ],
+      routes: [{ path: '/records/:id', component: fallback, permissions: ['Example.View'] }],
+    }], 'snapshot-invalid-projection');
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<ProjectionFailureBoundary><App /></ProjectionFailureBoundary>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain(
+        'MODULE_PROJECTION_FAILED: STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING: invalid.records.list',
+      );
+    });
+    expect(load).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it('renders a legacy fallback route through the compatibility Adapter', async () => {

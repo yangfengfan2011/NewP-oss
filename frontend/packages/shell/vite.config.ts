@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
@@ -8,6 +8,64 @@ const devShellPort = Number.parseInt(process.env.ICP_DEV_SHELL_PORT ?? '3000', 1
 const devHostPort = Number.parseInt(process.env.ICP_DEV_HOST_PORT ?? '5000', 10)
 const virtualRegistryId = 'virtual:newp-frontend-entry-registry'
 const resolvedVirtualRegistryId = `\0${virtualRegistryId}`
+interface AuthoringFrontendManifest {
+  moduleId?: unknown
+  frontend?: {
+    enabled?: unknown
+    entry?: unknown
+  }
+}
+
+function toKebabCase(value: string): string {
+  return [...value].map((character, index) => {
+    const normalized = character.toLocaleLowerCase('en-US')
+    return character !== normalized && index > 0 ? `-${normalized}` : normalized
+  }).join('')
+}
+
+function collectEnabledBuiltInFrontendEntries(repositoryRoot: string): Set<string> {
+  const entries = new Set<string>()
+  const sources = [
+    {
+      root: join(repositoryRoot, 'modules'),
+      manifestName: 'newp.plugin.json',
+    },
+    {
+      root: join(repositoryRoot, 'apps', 'host-api', 'modules'),
+      manifestName: 'plugin.json',
+    },
+  ]
+
+  for (const source of sources) {
+    if (!existsSync(source.root)) {
+      continue
+    }
+    for (const item of readdirSync(source.root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .sort((left, right) => left.name.localeCompare(right.name, 'en'))) {
+      const manifestPath = join(source.root, item.name, source.manifestName)
+      if (!existsSync(manifestPath)) {
+        continue
+      }
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as AuthoringFrontendManifest
+      if (manifest.frontend?.enabled === false) {
+        continue
+      }
+      if (typeof manifest.moduleId !== 'string' || manifest.moduleId.trim().length === 0) {
+        throw new Error(`Frontend authoring manifest '${manifestPath}' does not declare moduleId.`)
+      }
+      const entry = typeof manifest.frontend?.entry === 'string' && manifest.frontend.entry.trim().length > 0
+        ? manifest.frontend.entry.trim()
+        : toKebabCase(manifest.moduleId.trim())
+      if (entries.has(entry)) {
+        throw new Error(`Duplicate enabled frontend authoring entry '${entry}'.`)
+      }
+      entries.add(entry)
+    }
+  }
+
+  return entries
+}
 
 function localhostIpv4Redirect(): Plugin {
   return {
@@ -50,15 +108,23 @@ function newpFrontendEntryRegistry(): Plugin {
   }
 
   const frontendModulesRoot = fileURLToPath(new URL('../../modules', import.meta.url))
+  const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url))
+  const enabledBuiltInEntries = collectEnabledBuiltInFrontendEntries(repositoryRoot)
   if (existsSync(frontendModulesRoot)) {
     for (const item of readdirSync(frontendModulesRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && enabledBuiltInEntries.has(entry.name))
       .sort((left, right) => left.name.localeCompare(right.name, 'en'))) {
       const entryPath = join(frontendModulesRoot, item.name, 'src', 'index.ts')
       if (existsSync(entryPath)) {
         addEntry(item.name, entryPath)
+        enabledBuiltInEntries.delete(item.name)
       }
     }
+  }
+  if (enabledBuiltInEntries.size > 0) {
+    throw new Error(
+      `Enabled frontend implementation entries are missing: ${[...enabledBuiltInEntries].sort().join(', ')}.`,
+    )
   }
 
   return {
@@ -88,7 +154,10 @@ export default defineConfig({
       '@icp-platform/ui/styles': fileURLToPath(
         new URL('../ui/src/styles/index.css', import.meta.url),
       ),
+      '@icp-platform/ui/button': fileURLToPath(new URL('../ui/src/components/Button.tsx', import.meta.url)),
       '@icp-platform/ui/core': fileURLToPath(new URL('../ui/src/core.ts', import.meta.url)),
+      '@icp-platform/ui/crud-detail': fileURLToPath(new URL('../ui/src/crud-detail.ts', import.meta.url)),
+      '@icp-platform/ui/crud-list': fileURLToPath(new URL('../ui/src/crud-list.ts', import.meta.url)),
       '@icp-platform/ui/crud': fileURLToPath(new URL('../ui/src/crud.ts', import.meta.url)),
       '@icp-platform/ui': fileURLToPath(new URL('../ui/src/index.ts', import.meta.url)),
     },

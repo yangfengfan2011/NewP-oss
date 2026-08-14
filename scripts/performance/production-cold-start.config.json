@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "samplesPerScenario": 20,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "throttle": {
+    "downloadBytesPerSecond": 1250000,
+    "uploadBytesPerSecond": 625000,
+    "latencyMs": 40,
+    "cpuSlowdownRate": 4
+  },
+  "budgets": {
+    "anonymous-login": {
+      "maxP50Ms": 1000,
+      "maxP95Ms": 1500
+    },
+    "authenticated-home": {
+      "maxP50Ms": 1400,
+      "maxP95Ms": 2000,
+      "minimumImprovementRatio": 0.30
+    },
+    "authenticated-personnel": {
+      "maxP50Ms": 2200,
+      "maxP95Ms": 3000,
+      "minimumImprovementRatio": 0.30
+    }
+  }
+}

@@ -14,6 +14,15 @@ internal sealed record PersonnelAcceptanceExecution(
     IReadOnlyList<string> ArtifactRefs,
     AcceptanceCleanupResult Cleanup);
 
+internal sealed record PersonnelProductionColdStartExecution(
+    string? DatabaseFingerprint,
+    IReadOnlyList<string> ProcessIdentities,
+    IReadOnlyList<string> ArtifactRefs,
+    IReadOnlyList<ProductionColdStartSample> Samples,
+    string ChromiumVersion,
+    AcceptanceCleanupResult Cleanup,
+    string? FailureDiagnostic);
+
 internal sealed class PersonnelAcceptanceRunner
 {
     internal const string PreflightScenario = "personnel.preflight";
@@ -51,6 +60,8 @@ internal sealed class PersonnelAcceptanceRunner
     private string? _readOnlyPassword;
     private long? _readOnlyRevision;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
+    private bool _evidenceValidationFailed;
+    private bool _secretLeakDetected;
 
     public PersonnelAcceptanceRunner(
         string repositoryRoot,
@@ -118,6 +129,105 @@ internal sealed class PersonnelAcceptanceRunner
             _processIdentities,
             _artifactRefs,
             cleanup);
+    }
+
+    /// <summary>
+    /// 复用 Personnel 一次性 Host/catalog/actor ownership seam，只运行 production cold-start 真实浏览器观察。
+    /// </summary>
+    public async Task<PersonnelProductionColdStartExecution> RunProductionColdStartAsync(
+        string assetsRoot,
+        int samplesPerScenario,
+        ProductionColdStartThrottleProfile throttle,
+        IReadOnlyList<string> targetCapabilityAssets,
+        string rawSamplesPath,
+        CancellationToken cancellationToken)
+    {
+        AcceptanceCleanupResult cleanup = new("not-started", AcceptanceFailureCodes.CleanupIncomplete);
+        ProductionColdStartBrowserExecution? browserExecution = null;
+        string? failureDiagnostic = null;
+
+        try
+        {
+            await RunPreflightAsync(cancellationToken);
+            var unauthorized = await CreateUnauthorizedActorAsync(cancellationToken);
+            browserExecution = await new ProductionColdStartBrowserRunner().RunAsync(
+                new ProductionColdStartBrowserRequest(
+                    _repositoryRoot,
+                    _runDirectory,
+                    _runId,
+                    assetsRoot,
+                    _hostPort,
+                    "admin",
+                    _adminPassword ?? throw new InvalidOperationException("Administrator password was not prepared."),
+                    unauthorized.ECode,
+                    unauthorized.Password,
+                    samplesPerScenario,
+                    throttle,
+                    targetCapabilityAssets,
+                    rawSamplesPath),
+                cancellationToken);
+            failureDiagnostic = browserExecution.FailureDiagnostic;
+            if (!string.Equals(browserExecution.ProductionServerIdentity, "unavailable", StringComparison.Ordinal))
+            {
+                _processIdentities.Add(browserExecution.ProductionServerIdentity);
+            }
+            foreach (var path in new[]
+                     {
+                         rawSamplesPath,
+                         Path.Combine(_runDirectory, "production-shell", "ready.json"),
+                         Path.Combine(_runDirectory, "production-shell", "stdout.log"),
+                         Path.Combine(_runDirectory, "production-shell", "stderr.log")
+                     }.Where(path => File.Exists(path) && new FileInfo(path).Length > 0))
+            {
+                var artifact = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, path);
+                if (!_artifactRefs.Contains(artifact, StringComparer.Ordinal))
+                {
+                    _artifactRefs.Add(artifact);
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            failureDiagnostic = Sanitize(exception.Message);
+            await WriteEvidenceAsync(
+                "production-cold-start/browser-failure.json",
+                new
+                {
+                    status = "failed",
+                    failureCode = AcceptanceFailureCodes.ProductionColdStartRequestEvidenceMissing,
+                    diagnostic = failureDiagnostic
+                },
+                cancellationToken);
+        }
+        finally
+        {
+            cleanup = await TeardownAsync(CancellationToken.None);
+            await ValidateEvidenceAsync(CancellationToken.None);
+            await ScanEvidenceForSecretsAsync(CancellationToken.None);
+        }
+
+        if (browserExecution?.ProductionServerCleanup.Status is not "completed")
+        {
+            cleanup = browserExecution?.ProductionServerCleanup
+                ?? new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.CleanupIncomplete);
+        }
+        if (_evidenceValidationFailed)
+        {
+            cleanup = new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.EvidenceUnreadable);
+        }
+        if (_secretLeakDetected)
+        {
+            cleanup = new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.SecretDetected);
+        }
+
+        return new PersonnelProductionColdStartExecution(
+            _catalog is null ? null : AcceptanceInfrastructure.Sha256(_catalog),
+            _processIdentities,
+            _artifactRefs,
+            browserExecution?.Samples ?? [],
+            browserExecution?.ChromiumVersion ?? "unavailable",
+            cleanup,
+            failureDiagnostic);
     }
 
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
@@ -264,6 +374,42 @@ internal sealed class PersonnelAcceptanceRunner
         {
             throw new InvalidOperationException("Personnel fixture run identity did not match the acceptance run.");
         }
+    }
+
+    // 无权限场景通过正式 Identity API 创建一次性普通账号，不直接修改数据库或伪造认证状态。
+    private async Task<(string ECode, string Password)> CreateUnauthorizedActorAsync(
+        CancellationToken cancellationToken)
+    {
+        var ecode = $"acceptance.denied.{_runId[..8]}";
+        var password = $"Denied-{_runId}-Pass";
+        using var administrator = CreateClient(_hostPort);
+        await LoginAdminAsync(administrator, cancellationToken);
+        using var created = await SendJsonWithAntiforgeryAsync(
+            administrator,
+            HttpMethod.Post,
+            "/api/identity/accounts",
+            new { ecode, ename = "Production Cold Start Unauthorized" },
+            cancellationToken);
+        var createdBody = await created.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(created, HttpStatusCode.Created, createdBody, "create production cold-start unauthorized account");
+        using var createdJson = JsonDocument.Parse(createdBody);
+        var temporaryCredential = ReadString(createdJson.RootElement, "temporaryCredential");
+        _secretTokens.Add(temporaryCredential);
+        _secretTokens.Add(password);
+
+        using var unauthorized = CreateClient(_hostPort);
+        using var restrictedLogin = await LoginAsync(
+            unauthorized,
+            ecode,
+            temporaryCredential,
+            cancellationToken);
+        _ = await ChangePasswordAsync(
+            unauthorized,
+            temporaryCredential,
+            password,
+            ReadLong(restrictedLogin.RootElement, "revision"),
+            cancellationToken);
+        return (ecode, password);
     }
 
     private async Task RunApiScenarioAsync(CancellationToken cancellationToken)
@@ -906,10 +1052,13 @@ internal sealed class PersonnelAcceptanceRunner
                 await DropCatalogAsync(cancellationToken);
                 _catalogCreated = false;
             }
-            if (_pluginRoot is not null && Directory.Exists(_pluginRoot))
+            foreach (var root in new[] { _pluginRoot, _keyRingRoot })
             {
-                EnsureSafePluginRoot(_pluginRoot);
-                Directory.Delete(_pluginRoot, recursive: true);
+                if (root is not null && Directory.Exists(root))
+                {
+                    EnsureSafeResourceRoot(root);
+                    Directory.Delete(root, recursive: true);
+                }
             }
 
             await _recorder.RecordAsync(AcceptanceGateKind.Personnel, AcceptanceEventType.CleanupCompleted, cancellationToken: cancellationToken);
@@ -935,15 +1084,16 @@ internal sealed class PersonnelAcceptanceRunner
 
     private async Task VerifyOwnershipAsync(CancellationToken cancellationToken)
     {
-        if (_catalog is null || _applicationConnectionString is null || _pluginRoot is null)
+        if (_catalog is null || _applicationConnectionString is null || _pluginRoot is null || _keyRingRoot is null)
         {
             throw new InvalidOperationException("Acceptance resources were not fully identified.");
         }
         ValidateCatalogName(_catalog);
-        EnsureSafePluginRoot(_pluginRoot);
-        if (!Directory.Exists(_pluginRoot))
+        EnsureSafeResourceRoot(_pluginRoot);
+        EnsureSafeResourceRoot(_keyRingRoot);
+        if (!Directory.Exists(_pluginRoot) || !Directory.Exists(_keyRingRoot))
         {
-            throw new InvalidOperationException("Acceptance plugin root disappeared before teardown.");
+            throw new InvalidOperationException("Acceptance owned resource root disappeared before teardown.");
         }
 
         var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
@@ -1028,6 +1178,7 @@ internal sealed class PersonnelAcceptanceRunner
         }
         catch (Exception exception)
         {
+            _evidenceValidationFailed = true;
             await _recorder.RecordAsync(
                 AcceptanceGateKind.Personnel,
                 AcceptanceEventType.EvidenceRecorded,
@@ -1059,6 +1210,8 @@ internal sealed class PersonnelAcceptanceRunner
                 break;
             }
         }
+
+        _secretLeakDetected = leaked;
 
         await _recorder.RecordAsync(
             AcceptanceGateKind.Personnel,
@@ -1681,18 +1834,24 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
-    private void EnsureSafePluginRoot(string pluginRoot)
+    // teardown 只接受当前 run/resources 下预先声明的 plugins 或 key-ring 根，并拒绝任何 reparse point。
+    private void EnsureSafeResourceRoot(string resourceRoot)
     {
-        var expected = Path.GetFullPath(Path.Combine(_runDirectory, "resources", "plugins"));
-        if (!string.Equals(Path.GetFullPath(pluginRoot), expected, StringComparison.OrdinalIgnoreCase))
+        var fullPath = Path.GetFullPath(resourceRoot);
+        var allowed = new[]
         {
-            throw new InvalidOperationException("Acceptance plugin root escaped its owned resource directory.");
+            Path.GetFullPath(Path.Combine(_runDirectory, "resources", "plugins")),
+            Path.GetFullPath(Path.Combine(_runDirectory, "resources", "key-ring"))
+        };
+        if (!allowed.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Acceptance resource root escaped its owned run directory.");
         }
-        if ((File.GetAttributes(pluginRoot) & FileAttributes.ReparsePoint) != 0
-            || Directory.EnumerateFileSystemEntries(pluginRoot, "*", SearchOption.AllDirectories)
+        if ((File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0
+            || Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.AllDirectories)
                 .Any(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0))
         {
-            throw new InvalidOperationException("Acceptance plugin root contains a reparse point and will be preserved.");
+            throw new InvalidOperationException("Acceptance resource root contains a reparse point and will be preserved.");
         }
     }
 

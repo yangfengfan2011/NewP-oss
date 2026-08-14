@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0",
+  "scenarios": {
+    "anonymous": {
+      "roots": ["index.html"]
+    },
+    "authenticatedHome": {
+      "roots": ["index.html", "src/module.ts"]
+    },
+    "personnelRoute": {
+      "roots": ["index.html", "src/module.ts", "src/personnel.ts"],
+      "relativeTo": "authenticatedHome"
+    }
+  },
+  "targetCapabilityAssets": [
+    { "sourceContains": "modules/organization/src/personStandardCrudResource.tsx" }
+  ],
+  "bindingEntries": ["src/module.ts"],
+  "forbiddenDependencies": [],
+  "budgets": {
+    "maxChunkMinifiedBytes": 1000,
+    "maxBindingEntryGzipBytes": 1000,
+    "maxAllBindingEntriesGzipBytes": 1000,
+    "scenarios": {
+      "anonymous": {
+        "maxMinifiedBytes": 1000,
+        "maxGzipBytes": 1000
+      },
+      "authenticatedHome": {
+        "maxMinifiedBytes": 1000,
+        "maxGzipBytes": 1000
+      },
+      "personnelRoute": {
+        "maxDeltaGzipBytes": 1000
+      }
+    }
+  }
+}

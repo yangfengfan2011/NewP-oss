@@ -107,6 +107,10 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    manifest: true,
+    sourcemap: true,
+  },
   test: {
     globals: true,
     environment: 'jsdom',

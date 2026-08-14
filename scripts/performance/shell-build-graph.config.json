@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "scenarios": {
+    "anonymous": {
+      "roots": [
+        { "manifestKey": "index.html" }
+      ]
+    },
+    "authenticatedHome": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
+      ]
+    },
+    "personnelRoute": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+        { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
+      ],
+      "relativeTo": "authenticatedHome"
+    }
+  },
+  "targetCapabilityAssets": [
+    { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
+  ],
+  "bindingEntries": [
+    { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
+  ],
+  "forbiddenDependencies": [
+    {
+      "id": "ant-design-pro",
+      "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-",
+      "scenarios": ["anonymous", "authenticatedHome"]
+    },
+    {
+      "id": "rc-picker",
+      "sourceContains": "/node_modules/.pnpm/rc-picker@",
+      "scenarios": ["anonymous", "authenticatedHome"]
+    },
+    {
+      "id": "business-module-page",
+      "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|standard-crud)/",
+      "scenarios": ["anonymous", "authenticatedHome"]
+    },
+    {
+      "id": "standard-crud-list-host",
+      "sourceRegex": "(?:^|/)src/pages/StandardCrudListPageHost\\.tsx$",
+      "scenarios": ["anonymous", "authenticatedHome"]
+    },
+    {
+      "id": "standard-crud-detail-host",
+      "sourceRegex": "(?:^|/)src/pages/StandardCrudDetailPageHost\\.tsx$",
+      "scenarios": ["anonymous", "authenticatedHome"]
+    }
+  ],
+  "budgets": {
+    "maxChunkMinifiedBytes": 500000,
+    "maxBindingEntryGzipBytes": 20480,
+    "maxAllBindingEntriesGzipBytes": 102400,
+    "scenarios": {
+      "anonymous": {
+        "maxMinifiedBytes": 819200,
+        "maxGzipBytes": 256000
+      },
+      "authenticatedHome": {
+        "maxMinifiedBytes": 1153434,
+        "maxGzipBytes": 358400
+      },
+      "personnelRoute": {
+        "maxDeltaGzipBytes": 460800
+      }
+    }
+  }
+}

@@ -2,15 +2,28 @@ using ICP.Platform.Acceptance;
 
 try
 {
-    var options = ParseArguments(args);
-    var runner = new AcceptanceSkeletonRunner();
-    var outcome = await runner.RunAsync(
-        options.RepositoryRoot,
-        options.OutputRoot,
-        options.Gate);
+    var values = ParseValues(args);
+    if (values.TryGetValue("--production-cold-start-mode", out var modeText))
+    {
+        var options = ParseProductionColdStartArguments(values, modeText);
+        var outcome = await new ProductionColdStartAcceptanceRunner().RunAsync(
+            options.RepositoryRoot,
+            options.OutputRoot,
+            options.Mode,
+            options.BaselineResultPath);
 
-    Console.WriteLine($"ACCEPTANCE_RESULT: {outcome.ResultPath}");
-    return outcome.ExitCode;
+        Console.WriteLine($"PRODUCTION_COLD_START_RESULT: {outcome.ResultPath}");
+        return outcome.ExitCode;
+    }
+
+    var acceptanceOptions = ParseAcceptanceArguments(values);
+    var acceptanceOutcome = await new AcceptanceSkeletonRunner().RunAsync(
+        acceptanceOptions.RepositoryRoot,
+        acceptanceOptions.OutputRoot,
+        acceptanceOptions.Gate);
+
+    Console.WriteLine($"ACCEPTANCE_RESULT: {acceptanceOutcome.ResultPath}");
+    return acceptanceOutcome.ExitCode;
 }
 catch (Exception exception)
 {
@@ -18,7 +31,8 @@ catch (Exception exception)
     return 2;
 }
 
-static RunnerOptions ParseArguments(string[] arguments)
+// 两个 runner 共享严格的 --name value 参数形状，重复键由最后一次显式输入覆盖。
+static Dictionary<string, string> ParseValues(string[] arguments)
 {
     var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     for (var index = 0; index < arguments.Length; index += 2)
@@ -31,11 +45,13 @@ static RunnerOptions ParseArguments(string[] arguments)
         values[arguments[index]] = arguments[index + 1];
     }
 
-    if (!values.TryGetValue("--repository-root", out var repositoryRoot) ||
-        !values.TryGetValue("--output-root", out var outputRoot))
-    {
-        throw new ArgumentException("缺少 --repository-root 或 --output-root。");
-    }
+    return values;
+}
+
+// 现有 Acceptance gate 参数保持不变。
+static RunnerOptions ParseAcceptanceArguments(IReadOnlyDictionary<string, string> values)
+{
+    var (repositoryRoot, outputRoot) = ReadCommonPaths(values);
 
     var gateText = values.GetValueOrDefault("--gate", "All");
     if (!Enum.TryParse<AcceptanceGateSelection>(gateText, ignoreCase: true, out var gate))
@@ -46,7 +62,43 @@ static RunnerOptions ParseArguments(string[] arguments)
     return new RunnerOptions(Path.GetFullPath(repositoryRoot), Path.GetFullPath(outputRoot), gate);
 }
 
+// production cold-start 入口显式区分 baseline/candidate，并让 candidate 带入冻结 baseline result。
+static ProductionColdStartRunnerOptions ParseProductionColdStartArguments(
+    IReadOnlyDictionary<string, string> values,
+    string modeText)
+{
+    var (repositoryRoot, outputRoot) = ReadCommonPaths(values);
+    if (!Enum.TryParse<ProductionColdStartMode>(modeText, ignoreCase: true, out var mode))
+    {
+        throw new ArgumentException("--production-cold-start-mode 只能是 Baseline 或 Candidate。");
+    }
+    var baselineResult = values.GetValueOrDefault("--baseline-result");
+    return new ProductionColdStartRunnerOptions(
+        repositoryRoot,
+        outputRoot,
+        mode,
+        string.IsNullOrWhiteSpace(baselineResult) ? null : Path.GetFullPath(baselineResult));
+}
+
+// 两种 runner 都必须固定显式 repository/output 根目录。
+static (string RepositoryRoot, string OutputRoot) ReadCommonPaths(
+    IReadOnlyDictionary<string, string> values)
+{
+    if (!values.TryGetValue("--repository-root", out var repositoryRoot)
+        || !values.TryGetValue("--output-root", out var outputRoot))
+    {
+        throw new ArgumentException("缺少 --repository-root 或 --output-root。");
+    }
+    return (Path.GetFullPath(repositoryRoot), Path.GetFullPath(outputRoot));
+}
+
 internal sealed record RunnerOptions(
     string RepositoryRoot,
     string OutputRoot,
     AcceptanceGateSelection Gate);
+
+internal sealed record ProductionColdStartRunnerOptions(
+    string RepositoryRoot,
+    string OutputRoot,
+    ProductionColdStartMode Mode,
+    string? BaselineResultPath);

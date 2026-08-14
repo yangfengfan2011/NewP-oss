@@ -61,6 +61,17 @@ describe('vite config', () => {
     expect(loaderSource).not.toContain(['..', '..', '..', 'modules', '*', 'src', 'index.ts'].join('/'));
   });
 
+  it('emits production analysis artifacts without hiding Vite chunk warnings or forcing chunk policy', () => {
+    const serverConfig = typeof config === 'function' ? config({ command: 'build', mode: 'production' }) : config;
+
+    expect(serverConfig.build).toMatchObject({
+      manifest: true,
+      sourcemap: true,
+    });
+    expect(serverConfig.build).not.toHaveProperty('chunkSizeWarningLimit');
+    expect(serverConfig.build?.rollupOptions?.output).toBeUndefined();
+  });
+
   it('redirects localhost requests once to the IPv4 shell origin', () => {
     const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
     const redirectPlugin = (serverConfig.plugins ?? [])

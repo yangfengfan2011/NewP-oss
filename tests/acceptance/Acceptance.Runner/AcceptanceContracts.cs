@@ -65,6 +65,19 @@ public static class AcceptanceFailureCodes
     public const string IdentityFoundationRestartFailed = "ACC_IDENTITY_FOUNDATION_RESTART_FAILED";
     public const string IdentityFoundationSecurityFailed = "ACC_IDENTITY_FOUNDATION_SECURITY_FAILED";
     public const string IdentityFoundationPersistenceFailed = "ACC_IDENTITY_FOUNDATION_PERSISTENCE_FAILED";
+    public const string ProductionColdStartSampleCount = "ACC_PRODUCTION_COLD_START_SAMPLE_COUNT";
+    public const string ProductionColdStartScenarioSkipped = "ACC_PRODUCTION_COLD_START_SCENARIO_SKIPPED";
+    public const string ProductionColdStartCacheNotCleared = "ACC_PRODUCTION_COLD_START_CACHE_NOT_CLEARED";
+    public const string ProductionColdStartThrottleMismatch = "ACC_PRODUCTION_COLD_START_THROTTLE_MISMATCH";
+    public const string ProductionColdStartRequestEvidenceMissing = "ACC_PRODUCTION_COLD_START_REQUEST_EVIDENCE_MISSING";
+    public const string ProductionColdStartLongTaskEvidenceMissing = "ACC_PRODUCTION_COLD_START_LONG_TASK_EVIDENCE_MISSING";
+    public const string ProductionColdStartServiceWorkerEnabled = "ACC_PRODUCTION_COLD_START_SERVICE_WORKER_ENABLED";
+    public const string ProductionColdStartViewportMismatch = "ACC_PRODUCTION_COLD_START_VIEWPORT_MISMATCH";
+    public const string ProductionColdStartBudgetExceeded = "ACC_PRODUCTION_COLD_START_BUDGET_EXCEEDED";
+    public const string ProductionColdStartBaselineMissing = "ACC_PRODUCTION_COLD_START_BASELINE_MISSING";
+    public const string ProductionColdStartTargetCapabilityRequested = "ACC_PRODUCTION_COLD_START_TARGET_CAPABILITY_REQUESTED";
+    public const string ProductionColdStartBuildFailed = "ACC_PRODUCTION_COLD_START_BUILD_FAILED";
+    public const string ProductionColdStartBrowserFailed = "ACC_PRODUCTION_COLD_START_BROWSER_FAILED";
 }
 
 public sealed record AcceptanceGateDefinition(

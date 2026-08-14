@@ -1,0 +1,34 @@
+{
+  "index.html": {
+    "file": "assets/main.js",
+    "isEntry": true,
+    "css": ["assets/main.css"],
+    "imports": ["_shared.js", "_cycle.js"],
+    "dynamicImports": ["src/module.ts"]
+  },
+  "secondary.html": {
+    "file": "assets/secondary.js",
+    "isEntry": true,
+    "imports": ["_shared.js"]
+  },
+  "_shared.js": {
+    "file": "assets/shared.js",
+    "imports": ["_cycle.js"]
+  },
+  "_cycle.js": {
+    "file": "assets/cycle.js",
+    "imports": ["_shared.js"]
+  },
+  "src/module.ts": {
+    "file": "assets/module.js",
+    "isDynamicEntry": true,
+    "css": ["assets/module.css", "assets/main.css"],
+    "imports": ["_shared.js"],
+    "dynamicImports": ["src/personnel.ts"]
+  },
+  "src/personnel.ts": {
+    "file": "assets/personnel.js",
+    "isDynamicEntry": true,
+    "imports": ["_shared.js"]
+  }
+}

@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [ValidateSet("IdentityFoundation", "Personnel")]
-    [string[]]$AcceptanceGate = @()
+    [string[]]$AcceptanceGate = @(),
+    [ValidateSet("Baseline", "Candidate")]
+    [string]$ProductionColdStartMode,
+    [string]$ProductionColdStartBaselineResult
 )
 
 $ErrorActionPreference = "Stop"
@@ -153,6 +156,19 @@ try {
         Invoke-VerificationStage -Name $currentStage -FilePath $pwshPath -Arguments @(
             "-NoLogo", "-NoProfile", "-File", (Join-Path $PSScriptRoot "accept.ps1"),
             "-Gate", $gate, "-NoBuild")
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ProductionColdStartMode))
+    {
+        $currentStage = "production-cold-start-" + $ProductionColdStartMode.ToLowerInvariant()
+        $coldStartArguments = @(
+            "-NoLogo", "-NoProfile", "-File", (Join-Path $PSScriptRoot "accept-production-cold-start.ps1"),
+            "-Mode", $ProductionColdStartMode)
+        if (-not [string]::IsNullOrWhiteSpace($ProductionColdStartBaselineResult))
+        {
+            $coldStartArguments += @("-BaselineResult", $ProductionColdStartBaselineResult)
+        }
+        Invoke-VerificationStage -Name $currentStage -FilePath $pwshPath -Arguments $coldStartArguments
     }
 
     Save-VerificationResult -Status "passed"

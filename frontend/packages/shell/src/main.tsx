@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import App, { AuthenticationOnlyApp } from './App';
+import { AuthenticationOnlyApp } from './AuthenticationOnlyApp';
 import { bootstrapShell } from './bootstrap';
 import { ModuleRuntimeFatal } from './components/ModuleRuntimeFatal';
 import { registerShellModules } from './registerModules';
@@ -15,13 +15,23 @@ void bootstrapShell({
   readAuthenticationSnapshot: readCurrentUser,
   registerModules: registerShellModules,
   initializeModules: () => ModuleRegistry.initializeAll(),
-  renderApp: (user) => root.render(
-    <React.StrictMode>
-      {user && !user.mustChangePassword
-        ? <App initialUser={user} />
-        : <AuthenticationOnlyApp initialUser={user} />}
-    </React.StrictMode>,
-  ),
+  renderApp: async (user) => {
+    if (user && !user.mustChangePassword) {
+      const { default: App } = await import('./App');
+      root.render(
+        <React.StrictMode>
+          <App initialUser={user} />
+        </React.StrictMode>,
+      );
+      return;
+    }
+
+    root.render(
+      <React.StrictMode>
+        <AuthenticationOnlyApp initialUser={user} />
+      </React.StrictMode>,
+    );
+  },
   renderFatal: (error, retry) => root.render(
     <ModuleRuntimeFatal error={error} onRetry={() => void retry()} />,
   ),

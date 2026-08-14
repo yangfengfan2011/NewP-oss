@@ -4,7 +4,7 @@ import {
   type StandardCrudSummaryBlock,
   type StandardCrudSummaryRenderer,
 } from '@icp-platform/sdk';
-import { SummaryCard } from '@icp-platform/ui';
+import { SummaryCard } from '@icp-platform/ui/core';
 
 interface StandardCrudSummaryBlocksProps {
   blocks: string[];

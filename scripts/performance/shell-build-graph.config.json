@@ -6,15 +6,28 @@
         { "manifestKey": "index.html" }
       ]
     },
+    "authenticatedShell": {
+      "roots": [
+        { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)src/App\\.tsx$" }
+      ]
+    },
+    "moduleBindingEager": {
+      "roots": [
+        { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
+      ]
+    },
     "authenticatedHome": {
       "roots": [
         { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
         { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
       ]
     },
     "personnelRoute": {
       "roots": [
         { "manifestKey": "index.html" },
+        { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
         { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
         { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
       ],
@@ -31,27 +44,71 @@
     {
       "id": "ant-design-pro",
       "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-",
-      "scenarios": ["anonymous", "authenticatedHome"]
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
     },
     {
       "id": "rc-picker",
       "sourceContains": "/node_modules/.pnpm/rc-picker@",
-      "scenarios": ["anonymous", "authenticatedHome"]
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
     },
     {
       "id": "business-module-page",
       "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|standard-crud)/",
-      "scenarios": ["anonymous", "authenticatedHome"]
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "shell-non-initial-page",
+      "sourceRegex": "(?:^|/)src/pages/(?:UiShowcase|StandardListPageHost|StandardCrudListPageHost|StandardCrudDetailPageHost)\\.tsx$",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "ui-root-compatibility-entry",
+      "sourceRegex": "(?:^|/)(?:packages/)?ui/src/index\\.ts$",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "ui-crud-entry",
+      "sourceRegex": "(?:^|/)(?:packages/)?ui/src/(?:crud\\.ts|pro-adapters/|patterns/StandardCrud)",
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
     },
     {
       "id": "standard-crud-list-host",
       "sourceRegex": "(?:^|/)src/pages/StandardCrudListPageHost\\.tsx$",
-      "scenarios": ["anonymous", "authenticatedHome"]
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
     },
     {
       "id": "standard-crud-detail-host",
       "sourceRegex": "(?:^|/)src/pages/StandardCrudDetailPageHost\\.tsx$",
-      "scenarios": ["anonymous", "authenticatedHome"]
+      "scenarios": ["anonymous", "authenticatedShell"],
+      "attribution": "shell-initial"
+    },
+    {
+      "id": "module-binding-eager-pro",
+      "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-",
+      "scenarios": ["moduleBindingEager"],
+      "enforcement": "report-only",
+      "attribution": "module-binding-eager"
+    },
+    {
+      "id": "module-binding-eager-rc-picker",
+      "sourceContains": "/node_modules/.pnpm/rc-picker@",
+      "scenarios": ["moduleBindingEager"],
+      "enforcement": "report-only",
+      "attribution": "module-binding-eager"
+    },
+    {
+      "id": "module-binding-eager-business-page",
+      "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|standard-crud)/",
+      "scenarios": ["moduleBindingEager"],
+      "enforcement": "report-only",
+      "attribution": "module-binding-eager"
     }
   ],
   "budgets": {

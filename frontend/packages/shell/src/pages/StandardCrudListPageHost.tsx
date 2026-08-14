@@ -18,18 +18,18 @@ import type {
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { Button as AntdButton, Drawer, Dropdown, Input, Modal, Select, Space, Tag, message } from 'antd';
+import { ErrorState } from '@icp-platform/ui/core';
 import {
   CrudFormDrawer,
   CrudSearchBar,
   CrudTableSection,
   CrudWorkspacePage,
-  ErrorState,
   StandardCrudForm,
   createSearchTableRequest,
   loadStandardCrudColumnPreference,
   saveStandardCrudColumnPreference,
-} from '@icp-platform/ui';
-import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui';
+} from '@icp-platform/ui/crud';
+import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui/crud';
 import { useAuth } from '../contexts/AuthContext';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } from '../metadata/standardCrudSchemaResolver';

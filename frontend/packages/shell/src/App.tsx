@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ConfigProvider } from 'antd';
 import {
   AuthorizationProvider,
   FirstPasswordChangePage,
@@ -9,9 +8,11 @@ import {
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
+import { LazyRouteOutlet } from './capabilities/LazyRouteOutlet';
 import { RouteCapabilityOutlet } from './capabilities/RouteCapabilityOutlet';
 import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
 import Layout from './components/Layout';
+import { ShellThemeProvider } from './components/ShellThemeProvider';
 import { shellAntdTheme } from './config/antdTheme';
 import { shellUiConfig } from './config/uiConfig';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -41,7 +42,8 @@ import {
 import { renderPageEntry } from './navigation/pageRouteRenderer';
 import Home from './pages/Home';
 import Login from './pages/Login';
-import UiShowcase from './pages/UiShowcase';
+
+const loadUiShowcase = () => import('./pages/UiShowcase');
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -66,40 +68,6 @@ function PasswordChangeRoute() {
   return destination === '/account/change-password'
     ? <FirstPasswordChangePage auth={auth} />
     : <Navigate to={destination} replace />;
-}
-
-function AuthenticationOnlyRoutes() {
-  const auth = useAuth();
-  if (!auth.isInitialized || auth.sessionError) {
-    return <AuthenticationSessionBoundary authentication={auth}>{null}</AuthenticationSessionBoundary>;
-  }
-  if (!auth.isAuthenticated || !auth.user) {
-    return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    );
-  }
-
-  return (
-    <Routes>
-      <Route path="/account/change-password" element={<PasswordChangeRoute />} />
-      <Route path="*" element={<Navigate to="/account/change-password" replace />} />
-    </Routes>
-  );
-}
-
-export function AuthenticationOnlyApp({ initialUser }: { initialUser?: AuthUser }) {
-  return (
-    <ConfigProvider theme={shellAntdTheme}>
-      <BrowserRouter>
-        <AuthProvider initialUser={initialUser}>
-          <AuthenticationOnlyRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </ConfigProvider>
-  );
 }
 
 function LocalAdministratorGuard({ children }: { children: React.ReactNode }) {
@@ -183,7 +151,7 @@ function AppRoutes() {
         )}
       >
         <Route index element={<Home />} />
-        <Route path="ui-showcase" element={<UiShowcase />} />
+        <Route path="ui-showcase" element={<LazyRouteOutlet load={loadUiShowcase} />} />
         {metadataEntries.map((entry) => (
           <Route
             key={entry.path}
@@ -338,7 +306,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
   }
 
   return (
-    <ConfigProvider theme={shellAntdTheme}>
+    <ShellThemeProvider theme={shellAntdTheme}>
       <BrowserRouter>
         <LocalizationProvider
           defaultLanguage={localizationManifest.defaultLanguage}
@@ -361,7 +329,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
           </AuthProvider>
         </LocalizationProvider>
       </BrowserRouter>
-    </ConfigProvider>
+    </ShellThemeProvider>
   );
 }
 

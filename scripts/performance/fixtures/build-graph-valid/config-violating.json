@@ -29,6 +29,13 @@
       "id": "fixture-shared-package",
       "sourceRegex": "node_modules/shared/index\\.js$",
       "scenarios": ["anonymous", "authenticatedHome"]
+    },
+    {
+      "id": "fixture-module-binding-eager",
+      "sourceRegex": "node_modules/shared/index\\.js$",
+      "scenarios": ["authenticatedHome"],
+      "enforcement": "report-only",
+      "attribution": "module-binding-eager"
     }
   ],
   "budgets": {

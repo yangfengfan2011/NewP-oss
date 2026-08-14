@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { StandardListPage } from '@icp-platform/ui';
+import { StandardListPage } from '@icp-platform/ui/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';

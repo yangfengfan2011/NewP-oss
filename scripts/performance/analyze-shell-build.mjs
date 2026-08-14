@@ -316,6 +316,14 @@ function analyze(manifest, config, assetsRoot, mode) {
       || (!dependency.sourceContains && !dependency.sourceRegex)) {
       throw new Error('Forbidden dependency rules must declare id, a source matcher, and scenarios.')
     }
+    const enforcement = dependency.enforcement ?? 'enforced'
+    if (enforcement !== 'enforced' && enforcement !== 'report-only') {
+      throw new Error(`Forbidden dependency '${dependency.id}' enforcement must be enforced or report-only.`)
+    }
+    const attribution = dependency.attribution ?? 'unclassified'
+    if (typeof attribution !== 'string' || attribution.length === 0) {
+      throw new Error(`Forbidden dependency '${dependency.id}' attribution must be a non-empty string.`)
+    }
     let sourcePattern = null
     if (dependency.sourceRegex) {
       try {
@@ -338,6 +346,8 @@ function analyze(manifest, config, assetsRoot, mode) {
         forbiddenReachability.push({
           dependency: dependency.id,
           scenario: scenarioName,
+          enforcement,
+          attribution,
           source: matchingSource,
           file: metrics.get(key).file,
           chain: findStaticPath(manifest, scenarioRoots.get(scenarioName), key),
@@ -419,6 +429,9 @@ function analyze(manifest, config, assetsRoot, mode) {
     })
   }
   for (const reachable of forbiddenReachability) {
+    if (reachable.enforcement === 'report-only') {
+      continue
+    }
     violations.push({
       code: 'BUILD_GRAPH_FORBIDDEN_DEPENDENCY',
       subject: `${reachable.scenario}:${reachable.dependency}`,

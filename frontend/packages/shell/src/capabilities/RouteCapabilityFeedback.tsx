@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Button } from 'antd';
+import { Button } from '@icp-platform/ui/core';
 import { RouteCapabilityError, type RouteCapabilityErrorCode } from './RouteCapabilityRuntime';
 
 export function RouteCapabilityLoading() {

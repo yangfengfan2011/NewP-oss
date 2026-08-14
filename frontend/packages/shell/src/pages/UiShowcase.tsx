@@ -24,7 +24,7 @@ import {
   TableWrap,
   Tabs,
   Textarea,
-} from '@icp-platform/ui';
+} from '@icp-platform/ui/core';
 import { DataTable } from '../../../ui/dist/components/DataTable.js';
 import { Tree, type TreeNode } from '../../../ui/dist/components/Tree.js';
 import { TreeSelect } from '../../../ui/dist/components/TreeSelect.js';

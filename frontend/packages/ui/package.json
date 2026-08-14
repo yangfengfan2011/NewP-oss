@@ -10,6 +10,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./crud": {
+      "types": "./dist/crud.d.ts",
+      "import": "./dist/crud.js"
+    },
     "./styles": "./src/styles/index.css"
   },
   "scripts": {

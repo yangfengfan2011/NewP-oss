@@ -11,7 +11,8 @@ import {
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { DetailPage, ErrorState, FormPage, LoadingState, PageHeader, StandardCrudForm } from '@icp-platform/ui';
+import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
+import { DetailPage, FormPage, StandardCrudForm } from '@icp-platform/ui/crud';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';

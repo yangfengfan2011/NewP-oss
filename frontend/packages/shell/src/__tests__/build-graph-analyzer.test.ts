@@ -99,6 +99,15 @@ describe('Shell production build graph CLI', () => {
       scenario: 'anonymous',
       chain: ['index.html', '_shared.js'],
     }))
+    expect(baseline.report.forbiddenReachability).toContainEqual(expect.objectContaining({
+      dependency: 'fixture-module-binding-eager',
+      scenario: 'authenticatedHome',
+      enforcement: 'report-only',
+      attribution: 'module-binding-eager',
+    }))
+    expect(baseline.report.violations).not.toContainEqual(expect.objectContaining({
+      subject: 'authenticatedHome:fixture-module-binding-eager',
+    }))
     expect(baseline.report.sharedDependencies).toContainEqual(expect.objectContaining({
       file: 'assets/shared.js',
       bindingEntries: ['secondary.html', 'src/module.ts'],

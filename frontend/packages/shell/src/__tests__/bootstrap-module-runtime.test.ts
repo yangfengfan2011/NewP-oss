@@ -56,4 +56,36 @@ describe('Shell module runtime bootstrap', () => {
     expect(renderApp).toHaveBeenCalledWith(user);
     expect(renderFatal).not.toHaveBeenCalled();
   });
+
+  it('waits for the authenticated app chunk and keeps its load failure inside fatal retry', async () => {
+    const chunkFailure = new Error('Failed to fetch dynamically imported module: App');
+    let finishRender!: () => void;
+    const renderApp = vi.fn()
+      .mockRejectedValueOnce(chunkFailure)
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finishRender = resolve;
+      }));
+    const renderFatal = vi.fn();
+
+    await bootstrapShell({
+      readAuthenticationSnapshot: vi.fn().mockResolvedValue(regularUser),
+      registerModules: vi.fn().mockResolvedValue(undefined),
+      initializeModules: vi.fn().mockResolvedValue(undefined),
+      renderApp,
+      renderFatal,
+    });
+
+    expect(renderFatal).toHaveBeenCalledWith(chunkFailure, expect.any(Function));
+    const retry = renderFatal.mock.calls[0][1] as () => Promise<void>;
+    let retryCompleted = false;
+    const retryResult = retry().then(() => {
+      retryCompleted = true;
+    });
+
+    await vi.waitFor(() => expect(renderApp).toHaveBeenCalledTimes(2));
+    expect(retryCompleted).toBe(false);
+    finishRender();
+    await retryResult;
+    expect(retryCompleted).toBe(true);
+  });
 });

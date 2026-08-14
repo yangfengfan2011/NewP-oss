@@ -21,8 +21,8 @@ const standardListPageMock = vi.hoisted(() =>
   )),
 );
 
-vi.mock('@icp-platform/ui', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@icp-platform/ui')>();
+vi.mock('@icp-platform/ui/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@icp-platform/ui/core')>();
 
   return {
     ...actual,

@@ -88,6 +88,8 @@ export default defineConfig({
       '@icp-platform/ui/styles': fileURLToPath(
         new URL('../ui/src/styles/index.css', import.meta.url),
       ),
+      '@icp-platform/ui/core': fileURLToPath(new URL('../ui/src/core.ts', import.meta.url)),
+      '@icp-platform/ui/crud': fileURLToPath(new URL('../ui/src/crud.ts', import.meta.url)),
       '@icp-platform/ui': fileURLToPath(new URL('../ui/src/index.ts', import.meta.url)),
     },
   },

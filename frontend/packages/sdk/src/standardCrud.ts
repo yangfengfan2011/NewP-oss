@@ -173,6 +173,16 @@ export interface StandardCrudSummaryRendererContext<TData = unknown> {
 /** 摘要渲染器声明；空态、异常态和装载流程由 Shell 统一处理后再调用模块渲染。 */
 export type StandardCrudSummaryRenderer<TData = unknown> = (context: StandardCrudSummaryRendererContext<TData>) => ReactNode;
 
+/** 详情字段渲染上下文；模块扩展只读取当前协议字段和值，不拥有详情结构或装载流程。 */
+export interface StandardCrudDetailFieldRendererContext {
+  fieldKey: string;
+  value: unknown;
+  detailFields: Record<string, unknown>;
+}
+
+/** 详情字段 renderer binding；选择、顺序、分区和默认 renderer 仍由 Resolved Detail Schema 决定。 */
+export type StandardCrudDetailFieldRenderer = (context: StandardCrudDetailFieldRendererContext) => ReactNode;
+
 /** 标准列表列声明；复杂单元格可通过受控 render 回调保留在模块边界内。 */
 export interface StandardCrudTableColumn<TRow> {
   key: string;
@@ -230,6 +240,7 @@ export interface StandardCrudResourceRegistration<
   detailActions?: StandardCrudActionDefinition[];
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
+  detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
   validateMutationValues?: (values: Record<string, unknown>, mode: StandardCrudFormMode) => string | null;

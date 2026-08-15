@@ -6,6 +6,8 @@ type MetadataRecord = Record<string, unknown>;
 export interface StandardCrudSchemaResolverContext {
   modelDocuments?: MetadataRecord[];
   defaultLanguageCatalog?: Record<string, string>;
+  /** 候选编译器提供的详情响应协议字段，不由前端资源 binding 重复声明。 */
+  detailResponseFields?: string[];
 }
 
 export interface StandardCrudRuntimeFieldSchema {
@@ -112,12 +114,57 @@ export interface StandardCrudDetailRuntimeSchema {
   pageActions: StandardCrudRuntimeActionSchema[];
 }
 
+export type StandardCrudResolvedDetailFieldKind = 'text' | 'number' | 'boolean' | 'date' | 'enum' | 'lookup';
+
+export interface StandardCrudResolvedDetailFieldCatalogEntry {
+  key: string;
+  kind: StandardCrudResolvedDetailFieldKind;
+  source: 'model' | 'entity' | 'builtin';
+}
+
+export interface StandardCrudResolvedDetailFieldSchema {
+  key: string;
+  labelKey: string;
+  rendererKey: string;
+  rendererSource: 'standard' | 'binding';
+}
+
+export interface StandardCrudResolvedDetailSectionSchema {
+  key: string;
+  titleKey: string;
+  fields: StandardCrudResolvedDetailFieldSchema[];
+}
+
+export interface StandardCrudResolvedDetailSchema {
+  viewKey: string;
+  resourceKey: string;
+  apiRoute: string;
+  dicKey: string;
+  titleKey: string;
+  descriptionKey: string;
+  fieldCatalog: StandardCrudResolvedDetailFieldCatalogEntry[];
+  sections: StandardCrudResolvedDetailSectionSchema[];
+  summaryBlocks: string[];
+  pageActions: StandardCrudRuntimeActionSchema[];
+}
+
 const builtinModelFields = ['EID', 'ENAME', 'ECODE'];
 const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'enable', 'submit']);
 const supportedActionVariants = new Set(['default', 'primary', 'danger']);
 const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
 const supportedQueryPresets = new Set(['keyword']);
 const reservedStandardCrudQueryKeys = new Set(['page', 'pageindex', 'pagesize', 'sortby', 'sortdirection', 'fields']);
+const entityDetailFields: Array<[string, StandardCrudResolvedDetailFieldKind]> = [
+  ['EID', 'text'],
+  ['CreatedBy', 'text'],
+  ['CreatedAt', 'date'],
+  ['UpdatedBy', 'text'],
+  ['UpdatedAt', 'date'],
+];
+const optionalBuiltinDetailFields = new Map<string, StandardCrudResolvedDetailFieldKind>([
+  ['ENAME', 'text'],
+  ['ECODE', 'text'],
+]);
 
 function readString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
@@ -332,6 +379,182 @@ function readDetailSection(value: unknown): StandardCrudDetailSectionSchema | nu
     key,
     titleKey: readString(record.titleKey, key),
     fields: readArray<unknown>(record.fields).filter((field): field is string => typeof field === 'string' && field.length > 0),
+  };
+}
+
+function inferResolvedDetailFieldKind(field: MetadataRecord): StandardCrudResolvedDetailFieldKind {
+  const uiType = readString(field.uiType);
+  const dataSource = readRecord(field.dataSource);
+  const dataSourceType = readString(dataSource.type);
+  const contract = readRecord(field.contract);
+  const storageType = readString(readRecord(field.storage).type);
+
+  if (uiType === 'lookup' || dataSourceType === 'model' || dataSourceType === 'provider') {
+    return 'lookup';
+  }
+  if (uiType === 'select' || contract.valueType === 'enum' || dataSourceType === 'enum') {
+    return 'enum';
+  }
+  if (uiType === 'switch' || uiType === 'checkbox' || storageType === 'bool') {
+    return 'boolean';
+  }
+  if (uiType === 'number' || ['byte', 'short', 'int', 'long', 'decimal', 'double', 'float'].includes(storageType)) {
+    return 'number';
+  }
+  if (uiType === 'date' || storageType === 'date' || storageType === 'datetime') {
+    return 'date';
+  }
+
+  return 'text';
+}
+
+function buildResolvedDetailFieldCatalog(model: MetadataRecord): StandardCrudResolvedDetailFieldCatalogEntry[] {
+  const catalog: StandardCrudResolvedDetailFieldCatalogEntry[] = [];
+  const names = new Set<string>();
+  const append = (
+    key: string,
+    kind: StandardCrudResolvedDetailFieldKind,
+    source: StandardCrudResolvedDetailFieldCatalogEntry['source'],
+  ): void => {
+    if (key.length > 0 && names.add(key)) {
+      catalog.push({ key, kind, source });
+    }
+  };
+
+  for (const field of readRecordArray(model.fields)) {
+    const key = readString(field.name);
+    append(key, inferResolvedDetailFieldKind(field), 'model');
+  }
+  if (readString(model.kind) === 'Entity') {
+    for (const [key, kind] of entityDetailFields) {
+      append(key, kind, 'entity');
+    }
+  }
+  for (const value of readArray<unknown>(model.builtinFields)) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const kind = optionalBuiltinDetailFields.get(value);
+    if (kind) {
+      append(value, kind, 'builtin');
+    }
+  }
+
+  return catalog;
+}
+
+function resolveStrictDetailView(viewDocuments: MetadataRecord[], viewKey: string): MetadataRecord {
+  const matches = viewDocuments
+    .filter((document) => document.type === 'view')
+    .map((document) => readRecord(document.view))
+    .filter((view) => readString(view.key) === viewKey && readString(view.mode) === 'detail');
+
+  if (matches.length === 0) {
+    throw new Error(`detail view "${viewKey}" is missing`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`detail view "${viewKey}" is declared multiple times`);
+  }
+
+  return matches[0];
+}
+
+function readResolvedDetailField(value: unknown): { field: string; rendererKey?: string } {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return { field: value };
+  }
+
+  const record = readRecord(value);
+  const field = readString(record.field);
+  const rendererKey = readString(record.rendererKey);
+  return { field, ...(rendererKey.length > 0 ? { rendererKey } : {}) };
+}
+
+export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
+  viewDocuments: MetadataRecord[],
+  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
+  context: StandardCrudSchemaResolverContext,
+): StandardCrudResolvedDetailSchema {
+  const viewKey = readString(registration.detailViewKey);
+  if (viewKey.length === 0) {
+    throw new Error(`standard CRUD resource "${registration.resourceKey}" does not declare detailViewKey`);
+  }
+
+  const view = resolveStrictDetailView(viewDocuments, viewKey);
+  const modelKey = readString(view.model);
+  const model = requireModelDocument(viewKey, context.modelDocuments ?? [], modelKey);
+  if (modelKey.length === 0 || Object.keys(model).length === 0) {
+    throw new Error(`view "${viewKey}" references unknown model "${modelKey}"`);
+  }
+
+  const fieldCatalog = buildResolvedDetailFieldCatalog(model);
+  const catalogByKey = new Map(fieldCatalog.map((field) => [field.key, field]));
+  const responseFields = new Set(context.detailResponseFields ?? []);
+  const usedFields = new Set<string>();
+  const rawSections = readArray<unknown>(view.sections);
+  const sections = rawSections.map((value) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`detail view "${viewKey}" sections must be objects`);
+    }
+
+    const section = readRecord(value);
+    const sectionKey = readString(section.key);
+    const titleKey = readString(section.titleKey);
+    const rawFields = readArray<unknown>(section.fields);
+    if (sectionKey.length === 0 || titleKey.length === 0 || rawFields.length === 0) {
+      throw new Error(`detail view "${viewKey}" contains an empty detail section`);
+    }
+
+    const fields = rawFields.map((fieldValue): StandardCrudResolvedDetailFieldSchema => {
+      const declaration = readResolvedDetailField(fieldValue);
+      const catalogField = catalogByKey.get(declaration.field);
+      if (!catalogField) {
+        throw new Error(`detail section "${sectionKey}" references unknown model field "${declaration.field}"`);
+      }
+      if (usedFields.has(declaration.field)) {
+        throw new Error(`detail view "${viewKey}" contains duplicate field "${declaration.field}"`);
+      }
+      usedFields.add(declaration.field);
+      if (!responseFields.has(declaration.field)) {
+        throw new Error(`detail field "${declaration.field}" is not provided by resource "${registration.resourceKey}" response`);
+      }
+      if (declaration.rendererKey && !registration.detailFieldRenderers?.[declaration.rendererKey]) {
+        throw new Error(`detail field renderer "${declaration.rendererKey}" is not registered on resource "${registration.resourceKey}"`);
+      }
+
+      return {
+        key: declaration.field,
+        labelKey: `Field_${declaration.field}`,
+        rendererKey: declaration.rendererKey ?? `standard.${catalogField.kind}`,
+        rendererSource: declaration.rendererKey ? 'binding' : 'standard',
+      };
+    });
+
+    return { key: sectionKey, titleKey, fields };
+  });
+
+  if (sections.length === 0 || usedFields.size === 0) {
+    throw new Error(`detail view "${viewKey}" must contain at least one section and one field`);
+  }
+
+  const pageActions = readRecordArray(view.pageActions)
+    .map(readAction)
+    .filter((action) => action.key.length > 0);
+  for (const action of pageActions) {
+    assertAction(action, registration);
+  }
+
+  return {
+    viewKey,
+    resourceKey: registration.resourceKey,
+    apiRoute: registration.apiRoute,
+    dicKey: readString(view.dicKey, registration.resourceKey),
+    titleKey: readString(view.titleKey, 'Title'),
+    descriptionKey: readString(view.descriptionKey, 'Description'),
+    fieldCatalog,
+    sections,
+    summaryBlocks: readArray<unknown>(view.summaryBlocks).filter((block): block is string => typeof block === 'string'),
+    pageActions,
   };
 }
 

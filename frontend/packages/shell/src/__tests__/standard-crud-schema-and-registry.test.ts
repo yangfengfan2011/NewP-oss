@@ -4,6 +4,7 @@ import { resolveDetailViewDocument, resolveListViewDocument } from '../metadata/
 import {
   buildStandardCrudDetailSchema,
   buildStandardCrudListSchema,
+  resolveStandardCrudDetailSchema,
 } from '../metadata/standardCrudSchemaResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 
@@ -27,6 +28,174 @@ const personRegistration = {
 };
 
 describe('standard CRUD schema resolver and registry', () => {
+  it('resolves ordered detail sections against the canonical field catalog and renderer bindings', () => {
+    const schema = resolveStandardCrudDetailSchema(
+      [{
+        type: 'view',
+        view: {
+          key: 'organization.person.detail',
+          mode: 'detail',
+          model: 'Person',
+          sections: [
+            {
+              key: 'basic',
+              titleKey: 'Section_Basic',
+              fields: ['PersonNo', 'ENAME'],
+            },
+            {
+              key: 'audit',
+              titleKey: 'Section_Audit',
+              fields: [
+                { field: 'CreatedBy', rendererKey: 'organization.actor' },
+                'CreatedAt',
+              ],
+            },
+            {
+              key: 'organization',
+              titleKey: 'Section_Organization',
+              fields: ['CompanyId'],
+            },
+          ],
+        },
+      }],
+      {
+        ...personRegistration,
+        detailFieldRenderers: {
+          'organization.actor': () => null,
+        },
+      },
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            kind: 'Entity',
+            builtinFields: ['ENAME', 'ECODE'],
+            fields: [
+              { name: 'PersonNo', storage: { type: 'string' } },
+              { name: 'CompanyId', uiType: 'lookup' },
+            ],
+          },
+        }],
+        detailResponseFields: ['EID', 'PersonNo', 'ENAME', 'CompanyId', 'CompanyName', 'CreatedBy', 'CreatedAt'],
+      },
+    );
+
+    expect(schema.sections).toEqual([
+      {
+        key: 'basic',
+        titleKey: 'Section_Basic',
+        fields: [
+          { key: 'PersonNo', labelKey: 'Field_PersonNo', rendererKey: 'standard.text', rendererSource: 'standard' },
+          { key: 'ENAME', labelKey: 'Field_ENAME', rendererKey: 'standard.text', rendererSource: 'standard' },
+        ],
+      },
+      {
+        key: 'audit',
+        titleKey: 'Section_Audit',
+        fields: [
+          { key: 'CreatedBy', labelKey: 'Field_CreatedBy', rendererKey: 'organization.actor', rendererSource: 'binding' },
+          { key: 'CreatedAt', labelKey: 'Field_CreatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
+        ],
+      },
+      {
+        key: 'organization',
+        titleKey: 'Section_Organization',
+        fields: [
+          { key: 'CompanyId', labelKey: 'Field_CompanyId', rendererKey: 'standard.lookup', rendererSource: 'standard' },
+        ],
+      },
+    ]);
+    expect(schema.fieldCatalog.map((field) => field.key)).toEqual([
+      'PersonNo',
+      'CompanyId',
+      'EID',
+      'CreatedBy',
+      'CreatedAt',
+      'UpdatedBy',
+      'UpdatedAt',
+      'ENAME',
+      'ECODE',
+    ]);
+  });
+
+  it.each([
+    {
+      name: 'missing view',
+      viewDocuments: [],
+      expected: 'detail view "organization.person.detail" is missing',
+    },
+    {
+      name: 'string section',
+      sections: ['basic'],
+      expected: 'detail view "organization.person.detail" sections must be objects',
+    },
+    {
+      name: 'no sections',
+      sections: [],
+      expected: 'detail view "organization.person.detail" must contain at least one section and one field',
+    },
+    {
+      name: 'empty section',
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: [] }],
+      expected: 'detail view "organization.person.detail" contains an empty detail section',
+    },
+    {
+      name: 'unknown model',
+      model: 'Ghost',
+      expected: 'view "organization.person.detail" references unknown model "Ghost"',
+    },
+    {
+      name: 'unknown field and DTO alias',
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['CompanyName'] }],
+      expected: 'detail section "basic" references unknown model field "CompanyName"',
+    },
+    {
+      name: 'duplicate field',
+      sections: [
+        { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo'] },
+        { key: 'other', titleKey: 'Section_Other', fields: ['PersonNo'] },
+      ],
+      expected: 'detail view "organization.person.detail" contains duplicate field "PersonNo"',
+    },
+    {
+      name: 'field unavailable in response',
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['CreatedAt'] }],
+      expected: 'detail field "CreatedAt" is not provided by resource "organization.person" response',
+    },
+    {
+      name: 'unknown renderer binding',
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: [{ field: 'PersonNo', rendererKey: 'missing' }] }],
+      expected: 'detail field renderer "missing" is not registered on resource "organization.person"',
+    },
+  ])('rejects $name with a stable diagnostic', ({ viewDocuments, sections, model = 'Person', expected }) => {
+    const documents = viewDocuments ?? [{
+      type: 'view',
+      view: {
+        key: 'organization.person.detail',
+        mode: 'detail',
+        model,
+        sections: sections ?? [{ key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo'] }],
+      },
+    }];
+    expect(() => resolveStandardCrudDetailSchema(
+      documents,
+      {
+        ...personRegistration,
+      },
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            kind: 'Entity',
+            builtinFields: ['ENAME'],
+            fields: [{ name: 'PersonNo', storage: { type: 'string' } }],
+          },
+        }],
+        detailResponseFields: ['PersonNo', 'CompanyName'],
+      },
+    )).toThrow(expected);
+  });
+
   it('builds a list schema from runtime view metadata and registration', () => {
     const schema = buildStandardCrudListSchema(
       {

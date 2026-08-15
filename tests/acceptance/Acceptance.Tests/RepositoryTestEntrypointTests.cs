@@ -240,6 +240,18 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("GetByText(\"已加载\", new LocatorGetByTextOptions { Exact = true }", runner, StringComparison.Ordinal);
         Assert.Contains("GetByText(\"已永久绑定\", new LocatorGetByTextOptions { Exact = true }", runner, StringComparison.Ordinal);
         Assert.Contains("Name = \"停用\", Exact = true", runner, StringComparison.Ordinal);
+        Assert.Contains("browser-intercepted-response", runner, StringComparison.Ordinal);
+        foreach (var driftCheck in new[]
+                 {
+                     "detail-null-renders-em-dash",
+                     "detail-missing-field-degrades-locally",
+                     "detail-unavailable-section-degrades-whole-section",
+                     "detail-critical-id-fails-whole-detail",
+                     "detail-action-dependency-disables-action"
+                 })
+        {
+            Assert.Contains(driftCheck, runner, StringComparison.Ordinal);
+        }
 
         var summaryUnit = File.ReadAllText(Path.Combine(
             repositoryRoot,

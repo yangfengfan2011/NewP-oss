@@ -1,16 +1,13 @@
 import type { ReactNode } from 'react';
-import type {
-  StandardCrudResourceRegistration,
-} from '@icp-platform/sdk';
+import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { DetailPage } from '@icp-platform/ui/crud-detail';
-import type {
-  StandardCrudResolvedDetailFieldSchema,
-  StandardCrudResolvedDetailSchema,
-} from '../metadata/standardCrudSchemaResolver';
+import type { StandardCrudResolvedDetailFieldSchema } from '../metadata/standardCrudSchemaResolver';
+import type { StandardCrudDetailPresentation } from './standardCrudDetailPresentation';
+
+type ReadyDetailPresentation = Extract<StandardCrudDetailPresentation, { kind: 'ready' }>;
 
 interface StandardCrudResolvedDetailSectionsProps {
-  schema: StandardCrudResolvedDetailSchema;
-  detailFields: Record<string, unknown>;
+  presentation: ReadyDetailPresentation;
   registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions'>;
   textFor: (key: string, fallback: string) => string;
 }
@@ -20,6 +17,9 @@ function formatStandardValue(
   value: unknown,
   registration: Pick<StandardCrudResourceRegistration, 'enumOptions'>,
 ): ReactNode {
+  if (value === null) {
+    return '—';
+  }
   if (field.rendererKey === 'standard.enum') {
     const option = field.enumKey
       ? registration.enumOptions?.[field.enumKey]?.find((item) => item.value === value)
@@ -28,10 +28,6 @@ function formatStandardValue(
       return option.label;
     }
   }
-
-  if (value === null || value === undefined || value === '') {
-    return '-';
-  }
   if (field.rendererKey === 'standard.boolean') {
     return value === true ? '是' : value === false ? '否' : String(value);
   }
@@ -39,34 +35,65 @@ function formatStandardValue(
   return String(value);
 }
 
-/**
- * 统一渲染严格解析后的普通详情分区；Drawer 与完整详情页共享此组件，避免再次从 Model 表单推断展示结构。
- */
+/** Renders the shared runtime availability plan used by both the Drawer and the full detail page. */
 export default function StandardCrudResolvedDetailSections({
-  schema,
-  detailFields,
+  presentation,
   registration,
   textFor,
 }: StandardCrudResolvedDetailSectionsProps) {
-  return schema.sections.map((section) => (
-    <DetailPage
-      key={section.key}
-      title={textFor(section.titleKey, section.titleKey)}
-      dataSource={detailFields}
-      columns={section.fields.map((field) => {
-        const bindingRenderer = field.rendererSource === 'binding'
-          ? registration.detailFieldRenderers?.[field.rendererKey]
-          : undefined;
+  return presentation.sections.map((section) => {
+    if (section.state === 'unavailable') {
+      return (
+        <section
+          key={section.key}
+          className="np-standard-crud-detail-section-unavailable"
+          data-diagnostic-code="STANDARD_CRUD_DETAIL_SECTION_UNAVAILABLE"
+          data-section-key={section.key}
+        >
+          <h3>{textFor(section.titleKey, section.titleKey)}</h3>
+          <div role="status">数据不可用</div>
+        </section>
+      );
+    }
 
-        return {
+    return (
+      <DetailPage
+        key={section.key}
+        title={textFor(section.titleKey, section.titleKey)}
+        dataSource={presentation.sourceFields}
+        columns={section.fields.map((field) => ({
           key: field.key,
           dataIndex: field.key,
           title: textFor(field.labelKey, field.labelKey),
-          render: () => bindingRenderer
-            ? bindingRenderer({ fieldKey: field.key, value: detailFields[field.key], detailFields })
-            : formatStandardValue(field, detailFields[field.key], registration),
-        };
-      })}
-    />
-  ));
+          render: () => {
+            if (field.state === 'unavailable') {
+              return (
+                <span
+                  role="status"
+                  data-diagnostic-code="STANDARD_CRUD_DETAIL_FIELD_UNAVAILABLE"
+                  data-field-key={field.key}
+                >
+                  数据不可用
+                </span>
+              );
+            }
+            if (field.value === null) {
+              return '—';
+            }
+
+            const bindingRenderer = field.rendererSource === 'binding'
+              ? registration.detailFieldRenderers?.[field.rendererKey]
+              : undefined;
+            return bindingRenderer
+              ? bindingRenderer({
+                  fieldKey: field.key,
+                  value: field.value,
+                  detailFields: presentation.sourceFields,
+                })
+              : formatStandardValue(field, field.value, registration);
+          },
+        }))}
+      />
+    );
+  });
 }

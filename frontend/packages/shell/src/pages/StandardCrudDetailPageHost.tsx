@@ -16,6 +16,10 @@ import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import StandardCrudResolvedDetailSections from '../standard-crud/StandardCrudResolvedDetailSections';
+import {
+  reportStandardCrudDetailDiagnostics,
+  resolveStandardCrudDetailPresentation,
+} from '../standard-crud/standardCrudDetailPresentation';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 type MetadataRecord = Record<string, unknown>;
@@ -209,16 +213,26 @@ function StandardCrudDetailPageContent<TDetail>({
 
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
-  const schema = useMemo(() => currentNormalizedDetail
-    ? resolveStandardCrudDetailSchema(viewDocuments, registration, {
-        modelDocuments,
-        detailResponseFields: Object.keys(currentNormalizedDetail.fields),
-      })
-    : null, [currentNormalizedDetail, modelDocuments, registration, viewDocuments]);
-  const detailSectionPages = schema && currentNormalizedDetail ? (
+  const schema = useMemo(
+    () => resolveStandardCrudDetailSchema(viewDocuments, registration, { modelDocuments }),
+    [modelDocuments, registration, viewDocuments],
+  );
+  const presentation = useMemo(() => currentNormalizedDetail
+    ? resolveStandardCrudDetailPresentation({ schema, fields: currentNormalizedDetail.fields, expectedId: id })
+    : null, [currentNormalizedDetail, id, schema]);
+  const readyPresentation = presentation?.kind === 'ready' ? presentation : null;
+
+  useEffect(() => {
+    if (!presentation) return;
+    reportStandardCrudDetailDiagnostics(
+      schema,
+      presentation.kind === 'fatal' ? [presentation.diagnostic] : presentation.diagnostics,
+    );
+  }, [presentation, schema]);
+
+  const detailSectionPages = readyPresentation ? (
     <StandardCrudResolvedDetailSections
-      schema={schema}
-      detailFields={currentNormalizedDetail.fields}
+      presentation={readyPresentation}
       registration={registration}
       textFor={(key, fallback) => t(`${schema.dicKey}.${key}`, fallback)}
     />
@@ -229,13 +243,17 @@ function StandardCrudDetailPageContent<TDetail>({
     edit: () => setEditing(true),
   }), [registration.actionHandlers]);
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
-  const detailHeaderActions = !showLoading && currentDetail && schema
-    ? schema.pageActions.length > 0
+  const detailHeaderActions = !showLoading && currentDetail && readyPresentation
+    ? readyPresentation.pageActions.length > 0
       ? (
         <StandardCrudActions
-          actions={schema.pageActions.map((action) => ({
+          actions={readyPresentation.pageActions.map((action) => ({
             ...action,
             labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+            runtimeDisabled: action.disabled,
+            disabledReason: action.disabledReasonKey
+              ? t(`${schema.dicKey}.${action.disabledReasonKey}`, action.disabledReasonKey)
+              : undefined,
             confirmMessage: action.confirmMessageKey
               ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
               : undefined,
@@ -252,9 +270,9 @@ function StandardCrudDetailPageContent<TDetail>({
   return (
     <div className="sh-page">
       <PageHeader
-        eyebrow={schema?.resourceKey ?? registration.resourceKey}
-        title={t(`${dicKey}.${schema?.titleKey ?? titleKey}`, schema?.titleKey ?? titleKey)}
-        description={t(`${dicKey}.${schema?.descriptionKey ?? descriptionKey}`, schema?.descriptionKey ?? descriptionKey)}
+        eyebrow={schema.resourceKey}
+        title={t(`${dicKey}.${schema.titleKey ?? titleKey}`, schema.titleKey ?? titleKey)}
+        description={t(`${dicKey}.${schema.descriptionKey ?? descriptionKey}`, schema.descriptionKey ?? descriptionKey)}
         actions={detailHeaderActions}
       />
 
@@ -262,7 +280,9 @@ function StandardCrudDetailPageContent<TDetail>({
         <LoadingState message="正在加载详情..." />
       ) : error ? (
         <ErrorState message={error} />
-      ) : currentNormalizedDetail && schema ? (
+      ) : presentation?.kind === 'fatal' ? (
+        <ErrorState message={`详情数据契约失败：${presentation.diagnostic.code}`} />
+      ) : currentNormalizedDetail && readyPresentation ? (
         <div className="sh-page-stack">
           <StandardCrudSummaryBlocks
             blocks={schema.summaryBlocks}

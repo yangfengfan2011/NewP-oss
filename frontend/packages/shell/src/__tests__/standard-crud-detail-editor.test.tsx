@@ -116,6 +116,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
             mapListItem: (value: unknown) => value,
             getRowId: () => 'row-1',
             buildColumns: () => [],
+            concurrencyRevisionField: 'Revision',
           },
         ],
       },
@@ -163,12 +164,13 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
             mapListItem: (value: unknown) => value,
             getRowId: () => 'row-1',
             buildColumns: () => [],
+            concurrencyRevisionField: 'Revision',
           },
         ],
       },
     ]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: ' 张三 ' }, summaries: {} }), {
+      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: ' 张三 ', Revision: 7 }, summaries: {} }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -188,7 +190,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ENAME: '张三' }),
+      body: JSON.stringify({ ENAME: '张三', Revision: 7 }),
     });
   });
 

@@ -179,6 +179,25 @@ const personListViewDocument = {
   },
 };
 
+const personDetailViewDocument = {
+  type: 'view' as const,
+  view: {
+    key: 'organization.person.detail',
+    dicKey: 'PersonDetailView',
+    titleKey: 'Title',
+    descriptionKey: 'Description',
+    mode: 'detail',
+    model: 'Person',
+    sections: [
+      { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
+      { key: 'organization', titleKey: 'Section_Organization', fields: ['DepartmentId', 'EmploymentStatus', 'IsEnabled'] },
+    ],
+    pageActions: [
+      { key: 'edit', labelKey: 'Action_Edit', standardAction: 'edit' },
+    ],
+  },
+};
+
 const personListCatalog = {
   'PersonListView.Title': '人员中心',
   'PersonListView.Description': '维护组织模块中的人员基础信息。',
@@ -253,7 +272,7 @@ describe('StandardCrudListPageHost', () => {
                 manifest: { modules: [] },
                 navDocuments: [],
                 modelDocuments: [personModelDocument],
-                viewDocuments: [viewDocument],
+                viewDocuments: [viewDocument, personDetailViewDocument],
               }}
             >
               <StandardCrudListPageHost viewKey="organization.person.list" />

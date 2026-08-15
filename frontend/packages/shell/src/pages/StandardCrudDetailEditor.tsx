@@ -17,7 +17,10 @@ interface StandardCrudDetailEditorProps {
   detail: StandardCrudDetail;
   fields: StandardCrudFieldDefinition[];
   sections: StandardCrudFormSection[];
-  registration: Pick<StandardCrudResourceRegistration, 'lookupProviders' | 'buildMutationValues'>;
+  registration: Pick<
+    StandardCrudResourceRegistration,
+    'lookupProviders' | 'buildMutationValues' | 'concurrencyRevisionField'
+  >;
   onSave: (values: Record<string, unknown>) => Promise<void>;
   onSaved: () => void;
   titleForSection: (titleKey: string) => string;
@@ -50,9 +53,15 @@ export default function StandardCrudDetailEditor({
     try {
       setSaving(true);
       setSaveError(null);
-      const values = registration.buildMutationValues
+      const normalizedValues = registration.buildMutationValues
         ? registration.buildMutationValues(formValues)
         : normalizeStandardCrudSubmitValues(fields, formValues);
+      const revisionField = registration.concurrencyRevisionField;
+      const values = revisionField
+        && Object.prototype.hasOwnProperty.call(detail.fields, revisionField)
+        && detail.fields[revisionField] !== undefined
+        ? { ...normalizedValues, [revisionField]: detail.fields[revisionField] }
+        : normalizedValues;
       await onSave(values);
       onSaved();
     } catch (error) {

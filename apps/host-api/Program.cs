@@ -238,23 +238,6 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Acceptan
     app.UseHttpsRedirection();
 }
 
-if (!externalPluginsEnabled)
-{
-    // 关闭态在统一 HTTP seam 上拒绝全部插件运维能力，避免只隐藏 Shell 页面后仍可直接调用写入口。
-    app.Use(async (context, next) =>
-    {
-        if (context.Request.Path.StartsWithSegments(
-                "/api/plugin-ops",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
-        }
-
-        await next(context);
-    });
-}
-
 app.MapPluginManifestEndpoints(pluginInstallRoot);
 
 app.MapControllers();

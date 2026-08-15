@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Playwright;
@@ -782,6 +783,7 @@ internal sealed class PersonnelAcceptanceRunner
         await OpenPersonnelFromShellAsync(page);
 
         await AssertPersonListAndDrawerAsync(page, person, fixture);
+        IReadOnlyList<string> interceptedResponseAssertions = [];
         var browserAssertions = new List<string>
         {
             "canonical-list-row-visible",
@@ -834,6 +836,13 @@ internal sealed class PersonnelAcceptanceRunner
                 "detail-disable-success",
                 "detail-disable-conflict"
             ]);
+            interceptedResponseAssertions = await CaptureDetailContractDriftBrowserEvidenceAsync(
+                browser,
+                person,
+                adminPassword,
+                cancellationToken);
+            browserAssertions.AddRange(interceptedResponseAssertions.Select(
+                static check => $"browser-intercepted-response:{check}"));
             await CaptureUnauthorizedDetailEvidenceAsync(browser, person, cancellationToken);
             browserAssertions.Add("detail-capability-denied-before-download");
         }
@@ -852,6 +861,14 @@ internal sealed class PersonnelAcceptanceRunner
             phase,
             url = page.Url,
             browserAssertions = browserAssertions,
+            interceptedResponseAssertions = interceptedResponseAssertions.Select(check => new
+            {
+                check,
+                source = "browser-intercepted-response",
+                scope = "frontend-contract-drift-presentation",
+                apiContractEvidence = false,
+                realBackendExceptionPath = false
+            }),
             apiAssertions = _apiAssertions,
             unitAssertions = new[]
             {
@@ -907,6 +924,139 @@ internal sealed class PersonnelAcceptanceRunner
         var scenario = phase == "initial" ? BrowserScenario : RestartScenario;
         await _recorder.RecordAsync(AcceptanceGateKind.Personnel, AcceptanceEventType.ScenarioCompleted, scenario: scenario, cancellationToken: cancellationToken);
         await _recorder.RecordAsync(AcceptanceGateKind.Personnel, AcceptanceEventType.EvidenceRecorded, scenario: scenario, evidenceRef: evidenceRef, cancellationToken: cancellationToken);
+    }
+
+    // 只拦截浏览器收到的正式详情响应，用于证明前端面对契约漂移时的局部降级；不能计作后端异常路径证据。
+    private async Task<IReadOnlyList<string>> CaptureDetailContractDriftBrowserEvidenceAsync(
+        IBrowser browser,
+        PersonData person,
+        string adminPassword,
+        CancellationToken cancellationToken)
+    {
+        var checks = new List<string>();
+        var mode = "null";
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            Locale = "zh-CN",
+            ViewportSize = new ViewportSize { Width = 1280, Height = 900 }
+        });
+        await using (context)
+        {
+            var page = await LoginAndOpenPersonnelAsync(context, "admin", adminPassword, cancellationToken);
+            var detailApiPattern = $"**/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
+            await page.RouteAsync(detailApiPattern, async route =>
+            {
+                var response = await route.FetchAsync();
+                var payload = JsonNode.Parse(await response.TextAsync())?.AsObject()
+                    ?? throw new InvalidOperationException("Intercepted Personnel detail response is not a JSON object.");
+                var fields = payload["fields"]?.AsObject()
+                    ?? throw new InvalidOperationException("Intercepted Personnel detail response does not contain fields.");
+
+                switch (mode)
+                {
+                    case "null":
+                        fields["UpdatedBy"] = null;
+                        break;
+                    case "field-missing":
+                        fields.Remove("UpdatedBy");
+                        break;
+                    case "section-unavailable":
+                        foreach (var fieldKey in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+                        {
+                            fields.Remove(fieldKey);
+                        }
+                        break;
+                    case "critical-id":
+                        fields.Remove("EID");
+                        break;
+                    case "action-dependency":
+                        fields.Remove("Revision");
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unsupported detail contract drift mode '{mode}'.");
+                }
+
+                await route.FulfillAsync(new RouteFulfillOptions
+                {
+                    Response = response,
+                    Body = payload.ToJsonString(),
+                    ContentType = "application/json"
+                });
+            });
+
+            var detailUrl = $"http://127.0.0.1:{_shellPort}/organization/persons/{Uri.EscapeDataString(person.Id)}";
+            await page.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "人员详情", Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            var updatedByItem = page.Locator(
+                ".ant-descriptions-item",
+                new PageLocatorOptions { HasTextString = "更新人" }).Last;
+            await updatedByItem.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            AssertContains(await updatedByItem.InnerTextAsync(), "—", "present null detail field");
+            checks.Add("detail-null-renders-em-dash");
+
+            mode = "field-missing";
+            await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.Locator("[data-field-key='UpdatedBy']")
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            if (await page.Locator("[data-section-key='audit']").CountAsync() != 0)
+            {
+                throw new InvalidOperationException("One missing audit field incorrectly degraded the whole section.");
+            }
+            checks.Add("detail-missing-field-degrades-locally");
+
+            mode = "section-unavailable";
+            await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            var unavailableSection = page.Locator("[data-section-key='audit']");
+            await unavailableSection.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            AssertContains(await unavailableSection.InnerTextAsync(), "数据不可用", "unavailable audit section");
+            checks.Add("detail-unavailable-section-degrades-whole-section");
+
+            mode = "critical-id";
+            await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByText(
+                    "详情数据契约失败：STANDARD_CRUD_DETAIL_CRITICAL_ID_MISSING",
+                    new PageGetByTextOptions { Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            if (await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true }).CountAsync() != 0
+                || await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true }).CountAsync() != 0)
+            {
+                throw new InvalidOperationException("Critical Personnel detail identity failure left actions visible.");
+            }
+            checks.Add("detail-critical-id-fails-whole-detail");
+
+            mode = "action-dependency";
+            await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            var edit = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true });
+            var disable = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true });
+            await edit.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            if (!await edit.IsDisabledAsync() || !await disable.IsDisabledAsync())
+            {
+                throw new InvalidOperationException("Missing Personnel Revision did not disable all dependency-bound actions.");
+            }
+            await page.GetByText(
+                    "动作所需数据不可用，请刷新详情后重试。",
+                    new PageGetByTextOptions { Exact = true })
+                .First
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            checks.Add("detail-action-dependency-disables-action");
+
+            var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-intercepted-response.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            await WriteEvidenceAsync("personnel/browser-intercepted-response.json", new
+            {
+                status = "passed",
+                source = "browser-intercepted-response",
+                scope = "frontend-contract-drift-presentation",
+                apiContractEvidence = false,
+                realBackendExceptionPath = false,
+                checks,
+                screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath)
+            }, cancellationToken);
+        }
+
+        return checks;
     }
 
     private async Task AssertSubmittedQueryAndKeyboardAsync(IPage page, PersonData person)

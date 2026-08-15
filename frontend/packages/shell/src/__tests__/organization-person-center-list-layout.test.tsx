@@ -410,6 +410,44 @@ describe('organization person center list layout', () => {
     expect(document.body.textContent).not.toContain('account-1');
   });
 
+  it('keeps the drawer edit action disabled when its detail dependency is unavailable', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: {
+          EID: 'person-1',
+          PersonNo: 'P0001',
+          ENAME: '张三',
+          CompanyId: null,
+          DepartmentId: null,
+          PositionId: null,
+          EmploymentStatus: 'FullTime',
+          IsEnabled: true,
+        },
+        summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => renderStandardCrudListHost());
+    await flushProTableRequest();
+    await act(async () => {
+      container.querySelector('.np-standard-crud-cell-action')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain('动作所需数据不可用'));
+    const editButton = Array.from(document.body.querySelectorAll('.ant-drawer-footer button')).find(
+      (button) => button.textContent?.replace(/\s+/g, '') === '编辑',
+    );
+    expect(editButton?.disabled).toBe(true);
+  });
+
   it('disables deletion for a permanently bound person and explains the guard', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       items: [{

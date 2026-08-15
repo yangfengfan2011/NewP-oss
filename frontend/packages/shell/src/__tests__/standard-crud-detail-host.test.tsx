@@ -42,6 +42,15 @@ const personDetailModelDocument = {
           edit: { mode: 'hidden' },
         },
       },
+      {
+        name: 'Revision',
+        storage: { type: 'number' },
+        uiType: 'number',
+        form: {
+          create: { mode: 'hidden' },
+          edit: { mode: 'hidden' },
+        },
+      },
     ],
     sections: [
       { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
@@ -92,6 +101,7 @@ const personDetailCatalog = {
   'PersonDetailView.Section_Organization': '组织信息',
   'PersonDetailView.Action_Edit': '编辑',
   'PersonDetailView.Action_Disable': '停用人员',
+  'PersonDetailView.Action_DataUnavailable': '动作所需数据不可用',
   'PersonDetailView.Field_PersonNo': '人员编号',
   'PersonDetailView.Field_ENAME': '姓名',
   'PersonDetailView.Field_DepartmentId': '部门',
@@ -103,6 +113,22 @@ const referenceDetailFieldRenderers = {
     detailFields: Record<string, unknown>;
   }) => String(detailFields.DepartmentName ?? value ?? ''),
 };
+
+function createPersonRegistration(): StandardCrudResourceRegistration {
+  return {
+    resourceKey: 'organization.person',
+    apiRoute: '/api/organization/persons',
+    listViewKey: 'organization.person.list',
+    detailViewKey: 'organization.person.detail',
+    createEmptyFilters: () => ({}),
+    buildListQuery: () => ({}),
+    mapListItem: (value) => value as Record<string, unknown>,
+    getRowId: () => 'Person_1',
+    detailFieldRenderers: referenceDetailFieldRenderers,
+    lookupProviders: [{ key: 'organization.departments', load: async () => [] }],
+    actionHandlers: { disablePerson: vi.fn() },
+  };
+}
 
 describe('StandardCrudDetailPageHost', () => {
   let container: HTMLDivElement;
@@ -205,6 +231,85 @@ describe('StandardCrudDetailPageHost', () => {
       () => expect(container.textContent).toContain('张三'),
       { timeout: 3_000 },
     );
+  });
+
+  it('renders null as an em dash and degrades only a missing field in an otherwise available section', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      fields: { EID: 'Person_1', PersonNo: null, DepartmentId: null },
+      summaries: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost('Person_1', createPersonRegistration());
+    await vi.waitFor(() => expect(container.querySelector('[data-field-key="ENAME"]')).not.toBeNull());
+
+    expect(container.textContent).toContain('—');
+    expect(container.querySelector('[data-section-key="basic"]')).toBeNull();
+    expect(container.querySelector('[data-field-key="ENAME"]')?.textContent).toBe('数据不可用');
+    expect(warn).toHaveBeenCalledWith(
+      '[STANDARD_CRUD_DETAIL_CONTRACT]',
+      expect.objectContaining({
+        resourceKey: 'organization.person',
+        viewKey: 'organization.person.detail',
+        sectionKey: 'basic',
+        fieldKey: 'ENAME',
+      }),
+    );
+  });
+
+  it('degrades a whole section only when every declared field is absent', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      fields: { EID: 'Person_1', DepartmentId: null },
+      summaries: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost('Person_1', createPersonRegistration());
+    await vi.waitFor(() => expect(container.querySelector('[data-section-key="basic"]')).not.toBeNull());
+
+    expect(container.querySelector('[data-section-key="basic"]')?.textContent).toContain('数据不可用');
+    expect(container.querySelector('[data-section-key="organization"]')).toBeNull();
+  });
+
+  it('fails the whole detail and hides actions when the response EID does not match the route', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      fields: { EID: 'Person_2', PersonNo: 'P002', ENAME: '李四', DepartmentId: null },
+      summaries: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost('Person_1', createPersonRegistration());
+    await vi.waitFor(() => expect(container.textContent).toContain('STANDARD_CRUD_DETAIL_CRITICAL_ID_MISMATCH'));
+
+    expect(container.textContent).not.toContain('李四');
+    expect(container.textContent).not.toContain('编辑');
+    expect(container.textContent).not.toContain('停用人员');
+  });
+
+  it('keeps dependency-bound actions visible but disabled with a localized reason', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const dependencyView = {
+      ...personDetailViewDocument,
+      view: {
+        ...personDetailViewDocument.view,
+        pageActions: personDetailViewDocument.view.pageActions.map((action) => ({
+          ...action,
+          dataDependency: { fields: ['Revision'], reasonKey: 'Action_DataUnavailable' },
+        })),
+      },
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+      summaries: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost('Person_1', createPersonRegistration(), dependencyView);
+    await vi.waitFor(() => expect(container.textContent).toContain('动作所需数据不可用'));
+
+    const edit = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '编辑');
+    const disable = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '停用人员');
+    expect(edit?.disabled).toBe(true);
+    expect(disable?.disabled).toBe(true);
   });
 
   it('uses a route-loaded detail registration without publishing it to ModuleRegistry', async () => {

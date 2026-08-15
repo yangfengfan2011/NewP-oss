@@ -6,8 +6,6 @@ type MetadataRecord = Record<string, unknown>;
 export interface StandardCrudSchemaResolverContext {
   modelDocuments?: MetadataRecord[];
   defaultLanguageCatalog?: Record<string, string>;
-  /** 候选编译器提供的详情响应协议字段，不由前端资源 binding 重复声明。 */
-  detailResponseFields?: string[];
 }
 
 export interface StandardCrudRuntimeFieldSchema {
@@ -33,6 +31,11 @@ export interface StandardCrudRowActionDisabledSchema {
   reasonKey: string;
 }
 
+export interface StandardCrudActionDataDependencySchema {
+  fields: string[];
+  reasonKey: string;
+}
+
 export interface StandardCrudRuntimeActionSchema {
   key: string;
   labelKey: string;
@@ -44,6 +47,7 @@ export interface StandardCrudRuntimeActionSchema {
   requiredPermissions?: string[];
   visibleWhen?: StandardCrudRowActionVisibilitySchema;
   disabledWhen?: StandardCrudRowActionDisabledSchema;
+  dataDependency?: StandardCrudActionDataDependencySchema;
 }
 
 export interface StandardCrudRuntimeColumnSchema {
@@ -200,6 +204,12 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     operator: readString(disabledWhenRecord.operator) as StandardCrudRowActionDisabledSchema['operator'],
     reasonKey: readString(disabledWhenRecord.reasonKey),
   } : undefined;
+  const dataDependencyRecord = readRecord(value.dataDependency);
+  const dataDependency = Object.keys(dataDependencyRecord).length > 0 ? {
+    fields: readArray<unknown>(dataDependencyRecord.fields)
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
+    reasonKey: readString(dataDependencyRecord.reasonKey),
+  } : undefined;
 
   return {
     key: readString(value.key),
@@ -212,6 +222,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(requiredPermissions.length > 0 ? { requiredPermissions } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),
     ...(disabledWhen ? { disabledWhen } : {}),
+    ...(dataDependency ? { dataDependency } : {}),
   };
 }
 
@@ -463,9 +474,6 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
 
   const fieldCatalog = buildResolvedDetailFieldCatalog(model);
   const catalogByKey = new Map(fieldCatalog.map((field) => [field.key, field]));
-  const responseFields = context.detailResponseFields
-    ? new Set(context.detailResponseFields)
-    : null;
   const usedFields = new Set<string>();
   const rawSections = readArray<unknown>(view.sections);
   const sections = rawSections.map((value) => {
@@ -491,9 +499,6 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
         throw new Error(`detail view "${viewKey}" contains duplicate field "${declaration.field}"`);
       }
       usedFields.add(declaration.field);
-      if (responseFields && !responseFields.has(declaration.field)) {
-        throw new Error(`detail field "${declaration.field}" is not provided by resource "${registration.resourceKey}" response`);
-      }
       if (declaration.rendererKey && !registration.detailFieldRenderers?.[declaration.rendererKey]) {
         throw new Error(`detail field renderer "${declaration.rendererKey}" is not registered on resource "${registration.resourceKey}"`);
       }
@@ -519,6 +524,21 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
     .filter((action) => action.key.length > 0);
   for (const action of pageActions) {
     assertAction(action, registration);
+    if (action.dataDependency) {
+      if (action.dataDependency.fields.length === 0 || action.dataDependency.reasonKey.length === 0) {
+        throw new Error(`detail action "${action.key}" dataDependency must declare fields and reasonKey`);
+      }
+      for (const fieldKey of action.dataDependency.fields) {
+        if (!catalogByKey.has(fieldKey)) {
+          throw new Error(`detail action "${action.key}" dataDependency references unknown model field "${fieldKey}"`);
+        }
+      }
+      assertDictionaryKey(
+        readString(view.dicKey, registration.resourceKey),
+        action.dataDependency.reasonKey,
+        context.defaultLanguageCatalog,
+      );
+    }
   }
 
   return {

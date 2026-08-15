@@ -6,8 +6,8 @@ import type {
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { CrudFormDrawer, StandardCrudForm } from '@icp-platform/ui/crud-form';
-import type { StandardCrudResolvedDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import StandardCrudResolvedDetailSections from '../standard-crud/StandardCrudResolvedDetailSections';
+import type { StandardCrudDetailPresentation } from '../standard-crud/standardCrudDetailPresentation';
 
 export interface StandardCrudListDrawerRuntimeProps {
   mode: 'create' | 'view' | 'edit';
@@ -21,8 +21,7 @@ export interface StandardCrudListDrawerRuntimeProps {
   formId: string;
   fields: StandardCrudFieldDefinition[];
   sections: StandardCrudFormSection[];
-  resolvedDetailSchema: StandardCrudResolvedDetailSchema | null;
-  detailFields: Record<string, unknown>;
+  detailPresentation: StandardCrudDetailPresentation | null;
   registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions'>;
   values: Record<string, unknown>;
   lookupOptions: Record<string, StandardCrudOption[]>;
@@ -52,8 +51,7 @@ export default function StandardCrudListDrawerRuntime({
   formId,
   fields,
   sections,
-  resolvedDetailSchema,
-  detailFields,
+  detailPresentation,
   registration,
   values,
   lookupOptions,
@@ -71,23 +69,33 @@ export default function StandardCrudListDrawerRuntime({
   textForDetail,
 }: StandardCrudListDrawerRuntimeProps) {
   if (mode === 'view') {
+    const readyPresentation = detailPresentation?.kind === 'ready' ? detailPresentation : null;
+    const fatalDiagnostic = detailPresentation?.kind === 'fatal' ? detailPresentation.diagnostic : null;
+    const editAction = readyPresentation?.pageActions.find(
+      (action) => action.standardAction === 'edit' || action.key === 'edit',
+    );
+    const primaryDisabledReason = editAction?.disabledReasonKey
+      ? textForDetail(editAction.disabledReasonKey, editAction.disabledReasonKey)
+      : undefined;
+
     return (
       <CrudFormDrawer
         open
         title={viewTitle}
         loading={detailLoading}
-        error={detailError}
+        error={detailError ?? (fatalDiagnostic ? `详情数据契约失败：${fatalDiagnostic.code}` : null)}
         primaryLabel="编辑"
-        secondaryAction={viewSecondaryAction}
-        hidePrimary={!canEdit}
+        secondaryAction={fatalDiagnostic ? undefined : viewSecondaryAction}
+        hidePrimary={!canEdit || !editAction || fatalDiagnostic !== null}
+        primaryDisabled={editAction?.disabled === true}
+        primaryDisabledReason={primaryDisabledReason}
         primaryAction={onEdit}
         onClose={onClose}
         afterOpenChange={afterOpenChange}
       >
-        {!detailError && resolvedDetailSchema ? (
+        {!detailError && readyPresentation ? (
           <StandardCrudResolvedDetailSections
-            schema={resolvedDetailSchema}
-            detailFields={detailFields}
+            presentation={readyPresentation}
             registration={registration}
             textFor={textForDetail}
           />

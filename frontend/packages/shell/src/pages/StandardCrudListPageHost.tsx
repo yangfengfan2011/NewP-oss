@@ -52,6 +52,10 @@ import {
   serializeStandardCrudListState,
 } from '../standard-crud/standardCrudMetadataQuery';
 import type { StandardCrudListState } from '../standard-crud/standardCrudMetadataQuery';
+import {
+  reportStandardCrudDetailDiagnostics,
+  resolveStandardCrudDetailPresentation,
+} from '../standard-crud/standardCrudDetailPresentation';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -841,13 +845,33 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     detailFields,
   });
   const resolvedDrawerDetailSchema = useMemo(() => (
-    drawerState.mode === 'view' && Object.keys(detailFields).length > 0
-      ? resolveStandardCrudDetailSchema(viewDocuments, registration, {
-          modelDocuments,
-          detailResponseFields: Object.keys(detailFields),
+    drawerState.mode === 'view'
+      ? resolveStandardCrudDetailSchema(viewDocuments, registration, { modelDocuments })
+      : null
+  ), [drawerState.mode, modelDocuments, registration, viewDocuments]);
+  const drawerDetailPresentation = useMemo(() => (
+    drawerState.mode === 'view'
+      && drawerState.id
+      && resolvedDrawerDetailSchema
+      && !detailLoading
+      && !detailError
+      ? resolveStandardCrudDetailPresentation({
+          schema: resolvedDrawerDetailSchema,
+          fields: detailFields,
+          expectedId: drawerState.id,
         })
       : null
-  ), [detailFields, drawerState.mode, modelDocuments, registration, viewDocuments]);
+  ), [detailError, detailFields, detailLoading, drawerState.id, drawerState.mode, resolvedDrawerDetailSchema]);
+
+  useEffect(() => {
+    if (!resolvedDrawerDetailSchema || !drawerDetailPresentation) return;
+    reportStandardCrudDetailDiagnostics(
+      resolvedDrawerDetailSchema,
+      drawerDetailPresentation.kind === 'fatal'
+        ? [drawerDetailPresentation.diagnostic]
+        : drawerDetailPresentation.diagnostics,
+    );
+  }, [drawerDetailPresentation, resolvedDrawerDetailSchema]);
 
   const invalidateDetailRequests = () => {
     detailRequestIdRef.current += 1;
@@ -1022,6 +1046,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const requestId = detailRequestIdRef.current + 1;
     detailRequestIdRef.current = requestId;
     setDrawerState({ mode: 'view', id, source });
+    setDetailFields({});
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     if (source === 'user-action' && options.syncRoute !== false) {
       syncDrawerRoute('view', id);
@@ -1696,8 +1721,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             formId={drawerFormId}
             fields={drawerState.mode === 'create' ? createFields : editFields}
             sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
-            resolvedDetailSchema={resolvedDrawerDetailSchema}
-            detailFields={detailFields}
+            detailPresentation={drawerDetailPresentation}
             registration={registration}
             values={formValues}
             lookupOptions={lookupOptions}

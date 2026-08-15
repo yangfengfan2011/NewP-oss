@@ -59,7 +59,13 @@
         "standardAction": "edit",
         "permissions": [
           "Organization.Person.Update"
-        ]
+        ],
+        "dataDependency": {
+          "fields": [
+            "Revision"
+          ],
+          "reasonKey": "Action_DataUnavailable"
+        }
       },
       {
         "key": "disable",
@@ -71,7 +77,13 @@
         "inputKey": "disableReason",
         "permissions": [
           "Organization.Person.Update"
-        ]
+        ],
+        "dataDependency": {
+          "fields": [
+            "Revision"
+          ],
+          "reasonKey": "Action_DataUnavailable"
+        }
       }
     ]
   }

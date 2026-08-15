@@ -55,6 +55,12 @@ describe('standard CRUD schema resolver and registry', () => {
               fields: [{ field: 'CompanyId', rendererKey: 'organization.reference' }],
             },
           ],
+          pageActions: [{
+            key: 'edit',
+            labelKey: 'Action_Edit',
+            standardAction: 'edit',
+            dataDependency: { fields: ['Revision'], reasonKey: 'Action_DataUnavailable' },
+          }],
         },
       }],
       {
@@ -73,10 +79,10 @@ describe('standard CRUD schema resolver and registry', () => {
             fields: [
               { name: 'PersonNo', storage: { type: 'string' } },
               { name: 'CompanyId', uiType: 'lookup' },
+              { name: 'Revision', storage: { type: 'number' } },
             ],
           },
         }],
-        detailResponseFields: ['EID', 'PersonNo', 'ENAME', 'CompanyId', 'CompanyName', 'CreatedBy', 'CreatedAt'],
       },
     );
 
@@ -113,6 +119,7 @@ describe('standard CRUD schema resolver and registry', () => {
     expect(schema.fieldCatalog.map((field) => field.key)).toEqual([
       'PersonNo',
       'CompanyId',
+      'Revision',
       'EID',
       'CreatedBy',
       'CreatedAt',
@@ -121,6 +128,10 @@ describe('standard CRUD schema resolver and registry', () => {
       'ENAME',
       'ECODE',
     ]);
+    expect(schema.pageActions[0].dataDependency).toEqual({
+      fields: ['Revision'],
+      reasonKey: 'Action_DataUnavailable',
+    });
   });
 
   it.each([
@@ -163,11 +174,6 @@ describe('standard CRUD schema resolver and registry', () => {
       expected: 'detail view "organization.person.detail" contains duplicate field "PersonNo"',
     },
     {
-      name: 'field unavailable in response',
-      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['CreatedAt'] }],
-      expected: 'detail field "CreatedAt" is not provided by resource "organization.person" response',
-    },
-    {
       name: 'unknown renderer binding',
       sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: [{ field: 'PersonNo', rendererKey: 'missing' }] }],
       expected: 'detail field renderer "missing" is not registered on resource "organization.person"',
@@ -196,7 +202,6 @@ describe('standard CRUD schema resolver and registry', () => {
             fields: [{ name: 'PersonNo', storage: { type: 'string' } }],
           },
         }],
-        detailResponseFields: ['PersonNo', 'CompanyName'],
       },
     )).toThrow(expected);
   });

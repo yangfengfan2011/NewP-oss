@@ -15,6 +15,8 @@ export interface CrudFormDrawerProps {
   primaryLabel?: ReactNode;
   primaryAction?: () => void;
   hidePrimary?: boolean;
+  primaryDisabled?: boolean;
+  primaryDisabledReason?: ReactNode;
   secondaryAction?: ReactNode;
   onSubmit?: () => void;
   onClose: () => void;
@@ -33,22 +35,31 @@ export function CrudFormDrawer({
   primaryLabel = '保存',
   primaryAction,
   hidePrimary = false,
+  primaryDisabled = false,
+  primaryDisabledReason,
   secondaryAction,
   onSubmit,
   onClose,
   afterOpenChange,
 }: CrudFormDrawerProps) {
   const primaryButton = hidePrimary ? null : (
-    <Button
-      type="primary"
-      htmlType={submitFormId ? 'submit' : 'button'}
-      form={submitFormId}
-      onClick={submitFormId ? undefined : (primaryAction ?? onSubmit)}
-      loading={saving}
-      disabled={loading}
-    >
-      {primaryLabel}
-    </Button>
+    <Space direction="vertical" size={2} align="end">
+      <Button
+        type="primary"
+        htmlType={submitFormId ? 'submit' : 'button'}
+        form={submitFormId}
+        onClick={submitFormId ? undefined : (primaryAction ?? onSubmit)}
+        loading={saving}
+        disabled={loading || primaryDisabled}
+      >
+        {primaryLabel}
+      </Button>
+      {primaryDisabled && primaryDisabledReason ? (
+        <span role="status" className="np-crud-form-drawer-disabled-reason">
+          {primaryDisabledReason}
+        </span>
+      ) : null}
+    </Space>
   );
 
   return (

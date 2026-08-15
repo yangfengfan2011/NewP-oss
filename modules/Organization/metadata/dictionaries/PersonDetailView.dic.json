@@ -86,6 +86,10 @@
       "zhs": "确认停用当前人员吗？",
       "en": "Disable this person?"
     },
+    "Action_DataUnavailable": {
+      "zhs": "动作所需数据不可用，请刷新详情后重试。",
+      "en": "Required action data is unavailable. Refresh the detail and try again."
+    },
     "Detail_Info": {
       "zhs": "详情信息",
       "en": "Details"

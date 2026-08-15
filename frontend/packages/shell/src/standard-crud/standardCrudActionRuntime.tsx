@@ -10,11 +10,16 @@ import type {
 } from '@icp-platform/sdk';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
-  actions: StandardCrudActionDefinition[];
+  actions: StandardCrudPresentationActionDefinition[];
   grantedPermissions?: string[];
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   context: StandardCrudActionContext<TDetail, TRow>;
+}
+
+export interface StandardCrudPresentationActionDefinition extends StandardCrudActionDefinition {
+  runtimeDisabled?: boolean;
+  disabledReason?: string;
 }
 
 function hasPermission(action: StandardCrudActionDefinition, grantedPermissions: string[]): boolean {
@@ -61,7 +66,10 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     }
   }
 
-  function requestAction(action: StandardCrudActionDefinition) {
+  function requestAction(action: StandardCrudPresentationActionDefinition) {
+    if (action.runtimeDisabled) {
+      return;
+    }
     if (action.inputKey && actionInputs[action.inputKey]) {
       setInputValue(undefined);
       setInputAction(action);
@@ -75,31 +83,40 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {visibleActions.map((action) => {
           const isDangerAction = action.variant === 'danger' || action.standardAction === 'delete';
+          const disabled = pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
 
           if (isDangerAction && action.confirmMessage) {
             return (
-            <CrudDangerAction
-              key={action.key}
-              confirmMessage={action.confirmMessage}
-              loading={pendingKey === action.key}
-              disabled={pendingKey !== null || !resolveActionHandler(action, handlers)}
-              onConfirm={() => requestAction(action)}
-            >
-              {pendingKey === action.key ? '处理中...' : action.labelKey}
-            </CrudDangerAction>
+              <div key={action.key} data-action-key={action.key}>
+                <CrudDangerAction
+                  confirmMessage={action.confirmMessage}
+                  loading={pendingKey === action.key}
+                  disabled={disabled}
+                  onConfirm={() => requestAction(action)}
+                >
+                  {pendingKey === action.key ? '处理中...' : action.labelKey}
+                </CrudDangerAction>
+                {action.runtimeDisabled && action.disabledReason ? (
+                  <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
+                ) : null}
+              </div>
             );
           }
 
           return (
-            <Button
-              key={action.key}
-              size="sm"
-              variant={action.variant}
-              disabled={pendingKey !== null || !resolveActionHandler(action, handlers)}
-              onClick={() => requestAction(action)}
-            >
-              {pendingKey === action.key ? '处理中...' : action.labelKey}
-            </Button>
+            <div key={action.key} data-action-key={action.key}>
+              <Button
+                size="sm"
+                variant={action.variant}
+                disabled={disabled}
+                onClick={() => requestAction(action)}
+              >
+                {pendingKey === action.key ? '处理中...' : action.labelKey}
+              </Button>
+              {action.runtimeDisabled && action.disabledReason ? (
+                <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
+              ) : null}
+            </div>
           );
         })}
       </div>

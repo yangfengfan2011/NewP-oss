@@ -935,7 +935,17 @@ internal sealed class PersonnelAcceptanceRunner
     {
         var checks = new List<string>();
         var mode = "null";
-        var interceptedModes = new HashSet<string>(StringComparer.Ordinal);
+        var interceptedModeSignals = new[]
+        {
+            "null",
+            "field-missing",
+            "section-unavailable",
+            "critical-id",
+            "action-dependency"
+        }.ToDictionary(
+            static key => key,
+            static _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+            StringComparer.Ordinal);
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             Locale = "zh-CN",
@@ -944,9 +954,16 @@ internal sealed class PersonnelAcceptanceRunner
         await using (context)
         {
             var page = await LoginAndOpenPersonnelAsync(context, "admin", adminPassword, cancellationToken);
-            var detailApiPattern = $"**/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
-            await page.RouteAsync(detailApiPattern, async route =>
+            var detailApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
+            await page.RouteAsync("**/api/organization/persons/**", async route =>
             {
+                var requestUri = new Uri(route.Request.Url);
+                if (!string.Equals(requestUri.AbsolutePath, detailApiPath, StringComparison.Ordinal))
+                {
+                    await route.ContinueAsync();
+                    return;
+                }
+
                 var interceptedMode = mode;
                 var response = await route.FetchAsync();
                 var payload = JsonNode.Parse(await response.TextAsync())?.AsObject()
@@ -978,46 +995,60 @@ internal sealed class PersonnelAcceptanceRunner
                         throw new InvalidOperationException($"Unsupported detail contract drift mode '{interceptedMode}'.");
                 }
 
-                interceptedModes.Add(interceptedMode);
                 await route.FulfillAsync(new RouteFulfillOptions
                 {
                     Response = response,
                     Body = payload.ToJsonString(),
                     ContentType = "application/json"
                 });
+                interceptedModeSignals[interceptedMode].TrySetResult(true);
             });
 
             var detailUrl = $"http://127.0.0.1:{_shellPort}/organization/persons/{Uri.EscapeDataString(person.Id)}";
             await page.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "人员详情", Exact = true })
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            await WaitForInterceptedModeAsync(interceptedModeSignals["null"].Task, "null", cancellationToken);
             var updatedByItem = page.Locator("[data-field-key='UpdatedBy']");
-            await updatedByItem.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            await updatedByItem.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 15_000
+            });
             AssertContains(await updatedByItem.InnerTextAsync(), "—", "present null detail field");
-            AssertInterceptedMode(interceptedModes, "null");
             checks.Add("detail-null-renders-em-dash");
 
             mode = "field-missing";
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await WaitForInterceptedModeAsync(
+                interceptedModeSignals["field-missing"].Task,
+                "field-missing",
+                cancellationToken);
             await page.Locator("[data-field-key='UpdatedBy']")
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             if (await page.Locator("[data-section-key='audit']").CountAsync() != 0)
             {
                 throw new InvalidOperationException("One missing audit field incorrectly degraded the whole section.");
             }
-            AssertInterceptedMode(interceptedModes, "field-missing");
             checks.Add("detail-missing-field-degrades-locally");
 
             mode = "section-unavailable";
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await WaitForInterceptedModeAsync(
+                interceptedModeSignals["section-unavailable"].Task,
+                "section-unavailable",
+                cancellationToken);
             var unavailableSection = page.Locator("[data-section-key='audit']");
             await unavailableSection.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             AssertContains(await unavailableSection.InnerTextAsync(), "数据不可用", "unavailable audit section");
-            AssertInterceptedMode(interceptedModes, "section-unavailable");
             checks.Add("detail-unavailable-section-degrades-whole-section");
 
             mode = "critical-id";
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await WaitForInterceptedModeAsync(
+                interceptedModeSignals["critical-id"].Task,
+                "critical-id",
+                cancellationToken);
             await page.GetByText(
                     "详情数据契约失败：STANDARD_CRUD_DETAIL_CRITICAL_ID_MISSING",
                     new PageGetByTextOptions { Exact = true })
@@ -1027,11 +1058,14 @@ internal sealed class PersonnelAcceptanceRunner
             {
                 throw new InvalidOperationException("Critical Personnel detail identity failure left actions visible.");
             }
-            AssertInterceptedMode(interceptedModes, "critical-id");
             checks.Add("detail-critical-id-fails-whole-detail");
 
             mode = "action-dependency";
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await WaitForInterceptedModeAsync(
+                interceptedModeSignals["action-dependency"].Task,
+                "action-dependency",
+                cancellationToken);
             var edit = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true });
             var disable = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true });
             await edit.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
@@ -1044,7 +1078,6 @@ internal sealed class PersonnelAcceptanceRunner
                     new PageGetByTextOptions { Exact = true })
                 .First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            AssertInterceptedMode(interceptedModes, "action-dependency");
             checks.Add("detail-action-dependency-disables-action");
 
             var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-intercepted-response.png");
@@ -1065,12 +1098,20 @@ internal sealed class PersonnelAcceptanceRunner
         return checks;
     }
 
-    private static void AssertInterceptedMode(IReadOnlySet<string> interceptedModes, string expectedMode)
+    private static async Task WaitForInterceptedModeAsync(
+        Task signal,
+        string expectedMode,
+        CancellationToken cancellationToken)
     {
-        if (!interceptedModes.Contains(expectedMode))
+        try
+        {
+            await signal.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+        }
+        catch (TimeoutException exception)
         {
             throw new InvalidOperationException(
-                $"Personnel detail response was not intercepted for contract drift mode '{expectedMode}'.");
+                $"Personnel detail response was not intercepted for contract drift mode '{expectedMode}'.",
+                exception);
         }
     }
 

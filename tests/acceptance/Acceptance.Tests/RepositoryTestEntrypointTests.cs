@@ -241,6 +241,8 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("GetByText(\"已永久绑定\", new LocatorGetByTextOptions { Exact = true }", runner, StringComparison.Ordinal);
         Assert.Contains("Name = \"停用\", Exact = true", runner, StringComparison.Ordinal);
         Assert.Contains("browser-intercepted-response", runner, StringComparison.Ordinal);
+        Assert.Contains("**/api/organization/persons/**", runner, StringComparison.Ordinal);
+        Assert.Contains("interceptedModeSignals", runner, StringComparison.Ordinal);
         foreach (var driftCheck in new[]
                  {
                      "detail-null-renders-em-dash",

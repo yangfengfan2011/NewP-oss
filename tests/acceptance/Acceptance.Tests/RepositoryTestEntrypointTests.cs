@@ -197,23 +197,74 @@ public class RepositoryTestEntrypointTests
             "Acceptance.Runner",
             "PersonnelAcceptanceRunner.cs"));
 
+        var browserScenarioStart = runner.IndexOf(
+            "private async Task RunBrowserScenarioAsync",
+            StringComparison.Ordinal);
+        var browserScenarioEnd = runner.IndexOf(
+            "private async Task AssertSubmittedQueryAndKeyboardAsync",
+            browserScenarioStart,
+            StringComparison.Ordinal);
+        Assert.True(browserScenarioStart >= 0 && browserScenarioEnd > browserScenarioStart);
+        var browserScenario = runner[browserScenarioStart..browserScenarioEnd];
+
         foreach (var requiredCheck in new[]
         {
             "drawer-to-full-detail",
             "full-detail-direct-refresh-back-forward",
             "detail-three-sections-four-audit-fields",
-            "detail-summary-statuses",
+            "detail-summary-ready",
             "detail-edit-permission",
             "detail-disable-required-reason",
             "detail-disable-success",
-            "detail-disable-business-failure",
-            "detail-disable-unauthorized",
-            "detail-disable-forbidden",
             "detail-disable-conflict",
             "detail-capability-denied-before-download"
         })
         {
-            Assert.Contains(requiredCheck, runner, StringComparison.Ordinal);
+            Assert.Contains(requiredCheck, browserScenario, StringComparison.Ordinal);
+        }
+
+        foreach (var apiOnlyCheck in new[]
+        {
+            "detail-disable-business-failure",
+            "detail-disable-unauthorized",
+            "detail-disable-forbidden"
+        })
+        {
+            Assert.DoesNotContain(apiOnlyCheck, browserScenario, StringComparison.Ordinal);
+            Assert.Contains(apiOnlyCheck, runner, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("apiAssertions = checks", runner, StringComparison.Ordinal);
+        Assert.Contains("browserAssertions = browserAssertions", runner, StringComparison.Ordinal);
+        Assert.Contains("unitAssertions = new[]", runner, StringComparison.Ordinal);
+        Assert.Contains("GetByText(\"已加载\", new LocatorGetByTextOptions { Exact = true }", runner, StringComparison.Ordinal);
+        Assert.Contains("GetByText(\"已永久绑定\", new LocatorGetByTextOptions { Exact = true }", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"停用\", Exact = true", runner, StringComparison.Ordinal);
+
+        var summaryUnit = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "packages",
+            "shell",
+            "src",
+            "__tests__",
+            "organization-person-center-detail-layout.test.tsx"));
+        foreach (var summaryStatus in new[] { "status: 'ready'", "status: 'notConfigured'", "status: 'dependencyUnavailable'" })
+        {
+            Assert.Contains(summaryStatus, summaryUnit, StringComparison.Ordinal);
+        }
+
+        var lifecycleClientUnit = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "frontend",
+            "modules",
+            "organization",
+            "src",
+            "__tests__",
+            "personLifecycleClient.test.ts"));
+        foreach (var responseStatus in new[] { "[400,", "[401,", "[403," })
+        {
+            Assert.Contains(responseStatus, lifecycleClientUnit, StringComparison.Ordinal);
         }
     }
 

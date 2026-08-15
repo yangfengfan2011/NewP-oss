@@ -42,6 +42,7 @@ internal sealed class PersonnelAcceptanceRunner
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
     private readonly List<string> _secretTokens = [];
+    private readonly List<string> _apiAssertions = [];
     private readonly Dictionary<string, string?> _devEnvironment = new(StringComparer.OrdinalIgnoreCase);
     private string? _adminConnectionString;
     private string? _adminConnectionSource;
@@ -544,6 +545,7 @@ internal sealed class PersonnelAcceptanceRunner
                 await deniedStatus.Content.ReadAsStringAsync(cancellationToken),
                 "anonymous disable");
             checks.Add(new { check = "detail-disable-unauthorized", status = 401 });
+            _apiAssertions.Add("detail-disable-unauthorized-401");
         }
 
         using (var readOnly = CreateClient(_hostPort))
@@ -574,6 +576,7 @@ internal sealed class PersonnelAcceptanceRunner
                 "read-only disable");
             checks.Add(new { check = "detail-edit-permission", status = 200 });
             checks.Add(new { check = "detail-disable-forbidden", status = 403 });
+            _apiAssertions.Add("detail-disable-forbidden-403");
         }
 
         using (var invalidReason = await SendJsonWithAntiforgeryAsync(
@@ -587,6 +590,7 @@ internal sealed class PersonnelAcceptanceRunner
             EnsureStatus(invalidReason, HttpStatusCode.BadRequest, invalidReasonBody, "empty disable reason");
             AssertContains(invalidReasonBody, "ORGANIZATION_PERSON_LIFECYCLE_REASON_INVALID", "disable business failure code");
             checks.Add(new { check = "detail-disable-business-failure", status = 400 });
+            _apiAssertions.Add("detail-disable-business-failure-400");
         }
 
         using var list = await admin.GetAsync($"/api/organization/persons?keyword={Uri.EscapeDataString(personNo)}&pageIndex=1&pageSize=20", cancellationToken);
@@ -729,7 +733,7 @@ internal sealed class PersonnelAcceptanceRunner
         await RecordScenarioSuccessAsync(ApiScenario, "personnel/api.json", new
         {
             status = "passed",
-            checks,
+            apiAssertions = checks,
             matrix = new[]
             {
                 "page-and-query",
@@ -806,6 +810,7 @@ internal sealed class PersonnelAcceptanceRunner
                 900,
                 900,
                 cancellationToken);
+            browserAssertions.Add("tablet-table-with-responsive-columns");
             await CaptureResponsiveBrowserEvidenceAsync(
                 browser,
                 person,
@@ -814,27 +819,23 @@ internal sealed class PersonnelAcceptanceRunner
                 390,
                 844,
                 cancellationToken);
+            browserAssertions.Add("narrow-table-with-horizontal-scroll");
             await CaptureRestrictedBrowserEvidenceAsync(browser, person, cancellationToken);
+            browserAssertions.Add("restricted-view-only-actions-hidden");
             await AssertPersonListAndDrawerAsync(page, person, fixture);
             await AssertFullDetailJourneyAsync(page, person, fixture, exerciseActions: true, cancellationToken);
-            await CaptureUnauthorizedDetailEvidenceAsync(browser, person, cancellationToken);
             browserAssertions.AddRange([
-                "tablet-table-with-responsive-columns",
-                "narrow-table-with-horizontal-scroll",
-                "restricted-view-only-actions-hidden",
                 "drawer-to-full-detail",
                 "full-detail-direct-refresh-back-forward",
                 "detail-three-sections-four-audit-fields",
-                "detail-summary-statuses",
+                "detail-summary-ready",
                 "detail-edit-permission",
                 "detail-disable-required-reason",
                 "detail-disable-success",
-                "detail-disable-business-failure",
-                "detail-disable-unauthorized",
-                "detail-disable-forbidden",
-                "detail-disable-conflict",
-                "detail-capability-denied-before-download"
+                "detail-disable-conflict"
             ]);
+            await CaptureUnauthorizedDetailEvidenceAsync(browser, person, cancellationToken);
+            browserAssertions.Add("detail-capability-denied-before-download");
         }
         else
         {
@@ -850,7 +851,23 @@ internal sealed class PersonnelAcceptanceRunner
             status = "passed",
             phase,
             url = page.Url,
-            assertions = browserAssertions,
+            browserAssertions = browserAssertions,
+            apiAssertions = _apiAssertions,
+            unitAssertions = new[]
+            {
+                new
+                {
+                    check = "detail-summary-ready-notConfigured-dependencyUnavailable",
+                    source = "frontend/packages/shell/src/__tests__/organization-person-center-detail-layout.test.tsx",
+                    verification = "targeted-unit-outside-browser-gate"
+                },
+                new
+                {
+                    check = "detail-disable-client-400-401-403",
+                    source = "frontend/modules/organization/src/__tests__/personLifecycleClient.test.ts",
+                    verification = "targeted-unit-outside-browser-gate"
+                }
+            },
             coverage = new[]
             {
                 new
@@ -989,6 +1006,27 @@ internal sealed class PersonnelAcceptanceRunner
                 || await row.Locator("button:visible", new LocatorLocatorOptions { HasTextString = "编辑" }).CountAsync() != 0)
             {
                 throw new InvalidOperationException("Restricted Personnel subject received a write action in the Shell projection.");
+            }
+
+            await row.GetByRole(
+                    AriaRole.Button,
+                    new LocatorGetByRoleOptions { Name = person.Name, Exact = true })
+                .ClickAsync();
+            var drawer = page.Locator(".ant-drawer-content:visible").Last;
+            await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            await drawer.GetByRole(
+                    AriaRole.Button,
+                    new LocatorGetByRoleOptions { Name = "查看完整详情", Exact = true })
+                .ClickAsync();
+            await page.WaitForURLAsync(
+                $"http://127.0.0.1:{_shellPort}/organization/persons/{Uri.EscapeDataString(person.Id)}",
+                new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "人员详情", Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            if (await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true }).CountAsync() != 0
+                || await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true }).CountAsync() != 0)
+            {
+                throw new InvalidOperationException("Restricted Personnel subject received a full-detail write action.");
             }
 
             var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-restricted.png");
@@ -1241,8 +1279,8 @@ internal sealed class PersonnelAcceptanceRunner
             .ClickAsync();
     }
 
-    // 完整详情两容器共享字段结构；完整页额外必须展示两个 ready 摘要块和权限动作。
-    private static async Task AssertFullDetailContentAsync(IPage page, PersonData person, FixtureData fixture)
+    // 完整详情两容器共享字段结构；完整页额外必须展示两个真实 ready 摘要块和权限动作。
+    private async Task AssertFullDetailContentAsync(IPage page, PersonData person, FixtureData fixture)
     {
         await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "人员详情", Exact = true })
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
@@ -1252,6 +1290,15 @@ internal sealed class PersonnelAcceptanceRunner
         await main.GetByText("账号绑定", new LocatorGetByTextOptions { Exact = true }).First
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await main.GetByText("授权摘要", new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await main.GetByText("已永久绑定", new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await main.GetByText("已加载", new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await main.GetByText(
+                _readOnlyECode ?? throw new InvalidOperationException("Read-only ECODE was not prepared."),
+                new LocatorGetByTextOptions { Exact = true })
+            .First
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         var pageText = await main.InnerTextAsync();
         foreach (var expected in new[]

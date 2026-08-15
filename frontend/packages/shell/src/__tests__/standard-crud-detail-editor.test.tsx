@@ -47,6 +47,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
   });
 
   async function renderHost(modelDocument: Record<string, unknown>) {
+    const model = modelDocument.Person as Record<string, unknown>;
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -73,6 +74,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
                     descriptionKey: 'Description',
                     mode: 'detail',
                     model: 'Person',
+                    sections: model.sections,
                     pageActions: [
                       {
                         key: 'edit',

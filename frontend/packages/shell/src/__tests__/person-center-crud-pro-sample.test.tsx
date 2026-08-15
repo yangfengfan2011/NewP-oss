@@ -7,8 +7,10 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, type FrontendModule, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import baseOrganizationModule from '../../../../modules/organization/src/index';
+import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
 import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
 import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
@@ -38,7 +40,26 @@ function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<stri
 
 const personListCatalog = {
   ...flattenZhsCatalog(personListDictionary),
+  ...Object.fromEntries(Object.entries(personDetailDictionary.PersonDetailView).map(([key, value]) => [
+    `PersonDetailView.${key}`,
+    value.zhs,
+  ])),
 };
+
+function completePersonDetailFields(fields: Record<string, unknown>): Record<string, unknown> {
+  return {
+    CompanyId: null,
+    DepartmentId: null,
+    PositionId: null,
+    EmploymentStatus: 'FullTime',
+    IsEnabled: true,
+    CreatedBy: 'creator-1',
+    CreatedAt: '2026-08-14T01:02:03Z',
+    UpdatedBy: 'editor-1',
+    UpdatedAt: '2026-08-15T04:05:06Z',
+    ...fields,
+  };
+}
 
 // 该样板验证管理员写入交互；显式补齐授权，避免把资源路由的 View 门禁误当成当前主体权限。
 let organizationModule: FrontendModule;
@@ -179,7 +200,7 @@ function renderHost(
           value={{
             manifest: { modules: [] },
             navDocuments: [],
-            viewDocuments: [viewDocument],
+            viewDocuments: [viewDocument, personDetailViewDocument],
             modelDocuments: [personModelDocument],
           }}
         >
@@ -300,12 +321,12 @@ describe('人员中心 CRUD Pro 样板', () => {
       const url = String(input);
       if (url.includes('/person-1')) {
         return new Response(JSON.stringify({
-          fields: {
+          fields: completePersonDetailFields({
             EID: 'person-1',
             PersonNo: 'P0001',
             ENAME: '张三',
             IsEnabled: true,
-          },
+          }),
           summaries: {},
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -388,7 +409,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       const url = String(input);
       if (url.includes('/person-1')) {
         return new Response(JSON.stringify({
-          fields: {
+          fields: completePersonDetailFields({
             EID: 'person-1',
             PersonNo: 'P0001',
             ENAME: '张三',
@@ -398,7 +419,7 @@ describe('人员中心 CRUD Pro 样板', () => {
             DepartmentName: '研发部',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
-          },
+          }),
           summaries: {},
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -584,12 +605,12 @@ describe('人员中心 CRUD Pro 样板', () => {
     });
 
     person2Detail.resolve(new Response(JSON.stringify({
-      fields: {
+      fields: completePersonDetailFields({
         EID: 'person-2',
         PersonNo: 'P0002',
         ENAME: '李四',
         IsEnabled: true,
-      },
+      }),
       summaries: {},
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await flushAsync();
@@ -597,12 +618,12 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(findInputByLabel(document.body, '姓名')?.value).toBe('李四');
 
     person1Detail.resolve(new Response(JSON.stringify({
-      fields: {
+      fields: completePersonDetailFields({
         EID: 'person-1',
         PersonNo: 'P0001',
         ENAME: '张三',
         IsEnabled: true,
-      },
+      }),
       summaries: {},
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await flushAsync();
@@ -920,12 +941,12 @@ describe('人员中心 CRUD Pro 样板', () => {
       const url = String(input);
       if (url.includes('/person-1')) {
         return new Response(JSON.stringify({
-          fields: {
+          fields: completePersonDetailFields({
             EID: 'person-1',
             PersonNo: 'P0001',
             ENAME: '张三',
             IsEnabled: true,
-          },
+          }),
           summaries: {},
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -1042,24 +1063,24 @@ describe('人员中心 CRUD Pro 样板', () => {
       const url = String(input);
       if (url.includes('/person-1')) {
         return new Response(JSON.stringify({
-          fields: {
+          fields: completePersonDetailFields({
             EID: 'person-1',
             PersonNo: 'P0001',
             ENAME: '张三',
             IsEnabled: true,
-          },
+          }),
           summaries: {},
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
       if (url.includes('/person-2')) {
         return new Response(JSON.stringify({
-          fields: {
+          fields: completePersonDetailFields({
             EID: 'person-2',
             PersonNo: 'P0002',
             ENAME: '李四',
             IsEnabled: true,
-          },
+          }),
           summaries: {},
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }

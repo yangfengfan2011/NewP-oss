@@ -8,8 +8,10 @@ import { LocalizationProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
+import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
 import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
 import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
@@ -45,10 +47,14 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
   };
 });
 
-function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<string, string> {
+function flattenZhsCatalog(
+  dictionary: typeof personListDictionary | typeof personDetailDictionary,
+  dictionaryKey: 'PersonListView' | 'PersonDetailView',
+): Record<string, string> {
+  const entries = dictionary[dictionaryKey] as Record<string, { zhs: string }>;
   return Object.fromEntries(
-    Object.entries(dictionary.PersonListView).map(([key, value]) => [
-      `PersonListView.${key}`,
+    Object.entries(entries).map(([key, value]) => [
+      `${dictionaryKey}.${key}`,
       value.zhs,
     ]),
   );
@@ -68,11 +74,14 @@ const standardCrudListViewMetadata = {
       }],
     },
   }],
-  viewDocuments: [createPersonListViewDocumentWithRowActionVisibility()],
+  viewDocuments: [createPersonListViewDocumentWithRowActionVisibility(), personDetailViewDocument],
   modelDocuments: [personModelDocument],
 };
 
-const personListCatalog = flattenZhsCatalog(personListDictionary);
+const personListCatalog = {
+  ...flattenZhsCatalog(personListDictionary, 'PersonListView'),
+  ...flattenZhsCatalog(personDetailDictionary, 'PersonDetailView'),
+};
 
 let personResource: StandardCrudResourceRegistration;
 
@@ -345,7 +354,25 @@ describe('organization person center list layout', () => {
         pageSize: 20,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        fields: { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 },
+        fields: {
+          EID: 'person-1',
+          PersonNo: 'P0001',
+          ENAME: '张三',
+          CompanyId: 'company-1',
+          CompanyName: '总部',
+          DepartmentId: 'department-1',
+          DepartmentName: '人力资源部',
+          PositionId: 'position-1',
+          PositionName: '经理',
+          EmploymentStatus: 'FullTime',
+          IsEnabled: true,
+          Revision: 4,
+          CreatedBy: 'creator-1',
+          CreatedAt: '2026-04-21T00:00:00Z',
+          UpdatedBy: 'editor-2',
+          UpdatedAt: '2026-04-23T00:00:00Z',
+          AccountEID: 'account-1',
+        },
         summaries: {
           userBinding: { status: 'ready', data: { AccountEid: 'account-1' } },
           authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
@@ -369,6 +396,13 @@ describe('organization person center list layout', () => {
     });
     expect(document.body.textContent).not.toContain('账号绑定');
     expect(document.body.textContent).not.toContain('授权摘要');
+    expect(document.body.textContent).toContain('基础信息');
+    expect(document.body.textContent).toContain('组织信息');
+    expect(document.body.textContent).toContain('审计信息');
+    expect(document.body.textContent).toContain('creator-1');
+    expect(document.body.textContent).toContain('editor-2');
+    expect(document.body.textContent).not.toContain('person-1');
+    expect(document.body.textContent).not.toContain('account-1');
   });
 
   it('disables deletion for a permanently bound person and explains the guard', async () => {

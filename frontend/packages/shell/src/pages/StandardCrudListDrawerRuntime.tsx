@@ -3,8 +3,11 @@ import type {
   StandardCrudFieldDefinition,
   StandardCrudFormSection,
   StandardCrudOption,
+  StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { CrudFormDrawer, StandardCrudForm } from '@icp-platform/ui/crud-form';
+import type { StandardCrudResolvedDetailSchema } from '../metadata/standardCrudSchemaResolver';
+import StandardCrudResolvedDetailSections from '../standard-crud/StandardCrudResolvedDetailSections';
 
 export interface StandardCrudListDrawerRuntimeProps {
   mode: 'create' | 'view' | 'edit';
@@ -18,6 +21,10 @@ export interface StandardCrudListDrawerRuntimeProps {
   formId: string;
   fields: StandardCrudFieldDefinition[];
   sections: StandardCrudFormSection[];
+  resolvedDetailSchema: StandardCrudResolvedDetailSchema | null;
+  detailFields: Record<string, unknown>;
+  detailFormFields: StandardCrudFieldDefinition[];
+  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers'>;
   values: Record<string, unknown>;
   lookupOptions: Record<string, StandardCrudOption[]>;
   lookupLoading: Record<string, boolean>;
@@ -31,6 +38,7 @@ export interface StandardCrudListDrawerRuntimeProps {
   onClose: () => void;
   afterOpenChange: (open: boolean) => void;
   titleForSection: (titleKey: string) => string;
+  textForDetail: (key: string, fallback: string) => string;
 }
 
 export default function StandardCrudListDrawerRuntime({
@@ -45,6 +53,10 @@ export default function StandardCrudListDrawerRuntime({
   formId,
   fields,
   sections,
+  resolvedDetailSchema,
+  detailFields,
+  detailFormFields,
+  registration,
   values,
   lookupOptions,
   lookupLoading,
@@ -58,6 +70,7 @@ export default function StandardCrudListDrawerRuntime({
   onClose,
   afterOpenChange,
   titleForSection,
+  textForDetail,
 }: StandardCrudListDrawerRuntimeProps) {
   if (mode === 'view') {
     return (
@@ -73,21 +86,13 @@ export default function StandardCrudListDrawerRuntime({
         onClose={onClose}
         afterOpenChange={afterOpenChange}
       >
-        {!detailError ? (
-          <StandardCrudForm
-            formId={`${formId}-view`}
-            mode="view"
-            fields={fields}
-            sections={sections}
-            values={values}
-            lookupOptions={lookupOptions}
-            lookupLoading={lookupLoading}
-            lookupErrors={lookupErrors}
-            onChange={onChange}
-            onSubmit={() => undefined}
-            saving={false}
-            showSubmitAction={false}
-            titleForSection={titleForSection}
+        {!detailError && resolvedDetailSchema ? (
+          <StandardCrudResolvedDetailSections
+            schema={resolvedDetailSchema}
+            detailFields={detailFields}
+            formFields={detailFormFields}
+            registration={registration}
+            textFor={textForDetail}
           />
         ) : null}
       </CrudFormDrawer>

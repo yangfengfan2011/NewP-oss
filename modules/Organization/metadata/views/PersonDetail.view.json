@@ -9,8 +9,35 @@
     "mode": "detail",
     "model": "Person",
     "sections": [
-      "basic",
-      "organization"
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "PersonNo",
+          "ENAME"
+        ]
+      },
+      {
+        "key": "organization",
+        "titleKey": "Section_Organization",
+        "fields": [
+          "CompanyId",
+          "DepartmentId",
+          "PositionId",
+          "EmploymentStatus",
+          "IsEnabled"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
     ],
     "summaryBlocks": [
       "userBinding",

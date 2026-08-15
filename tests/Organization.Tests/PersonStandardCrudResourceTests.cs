@@ -59,6 +59,16 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public void PersonCrudDescriptor_ExposesAllEntityAuditFieldsToDetailResponses()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        Assert.All(
+            new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" },
+            field => Assert.Contains(field, descriptor.FieldSet.DetailFields));
+    }
+
+    [Fact]
     public void Descriptor_ShouldExposePersonDisplayValueProjectionFields()
     {
         var descriptor = PersonCrudDescriptorFactory.Create();

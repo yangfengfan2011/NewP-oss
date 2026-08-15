@@ -18,6 +18,54 @@
       "zhs": "组织信息",
       "en": "Organization"
     },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit"
+    },
+    "Field_PersonNo": {
+      "zhs": "人员编号",
+      "en": "Person No."
+    },
+    "Field_ENAME": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "Field_CompanyId": {
+      "zhs": "所属公司",
+      "en": "Company"
+    },
+    "Field_DepartmentId": {
+      "zhs": "所属部门",
+      "en": "Department"
+    },
+    "Field_PositionId": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "Field_EmploymentStatus": {
+      "zhs": "任职状态",
+      "en": "Employment Status"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    },
     "Block_UserBinding": {
       "zhs": "账号绑定",
       "en": "User Binding"

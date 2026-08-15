@@ -173,7 +173,7 @@ describe('StandardCrudDetailPageHost', () => {
       },
     ]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: '张三' }, summaries: {} }), {
+      new Response(JSON.stringify({ fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null }, summaries: {} }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -189,7 +189,7 @@ describe('StandardCrudDetailPageHost', () => {
   it('uses a route-loaded detail registration without publishing it to ModuleRegistry', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ fields: { EID: 'Person_2', ENAME: '李四' }, summaries: {} }), {
+      new Response(JSON.stringify({ fields: { EID: 'Person_2', PersonNo: 'P002', ENAME: '李四', DepartmentId: null }, summaries: {} }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -246,7 +246,7 @@ describe('StandardCrudDetailPageHost', () => {
       },
     ]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: '张三' }, summaries: {} }), {
+      new Response(JSON.stringify({ fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null }, summaries: {} }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -294,7 +294,7 @@ describe('StandardCrudDetailPageHost', () => {
       },
     ]);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: '张三' }, summaries: { userLink: { status: 'notConfigured', data: null } } }), {
+      new Response(JSON.stringify({ fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null }, summaries: { userLink: { status: 'notConfigured', data: null } } }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -347,7 +347,9 @@ describe('StandardCrudDetailPageHost', () => {
         JSON.stringify({
           fields: {
             EID: path.endsWith('/Person_2') ? 'Person_2' : 'Person_1',
+            PersonNo: path.endsWith('/Person_2') ? 'P002' : 'P001',
             ENAME: path.endsWith('/Person_2') ? '李四' : '张三',
+            DepartmentId: null,
           },
           summaries: {},
         }),

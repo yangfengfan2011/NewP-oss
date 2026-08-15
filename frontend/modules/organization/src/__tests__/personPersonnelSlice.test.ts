@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mapPersonListItem } from '../services/organizationService';
+import { mapPersonDetailView, mapPersonListItem } from '../services/organizationService';
 import { personStandardCrudResource } from '../standard-crud/personStandardCrudResource';
 
 describe('personnel center first vertical slice', () => {
@@ -79,6 +79,36 @@ describe('personnel center first vertical slice', () => {
     expect(row.DepartmentName).toBe('研发部');
     expect(unresolved.companyName).toBe('');
     expect(unresolved.departmentName).toBe('');
+  });
+
+  it('maps all entity audit fields and preserves person detail summaries', () => {
+    const detail = mapPersonDetailView({
+      fields: {
+        EID: 'person-1',
+        PersonNo: 'P001',
+        ENAME: '张三',
+        EmploymentStatus: 'FullTime',
+        IsEnabled: true,
+        Revision: 7,
+        CreatedBy: 'creator-1',
+        CreatedAt: '2026-08-14T01:02:03Z',
+        UpdatedBy: 'editor-2',
+        UpdatedAt: '2026-08-15T04:05:06Z',
+      },
+      summaries: {
+        userBinding: { status: 'notConfigured', data: null },
+        authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
+      },
+    });
+
+    expect(detail).toMatchObject({
+      createdBy: 'creator-1',
+      createdAt: '2026-08-14T01:02:03Z',
+      updatedBy: 'editor-2',
+      updatedAt: '2026-08-15T04:05:06Z',
+      userBindingSummary: { status: 'notConfigured', data: null },
+      authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
+    });
   });
 
   it('requires an explicit disable reason before invoking the lifecycle command', async () => {

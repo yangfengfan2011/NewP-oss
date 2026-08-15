@@ -41,13 +41,7 @@
           },
           "edit": {
             "mode": "readonly"
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         }
       },
       {
@@ -61,13 +55,7 @@
           "edit": {
             "mode": "editable",
             "required": true
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         }
       },
       {
@@ -83,13 +71,7 @@
           },
           "edit": {
             "mode": "editable"
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         },
         "dataSource": {
           "type": "provider",
@@ -109,13 +91,7 @@
           },
           "edit": {
             "mode": "editable"
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         },
         "dataSource": {
           "type": "provider",
@@ -138,13 +114,7 @@
           },
           "edit": {
             "mode": "editable"
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         },
         "dataSource": {
           "type": "provider",
@@ -174,13 +144,7 @@
           "edit": {
             "mode": "editable",
             "required": true
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         },
         "dataSource": {
           "type": "enum",
@@ -200,13 +164,7 @@
           },
           "edit": {
             "mode": "readonly"
-          },
-          "view": {
-            "mode": "readonly"
           }
-        },
-        "view": {
-          "visible": true
         }
       },
       {

@@ -116,7 +116,10 @@ export interface PersonDetailView {
   employmentStatusLabel: string;
   isEnabled: boolean;
   revision: number;
+  createdBy: string;
   createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
   companyName?: string | null;
   departmentName?: string | null;
   positionName?: string | null;
@@ -251,7 +254,10 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled: readStandardCrudBoolean(fields, ['IsEnabled'], true),
     revision: Number(fields.Revision ?? fields.revision ?? 0),
+    createdBy: readStandardCrudString(fields, ['CreatedBy']),
     createdAt: readDateString(fields, ['CreatedAt']),
+    updatedBy: readStandardCrudString(fields, ['UpdatedBy']),
+    updatedAt: readDateString(fields, ['UpdatedAt']),
     companyName: readStandardCrudNullableString(fields, ['CompanyName']),
     departmentName: readStandardCrudNullableString(fields, ['DepartmentName']),
     positionName: readStandardCrudNullableString(fields, ['PositionName']),

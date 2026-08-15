@@ -37,7 +37,11 @@ import {
 import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui/crud-list';
 import { useAuth } from '../contexts/AuthContext';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { buildStandardCrudListSchema, type StandardCrudRuntimeActionSchema } from '../metadata/standardCrudSchemaResolver';
+import {
+  buildStandardCrudListSchema,
+  resolveStandardCrudDetailSchema,
+  type StandardCrudRuntimeActionSchema,
+} from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
@@ -600,6 +604,7 @@ export default function StandardCrudListPageHost({
     <StandardCrudListPageContent
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
+      viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
       detailRoutePath={listRoute && registration.detailViewKey
         ? `${listRoute.path.replace(/\/$/, '')}/:id`
@@ -612,11 +617,13 @@ export default function StandardCrudListPageHost({
 function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TRow extends Record<string, unknown>>({
   view,
   registration,
+  viewDocuments,
   modelDocuments,
   detailRoutePath,
 }: {
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<TFilter, TRow>;
+  viewDocuments: MetadataRecord[];
   modelDocuments: MetadataRecord[];
   detailRoutePath?: string;
 }): ReactElement {
@@ -822,14 +829,25 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     total,
   };
   const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
-  // 查看抽屉同样依赖 lookup 当前值标签；只有关闭状态才不启动 provider，避免只读字段退化为原始 ID。
-  const activeFormFields = drawerState.mode === 'create' ? createFields : drawerState.mode === 'closed' ? [] : editFields;
+  const activeFormFields = drawerState.mode === 'create'
+    ? createFields
+    : drawerState.mode === 'edit'
+      ? editFields
+      : [];
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
     fields: activeFormFields,
     providers: registration.lookupProviders ?? [],
     values: formValues,
     detailFields,
   });
+  const resolvedDrawerDetailSchema = useMemo(() => (
+    drawerState.mode === 'view' && Object.keys(detailFields).length > 0
+      ? resolveStandardCrudDetailSchema(viewDocuments, registration, {
+          modelDocuments,
+          detailResponseFields: Object.keys(detailFields),
+        })
+      : null
+  ), [detailFields, drawerState.mode, modelDocuments, registration, viewDocuments]);
 
   const invalidateDetailRequests = () => {
     detailRequestIdRef.current += 1;
@@ -1678,6 +1696,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             formId={drawerFormId}
             fields={drawerState.mode === 'create' ? createFields : editFields}
             sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
+            resolvedDetailSchema={resolvedDrawerDetailSchema}
+            detailFields={detailFields}
+            detailFormFields={editFields}
+            registration={registration}
             values={formValues}
             lookupOptions={lookupOptions}
             lookupLoading={lookupLoading}
@@ -1706,6 +1728,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             onClose={requestCloseDrawer}
             afterOpenChange={restoreDrawerTriggerFocus}
             titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
+            textForDetail={(key, fallback) => t(`${resolvedDrawerDetailSchema?.dicKey ?? schema.dicKey}.${key}`, fallback)}
           />
         </Suspense>
       ) : null}

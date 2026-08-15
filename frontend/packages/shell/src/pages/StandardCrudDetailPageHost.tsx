@@ -9,17 +9,13 @@ import {
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
-import { DetailPage } from '@icp-platform/ui/crud-detail';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { buildStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
+import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
-import {
-  buildStandardCrudDetailColumns,
-  buildStandardCrudDetailPreviewData,
-} from '../standard-crud/standardCrudDetailView';
+import StandardCrudResolvedDetailSections from '../standard-crud/StandardCrudResolvedDetailSections';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 type MetadataRecord = Record<string, unknown>;
@@ -92,6 +88,10 @@ function toDictionaryBlockKey(blockKey: string): string {
   return `Block_${blockKey.charAt(0).toUpperCase()}${blockKey.slice(1)}`;
 }
 
+function readMetadataString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+}
+
 function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): string[] {
   try {
     return useAuthorization().permissions;
@@ -128,6 +128,7 @@ export default function StandardCrudDetailPageHost({
       id={id}
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
+      viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
     />
     </StandardCrudHostErrorBoundary>
@@ -138,19 +139,21 @@ function StandardCrudDetailPageContent<TDetail>({
   id,
   view,
   registration,
+  viewDocuments,
   modelDocuments,
 }: {
   id: string;
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>, TDetail>;
+  viewDocuments: MetadataRecord[];
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
-  const schema = useMemo(() => buildStandardCrudDetailSchema(view, registration, {
-    modelDocuments,
-  }), [view, registration, modelDocuments]);
-  const client = useMemo(() => createStandardCrudClient(schema.apiRoute, platformFetch), [schema.apiRoute]);
+  const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
+  const titleKey = readMetadataString(view.titleKey, 'Title');
+  const descriptionKey = readMetadataString(view.descriptionKey, 'Description');
+  const client = useMemo(() => createStandardCrudClient(registration.apiRoute, platformFetch), [registration.apiRoute]);
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
   const formSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
     mode: 'edit',
@@ -158,8 +161,8 @@ function StandardCrudDetailPageContent<TDetail>({
     lookupProviders: registration.lookupProviders ?? [],
   }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
   const editFields = useMemo(
-    () => localizeStandardCrudFields(formSchema.fields, schema.dicKey, t),
-    [formSchema.fields, schema.dicKey, t],
+    () => localizeStandardCrudFields(formSchema.fields, dicKey, t),
+    [formSchema.fields, dicKey, t],
   );
   const [loadedDetail, setLoadedDetail] = useState<LoadedDetail<TDetail> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -206,59 +209,31 @@ function StandardCrudDetailPageContent<TDetail>({
 
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
-  const detailPreviewData = useMemo(
-    () => (currentNormalizedDetail ? buildStandardCrudDetailPreviewData(currentNormalizedDetail.fields, editFields) : {}),
-    [currentNormalizedDetail, editFields],
-  );
-  const detailColumns = useMemo(
-    () => (currentNormalizedDetail ? buildStandardCrudDetailColumns(currentNormalizedDetail.fields, editFields) : []),
-    [currentNormalizedDetail, editFields],
-  );
-  const detailSections = useMemo(() => {
-    const sectionedFieldKeys = new Set(formSchema.sections.flatMap((section) => section.fields));
-    const sections = formSchema.sections
-      .map((section) => ({
-        key: section.key,
-        title: t(`${schema.dicKey}.${section.titleKey}`, section.titleKey),
-        columns: detailColumns.filter((column) => section.fields.includes(column.key)),
-      }))
-      .filter((section) => section.columns.length > 0);
-    const remainingColumns = detailColumns.filter((column) => !sectionedFieldKeys.has(column.key));
-
-    return remainingColumns.length > 0
-      ? [...sections, {
-          key: 'remaining',
-          title: t(`${schema.dicKey}.Detail_Title`, '详情信息'),
-          columns: remainingColumns,
-        }]
-      : sections;
-  }, [detailColumns, formSchema.sections, schema.dicKey, t]);
-  const detailSectionPages = detailSections.length > 0
-    ? detailSections.map((section) => (
-        <DetailPage
-          key={section.key}
-          title={section.title}
-          dataSource={detailPreviewData}
-          columns={section.columns}
-        />
-      ))
-    : (
-        <DetailPage
-          title={t(`${schema.dicKey}.Detail_Title`, '详情信息')}
-          dataSource={detailPreviewData}
-          columns={detailColumns}
-        />
-      );
+  const schema = useMemo(() => currentNormalizedDetail
+    ? resolveStandardCrudDetailSchema(viewDocuments, registration, {
+        modelDocuments,
+        detailResponseFields: Object.keys(currentNormalizedDetail.fields),
+      })
+    : null, [currentNormalizedDetail, modelDocuments, registration, viewDocuments]);
+  const detailSectionPages = schema && currentNormalizedDetail ? (
+    <StandardCrudResolvedDetailSections
+      schema={schema}
+      detailFields={currentNormalizedDetail.fields}
+      formFields={editFields}
+      registration={registration}
+      textFor={(key, fallback) => t(`${schema.dicKey}.${key}`, fallback)}
+    />
+  ) : null;
   const refresh = () => setReloadTick((current) => current + 1);
   const detailActionHandlers = useMemo(() => ({
     ...registration.actionHandlers,
     edit: () => setEditing(true),
   }), [registration.actionHandlers]);
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
-  const nonReadySummaryBlocks = currentNormalizedDetail
+  const nonReadySummaryBlocks = currentNormalizedDetail && schema
     ? schema.summaryBlocks.filter((blockKey) => currentNormalizedDetail.summaries[blockKey]?.status !== 'ready')
     : [];
-  const detailHeaderActions = !showLoading && currentDetail
+  const detailHeaderActions = !showLoading && currentDetail && schema
     ? registration.renderDetailHeaderActions
       ? registration.renderDetailHeaderActions({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
       : schema.pageActions.length > 0
@@ -282,9 +257,9 @@ function StandardCrudDetailPageContent<TDetail>({
   return (
     <div className="sh-page">
       <PageHeader
-        eyebrow={schema.resourceKey}
-        title={t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey)}
-        description={t(`${schema.dicKey}.${schema.descriptionKey}`, schema.descriptionKey)}
+        eyebrow={schema?.resourceKey ?? registration.resourceKey}
+        title={t(`${dicKey}.${schema?.titleKey ?? titleKey}`, schema?.titleKey ?? titleKey)}
+        description={t(`${dicKey}.${schema?.descriptionKey ?? descriptionKey}`, schema?.descriptionKey ?? descriptionKey)}
         actions={detailHeaderActions}
       />
 
@@ -292,7 +267,7 @@ function StandardCrudDetailPageContent<TDetail>({
         <LoadingState message="正在加载详情..." />
       ) : error ? (
         <ErrorState message={error} />
-      ) : currentDetail && registration.renderDetail ? (
+      ) : currentDetail && currentNormalizedDetail && schema && registration.renderDetail ? (
         <div className="sh-page-stack">
           {detailSectionPages}
           <StandardCrudSummaryBlocks
@@ -302,7 +277,7 @@ function StandardCrudDetailPageContent<TDetail>({
           />
           {registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })}
         </div>
-      ) : currentNormalizedDetail ? (
+      ) : currentNormalizedDetail && schema ? (
         <div className="sh-page-stack">
           <StandardCrudSummaryBlocks
             blocks={schema.summaryBlocks}
@@ -326,7 +301,7 @@ function StandardCrudDetailPageContent<TDetail>({
                   setEditing(false);
                   refresh();
                 }}
-                titleForSection={(titleKey) => t(`${schema.dicKey}.${titleKey}`, titleKey)}
+                titleForSection={(sectionTitleKey) => t(`${schema.dicKey}.${sectionTitleKey}`, sectionTitleKey)}
               />
             </Suspense>
           ) : null}

@@ -127,6 +127,34 @@ describe('organization person center detail layout', () => {
     }
   });
 
+  it('declares the complete person detail schema without model view fallbacks', () => {
+    expect(personDetailViewDocument.view.sections).toEqual([
+      { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
+      {
+        key: 'organization',
+        titleKey: 'Section_Organization',
+        fields: ['CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus', 'IsEnabled'],
+      },
+      {
+        key: 'audit',
+        titleKey: 'Section_Audit',
+        fields: ['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'],
+      },
+    ]);
+
+    const fields = personModelDocument.Person.fields as Array<Record<string, unknown>>;
+    expect(fields.every((field) => !Object.prototype.hasOwnProperty.call(field, 'view'))).toBe(true);
+    expect(fields.every((field) => !Object.prototype.hasOwnProperty.call(field.form ?? {}, 'view'))).toBe(true);
+    expect(fields.find((field) => field.name === 'PersonNo')?.form).toMatchObject({
+      create: { mode: 'editable', required: true },
+      edit: { mode: 'readonly' },
+    });
+    expect(fields.find((field) => field.name === 'ENAME')?.form).toMatchObject({
+      create: { mode: 'editable', required: true },
+      edit: { mode: 'editable', required: true },
+    });
+  });
+
   it('renders person detail through the standard CRUD detail host', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
@@ -139,9 +167,13 @@ describe('organization person center detail layout', () => {
             CompanyName: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
+            PositionId: null,
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
+            CreatedBy: 'creator-1',
             CreatedAt: '2026-04-21T00:00:00Z',
+            UpdatedBy: 'editor-2',
+            UpdatedAt: '2026-04-23T00:00:00Z',
           },
           summaries: {
             userLink: {
@@ -174,6 +206,11 @@ describe('organization person center detail layout', () => {
     expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('基础信息');
     expect(container.textContent).toContain('组织信息');
+    expect(container.textContent).toContain('审计信息');
+    expect(container.textContent).toContain('creator-1');
+    expect(container.textContent).toContain('2026-04-21T00:00:00Z');
+    expect(container.textContent).toContain('editor-2');
+    expect(container.textContent).toContain('2026-04-23T00:00:00Z');
     expect(container.textContent).toContain('账号绑定');
     await vi.waitFor(() => expect(container.textContent).toContain('授权摘要'));
   });
@@ -190,9 +227,13 @@ describe('organization person center detail layout', () => {
             CompanyName: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
+            PositionId: null,
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
+            CreatedBy: 'creator-1',
             CreatedAt: '2026-04-21T00:00:00Z',
+            UpdatedBy: 'editor-2',
+            UpdatedAt: '2026-04-23T00:00:00Z',
           },
           summaries: {
             userLink: { status: 'notConfigured', data: null },

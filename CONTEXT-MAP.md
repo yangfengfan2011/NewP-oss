@@ -5,6 +5,7 @@
 - [Identity](./docs/contexts/identity/CONTEXT.md) — 管理用户账号、账号状态与可供认证机制使用的账号目录
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
+- [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [Plugin Platform](./docs/contexts/plugin-platform/CONTEXT.md) — 管理外部插件包的校验、期望状态、启动期激活与统一运行时投影
 - [Authorization](./docs/contexts/authorization/CONTEXT.md) — 把已认证主体与活动权限目录解析为服务端 endpoint 的允许、拒绝或不可判定结果
 - [Platform Persistence](./docs/contexts/platform-persistence/CONTEXT.md) — 把候选模块计划编译为共享运行时模型与可验证的 EF migration streams，并保障 SQL Server 上的确定执行
@@ -17,7 +18,9 @@
 - **Authentication → Host**：Authentication 拥有服务端认证会话及其有效性；Host 只负责 Cookie 接入和逐请求验证，不拥有会话状态。首阶段只支持单个活动 Host，Host 使用稳定应用名和受保护的持久化 Data Protection 密钥环保证正常重启后仍能解析既有 Cookie，多实例共享认证不在本阶段范围内。
 - **Organization → Identity / Authentication**：Organization 通过账号目录查询用户账号，并由 Person 保存不可变的 IdentityAccount EID 来拥有永久一对一绑定；Identity 不保存 Person EID，Person.Name 与 IdentityAccount.ENAME 分别维护且不自动同步。账号目录暂时不可用时，已绑定人员仍可降级读取 Organization 自有绑定事实，但新绑定安全关闭。Organization 应用层通过 Identity.Contracts、Authentication.Contracts 与平台事务执行器编排人员停用、关联账号停用、人员停用阻断和全部会话撤销的单事务提交；Host 不承载该业务流程。人员恢复只解除阻断条件，不会自动恢复账号或旧会话。
 - **Organization → Authorization**：Organization 声明业务权限和 endpoint access rule，并只通过稳定契约读取授权摘要；它不拥有角色、权限分配或授权存储实现。
+- **Organization → Standard CRUD**：Organization 拥有人员数据与业务行为，并以人员中心作为 Standard CRUD 的首个完整采用者；Standard CRUD 拥有共享列表、表单和详情宿主，不吸收人员专属规则。
 - **Plugin Platform → Host / Shell**：Plugin Platform 产生活动插件快照；Host 和 Shell 只消费同一快照，不分别决定插件版本或启用状态。
+- **Plugin Platform → Standard CRUD**：Plugin Platform 校验并激活插件提供的显式 Model 与 View metadata；Standard CRUD 只消费活动快照中的已解析契约，不从 Model 推断缺失的 Detail View。
 - **Plugin Platform → Persistence**：Plugin Platform 把插件拥有的模型与 migration stream 纳入候选计划；它不直接执行迁移。Platform Persistence 负责 provider adapter、统一 history 和执行保障，不拥有插件业务模型。
 - **Platform Persistence → Plugin Platform**：Platform Persistence 只准备并执行某个候选快照的持久化计划；迁移成功不等于插件激活，活动状态仍由 Plugin Platform 原子提交。
 - **Platform Persistence → Modules**：模块拥有自己的模型和 migration stream；Platform Persistence 校验归属、线性迁移链、摘要与目标 frontier，并把所有活动模型投影进共享运行时 DbContext。
@@ -25,6 +28,7 @@
 - **Authorization → Identity / LocalAuth**：Authorization 消费可信主体标识，不拥有凭据交换、Cookie 或账号生命周期。
 - **Authorization → Plugin Platform**：Authorization 只接受活动插件快照中的权限和 access rule；未激活插件的声明不能进入有效权限目录。
 - **Authorization → Shell**：Shell 可用当前主体的有效权限改善菜单和按钮可见性，但服务端判定始终是安全事实源。
+- **Standard CRUD → Authorization**：Standard CRUD 消费 metadata 中的权限引用控制交互呈现，但字段是否出现在 View 中不构成数据授权，服务端 endpoint 判定仍是安全事实源。
 - **Platform Acceptance → Host / Shell**：Platform Acceptance 只通过受支持启动命令、就绪接口、Shell origin 与浏览器可见行为观察系统，不直接组合或启动内部组件。
 - **Platform Acceptance → Organization**：验收 Fixture 只通过受限的应用接口准备公司、部门与 actors；人员中心结果仍必须通过正式 API 与浏览器旅程证明。
 - **Platform Acceptance → Identity / Authentication**：验收从新数据库、离线 bootstrap、受限首次改密开始，通过正式 API、Shell 与浏览器证明账号生命周期、会话撤销、Host 重启恢复和人员账号原子联动，不以内存替身或直接数据库写入替代完成证据。

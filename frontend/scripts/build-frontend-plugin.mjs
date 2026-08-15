@@ -30,6 +30,7 @@ if (hasInvalidModuleName) {
 
 // Construct paths
 const modulesRoot = resolve(__dirname, '../modules');
+const uiSourceRoot = resolve(__dirname, '../packages/ui/src');
 const artifactsRoot = resolve(__dirname, '../../artifacts/frontend-plugins');
 const entryPath = resolve(modulesRoot, moduleName, 'src/index.ts');
 const outDir = resolve(artifactsRoot, moduleName);
@@ -62,6 +63,12 @@ console.log(`Output: ${outDir}/entry.js`);
 try {
   await build({
     configFile: false,
+    resolve: {
+      alias: [
+        { find: '@icp-platform/ui/core', replacement: resolve(uiSourceRoot, 'core.ts') },
+        { find: '@icp-platform/ui', replacement: resolve(uiSourceRoot, 'index.ts') }
+      ]
+    },
     build: {
       lib: {
         entry: entryPath,

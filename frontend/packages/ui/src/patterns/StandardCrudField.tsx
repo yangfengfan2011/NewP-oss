@@ -64,7 +64,7 @@ export function StandardCrudField({
   error = null,
   onChange,
 }: StandardCrudFieldProps): ReactElement {
-  const readOnly = mode === 'view' || field.readOnly === true || field.kind === 'readonly';
+  const readOnly = field.readOnly === true || field.kind === 'readonly';
   if (readOnly) {
     return <StandardCrudReadonlyValue field={field} value={value} options={options} />;
   }

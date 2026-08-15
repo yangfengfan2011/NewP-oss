@@ -32,17 +32,18 @@ describe('StandardCrudField and StandardCrudForm', () => {
     });
   }
 
-  it('renders readonly values by field kind in view mode', async () => {
+  it('renders readonly values by field kind in edit mode', async () => {
     const fields: StandardCrudFieldDefinition[] = [
-      { key: 'name', labelKey: '姓名', modelField: 'NAME', kind: 'text' },
-      { key: 'birthday', labelKey: '生日', modelField: 'BIRTHDAY', kind: 'date' },
+      { key: 'name', labelKey: '姓名', modelField: 'NAME', kind: 'text', readOnly: true },
+      { key: 'birthday', labelKey: '生日', modelField: 'BIRTHDAY', kind: 'date', readOnly: true },
       { key: 'lockedCode', labelKey: '编码', modelField: 'LOCKED_CODE', kind: 'readonly' },
-      { key: 'enabled', labelKey: '启用', modelField: 'ENABLED', kind: 'boolean' },
+      { key: 'enabled', labelKey: '启用', modelField: 'ENABLED', kind: 'boolean', readOnly: true },
       {
         key: 'status',
         labelKey: '状态',
         modelField: 'STATUS',
         kind: 'enum',
+        readOnly: true,
         options: [{ value: 'active', label: '有效' }],
       },
     ];
@@ -50,7 +51,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     await render(
       <StandardCrudForm
         formId="readonly-form"
-        mode="view"
+        mode="edit"
         fields={fields}
         sections={[]}
         values={Object.fromEntries(fields.map((field) => [
@@ -64,7 +65,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
       />,
     );
 
-    expect(container.querySelector('.ant-descriptions')).not.toBeNull();
+    expect(container.querySelector('.np-standard-crud-form-edit')).not.toBeNull();
     expect(container.querySelector('input')).toBeNull();
     expect(Array.from(container.querySelectorAll('.np-standard-crud-readonly-value')).some((item) => item.textContent === 'lockedCode-value')).toBe(true);
     expect(container.textContent).toContain('name-value');
@@ -278,7 +279,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('请填写此字段');
   });
 
-  it('uses create submit text and hides submit action in view mode', async () => {
+  it('uses create submit text and hides the inline submit action when requested', async () => {
     const fields: StandardCrudFieldDefinition[] = [
       { key: 'name', labelKey: '姓名', modelField: 'NAME', kind: 'text' },
     ];
@@ -302,14 +303,15 @@ describe('StandardCrudField and StandardCrudForm', () => {
     await act(async () => {
       root.render(
         <StandardCrudForm
-          formId="person-view-form"
-          mode="view"
+          formId="person-edit-form"
+          mode="edit"
           fields={fields}
           sections={[]}
           values={{ name: '张三' }}
           onChange={vi.fn()}
           onSubmit={vi.fn()}
           saving={false}
+          showSubmitAction={false}
           titleForSection={(titleKey) => titleKey}
         />,
       );

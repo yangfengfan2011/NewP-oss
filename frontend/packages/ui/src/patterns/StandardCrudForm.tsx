@@ -5,10 +5,10 @@ import type {
   StandardCrudOption,
   StandardCrudFormSection,
 } from '@icp-platform/sdk';
-import { Button, Descriptions, Form } from 'antd';
+import { Button, Form } from 'antd';
 import { ErrorState } from '../components/ErrorState';
 import { Panel } from './Panel';
-import { StandardCrudField, StandardCrudReadonlyValue } from './StandardCrudField';
+import { StandardCrudField } from './StandardCrudField';
 
 export interface StandardCrudFormProps {
   formId: string;
@@ -76,7 +76,7 @@ export function StandardCrudForm({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   async function handleFinish() {
-    if (mode === 'view' || saving) {
+    if (saving) {
       return;
     }
     const nextErrors = fields.reduce<Record<string, string>>((current, field) => {
@@ -98,23 +98,6 @@ export function StandardCrudForm({
       return rest;
     });
     onChange(fieldKey, value);
-  }
-
-  if (mode === 'view') {
-    return (
-      <div id={formId} className="np-standard-crud-form np-standard-crud-form-view">
-        {error ? <ErrorState message={error} /> : null}
-        {resolvedSections.map((section) => (
-          <Descriptions key={section.key} title={titleForSection(section.titleKey)} bordered column={{ xs: 1, sm: 1, md: 2 }}>
-            {section.fields.map((field) => (
-              <Descriptions.Item key={field.key} label={field.labelKey}>
-                <StandardCrudReadonlyValue field={field} value={values[field.key]} options={lookupOptions[field.key]} />
-              </Descriptions.Item>
-            ))}
-          </Descriptions>
-        ))}
-      </div>
-    );
   }
 
   return (

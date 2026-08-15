@@ -38,7 +38,7 @@ function formatReadonlyValue(
   return String(value);
 }
 
-/** 查看模式只输出展示语义，避免把禁用输入框伪装成只读详情。 */
+/** 只读字段输出展示语义，避免把禁用输入框伪装成只读内容。 */
 export function StandardCrudReadonlyValue({
   field,
   value,
@@ -58,7 +58,6 @@ function toDayjs(value: unknown): Dayjs | null {
 export function StandardCrudField({
   field,
   value,
-  mode,
   options = field.options ?? [],
   loading = false,
   error = null,

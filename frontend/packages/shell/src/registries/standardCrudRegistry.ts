@@ -1,4 +1,6 @@
 import type { FrontendModule, StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
+import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 
 export interface StandardCrudRegistry {
   findByResourceKey: (resourceKey: string) => StandardCrudResourceRegistration | undefined;
@@ -8,6 +10,70 @@ export interface StandardCrudRegistry {
 
 interface RegistryEntry {
   resource: StandardCrudResourceRegistration;
+}
+
+type MetadataRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): MetadataRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as MetadataRecord
+    : {};
+}
+
+function validateRetiredDetailMetadata(modelDocuments: RuntimeMetadataState['modelDocuments']): void {
+  for (const document of modelDocuments) {
+    for (const [modelKey, modelValue] of Object.entries(document)) {
+      if (modelKey === 'schemaVersion' || modelKey === 'type') {
+        continue;
+      }
+
+      const model = asRecord(modelValue);
+      const fields = Array.isArray(model.fields) ? model.fields : [];
+      for (const fieldValue of fields) {
+        const field = asRecord(fieldValue);
+        const fieldKey = typeof field.name === 'string' ? field.name : '<unknown>';
+        if (Object.prototype.hasOwnProperty.call(field, 'view')) {
+          throw new Error(`retired detail metadata "${modelKey}.${fieldKey}.view" is not allowed`);
+        }
+        if (Object.prototype.hasOwnProperty.call(asRecord(field.form), 'view')) {
+          throw new Error(`retired detail metadata "${modelKey}.${fieldKey}.form.view" is not allowed`);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 在活动模块注册表替换前校验整份标准 CRUD metadata 与 binding candidate。
+ */
+export function validateStandardCrudCandidate(
+  modules: FrontendModule[],
+  metadata: RuntimeMetadataState,
+): void {
+  validateRetiredDetailMetadata(metadata.modelDocuments);
+
+  for (const module of modules) {
+    for (const resource of module.standardCrudResources ?? []) {
+      const registration = resource as StandardCrudResourceRegistration & MetadataRecord;
+      for (const retiredKey of ['detailActions', 'renderDetail', 'renderDetailHeaderActions']) {
+        if (Object.prototype.hasOwnProperty.call(registration, retiredKey)) {
+          throw new Error(
+            `retired standard CRUD registration property "${retiredKey}" is not allowed on "${resource.resourceKey}"`,
+          );
+        }
+      }
+
+      if (resource.detailViewKey) {
+        resolveStandardCrudDetailSchema(
+          metadata.viewDocuments as unknown as MetadataRecord[],
+          resource,
+          {
+            modelDocuments: metadata.modelDocuments as unknown as MetadataRecord[],
+          },
+        );
+      }
+    }
+  }
 }
 
 function increment(counts: Map<string, number>, key: string | undefined): void {

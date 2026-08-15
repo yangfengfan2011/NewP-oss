@@ -9,11 +9,20 @@ import type {
 const DEFAULT_RUNTIME_METADATA_MANIFEST_URL = '/plugins/metadata-runtime-manifest.json';
 const RUNTIME_METADATA_LOAD_CONCURRENCY = 8;
 const inFlightLoads = new WeakMap<typeof fetch, Promise<RuntimeMetadataState>>();
+let preloadedRuntimeMetadata: RuntimeMetadataState | null = null;
 
 type LoadedRuntimeMetadataDocument =
   | { kind: 'nav'; document: RuntimeNavItemDocument }
   | { kind: 'view'; document: RuntimeViewDocument }
   | { kind: 'model'; document: RuntimeModelDocument };
+
+export function getPreloadedRuntimeMetadata(): RuntimeMetadataState | null {
+  return preloadedRuntimeMetadata;
+}
+
+export function setPreloadedRuntimeMetadata(metadata: RuntimeMetadataState): void {
+  preloadedRuntimeMetadata = metadata;
+}
 
 async function loadJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
   const response = await fetcher(url, { credentials: 'same-origin' });
@@ -140,4 +149,3 @@ async function mapWithConcurrency<T, TResult>(
   );
   return results;
 }
-

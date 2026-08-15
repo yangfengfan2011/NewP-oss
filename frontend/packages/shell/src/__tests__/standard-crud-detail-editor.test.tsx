@@ -46,8 +46,10 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     container?.remove();
   });
 
-  async function renderHost(modelDocument: Record<string, unknown>) {
-    const model = modelDocument.Person as Record<string, unknown>;
+  async function renderHost(
+    modelDocument: Record<string, unknown>,
+    detailSections: Record<string, unknown>[],
+  ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -63,7 +65,6 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
             value={{
               manifest: { modules: [] },
               navDocuments: [],
-              modelDocuments: [],
               viewDocuments: [
                 {
                   type: 'view',
@@ -74,7 +75,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
                     descriptionKey: 'Description',
                     mode: 'detail',
                     model: 'Person',
-                    sections: model.sections,
+                    sections: detailSections,
                     pageActions: [
                       {
                         key: 'edit',
@@ -126,7 +127,9 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       }),
     );
 
-    await renderHost(modelDocument);
+    await renderHost(modelDocument, [
+      { key: 'basic', titleKey: '基础信息', fields: ['ENAME'] },
+    ]);
     await act(async () => undefined);
     await waitForText(container, '基础信息');
 
@@ -171,7 +174,9 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       }),
     );
 
-    await renderHost(modelDocument);
+    await renderHost(modelDocument, [
+      { key: 'basic', titleKey: '基础信息', fields: ['ENAME'] },
+    ]);
     await act(async () => undefined);
 
     await openEditor(container);
@@ -238,7 +243,9 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
       ),
     );
 
-    await renderHost(modelDocument);
+    await renderHost(modelDocument, [
+      { key: 'organization', titleKey: '组织信息', fields: ['CompanyId', 'DepartmentId', 'PositionId'] },
+    ]);
     await flushAsyncWork();
 
     await openEditor(container);

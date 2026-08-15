@@ -81,6 +81,19 @@ describe('personnel center first vertical slice', () => {
     expect(unresolved.departmentName).toBe('');
   });
 
+  it('renders reference projections through the explicit detail field binding', () => {
+    const renderer = personStandardCrudResource.detailFieldRenderers?.['organization.person.reference'];
+
+    expect(renderer?.({
+      fieldKey: 'DepartmentId',
+      value: 'department-1',
+      detailFields: {
+        DepartmentId: 'department-1',
+        DepartmentName: '研发部',
+      },
+    })).toBe('研发部');
+  });
+
   it('maps all entity audit fields and preserves person detail summaries', () => {
     const detail = mapPersonDetailView({
       fields: {

@@ -23,8 +23,7 @@ export interface StandardCrudListDrawerRuntimeProps {
   sections: StandardCrudFormSection[];
   resolvedDetailSchema: StandardCrudResolvedDetailSchema | null;
   detailFields: Record<string, unknown>;
-  detailFormFields: StandardCrudFieldDefinition[];
-  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers'>;
+  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions'>;
   values: Record<string, unknown>;
   lookupOptions: Record<string, StandardCrudOption[]>;
   lookupLoading: Record<string, boolean>;
@@ -55,7 +54,6 @@ export default function StandardCrudListDrawerRuntime({
   sections,
   resolvedDetailSchema,
   detailFields,
-  detailFormFields,
   registration,
   values,
   lookupOptions,
@@ -90,7 +88,6 @@ export default function StandardCrudListDrawerRuntime({
           <StandardCrudResolvedDetailSections
             schema={resolvedDetailSchema}
             detailFields={detailFields}
-            formFields={detailFormFields}
             registration={registration}
             textFor={textForDetail}
           />

@@ -133,7 +133,13 @@ describe('organization person center detail layout', () => {
       {
         key: 'organization',
         titleKey: 'Section_Organization',
-        fields: ['CompanyId', 'DepartmentId', 'PositionId', 'EmploymentStatus', 'IsEnabled'],
+        fields: [
+          { field: 'CompanyId', rendererKey: 'organization.person.reference' },
+          { field: 'DepartmentId', rendererKey: 'organization.person.reference' },
+          { field: 'PositionId', rendererKey: 'organization.person.reference' },
+          'EmploymentStatus',
+          'IsEnabled',
+        ],
       },
       {
         key: 'audit',

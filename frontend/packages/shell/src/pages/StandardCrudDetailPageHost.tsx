@@ -219,7 +219,6 @@ function StandardCrudDetailPageContent<TDetail>({
     <StandardCrudResolvedDetailSections
       schema={schema}
       detailFields={currentNormalizedDetail.fields}
-      formFields={editFields}
       registration={registration}
       textFor={(key, fallback) => t(`${schema.dicKey}.${key}`, fallback)}
     />
@@ -230,28 +229,23 @@ function StandardCrudDetailPageContent<TDetail>({
     edit: () => setEditing(true),
   }), [registration.actionHandlers]);
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
-  const nonReadySummaryBlocks = currentNormalizedDetail && schema
-    ? schema.summaryBlocks.filter((blockKey) => currentNormalizedDetail.summaries[blockKey]?.status !== 'ready')
-    : [];
   const detailHeaderActions = !showLoading && currentDetail && schema
-    ? registration.renderDetailHeaderActions
-      ? registration.renderDetailHeaderActions({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })
-      : schema.pageActions.length > 0
-        ? (
-          <StandardCrudActions
-            actions={schema.pageActions.map((action) => ({
-              ...action,
-              labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-              confirmMessage: action.confirmMessageKey
-                ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
-                : undefined,
-            }))}
-            grantedPermissions={grantedPermissions}
-            handlers={detailActionHandlers}
-            context={{ id, detail: currentDetail as TDetail, refresh }}
-          />
-        )
-        : undefined
+    ? schema.pageActions.length > 0
+      ? (
+        <StandardCrudActions
+          actions={schema.pageActions.map((action) => ({
+            ...action,
+            labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+            confirmMessage: action.confirmMessageKey
+              ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+              : undefined,
+          }))}
+          grantedPermissions={grantedPermissions}
+          handlers={detailActionHandlers}
+          context={{ id, detail: currentDetail as TDetail, refresh }}
+        />
+      )
+      : undefined
     : undefined;
 
   return (
@@ -267,16 +261,6 @@ function StandardCrudDetailPageContent<TDetail>({
         <LoadingState message="正在加载详情..." />
       ) : error ? (
         <ErrorState message={error} />
-      ) : currentDetail && currentNormalizedDetail && schema && registration.renderDetail ? (
-        <div className="sh-page-stack">
-          {detailSectionPages}
-          <StandardCrudSummaryBlocks
-            blocks={nonReadySummaryBlocks}
-            summaries={currentNormalizedDetail?.summaries ?? {}}
-            titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
-          />
-          {registration.renderDetail({ id, detail: currentDetail as TDetail, refresh, loading: showLoading })}
-        </div>
       ) : currentNormalizedDetail && schema ? (
         <div className="sh-page-stack">
           <StandardCrudSummaryBlocks

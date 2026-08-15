@@ -77,6 +77,13 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
                 "key": "organization.person.detail",
                 "mode": "detail",
                 "model": "Person",
+                "sections": [
+                  {
+                    "key": "basic",
+                    "titleKey": "Section_Basic",
+                    "fields": ["ENAME"]
+                  }
+                ],
                 "pageActions": [
                   {
                     "key": "edit",

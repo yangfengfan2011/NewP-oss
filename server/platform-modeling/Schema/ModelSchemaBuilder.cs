@@ -4,6 +4,11 @@ namespace ICP.Platform.Modeling.Schema;
 
 public sealed class ModelSchemaBuilder
 {
+    /// <summary>
+    /// 从模型 authoring 构建只包含字段、布局以及 create/edit 表单语义的公共 schema。
+    /// </summary>
+    /// <param name="document">已经加载并确定 owner 的模型文档。</param>
+    /// <returns>不包含详情展示结构的模型 schema。</returns>
     public ModelSchemaDescriptor Build(ModelMetadataDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -29,12 +34,6 @@ public sealed class ModelSchemaBuilder
                 {
                     CreateMode = field.Form.Create?.Mode,
                     EditMode = field.Form.Edit?.Mode
-                },
-            View = field.View is null
-                ? null
-                : new ModelSchemaViewDescriptor
-                {
-                    Visible = field.View.Visible
                 },
             DataSource = field.DataSource is null
                 ? null

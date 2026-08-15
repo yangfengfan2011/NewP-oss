@@ -104,6 +104,7 @@ vi.mock('../localization/runtimeLocalizationManifest', () => ({
 
 vi.mock('../metadata/runtimeMetadataLoader', () => ({
   getFallbackRuntimeMetadata: vi.fn(),
+  getPreloadedRuntimeMetadata: vi.fn(() => undefined),
   loadRuntimeMetadata: vi.fn().mockImplementation(async () => ({
     manifest: { modules: [] },
     navDocuments: [{
@@ -139,9 +140,16 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
       view: {
         key: state.standardCrudDetailViewKey,
         mode: 'detail',
+        model: 'Record',
+        sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
       },
     }] : [])] : [],
-    modelDocuments: [],
+    modelDocuments: state.standardCrudDetailViewKey ? [{
+      type: 'model' as const,
+      Record: {
+        fields: [{ name: 'ENAME', storage: { type: 'string' }, uiType: 'text' }],
+      },
+    }] : [],
   })),
 }));
 

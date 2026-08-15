@@ -1,7 +1,17 @@
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { loadActiveModuleRuntime } from './active-module-runtime-loader';
+import {
+  loadRuntimeMetadata,
+  setPreloadedRuntimeMetadata,
+} from './metadata/runtimeMetadataLoader';
+import { validateStandardCrudCandidate } from './registries/standardCrudRegistry';
 
 export async function registerShellModules() {
-  const result = await loadActiveModuleRuntime();
+  const [result, metadata] = await Promise.all([
+    loadActiveModuleRuntime(),
+    loadRuntimeMetadata(),
+  ]);
+  validateStandardCrudCandidate(result.modules, metadata);
   ModuleRegistry.replaceAll(result.modules, result.snapshotId);
+  setPreloadedRuntimeMetadata(metadata);
 }

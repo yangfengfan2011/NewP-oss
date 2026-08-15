@@ -21,8 +21,6 @@ public sealed class ModelSchemaFieldDescriptor
 
     public ModelSchemaFormDescriptor? Form { get; init; }
 
-    public ModelSchemaViewDescriptor? View { get; init; }
-
     public ModelSchemaDataSourceDescriptor? DataSource { get; init; }
 }
 
@@ -40,11 +38,6 @@ public sealed class ModelSchemaFormDescriptor
     public string? CreateMode { get; init; }
 
     public string? EditMode { get; init; }
-}
-
-public sealed class ModelSchemaViewDescriptor
-{
-    public bool Visible { get; init; }
 }
 
 public sealed class ModelSchemaDataSourceDescriptor

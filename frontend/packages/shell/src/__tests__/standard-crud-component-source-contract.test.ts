@@ -19,6 +19,15 @@ const standardCrudListHostUrl = new URL('../pages/StandardCrudListPageHost.tsx',
 const standardCrudListFormRuntimeUrl = new URL('../pages/StandardCrudListFormRuntime.ts', import.meta.url);
 const standardCrudListOverlayRuntimeUrl = new URL('../pages/StandardCrudListOverlayRuntime.tsx', import.meta.url);
 const standardCrudDetailHostUrl = new URL('../pages/StandardCrudDetailPageHost.tsx', import.meta.url);
+const standardCrudDetailSectionsUrl = new URL(
+  '../standard-crud/StandardCrudResolvedDetailSections.tsx',
+  import.meta.url,
+);
+const standardCrudSchemaResolverUrl = new URL(
+  '../metadata/standardCrudSchemaResolver.ts',
+  import.meta.url,
+);
+const standardCrudSdkUrl = new URL('../../../sdk/src/standardCrud.ts', import.meta.url);
 const standardCrudDetailFormValuesUrl = new URL(
   '../standard-crud/standardCrudDetailFormValues.ts',
   import.meta.url,
@@ -90,6 +99,20 @@ describe('standard CRUD component source contract', () => {
     const detailPage = readFileSync(fileURLToPath(detailPageUrl), 'utf8');
 
     expect(detailPage).toContain("lazy(() => import('@ant-design/pro-descriptions'))");
+  });
+
+  it('keeps retired detail contracts and form fallbacks out of the standard CRUD runtime', () => {
+    const sdk = readFileSync(fileURLToPath(standardCrudSdkUrl), 'utf8');
+    const detailHost = readFileSync(fileURLToPath(standardCrudDetailHostUrl), 'utf8');
+    const detailSections = readFileSync(fileURLToPath(standardCrudDetailSectionsUrl), 'utf8');
+    const resolver = readFileSync(fileURLToPath(standardCrudSchemaResolverUrl), 'utf8');
+
+    expect(sdk).not.toMatch(/\bdetailActions\??\s*:/);
+    expect(sdk).not.toMatch(/\brenderDetail(?:HeaderActions)?\??\s*:/);
+    expect(detailHost).not.toMatch(/registration\.renderDetail/);
+    expect(detailSections).not.toMatch(/\bformFields\b|StandardCrudFieldDefinition/);
+    expect(resolver).not.toMatch(/function readDetailSection\b|function buildStandardCrudDetailSchema\b/);
+    expect(resolver).not.toMatch(/replace\(\/Id\$\/|endsWith\(['"]Id['"]\)/);
   });
 
 });

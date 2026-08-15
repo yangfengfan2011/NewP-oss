@@ -11,7 +11,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "pnpm run test:types && tsc",
+    "test:types": "tsc -p tsconfig.type-tests.json",
     "dev": "tsc --watch"
   },
   "devDependencies": {

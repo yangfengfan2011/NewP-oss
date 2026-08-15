@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
 import { resolveDetailViewDocument, resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import {
-  buildStandardCrudDetailSchema,
   buildStandardCrudListSchema,
   resolveStandardCrudDetailSchema,
 } from '../metadata/standardCrudSchemaResolver';
@@ -53,7 +52,7 @@ describe('standard CRUD schema resolver and registry', () => {
             {
               key: 'organization',
               titleKey: 'Section_Organization',
-              fields: ['CompanyId'],
+              fields: [{ field: 'CompanyId', rendererKey: 'organization.reference' }],
             },
           ],
         },
@@ -62,6 +61,7 @@ describe('standard CRUD schema resolver and registry', () => {
         ...personRegistration,
         detailFieldRenderers: {
           'organization.actor': () => null,
+          'organization.reference': () => null,
         },
       },
       {
@@ -101,7 +101,12 @@ describe('standard CRUD schema resolver and registry', () => {
         key: 'organization',
         titleKey: 'Section_Organization',
         fields: [
-          { key: 'CompanyId', labelKey: 'Field_CompanyId', rendererKey: 'standard.lookup', rendererSource: 'standard' },
+          {
+            key: 'CompanyId',
+            labelKey: 'Field_CompanyId',
+            rendererKey: 'organization.reference',
+            rendererSource: 'binding',
+          },
         ],
       },
     ]);
@@ -887,40 +892,19 @@ describe('standard CRUD schema resolver and registry', () => {
     )).toThrow('unsupported action variant "quiet"');
   });
 
-  it('builds a detail schema from runtime view metadata and registration', () => {
-    const schema = buildStandardCrudDetailSchema(
-      {
-        key: 'organization.person.detail',
-        dicKey: 'PersonDetailView',
-        titleKey: 'Title',
-        descriptionKey: 'Description',
-        mode: 'detail',
-        sections: ['basic', { key: 'organization', titleKey: '组织信息', fields: ['departmentId'] }],
-        summaryBlocks: ['userLink'],
-        pageActions: [{ key: 'disable', labelKey: 'Action_Disable' }],
-      },
-      personRegistration,
-    );
-
-    expect(schema).toMatchObject({
-      viewKey: 'organization.person.detail',
-      resourceKey: 'organization.person',
-      apiRoute: '/api/organization/persons',
-      dicKey: 'PersonDetailView',
-      titleKey: 'Title',
-    });
-    expect(schema.sections).toEqual([
-      { key: 'basic', titleKey: 'basic', fields: [] },
-      { key: 'organization', titleKey: '组织信息', fields: ['departmentId'] },
-    ]);
-    expect(schema.summaryBlocks).toEqual(['userLink']);
-  });
-
   it('resolves only detail view documents for detail mode', () => {
     const detail = resolveDetailViewDocument(
       [
         { type: 'view', view: { key: 'organization.person.list', mode: 'list' } },
-        { type: 'view', view: { key: 'organization.person.detail', mode: 'detail' } },
+        {
+          type: 'view',
+          view: {
+            key: 'organization.person.detail',
+            mode: 'detail',
+            model: 'Person',
+            sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo'] }],
+          },
+        },
       ],
       'organization.person.detail',
     );

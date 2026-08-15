@@ -23,6 +23,7 @@ import {
 } from './localization/runtimeLocalizationManifest';
 import { RuntimeMetadataProvider } from './metadata/runtimeMetadataContext';
 import {
+  getPreloadedRuntimeMetadata,
   getFallbackRuntimeMetadata,
   loadRuntimeMetadata,
 } from './metadata/runtimeMetadataLoader';
@@ -213,7 +214,9 @@ function getDefaultShellView(): ShellView {
 function App({ initialUser }: { initialUser?: AuthUser }) {
   const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
   const [localizationManifest, setLocalizationManifest] = useState<RuntimeLocalizationManifest | null>(null);
-  const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeMetadataState | null>(null);
+  const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeMetadataState | null>(
+    getPreloadedRuntimeMetadata,
+  );
 
   const shellView = useMemo<ShellView>(() => {
     switch (shellUiConfig.shellExperienceMode) {
@@ -268,6 +271,10 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
   }, []);
 
   useEffect(() => {
+    if (runtimeMetadata) {
+      return;
+    }
+
     let disposed = false;
 
     void loadRuntimeMetadata()
@@ -293,7 +300,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [runtimeMetadata]);
 
   if (!localizationManifest || !runtimeMetadata) {
     return null;

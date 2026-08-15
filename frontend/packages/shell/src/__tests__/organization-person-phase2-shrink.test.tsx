@@ -9,7 +9,6 @@ describe('organization person standard CRUD phase 2 registration', () => {
     expect(personStandardCrudResource.fields).toBeUndefined();
     expect(personStandardCrudResource.formSections).toBeUndefined();
     expect(personStandardCrudResource.listActions).toBeUndefined();
-    expect(personStandardCrudResource.detailActions).toBeUndefined();
     expect(personStandardCrudResource.buildColumns).toBeUndefined();
     expect(personStandardCrudResource.renderFilters).toBeUndefined();
     expect(personStandardCrudResource.buildMutationValues).toBeUndefined();

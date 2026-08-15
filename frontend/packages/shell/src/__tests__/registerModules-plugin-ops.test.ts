@@ -31,6 +31,15 @@ describe('active module registry commit', () => {
         modules,
       }),
     }));
+    vi.doMock('../metadata/runtimeMetadataLoader', () => ({
+      loadRuntimeMetadata: vi.fn().mockResolvedValue({
+        manifest: { modules: [] },
+        navDocuments: [],
+        viewDocuments: [],
+        modelDocuments: [],
+      }),
+      setPreloadedRuntimeMetadata: vi.fn(),
+    }));
     vi.doMock('@icp-platform/sdk', () => ({
       ModuleRegistry: { replaceAll },
     }));
@@ -49,6 +58,15 @@ describe('active module registry commit', () => {
         new Error('MODULE_PROJECTION_FAILED: Organization'),
       ),
     }));
+    vi.doMock('../metadata/runtimeMetadataLoader', () => ({
+      loadRuntimeMetadata: vi.fn().mockResolvedValue({
+        manifest: { modules: [] },
+        navDocuments: [],
+        viewDocuments: [],
+        modelDocuments: [],
+      }),
+      setPreloadedRuntimeMetadata: vi.fn(),
+    }));
     vi.doMock('@icp-platform/sdk', () => ({
       ModuleRegistry: { replaceAll },
     }));
@@ -57,5 +75,139 @@ describe('active module registry commit', () => {
 
     await expect(registerShellModules()).rejects.toThrow('MODULE_PROJECTION_FAILED');
     expect(replaceAll).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid detail view candidate before replacing the active snapshot', async () => {
+    let activeSnapshotId = 'snapshot-active';
+    const replaceAll = vi.fn((_modules: FrontendModule[], snapshotId: string) => {
+      activeSnapshotId = snapshotId;
+    });
+    vi.doMock('../active-module-runtime-loader', () => ({
+      loadActiveModuleRuntime: vi.fn().mockResolvedValue({
+        snapshotId: 'snapshot-invalid',
+        planHash: 'plan-invalid',
+        modules: [{
+          metadata: {
+            moduleId: 'Organization',
+            displayName: '组织结构',
+            version: '1.0.0',
+          },
+          standardCrudResources: [{
+            resourceKey: 'organization.person',
+            apiRoute: '/api/organization/persons',
+            listViewKey: 'organization.person.list',
+            detailViewKey: 'organization.person.detail',
+            createEmptyFilters: () => ({}),
+            buildListQuery: () => ({}),
+            mapListItem: () => ({}),
+            getRowId: () => 'Person_1',
+          }],
+        } satisfies FrontendModule],
+      }),
+    }));
+    vi.doMock('../metadata/runtimeMetadataLoader', () => ({
+      loadRuntimeMetadata: vi.fn().mockResolvedValue({
+        manifest: { modules: [] },
+        navDocuments: [],
+        viewDocuments: [],
+        modelDocuments: [],
+      }),
+      setPreloadedRuntimeMetadata: vi.fn(),
+    }));
+    vi.doMock('@icp-platform/sdk', () => ({
+      ModuleRegistry: { replaceAll },
+    }));
+
+    const { registerShellModules } = await import('../registerModules');
+
+    await expect(registerShellModules()).rejects.toThrow(
+      'detail view "organization.person.detail" is missing',
+    );
+    expect(replaceAll).not.toHaveBeenCalled();
+    expect(activeSnapshotId).toBe('snapshot-active');
+  });
+
+  it.each([
+    {
+      name: 'retired form.view metadata',
+      fieldExtension: { form: { view: { visible: true } } },
+      registrationExtension: {},
+      diagnostic: 'Person.ENAME.form.view',
+    },
+    {
+      name: 'retired runtime detailActions registration',
+      fieldExtension: {},
+      registrationExtension: { detailActions: [] },
+      diagnostic: 'registration property "detailActions"',
+    },
+  ])('rejects $name without replacing the active snapshot', async ({
+    fieldExtension,
+    registrationExtension,
+    diagnostic,
+  }) => {
+    let activeSnapshotId = 'snapshot-active';
+    const replaceAll = vi.fn((_modules: FrontendModule[], snapshotId: string) => {
+      activeSnapshotId = snapshotId;
+    });
+    vi.doMock('../active-module-runtime-loader', () => ({
+      loadActiveModuleRuntime: vi.fn().mockResolvedValue({
+        snapshotId: 'snapshot-invalid',
+        planHash: 'plan-invalid',
+        modules: [{
+          metadata: {
+            moduleId: 'Organization',
+            displayName: '组织结构',
+            version: '1.0.0',
+          },
+          standardCrudResources: [{
+            resourceKey: 'organization.person',
+            apiRoute: '/api/organization/persons',
+            listViewKey: 'organization.person.list',
+            detailViewKey: 'organization.person.detail',
+            createEmptyFilters: () => ({}),
+            buildListQuery: () => ({}),
+            mapListItem: () => ({}),
+            getRowId: () => 'Person_1',
+            ...registrationExtension,
+          }],
+        } as unknown as FrontendModule],
+      }),
+    }));
+    vi.doMock('../metadata/runtimeMetadataLoader', () => ({
+      loadRuntimeMetadata: vi.fn().mockResolvedValue({
+        manifest: { modules: [] },
+        navDocuments: [],
+        viewDocuments: [{
+          type: 'view',
+          view: {
+            key: 'organization.person.detail',
+            mode: 'detail',
+            model: 'Person',
+            sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+          },
+        }],
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            fields: [{
+              name: 'ENAME',
+              storage: { type: 'string' },
+              uiType: 'text',
+              ...fieldExtension,
+            }],
+          },
+        }],
+      }),
+      setPreloadedRuntimeMetadata: vi.fn(),
+    }));
+    vi.doMock('@icp-platform/sdk', () => ({
+      ModuleRegistry: { replaceAll },
+    }));
+
+    const { registerShellModules } = await import('../registerModules');
+
+    await expect(registerShellModules()).rejects.toThrow(diagnostic);
+    expect(replaceAll).not.toHaveBeenCalled();
+    expect(activeSnapshotId).toBe('snapshot-active');
   });
 });

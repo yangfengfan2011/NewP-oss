@@ -21,9 +21,18 @@
         "key": "organization",
         "titleKey": "Section_Organization",
         "fields": [
-          "CompanyId",
-          "DepartmentId",
-          "PositionId",
+          {
+            "field": "CompanyId",
+            "rendererKey": "organization.person.reference"
+          },
+          {
+            "field": "DepartmentId",
+            "rendererKey": "organization.person.reference"
+          },
+          {
+            "field": "PositionId",
+            "rendererKey": "organization.person.reference"
+          },
           "EmploymentStatus",
           "IsEnabled"
         ]

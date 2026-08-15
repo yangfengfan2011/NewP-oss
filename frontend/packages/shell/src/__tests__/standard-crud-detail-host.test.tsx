@@ -39,7 +39,7 @@ const personDetailModelDocument = {
         dataSource: { type: 'provider', key: 'organization.departments' },
         form: {
           create: { mode: 'editable' },
-          edit: { mode: 'editable' },
+          edit: { mode: 'hidden' },
         },
       },
     ],
@@ -61,7 +61,11 @@ const personDetailViewDocument = {
     model: 'Person',
     sections: [
       { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
-      { key: 'organization', titleKey: 'Section_Organization', fields: ['DepartmentId'] },
+      {
+        key: 'organization',
+        titleKey: 'Section_Organization',
+        fields: [{ field: 'DepartmentId', rendererKey: 'organization.reference' }],
+      },
     ],
     summaryBlocks: ['userLink'],
     pageActions: [
@@ -91,6 +95,13 @@ const personDetailCatalog = {
   'PersonDetailView.Field_PersonNo': '人员编号',
   'PersonDetailView.Field_ENAME': '姓名',
   'PersonDetailView.Field_DepartmentId': '部门',
+};
+
+const referenceDetailFieldRenderers = {
+  'organization.reference': ({ value, detailFields }: {
+    value: unknown;
+    detailFields: Record<string, unknown>;
+  }) => String(detailFields.DepartmentName ?? value ?? ''),
 };
 
 describe('StandardCrudDetailPageHost', () => {
@@ -159,6 +170,7 @@ describe('StandardCrudDetailPageHost', () => {
             buildListQuery: () => ({}),
             mapListItem: (value: unknown) => value,
             getRowId: () => 'row-1',
+            detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
               load: async () => [],
@@ -166,8 +178,6 @@ describe('StandardCrudDetailPageHost', () => {
             actionHandlers: {
               disablePerson: vi.fn(),
             },
-            mapDetail: (detail) => ({ id: String(detail.fields.EID), name: String(detail.fields.ENAME) }),
-            renderDetail: ({ detail }) => <div data-testid="detail">{(detail as { name: string }).name}</div>,
           },
         ],
       },
@@ -183,7 +193,10 @@ describe('StandardCrudDetailPageHost', () => {
     await act(async () => undefined);
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'GET' });
-    expect(container.textContent).toContain('张三');
+    await vi.waitFor(
+      () => expect(container.textContent).toContain('张三'),
+      { timeout: 3_000 },
+    );
   });
 
   it('uses a route-loaded detail registration without publishing it to ModuleRegistry', async () => {
@@ -203,6 +216,7 @@ describe('StandardCrudDetailPageHost', () => {
       buildListQuery: () => ({}),
       mapListItem: (value) => value as Record<string, unknown>,
       getRowId: () => 'Person_2',
+      detailFieldRenderers: referenceDetailFieldRenderers,
       lookupProviders: [{
         key: 'organization.departments',
         load: async () => [],
@@ -210,7 +224,6 @@ describe('StandardCrudDetailPageHost', () => {
       actionHandlers: {
         disablePerson: vi.fn(),
       },
-      renderDetail: ({ detail }) => <div data-testid="loaded-detail">{String(detail.fields.ENAME)}</div>,
     };
 
     await renderHost('Person_2', registration);
@@ -233,6 +246,7 @@ describe('StandardCrudDetailPageHost', () => {
             buildListQuery: () => ({}),
             mapListItem: (value: unknown) => value,
             getRowId: () => 'row-1',
+            detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
               load: async () => [],
@@ -240,7 +254,6 @@ describe('StandardCrudDetailPageHost', () => {
             actionHandlers: {
               disablePerson: vi.fn(),
             },
-            renderDetail: () => <div>详情内容</div>,
           },
         ],
       },
@@ -282,6 +295,7 @@ describe('StandardCrudDetailPageHost', () => {
             buildListQuery: () => ({}),
             mapListItem: (value: unknown) => value,
             getRowId: () => 'row-1',
+            detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
               load: async () => [],
@@ -310,68 +324,6 @@ describe('StandardCrudDetailPageHost', () => {
     expect(text.indexOf('暂未配置')).toBeLessThan(text.indexOf('姓名'));
   });
 
-  it('does not expose stale header actions after the route id changes', async () => {
-    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
-      {
-        metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
-        standardCrudResources: [
-          {
-            resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
-            listViewKey: 'organization.person.list',
-            detailViewKey: 'organization.person.detail',
-            detailRoutePath: '/organization/persons/:id',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
-            lookupProviders: [{
-              key: 'organization.departments',
-              load: async () => [],
-            }],
-            actionHandlers: {
-              disablePerson: vi.fn(),
-            },
-            mapDetail: (detail) => ({ id: String(detail.fields.EID), name: String(detail.fields.ENAME) }),
-            renderDetailHeaderActions: ({ id, detail }) => (
-              <button type="button">{`${id}:${(detail as { id: string }).id}`}</button>
-            ),
-            renderDetail: ({ detail }) => <div data-testid="detail">{(detail as { name: string }).name}</div>,
-          },
-        ],
-      },
-    ]);
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const path = String(input);
-      return new Response(
-        JSON.stringify({
-          fields: {
-            EID: path.endsWith('/Person_2') ? 'Person_2' : 'Person_1',
-            PersonNo: path.endsWith('/Person_2') ? 'P002' : 'P001',
-            ENAME: path.endsWith('/Person_2') ? '李四' : '张三',
-            DepartmentId: null,
-          },
-          summaries: {},
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-    });
-
-    await renderHost('Person_1');
-    await act(async () => undefined);
-
-    expect(container.textContent).toContain('Person_1:Person_1');
-
-    await act(async () => {
-      renderHostWithId('Person_2');
-    });
-
-    expect(container.textContent).not.toContain('Person_2:Person_1');
-  });
-
   it('renders metadata sections form fields and detail actions without legacy registration declarations', async () => {
     const disablePerson = vi.fn();
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
@@ -389,6 +341,7 @@ describe('StandardCrudDetailPageHost', () => {
             buildListQuery: () => ({}),
             mapListItem: (value: unknown) => value,
             getRowId: () => 'row-1',
+            detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
               load: async () => [],
@@ -398,7 +351,6 @@ describe('StandardCrudDetailPageHost', () => {
             },
             fields: undefined,
             formSections: undefined,
-            detailActions: undefined,
           },
         ],
       },
@@ -429,6 +381,7 @@ describe('StandardCrudDetailPageHost', () => {
     expect(container.textContent).toContain('人员编号');
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('部门');
+    expect(container.textContent).toContain('人力资源部');
     expect(container.textContent).toContain('编辑');
     expect(container.textContent).toContain('停用人员');
 

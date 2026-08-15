@@ -1,4 +1,5 @@
 import {
+  type StandardCrudDetailFieldRendererContext,
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
@@ -123,6 +124,24 @@ const personSummaryRenderers = {
   ),
 };
 
+const personReferenceProjectionByField: Record<string, string> = {
+  CompanyId: 'CompanyName',
+  DepartmentId: 'DepartmentName',
+  PositionId: 'PositionName',
+};
+
+function renderPersonReferenceDisplay({
+  fieldKey,
+  value,
+  detailFields,
+}: StandardCrudDetailFieldRendererContext) {
+  const projectionField = personReferenceProjectionByField[fieldKey];
+  const displayValue = projectionField ? detailFields[projectionField] : undefined;
+  return displayValue === null || displayValue === undefined || displayValue === ''
+    ? String(value ?? '')
+    : String(displayValue);
+}
+
 // 该注册只保留模块私有 provider、renderer、handler 和 mapper；标准字段、列、查询和动作由 metadata + Shell 内核合成。
 export const personStandardCrudResource: StandardCrudResourceRegistration<PersonListFilters, PersonListRow, PersonDetailView> = {
   resourceKey: 'organization.person',
@@ -133,6 +152,9 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
   lookupProviders: organizationLookupProviders,
   enumOptions: {
     EmploymentStatus: employmentStatusOptions,
+  },
+  detailFieldRenderers: {
+    'organization.person.reference': renderPersonReferenceDisplay,
   },
   summaryRenderers: personSummaryRenderers,
   actionInputRenderers: {

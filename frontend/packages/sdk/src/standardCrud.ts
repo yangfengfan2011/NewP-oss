@@ -123,8 +123,8 @@ export interface StandardCrudFormSection {
   fields: string[];
 }
 
-/** 标准 CRUD 表单模式；模块用它声明动作边界，Shell 用它选择运行时流程。 */
-export type StandardCrudFormMode = 'create' | 'edit' | 'view';
+/** 标准 CRUD 表单模式；详情展示由 Detail View 独立声明，不属于表单模式。 */
+export type StandardCrudFormMode = 'create' | 'edit';
 
 /** 标准动作声明；这里只描述入口和权限，不描述执行顺序、回滚或弹窗流程。 */
 export interface StandardCrudActionDefinition {
@@ -202,14 +202,6 @@ export interface StandardCrudListExtensionContext<TFilter, TRow> {
   total: number;
 }
 
-/** 详情扩展上下文，只暴露当前 id、映射后详情和刷新能力，避免模块依赖 Shell 内部状态。 */
-export interface StandardCrudDetailExtensionContext<TDetail> {
-  id: string;
-  detail: TDetail;
-  refresh: () => void;
-  loading: boolean;
-}
-
 /**
  * 模块向 Shell 注册标准 CRUD 资源的公共契约。
  *
@@ -237,7 +229,6 @@ export interface StandardCrudResourceRegistration<
   lookupProviders?: StandardCrudLookupProvider[];
   enumOptions?: Record<string, StandardCrudOption[]>;
   listActions?: StandardCrudActionDefinition[];
-  detailActions?: StandardCrudActionDefinition[];
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
@@ -253,8 +244,6 @@ export interface StandardCrudResourceRegistration<
   renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderRowActions?: (row: TRow, context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   mapDetail?: (detail: StandardCrudDetail) => TDetail;
-  renderDetail?: (context: StandardCrudDetailExtensionContext<TDetail>) => ReactNode;
-  renderDetailHeaderActions?: (context: StandardCrudDetailExtensionContext<TDetail>) => ReactNode;
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */

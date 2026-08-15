@@ -1698,7 +1698,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
             resolvedDetailSchema={resolvedDrawerDetailSchema}
             detailFields={detailFields}
-            detailFormFields={editFields}
             registration={registration}
             values={formValues}
             lookupOptions={lookupOptions}

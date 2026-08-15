@@ -7,6 +7,17 @@ namespace ICP.Platform.Modeling.Tests;
 public class ModelSchemaBuilderTests
 {
     [Fact]
+    public void PublicModelSchema_DoesNotExposeRetiredDetailVisibility()
+    {
+        Assert.DoesNotContain(
+            typeof(ModelMetadataField).GetProperties(),
+            static property => property.Name == "View");
+        Assert.DoesNotContain(
+            typeof(ModelSchemaFieldDescriptor).GetProperties(),
+            static property => property.Name == "View");
+    }
+
+    [Fact]
     public void Build_ReturnsResolvedUiTypeAndFormModes()
     {
         var document = new ModelMetadataDocument
@@ -41,10 +52,6 @@ public class ModelSchemaBuilderTests
                                 Mode = "editable"
                             }
                         },
-                        View = new ModelMetadataViewSection
-                        {
-                            Visible = true
-                        },
                         DataSource = new ModelMetadataDataSource
                         {
                             Type = "model",
@@ -74,8 +81,6 @@ public class ModelSchemaBuilderTests
         Assert.NotNull(nameField.Form);
         Assert.Equal("editable", nameField.Form!.CreateMode);
         Assert.Equal("editable", nameField.Form.EditMode);
-        Assert.NotNull(nameField.View);
-        Assert.True(nameField.View!.Visible);
         Assert.NotNull(nameField.DataSource);
         Assert.Equal("model", nameField.DataSource!.Type);
         Assert.Equal("Owner", nameField.DataSource.Key);
@@ -85,7 +90,6 @@ public class ModelSchemaBuilderTests
         Assert.Equal("readonly", descriptionField.UiType);
         Assert.Null(descriptionField.Layout);
         Assert.Null(descriptionField.Form);
-        Assert.Null(descriptionField.View);
         Assert.Null(descriptionField.DataSource);
     }
 }

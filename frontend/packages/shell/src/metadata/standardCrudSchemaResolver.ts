@@ -78,12 +78,6 @@ export interface StandardCrudRuntimeQuerySchema {
   advancedFilter?: StandardCrudAdvancedFilterSchema;
 }
 
-export interface StandardCrudDetailSectionSchema {
-  key: string;
-  titleKey: string;
-  fields: string[];
-}
-
 export interface StandardCrudListRuntimeSchema {
   viewKey: string;
   resourceKey: string;
@@ -102,24 +96,13 @@ export interface StandardCrudListRuntimeSchema {
   exportModes: string[];
 }
 
-export interface StandardCrudDetailRuntimeSchema {
-  viewKey: string;
-  resourceKey: string;
-  apiRoute: string;
-  dicKey: string;
-  titleKey: string;
-  descriptionKey: string;
-  sections: StandardCrudDetailSectionSchema[];
-  summaryBlocks: string[];
-  pageActions: StandardCrudRuntimeActionSchema[];
-}
-
 export type StandardCrudResolvedDetailFieldKind = 'text' | 'number' | 'boolean' | 'date' | 'enum' | 'lookup';
 
 export interface StandardCrudResolvedDetailFieldCatalogEntry {
   key: string;
   kind: StandardCrudResolvedDetailFieldKind;
   source: 'model' | 'entity' | 'builtin';
+  enumKey?: string;
 }
 
 export interface StandardCrudResolvedDetailFieldSchema {
@@ -127,6 +110,7 @@ export interface StandardCrudResolvedDetailFieldSchema {
   labelKey: string;
   rendererKey: string;
   rendererSource: 'standard' | 'binding';
+  enumKey?: string;
 }
 
 export interface StandardCrudResolvedDetailSectionSchema {
@@ -364,24 +348,6 @@ function resolveAdvancedFilterSource(view: MetadataRecord, query: MetadataRecord
   return Object.prototype.hasOwnProperty.call(view, 'advancedFilter') ? view.advancedFilter : query.advancedFilter;
 }
 
-function readDetailSection(value: unknown): StandardCrudDetailSectionSchema | null {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return { key: value, titleKey: value, fields: [] };
-  }
-
-  const record = readRecord(value);
-  const key = readString(record.key);
-  if (key.length === 0) {
-    return null;
-  }
-
-  return {
-    key,
-    titleKey: readString(record.titleKey, key),
-    fields: readArray<unknown>(record.fields).filter((field): field is string => typeof field === 'string' && field.length > 0),
-  };
-}
-
 function inferResolvedDetailFieldKind(field: MetadataRecord): StandardCrudResolvedDetailFieldKind {
   const uiType = readString(field.uiType);
   const dataSource = readRecord(field.dataSource);
@@ -415,15 +381,23 @@ function buildResolvedDetailFieldCatalog(model: MetadataRecord): StandardCrudRes
     key: string,
     kind: StandardCrudResolvedDetailFieldKind,
     source: StandardCrudResolvedDetailFieldCatalogEntry['source'],
+    display: Pick<StandardCrudResolvedDetailFieldCatalogEntry, 'enumKey'> = {},
   ): void => {
     if (key.length > 0 && names.add(key)) {
-      catalog.push({ key, kind, source });
+      catalog.push({ key, kind, source, ...display });
     }
   };
 
   for (const field of readRecordArray(model.fields)) {
     const key = readString(field.name);
-    append(key, inferResolvedDetailFieldKind(field), 'model');
+    const kind = inferResolvedDetailFieldKind(field);
+    const dataSource = readRecord(field.dataSource);
+    const contract = readRecord(field.contract);
+    append(key, kind, 'model', {
+      ...(kind === 'enum'
+        ? { enumKey: readString(dataSource.key, readString(contract.clrType)) }
+        : {}),
+    });
   }
   if (readString(model.kind) === 'Entity') {
     for (const [key, kind] of entityDetailFields) {
@@ -489,7 +463,9 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
 
   const fieldCatalog = buildResolvedDetailFieldCatalog(model);
   const catalogByKey = new Map(fieldCatalog.map((field) => [field.key, field]));
-  const responseFields = new Set(context.detailResponseFields ?? []);
+  const responseFields = context.detailResponseFields
+    ? new Set(context.detailResponseFields)
+    : null;
   const usedFields = new Set<string>();
   const rawSections = readArray<unknown>(view.sections);
   const sections = rawSections.map((value) => {
@@ -515,7 +491,7 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
         throw new Error(`detail view "${viewKey}" contains duplicate field "${declaration.field}"`);
       }
       usedFields.add(declaration.field);
-      if (!responseFields.has(declaration.field)) {
+      if (responseFields && !responseFields.has(declaration.field)) {
         throw new Error(`detail field "${declaration.field}" is not provided by resource "${registration.resourceKey}" response`);
       }
       if (declaration.rendererKey && !registration.detailFieldRenderers?.[declaration.rendererKey]) {
@@ -527,6 +503,7 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
         labelKey: `Field_${declaration.field}`,
         rendererKey: declaration.rendererKey ?? `standard.${catalogField.kind}`,
         rendererSource: declaration.rendererKey ? 'binding' : 'standard',
+        ...(catalogField.enumKey ? { enumKey: catalogField.enumKey } : {}),
       };
     });
 
@@ -892,55 +869,4 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   assertQuery(schema.query, schema.advancedFilter);
 
   return schema;
-}
-
-export function buildStandardCrudDetailSchema<TFilter, TRow, TDetail>(
-  view: MetadataRecord,
-  registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
-  context?: StandardCrudSchemaResolverContext,
-): StandardCrudDetailRuntimeSchema {
-  const viewKey = readString(view.key, registration.detailViewKey ?? '');
-  const dicKey = readString(view.dicKey, registration.resourceKey);
-  const titleKey = readString(view.titleKey, 'Title');
-  const descriptionKey = readString(view.descriptionKey, 'Description');
-  const modelKey = readString(view.model);
-  const model = modelKey.length > 0 ? requireModelDocument(viewKey, context?.modelDocuments, modelKey) : {};
-  const modelFields = collectModelFields(model);
-  const sections = readArray<unknown>(view.sections)
-    .map(readDetailSection)
-    .filter((section): section is StandardCrudDetailSectionSchema => section !== null);
-  const pageActions = readRecordArray(view.pageActions)
-    .map(readAction)
-    .filter((action) => action.key.length > 0);
-
-  assertDictionaryKey(dicKey, titleKey, context?.defaultLanguageCatalog);
-  assertDictionaryKey(dicKey, descriptionKey, context?.defaultLanguageCatalog);
-  for (const section of sections) {
-    assertRequiredMetadataKey('detail section', section.key, section.titleKey);
-    assertDictionaryKey(dicKey, section.titleKey, context?.defaultLanguageCatalog);
-    for (const fieldName of section.fields) {
-      assertModelFieldReference(
-        fieldName,
-        modelFields,
-        `detail section "${section.key}" references unknown model field "${fieldName}"`,
-      );
-    }
-  }
-  assertLocalizedActions(dicKey, pageActions, context?.defaultLanguageCatalog);
-  assertStandardCrudModelDataSources(model, registration);
-  for (const action of pageActions) {
-    assertAction(action, registration);
-  }
-
-  return {
-    viewKey,
-    resourceKey: registration.resourceKey,
-    apiRoute: registration.apiRoute,
-    dicKey,
-    titleKey,
-    descriptionKey,
-    sections,
-    summaryBlocks: readArray<unknown>(view.summaryBlocks).filter((block): block is string => typeof block === 'string'),
-    pageActions,
-  };
 }

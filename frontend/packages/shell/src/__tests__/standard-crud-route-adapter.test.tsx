@@ -52,6 +52,8 @@ const viewDocuments: RuntimeViewDocument[] = [{
   view: {
     key: 'organization.person.detail',
     mode: 'detail',
+    model: 'Person',
+    sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
   },
 }];
 
@@ -169,6 +171,8 @@ describe('standard CRUD route adapter', () => {
         view: {
           key: 'employee.person.detail',
           mode: 'detail',
+          model: 'Person',
+          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
         },
       },
     ];
@@ -213,7 +217,12 @@ describe('standard CRUD route projection compiler', () => {
     view: { key: listTarget, mode: 'list', detailViewKey: detailTarget },
   }, {
     type: 'view',
-    view: { key: detailTarget, mode: 'detail' },
+    view: {
+      key: detailTarget,
+      mode: 'detail',
+      model: 'Record',
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+    },
   }];
 
   function expectProjectionFailure(
@@ -343,7 +352,15 @@ describe('standard CRUD route projection compiler', () => {
     const views: RuntimeViewDocument[] = [
       ...lazyViews,
       { type: 'view', view: { key: secondListTarget, mode: 'list', detailViewKey: secondDetailTarget } },
-      { type: 'view', view: { key: secondDetailTarget, mode: 'detail' } },
+      {
+        type: 'view',
+        view: {
+          key: secondDetailTarget,
+          mode: 'detail',
+          model: 'Record',
+          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
+        },
+      },
     ];
 
     expectProjectionFailure(

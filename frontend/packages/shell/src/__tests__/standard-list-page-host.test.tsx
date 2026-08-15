@@ -275,6 +275,8 @@ describe('StandardListPageHost', () => {
           key: 'organization.person.list',
           mode: 'detail',
           title: '人员详情',
+          model: 'Person',
+          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['ENAME'] }],
         },
       },
     ]);

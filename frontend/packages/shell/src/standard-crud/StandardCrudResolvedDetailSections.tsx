@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type {
-  StandardCrudFieldDefinition,
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { DetailPage } from '@icp-platform/ui/crud-detail';
@@ -12,27 +11,19 @@ import type {
 interface StandardCrudResolvedDetailSectionsProps {
   schema: StandardCrudResolvedDetailSchema;
   detailFields: Record<string, unknown>;
-  formFields: StandardCrudFieldDefinition[];
-  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers'>;
+  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions'>;
   textFor: (key: string, fallback: string) => string;
 }
 
 function formatStandardValue(
   field: StandardCrudResolvedDetailFieldSchema,
   value: unknown,
-  definition: StandardCrudFieldDefinition | undefined,
-  detailFields: Record<string, unknown>,
+  registration: Pick<StandardCrudResourceRegistration, 'enumOptions'>,
 ): ReactNode {
-  if (field.rendererKey === 'standard.lookup') {
-    const labelField = definition?.lookup?.currentValueLabelField;
-    const displayValue = labelField ? detailFields[labelField] : undefined;
-    if (displayValue !== null && displayValue !== undefined && displayValue !== '') {
-      return String(displayValue);
-    }
-  }
-
   if (field.rendererKey === 'standard.enum') {
-    const option = definition?.options?.find((item) => item.value === value);
+    const option = field.enumKey
+      ? registration.enumOptions?.[field.enumKey]?.find((item) => item.value === value)
+      : undefined;
     if (option) {
       return option.label;
     }
@@ -54,19 +45,15 @@ function formatStandardValue(
 export default function StandardCrudResolvedDetailSections({
   schema,
   detailFields,
-  formFields,
   registration,
   textFor,
 }: StandardCrudResolvedDetailSectionsProps) {
-  const definitionByModelField = new Map(formFields.map((field) => [field.modelField, field]));
-
   return schema.sections.map((section) => (
     <DetailPage
       key={section.key}
       title={textFor(section.titleKey, section.titleKey)}
       dataSource={detailFields}
       columns={section.fields.map((field) => {
-        const definition = definitionByModelField.get(field.key);
         const bindingRenderer = field.rendererSource === 'binding'
           ? registration.detailFieldRenderers?.[field.rendererKey]
           : undefined;
@@ -77,7 +64,7 @@ export default function StandardCrudResolvedDetailSections({
           title: textFor(field.labelKey, field.labelKey),
           render: () => bindingRenderer
             ? bindingRenderer({ fieldKey: field.key, value: detailFields[field.key], detailFields })
-            : formatStandardValue(field, detailFields[field.key], definition, detailFields),
+            : formatStandardValue(field, detailFields[field.key], registration),
         };
       })}
     />

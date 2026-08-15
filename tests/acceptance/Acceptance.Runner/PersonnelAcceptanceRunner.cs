@@ -60,6 +60,8 @@ internal sealed class PersonnelAcceptanceRunner
     private string? _readOnlyECode;
     private string? _readOnlyPassword;
     private long? _readOnlyRevision;
+    private string? _unauthorizedECode;
+    private string? _unauthorizedPassword;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
     private bool _evidenceValidationFailed;
     private bool _secretLeakDetected;
@@ -395,7 +397,7 @@ internal sealed class PersonnelAcceptanceRunner
             new { ecode, ename = "Production Cold Start Unauthorized" },
             cancellationToken);
         var createdBody = await created.Content.ReadAsStringAsync(cancellationToken);
-        EnsureStatus(created, HttpStatusCode.Created, createdBody, "create production cold-start unauthorized account");
+        EnsureStatus(created, HttpStatusCode.Created, createdBody, "create unauthorized acceptance account");
         using var createdJson = JsonDocument.Parse(createdBody);
         var temporaryCredential = ReadString(createdJson.RootElement, "temporaryCredential");
         _secretTokens.Add(temporaryCredential);
@@ -416,10 +418,12 @@ internal sealed class PersonnelAcceptanceRunner
         return (ecode, password);
     }
 
+    // API 场景通过正式认证、授权与业务 endpoint 建立浏览器旅程所需数据，并锁定失败语义。
     private async Task RunApiScenarioAsync(CancellationToken cancellationToken)
     {
         var fixture = _fixture ?? throw new InvalidOperationException("Personnel fixture was not prepared.");
         var checks = new List<object>();
+        (_unauthorizedECode, _unauthorizedPassword) = await CreateUnauthorizedActorAsync(cancellationToken);
 
         using (var anonymous = CreateClient(_hostPort))
         using (var response = await anonymous.GetAsync("/api/organization/persons", cancellationToken))
@@ -519,6 +523,72 @@ internal sealed class PersonnelAcceptanceRunner
         var detailBody = await detail.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(detail, HttpStatusCode.OK, detailBody, "admin detail");
         AssertPersonBody(detailBody, person, fixture);
+
+        using (var anonymous = CreateClient(_hostPort))
+        {
+            using var deniedDetail = await anonymous.GetAsync(
+                $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+                cancellationToken);
+            EnsureStatus(
+                deniedDetail,
+                HttpStatusCode.Unauthorized,
+                await deniedDetail.Content.ReadAsStringAsync(cancellationToken),
+                "anonymous detail");
+            using var deniedStatus = await anonymous.PutAsJsonAsync(
+                $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+                new { isEnabled = false, expectedRevision = person.Revision, reason = "Anonymous disable" },
+                cancellationToken);
+            EnsureStatus(
+                deniedStatus,
+                HttpStatusCode.Unauthorized,
+                await deniedStatus.Content.ReadAsStringAsync(cancellationToken),
+                "anonymous disable");
+            checks.Add(new { check = "detail-disable-unauthorized", status = 401 });
+        }
+
+        using (var readOnly = CreateClient(_hostPort))
+        {
+            using var login = await LoginAsync(
+                readOnly,
+                _readOnlyECode ?? throw new InvalidOperationException("Read-only ECODE was not prepared."),
+                _readOnlyPassword ?? throw new InvalidOperationException("Read-only password was not prepared."),
+                cancellationToken);
+            using var allowedDetail = await readOnly.GetAsync(
+                $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+                cancellationToken);
+            EnsureStatus(
+                allowedDetail,
+                HttpStatusCode.OK,
+                await allowedDetail.Content.ReadAsStringAsync(cancellationToken),
+                "read-only detail");
+            using var deniedStatus = await SendJsonWithAntiforgeryAsync(
+                readOnly,
+                HttpMethod.Put,
+                $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+                new { isEnabled = false, expectedRevision = person.Revision, reason = "Read-only disable" },
+                cancellationToken);
+            EnsureStatus(
+                deniedStatus,
+                HttpStatusCode.Forbidden,
+                await deniedStatus.Content.ReadAsStringAsync(cancellationToken),
+                "read-only disable");
+            checks.Add(new { check = "detail-edit-permission", status = 200 });
+            checks.Add(new { check = "detail-disable-forbidden", status = 403 });
+        }
+
+        using (var invalidReason = await SendJsonWithAntiforgeryAsync(
+                   admin,
+                   HttpMethod.Put,
+                   $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+                   new { isEnabled = false, expectedRevision = person.Revision, reason = "" },
+                   cancellationToken))
+        {
+            var invalidReasonBody = await invalidReason.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(invalidReason, HttpStatusCode.BadRequest, invalidReasonBody, "empty disable reason");
+            AssertContains(invalidReasonBody, "ORGANIZATION_PERSON_LIFECYCLE_REASON_INVALID", "disable business failure code");
+            checks.Add(new { check = "detail-disable-business-failure", status = 400 });
+        }
+
         using var list = await admin.GetAsync($"/api/organization/persons?keyword={Uri.EscapeDataString(personNo)}&pageIndex=1&pageSize=20", cancellationToken);
         var listBody = await list.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(list, HttpStatusCode.OK, listBody, "admin list");
@@ -603,7 +673,7 @@ internal sealed class PersonnelAcceptanceRunner
                    cancellationToken))
         {
             EnsureStatus(conflict, HttpStatusCode.Conflict, await conflict.Content.ReadAsStringAsync(cancellationToken), "stale lifecycle update");
-            checks.Add(new { check = "lifecycle-stale-revision", status = 409 });
+            checks.Add(new { check = "detail-disable-conflict", status = 409 });
         }
 
         using var enabled = await SendJsonWithAntiforgeryAsync(
@@ -617,7 +687,7 @@ internal sealed class PersonnelAcceptanceRunner
         using var enabledJson = JsonDocument.Parse(enabledBody);
         var enabledRevision = ReadLong(enabledJson.RootElement, "revision");
         _person = person with { Revision = enabledRevision };
-        checks.Add(new { check = "disable-reason-and-enable", status = 200 });
+        checks.Add(new { check = "detail-disable-success", status = 200 });
 
         using (var bound = await SendJsonWithAntiforgeryAsync(
                    admin,
@@ -673,6 +743,7 @@ internal sealed class PersonnelAcceptanceRunner
         }, cancellationToken);
     }
 
+    // 浏览器场景只通过正式 Shell 路由和 API 完成列表、Drawer、完整详情、动作与权限旅程。
     private async Task RunBrowserScenarioAsync(string phase, CancellationToken cancellationToken)
     {
         var person = _person ?? throw new InvalidOperationException("Personnel API scenario did not create a person.");
@@ -745,15 +816,31 @@ internal sealed class PersonnelAcceptanceRunner
                 cancellationToken);
             await CaptureRestrictedBrowserEvidenceAsync(browser, person, cancellationToken);
             await AssertPersonListAndDrawerAsync(page, person, fixture);
+            await AssertFullDetailJourneyAsync(page, person, fixture, exerciseActions: true, cancellationToken);
+            await CaptureUnauthorizedDetailEvidenceAsync(browser, person, cancellationToken);
             browserAssertions.AddRange([
                 "tablet-table-with-responsive-columns",
                 "narrow-table-with-horizontal-scroll",
-                "restricted-view-only-actions-hidden"
+                "restricted-view-only-actions-hidden",
+                "drawer-to-full-detail",
+                "full-detail-direct-refresh-back-forward",
+                "detail-three-sections-four-audit-fields",
+                "detail-summary-statuses",
+                "detail-edit-permission",
+                "detail-disable-required-reason",
+                "detail-disable-success",
+                "detail-disable-business-failure",
+                "detail-disable-unauthorized",
+                "detail-disable-forbidden",
+                "detail-disable-conflict",
+                "detail-capability-denied-before-download"
             ]);
         }
         else
         {
+            await AssertFullDetailJourneyAsync(page, person, fixture, exerciseActions: false, cancellationToken);
             browserAssertions.Add("restart-relogin-canonical-list-and-drawer");
+            browserAssertions.Add("restart-full-detail-route-and-summary");
         }
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
         _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
@@ -910,7 +997,70 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
+    // 无权限 actor 直达详情时必须先停在 Shell guard，不能触发人员详情 capability 的动态下载。
+    private async Task CaptureUnauthorizedDetailEvidenceAsync(
+        IBrowser browser,
+        PersonData person,
+        CancellationToken cancellationToken)
+    {
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            Locale = "zh-CN",
+            ViewportSize = new ViewportSize { Width = 1280, Height = 900 }
+        });
+        await using (context)
+        {
+            var requestedUrls = new List<string>();
+            var page = await LoginInBrowserAsync(
+                context,
+                _unauthorizedECode ?? throw new InvalidOperationException("Unauthorized ECODE was not prepared."),
+                _unauthorizedPassword ?? throw new InvalidOperationException("Unauthorized password was not prepared."),
+                cancellationToken);
+            page.Request += (_, request) => requestedUrls.Add(request.Url);
+            requestedUrls.Clear();
+
+            var detailUrl = $"http://127.0.0.1:{_shellPort}/organization/persons/{Uri.EscapeDataString(person.Id)}";
+            await page.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByText("无权限访问", new PageGetByTextOptions { Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            var requestedCapabilityUrls = requestedUrls
+                .Where(static url => url.Contains("personStandardCrudResource", StringComparison.OrdinalIgnoreCase))
+                .Select(static url => new Uri(url).AbsolutePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (requestedCapabilityUrls.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Unauthorized detail route downloaded the Personnel capability before access denial: {string.Join(", ", requestedCapabilityUrls)}");
+            }
+
+            var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-detail-unauthorized.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            var evidenceRef = await WriteEvidenceAsync("personnel/browser-detail-unauthorized.json", new
+            {
+                status = "passed",
+                denial = "无权限访问",
+                requestedPersonnelCapabilityUrls = requestedCapabilityUrls
+            }, cancellationToken);
+            _artifactRefs.Add(evidenceRef);
+        }
+    }
+
+    // 列表观察复用同一正式登录入口，登录完成后再从 Shell 导航进入人员中心。
     private async Task<IPage> LoginAndOpenPersonnelAsync(
+        IBrowserContext context,
+        string ecode,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        var page = await LoginInBrowserAsync(context, ecode, password, cancellationToken);
+        await OpenPersonnelFromShellAsync(page);
+        return page;
+    }
+
+    // 浏览器 actor 只通过正式登录表单建立认证状态，不注入 Cookie 或前端权限快照。
+    private async Task<IPage> LoginInBrowserAsync(
         IBrowserContext context,
         string ecode,
         string password,
@@ -928,7 +1078,6 @@ internal sealed class PersonnelAcceptanceRunner
         await page.Locator("#password").FillAsync(password);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await WaitForPostLoginNavigationAsync(page);
-        await OpenPersonnelFromShellAsync(page);
         return page;
     }
 
@@ -937,6 +1086,10 @@ internal sealed class PersonnelAcceptanceRunner
         await page.WaitForURLAsync(
             $"http://127.0.0.1:{_shellPort}/",
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await page.GetByRole(
+                AriaRole.Button,
+                new PageGetByRoleOptions { Name = "退出登录", Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
     }
 
     private async Task OpenPersonnelFromShellAsync(IPage page)
@@ -951,6 +1104,7 @@ internal sealed class PersonnelAcceptanceRunner
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
+    // 列表姓名入口必须打开共享 Detail View Drawer，并同时呈现三分区与四个审计字段。
     private static async Task AssertPersonListAndDrawerAsync(
         IPage page,
         PersonData person,
@@ -988,6 +1142,190 @@ internal sealed class PersonnelAcceptanceRunner
         AssertContains(drawerText, person.Name, "person name in view drawer");
         AssertContains(drawerText, fixture.CompanyName, "company display name in view drawer");
         AssertContains(drawerText, fixture.DepartmentName, "department display name in view drawer");
+        foreach (var expected in new[]
+                 {
+                     "基础信息", "组织信息", "审计信息", "创建人", "创建时间", "更新人", "更新时间"
+                 })
+        {
+            AssertContains(drawerText, expected, $"drawer detail field {expected}");
+        }
+    }
+
+    // 完整详情旅程覆盖 Drawer 入口、直达/刷新/前后退、共享内容、摘要和停用输入/冲突恢复。
+    private async Task AssertFullDetailJourneyAsync(
+        IPage page,
+        PersonData person,
+        FixtureData fixture,
+        bool exerciseActions,
+        CancellationToken cancellationToken)
+    {
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "查看完整详情", Exact = true })
+            .ClickAsync();
+        var detailUrl = $"http://127.0.0.1:{_shellPort}/organization/persons/{Uri.EscapeDataString(person.Id)}";
+        await page.WaitForURLAsync(detailUrl, new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await AssertFullDetailContentAsync(page, person, fixture);
+
+        await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await AssertFullDetailContentAsync(page, person, fixture);
+
+        await page.GoBackAsync(new PageGoBackOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        var listUri = new Uri(page.Url);
+        var listQuery = System.Web.HttpUtility.ParseQueryString(listUri.Query);
+        if (!string.Equals(listUri.AbsolutePath, "/organization/persons", StringComparison.Ordinal)
+            || !Uri.UnescapeDataString(listUri.Query).Contains(person.PersonNo, StringComparison.Ordinal)
+            || !string.Equals(listQuery["drawer"], "view", StringComparison.Ordinal)
+            || !string.Equals(listQuery["id"], person.Id, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Browser back returned an unstable Personnel list URL: {listUri.PathAndQuery}");
+        }
+        await page.GetByText(person.Name, new PageGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var restoredDrawer = page.Locator(".ant-drawer-content:visible").Last;
+        await restoredDrawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await restoredDrawer.GetByText(person.Name, new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+        await page.GoForwardAsync(new PageGoForwardOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await page.WaitForURLAsync(detailUrl, new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await AssertFullDetailContentAsync(page, person, fixture);
+
+        await page.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await AssertFullDetailContentAsync(page, person, fixture);
+        if (!exerciseActions)
+        {
+            return;
+        }
+
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var reasonInput = await OpenDisableReasonDialogAsync(page);
+        var inputModal = page.Locator(".ant-modal-content:visible").Last;
+        await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
+            .ClickAsync();
+        await page.GetByText("请填写停用原因。", new PageGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+        await reasonInput.FillAsync("Personnel detail browser disable");
+        var successResponseTask = page.WaitForResponseAsync(static response =>
+            response.Request.Method == "PUT"
+            && response.Url.EndsWith("/status", StringComparison.Ordinal));
+        await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
+            .ClickAsync();
+        var successResponse = await successResponseTask;
+        if (successResponse.Status != (int)HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException($"Browser disable returned {successResponse.Status}, expected 200.");
+        }
+        await inputModal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+
+        _person = await EnablePersonAfterBrowserDisableAsync(person, cancellationToken);
+        reasonInput = await OpenDisableReasonDialogAsync(page);
+        inputModal = page.Locator(".ant-modal-content:visible").Last;
+        await reasonInput.FillAsync("Personnel detail stale disable");
+        var conflictResponseTask = page.WaitForResponseAsync(static response =>
+            response.Request.Method == "PUT"
+            && response.Url.EndsWith("/status", StringComparison.Ordinal));
+        await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
+            .ClickAsync();
+        var conflictResponse = await conflictResponseTask;
+        if (conflictResponse.Status != (int)HttpStatusCode.Conflict)
+        {
+            throw new InvalidOperationException($"Browser stale disable returned {conflictResponse.Status}, expected 409.");
+        }
+        await page.GetByText("LIFECYCLE_CONFLICT", new PageGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^取\\s*消$") })
+            .ClickAsync();
+    }
+
+    // 完整详情两容器共享字段结构；完整页额外必须展示两个 ready 摘要块和权限动作。
+    private static async Task AssertFullDetailContentAsync(IPage page, PersonData person, FixtureData fixture)
+    {
+        await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "人员详情", Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var main = page.Locator("main");
+        await main.GetByText(person.PersonNo, new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await main.GetByText("账号绑定", new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await main.GetByText("授权摘要", new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var pageText = await main.InnerTextAsync();
+        foreach (var expected in new[]
+                 {
+                     person.PersonNo,
+                     person.Name,
+                     fixture.CompanyName,
+                     fixture.DepartmentName,
+                     "基础信息",
+                     "组织信息",
+                     "审计信息",
+                     "创建人",
+                     "创建时间",
+                     "更新人",
+                     "更新时间",
+                     "账号绑定",
+                     "授权摘要"
+                 })
+        {
+            AssertContains(pageText, expected, $"full detail content {expected}");
+        }
+    }
+
+    // 危险动作先经过 metadata confirm，再进入模块拥有的必填原因输入弹层。
+    private static async Task<ILocator> OpenDisableReasonDialogAsync(IPage page)
+    {
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true })
+            .ClickAsync();
+        var confirmation = page.GetByRole(AriaRole.Tooltip)
+            .Filter(new LocatorFilterOptions { HasTextString = "确认停用当前人员吗？" })
+            .Last;
+        await confirmation.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
+            .Last
+            .ClickAsync();
+        var reasonInput = page.GetByLabel("停用原因", new PageGetByLabelOptions { Exact = true });
+        await reasonInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        return reasonInput;
+    }
+
+    // 浏览器成功停用后由正式 API 恢复人员，使同一页面保留旧 Revision 并产生可观测 409。
+    private async Task<PersonData> EnablePersonAfterBrowserDisableAsync(
+        PersonData person,
+        CancellationToken cancellationToken)
+    {
+        using var admin = CreateClient(_hostPort);
+        await LoginAdminAsync(admin, cancellationToken);
+        using var detail = await admin.GetAsync(
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+            cancellationToken);
+        var detailBody = await detail.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(detail, HttpStatusCode.OK, detailBody, "detail after browser disable");
+        using var detailJson = JsonDocument.Parse(detailBody);
+        var fields = ReadObject(detailJson.RootElement, "fields");
+        if (ReadBoolean(fields, "IsEnabled"))
+        {
+            throw new InvalidOperationException("Browser disable did not persist through the formal API.");
+        }
+
+        using var enabled = await SendJsonWithAntiforgeryAsync(
+            admin,
+            HttpMethod.Put,
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
+            new
+            {
+                isEnabled = true,
+                expectedRevision = ReadLong(fields, "Revision"),
+                reason = "Prepare browser lifecycle conflict"
+            },
+            cancellationToken);
+        var enabledBody = await enabled.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(enabled, HttpStatusCode.OK, enabledBody, "enable after browser disable");
+        using var enabledJson = JsonDocument.Parse(enabledBody);
+        return person with { Revision = ReadLong(enabledJson.RootElement, "revision") };
     }
 
     private static async Task SubmitPersonnelKeywordAsync(IPage page, string keywordValue)
@@ -1757,6 +2095,20 @@ internal sealed class PersonnelAcceptanceRunner
             }
         }
         throw new InvalidOperationException($"JSON integer {property} was missing.");
+    }
+
+    // 只接受明确 JSON boolean，避免验收把字符串或缺失字段误判为业务状态。
+    private static bool ReadBoolean(JsonElement element, string property)
+    {
+        foreach (var item in element.EnumerateObject())
+        {
+            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
+                && item.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                return item.Value.GetBoolean();
+            }
+        }
+        throw new InvalidOperationException($"JSON boolean {property} was missing.");
     }
 
     private static int ReadInt(JsonElement element, string property)

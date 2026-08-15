@@ -169,6 +169,52 @@ public class RepositoryTestEntrypointTests
         {
             Assert.Contains(requiredCheck, runner, StringComparison.Ordinal);
         }
+
+        Assert.Contains("listQuery[\"drawer\"], \"view\"", runner, StringComparison.Ordinal);
+        Assert.Contains("listQuery[\"id\"], person.Id", runner, StringComparison.Ordinal);
+        Assert.Contains("restoredDrawer.WaitForAsync", runner, StringComparison.Ordinal);
+        Assert.Contains("restoredDrawer.GetByText(person.Name", runner, StringComparison.Ordinal);
+        Assert.Contains("GetByRole(AriaRole.Tooltip)", runner, StringComparison.Ordinal);
+        Assert.Contains("HasTextString = \"确认停用当前人员吗？\"", runner, StringComparison.Ordinal);
+        Assert.Contains("PageGetByRoleOptions { NameRegex = new Regex(\"^确\\\\s*认$\") }", runner, StringComparison.Ordinal);
+        Assert.Contains("LocatorGetByRoleOptions { NameRegex = new Regex(\"^取\\\\s*消$\") }", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"退出登录\", Exact = true", runner, StringComparison.Ordinal);
+        Assert.Contains("requestedCapabilityUrls", runner, StringComparison.Ordinal);
+        Assert.Contains("personStandardCrudResource", runner, StringComparison.Ordinal);
+        Assert.Contains("browser-detail-unauthorized.json", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("url.Contains(\"/frontend/modules/organization/\"", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ant-popover", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PersonnelAcceptanceRunner_DeclaresIssue68DetailJourney()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        foreach (var requiredCheck in new[]
+        {
+            "drawer-to-full-detail",
+            "full-detail-direct-refresh-back-forward",
+            "detail-three-sections-four-audit-fields",
+            "detail-summary-statuses",
+            "detail-edit-permission",
+            "detail-disable-required-reason",
+            "detail-disable-success",
+            "detail-disable-business-failure",
+            "detail-disable-unauthorized",
+            "detail-disable-forbidden",
+            "detail-disable-conflict",
+            "detail-capability-denied-before-download"
+        })
+        {
+            Assert.Contains(requiredCheck, runner, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

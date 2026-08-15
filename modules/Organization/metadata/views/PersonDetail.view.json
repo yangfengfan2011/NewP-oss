@@ -68,6 +68,7 @@
         "variant": "danger",
         "confirmMessageKey": "Action_Disable_Confirm",
         "handlerKey": "disable",
+        "inputKey": "disableReason",
         "permissions": [
           "Organization.Person.Update"
         ]

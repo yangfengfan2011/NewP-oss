@@ -115,6 +115,11 @@ describe('organization person center list layout', () => {
   let root: Root;
 
   beforeAll(async () => {
+    await Promise.all([
+      import('@ant-design/pro-descriptions'),
+      import('../pages/StandardCrudListDrawerRuntime'),
+      import('../pages/StandardCrudListOverlayRuntime'),
+    ]);
     const capability = organizationModule.standardCrudCapabilities?.find(
       (item) => item.kind === 'standard-list' && item.targetKey === 'organization.person.list',
     );
@@ -392,15 +397,15 @@ describe('organization person center list layout', () => {
       await vi.waitFor(() => {
         expect(document.body.textContent).toContain('查看人员');
         expect(document.body.textContent).toContain('查看完整详情');
+        expect(document.body.textContent).toContain('基础信息');
+        expect(document.body.textContent).toContain('组织信息');
+        expect(document.body.textContent).toContain('审计信息');
+        expect(document.body.textContent).toContain('creator-1');
+        expect(document.body.textContent).toContain('editor-2');
       }, { timeout: 5_000 });
     });
     expect(document.body.textContent).not.toContain('账号绑定');
     expect(document.body.textContent).not.toContain('授权摘要');
-    expect(document.body.textContent).toContain('基础信息');
-    expect(document.body.textContent).toContain('组织信息');
-    expect(document.body.textContent).toContain('审计信息');
-    expect(document.body.textContent).toContain('creator-1');
-    expect(document.body.textContent).toContain('editor-2');
     expect(document.body.textContent).not.toContain('person-1');
     expect(document.body.textContent).not.toContain('account-1');
   });

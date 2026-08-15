@@ -118,17 +118,25 @@ describe('StandardCrudDetailPageHost', () => {
     container?.remove();
   });
 
-  async function renderHost(id: string | null, registration?: StandardCrudResourceRegistration) {
+  async function renderHost(
+    id: string | null,
+    registration?: StandardCrudResourceRegistration,
+    detailViewDocument = personDetailViewDocument,
+  ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => {
       root = createRoot(container);
-      renderHostWithId(id, registration);
+      renderHostWithId(id, registration, detailViewDocument);
     });
   }
 
-  function renderHostWithId(id: string | null, registration?: StandardCrudResourceRegistration) {
+  function renderHostWithId(
+    id: string | null,
+    registration?: StandardCrudResourceRegistration,
+    detailViewDocument = personDetailViewDocument,
+  ) {
     root.render(
       <LocalizationProvider
         defaultLanguage="zhs"
@@ -142,7 +150,7 @@ describe('StandardCrudDetailPageHost', () => {
             manifest: { modules: [] },
             navDocuments: [],
             modelDocuments: [personDetailModelDocument],
-            viewDocuments: [personDetailViewDocument],
+            viewDocuments: [detailViewDocument],
           }}
         >
           <StandardCrudDetailPageHost
@@ -326,6 +334,15 @@ describe('StandardCrudDetailPageHost', () => {
 
   it('renders metadata sections form fields and detail actions without legacy registration declarations', async () => {
     const disablePerson = vi.fn();
+    const detailViewWithInput = {
+      ...personDetailViewDocument,
+      view: {
+        ...personDetailViewDocument.view,
+        pageActions: personDetailViewDocument.view.pageActions.map((action) => action.standardAction === 'disable'
+          ? { ...action, inputKey: 'disableReason' }
+          : action),
+      },
+    };
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {
         metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
@@ -348,6 +365,15 @@ describe('StandardCrudDetailPageHost', () => {
             }],
             actionHandlers: {
               disablePerson,
+            },
+            actionInputRenderers: {
+              disableReason: ({ value, onChange }) => (
+                <textarea
+                  aria-label="停用原因"
+                  value={String(value ?? '')}
+                  onChange={(event) => onChange(event.target.value)}
+                />
+              ),
             },
             fields: undefined,
             formSections: undefined,
@@ -373,7 +399,7 @@ describe('StandardCrudDetailPageHost', () => {
       }),
     );
 
-    await renderHost('Person_1');
+    await renderHost('Person_1', undefined, detailViewWithInput);
     await act(async () => undefined);
 
     expect(container.textContent).toContain('基础信息');
@@ -391,6 +417,23 @@ describe('StandardCrudDetailPageHost', () => {
       actionButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(disablePerson).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1' }));
+    const reason = document.body.querySelector('textarea[aria-label="停用原因"]') as HTMLTextAreaElement | null;
+    expect(reason).not.toBeNull();
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      valueSetter?.call(reason, '人员离职');
+      reason?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '确认');
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(disablePerson).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'Person_1',
+      input: '人员离职',
+    }));
   });
 });

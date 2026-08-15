@@ -151,6 +151,13 @@ function readErrorMessage(value: unknown): string | undefined {
     return record.message;
   }
 
+  if (typeof record.code === 'string') {
+    const code = record.code.trim();
+    if (code.length > 0 && code.toLowerCase() !== 'unknown') {
+      return code;
+    }
+  }
+
   const nestedError = record.error;
   if (nestedError && typeof nestedError === 'object' && !Array.isArray(nestedError)) {
     const nestedMessage = (nestedError as Record<string, unknown>).message;
@@ -166,7 +173,7 @@ function readErrorMessage(value: unknown): string | undefined {
 async function readResponseErrorMessage(response: Response, fallback: string): Promise<string> {
   const contentType = response.headers.get('content-type') ?? '';
   try {
-    if (contentType.toLowerCase().includes('application/json')) {
+    if (contentType.toLowerCase().includes('json')) {
       return readErrorMessage(await response.json()) ?? fallback;
     }
 

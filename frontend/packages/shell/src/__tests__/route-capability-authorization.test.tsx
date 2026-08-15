@@ -267,6 +267,29 @@ describe('route capability authorization ordering', () => {
     listLoad.mockRestore();
   });
 
+  it('does not download the real Personnel detail capability for an unauthorized direct route', async () => {
+    window.history.replaceState({}, '', '/records/person-42');
+    state.standardCrudTargetKey = 'organization.person.list';
+    state.standardCrudDetailViewKey = 'organization.person.detail';
+    state.user = { ...state.user!, permissions: [] };
+    const detailBinding = organizationBindings.standardCrudCapabilities?.find(
+      (binding) => binding.kind === 'standard-crud-detail',
+    );
+    const detailLoad = vi.spyOn(detailBinding!, 'load');
+    registerOrganization('snapshot-organization-detail-denied');
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(detailLoad).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('无权限访问');
+    detailLoad.mockRestore();
+  });
+
   it('loads the real Personnel list implementation only after access and preserves the query', async () => {
     window.history.replaceState({}, '', '/records?keyword=alice&page=2');
     state.standardCrudTargetKey = 'organization.person.list';

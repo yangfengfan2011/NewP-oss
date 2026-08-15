@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/organization/src/services/organizationService';
 import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
 import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import organizationNavDocument from '../../../../../modules/Organization/metadata/navigation/Organization.nav.json';
 
 describe('organization person standard CRUD phase 2 registration', () => {
@@ -55,6 +56,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
 
   it('declares the six filters, personnel columns, sort whitelist and guarded actions in metadata', () => {
     const view = personListViewDocument.view;
+    const detailView = personDetailViewDocument.view;
     const advancedFields = view.advancedFilter.sections.flatMap((section) => section.fields);
 
     expect(view.query.fields.map((field) => field.key)).toEqual(['keyword', 'employmentStatus']);
@@ -67,6 +69,9 @@ describe('organization person standard CRUD phase 2 registration', () => {
     ]);
     expect(view.columns.find((column) => column.key === 'name')).toMatchObject({ standardAction: 'view' });
     expect(view.rowActions.find((action) => action.standardAction === 'disable')).toMatchObject({ inputKey: 'disableReason' });
+    expect(detailView.pageActions.find((action) => action.standardAction === 'disable')).toMatchObject({
+      inputKey: 'disableReason',
+    });
     expect(view.rowActions.find((action) => action.standardAction === 'delete')).toMatchObject({
       disabledWhen: { field: 'AccountEID', operator: 'notEmpty' },
     });

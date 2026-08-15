@@ -3,7 +3,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LocalizationProvider } from '@icp-platform/core';
+import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonDetailPage from '../../../../modules/organization/src/pages/PersonDetailPage';
@@ -97,16 +97,18 @@ describe('organization person center detail layout', () => {
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
           catalogs={{ zhs: personDetailCatalog }}
         >
-          <RuntimeMetadataProvider
-            value={{
-              manifest: { modules: [] },
-              navDocuments: [],
-              viewDocuments: [personDetailViewDocument],
-              modelDocuments: [personModelDocument],
-            }}
-          >
-            <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" registration={registration} />
-          </RuntimeMetadataProvider>
+          <AuthorizationProvider permissions={['Organization.Person.View', 'Organization.Person.Update']}>
+            <RuntimeMetadataProvider
+              value={{
+                manifest: { modules: [] },
+                navDocuments: [],
+                viewDocuments: [personDetailViewDocument],
+                modelDocuments: [personModelDocument],
+              }}
+            >
+              <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" registration={registration} />
+            </RuntimeMetadataProvider>
+          </AuthorizationProvider>
         </LocalizationProvider>,
       );
     });
@@ -182,13 +184,24 @@ describe('organization person center detail layout', () => {
             UpdatedAt: '2026-04-23T00:00:00Z',
           },
           summaries: {
-            userLink: {
+            userBinding: {
               status: 'ready',
               data: {
-                PersonId: 'person-1',
-                UserId: 'user-1',
-                LinkedAt: '2026-04-22T00:00:00Z',
-                LinkedBy: 'admin',
+                personEid: 'person-1',
+                personName: '张三',
+                isPersonEnabled: true,
+                accountEid: 'user-1',
+                boundAt: '2026-04-22T00:00:00Z',
+                boundBy: 'admin',
+                reason: '入职绑定',
+                account: {
+                  accountEid: 'user-1',
+                  ecode: 'zhangsan',
+                  ename: '张三账号',
+                  status: 'Enabled',
+                  revision: 3,
+                },
+                isAccountAvailable: true,
               },
             },
             authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
@@ -217,8 +230,11 @@ describe('organization person center detail layout', () => {
     expect(container.textContent).toContain('2026-04-21T00:00:00Z');
     expect(container.textContent).toContain('editor-2');
     expect(container.textContent).toContain('2026-04-23T00:00:00Z');
-    expect(container.textContent).toContain('账号绑定');
-    await vi.waitFor(() => expect(container.textContent).toContain('授权摘要'));
+    await vi.waitFor(() => expect(container.textContent).toContain('账号绑定'));
+    expect(container.textContent).toContain('已永久绑定');
+    expect(container.textContent).toContain('zhangsan');
+    expect(container.textContent).toContain('授权摘要');
+    expect(container.textContent).toContain('已加载');
   });
 
   it('keeps platform summary fallback during compatibility detail rendering', async () => {
@@ -242,7 +258,7 @@ describe('organization person center detail layout', () => {
             UpdatedAt: '2026-04-23T00:00:00Z',
           },
           summaries: {
-            userLink: { status: 'notConfigured', data: null },
+            userBinding: { status: 'notConfigured', data: null },
             authorizationSummary: { status: 'dependencyUnavailable', data: null },
           },
         }),

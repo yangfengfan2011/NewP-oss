@@ -242,6 +242,7 @@ function StandardCrudDetailPageContent<TDetail>({
           }))}
           grantedPermissions={grantedPermissions}
           handlers={detailActionHandlers}
+          actionInputs={registration.actionInputRenderers}
           context={{ id, detail: currentDetail as TDetail, refresh }}
         />
       )

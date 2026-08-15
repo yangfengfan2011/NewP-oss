@@ -78,7 +78,7 @@ export default function StandardCrudResolvedDetailSections({
               );
             }
             if (field.value === null) {
-              return '—';
+              return <span data-field-key={field.key}>—</span>;
             }
 
             const bindingRenderer = field.rendererSource === 'binding'

@@ -935,6 +935,7 @@ internal sealed class PersonnelAcceptanceRunner
     {
         var checks = new List<string>();
         var mode = "null";
+        var interceptedModes = new HashSet<string>(StringComparer.Ordinal);
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             Locale = "zh-CN",
@@ -946,13 +947,14 @@ internal sealed class PersonnelAcceptanceRunner
             var detailApiPattern = $"**/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
             await page.RouteAsync(detailApiPattern, async route =>
             {
+                var interceptedMode = mode;
                 var response = await route.FetchAsync();
                 var payload = JsonNode.Parse(await response.TextAsync())?.AsObject()
                     ?? throw new InvalidOperationException("Intercepted Personnel detail response is not a JSON object.");
                 var fields = payload["fields"]?.AsObject()
                     ?? throw new InvalidOperationException("Intercepted Personnel detail response does not contain fields.");
 
-                switch (mode)
+                switch (interceptedMode)
                 {
                     case "null":
                         fields["UpdatedBy"] = null;
@@ -973,9 +975,10 @@ internal sealed class PersonnelAcceptanceRunner
                         fields.Remove("Revision");
                         break;
                     default:
-                        throw new InvalidOperationException($"Unsupported detail contract drift mode '{mode}'.");
+                        throw new InvalidOperationException($"Unsupported detail contract drift mode '{interceptedMode}'.");
                 }
 
+                interceptedModes.Add(interceptedMode);
                 await route.FulfillAsync(new RouteFulfillOptions
                 {
                     Response = response,
@@ -988,11 +991,10 @@ internal sealed class PersonnelAcceptanceRunner
             await page.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "人员详情", Exact = true })
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            var updatedByItem = page.Locator(
-                ".ant-descriptions-item",
-                new PageLocatorOptions { HasTextString = "更新人" }).Last;
+            var updatedByItem = page.Locator("[data-field-key='UpdatedBy']");
             await updatedByItem.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             AssertContains(await updatedByItem.InnerTextAsync(), "—", "present null detail field");
+            AssertInterceptedMode(interceptedModes, "null");
             checks.Add("detail-null-renders-em-dash");
 
             mode = "field-missing";
@@ -1003,6 +1005,7 @@ internal sealed class PersonnelAcceptanceRunner
             {
                 throw new InvalidOperationException("One missing audit field incorrectly degraded the whole section.");
             }
+            AssertInterceptedMode(interceptedModes, "field-missing");
             checks.Add("detail-missing-field-degrades-locally");
 
             mode = "section-unavailable";
@@ -1010,6 +1013,7 @@ internal sealed class PersonnelAcceptanceRunner
             var unavailableSection = page.Locator("[data-section-key='audit']");
             await unavailableSection.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             AssertContains(await unavailableSection.InnerTextAsync(), "数据不可用", "unavailable audit section");
+            AssertInterceptedMode(interceptedModes, "section-unavailable");
             checks.Add("detail-unavailable-section-degrades-whole-section");
 
             mode = "critical-id";
@@ -1023,6 +1027,7 @@ internal sealed class PersonnelAcceptanceRunner
             {
                 throw new InvalidOperationException("Critical Personnel detail identity failure left actions visible.");
             }
+            AssertInterceptedMode(interceptedModes, "critical-id");
             checks.Add("detail-critical-id-fails-whole-detail");
 
             mode = "action-dependency";
@@ -1039,6 +1044,7 @@ internal sealed class PersonnelAcceptanceRunner
                     new PageGetByTextOptions { Exact = true })
                 .First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            AssertInterceptedMode(interceptedModes, "action-dependency");
             checks.Add("detail-action-dependency-disables-action");
 
             var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-intercepted-response.png");
@@ -1057,6 +1063,15 @@ internal sealed class PersonnelAcceptanceRunner
         }
 
         return checks;
+    }
+
+    private static void AssertInterceptedMode(IReadOnlySet<string> interceptedModes, string expectedMode)
+    {
+        if (!interceptedModes.Contains(expectedMode))
+        {
+            throw new InvalidOperationException(
+                $"Personnel detail response was not intercepted for contract drift mode '{expectedMode}'.");
+        }
     }
 
     private async Task AssertSubmittedQueryAndKeyboardAsync(IPage page, PersonData person)

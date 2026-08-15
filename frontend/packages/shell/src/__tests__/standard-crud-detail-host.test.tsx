@@ -243,7 +243,7 @@ describe('StandardCrudDetailPageHost', () => {
     await renderHost('Person_1', createPersonRegistration());
     await vi.waitFor(() => expect(container.querySelector('[data-field-key="ENAME"]')).not.toBeNull());
 
-    expect(container.textContent).toContain('—');
+    expect(container.querySelector('[data-field-key="PersonNo"]')?.textContent).toBe('—');
     expect(container.querySelector('[data-section-key="basic"]')).toBeNull();
     expect(container.querySelector('[data-field-key="ENAME"]')?.textContent).toBe('数据不可用');
     expect(warn).toHaveBeenCalledWith(

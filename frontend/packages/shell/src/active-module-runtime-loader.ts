@@ -66,6 +66,7 @@ interface StandardDataBlueprintResource {
   key: string;
   displayName: string;
   displayField: string;
+  detailViewKey?: string;
   fields: StandardDataBlueprintField[];
 }
 
@@ -79,6 +80,7 @@ interface StandardDataProjectionResource {
   resourceKey: string;
   apiRoute: string;
   pageRoute: string;
+  detailViewKey?: string;
   permissionCodes: string[];
 }
 
@@ -279,6 +281,12 @@ async function projectStandardDataModule(
       throw new Error(`standard-data resource '${bindingKey}' has no active projection binding`);
     }
 
+    if (resource.detailViewKey !== projected.detailViewKey
+      || (resource.detailViewKey !== undefined
+        && (typeof resource.detailViewKey !== 'string' || resource.detailViewKey.trim().length === 0))) {
+      throw new Error(`standard-data resource '${bindingKey}' has an inconsistent detail view projection`);
+    }
+
     const resourceSlug = toRouteToken(resource.key);
     const viewPermission = projected.permissionCodes.find((code) => code.endsWith('.View'));
     if (!viewPermission) {
@@ -290,8 +298,10 @@ async function projectStandardDataModule(
       apiRoute: projected.apiRoute,
       listViewKey: `${projection.moduleSlug}.${resourceSlug}.list`,
       listRoutePath: projected.pageRoute,
-      detailViewKey: `${projection.moduleSlug}.${resourceSlug}.detail`,
-      detailRoutePath: `${projected.pageRoute.replace(/\/$/, '')}/:id`,
+      detailViewKey: projected.detailViewKey,
+      detailRoutePath: projected.detailViewKey
+        ? `${projected.pageRoute.replace(/\/$/, '')}/:id`
+        : undefined,
       listPanelTitle: resource.displayName,
       permissions: [viewPermission],
       fields: resource.fields.map((field) => ({

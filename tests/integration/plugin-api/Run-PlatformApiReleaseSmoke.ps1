@@ -283,6 +283,7 @@ function Assert-PackageBoundary {
             "projections/standard-data.json",
             "provenance/explain.json",
             "checksums/sha256sums.json",
+            "metadata/views/AssetDetail.view.json",
             "migrations/sqlserver/Partner.AssetCatalog.Migrations.dll")) {
             if ($required -notin $entries) {
                 throw "Package is missing required entry '$required'."

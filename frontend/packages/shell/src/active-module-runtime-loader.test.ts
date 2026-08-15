@@ -455,7 +455,7 @@ describe('active-module-runtime-loader', () => {
               blueprintUrl: '/plugins/runtime/modules/Partner.AssetCatalog/authoring/newp.plugin.json',
               behaviorKey: 'standard-data.v1',
               bindingMode: 'standard-data',
-              bindings: ['Partner.AssetCatalog.Asset'],
+              bindings: ['Partner.AssetCatalog.Asset', 'Partner.AssetCatalog.Audit'],
             },
           },
         ],
@@ -472,9 +472,18 @@ describe('active-module-runtime-loader', () => {
                 key: 'Asset',
                 displayName: 'Asset',
                 displayField: 'Name',
+                detailViewKey: 'partner.asset.detail',
                 fields: [
                   { name: 'Name', type: 'string', required: true },
                   { name: 'IsEnabled', type: 'boolean', required: false },
+                ],
+              },
+              {
+                key: 'Audit',
+                displayName: 'Audit',
+                displayField: 'Name',
+                fields: [
+                  { name: 'Name', type: 'string', required: true },
                 ],
               },
             ],
@@ -489,11 +498,23 @@ describe('active-module-runtime-loader', () => {
             resourceKey: 'Asset',
             apiRoute: '/api/standard/partner-asset-catalog/assets',
             pageRoute: '/assets',
+            detailViewKey: 'partner.asset.detail',
             permissionCodes: [
               'Partner.AssetCatalog.Asset.View',
               'Partner.AssetCatalog.Asset.Create',
               'Partner.AssetCatalog.Asset.Update',
               'Partner.AssetCatalog.Asset.Delete',
+            ],
+          },
+          {
+            resourceKey: 'Audit',
+            apiRoute: '/api/standard/partner-asset-catalog/audits',
+            pageRoute: '/audits',
+            permissionCodes: [
+              'Partner.AssetCatalog.Audit.View',
+              'Partner.AssetCatalog.Audit.Create',
+              'Partner.AssetCatalog.Audit.Update',
+              'Partner.AssetCatalog.Audit.Delete',
             ],
           },
         ],
@@ -511,13 +532,14 @@ describe('active-module-runtime-loader', () => {
     expect(importModule).not.toHaveBeenCalled();
     expect(result.modules).toHaveLength(1);
     const module = result.modules[0];
-    const resource = module.standardCrudResources?.[0];
+    const resource = module.standardCrudResources?.find((candidate) =>
+      candidate.resourceKey === 'Partner.AssetCatalog.Asset');
     expect(resource).toMatchObject({
       resourceKey: 'Partner.AssetCatalog.Asset',
       apiRoute: '/api/standard/partner-asset-catalog/assets',
       listViewKey: 'partner-asset-catalog.asset.list',
       listRoutePath: '/assets',
-      detailViewKey: 'partner-asset-catalog.asset.detail',
+      detailViewKey: 'partner.asset.detail',
       detailRoutePath: '/assets/:id',
       permissions: ['Partner.AssetCatalog.Asset.View'],
     });
@@ -527,6 +549,14 @@ describe('active-module-runtime-loader', () => {
     ]);
     expect(resource?.getRowId({ EID: 'asset-1' })).toBe('asset-1');
     expect(Object.keys(resource?.actionHandlers ?? {})).toEqual(['disable', 'enable']);
+    expect(module.standardCrudResources).toHaveLength(2);
+    expect(module.standardCrudResources?.find((candidate) =>
+      candidate.resourceKey === 'Partner.AssetCatalog.Audit')).toMatchObject({
+      listViewKey: 'partner-asset-catalog.audit.list',
+      listRoutePath: '/audits',
+      detailViewKey: undefined,
+      detailRoutePath: undefined,
+    });
     const refresh = vi.fn();
     await resource?.actionHandlers?.disable({ id: 'asset-1', row: {}, refresh });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
@@ -550,6 +580,10 @@ describe('active-module-runtime-loader', () => {
       'Partner.AssetCatalog.Asset.Create',
       'Partner.AssetCatalog.Asset.Update',
       'Partner.AssetCatalog.Asset.Delete',
+      'Partner.AssetCatalog.Audit.View',
+      'Partner.AssetCatalog.Audit.Create',
+      'Partner.AssetCatalog.Audit.Update',
+      'Partner.AssetCatalog.Audit.Delete',
     ]);
   });
 });

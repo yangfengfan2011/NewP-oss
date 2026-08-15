@@ -31,6 +31,7 @@ export const projectStandardPluginBlueprint = (
       permissionCodes: ['View', 'Create', 'Update', 'Delete']
         .map((action) => `${blueprint.moduleId}.${resource.key}.${action}`)
         .sort(),
+      detailViewKey: resource.detailViewKey,
     }))
     .sort((left, right) => left.resourceKey.localeCompare(right.resourceKey));
 

@@ -25,6 +25,7 @@ public sealed class StandardPluginBlueprintCompilerTests : IDisposable
         Assert.Equal("/plugins/partner-asset-catalog/assets", resource.PageRoute);
         Assert.Equal("np_partner_asset_catalog", resource.SchemaName);
         Assert.Equal("Assets", resource.TableName);
+        Assert.Equal("partner.asset.detail", resource.DetailViewKey);
         Assert.Equal("UX_Assets_Code", Assert.Single(resource.UniqueIndexes));
         Assert.Equal(
             new[]
@@ -82,6 +83,22 @@ public sealed class StandardPluginBlueprintCompilerTests : IDisposable
         Assert.Equal(PlatformApiDiagnosticCodes.PlatformApiIncompatible, Assert.Single(result.Diagnostics).Code);
     }
 
+    [Fact]
+    public void Compile_EmptyDeclaredDetailViewKey_IsRejected()
+    {
+        var path = WriteBlueprint(ValidBlueprint().Replace(
+            "\"detailViewKey\": \"partner.asset.detail\"",
+            "\"detailViewKey\": \"\"",
+            StringComparison.Ordinal));
+
+        var result = new StandardPluginBlueprintCompiler().Compile(path);
+
+        Assert.False(result.IsSuccess);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(PlatformApiDiagnosticCodes.PackageSchemaUnsupported, diagnostic.Code);
+        Assert.Equal("/standardData/resources/0/detailViewKey", diagnostic.JsonPointer);
+    }
+
     public void Dispose()
     {
         Directory.Delete(_root, recursive: true);
@@ -120,6 +137,7 @@ public sealed class StandardPluginBlueprintCompilerTests : IDisposable
                 "pluralName": "Assets",
                 "displayName": "资产",
                 "displayField": "Name",
+                "detailViewKey": "partner.asset.detail",
                 "fields": [
                   { "name": "Code", "type": "string", "required": true, "unique": true },
                   { "name": "Name", "type": "string", "required": true },

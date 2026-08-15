@@ -68,7 +68,8 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "projections", "standard-data.json")));
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "navigation", "standard-data.nav.json")));
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetList.view.json")));
-        Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetDetail.view.json")));
+        var detailViewPath = Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetDetail.view.json");
+        Assert.True(File.Exists(detailViewPath));
         Assert.False(Directory.Exists(Path.Combine(_installRoot, "public", "Partner.AssetCatalog")));
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
@@ -84,6 +85,17 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.DoesNotContain(rowActions, static action => action.GetProperty("key").GetString() == "delete");
         AssertStateAction(rowActions, "disable", expectedEnabledValue: true);
         AssertStateAction(rowActions, "enable", expectedEnabledValue: false);
+        Assert.Equal(
+            "partner.asset.detail",
+            listView.RootElement.GetProperty("view").GetProperty("detailViewKey").GetString());
+
+        using var detailView = JsonDocument.Parse(File.ReadAllText(detailViewPath));
+        var detail = detailView.RootElement.GetProperty("view");
+        Assert.Equal("Author-owned detail", detail.GetProperty("titleKey").GetString());
+        Assert.Equal(
+            ["Name", "IsEnabled"],
+            detail.GetProperty("sections")[0].GetProperty("fields").EnumerateArray()
+                .Select(static field => field.GetString()));
 
         using var catalog = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(_installRoot, "runtime", "active-module-runtime.json")));
@@ -96,6 +108,52 @@ public sealed class RuntimeViewStagingTests : IDisposable
             "/plugins/runtime/modules/Partner.AssetCatalog/authoring/newp.plugin.json",
             frontend.GetProperty("blueprintUrl").GetString());
         Assert.False(frontend.TryGetProperty("url", out _));
+    }
+
+    [Fact]
+    public void Stage_StandardDataModuleWithoutDetailDeclaration_DoesNotPublishDetailCapability()
+    {
+        var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
+        WriteStandardDataPackage(packageRoot, "undeclared");
+        var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(_installRoot));
+
+        using (var stage = materializer.Stage(_installRoot, CreateStandardDataPlan(packageRoot)))
+        using (var commit = stage.BeginCommit())
+        {
+            commit.Complete();
+        }
+
+        var viewRoot = Path.Combine(
+            _installRoot,
+            "runtime",
+            "modules",
+            "Partner.AssetCatalog",
+            "metadata",
+            "views");
+        Assert.False(File.Exists(Path.Combine(viewRoot, "AssetDetail.view.json")));
+        using var listView = JsonDocument.Parse(File.ReadAllText(Path.Combine(viewRoot, "AssetList.view.json")));
+        var list = listView.RootElement.GetProperty("view");
+        Assert.False(list.TryGetProperty("detailViewKey", out _));
+        Assert.DoesNotContain(
+            list.GetProperty("rowActions").EnumerateArray(),
+            static action => action.GetProperty("key").GetString() == "view");
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("duplicate")]
+    [InlineData("wrong-mode")]
+    [InlineData("wrong-model")]
+    public void Stage_DeclaredDetailViewReferenceIsInvalid_RejectsWholeCandidate(string scenario)
+    {
+        var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
+        WriteStandardDataPackage(packageRoot, scenario);
+        var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(_installRoot));
+
+        Assert.Throws<JsonException>(() => materializer.Stage(_installRoot, CreateStandardDataPlan(packageRoot)));
+
+        Assert.False(Directory.Exists(Path.Combine(_installRoot, "runtime")));
+        Assert.Empty(Directory.GetDirectories(_installRoot, ".materialize-staging-*"));
     }
 
     private static void AssertStateAction(
@@ -184,7 +242,7 @@ public sealed class RuntimeViewStagingTests : IDisposable
                         "/"))
             ]);
 
-    private static void WriteStandardDataPackage(string packageRoot)
+    private static void WriteStandardDataPackage(string packageRoot, string detailScenario = "valid")
     {
         Directory.CreateDirectory(Path.Combine(packageRoot, "authoring"));
         Directory.CreateDirectory(Path.Combine(packageRoot, "projections"));
@@ -198,8 +256,7 @@ public sealed class RuntimeViewStagingTests : IDisposable
               }
             }
             """);
-        File.WriteAllText(
-            Path.Combine(packageRoot, "authoring", "newp.plugin.json"),
+        var blueprint =
             """
             {
               "schemaVersion": "1.0",
@@ -223,9 +280,19 @@ public sealed class RuntimeViewStagingTests : IDisposable
               },
               "navigation": { "slot": "business", "group": "Assets", "menu": "Assets", "order": 200 }
             }
-            """);
+            """;
+        if (!string.Equals(detailScenario, "undeclared", StringComparison.Ordinal))
+        {
+            blueprint = blueprint.Replace(
+                "\"displayField\": \"Name\",",
+                "\"displayField\": \"Name\",\n                \"detailViewKey\": \"partner.asset.detail\",",
+                StringComparison.Ordinal);
+        }
+
         File.WriteAllText(
-            Path.Combine(packageRoot, "projections", "standard-data.json"),
+            Path.Combine(packageRoot, "authoring", "newp.plugin.json"),
+            blueprint);
+        var projection =
             """
             {
               "moduleSlug": "partner-asset-catalog",
@@ -243,6 +310,49 @@ public sealed class RuntimeViewStagingTests : IDisposable
                 }
               ]
             }
-            """);
+            """;
+        if (!string.Equals(detailScenario, "undeclared", StringComparison.Ordinal))
+        {
+            projection = projection.Replace(
+                "\"pageRoute\": \"/assets\",",
+                "\"pageRoute\": \"/assets\",\n          \"detailViewKey\": \"partner.asset.detail\",",
+                StringComparison.Ordinal);
+        }
+
+        File.WriteAllText(
+            Path.Combine(packageRoot, "projections", "standard-data.json"),
+            projection);
+
+        if (!string.Equals(detailScenario, "missing", StringComparison.Ordinal)
+            && !string.Equals(detailScenario, "undeclared", StringComparison.Ordinal))
+        {
+            var viewsRoot = Path.Combine(packageRoot, "metadata", "views");
+            Directory.CreateDirectory(viewsRoot);
+            var mode = string.Equals(detailScenario, "wrong-mode", StringComparison.Ordinal) ? "list" : "detail";
+            var model = string.Equals(detailScenario, "wrong-model", StringComparison.Ordinal) ? "Other" : "Asset";
+            var authoredDetail =
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "view",
+              "view": {
+                "key": "partner.asset.detail",
+                "titleKey": "Author-owned detail",
+                "mode": "__MODE__",
+                "model": "__MODEL__",
+                "sections": [
+                  { "key": "basic", "titleKey": "Basic", "fields": ["Name", "IsEnabled"] }
+                ]
+              }
+            }
+            """
+                .Replace("__MODE__", mode, StringComparison.Ordinal)
+                .Replace("__MODEL__", model, StringComparison.Ordinal);
+            File.WriteAllText(Path.Combine(viewsRoot, "AssetDetail.view.json"), authoredDetail);
+            if (string.Equals(detailScenario, "duplicate", StringComparison.Ordinal))
+            {
+                File.WriteAllText(Path.Combine(viewsRoot, "AssetDetailDuplicate.view.json"), authoredDetail);
+            }
+        }
     }
 }

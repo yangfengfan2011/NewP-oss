@@ -70,6 +70,19 @@ export const validateStandardPluginBlueprint = (value: unknown): PlatformApiDiag
     diagnostics.push(
       diagnostic('PACKAGE_SCHEMA_UNSUPPORTED', 'schema', 'At least one standard data resource is required.', '/standardData/resources'),
     );
+  } else {
+    standardData.resources.forEach((resource, index) => {
+      if (isRecord(resource)
+        && 'detailViewKey' in resource
+        && (typeof resource.detailViewKey !== 'string' || resource.detailViewKey.trim().length === 0)) {
+        diagnostics.push(diagnostic(
+          'PACKAGE_SCHEMA_UNSUPPORTED',
+          'schema',
+          'Declared detailViewKey must not be empty.',
+          `/standardData/resources/${index}/detailViewKey`,
+        ));
+      }
+    });
   }
 
   return diagnostics.sort((left, right) =>

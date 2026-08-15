@@ -24,6 +24,7 @@
         "pluralName": "Assets",
         "displayName": "资产",
         "displayField": "Name",
+        "detailViewKey": "partner.asset.detail",
         "fields": [
           {
             "name": "Code",

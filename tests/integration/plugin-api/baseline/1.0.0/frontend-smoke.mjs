@@ -13,4 +13,5 @@ assert.equal(platformApiReleaseIdentity.profile, 'standard-data.v1');
 const projection = projectStandardPluginBlueprint(blueprint);
 assert.equal(projection.resources[0].apiRoute, '/api/plugins/partner-asset-catalog/assets');
 assert.equal(projection.resources[0].pageRoute, '/plugins/partner-asset-catalog/assets');
+assert.equal(projection.resources[0].detailViewKey, 'partner.asset.detail');
 console.log(JSON.stringify({ status: 'passed', release: platformApiReleaseIdentity.version }));

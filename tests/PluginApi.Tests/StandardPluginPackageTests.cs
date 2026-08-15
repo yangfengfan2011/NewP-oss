@@ -33,6 +33,7 @@ public sealed class StandardPluginPackageTests : IDisposable
         Assert.Contains("projections/standard-data.json", entries);
         Assert.Contains("provenance/explain.json", entries);
         Assert.Contains("checksums/sha256sums.json", entries);
+        Assert.Contains("metadata/views/AssetDetail.view.json", entries);
         Assert.Contains("migrations/sqlserver/Partner.AssetCatalog.Migrations.dll", entries);
         Assert.DoesNotContain(entries, static entry => entry.StartsWith("backend/", StringComparison.Ordinal));
         Assert.DoesNotContain(entries, static entry => entry.StartsWith("frontend/", StringComparison.Ordinal));
@@ -47,6 +48,10 @@ public sealed class StandardPluginPackageTests : IDisposable
             string.Join(Environment.NewLine, verified.Diagnostics.Select(static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}")));
         Assert.Empty(verified.Diagnostics);
         Assert.Equal("Partner.AssetCatalog", verified.Manifest?.ModuleId);
+        using var detailEntry = Assert.Single(archive.Entries, static entry =>
+            entry.FullName == "metadata/views/AssetDetail.view.json").Open();
+        using var detailReader = new StreamReader(detailEntry);
+        Assert.Contains("partner.asset.detail", detailReader.ReadToEnd(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -129,6 +134,24 @@ public sealed class StandardPluginPackageTests : IDisposable
               }
             }
             """);
+        var views = Path.Combine(_root, "metadata", "views");
+        Directory.CreateDirectory(views);
+        File.WriteAllText(
+            Path.Combine(views, "AssetDetail.view.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "type": "view",
+              "view": {
+                "key": "partner.asset.detail",
+                "mode": "detail",
+                "model": "Asset",
+                "sections": [
+                  { "key": "basic", "titleKey": "Basic", "fields": ["Name", "PurchasedAt"] }
+                ]
+              }
+            }
+            """);
         var migrations = Path.Combine(_root, "migrations", "sqlserver");
         Directory.CreateDirectory(migrations);
         File.WriteAllBytes(
@@ -189,6 +212,7 @@ public sealed class StandardPluginPackageTests : IDisposable
                 "pluralName": "Assets",
                 "displayName": "资产",
                 "displayField": "Name",
+                "detailViewKey": "partner.asset.detail",
                 "fields": [
                   { "name": "Code", "type": "string", "required": true, "unique": true },
                   { "name": "Name", "type": "string", "required": true },

@@ -47,7 +47,8 @@ public sealed record StandardDataResourceBlueprint(
     string PluralName,
     string DisplayName,
     string DisplayField,
-    IReadOnlyList<StandardDataFieldBlueprint> Fields);
+    IReadOnlyList<StandardDataFieldBlueprint> Fields,
+    string? DetailViewKey = null);
 
 /// <summary>
 /// 标准数据资源字段声明。
@@ -89,7 +90,8 @@ public sealed record StandardDataResourceProjection(
     string SchemaName,
     string TableName,
     IReadOnlyList<string> UniqueIndexes,
-    IReadOnlyList<string> PermissionCodes);
+    IReadOnlyList<string> PermissionCodes,
+    string? DetailViewKey = null);
 
 /// <summary>
 /// standard-data.v1 的编译投影。

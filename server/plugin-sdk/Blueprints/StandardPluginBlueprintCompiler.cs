@@ -105,6 +105,7 @@ public sealed partial class StandardPluginBlueprintCompiler
         return diagnostics.OrderBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal).ToArray();
     }
 
+    // 校验 Blueprint 的公开 profile、资源与持久化约束，任何诊断都拒绝整份编译结果。
     private static IReadOnlyList<PlatformApiDiagnostic> Validate(
         StandardPluginBlueprint blueprint,
         string sourcePath)
@@ -203,6 +204,20 @@ public sealed partial class StandardPluginBlueprintCompiler
                 "/standardData/resources"));
         }
 
+        for (var index = 0; index < blueprint.StandardData.Resources.Count; index++)
+        {
+            var detailViewKey = blueprint.StandardData.Resources[index].DetailViewKey;
+            if (detailViewKey is not null && string.IsNullOrWhiteSpace(detailViewKey))
+            {
+                diagnostics.Add(Diagnostic(
+                    PlatformApiDiagnosticCodes.PackageSchemaUnsupported,
+                    "schema",
+                    "Declared detailViewKey must not be empty.",
+                    sourcePath,
+                    $"/standardData/resources/{index}/detailViewKey"));
+            }
+        }
+
         if (blueprint.Persistence.Models.Count == 0
             || blueprint.Persistence.Models.Any(static path => !IsSafeRelativePath(path))
             || blueprint.Persistence.Migrations.Count != 1
@@ -226,6 +241,7 @@ public sealed partial class StandardPluginBlueprintCompiler
             .ToArray();
     }
 
+    // 从单个资源声明派生确定性运行时投影，并保留显式详情引用。
     private static StandardDataResourceProjection ProjectResource(
         string moduleId,
         string moduleSlug,
@@ -249,7 +265,8 @@ public sealed partial class StandardPluginBlueprintCompiler
             schemaName,
             resource.PluralName,
             indexes,
-            permissions);
+            permissions,
+            resource.DetailViewKey);
     }
 
     private static StandardPluginCompilationResult Failure(

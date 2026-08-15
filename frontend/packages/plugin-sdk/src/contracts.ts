@@ -47,6 +47,7 @@ export interface StandardDataResourceBlueprint {
   pluralName: string;
   displayName: string;
   displayField: string;
+  detailViewKey?: string;
   fields: StandardDataFieldBlueprint[];
 }
 
@@ -70,4 +71,5 @@ export interface StandardDataResourceProjection {
   tableName: string;
   uniqueIndexes: string[];
   permissionCodes: string[];
+  detailViewKey?: string;
 }

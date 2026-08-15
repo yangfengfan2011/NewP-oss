@@ -24,6 +24,7 @@ const blueprint = (): StandardPluginBlueprint => ({
         pluralName: 'Assets',
         displayName: '资产',
         displayField: 'Name',
+        detailViewKey: 'partner.asset.detail',
         fields: [
           { name: 'Code', type: 'string', required: true, unique: true },
           { name: 'Name', type: 'string', required: true },
@@ -57,6 +58,7 @@ describe('@icp-platform/plugin-sdk', () => {
     expect(projectStandardPluginBlueprint(input).resources[0]).toMatchObject({
       resourceKey: 'Asset',
       pageRoute: '/plugins/partner-asset-catalog/assets',
+      detailViewKey: 'partner.asset.detail',
       permissionCodes: [
         'Partner.AssetCatalog.Asset.Create',
         'Partner.AssetCatalog.Asset.Delete',
@@ -64,6 +66,16 @@ describe('@icp-platform/plugin-sdk', () => {
         'Partner.AssetCatalog.Asset.View',
       ],
     });
+  });
+
+  it('rejects an empty declared detail view key', () => {
+    const input = blueprint();
+    input.standardData.resources[0].detailViewKey = '';
+
+    expect(validateStandardPluginBlueprint(input)).toContainEqual(expect.objectContaining({
+      code: 'PACKAGE_SCHEMA_UNSUPPORTED',
+      jsonPointer: '/standardData/resources/0/detailViewKey',
+    }));
   });
 
   it('rejects runtime code and unsupported profiles with stable diagnostics', () => {

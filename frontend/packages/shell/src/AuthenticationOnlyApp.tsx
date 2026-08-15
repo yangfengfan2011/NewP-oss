@@ -33,6 +33,9 @@ function AuthenticationOnlyRoutes() {
       </Routes>
     );
   }
+  if (!auth.user.mustChangePassword) {
+    return null;
+  }
 
   return (
     <Routes>

@@ -42,15 +42,17 @@ frontend/modules/example-module/        前端 binding 与实现
 - 模型与 migration 按[持久化开发流程](persistence-development-workflow.md)处理。
 - 共享 UI 进入 `frontend/packages/ui`，普通模块不引用 Shell 内部源码。
 
-### 4. 验证完整候选
+### 4. 验证启动期静态集合
 
 先执行模块级构建和定向测试，再构建 Host 与前端模块。接入完成必须证明：
 
 - Capsule、metadata 和 behavior references 能编译为同一 Canonical Module Plan；
 - 冲突或缺失引用会拒绝整份候选；
-- Host 与 Shell 消费相同 `snapshotId` / `planHash`；
-- 前端模块全部装载成功后才原子替换 registry；
+- 所有 runtime 投影都来自同一启动期计划；
+- 前端模块全部装载成功后才一次注册本次启动的静态集合；
 - 任务涉及的权限、持久化或启动 smoke 有可复跑验证。
+
+插件变更只允许在 Host 停止期间通过离线部署工具完成，然后重启 Host / Shell。运行中的安装、升级、启用、停用、卸载和回滚不是开发或验收入口；只读 inventory 也不代表这些写能力可用。详见 ADR-0032。
 
 仓库级验证使用 `scripts/test.ps1`；冻结候选使用 `scripts/verify.ps1`。
 

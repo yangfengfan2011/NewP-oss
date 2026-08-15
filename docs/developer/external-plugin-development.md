@@ -35,6 +35,6 @@ pwsh -NoProfile -File .\tests\integration\plugin-api\Run-PlatformApiReleaseSmoke
 
 ## 生命周期边界
 
-安装只改变已安装库存或期望状态；活动版本在 Host 启动期完成整体验证、迁移和投影后原子提交。migration 成功不等于插件已经激活，禁用也不等于删除数据。
+安装、升级、启用、停用、卸载和回滚只允许在 Host 停止期间通过离线工具改变已安装库存或期望状态；运行中的 Host 写入口稳定不支持。活动版本在随后一次 Host 启动中完成整体验证、迁移和投影后生效，Shell 只装载该次启动的静态集合。migration 成功不等于插件已经激活，禁用也不等于删除数据。
 
-完整术语和失败语义见[Plugin Platform Context](../contexts/plugin-platform/CONTEXT.md)与[Platform Persistence Context](../contexts/platform-persistence/CONTEXT.md)。需要代码型外部插件时必须另行设计 profile，不能扩张 `standard-data.v1`。
+完整术语和失败语义见[Plugin Platform Context](../contexts/plugin-platform/CONTEXT.md)、[ADR-0032](../adr/0032-plugins-change-only-while-host-is-stopped.md)与[Platform Persistence Context](../contexts/platform-persistence/CONTEXT.md)。需要代码型外部插件或运行时插件运维时必须另行设计，不能扩张 `standard-data.v1` 或把离线工具暴露为在线入口。

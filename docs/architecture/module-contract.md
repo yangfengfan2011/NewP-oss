@@ -18,7 +18,7 @@ C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，�
 - frontend / metadata / localization compatibility projections；
 - permission 与 model indexes。
 
-所有投影共享同一 `snapshotId` / `planHash`。冲突或引用缺失必须拒绝整份 candidate，不允许加载顺序覆盖、warning 后跳过或部分提交。
+所有投影由同一启动期计划生成并记录 `snapshotId` / `planHash`。冲突或引用缺失必须在该次启动中拒绝整份 candidate；不得依赖加载顺序覆盖、warning 后跳过或部分注册。当前不支持进程存活期间改变插件集合，因此跨请求投影 identity 核对、运行中原子切换与回滚不属于本契约；见 ADR-0032。
 
 ## Guardrails
 
@@ -27,3 +27,4 @@ C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，�
 - 共享声明通过 Kernel / Contracts / SDK 的稳定契约协作，不复制进模块。
 - migration/import 逻辑留在显式 persistence migration seam，不进入 Host 组合。
 - compatibility adapter 必须显式标记并有退出条件，不得成为新的平行真源。
+- Host 运行期间的插件安装、升级、启用、停用、卸载和回滚不属于受支持 module contract；只读 inventory 只观察停服部署结果。

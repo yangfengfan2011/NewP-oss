@@ -10,7 +10,7 @@ Shell 启动时只读取：
 GET /plugins/active-module-runtime.json
 ```
 
-该活动目录由 `Canonical Module Plan` 生成，包含同一 `snapshotId` / `planHash` 下的模块身份、版本、依赖、前端入口和 behavior binding 信息。frontend、metadata、localization compatibility projection 也由同一 plan 生成，并携带相同的 `snapshotId` 与 `projectionHash`。
+该活动目录由 Host 本次启动的 `Canonical Module Plan` 生成，包含模块身份、版本、依赖、前端入口和 behavior binding 信息。frontend、metadata、localization compatibility projection 也由同一启动期 plan 生成，并记录 `snapshotId` 与 `projectionHash` 供诊断；当前支持边界不允许 Host 运行期间切换这些投影。
 
 对应实现：
 
@@ -30,7 +30,7 @@ Shell 按以下顺序启动：
 1. 获取并校验 Active Module Runtime Catalog 的基本结构。
 2. 按目录中的 required frontend entries 导入全部模块。
 3. behavior binding 模式校验目录声明的 behavior key 与模块导出一致。
-4. 所有入口都成功后，调用 `ModuleRegistry.replaceAll` 一次提交完整快照。
+4. 所有入口都成功后，调用 `ModuleRegistry.replaceAll` 一次注册本次启动的完整静态集合。
 5. 初始化全部模块并渲染正常 Shell。
 
 任一目录读取、入口导入或 behavior key 校验失败时：
@@ -39,7 +39,7 @@ Shell 按以下顺序启动：
 - 不回退到旧 manifest 或手工业务模块列表；
 - 不补注册所谓 host-managed 模块；
 - Shell 只显示非模块的 fatal / retry 页面；
-- retry 会重新读取并重新装载整份快照。
+- retry 会重新读取同一次 Host 启动公开的静态集合；它不是运行时插件切换入口。
 
 ## 内建与外部入口
 
@@ -62,6 +62,8 @@ legacy frontend modules 仍由兼容 adapter 装载，但不得作为新增 cano
 
 ## 当前边界
 
-当前实现已经包含确定性 Canonical Module Plan、共同快照投影、desired/active/LKG 生命周期、Organization behavior binding 和 Shell all-or-nothing 注册。公开外部 authoring 仅支持声明式 `standard-data.v1`；它不向外仓开放任意后端程序集或前端运行时代码。公开包与工具链可用不等于终局外部插件 Gate 已通过，验收结论仍以当前 issue 和 Acceptance 证据为准。
+当前只支持“停服部署 -> Host 启动期编译与装载 -> Shell 一次注册”的静态流程。运行中的安装、升级、启用、停用、卸载和回滚入口稳定不支持；插件运维前端不进入活动目录。跨快照 identity gate、运行中原子切换和回滚必须由未来插件运维设计重新建立，不能从现存 desired/active/LKG 数据结构推断为已支持能力；见 ADR-0032。
+
+公开外部 authoring 仅支持声明式 `standard-data.v1`；它不向外仓开放任意后端程序集或前端运行时代码。公开包与工具链可用不等于运行时插件运维能力。
 
 代码型外部 profile 必须另行设计进程隔离、受控 DI、前端共享依赖和失败域，不得在 Shell 中提前复制这些职责。

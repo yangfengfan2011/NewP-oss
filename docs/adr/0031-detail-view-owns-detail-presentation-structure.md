@@ -10,7 +10,7 @@ status: accepted
 
 任何标准 CRUD 详情 capability 都必须显式引用一个 Detail View。一个 Model 可以有多个命名 Detail View，但每份 View 都必须完整，不允许 View 间继承、组合、增量覆盖，也不允许缺失时回退到 Model 或表单 schema。Detail View 中列入的字段即静态可见，未列入即不展示；本阶段不新增通用条件可见性表达式。
 
-Detail View 使用 metadata 协议字段名，并只能引用详情响应实际提供的解析后字段目录。该目录包含 Model 显式字段、`EID`、`CreatedBy`、`CreatedAt`、`UpdatedBy`、`UpdatedAt` 五个 Entity 强制固定字段，以及 Model 选择的 `ENAME`、`ECODE` 可选 builtin。DTO alias、前端 mapper alias 和 `CompanyName` 一类展示投影不成为独立字段；展示投影只供其所属引用字段的 renderer 消费。字段未声明 `rendererKey` 时使用由 Model 字段类型决定的平台标准 renderer，显式 `rendererKey` 必须解析到模块注册的稳定 binding。
+Detail View 使用 metadata 协议字段名，并只能引用解析后字段目录中的规范名称。该目录包含 Model 显式字段、`EID`、`CreatedBy`、`CreatedAt`、`UpdatedBy`、`UpdatedAt` 五个 Entity 强制固定字段，以及 Model 选择的 `ENAME`、`ECODE` 可选 builtin。DTO alias、前端 mapper alias 和 `CompanyName` 一类展示投影不成为独立字段；展示投影只供其所属引用字段的 renderer 消费。字段未声明 `rendererKey` 时使用由 Model 字段类型决定的平台标准 renderer，显式 `rendererKey` 必须解析到模块注册的稳定 binding。响应数据可用性不参与该结构解析，由 ADR-0033 规定的运行时详情呈现 module 独立判断。
 
 查看 Drawer 与完整详情页消费同一份 Resolved Detail Schema，并展示完全相同的普通字段、顺序、分区和 renderer。容器可以调整宽度、响应式列数、标题、关闭或返回交互；完整详情页还可以呈现同一 Detail View 显式声明的 `summaryBlocks` 和 `pageActions`，但这些扩展不能重新定义普通字段结构。View 可见性只控制呈现，不改变详情 API 数据契约，也不构成授权；服务端 endpoint 和业务权限判定仍是安全事实源。
 
@@ -29,7 +29,7 @@ Detail View 使用 metadata 协议字段名，并只能引用详情响应实际�
 
 ## 验收与失败信号
 
-缺失或空的 Detail View、字符串 section、重复字段、未知字段、详情响应未提供的字段、未知 renderer binding，以及详情 capability 缺失 View 引用，都必须在候选编译或前端原子注册阶段拒绝整份候选，不能带病激活后再局部报错。标准详情至少包含一个对象 section 和一个字段；纯 summary 页面应使用自定义页面 capability。
+缺失或空的 Detail View、字符串 section、重复字段、未知字段、未知 renderer binding，以及详情 capability 缺失 View 引用，都必须在候选编译或前端注册阶段拒绝整份候选。标准详情至少包含一个对象 section 和一个字段；纯 summary 页面应使用自定义页面 capability。普通响应字段缺失不再属于候选失败，而按 ADR-0033 在响应到达后局部降级；关键标识失败与动作依赖不可用也由同一运行时 module 统一裁决和诊断。
 
 迁移验收必须证明创建和编辑行为保持不变，人员 Drawer 与完整详情页解析出相同的三个普通字段分区，并且四个 Entity 审计字段可由详情 API 和运行时 mapper 完整提供。完整详情页还须验证账号绑定、授权摘要以及 edit/disable 的权限、输入、成功、失败和并发冲突。真实浏览器 Gate 必须覆盖从 Drawer 进入完整详情、详情 URL 直达、刷新、前进后退和权限拒绝；standard-data 契约测试必须证明显式 View 可以装载，而缺失引用不会产生 Model fallback。
 

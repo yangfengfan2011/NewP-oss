@@ -13,7 +13,7 @@ _Avoid_: 通用页面、业务专用页面
 _Avoid_: 查看表单、详情布局
 
 **解析后字段目录（Resolved Field Catalog）**：
-由 Model 显式字段、Entity 强制固定字段和 Model 选择的可选 builtin 组成的规范字段命名空间。Detail View 只能引用详情响应实际提供的目录字段。
+由 Model 显式字段、Entity 强制固定字段和 Model 选择的可选 builtin 组成的规范字段命名空间。它约束 Detail View 的静态字段名称，不声称每次详情响应都提供其中全部字段。
 _Avoid_: DTO 属性列表、前端映射字段
 
 **Detail View（详情视图）**：
@@ -27,6 +27,10 @@ _Avoid_: Model fallback、合并详情模式
 **Detail Surface（详情呈现面）**：
 呈现同一份 Resolved Detail Schema 的查看 Drawer 或完整详情页。两者共享普通字段结构；完整详情页可以承载 Detail View 显式声明的 summary block 和 page action。
 _Avoid_: 两套详情表单
+
+**详情数据可用性（Detail Data Availability）**：
+一次详情响应相对于 Resolved Detail Schema 的运行时可用状态，区分 present-null、missing field、unavailable section、critical id failure 和 action dependency unavailable；它不改变 Detail View 结构，也不参与候选注册。
+_Avoid_: 响应字段白名单、Model 推断、候选字段校验
 
 **展示投影（Display Projection）**：
 为字段 renderer 提供可读名称的查询结果，例如组织引用的名称。它不是可独立选择的 Model 字段，也不扩展解析后字段目录。

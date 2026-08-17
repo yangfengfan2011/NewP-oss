@@ -145,7 +145,6 @@ public class HostApiPluginManifestRouteTests : IDisposable
         {
             "identity.account.detail",
             "identity.account.list",
-            "identity.accounts.page",
             "organization.person.detail",
             "organization.person.list"
         };

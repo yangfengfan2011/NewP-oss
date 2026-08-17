@@ -15,6 +15,7 @@ import accountListViewDocument from '../../../../../modules/Identity/metadata/vi
 import accountDetailViewDocument from '../../../../../modules/Identity/metadata/views/AccountDetail.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
+import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
@@ -73,7 +74,7 @@ function IdentityAccountDetailCandidate({ registration }: { registration: Standa
   );
 }
 
-describe('Identity account Standard CRUD list candidate', () => {
+describe('Identity account Standard CRUD production route', () => {
   let container: HTMLDivElement;
   let root: Root;
   let registration: StandardCrudResourceRegistration;
@@ -111,6 +112,37 @@ describe('Identity account Standard CRUD list candidate', () => {
       await act(async () => root.unmount());
     }
     container?.remove();
+  });
+
+  it('projects the production list target and same-resource detail route atomically', () => {
+    const load = vi.fn();
+    const module = {
+      metadata: { moduleId: 'candidate', displayName: 'Candidate', version: '1.0.0' },
+      standardCrudCapabilities: [
+        { kind: 'standard-list' as const, targetKey: 'identity.account.list', load },
+        { kind: 'standard-crud-detail' as const, targetKey: 'identity.account.detail', load },
+      ],
+    };
+
+    expect(compileStandardCrudRouteProjection(
+      [module],
+      runtimeMetadata.navDocuments,
+      runtimeMetadata.viewDocuments,
+      [],
+    )).toEqual({
+      detailEntries: [{ path: '/identity/accounts/:id', viewKey: 'identity.account.detail' }],
+      drawerRedirects: [{ from: '/identity/accounts/new', to: '/identity/accounts?drawer=create' }],
+      fallbackRoutes: [],
+    });
+    expect(load).not.toHaveBeenCalled();
+
+    expect(() => compileStandardCrudRouteProjection(
+      [{ ...module, standardCrudCapabilities: module.standardCrudCapabilities.slice(0, 1) }],
+      runtimeMetadata.navDocuments,
+      runtimeMetadata.viewDocuments,
+      [],
+    )).toThrow('MODULE_PROJECTION_FAILED: STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE: identity.account.detail');
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('parses, queries and renders the candidate through the shared list host', async () => {
@@ -249,7 +281,7 @@ describe('Identity account Standard CRUD list candidate', () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/security-events'))).toBe(false);
   });
 
-  it('supports candidate detail direct entry, refresh, back and forward without switching production navigation', async () => {
+  it('supports production detail direct entry, refresh, back and forward', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('/security-events')) {
@@ -324,8 +356,8 @@ describe('Identity account Standard CRUD list candidate', () => {
       '/api/identity/accounts/User_2/snapshot',
     ]);
     expect(identityNavigationDocument.navigation.items.find((item) => item.key === 'identity.accounts')).toMatchObject({
-      entryType: 'custom',
-      targetKey: 'identity.accounts.page',
+      entryType: 'standard-list',
+      targetKey: 'identity.account.list',
     });
   });
 

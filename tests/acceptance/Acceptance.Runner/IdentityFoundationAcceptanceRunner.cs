@@ -413,6 +413,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }, cancellationToken);
     }
 
+    // 真实浏览器场景必须通过 metadata 驱动的标准账号宿主完成创建，避免退役页面继续充当验收入口。
     private async Task RunBrowserScenarioAsync(CancellationToken cancellationToken)
     {
         var adminPassword = RequireSecret(_adminPassword, "administrator permanent password");
@@ -441,9 +442,9 @@ internal sealed class IdentityFoundationAcceptanceRunner
         await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "账号管理", Exact = true }).WaitForAsync();
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).ClickAsync();
-        await page.Locator("#create-ecode").FillAsync(browserCode);
-        await page.Locator("#create-ename").FillAsync("Browser Acceptance Account");
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建并签发临时密码", Exact = true }).ClickAsync();
+        await page.Locator("#ECODE").FillAsync(browserCode);
+        await page.Locator("#ENAME").FillAsync("Browser Acceptance Account");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();
         var secret = page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true });
         await secret.WaitForAsync();
         var browserTemporaryPassword = await secret.InnerTextAsync();

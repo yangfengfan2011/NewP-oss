@@ -89,7 +89,7 @@ public sealed class IdentityFoundationModelTests
     }
 
     [Fact]
-    public void AccountListMetadata_DefinesStandardCandidateWithoutSwitchingProductionNavigation()
+    public void AccountListMetadata_OwnsProductionNavigationAndDetailCapability()
     {
         var root = FindRepositoryRoot();
         using var listView = JsonDocument.Parse(File.ReadAllText(
@@ -123,14 +123,15 @@ public sealed class IdentityFoundationModelTests
             Encoding.UTF8));
         var accountEntry = navigation.RootElement.GetProperty("navigation").GetProperty("items").EnumerateArray()
             .Single(item => item.GetProperty("key").GetString() == "identity.accounts");
-        Assert.Equal("custom", accountEntry.GetProperty("entryType").GetString());
-        Assert.Equal("identity.accounts.page", accountEntry.GetProperty("targetKey").GetString());
+        Assert.Equal("standard-list", accountEntry.GetProperty("entryType").GetString());
+        Assert.Equal("identity.account.list", accountEntry.GetProperty("targetKey").GetString());
+        Assert.True(accountEntry.GetProperty("localAdministratorOnly").GetBoolean());
 
         using var capsule = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(root, @"modules\Identity\newp.plugin.json"),
             Encoding.UTF8));
         Assert.Equal(
-            ["identity.accounts.page", "identity.account.list", "identity.account.detail"],
+            ["identity.account.list", "identity.account.detail"],
             capsule.RootElement.GetProperty("frontend").GetProperty("bindings").EnumerateArray()
                 .Select(binding => binding.GetString()));
 

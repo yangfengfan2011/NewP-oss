@@ -15,13 +15,6 @@ const loadIdentityAccountStandardCrudResource = createRecoverableCapabilityLoade
 
 const identityFrontendBindings: FrontendBehaviorBindings = {
   behaviorKey: 'identity.frontend',
-  routeCapabilities: [
-    {
-      kind: 'custom',
-      targetKey: 'identity.accounts.page',
-      load: () => import('./pages/IdentityAccountsPage'),
-    },
-  ],
   standardCrudCapabilities: [
     {
       kind: 'standard-list',

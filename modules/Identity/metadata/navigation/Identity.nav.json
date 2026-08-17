@@ -17,8 +17,8 @@
         "parentKey": "identity",
         "path": "/identity/accounts",
         "order": 90,
-        "entryType": "custom",
-        "targetKey": "identity.accounts.page",
+        "entryType": "standard-list",
+        "targetKey": "identity.account.list",
         "localAdministratorOnly": true
       }
     ]

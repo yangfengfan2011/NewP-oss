@@ -34,23 +34,9 @@ export interface IdentityPage<T> {
   totalCount: number;
 }
 
-export interface IdentityAccountDetail {
-  account: IdentityAccount;
-  events: IdentityPage<IdentitySecurityEvent>;
-}
-
 export interface IdentityCredentialIssuance {
   account: IdentityAccount;
   temporaryCredential: string;
-}
-
-export interface IdentityListFilters {
-  query?: string;
-  status?: IdentityAccountStatus;
-  isPersonnelBound?: boolean;
-  isLocalAdministrator?: boolean;
-  page: number;
-  pageSize: number;
 }
 
 export interface IdentitySecurityCommand {
@@ -68,23 +54,6 @@ export class IdentityApiError extends Error {
     super(code);
     this.name = 'IdentityApiError';
   }
-}
-
-export async function listAccounts(filters: IdentityListFilters): Promise<IdentityPage<IdentityAccount>> {
-  const query = new URLSearchParams();
-  if (filters.query) query.set('query', filters.query);
-  if (filters.status) query.set('status', filters.status);
-  if (filters.isPersonnelBound !== undefined) query.set('isPersonnelBound', String(filters.isPersonnelBound));
-  if (filters.isLocalAdministrator !== undefined) query.set('isLocalAdministrator', String(filters.isLocalAdministrator));
-  query.set('page', String(filters.page));
-  query.set('pageSize', String(filters.pageSize));
-  return requestJson(`/api/identity/accounts?${query.toString()}`, { method: 'GET' });
-}
-
-export function getAccount(accountEid: string, eventPage = 1): Promise<IdentityAccountDetail> {
-  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}?eventPage=${eventPage}&eventPageSize=20`, {
-    method: 'GET',
-  });
 }
 
 export function getAccountSnapshot(accountEid: string): Promise<IdentityAccount> {

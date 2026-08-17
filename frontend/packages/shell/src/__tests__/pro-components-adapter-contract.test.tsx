@@ -119,4 +119,29 @@ describe('Pro Components adapter contract', () => {
     await act(async () => root.unmount());
     container.remove();
   });
+
+  it('disables the broken density control while keeping column settings', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <SearchTablePage
+          rowKey="EID"
+          columns={[{ key: 'name', dataIndex: 'name', title: '姓名' }]}
+          request={async () => ({ data: [], total: 0, success: true })}
+          query={{ current: 1, pageSize: 20 }}
+          toolbar={<span>列表操作</span>}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-icon="column-height"]')).toBeNull();
+    expect(container.querySelector('[data-icon="setting"]')).not.toBeNull();
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
 });

@@ -226,7 +226,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         search={false}
         cardBordered={false}
         size="middle"
-        options={{ density: true, fullScreen: false, reload: false, setting: true }}
+        options={{ density: false, fullScreen: false, reload: false, setting: true }}
         columnsState={columnState && onColumnStateChange ? {
           value: remapColumnState(columnState, sortKeyAliases),
           defaultValue: remapColumnState(defaultColumnState, sortKeyAliases),

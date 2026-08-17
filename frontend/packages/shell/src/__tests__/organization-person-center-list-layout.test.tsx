@@ -258,16 +258,22 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('.np-crud-workspace-content.ant-card')).not.toBeNull();
     expect(container.querySelector('.np-crud-table-section-fill')).toBeNull();
     expect(container.querySelector('.ant-table')).not.toBeNull();
-    expect(container.querySelector('.ant-pagination')).toBeNull();
-    expect(container.querySelector('.np-search-table-footer')).toBeNull();
+    expect(container.querySelector('.ant-pagination')).not.toBeNull();
+    expect(container.querySelector('.np-search-table-footer')).not.toBeNull();
+    expect(container.querySelector('.ant-pagination')?.textContent).toContain('第 1 / 1 页');
+    expect(container.querySelector('.ant-pagination')?.textContent).toContain('共 2 条');
     expect(container.querySelector('.ant-table-selection-column')).toBeNull();
     expect(container.querySelector('.np-table-column-resize-handle')).toBeNull();
     expect(container.querySelector('.np-table-row-icon')).toBeNull();
-    expect(container.querySelector('.np-table-row-number-cell')).toBeNull();
+    const rowNumberHeader = container.querySelector('th.np-table-row-number-cell.ant-table-cell-fix-left');
+    expect(rowNumberHeader).not.toBeNull();
+    expect(rowNumberHeader?.textContent?.trim()).toBe('');
+    expect(rowNumberHeader?.getAttribute('aria-label')).toBe('行号');
+    expect(Array.from(container.querySelectorAll('td.np-table-row-number-cell')).map((node) => node.textContent)).toEqual(['1', '2']);
     const tableHeaderTexts = Array.from(container.querySelectorAll('.ant-table-thead th')).map((node) =>
       node.textContent?.replace(/\s+/g, ''),
     );
-    expect(tableHeaderTexts).not.toContain('序号');
+    expect(tableHeaderTexts).not.toContain('行号');
     expect(tableHeaderTexts).not.toContain('图标');
     const columnSettingIcon = container.querySelector('.anticon-setting');
     expect(columnSettingIcon).not.toBeNull();
@@ -325,7 +331,7 @@ describe('organization person center list layout', () => {
     expect(overflowMenu?.textContent).toContain('停用');
     expect(overflowMenu?.textContent).not.toContain('启用');
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
-    expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(0);
+    expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
   });
 

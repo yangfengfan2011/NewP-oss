@@ -160,15 +160,33 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection, retryVersion]);
 
+  const rowNumberStart = (effectiveQuery.current - 1) * effectiveQuery.pageSize;
   const tableColumns = useMemo(() => {
-    return columns.map((column) => ({
-      ...column,
-      sorter: column.sorter === true,
-      sortOrder: resolveColumnKey(column) === effectiveQuery.sortBy
-        ? effectiveQuery.sortDirection === 'desc' ? 'descend' : 'ascend'
-        : undefined,
-    } as ProColumns<TRow>));
-  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection]);
+    const rowNumberColumn: ProColumns<TRow> = {
+      title: '',
+      key: '__rowNumber',
+      width: 64,
+      fixed: 'left',
+      align: 'center',
+      hideInSearch: true,
+      hideInSetting: true,
+      sorter: false,
+      className: 'np-table-row-number-cell',
+      onHeaderCell: () => ({ 'aria-label': '行号' }),
+      render: (_, __, index) => rowNumberStart + index + 1,
+    };
+
+    return [
+      rowNumberColumn,
+      ...columns.map((column) => ({
+        ...column,
+        sorter: column.sorter === true,
+        sortOrder: resolveColumnKey(column) === effectiveQuery.sortBy
+          ? effectiveQuery.sortDirection === 'desc' ? 'descend' : 'ascend'
+          : undefined,
+      } as ProColumns<TRow>)),
+    ];
+  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart]);
 
   return (
     <div className="np-search-table-page">
@@ -227,14 +245,14 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
           });
         }}
       />
-      {total > effectiveQuery.pageSize ? <div className="np-search-table-footer">
+      <div className="np-search-table-footer">
         <Pagination
           current={effectiveQuery.current}
           pageSize={effectiveQuery.pageSize}
-          total={total}
+          total={Math.max(total, 1)}
           showSizeChanger
           pageSizeOptions={[20, 50, 100]}
-          showTotal={(value) => `共 ${value} 条`}
+          showTotal={() => `第 ${effectiveQuery.current} / ${Math.max(1, Math.ceil(total / effectiveQuery.pageSize))} 页，共 ${total} 条`}
           locale={{ items_per_page: '条/页' }}
           onChange={(nextCurrent, nextPageSize) => {
             updateQuery({
@@ -244,7 +262,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
             });
           }}
         />
-      </div> : null}
+      </div>
     </div>
   );
 }

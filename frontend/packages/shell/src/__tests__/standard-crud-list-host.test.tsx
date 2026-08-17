@@ -375,8 +375,10 @@ describe('StandardCrudListPageHost', () => {
       { method: 'GET' },
     );
     expect(container.textContent).toContain('张三');
-    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(0);
-    expect(container.querySelector('.ant-pagination')).toBeNull();
+    expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
+    expect(container.querySelector('.ant-pagination')).not.toBeNull();
+    expect(container.querySelector('.ant-pagination')?.textContent).toContain('第 1 / 1 页');
+    expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
   });
 
   it('restores committed filters paging and server sorting from the URL', async () => {
@@ -407,6 +409,7 @@ describe('StandardCrudListPageHost', () => {
       { method: 'GET' },
     );
     expect(container.querySelector('.ant-pagination')?.textContent).toContain('共 80 条');
+    expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('51');
   });
 
   it('falls back to the last valid page when refreshed data no longer reaches the URL page', async () => {
@@ -707,7 +710,7 @@ describe('StandardCrudListPageHost', () => {
 
   it('distinguishes an empty dataset from a filtered empty result', async () => {
     mockStandardCrudModule();
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
       new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -717,6 +720,9 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
     expect(container.textContent).toContain('当前数据集为空');
+    expect(container.querySelector('.ant-pagination')?.textContent).toContain('共 0 条');
+    expect(container.querySelector('.ant-pagination')?.textContent).toContain('第 1 / 1 页');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await act(async () => root.unmount());
     container.remove();
@@ -759,11 +765,11 @@ describe('StandardCrudListPageHost', () => {
       }),
     );
 
-    await renderHost();
+    await renderHost({}, personListViewDocument, '/organization/persons?page=2');
     await flushProTableRequest();
 
     expect(container.textContent).toContain('共 41 条');
-    expect(container.textContent).not.toContain('第 2 / 3 页');
+    expect(container.textContent).toContain('第 2 / 3 页');
     expect(container.textContent).toContain('3');
   });
 

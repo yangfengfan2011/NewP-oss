@@ -84,6 +84,21 @@ function resolveColumnKey<TRow>(column: ProColumns<TRow>): string {
   return String(column.title ?? 'column');
 }
 
+function remapColumnState(
+  state: StandardCrudColumnState | undefined,
+  aliases: ReadonlyMap<string, string>,
+  reverse = false,
+): StandardCrudColumnState | undefined {
+  if (!state) {
+    return undefined;
+  }
+
+  const keyMap = reverse
+    ? new Map([...aliases].map(([preferenceKey, runtimeKey]) => [runtimeKey, preferenceKey]))
+    : aliases;
+  return Object.fromEntries(Object.entries(state).map(([key, value]) => [keyMap.get(key) ?? key, value]));
+}
+
 export function SearchTablePage<TRow extends Record<string, unknown>>({
   rowKey,
   columns,
@@ -115,6 +130,11 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   eventHandlersRef.current = { onLoadResult, onLoadError, onLoadingChange };
   const effectiveQuery = query ?? uncontrolledQuery;
   const updateQuery = onQueryChange ?? setUncontrolledQuery;
+  const sortKeyAliases = useMemo(() => new Map(columns.flatMap((column) => {
+    const field = resolveColumnKey(column);
+    const preferenceKey = typeof column.key === 'string' ? column.key : field;
+    return column.sorter === true && preferenceKey !== field ? [[preferenceKey, field]] : [];
+  })), [columns]);
 
   useEffect(() => {
     const requestId = requestIdRef.current + 1;
@@ -178,19 +198,25 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
 
     return [
       rowNumberColumn,
-      ...columns.map((column) => ({
-        ...column,
-        sorter: column.sorter === true,
-        sortOrder: resolveColumnKey(column) === effectiveQuery.sortBy
-          ? effectiveQuery.sortDirection === 'desc' ? 'descend' : 'ascend'
-          : undefined,
-      } as ProColumns<TRow>)),
+      ...columns.map((column) => {
+        const field = resolveColumnKey(column);
+        const preferenceKey = typeof column.key === 'string' ? column.key : field;
+        return {
+          ...column,
+          key: sortKeyAliases.get(preferenceKey) ?? preferenceKey,
+          sorter: column.sorter === true,
+          defaultSortOrder: field === effectiveQuery.sortBy
+            ? effectiveQuery.sortDirection === 'desc' ? 'descend' : 'ascend'
+            : undefined,
+        } as ProColumns<TRow>;
+      }),
     ];
-  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart]);
+  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart, sortKeyAliases]);
 
   return (
     <div className="np-search-table-page">
       <ProTable<TRow>
+        key={`${effectiveQuery.sortBy ?? 'none'}:${effectiveQuery.sortDirection ?? 'none'}`}
         className={className}
         rowKey={rowKey}
         columns={tableColumns}
@@ -202,9 +228,11 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         size="middle"
         options={{ density: true, fullScreen: false, reload: false, setting: true }}
         columnsState={columnState && onColumnStateChange ? {
-          value: columnState,
-          defaultValue: defaultColumnState,
-          onChange: (value) => onColumnStateChange(value as StandardCrudColumnState),
+          value: remapColumnState(columnState, sortKeyAliases),
+          defaultValue: remapColumnState(defaultColumnState, sortKeyAliases),
+          onChange: (value) => onColumnStateChange(
+            remapColumnState(value as StandardCrudColumnState, sortKeyAliases, true) ?? {},
+          ),
         } : undefined}
         toolBarRender={toolbar ? () => [toolbar] : false}
         rowSelection={selectableRows ? {

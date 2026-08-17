@@ -410,6 +410,52 @@ describe('StandardCrudListPageHost', () => {
     );
     expect(container.querySelector('.ant-pagination')?.textContent).toContain('共 80 条');
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('51');
+    const nameHeader = Array.from(container.querySelectorAll('.ant-table-thead th')).find((header) =>
+      header.textContent?.includes('姓名'));
+    expect(nameHeader?.querySelector('.ant-table-column-sorter-down.active')).not.toBeNull();
+  });
+
+  it('cycles a controlled sortable column from ascending to descending', async () => {
+    mockStandardCrudModule();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost(
+      {},
+      createSortablePersonListViewDocument(),
+      '/organization/persons?page=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+    );
+    await flushProTableRequest();
+
+    const personNoHeader = Array.from(container.querySelectorAll('.ant-table-thead th')).find((header) =>
+      header.textContent?.includes('人员编号'));
+    expect(personNoHeader?.querySelector('.ant-table-column-sorter-up.active')).not.toBeNull();
+
+    await act(async () => {
+      personNoHeader?.querySelector<HTMLElement>('.ant-table-column-sorters')?.click();
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=desc',
+      { method: 'GET' },
+    );
+    const descendingPersonNoHeader = Array.from(
+      container.querySelectorAll<HTMLElement>('.ant-table-thead th'),
+    ).find((header) => header.textContent?.includes('人员编号'));
+
+    expect(
+      descendingPersonNoHeader?.querySelector('.ant-table-column-sorter-down.active'),
+    ).not.toBeNull();
   });
 
   it('falls back to the last valid page when refreshed data no longer reaches the URL page', async () => {
@@ -481,10 +527,17 @@ describe('StandardCrudListPageHost', () => {
       testNavigate?.('?keyword=%E5%BC%A0&page=2&pageSize=20&sortBy=ENAME&sortDirection=desc');
     });
     await flushProTableRequest();
+    const nameHeader = Array.from(container.querySelectorAll('.ant-table-thead th')).find((header) =>
+      header.textContent?.includes('姓名'));
+    expect(nameHeader?.querySelector('.ant-table-column-sorter-down.active')).not.toBeNull();
     await act(async () => {
       testNavigate?.(-1);
     });
     await flushProTableRequest();
+
+    const personNoHeader = Array.from(container.querySelectorAll('.ant-table-thead th')).find((header) =>
+      header.textContent?.includes('人员编号'));
+    expect(personNoHeader?.querySelector('.ant-table-column-sorter-up.active')).not.toBeNull();
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[1]?.[0]).toContain('keyword=%E5%BC%A0');

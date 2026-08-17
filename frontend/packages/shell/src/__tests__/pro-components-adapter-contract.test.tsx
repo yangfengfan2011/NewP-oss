@@ -73,7 +73,48 @@ describe('Pro Components adapter contract', () => {
     expect(container.textContent).not.toContain('过期结果');
     expect(onLoadResult).toHaveBeenCalledTimes(1);
     expect(container.querySelectorAll('.ant-table-column-has-sorters')).toHaveLength(1);
-    expect(container.querySelector('.ant-pagination')).toBeNull();
+    expect(container.querySelector('.ant-pagination')).not.toBeNull();
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it('reflects controlled server sorting and emits the next direction', async () => {
+    const onQueryChange = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <SearchTablePage
+          rowKey="EID"
+          columns={[{ key: 'personNo', dataIndex: 'PersonNo', title: '人员编号', sorter: true }]}
+          request={async () => ({
+            data: [{ EID: 'Person_1', PersonNo: 'P001' }],
+            total: 1,
+            success: true,
+          })}
+          query={{ current: 1, pageSize: 20, sortBy: 'PersonNo', sortDirection: 'asc' }}
+          onQueryChange={onQueryChange}
+          columnState={{ personNo: { show: true, order: 0 } }}
+          defaultColumnState={{ personNo: { show: true, order: 0 } }}
+          onColumnStateChange={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const header = container.querySelector('.ant-table-thead th.ant-table-column-has-sorters');
+    expect(header?.querySelector('.ant-table-column-sorter-up.active')).not.toBeNull();
+
+    await act(async () => {
+      header?.querySelector<HTMLElement>('.ant-table-column-sorters')?.click();
+    });
+    expect(onQueryChange).toHaveBeenCalledWith(expect.objectContaining({
+      sortBy: 'PersonNo',
+      sortDirection: 'desc',
+    }));
 
     await act(async () => root.unmount());
     container.remove();

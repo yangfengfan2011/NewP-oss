@@ -2,11 +2,14 @@ import { useState, type ReactElement } from 'react';
 import { Button } from '@icp-platform/ui/core';
 import { CrudDangerAction } from '@icp-platform/ui/crud-detail';
 import Modal from 'antd/es/modal';
+import { StandardCrudRequestError } from '@icp-platform/sdk';
 import type {
   StandardCrudActionContext,
   StandardCrudActionDefinition,
   StandardCrudActionHandler,
   StandardCrudActionInputRenderer,
+  StandardCrudActionStateResolver,
+  StandardCrudOperationResult,
 } from '@icp-platform/sdk';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
@@ -14,6 +17,8 @@ export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   grantedPermissions?: string[];
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
+  actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
+  onResult?: (result: StandardCrudOperationResult) => void;
   context: StandardCrudActionContext<TDetail, TRow>;
 }
 
@@ -39,13 +44,26 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   grantedPermissions = [],
   handlers = {},
   actionInputs = {},
+  actionStateResolver,
+  onResult,
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
   const [inputValue, setInputValue] = useState<unknown>(undefined);
-  const visibleActions = actions.filter((action) => hasPermission(action, grantedPermissions));
+  const resolvedActions = actions.map((action) => {
+    const state = actionStateResolver?.({ action, detail: context.detail, row: context.row });
+    return {
+      ...action,
+      runtimeDisabled: action.runtimeDisabled === true || state?.available === false,
+      disabledReason: action.disabledReason ?? state?.reason,
+      runtimeVisible: state?.visible !== false,
+    };
+  });
+  const visibleActions = resolvedActions.filter((action) => (
+    action.runtimeVisible && hasPermission(action, grantedPermissions)
+  ));
 
   async function runAction(action: StandardCrudActionDefinition, input?: unknown): Promise<boolean> {
     const handler = resolveActionHandler(action, handlers);
@@ -56,10 +74,17 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     try {
       setPendingKey(action.key);
       setError(null);
-      await handler({ ...context, ...(action.inputKey ? { input } : {}) });
+      const result = await handler({ ...context, ...(action.inputKey ? { input } : {}) });
+      if (result) {
+        onResult?.(result);
+      }
       return true;
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : '执行操作失败');
+      if (actionError instanceof StandardCrudRequestError && actionError.status === 409) {
+        setInputAction(null);
+        context.refresh();
+      }
       return false;
     } finally {
       setPendingKey(null);
@@ -143,7 +168,13 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
         }}
       >
         {inputAction?.inputKey
-          ? actionInputs[inputAction.inputKey]?.({ action: inputAction, value: inputValue, onChange: setInputValue })
+          ? actionInputs[inputAction.inputKey]?.({
+              action: inputAction,
+              value: inputValue,
+              onChange: setInputValue,
+              detail: context.detail,
+              row: context.row,
+            })
           : null}
       </Modal>
     </div>

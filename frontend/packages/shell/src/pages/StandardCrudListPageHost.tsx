@@ -1297,17 +1297,27 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           const rowActions: RowActionItem[] = rowActionDefinitions
             .filter((action) => hasActionPermission(action, grantedPermissions))
             .filter((action) => isRowActionVisibleForRow(action, row as Record<string, unknown>))
-            .map((action): RowActionItem => {
+            .map((action) => ({
+              action,
+              actionState: registration.actionStateResolver?.({ action, row }),
+            }))
+            .filter(({ actionState }) => actionState?.visible !== false)
+            .map(({ action, actionState }): RowActionItem => {
               const pendingKey = `${action.key}:${rowId}`;
               const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
-              const disabledReason = resolveRowActionDisabledReason(
+              const metadataDisabledReason = resolveRowActionDisabledReason(
                 action,
                 row as Record<string, unknown>,
                 (key) => t(`${schema.dicKey}.${key}`, key),
               );
+              const disabledReason = actionState?.available === false
+                ? actionState.reason ?? '当前状态不允许执行该操作。'
+                : metadataDisabledReason;
               const confirmMessage = action.confirmMessageKey
                 ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
                 : undefined;
+              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+              const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
 
               if (action.standardAction === 'view') {
                 return {
@@ -1325,6 +1335,20 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 };
               }
               if (action.standardAction === 'delete') {
+                if (inputRenderer) {
+                  return {
+                    key: action.key,
+                    label,
+                    danger: true,
+                    loading: rowActionPendingKey === pendingKey,
+                    disabled: rowActionPendingKey !== null || !handler || disabledReason !== undefined,
+                    disabledReason,
+                    onClick: async () => {
+                      setRowInputValue(undefined);
+                      setRowInputAction({ action, row, rowId, pendingKey, label });
+                    },
+                  };
+                }
                 return {
                   key: action.key,
                   label,
@@ -1338,7 +1362,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                       setDeletingActionKey(pendingKey);
                       setDeleteActionError(null);
 
-                      const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
                       if (handler) {
                         // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
                         await handler({ id: rowId, row, refresh: () => undefined });
@@ -1360,16 +1383,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 };
               }
 
-              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
-              const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
-
               return {
                 key: action.key,
                 label,
                 danger: isDangerRowAction(action),
                 confirmMessage: inputRenderer ? undefined : confirmMessage,
                 loading: rowActionPendingKey === pendingKey,
-                disabled: rowActionPendingKey !== null || !handler,
+                disabled: rowActionPendingKey !== null || !handler || disabledReason !== undefined,
+                disabledReason,
                 onClick: async () => {
                   if (!handler) {
                     return;
@@ -1384,7 +1405,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   try {
                     setRowActionPendingKey(pendingKey);
                     setRowActionError(null);
-                    await handler({ id: rowId, row, refresh: context.refresh });
+                    const result = await handler({ id: rowId, row, refresh: context.refresh });
+                    if (result && operationResultPresenterRegistry.resolve(result)) {
+                      setPresentedOperationResult(result);
+                    }
                   } catch (actionError) {
                     setRowActionError({
                       key: pendingKey,
@@ -1806,14 +1830,21 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 try {
                   setRowActionPendingKey(pendingKey);
                   setRowActionError(null);
-                  await handler({ id: rowId, row, input: rowInputValue, refresh: () => undefined });
+                  const result = await handler({ id: rowId, row, input: rowInputValue, refresh: () => undefined });
                   context.refresh();
                   setRowInputAction(null);
+                  if (result && operationResultPresenterRegistry.resolve(result)) {
+                    setPresentedOperationResult(result);
+                  }
                 } catch (actionError) {
                   setRowActionError({
                     key: pendingKey,
                     message: actionError instanceof Error ? actionError.message : '执行操作失败',
                   });
+                  if (actionError instanceof StandardCrudRequestError && actionError.status === 409) {
+                    setRowInputAction(null);
+                    context.refresh();
+                  }
                 } finally {
                   setRowActionPendingKey(null);
                 }
@@ -1831,6 +1862,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 action: rowInputAction.action,
                 value: rowInputValue,
                 onChange: setRowInputValue,
+                row: rowInputAction.row,
               })
               : null}
           </Modal>

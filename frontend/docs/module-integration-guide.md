@@ -46,6 +46,12 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 不声明 `inputKey` 的既有动作和 handler 保持兼容。声明了 `inputKey` 但缺少对应 renderer 时，活动标准 CRUD 注册会 fail closed，避免动作在缺失业务输入的情况下执行。
 
+## 标准 CRUD 动作状态与结果
+
+动作的静态定义仍由 metadata 拥有。需要根据当前列表行或详情快照决定可见性、可用性和原因时，模块在 `StandardCrudResourceRegistration.actionStateResolver` 注册一个仅返回通用 `visible` / `available` / `reason` 的 resolver。Shell 只解释这个通用结果；业务字段、组合规则和保护原因必须留在模块 binding，而且前端状态不能替代服务端 guard。
+
+`actionHandlers` 可以返回不透明的 `StandardCrudOperationResult`。Shell 只把该结果交给模块注册的 `operationResultPresenter`，不检查、持久或重放 payload。模块 presenter 拥有具体结果形状、展示、复制与关闭销毁时机。动作发生并发冲突时，Shell 刷新最新快照并结束旧确认流程，不自动重放写入。
+
 ## 验证
 
 - 模块构建证明 TypeScript binding 与依赖完整。

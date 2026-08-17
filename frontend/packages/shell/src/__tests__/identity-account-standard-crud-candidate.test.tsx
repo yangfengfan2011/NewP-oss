@@ -163,7 +163,7 @@ describe('Identity account Standard CRUD list candidate', () => {
     expect(container.textContent).toContain('共 21 条');
   });
 
-  it('resolves one complete account Detail View for both surfaces without actions', () => {
+  it('resolves one complete account Detail View with module-owned security action bindings', () => {
     const schema = resolveStandardCrudDetailSchema(
       runtimeMetadata.viewDocuments,
       registration,
@@ -180,7 +180,17 @@ describe('Identity account Standard CRUD list candidate', () => {
       { key: 'audit', fields: ['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'] },
     ]);
     expect(schema.summaryBlocks).toEqual(['securityEvents']);
-    expect(schema.pageActions).toEqual([]);
+    expect(schema.pageActions.map((action) => ({
+      key: action.key,
+      handlerKey: action.handlerKey,
+      inputKey: action.inputKey,
+    }))).toEqual([
+      { key: 'edit', handlerKey: undefined, inputKey: undefined },
+      { key: 'enable', handlerKey: 'enable', inputKey: 'identityAccountSecurityReason' },
+      { key: 'disable', handlerKey: 'disable', inputKey: 'identityAccountSecurityReason' },
+      { key: 'credentialReset', handlerKey: 'credentialReset', inputKey: 'identityAccountSecurityReason' },
+      { key: 'delete', handlerKey: 'delete', inputKey: 'identityAccountDeleteConfirmation' },
+    ]);
   });
 
   it('opens a Deleted account Drawer from an explicit result without loading security events or write actions', async () => {
@@ -219,6 +229,12 @@ describe('Identity account Standard CRUD list candidate', () => {
       );
     });
     await waitForBodyText('retired');
+    const moreActions = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '更多');
+    await act(async () => moreActions?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(document.body.textContent).not.toContain('启用账号');
+    expect(document.body.textContent).not.toContain('停用账号');
+    expect(document.body.textContent).not.toContain('重置凭据');
+    expect(document.body.textContent).not.toContain('删除账号');
     const buttonTexts = Array.from(container.querySelectorAll('button')).map((button) => button.textContent);
     expect(buttonTexts).toContain('retired');
     const accountLink = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'retired');
@@ -454,6 +470,235 @@ describe('Identity account Standard CRUD list candidate', () => {
       button.textContent?.includes('我已安全保存'));
     await act(async () => closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(document.body.textContent).not.toContain('only-once');
+  });
+
+  it('runs a row credential reset through the Identity command and presents only that one-time result', async () => {
+    const account = {
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/User_2/credential-reset') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          account: { ...account, revision: 8 }, temporaryCredential: 'reset-only-once',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        items: [account], total: 1, totalCount: 1, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/identity/accounts']}>
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: accountListCatalog }}
+        >
+          <RuntimeMetadataProvider value={runtimeMetadata}>
+            <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>
+      </MemoryRouter>,
+    ));
+    await waitForBodyText('alice');
+    const more = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '更多');
+    await act(async () => more?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const reset = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('重置凭据'));
+    await act(async () => reset?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('确认重置凭据并撤销全部会话？');
+    const reason = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="操作原因"]');
+    expect(reason).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reason, '凭据泄露');
+      reason?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '确认');
+    await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('reset-only-once');
+
+    const resetCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/User_2/credential-reset'));
+    expect(JSON.parse(String(resetCall?.[1]?.body))).toEqual({ expectedRevision: 7, reason: '凭据泄露' });
+    const close = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('我已安全保存'));
+    await act(async () => close?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(document.body.textContent).not.toContain('reset-only-once');
+  });
+
+  it('uses the Identity strong confirmation instead of generic delete transport', async () => {
+    const account = {
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/User_2/delete') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ ...account, status: 'Deleted', revision: 8 }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ items: [account], total: 1, totalCount: 1, page: 1, pageSize: 20 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/identity/accounts']}>
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: accountListCatalog }}
+        >
+          <RuntimeMetadataProvider value={runtimeMetadata}>
+            <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>
+      </MemoryRouter>,
+    ));
+    await waitForBodyText('alice');
+    const more = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '更多');
+    await act(async () => more?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('删除账号'));
+    await act(async () => deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('该操作不可恢复');
+
+    const reason = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="操作原因"]');
+    const confirmation = document.body.querySelector<HTMLInputElement>('input[aria-label="完整登录账号确认"]');
+    expect(reason).not.toBeNull();
+    expect(confirmation).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reason, '账号退役');
+      reason?.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(confirmation, 'alice');
+      confirmation?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '确认');
+    await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/User_2/delete'))).toBe(true));
+
+    const deleteCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/User_2/delete'));
+    expect(deleteCall?.[1]?.method).toBe('POST');
+    expect(JSON.parse(String(deleteCall?.[1]?.body))).toEqual({ expectedRevision: 7, reason: '账号退役' });
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+  });
+
+  it('runs the same credential reset action from the complete detail surface', async () => {
+    const account = {
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+      createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z', updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/User_2/credential-reset') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          account: { ...account, revision: 8 }, temporaryCredential: 'detail-reset-only-once',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/security-events')) {
+        return new Response(JSON.stringify({ items: [], page: 1, pageSize: 20, totalCount: 0 }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify(account), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/candidate/User_2']}>
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: accountListCatalog }}
+        >
+          <RuntimeMetadataProvider value={runtimeMetadata}>
+            <Routes>
+              <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
+            </Routes>
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>
+      </MemoryRouter>,
+    ));
+    await waitForBodyText('重置凭据');
+    const reset = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '重置凭据');
+    await act(async () => reset?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const reason = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="操作原因"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reason, '详情重置');
+      reason?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '确认');
+    await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('detail-reset-only-once');
+
+    expect(window.location.href).not.toContain('detail-reset-only-once');
+  });
+
+  it('refreshes to the latest security state after a list action 409 without replaying the command', async () => {
+    const stale = {
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+    };
+    const latest = { ...stale, status: 'Disabled', revision: 8, personnelDisableHold: true };
+    let current = stale;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/User_2/status') && init?.method === 'PUT') {
+        current = latest;
+        return new Response(JSON.stringify({ code: 'IDENTITY_REVISION_CONFLICT', current: latest }), {
+          status: 409, headers: { 'Content-Type': 'application/problem+json' },
+        });
+      }
+      return new Response(JSON.stringify({ items: [current], total: 1, totalCount: 1, page: 1, pageSize: 20 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/identity/accounts']}>
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: accountListCatalog }}
+        >
+          <RuntimeMetadataProvider value={runtimeMetadata}>
+            <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>
+      </MemoryRouter>,
+    ));
+    await waitForBodyText('alice');
+    const more = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '更多');
+    await act(async () => more?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const disable = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('停用账号'));
+    await act(async () => disable?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('确认停用当前账号并撤销全部会话？');
+    const reason = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="操作原因"]');
+    expect(reason).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reason, '并发处置');
+      reason?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '确认');
+    await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('最新状态 Disabled，Revision 8');
+
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/User_2/status'))).toHaveLength(1);
+    expect(document.body.querySelector('textarea[aria-label="操作原因"]')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'GET').length).toBeGreaterThanOrEqual(2);
   });
 
   it('edits only ENAME through the Identity API with the loaded ExpectedRevision', async () => {

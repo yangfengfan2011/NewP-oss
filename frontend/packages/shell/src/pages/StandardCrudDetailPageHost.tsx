@@ -3,10 +3,12 @@ import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/
 import {
   ModuleRegistry,
   createStandardCrudClient,
+  createStandardCrudOperationResultPresenterRegistry,
   normalizeStandardCrudDetail,
   type StandardCrudDetail,
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
+  type StandardCrudOperationResult,
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
@@ -158,6 +160,10 @@ function StandardCrudDetailPageContent<TDetail>({
   const titleKey = readMetadataString(view.titleKey, 'Title');
   const descriptionKey = readMetadataString(view.descriptionKey, 'Description');
   const client = useMemo(() => createStandardCrudClient(registration.apiRoute, platformFetch), [registration.apiRoute]);
+  const operationResultPresenterRegistry = useMemo(
+    () => createStandardCrudOperationResultPresenterRegistry(registration.operationResultPresenters ?? []),
+    [registration.operationResultPresenters],
+  );
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
   const formSchema = useMemo(() => buildStandardCrudFormSchemaFromModel(modelDocument, {
     mode: 'edit',
@@ -173,6 +179,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
 
   useEffect(() => {
     setEditing(false);
@@ -263,6 +270,10 @@ function StandardCrudDetailPageContent<TDetail>({
           grantedPermissions={grantedPermissions}
           handlers={detailActionHandlers}
           actionInputs={registration.actionInputRenderers}
+          actionStateResolver={registration.actionStateResolver}
+          onResult={(result) => {
+            if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
+          }}
           context={{ id, detail: currentDetail as TDetail, refresh }}
         />
       )
@@ -270,7 +281,14 @@ function StandardCrudDetailPageContent<TDetail>({
     : undefined;
 
   return (
-    <div className="sh-page">
+    <>
+      {presentedOperationResult
+        ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
+            result: presentedOperationResult,
+            close: () => setPresentedOperationResult(null),
+          })
+        : null}
+      <div className="sh-page">
       <PageHeader
         eyebrow={schema.resourceKey}
         title={t(`${dicKey}.${schema.titleKey ?? titleKey}`, schema.titleKey ?? titleKey)}
@@ -316,6 +334,7 @@ function StandardCrudDetailPageContent<TDetail>({
       ) : (
         <ErrorState message="未找到详情。" />
       )}
-    </div>
+      </div>
+    </>
   );
 }

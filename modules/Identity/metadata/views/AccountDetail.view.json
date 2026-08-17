@@ -41,6 +41,60 @@
     "summaryBlocks": [
       "securityEvents"
     ],
-    "pageActions": []
+    "pageActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit"
+      },
+      {
+        "key": "enable",
+        "labelKey": "Action_Enable",
+        "standardAction": "enable",
+        "handlerKey": "enable",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_Enable",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      },
+      {
+        "key": "disable",
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "handlerKey": "disable",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_Disable",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      },
+      {
+        "key": "credentialReset",
+        "labelKey": "Action_CredentialReset",
+        "handlerKey": "credentialReset",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_CredentialReset",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete",
+        "variant": "danger",
+        "handlerKey": "delete",
+        "inputKey": "identityAccountDeleteConfirmation",
+        "confirmMessageKey": "Confirm_Delete",
+        "dataDependency": {
+          "fields": ["EID", "ECODE", "ENAME", "Status", "Revision", "IsLocalAdministrator", "IsPersonnelBound", "PersonnelDisableHold"],
+          "reasonKey": "Action_DependencyUnavailable"
+        }
+      }
+    ]
   }
 }

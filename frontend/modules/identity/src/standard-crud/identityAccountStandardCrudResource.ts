@@ -7,12 +7,19 @@ import {
 } from '@icp-platform/sdk';
 import {
   createAccount,
+  deleteAccount,
   getAccountSnapshot,
   IdentityApiError,
+  resetCredential,
+  setAccountStatus,
   updateAccountName,
   type IdentityAccount,
 } from '../api/identityClient';
 import { identityAccountOperationResultPresenter } from './identityAccountOperationResultPresenter';
+import {
+  identityAccountDeleteConfirmationInput,
+  identityAccountSecurityReasonInput,
+} from './IdentityAccountSecurityActionInput';
 import { identityAccountSecurityEventsSummaryRenderer } from './IdentityAccountSecurityEventsSummary';
 
 export interface IdentityAccountListFilters {
@@ -110,6 +117,167 @@ function toSharedRequestError(error: IdentityApiError): StandardCrudRequestError
   return new StandardCrudRequestError(message, error.status, fieldErrors);
 }
 
+interface IdentitySecurityActionInput {
+  reason?: unknown;
+  confirmation?: unknown;
+}
+
+interface IdentityActionSnapshot {
+  eid: string;
+  ecode: string;
+  status: string;
+  revision: number;
+  isLocalAdministrator: boolean;
+  isPersonnelBound: boolean;
+  personnelDisableHold: boolean;
+}
+
+function readIdentityActionSnapshot(detail: unknown, row: unknown): IdentityActionSnapshot | null {
+  const detailRecord = isStandardCrudRecord(detail) && isStandardCrudRecord(detail.fields)
+    ? detail.fields
+    : detail;
+  const source = isStandardCrudRecord(detailRecord)
+    ? detailRecord
+    : isStandardCrudRecord(row) ? row : null;
+  if (!source) return null;
+
+  const eid = readStandardCrudString(source, ['EID', 'eid', 'id']);
+  const revision = Number(source.Revision ?? source.revision);
+  if (!eid || !Number.isSafeInteger(revision) || revision < 0) return null;
+
+  return {
+    eid,
+    ecode: readStandardCrudString(source, ['ECODE', 'ecode']),
+    status: readStandardCrudString(source, ['Status', 'status']),
+    revision,
+    isLocalAdministrator: readStandardCrudBoolean(source, ['IsLocalAdministrator', 'isLocalAdministrator']),
+    isPersonnelBound: readStandardCrudBoolean(source, ['IsPersonnelBound', 'isPersonnelBound']),
+    personnelDisableHold: readStandardCrudBoolean(source, ['PersonnelDisableHold', 'personnelDisableHold']),
+  };
+}
+
+function resolveIdentityAccountActionState({
+  action,
+  detail,
+  row,
+}: Parameters<NonNullable<StandardCrudResourceRegistration['actionStateResolver']>>[0]) {
+  const snapshot = readIdentityActionSnapshot(detail, row);
+  const securityAction = ['enable', 'disable', 'delete', 'credentialReset'].includes(action.key);
+  if (!snapshot) {
+    return securityAction
+      ? { visible: true, available: false, reason: '账号最新安全状态不可用，请刷新后重试。' }
+      : { visible: true, available: true };
+  }
+
+  if (snapshot.status === 'Deleted' && (securityAction || action.key === 'edit')) {
+    return { visible: false, available: false };
+  }
+  if (action.key === 'enable') {
+    if (snapshot.status !== 'Disabled') return { visible: false, available: false };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。' };
+    if (snapshot.personnelDisableHold) return { visible: true, available: false, reason: '存在人员停用阻断，不能启用账号。' };
+  }
+  if (action.key === 'disable') {
+    if (snapshot.status !== 'Enabled') return { visible: false, available: false };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。' };
+  }
+  if (action.key === 'delete') {
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。' };
+    if (snapshot.isPersonnelBound) return { visible: true, available: false, reason: '账号已绑定人员，只能停用，不能删除。' };
+  }
+  if (action.key === 'credentialReset' && snapshot.isLocalAdministrator) {
+    return { visible: true, available: false, reason: '本地管理员凭据只能通过本机维护命令重置。' };
+  }
+
+  return { visible: true, available: true };
+}
+
+function readIdentitySecurityInput(input: unknown): { reason: string; confirmation: string } {
+  const value = isStandardCrudRecord(input) ? input as IdentitySecurityActionInput : {};
+  const reason = typeof value.reason === 'string' ? value.reason.trim() : '';
+  if (!reason) throw new Error('请填写操作原因。');
+  return {
+    reason,
+    confirmation: typeof value.confirmation === 'string' ? value.confirmation : '',
+  };
+}
+
+function toIdentitySecurityActionError(error: unknown): Error {
+  if (!(error instanceof IdentityApiError)) {
+    return new Error('操作结果未知。系统不会自动重放，请刷新账号最新安全状态后核对。');
+  }
+  if (error.status === 403) {
+    return new StandardCrudRequestError('权限已变化，当前安全操作已被拒绝。', error.status);
+  }
+  if (error.code === 'IDENTITY_REVISION_CONFLICT' && error.current) {
+    return new StandardCrudRequestError(
+      `账号已发生变化：最新状态 ${error.current.status}，Revision ${error.current.revision}。请查看最新安全状态并重新确认。`,
+      error.status,
+    );
+  }
+  const guardMessages: Record<string, string> = {
+    IDENTITY_LOCAL_ADMIN_PROTECTED: '本地管理员账号受保护，不能执行该操作。',
+    IDENTITY_PERSONNEL_BOUND: '账号已绑定人员，只能停用，不能删除。',
+    IDENTITY_PERSONNEL_DISABLE_HOLD: '存在人员停用阻断，不能启用账号。',
+    IDENTITY_ACCOUNT_DELETED: '已删除账号处于不可恢复终态，不能执行该操作。',
+  };
+  return new StandardCrudRequestError(guardMessages[error.code] ?? error.code, error.status);
+}
+
+async function setIdentityAccountLifecycleStatus(
+  targetStatus: 'Enabled' | 'Disabled',
+  context: Parameters<NonNullable<StandardCrudResourceRegistration['actionHandlers']>[string]>[0],
+) {
+  const snapshot = readIdentityActionSnapshot(context.detail, context.row);
+  const input = readIdentitySecurityInput(context.input);
+  if (!context.id || !snapshot) throw new Error('账号最新安全状态不可用，请刷新后重试。');
+  try {
+    await setAccountStatus(context.id, {
+      targetStatus,
+      expectedRevision: snapshot.revision,
+      reason: input.reason,
+    });
+    context.refresh();
+  } catch (error) {
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
+async function deleteIdentityAccount(
+  context: Parameters<NonNullable<StandardCrudResourceRegistration['actionHandlers']>[string]>[0],
+) {
+  const snapshot = readIdentityActionSnapshot(context.detail, context.row);
+  const input = readIdentitySecurityInput(context.input);
+  if (!context.id || !snapshot) throw new Error('账号最新安全状态不可用，请刷新后重试。');
+  if (input.confirmation !== snapshot.ecode) {
+    throw new Error(`请完整输入登录账号 ${snapshot.ecode} 以确认不可恢复删除。`);
+  }
+  try {
+    await deleteAccount(context.id, { expectedRevision: snapshot.revision, reason: input.reason });
+    context.refresh();
+  } catch (error) {
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
+async function resetIdentityAccountCredential(
+  context: Parameters<NonNullable<StandardCrudResourceRegistration['actionHandlers']>[string]>[0],
+) {
+  const snapshot = readIdentityActionSnapshot(context.detail, context.row);
+  const input = readIdentitySecurityInput(context.input);
+  if (!context.id || !snapshot) throw new Error('账号最新安全状态不可用，请刷新后重试。');
+  try {
+    const issuance = await resetCredential(context.id, {
+      expectedRevision: snapshot.revision,
+      reason: input.reason,
+    });
+    context.refresh();
+    return { operation: 'action' as const, payload: issuance };
+  } catch (error) {
+    throw toIdentitySecurityActionError(error);
+  }
+}
+
 // 创建结果可能已在服务端生效；网络结果未知时只提示人工核对，绝不自动重试签发。
 async function createIdentityAccount(values: Record<string, unknown>) {
   try {
@@ -172,6 +340,17 @@ export const identityAccountStandardCrudResource: StandardCrudResourceRegistrati
     update: ({ id, values, detailFields }) => updateIdentityAccount(id, values, detailFields),
   },
   operationResultPresenters: [identityAccountOperationResultPresenter],
+  actionStateResolver: resolveIdentityAccountActionState,
+  actionHandlers: {
+    enable: (context) => setIdentityAccountLifecycleStatus('Enabled', context),
+    disable: (context) => setIdentityAccountLifecycleStatus('Disabled', context),
+    delete: deleteIdentityAccount,
+    credentialReset: resetIdentityAccountCredential,
+  },
+  actionInputRenderers: {
+    identityAccountSecurityReason: identityAccountSecurityReasonInput,
+    identityAccountDeleteConfirmation: identityAccountDeleteConfirmationInput,
+  },
   summaryRenderers: {
     securityEvents: identityAccountSecurityEventsSummaryRenderer,
   },

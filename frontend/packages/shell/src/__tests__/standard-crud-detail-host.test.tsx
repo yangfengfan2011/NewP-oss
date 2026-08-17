@@ -556,4 +556,61 @@ describe('StandardCrudDetailPageHost', () => {
       input: '人员离职',
     }));
   });
+
+  it('applies module action state and presents an opaque action result on the detail surface', async () => {
+    const view = {
+      ...personDetailViewDocument,
+      view: {
+        ...personDetailViewDocument.view,
+        pageActions: personDetailViewDocument.view.pageActions.map((action) => action.key === 'disable'
+          ? { ...action, inputKey: 'reason' }
+          : action),
+      },
+    };
+    const registration: StandardCrudResourceRegistration = {
+      ...createPersonRegistration(),
+      loadDetail: async () => ({
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, Revision: 4 },
+        summaries: {},
+      }),
+      actionStateResolver: ({ action }) => ({
+        visible: action.key !== 'edit',
+        available: true,
+      }),
+      actionInputRenderers: {
+        reason: ({ value, onChange }) => (
+          <input aria-label="动作原因" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+        ),
+      },
+      actionHandlers: {
+        disablePerson: vi.fn().mockResolvedValue({ operation: 'action', payload: { receipt: 'opaque-action-result' } }),
+      },
+      operationResultPresenters: [{
+        supports: (result) => result.operation === 'action',
+        render: ({ result, close }) => (
+          <div>
+            <span>{String((result.payload as { receipt?: string }).receipt)}</span>
+            <button type="button" onClick={close}>关闭动作结果</button>
+          </div>
+        ),
+      }],
+    };
+
+    await renderHost('Person_1', registration, view);
+    await vi.waitFor(() => expect(container.textContent).toContain('停用人员'));
+    expect(container.textContent).not.toContain('编辑');
+    const disable = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '停用人员');
+    await act(async () => disable?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="动作原因"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '风险处置');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+      const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '确认');
+      confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('opaque-action-result');
+  });
 });

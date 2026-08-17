@@ -201,11 +201,25 @@ export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> {
   refresh: () => void;
 }
 
+/** 模块动作状态只表达通用可见性与可用性；业务事实和组合规则留在模块 resolver 内。 */
+export interface StandardCrudActionState {
+  visible: boolean;
+  available: boolean;
+  reason?: string;
+}
+
+/** 动作状态 resolver 只接收动作声明和当前数据快照，不把模块字段或表达式引入公共契约。 */
+export type StandardCrudActionStateResolver<TDetail = unknown, TRow = unknown> = (
+  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'detail' | 'row'> & { action: StandardCrudActionDefinition },
+) => StandardCrudActionState;
+
 /** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
 export interface StandardCrudActionInputRenderContext {
   action: StandardCrudActionDefinition;
   value: unknown;
   onChange: (value: unknown) => void;
+  detail?: unknown;
+  row?: unknown;
 }
 
 /** 模块动作输入渲染器；弹层、权限、pending、错误、刷新和关闭生命周期仍归 Shell。 */
@@ -214,7 +228,7 @@ export type StandardCrudActionInputRenderer = (context: StandardCrudActionInputR
 /** 标准动作处理器；执行流程、错误边界和刷新策略由 Shell 运行时收口。 */
 export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = (
   context: StandardCrudActionContext<TDetail, TRow>,
-) => void | Promise<void>;
+) => void | StandardCrudOperationResult | Promise<void | StandardCrudOperationResult>;
 
 /** 摘要渲染上下文；模块只接收规范化摘要块和详情数据，不读取 Host 私有状态。 */
 export interface StandardCrudSummaryRendererContext<TData = unknown> {
@@ -283,6 +297,7 @@ export interface StandardCrudResourceRegistration<
   enumOptions?: Record<string, StandardCrudOption[]>;
   listActions?: StandardCrudActionDefinition[];
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
+  actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;

@@ -13,7 +13,7 @@ interface IdentityCredentialIssuancePayload {
 function readIdentityCredentialIssuance(
   result: StandardCrudOperationResult,
 ): IdentityCredentialIssuancePayload | null {
-  if (result.operation !== 'create' || typeof result.payload !== 'object' || result.payload === null) {
+  if ((result.operation !== 'create' && result.operation !== 'action') || typeof result.payload !== 'object' || result.payload === null) {
     return null;
   }
 

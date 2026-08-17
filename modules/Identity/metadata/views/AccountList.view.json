@@ -125,6 +125,38 @@
         "key": "edit",
         "labelKey": "Action_Edit",
         "standardAction": "edit"
+      },
+      {
+        "key": "enable",
+        "labelKey": "Action_Enable",
+        "standardAction": "enable",
+        "handlerKey": "enable",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_Enable"
+      },
+      {
+        "key": "disable",
+        "labelKey": "Action_Disable",
+        "standardAction": "disable",
+        "handlerKey": "disable",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_Disable"
+      },
+      {
+        "key": "credentialReset",
+        "labelKey": "Action_CredentialReset",
+        "handlerKey": "credentialReset",
+        "inputKey": "identityAccountSecurityReason",
+        "confirmMessageKey": "Confirm_CredentialReset"
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete",
+        "variant": "danger",
+        "handlerKey": "delete",
+        "inputKey": "identityAccountDeleteConfirmation",
+        "confirmMessageKey": "Confirm_Delete"
       }
     ]
   }

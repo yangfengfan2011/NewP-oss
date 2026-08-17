@@ -70,6 +70,14 @@
       "zhs": "编辑",
       "en": "Edit"
     },
+    "Action_Enable": { "zhs": "启用账号", "en": "Enable Account" },
+    "Action_Disable": { "zhs": "停用账号", "en": "Disable Account" },
+    "Action_CredentialReset": { "zhs": "重置凭据", "en": "Reset Credential" },
+    "Action_Delete": { "zhs": "删除账号", "en": "Delete Account" },
+    "Confirm_Enable": { "zhs": "确认启用当前账号？", "en": "Enable this account?" },
+    "Confirm_Disable": { "zhs": "确认停用当前账号并撤销全部会话？", "en": "Disable this account and revoke all sessions?" },
+    "Confirm_CredentialReset": { "zhs": "确认重置凭据并撤销全部会话？", "en": "Reset the credential and revoke all sessions?" },
+    "Confirm_Delete": { "zhs": "确认执行不可恢复删除？", "en": "Permanently delete this account?" },
     "Section_Basic": {
       "zhs": "账号信息",
       "en": "Account Information"

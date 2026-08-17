@@ -50,6 +50,7 @@ describe('Identity account operation result presenter', () => {
 
   it('owns the temporary credential shape and rejects unrelated operation results', () => {
     expect(identityAccountOperationResultPresenter.supports(issuanceResult)).toBe(true);
+    expect(identityAccountOperationResultPresenter.supports({ ...issuanceResult, operation: 'action' })).toBe(true);
     expect(identityAccountOperationResultPresenter.supports({ operation: 'update', payload: issuanceResult.payload })).toBe(false);
     expect(identityAccountOperationResultPresenter.supports({ operation: 'create', payload: { account: {} } })).toBe(false);
   });

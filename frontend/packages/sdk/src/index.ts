@@ -122,6 +122,8 @@ export type {
   StandardCrudActionHandler,
   StandardCrudActionInputRenderer,
   StandardCrudActionInputRenderContext,
+  StandardCrudActionState,
+  StandardCrudActionStateResolver,
   StandardCrudDetail,
   StandardCrudDetailFieldRenderer,
   StandardCrudDetailFieldRendererContext,

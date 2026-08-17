@@ -109,6 +109,14 @@ public sealed class IdentityFoundationModelTests
             ["isPersonnelBound", "isLocalAdministrator"],
             view.GetProperty("advancedFilter").GetProperty("sections")[0].GetProperty("fields").EnumerateArray()
                 .Select(field => field.GetProperty("key").GetString()));
+        Assert.Equal(
+            ["edit", "enable", "disable", "credentialReset", "delete"],
+            view.GetProperty("rowActions").EnumerateArray().Select(action => action.GetProperty("key").GetString()));
+        Assert.All(view.GetProperty("rowActions").EnumerateArray(), action =>
+        {
+            Assert.False(action.TryGetProperty("visibleWhen", out _));
+            Assert.False(action.TryGetProperty("disabledWhen", out _));
+        });
 
         using var navigation = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(root, @"modules\Identity\metadata\navigation\Identity.nav.json"),
@@ -136,7 +144,9 @@ public sealed class IdentityFoundationModelTests
             ["basic", "protection", "audit"],
             detail.GetProperty("sections").EnumerateArray().Select(section => section.GetProperty("key").GetString()));
         Assert.Equal(["securityEvents"], detail.GetProperty("summaryBlocks").EnumerateArray().Select(block => block.GetString()));
-        Assert.Empty(detail.GetProperty("pageActions").EnumerateArray());
+        Assert.Equal(
+            ["edit", "enable", "disable", "credentialReset", "delete"],
+            detail.GetProperty("pageActions").EnumerateArray().Select(action => action.GetProperty("key").GetString()));
     }
 
     private static void AssertAuditFields(ModelDefinition definition)

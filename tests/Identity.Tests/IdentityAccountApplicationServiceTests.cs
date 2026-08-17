@@ -437,6 +437,40 @@ public sealed class IdentityAccountApplicationServiceTests
     }
 
     [Fact]
+    public async Task DeletedAccount_RejectsLifecycleAndCredentialCommandsWithoutNewSideEffects()
+    {
+        var fixture = new Fixture();
+        var created = await fixture.CreateAsync();
+        var deleted = await fixture.Service.DeleteAsync(new DeleteIdentityAccountCommand(
+            created.Account.AccountEid,
+            created.Account.Revision,
+            "account retired",
+            fixture.Actor));
+        var eventCount = fixture.Repository.SecurityEvents.Count;
+        var revocationCount = fixture.Sessions.Revocations.Count;
+
+        var statusError = await Assert.ThrowsAsync<IdentityApplicationException>(() => fixture.Service.SetStatusAsync(
+            new SetIdentityAccountStatusCommand(
+                deleted.AccountEid,
+                IdentityAccountStatus.Enabled,
+                deleted.Revision,
+                "restore",
+                fixture.Actor)).AsTask());
+        var resetError = await Assert.ThrowsAsync<IdentityApplicationException>(() => fixture.Service.ResetCredentialAsync(
+            new ResetIdentityCredentialCommand(
+                deleted.AccountEid,
+                deleted.Revision,
+                "reset",
+                fixture.Actor)).AsTask());
+
+        Assert.Equal(IdentityFailureCodes.DeletedAccount, statusError.FailureCode);
+        Assert.Equal(IdentityFailureCodes.DeletedAccount, resetError.FailureCode);
+        Assert.Equal(eventCount, fixture.Repository.SecurityEvents.Count);
+        Assert.Equal(revocationCount, fixture.Sessions.Revocations.Count);
+        Assert.Empty(fixture.Repository.Credentials);
+    }
+
+    [Fact]
     public async Task DeleteAndReset_RejectLocalAdministrator_AndDeleteRejectsPersonnelBoundAccount()
     {
         var administratorFixture = new Fixture();

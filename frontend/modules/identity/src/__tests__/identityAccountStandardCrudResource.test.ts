@@ -5,19 +5,36 @@ import { identityAccountStandardCrudResource } from '../standard-crud/identityAc
 const createAccountMock = vi.hoisted(() => vi.fn());
 const getAccountSnapshotMock = vi.hoisted(() => vi.fn());
 const updateAccountNameMock = vi.hoisted(() => vi.fn());
+const setAccountStatusMock = vi.hoisted(() => vi.fn());
+const resetCredentialMock = vi.hoisted(() => vi.fn());
+const deleteAccountMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../api/identityClient', async (importOriginal) => ({
   ...await importOriginal<typeof import('../api/identityClient')>(),
   createAccount: createAccountMock,
   getAccountSnapshot: getAccountSnapshotMock,
   updateAccountName: updateAccountNameMock,
+  setAccountStatus: setAccountStatusMock,
+  resetCredential: resetCredentialMock,
+  deleteAccount: deleteAccountMock,
 }));
+
+function actionRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'User_2', EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Enabled', Revision: 7,
+    IsLocalAdministrator: false, IsPersonnelBound: false, PersonnelDisableHold: false,
+    ...overrides,
+  };
+}
 
 describe('Identity account Standard CRUD resource candidate', () => {
   beforeEach(() => {
     createAccountMock.mockReset();
     getAccountSnapshotMock.mockReset();
     updateAccountNameMock.mockReset();
+    setAccountStatusMock.mockReset();
+    resetCredentialMock.mockReset();
+    deleteAccountMock.mockReset();
   });
 
   it('maps the existing Identity list response into metadata protocol fields', () => {
@@ -183,5 +200,140 @@ describe('Identity account Standard CRUD resource candidate', () => {
       detailFields: {},
     })).rejects.toThrow('创建结果未知');
     expect(createAccountMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves account security actions from the current snapshot inside the Identity binding', () => {
+    const resolve = identityAccountStandardCrudResource.actionStateResolver;
+    const enabled = actionRow();
+    const held = { ...enabled, Status: 'Disabled', PersonnelDisableHold: true };
+    const deleted = { ...enabled, Status: 'Deleted' };
+
+    expect(resolve?.({ action: { key: 'disable', labelKey: 'disable' }, row: enabled })).toEqual({
+      visible: true, available: true,
+    });
+    expect(resolve?.({ action: { key: 'enable', labelKey: 'enable' }, row: enabled })).toEqual({
+      visible: false, available: false,
+    });
+    expect(resolve?.({ action: { key: 'enable', labelKey: 'enable' }, row: held })).toMatchObject({
+      visible: true, available: false, reason: expect.stringContaining('人员停用阻断'),
+    });
+    expect(resolve?.({ action: { key: 'delete', labelKey: 'delete' }, row: { ...enabled, IsPersonnelBound: true } })).toMatchObject({
+      visible: true, available: false, reason: expect.stringContaining('已绑定人员'),
+    });
+    expect(resolve?.({ action: { key: 'credentialReset', labelKey: 'reset' }, row: { ...enabled, IsLocalAdministrator: true } })).toMatchObject({
+      visible: true, available: false, reason: expect.stringContaining('本地管理员'),
+    });
+    for (const key of ['disable', 'delete']) {
+      expect(resolve?.({ action: { key, labelKey: key }, row: { ...enabled, IsLocalAdministrator: true } })).toMatchObject({
+        visible: true, available: false, reason: expect.stringContaining('本地管理员'),
+      });
+    }
+    for (const key of ['edit', 'enable', 'disable', 'delete', 'credentialReset']) {
+      expect(resolve?.({ action: { key, labelKey: key }, row: deleted })).toEqual({ visible: false, available: false });
+    }
+  });
+
+  it.each([
+    ['enable', 'Enabled', 'Disabled'],
+    ['disable', 'Disabled', 'Enabled'],
+  ] as const)('executes %s once with ExpectedRevision and the required trimmed reason', async (actionKey, targetStatus, currentStatus) => {
+    setAccountStatusMock.mockResolvedValue({ eid: 'User_2', status: targetStatus, revision: 8 });
+    const refresh = vi.fn();
+
+    await identityAccountStandardCrudResource.actionHandlers?.[actionKey]?.({
+      id: 'User_2',
+      row: actionRow({ Status: currentStatus }),
+      input: { reason: '  风险处置  ' },
+      refresh,
+    });
+
+    expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
+    expect(setAccountStatusMock).toHaveBeenCalledWith('User_2', {
+      targetStatus, expectedRevision: 7, reason: '风险处置',
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires the full current ECODE before calling the irreversible delete command', async () => {
+    const context = {
+      id: 'User_2',
+      row: actionRow({ Status: 'Disabled' }),
+      refresh: vi.fn(),
+    };
+
+    await expect(identityAccountStandardCrudResource.actionHandlers?.delete?.({
+      ...context,
+      input: { reason: '账号退役', confirmation: 'Alice' },
+    })).rejects.toThrow('完整输入登录账号 alice');
+    expect(deleteAccountMock).not.toHaveBeenCalled();
+
+    deleteAccountMock.mockResolvedValue({ eid: 'User_2', status: 'Deleted', revision: 8 });
+    await identityAccountStandardCrudResource.actionHandlers?.delete?.({
+      ...context,
+      input: { reason: '账号退役', confirmation: 'alice' },
+    });
+    expect(deleteAccountMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '账号退役' });
+  });
+
+  it('hands only the current credential reset issuance to the existing result seam', async () => {
+    const issuance = {
+      account: { eid: 'User_2', ecode: 'alice', status: 'Enabled', revision: 8 },
+      temporaryCredential: 'reset-once',
+    };
+    resetCredentialMock.mockResolvedValue(issuance);
+
+    const result = await identityAccountStandardCrudResource.actionHandlers?.credentialReset?.({
+      id: 'User_2',
+      detail: { fields: { EID: 'User_2', ECODE: 'alice', Status: 'Enabled', Revision: 7 }, summaries: {} },
+      input: { reason: '凭据泄露' },
+      refresh: vi.fn(),
+    });
+
+    expect(resetCredentialMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '凭据泄露' });
+    expect(result).toEqual({ operation: 'action', payload: issuance });
+  });
+
+  it.each([
+    [new IdentityApiError('IDENTITY_ACCOUNT_FORBIDDEN', 403), '权限已变化'],
+    [new IdentityApiError('IDENTITY_PERSONNEL_DISABLE_HOLD', 409), '人员停用阻断'],
+  ])('maps permission and business guard failures without replaying the command', async (failure, message) => {
+    setAccountStatusMock.mockRejectedValue(failure);
+
+    await expect(identityAccountStandardCrudResource.actionHandlers?.enable?.({
+      id: 'User_2',
+      row: actionRow({ Status: 'Disabled' }),
+      input: { reason: '恢复账号' },
+      refresh: vi.fn(),
+    })).rejects.toThrow(message);
+    expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the latest security state on 409 and never automatically replays the command', async () => {
+    setAccountStatusMock.mockRejectedValue(new IdentityApiError(
+      'IDENTITY_REVISION_CONFLICT',
+      409,
+      { eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 8,
+        isLocalAdministrator: false, isPersonnelBound: true, personnelDisableHold: true },
+    ));
+
+    await expect(identityAccountStandardCrudResource.actionHandlers?.disable?.({
+      id: 'User_2',
+      row: actionRow(),
+      input: { reason: '风险处置' },
+      refresh: vi.fn(),
+    })).rejects.toThrow('最新状态 Disabled，Revision 8');
+    expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an unknown result on a network failure and never retries a security command', async () => {
+    deleteAccountMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(identityAccountStandardCrudResource.actionHandlers?.delete?.({
+      id: 'User_2',
+      row: actionRow({ Status: 'Disabled' }),
+      input: { reason: '账号退役', confirmation: 'alice' },
+      refresh: vi.fn(),
+    })).rejects.toThrow('操作结果未知');
+    expect(deleteAccountMock).toHaveBeenCalledTimes(1);
   });
 });

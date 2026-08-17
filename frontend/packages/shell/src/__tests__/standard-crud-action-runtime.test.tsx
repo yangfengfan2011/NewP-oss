@@ -4,7 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
-import type { StandardCrudActionDefinition, StandardCrudActionHandler, StandardCrudActionInputRenderer } from '@icp-platform/sdk';
+import { StandardCrudRequestError } from '@icp-platform/sdk';
+import type {
+  StandardCrudActionDefinition,
+  StandardCrudActionHandler,
+  StandardCrudActionInputRenderer,
+  StandardCrudActionStateResolver,
+  StandardCrudOperationResult,
+} from '@icp-platform/sdk';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,11 +34,17 @@ describe('standard CRUD action runtime', () => {
     grantedPermissions = [],
     handlers,
     actionInputs,
+    actionStateResolver,
+    onResult,
+    refresh = vi.fn(),
   }: {
     actions: StandardCrudActionDefinition[];
     grantedPermissions?: string[];
     handlers?: Record<string, StandardCrudActionHandler>;
     actionInputs?: Record<string, StandardCrudActionInputRenderer>;
+    actionStateResolver?: StandardCrudActionStateResolver;
+    onResult?: (result: StandardCrudOperationResult) => void;
+    refresh?: () => void;
   }) {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -44,7 +57,9 @@ describe('standard CRUD action runtime', () => {
           grantedPermissions={grantedPermissions}
           handlers={handlers}
           actionInputs={actionInputs}
-          context={{ id: 'Person_1', refresh: vi.fn() }}
+          actionStateResolver={actionStateResolver}
+          onResult={onResult}
+          context={{ id: 'Person_1', detail: { revision: 4 }, refresh }}
         />,
       );
     });
@@ -110,7 +125,7 @@ describe('standard CRUD action runtime', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith({ id: 'Person_1', refresh: expect.any(Function) });
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1', refresh: expect.any(Function) }));
   });
 
   it('uses Popconfirm for delete standard action even without danger variant', async () => {
@@ -131,7 +146,7 @@ describe('standard CRUD action runtime', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith({ id: 'Person_1', refresh: expect.any(Function) });
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1', refresh: expect.any(Function) }));
   });
 
   it('does not run danger handler when Popconfirm is canceled', async () => {
@@ -218,13 +233,17 @@ describe('standard CRUD action runtime', () => {
       actions: [{ key: 'archive', labelKey: '归档', inputKey: 'archive-input' }],
       handlers: { archive: handler },
       actionInputs: {
-        'archive-input': ({ value, onChange }) => (
-          <input aria-label="归档说明" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+        'archive-input': ({ value, onChange, detail }) => (
+          <>
+            <span>快照 {String((detail as { revision?: number })?.revision)}</span>
+            <input aria-label="归档说明" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+          </>
         ),
       },
     });
 
     await clickActionButton('归档');
+    expect(document.body.textContent).toContain('快照 4');
     const input = document.body.querySelector('input[aria-label="归档说明"]') as HTMLInputElement;
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -238,5 +257,75 @@ describe('standard CRUD action runtime', () => {
 
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ input: '季度归档' }));
     expect(document.body.querySelector('input[aria-label="归档说明"]')).toBeNull();
+  });
+
+  it('applies module action state without exposing business fields in the shared contract', async () => {
+    const resolver: StandardCrudActionStateResolver = vi.fn(({ action, detail }) => ({
+      visible: action.key !== 'hidden',
+      available: action.key !== 'blocked',
+      reason: action.key === 'blocked' ? `最新快照 ${String((detail as { revision?: number })?.revision)}` : undefined,
+    }));
+
+    await renderActions({
+      actions: [
+        { key: 'available', labelKey: '可执行' },
+        { key: 'blocked', labelKey: '已阻止' },
+        { key: 'hidden', labelKey: '不显示' },
+      ],
+      handlers: {
+        available: vi.fn(),
+        blocked: vi.fn(),
+        hidden: vi.fn(),
+      },
+      actionStateResolver: resolver,
+    });
+
+    expect(container.textContent).toContain('可执行');
+    expect(container.textContent).toContain('已阻止');
+    expect(container.textContent).toContain('最新快照 4');
+    expect(container.textContent).not.toContain('不显示');
+    const blocked = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '已阻止');
+    expect(blocked?.disabled).toBe(true);
+  });
+
+  it('hands an opaque action result to the shared result callback', async () => {
+    const result: StandardCrudOperationResult = { operation: 'action', payload: { receipt: 'opaque' } };
+    const onResult = vi.fn();
+
+    await renderActions({
+      actions: [{ key: 'rotate', labelKey: '轮换' }],
+      handlers: { rotate: vi.fn().mockResolvedValue(result) },
+      onResult,
+    });
+    await clickActionButton('轮换');
+
+    expect(onResult).toHaveBeenCalledWith(result);
+  });
+
+  it('refreshes and closes stale confirmation on 409 without replaying the action', async () => {
+    const refresh = vi.fn();
+    const handler = vi.fn().mockRejectedValue(new StandardCrudRequestError(
+      '最新状态 Disabled，Revision 8，请重新确认。',
+      409,
+    ));
+
+    await renderActions({
+      actions: [{ key: 'secure', labelKey: '安全操作', inputKey: 'reason' }],
+      handlers: { secure: handler },
+      actionInputs: {
+        reason: ({ value, onChange }) => (
+          <input aria-label="原因" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+        ),
+      },
+      refresh,
+    });
+    await clickActionButton('安全操作');
+    await clickPopconfirmButton('确认');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector('input[aria-label="原因"]')).toBeNull();
+    expect(container.textContent).toContain('最新状态 Disabled，Revision 8');
   });
 });

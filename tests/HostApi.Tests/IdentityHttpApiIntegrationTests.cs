@@ -92,6 +92,16 @@ public sealed class IdentityHttpApiIntegrationTests
 
         public ValueTask<IdentityManagementAccountDetail?> FindAsync(string accountEid, int eventPage, int eventPageSize, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<IdentityManagementAccountDetail?>(null);
+
+        public ValueTask<IdentityManagementAccountView?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IdentityManagementAccountView?>(null);
+
+        public ValueTask<IdentityManagementSecurityEventPage?> SearchSecurityEventsAsync(
+            string accountEid,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IdentityManagementSecurityEventPage?>(null);
     }
 
     private sealed class PasswordChangingAccounts : IIdentityAccountApplicationService

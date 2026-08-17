@@ -62,14 +62,36 @@ public sealed record IdentityManagementAccountDetail(
 
 public interface IIdentityManagementQueryService
 {
+    /// <summary>
+    /// 查询满足筛选条件的账号分页。
+    /// </summary>
     ValueTask<IdentityManagementAccountPage> SearchAsync(
         IdentityManagementAccountSearch search,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 查询账号及其一页安全事件，供既有管理页面兼容消费。
+    /// </summary>
     ValueTask<IdentityManagementAccountDetail?> FindAsync(
         string accountEid,
         int eventPage,
         int eventPageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 只查询账号快照，不读取安全事件集合。
+    /// </summary>
+    ValueTask<IdentityManagementAccountView?> FindAccountAsync(
+        string accountEid,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 独立查询目标账号的一页安全事件；账号不存在时返回 null。
+    /// </summary>
+    ValueTask<IdentityManagementSecurityEventPage?> SearchSecurityEventsAsync(
+        string accountEid,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default);
 }
 
@@ -110,6 +132,9 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         return new IdentityManagementAccountPage(items, result.Page, result.PageSize, result.Total);
     }
 
+    /// <summary>
+    /// 为既有管理页面组合账号快照和安全事件分页。
+    /// </summary>
     public async ValueTask<IdentityManagementAccountDetail?> FindAsync(
         string accountEid,
         int eventPage,
@@ -127,21 +152,64 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
             return null;
         }
 
+        var events = await LoadSecurityEventPageAsync(accountEid, eventPage, eventPageSize, cancellationToken);
+        return new IdentityManagementAccountDetail(ToView(account), events);
+    }
+
+    /// <summary>
+    /// 读取账号快照而不触发安全事件查询，供共享详情 Drawer 与普通字段页使用。
+    /// </summary>
+    public async ValueTask<IdentityManagementAccountView?> FindAccountAsync(
+        string accountEid,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accountEid))
+        {
+            return null;
+        }
+
+        var account = await _repository.FindAccountAsync(accountEid, cancellationToken);
+        return account is null ? null : ToView(account);
+    }
+
+    /// <summary>
+    /// 在确认账号存在后独立读取安全事件分页，使重型摘要不进入普通详情装载路径。
+    /// </summary>
+    public async ValueTask<IdentityManagementSecurityEventPage?> SearchSecurityEventsAsync(
+        string accountEid,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accountEid)
+            || await _repository.FindAccountAsync(accountEid, cancellationToken) is null)
+        {
+            return null;
+        }
+
+        return await LoadSecurityEventPageAsync(accountEid, page, pageSize, cancellationToken);
+    }
+
+    // 安全事件仍由 Identity 仓储拥有；这里统一稳定倒序和分页响应，供新旧两个只读入口复用。
+    private async ValueTask<IdentityManagementSecurityEventPage> LoadSecurityEventPageAsync(
+        string accountEid,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
         var events = (await _repository.SearchSecurityEventsAsync(accountEid, cancellationToken))
             .OrderByDescending(item => item.OccurredAt)
             .ThenByDescending(item => item.EID, StringComparer.Ordinal)
             .ToArray();
-        var skip = (long)(eventPage - 1) * eventPageSize;
-        var page = skip >= events.Length
+        var skip = (long)(page - 1) * pageSize;
+        var items = skip >= events.Length
             ? []
             : events
                 .Skip((int)skip)
-                .Take(eventPageSize)
+                .Take(pageSize)
                 .Select(ToView)
                 .ToArray();
-        return new IdentityManagementAccountDetail(
-            ToView(account),
-            new IdentityManagementSecurityEventPage(page, eventPage, eventPageSize, events.Length));
+        return new IdentityManagementSecurityEventPage(items, page, pageSize, events.Length);
     }
 
     internal static IdentityManagementAccountView ToView(IdentityAccount account) => new(

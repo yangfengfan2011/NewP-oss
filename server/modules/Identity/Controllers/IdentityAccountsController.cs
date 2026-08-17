@@ -70,6 +70,47 @@ public sealed class IdentityAccountsController : ControllerBase
         return detail is null ? ProblemResult(404, IdentityFailureCodes.AccountNotFound) : Ok(IdentityAccountDetailResponse.From(detail));
     }
 
+    /// <summary>
+    /// 返回标准详情普通字段所需的账号快照，不读取安全事件集合。
+    /// </summary>
+    [HttpGet("{accountEid}/snapshot")]
+    public async Task<ActionResult<IdentityAccountViewResponse>> GetSnapshot(
+        string accountEid,
+        CancellationToken cancellationToken)
+    {
+        var account = await _queries.FindAccountAsync(accountEid, cancellationToken);
+        return account is null
+            ? ProblemResult(404, IdentityFailureCodes.AccountNotFound)
+            : Ok(IdentityAccountViewResponse.From(account));
+    }
+
+    /// <summary>
+    /// 独立分页返回目标账号安全事件，供 Identity 完整详情摘要按需装载。
+    /// </summary>
+    [HttpGet("{accountEid}/security-events")]
+    public async Task<ActionResult<IdentitySecurityEventPageResponse>> GetSecurityEvents(
+        string accountEid,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken cancellationToken)
+    {
+        var normalizedPage = page ?? 1;
+        var normalizedPageSize = pageSize ?? 20;
+        if (normalizedPage < 1 || normalizedPageSize is < 1 or > 100)
+        {
+            return ProblemResult(400, "IDENTITY_QUERY_INVALID");
+        }
+
+        var events = await _queries.SearchSecurityEventsAsync(
+            accountEid,
+            normalizedPage,
+            normalizedPageSize,
+            cancellationToken);
+        return events is null
+            ? ProblemResult(404, IdentityFailureCodes.AccountNotFound)
+            : Ok(IdentitySecurityEventPageResponse.From(events));
+    }
+
     [HttpPut("{accountEid}")]
     public async Task<ActionResult<IdentityAccountResponse>> UpdateName(
         string accountEid,

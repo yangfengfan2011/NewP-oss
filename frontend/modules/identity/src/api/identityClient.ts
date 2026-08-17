@@ -87,6 +87,23 @@ export function getAccount(accountEid: string, eventPage = 1): Promise<IdentityA
   });
 }
 
+export function getAccountSnapshot(accountEid: string): Promise<IdentityAccount> {
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/snapshot`, {
+    method: 'GET',
+  });
+}
+
+export function listAccountSecurityEvents(
+  accountEid: string,
+  page: number,
+  pageSize: number,
+): Promise<IdentityPage<IdentitySecurityEvent>> {
+  return requestJson(
+    `/api/identity/accounts/${encodeURIComponent(accountEid)}/security-events?page=${page}&pageSize=${pageSize}`,
+    { method: 'GET' },
+  );
+}
+
 export function createAccount(input: { ecode: string; ename: string }): Promise<IdentityCredentialIssuance> {
   return requestJson('/api/identity/accounts', jsonRequest('POST', input));
 }

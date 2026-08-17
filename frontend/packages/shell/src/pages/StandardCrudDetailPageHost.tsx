@@ -185,7 +185,9 @@ function StandardCrudDetailPageContent<TDetail>({
       try {
         setLoading(true);
         setError(null);
-        const rawDetail = await client.getDetail(id);
+        const rawDetail = registration.loadDetail
+          ? await registration.loadDetail(id)
+          : await client.getDetail(id);
         const normalized = normalizeStandardCrudDetail(rawDetail);
         const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
 

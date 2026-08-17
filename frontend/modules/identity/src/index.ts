@@ -28,6 +28,11 @@ const identityFrontendBindings: FrontendBehaviorBindings = {
       targetKey: 'identity.account.list',
       load: loadIdentityAccountStandardCrudResource,
     },
+    {
+      kind: 'standard-crud-detail',
+      targetKey: 'identity.account.detail',
+      load: loadIdentityAccountStandardCrudResource,
+    },
   ],
 };
 

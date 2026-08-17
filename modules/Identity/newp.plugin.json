@@ -19,7 +19,8 @@
     "bindingMode": "behavior-bindings",
     "bindings": [
       "identity.accounts.page",
-      "identity.account.list"
+      "identity.account.list",
+      "identity.account.detail"
     ]
   },
   "security": {

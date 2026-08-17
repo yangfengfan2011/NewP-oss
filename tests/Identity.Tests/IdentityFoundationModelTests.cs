@@ -99,6 +99,7 @@ public sealed class IdentityFoundationModelTests
 
         Assert.Equal("identity.account.list", view.GetProperty("key").GetString());
         Assert.Equal("IdentityAccount", view.GetProperty("model").GetString());
+        Assert.Equal("identity.account.detail", view.GetProperty("detailViewKey").GetString());
         Assert.Equal("ECODE", view.GetProperty("query").GetProperty("defaultSort").GetProperty("field").GetString());
         Assert.Equal(
             ["query", "status"],
@@ -121,9 +122,21 @@ public sealed class IdentityFoundationModelTests
             Path.Combine(root, @"modules\Identity\newp.plugin.json"),
             Encoding.UTF8));
         Assert.Equal(
-            ["identity.accounts.page", "identity.account.list"],
+            ["identity.accounts.page", "identity.account.list", "identity.account.detail"],
             capsule.RootElement.GetProperty("frontend").GetProperty("bindings").EnumerateArray()
                 .Select(binding => binding.GetString()));
+
+        using var detailView = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Identity\metadata\views\AccountDetail.view.json"),
+            Encoding.UTF8));
+        var detail = detailView.RootElement.GetProperty("view");
+        Assert.Equal("identity.account.detail", detail.GetProperty("key").GetString());
+        Assert.Equal("IdentityAccount", detail.GetProperty("model").GetString());
+        Assert.Equal(
+            ["basic", "protection", "audit"],
+            detail.GetProperty("sections").EnumerateArray().Select(section => section.GetProperty("key").GetString()));
+        Assert.Equal(["securityEvents"], detail.GetProperty("summaryBlocks").EnumerateArray().Select(block => block.GetString()));
+        Assert.Empty(detail.GetProperty("pageActions").EnumerateArray());
     }
 
     private static void AssertAuditFields(ModelDefinition definition)

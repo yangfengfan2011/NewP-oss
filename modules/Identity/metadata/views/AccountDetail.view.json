@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "identity.account.detail",
+    "dicKey": "AccountDetailView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "detail",
+    "model": "IdentityAccount",
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "Status"
+        ]
+      },
+      {
+        "key": "protection",
+        "titleKey": "Section_Protection",
+        "fields": [
+          "IsLocalAdministrator",
+          "IsPersonnelBound",
+          "PersonnelDisableHold"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ],
+    "summaryBlocks": [
+      "securityEvents"
+    ],
+    "pageActions": []
+  }
+}

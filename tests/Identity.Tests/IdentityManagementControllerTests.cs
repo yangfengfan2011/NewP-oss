@@ -88,6 +88,43 @@ public sealed class IdentityManagementControllerTests
     }
 
     [Fact]
+    public async Task Snapshot_ReturnsAccountWithoutLoadingSecurityEvents()
+    {
+        var queries = new RecordingManagementQueryService
+        {
+            AccountResult = AccountView()
+        };
+        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+
+        var result = await controller.GetSnapshot("account-1", CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result);
+        var account = Assert.IsType<IdentityAccountViewResponse>(response.Value);
+        Assert.Equal("account-1", account.EID);
+        Assert.Equal("account-1", queries.LastAccountEid);
+        Assert.Null(queries.LastEventAccountEid);
+    }
+
+    [Fact]
+    public async Task SecurityEvents_ValidatesAndForwardsIndependentPagination()
+    {
+        var queries = new RecordingManagementQueryService
+        {
+            SecurityEventResult = new IdentityManagementSecurityEventPage([], 2, 10, 23)
+        };
+        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+
+        var result = await controller.GetSecurityEvents("account-1", page: 2, pageSize: 10, CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result);
+        var events = Assert.IsType<IdentitySecurityEventPageResponse>(response.Value);
+        Assert.Equal(23, events.TotalCount);
+        Assert.Equal("account-1", queries.LastEventAccountEid);
+        Assert.Equal(2, queries.LastEventPage);
+        Assert.Equal(10, queries.LastEventPageSize);
+    }
+
+    [Fact]
     public async Task Create_ReturnsOneTimeCredentialOnlyInNoStoreSuccessResponse()
     {
         var accounts = new RecordingAccountApplicationService
@@ -274,11 +311,37 @@ public sealed class IdentityManagementControllerTests
         Revision = 1
     };
 
+    private static IdentityManagementAccountView AccountView() => new(
+        "account-1",
+        "alice",
+        "Alice",
+        IdentityAccountStatus.Enabled,
+        1,
+        false,
+        false,
+        false,
+        "account-1",
+        new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        "account-1",
+        new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
     private sealed class RecordingManagementQueryService : IIdentityManagementQueryService
     {
         public IdentityManagementAccountPage? SearchResult { get; init; }
 
         public IdentityManagementAccountSearch? LastSearch { get; private set; }
+
+        public IdentityManagementAccountView? AccountResult { get; init; }
+
+        public IdentityManagementSecurityEventPage? SecurityEventResult { get; init; }
+
+        public string? LastAccountEid { get; private set; }
+
+        public string? LastEventAccountEid { get; private set; }
+
+        public int? LastEventPage { get; private set; }
+
+        public int? LastEventPageSize { get; private set; }
 
         public ValueTask<IdentityManagementAccountPage> SearchAsync(
             IdentityManagementAccountSearch search,
@@ -293,6 +356,26 @@ public sealed class IdentityManagementControllerTests
             int eventPage,
             int eventPageSize,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public ValueTask<IdentityManagementAccountView?> FindAccountAsync(
+            string accountEid,
+            CancellationToken cancellationToken = default)
+        {
+            LastAccountEid = accountEid;
+            return ValueTask.FromResult(AccountResult);
+        }
+
+        public ValueTask<IdentityManagementSecurityEventPage?> SearchSecurityEventsAsync(
+            string accountEid,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            LastEventAccountEid = accountEid;
+            LastEventPage = page;
+            LastEventPageSize = pageSize;
+            return ValueTask.FromResult(SecurityEventResult);
+        }
     }
 
     private sealed class UnusedAccountApplicationService : IIdentityAccountApplicationService

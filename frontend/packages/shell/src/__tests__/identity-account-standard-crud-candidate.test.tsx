@@ -2,31 +2,41 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import identityModule from '../../../../modules/identity/src/index';
+import accountDetailDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountDetailView.dic.json';
 import accountListDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountListView.dic.json';
 import accountModelDocument from '../../../../../modules/Identity/metadata/models/IdentityAccount.model.json';
 import identityNavigationDocument from '../../../../../modules/Identity/metadata/navigation/Identity.nav.json';
 import accountListViewDocument from '../../../../../modules/Identity/metadata/views/AccountList.view.json';
+import accountDetailViewDocument from '../../../../../modules/Identity/metadata/views/AccountDetail.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
+import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const accountListCatalog = Object.fromEntries(
-  Object.entries(accountListDictionary.AccountListView).map(([key, value]) => [
-    `AccountListView.${key}`,
-    value.zhs,
-  ]),
+  [
+    ...Object.entries(accountListDictionary.AccountListView).map(([key, value]) => [
+      `AccountListView.${key}`,
+      value.zhs,
+    ]),
+    ...Object.entries(accountDetailDictionary.AccountDetailView).map(([key, value]) => [
+      `AccountDetailView.${key}`,
+      value.zhs,
+    ]),
+  ],
 );
 
 const runtimeMetadata = {
   manifest: { modules: [] },
   navDocuments: [identityNavigationDocument],
-  viewDocuments: [accountListViewDocument],
+  viewDocuments: [accountListViewDocument, accountDetailViewDocument],
   modelDocuments: [accountModelDocument],
 };
 
@@ -45,6 +55,22 @@ async function waitForBodyText(expectedText: string): Promise<void> {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
   }
   throw new Error(`Timed out waiting for body text: ${expectedText}`);
+}
+
+function IdentityAccountDetailCandidate({ registration }: { registration: StandardCrudResourceRegistration }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return (
+    <>
+      <button data-testid="history-back" onClick={() => navigate(-1)}>后退</button>
+      <button data-testid="history-forward" onClick={() => navigate(1)}>前进</button>
+      <StandardCrudDetailPageHost
+        viewKey="identity.account.detail"
+        id={id ?? null}
+        registration={registration}
+      />
+    </>
+  );
 }
 
 describe('Identity account Standard CRUD list candidate', () => {
@@ -135,6 +161,189 @@ describe('Identity account Standard CRUD list candidate', () => {
     expect(container.textContent).toContain('Alice');
     expect(container.textContent).toContain('已删除');
     expect(container.textContent).toContain('共 21 条');
+  });
+
+  it('resolves one complete account Detail View for both surfaces without actions', () => {
+    const schema = resolveStandardCrudDetailSchema(
+      runtimeMetadata.viewDocuments,
+      registration,
+      { modelDocuments: runtimeMetadata.modelDocuments },
+    );
+
+    expect(schema.viewKey).toBe('identity.account.detail');
+    expect(schema.sections.map((section) => ({
+      key: section.key,
+      fields: section.fields.map((field) => field.key),
+    }))).toEqual([
+      { key: 'basic', fields: ['ECODE', 'ENAME', 'Status'] },
+      { key: 'protection', fields: ['IsLocalAdministrator', 'IsPersonnelBound', 'PersonnelDisableHold'] },
+      { key: 'audit', fields: ['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'] },
+    ]);
+    expect(schema.summaryBlocks).toEqual(['securityEvents']);
+    expect(schema.pageActions).toEqual([]);
+  });
+
+  it('opens a Deleted account Drawer from an explicit result without loading security events or write actions', async () => {
+    const account = {
+      eid: 'User_2', ecode: 'retired', ename: 'Retired', status: 'Deleted', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+      createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z',
+      updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/User_2/snapshot')) {
+        return new Response(JSON.stringify(account), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        items: [account], total: 1, totalCount: 1, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/identity/accounts?status=Deleted']}>
+          <LocalizationProvider
+            defaultLanguage="zhs"
+            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+            catalogs={{ zhs: accountListCatalog }}
+          >
+            <RuntimeMetadataProvider value={runtimeMetadata}>
+              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            </RuntimeMetadataProvider>
+          </LocalizationProvider>
+        </MemoryRouter>,
+      );
+    });
+    await waitForBodyText('retired');
+    const buttonTexts = Array.from(container.querySelectorAll('button')).map((button) => button.textContent);
+    expect(buttonTexts).toContain('retired');
+    const accountLink = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'retired');
+    await act(async () => accountLink?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('审计信息');
+
+    const drawer = document.body.querySelector('.ant-drawer');
+    expect(drawer?.textContent).toContain('账号信息');
+    expect(drawer?.textContent).toContain('安全保护');
+    expect(drawer?.textContent).toContain('已删除');
+    expect(Array.from(drawer?.querySelectorAll('button') ?? []).map((button) => button.textContent)).not.toContain('编辑');
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/security-events'))).toBe(false);
+  });
+
+  it('supports candidate detail direct entry, refresh, back and forward without switching production navigation', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/security-events')) {
+        return new Response(JSON.stringify({ items: [], page: 1, pageSize: 20, totalCount: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const id = decodeURIComponent(url.split('/').at(-2) ?? '');
+      return new Response(JSON.stringify({
+        eid: id,
+        ecode: id.toLowerCase(),
+        ename: `Account ${id}`,
+        status: 'Enabled',
+        revision: 1,
+        isLocalAdministrator: false,
+        isPersonnelBound: false,
+        personnelDisableHold: false,
+        createdBy: 'User_1',
+        createdAt: '2026-08-01T00:00:00Z',
+        updatedBy: 'User_1',
+        updatedAt: '2026-08-02T00:00:00Z',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    const renderRouter = (entries: string[], initialIndex?: number) => (
+      <LocalizationProvider
+        defaultLanguage="zhs"
+        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+        catalogs={{ zhs: accountListCatalog }}
+      >
+        <RuntimeMetadataProvider value={runtimeMetadata}>
+          <MemoryRouter initialEntries={entries} initialIndex={initialIndex}>
+            <Routes>
+              <Route
+                path="/identity/accounts/:id"
+                element={<IdentityAccountDetailCandidate registration={registration} />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </RuntimeMetadataProvider>
+      </LocalizationProvider>
+    );
+    await act(async () => root.render(renderRouter([
+      '/identity/accounts/User_1',
+      '/identity/accounts/User_2',
+    ], 1)));
+    await waitForBodyText('Account User_2');
+
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history-back"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('Account User_1');
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history-forward"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('Account User_2');
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(renderRouter(['/identity/accounts/User_2'])));
+    await waitForBodyText('Account User_2');
+
+    const snapshotUrls = fetchMock.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.endsWith('/snapshot'));
+    expect(snapshotUrls).toEqual([
+      '/api/identity/accounts/User_2/snapshot',
+      '/api/identity/accounts/User_1/snapshot',
+      '/api/identity/accounts/User_2/snapshot',
+      '/api/identity/accounts/User_2/snapshot',
+    ]);
+    expect(identityNavigationDocument.navigation.items.find((item) => item.key === 'identity.accounts')).toMatchObject({
+      entryType: 'custom',
+      targetKey: 'identity.accounts.page',
+    });
+  });
+
+  it('keeps an account detail API 403 local and never starts the security-event renderer', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      code: 'IDENTITY_ACCOUNT_FORBIDDEN',
+    }), { status: 403, headers: { 'Content-Type': 'application/problem+json' } }));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <LocalizationProvider
+            defaultLanguage="zhs"
+            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+            catalogs={{ zhs: accountListCatalog }}
+          >
+            <RuntimeMetadataProvider value={runtimeMetadata}>
+              <StandardCrudDetailPageHost
+                viewKey="identity.account.detail"
+                id="User_2"
+                registration={registration}
+              />
+            </RuntimeMetadataProvider>
+          </LocalizationProvider>
+        </MemoryRouter>,
+      );
+    });
+    await waitForBodyText('IDENTITY_ACCOUNT_FORBIDDEN');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/identity/accounts/User_2/snapshot');
   });
 
   it('derives account create and edit drawers from metadata without exposing immutable fields', async () => {
@@ -260,11 +469,8 @@ describe('Identity account Standard CRUD list candidate', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      if (url.includes('/User_2?')) {
-        return new Response(JSON.stringify({
-          account,
-          events: { items: [], page: 1, pageSize: 20, totalCount: 0 },
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (url.endsWith('/User_2/snapshot')) {
+        return new Response(JSON.stringify(account), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       return new Response(JSON.stringify({
         items: [account], total: 1, totalCount: 1, page: 1, pageSize: 20,

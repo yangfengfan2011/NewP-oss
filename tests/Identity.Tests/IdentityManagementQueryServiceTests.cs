@@ -113,6 +113,31 @@ public sealed class IdentityManagementQueryServiceTests
         Assert.Equal("EID", executor.Descriptor?.IdField);
     }
 
+    [Fact]
+    public async Task FindAccountAsync_DoesNotLoadSecurityEvents()
+    {
+        var repository = new InMemoryIdentityRepository();
+        repository.Accounts.Add(new ICP.Platform.Modules.Identity.Models.IdentityAccount
+        {
+            EID = "User_2",
+            ECODE = "alice",
+            NormalizedECODE = "ALICE",
+            ENAME = "Alice",
+            Status = IdentityAccountStatus.Deleted,
+            Revision = 4,
+            CreatedBy = "User_1",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedBy = "User_1",
+            UpdatedAt = DateTime.UtcNow
+        });
+        var service = new IdentityManagementQueryService(repository, new UnusedPlatformQueryExecutor());
+
+        var account = await service.FindAccountAsync("User_2");
+
+        Assert.Equal(IdentityAccountStatus.Deleted, account?.Status);
+        Assert.Equal(0, repository.SecurityEventSearchCount);
+    }
+
     private sealed class RecordingPlatformQueryExecutor(PlatformQueryResult result) : IPlatformQueryExecutor
     {
         public PlatformQueryDescriptor? Descriptor { get; private set; }

@@ -3,20 +3,20 @@ import { IdentityApiError } from '../api/identityClient';
 import { identityAccountStandardCrudResource } from '../standard-crud/identityAccountStandardCrudResource';
 
 const createAccountMock = vi.hoisted(() => vi.fn());
-const getAccountMock = vi.hoisted(() => vi.fn());
+const getAccountSnapshotMock = vi.hoisted(() => vi.fn());
 const updateAccountNameMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../api/identityClient', async (importOriginal) => ({
   ...await importOriginal<typeof import('../api/identityClient')>(),
   createAccount: createAccountMock,
-  getAccount: getAccountMock,
+  getAccountSnapshot: getAccountSnapshotMock,
   updateAccountName: updateAccountNameMock,
 }));
 
 describe('Identity account Standard CRUD resource candidate', () => {
   beforeEach(() => {
     createAccountMock.mockReset();
-    getAccountMock.mockReset();
+    getAccountSnapshotMock.mockReset();
     updateAccountNameMock.mockReset();
   });
 
@@ -103,22 +103,25 @@ describe('Identity account Standard CRUD resource candidate', () => {
     expect(result).toEqual({ operation: 'update', payload: account });
   });
 
-  it('loads the editable account snapshot through the formal Identity detail API', async () => {
-    getAccountMock.mockResolvedValue({
-      account: {
-        eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
-        isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
-      },
-      events: { items: [], page: 1, pageSize: 20, totalCount: 0 },
+  it('loads only the account snapshot and publishes a lightweight security-event summary marker', async () => {
+    getAccountSnapshotMock.mockResolvedValue({
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+      createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z',
+      updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
     });
 
     const detail = await identityAccountStandardCrudResource.loadDetail?.('User_2');
 
-    expect(getAccountMock).toHaveBeenCalledWith('User_2');
+    expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2');
     expect(detail?.fields).toMatchObject({
       EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Enabled', Revision: 7,
     });
-    expect(detail?.summaries).toEqual({});
+    expect(detail?.summaries).toEqual({
+      securityEvents: { status: 'ready', data: { accountEid: 'User_2' } },
+    });
+    expect(identityAccountStandardCrudResource.detailViewKey).toBe('identity.account.detail');
+    expect(Object.keys(identityAccountStandardCrudResource.summaryRenderers ?? {})).toEqual(['securityEvents']);
   });
 
   it('maps Identity field and permission failures into the shared form error contract', async () => {

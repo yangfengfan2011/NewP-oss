@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const platformFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', () => ({ platformFetch: platformFetchMock }));
 
-import { listAccounts, resetCredential } from '../api/identityClient';
+import {
+  getAccountSnapshot,
+  listAccountSecurityEvents,
+  listAccounts,
+  resetCredential,
+} from '../api/identityClient';
 import { closeOneTimeSecret, revealOneTimeSecret } from '../state/oneTimeSecret';
 import { availableIdentityActions } from '../state/accountActions';
 
@@ -36,6 +41,32 @@ describe('identity management client', () => {
     await expect(resetCredential('User_1', { expectedRevision: 7, reason: 'rotation' }))
       .rejects.toMatchObject({ code: 'IDENTITY_REVISION_CONFLICT', current: { revision: 8 } });
     expect(platformFetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the account snapshot separately from paged security events', async () => {
+    platformFetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ eid: 'User_1', ecode: 'alice' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], page: 2, pageSize: 20, totalCount: 21 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+
+    await getAccountSnapshot('User/1');
+    await listAccountSecurityEvents('User/1', 2, 20);
+
+    expect(platformFetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/identity/accounts/User%2F1/snapshot',
+      { method: 'GET' },
+    );
+    expect(platformFetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/identity/accounts/User%2F1/security-events?page=2&pageSize=20',
+      { method: 'GET' },
+    );
   });
 });
 

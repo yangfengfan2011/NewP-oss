@@ -7,12 +7,13 @@ import {
 } from '@icp-platform/sdk';
 import {
   createAccount,
-  getAccount,
+  getAccountSnapshot,
   IdentityApiError,
   updateAccountName,
   type IdentityAccount,
 } from '../api/identityClient';
 import { identityAccountOperationResultPresenter } from './identityAccountOperationResultPresenter';
+import { identityAccountSecurityEventsSummaryRenderer } from './IdentityAccountSecurityEventsSummary';
 
 export interface IdentityAccountListFilters {
   [key: string]: string;
@@ -87,7 +88,12 @@ function mapIdentityAccountDetail(account: IdentityAccount) {
       UpdatedBy: account.updatedBy ?? null,
       UpdatedAt: account.updatedAt ?? null,
     },
-    summaries: {},
+    summaries: {
+      securityEvents: {
+        status: 'ready' as const,
+        data: { accountEid: account.eid },
+      },
+    },
   };
 }
 
@@ -152,6 +158,7 @@ export const identityAccountStandardCrudResource: StandardCrudResourceRegistrati
   resourceKey: 'identity.account',
   apiRoute: '/api/identity/accounts',
   listViewKey: 'identity.account.list',
+  detailViewKey: 'identity.account.detail',
   concurrencyRevisionField: 'Revision',
   enumOptions: {
     IdentityAccountStatus: [
@@ -165,9 +172,12 @@ export const identityAccountStandardCrudResource: StandardCrudResourceRegistrati
     update: ({ id, values, detailFields }) => updateIdentityAccount(id, values, detailFields),
   },
   operationResultPresenters: [identityAccountOperationResultPresenter],
+  summaryRenderers: {
+    securityEvents: identityAccountSecurityEventsSummaryRenderer,
+  },
   createEmptyFilters,
   buildListQuery,
   mapListItem: mapIdentityAccountListItem,
   getRowId: (row) => row.id,
-  loadDetail: async (id) => mapIdentityAccountDetail((await getAccount(id)).account),
+  loadDetail: async (id) => mapIdentityAccountDetail(await getAccountSnapshot(id)),
 };

@@ -344,6 +344,21 @@ describe('StandardCrudDetailPageHost', () => {
     expect(container.textContent).toContain('李四');
   });
 
+  it('uses the resource detail loader for a module-owned API shape', async () => {
+    const loadDetail = vi.fn().mockResolvedValue({
+      fields: { EID: 'Person_2', PersonNo: 'P002', ENAME: '模块详情', DepartmentId: null },
+      summaries: {},
+    });
+    const registration = { ...createPersonRegistration(), loadDetail };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await renderHost('Person_2', registration);
+    await vi.waitFor(() => expect(container.textContent).toContain('模块详情'));
+
+    expect(loadDetail).toHaveBeenCalledWith('Person_2');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('resolves detail title and description from the runtime dictionary', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "AccountDetailView": {
+    "Title": {
+      "zhs": "账号详情",
+      "en": "Account Detail"
+    },
+    "Description": {
+      "zhs": "查看账号状态、保护标记、审计信息与安全事件。",
+      "en": "View account status, protection markers, audit information, and security events."
+    },
+    "Section_Basic": {
+      "zhs": "账号信息",
+      "en": "Account"
+    },
+    "Section_Protection": {
+      "zhs": "安全保护",
+      "en": "Protection"
+    },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit"
+    },
+    "Field_ECODE": {
+      "zhs": "登录账号",
+      "en": "Account Code"
+    },
+    "Field_ENAME": {
+      "zhs": "显示名称",
+      "en": "Display Name"
+    },
+    "Field_Status": {
+      "zhs": "状态",
+      "en": "Status"
+    },
+    "Field_IsLocalAdministrator": {
+      "zhs": "本地管理员",
+      "en": "Local Administrator"
+    },
+    "Field_IsPersonnelBound": {
+      "zhs": "人员绑定",
+      "en": "Personnel Bound"
+    },
+    "Field_PersonnelDisableHold": {
+      "zhs": "人员停用阻断",
+      "en": "Personnel Disable Hold"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    },
+    "Block_SecurityEvents": {
+      "zhs": "安全事件",
+      "en": "Security Events"
+    }
+  }
+}

@@ -17,6 +17,8 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
 
     public bool FailOnSecurityEvent { get; set; }
 
+    public int SecurityEventSearchCount { get; private set; }
+
     public ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default) =>
         ValueTask.CompletedTask;
 
@@ -34,11 +36,14 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
 
     public ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(
         string targetAccountEid,
-        CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(SecurityEvents
+        CancellationToken cancellationToken = default)
+    {
+        SecurityEventSearchCount++;
+        return ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(SecurityEvents
             .Where(item => item.TargetAccountEID == targetAccountEid)
             .Select(Clone)
             .ToArray());
+    }
 
     public void AddAccount(IdentityAccount account)
     {

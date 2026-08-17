@@ -1,5 +1,8 @@
 using ICP.Platform.Modules.Identity.Models;
 using ICP.Platform.Modules.Identity.Repositories;
+using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Query.Models;
+using ICP.Platform.Query.Runtime;
 using Microsoft.AspNetCore.Identity;
 
 namespace ICP.Platform.Identity.Tests;
@@ -154,4 +157,12 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
     };
 
     private sealed record Snapshot(IdentityAccount[] Accounts, LocalCredential[] Credentials, IdentitySecurityEvent[] Events);
+}
+
+internal sealed class UnusedPlatformQueryExecutor : IPlatformQueryExecutor
+{
+    public Task<PlatformQueryResult> QueryAsync(
+        PlatformQueryDescriptor descriptor,
+        PlatformQueryRequest request,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
 }

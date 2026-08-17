@@ -6,11 +6,14 @@ using ICP.Platform.Sdk;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Repositories;
+using ICP.Platform.Query.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace ICP.Platform.Identity.Tests;
@@ -37,6 +40,7 @@ public sealed class IdentityFoundationModelTests
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityAccountDirectory));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityLifecycleParticipant));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityAccountApplicationService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPlatformQueryExecutor));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IValidateOptions<IdentityCredentialOptions>));
     }
 
@@ -84,12 +88,66 @@ public sealed class IdentityFoundationModelTests
             foreignKey is { Name: "FK_IdentitySecurityEvent_TargetIdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
     }
 
+    [Fact]
+    public void AccountListMetadata_DefinesStandardCandidateWithoutSwitchingProductionNavigation()
+    {
+        var root = FindRepositoryRoot();
+        using var listView = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Identity\metadata\views\AccountList.view.json"),
+            Encoding.UTF8));
+        var view = listView.RootElement.GetProperty("view");
+
+        Assert.Equal("identity.account.list", view.GetProperty("key").GetString());
+        Assert.Equal("IdentityAccount", view.GetProperty("model").GetString());
+        Assert.Equal("ECODE", view.GetProperty("query").GetProperty("defaultSort").GetProperty("field").GetString());
+        Assert.Equal(
+            ["query", "status"],
+            view.GetProperty("query").GetProperty("fields").EnumerateArray()
+                .Select(field => field.GetProperty("key").GetString()));
+        Assert.Equal(
+            ["isPersonnelBound", "isLocalAdministrator"],
+            view.GetProperty("advancedFilter").GetProperty("sections")[0].GetProperty("fields").EnumerateArray()
+                .Select(field => field.GetProperty("key").GetString()));
+
+        using var navigation = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Identity\metadata\navigation\Identity.nav.json"),
+            Encoding.UTF8));
+        var accountEntry = navigation.RootElement.GetProperty("navigation").GetProperty("items").EnumerateArray()
+            .Single(item => item.GetProperty("key").GetString() == "identity.accounts");
+        Assert.Equal("custom", accountEntry.GetProperty("entryType").GetString());
+        Assert.Equal("identity.accounts.page", accountEntry.GetProperty("targetKey").GetString());
+
+        using var capsule = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Identity\newp.plugin.json"),
+            Encoding.UTF8));
+        Assert.Equal(
+            ["identity.accounts.page", "identity.account.list"],
+            capsule.RootElement.GetProperty("frontend").GetProperty("bindings").EnumerateArray()
+                .Select(binding => binding.GetString()));
+    }
+
     private static void AssertAuditFields(ModelDefinition definition)
     {
         Assert.Contains(definition.Fields, static field => field is { Name: "CreatedBy", Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static field => field is { Name: "CreatedAt", Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static field => field is { Name: "UpdatedBy", Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static field => field is { Name: "UpdatedAt", Required: true, IsAuditField: true });
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "tests", "Identity.Tests", "Identity.Tests.csproj")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException("未能定位仓库根目录。");
     }
 
     private sealed class TestWebHostEnvironment(string environmentName) : IWebHostEnvironment

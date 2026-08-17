@@ -14,6 +14,7 @@ using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
 using ICP.Platform.Persistence.EfCore.Transactions;
+using ICP.Platform.Query.Runtime;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -334,7 +335,8 @@ public sealed class IdentitySqlServerIntegrationTests
                 Assert.Equal(2, account.Revision);
                 Assert.False(credential.IsTemporary);
                 Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, "replacement-secret"));
-                var detail = await new IdentityManagementQueryService(repository).FindAsync("User_1", 1, 1);
+                var detail = await new IdentityManagementQueryService(repository, new EfPlatformQueryExecutor(verification))
+                    .FindAsync("User_1", 1, 1);
                 Assert.Equal(2, detail?.Events.TotalCount);
                 Assert.Equal(IdentitySecurityEventTypes.PasswordChanged, Assert.Single(detail!.Events.Items).EventType);
             }

@@ -8,6 +8,7 @@ using ICP.Platform.Modules.Identity.Models;
 using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Modules.Identity.Repositories;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Query.Runtime;
 using ICP.Platform.Sdk;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -25,10 +26,12 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
 {
     public override string BehaviorKey => "identity.backend";
 
+    /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddPlatformObjectIdGeneration();
+        services.AddPlatformQueryKernel();
         services.AddOptions<IdentityCredentialOptions>()
             .Configure<IConfiguration>((options, configuration) =>
             {

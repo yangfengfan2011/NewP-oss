@@ -1,17 +1,65 @@
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Models;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
+using ICP.Platform.Query.Runtime;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace ICP.Platform.Identity.Tests;
 
 public sealed class EfIdentityRepositoryTests
 {
+    [Fact]
+    public async Task ManagementSearch_ExecutesFilterCountStableSortAndPagingInSql()
+    {
+        var sql = new List<string>();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlite(connection)
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .LogTo(sql.Add, LogLevel.Information)
+            .Options;
+        await using var context = new EfPlatformDbContext(options, IdentityModelDefinitions.All);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfIdentityRepository(context);
+        repository.AddAccount(Account("User_1", "A01", IdentityAccountStatus.Enabled, isPersonnelBound: true));
+        repository.AddAccount(Account("User_2", "A02", IdentityAccountStatus.Disabled, isPersonnelBound: true));
+        repository.AddAccount(Account("User_3", "A03", IdentityAccountStatus.Deleted, isPersonnelBound: true));
+        repository.AddAccount(Account("User_4", "B01", IdentityAccountStatus.Enabled, isPersonnelBound: false));
+        await context.SaveChangesAsync();
+        sql.Clear();
+
+        var result = await new IdentityManagementQueryService(repository, new EfPlatformQueryExecutor(context))
+            .SearchAsync(new IdentityManagementAccountSearch(
+                Query: "A",
+                Status: null,
+                IsPersonnelBound: true,
+                IsLocalAdministrator: false,
+                Page: 2,
+                PageSize: 1));
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal("A02", Assert.Single(result.Items).ECODE);
+        var executedSql = string.Join(Environment.NewLine, sql);
+        Assert.Contains("COUNT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WHERE", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ORDER BY", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OFFSET", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Status", executedSql, StringComparison.Ordinal);
+        Assert.Contains("IsPersonnelBound", executedSql, StringComparison.Ordinal);
+        Assert.Contains("IsLocalAdministrator", executedSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("NormalizedECODE", executedSql, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Repository_RoundTripsAggregateAndConditionallyClaimsRevision()
     {
@@ -122,4 +170,25 @@ public sealed class EfIdentityRepositoryTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
             .Options;
+
+    private static IdentityAccount Account(
+        string eid,
+        string code,
+        IdentityAccountStatus status,
+        bool isPersonnelBound) => new()
+    {
+        EID = eid,
+        ECODE = code,
+        NormalizedECODE = code,
+        ENAME = code,
+        Status = status,
+        IsLocalAdministrator = false,
+        IsPersonnelBound = isPersonnelBound,
+        PersonnelDisableHold = false,
+        Revision = 1,
+        CreatedBy = "actor",
+        CreatedAt = new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc),
+        UpdatedBy = "actor",
+        UpdatedAt = new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc)
+    };
 }

@@ -27,7 +27,10 @@ public sealed class IdentityManagementControllerTests
             isPersonnelBound: true,
             isLocalAdministrator: false,
             page: null,
+            pageIndex: null,
             pageSize: null,
+            sortBy: null,
+            sortDirection: null,
             cancellationToken: CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result);
@@ -41,6 +44,47 @@ public sealed class IdentityManagementControllerTests
             false,
             1,
             20), queries.LastSearch);
+    }
+
+    [Fact]
+    public async Task List_MapsStandardHostPagingAndSortWithoutChangingIdentityRoute()
+    {
+        var queries = new RecordingManagementQueryService
+        {
+            SearchResult = new IdentityManagementAccountPage([], 3, 50, 121)
+        };
+        var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
+
+        var result = await controller.List(
+            query: null,
+            status: null,
+            isPersonnelBound: null,
+            isLocalAdministrator: null,
+            page: null,
+            pageIndex: 3,
+            pageSize: 50,
+            sortBy: "ENAME",
+            sortDirection: "desc",
+            cancellationToken: CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result);
+        var page = Assert.IsType<IdentityAccountPageResponse>(response.Value);
+        Assert.Equal("api/identity/accounts", typeof(IdentityAccountsController)
+            .GetCustomAttributes(typeof(RouteAttribute), true)
+            .Cast<RouteAttribute>()
+            .Single()
+            .Template);
+        Assert.Equal(121, page.TotalCount);
+        Assert.Equal(121, page.Total);
+        Assert.Equal(new IdentityManagementAccountSearch(
+            null,
+            null,
+            null,
+            null,
+            3,
+            50,
+            "ENAME",
+            "desc"), queries.LastSearch);
     }
 
     [Fact]
@@ -191,7 +235,7 @@ public sealed class IdentityManagementControllerTests
             });
         }
 
-        var detail = await new IdentityManagementQueryService(repository)
+        var detail = await new IdentityManagementQueryService(repository, new UnusedPlatformQueryExecutor())
             .FindAsync("deleted-1", eventPage: 2, eventPageSize: 2);
 
         Assert.Equal(IdentityAccountStatus.Deleted, detail?.Account.Status);
@@ -232,6 +276,8 @@ public sealed class IdentityManagementControllerTests
 
     private sealed class RecordingManagementQueryService : IIdentityManagementQueryService
     {
+        public IdentityManagementAccountPage? SearchResult { get; init; }
+
         public IdentityManagementAccountSearch? LastSearch { get; private set; }
 
         public ValueTask<IdentityManagementAccountPage> SearchAsync(
@@ -239,7 +285,7 @@ public sealed class IdentityManagementControllerTests
             CancellationToken cancellationToken = default)
         {
             LastSearch = search;
-            return ValueTask.FromResult(new IdentityManagementAccountPage([], search.Page, search.PageSize, 0));
+            return ValueTask.FromResult(SearchResult ?? new IdentityManagementAccountPage([], search.Page, search.PageSize, 0));
         }
 
         public ValueTask<IdentityManagementAccountDetail?> FindAsync(

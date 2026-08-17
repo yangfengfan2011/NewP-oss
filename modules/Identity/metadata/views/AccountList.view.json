@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "identity.account.list",
+    "dicKey": "AccountListView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "list",
+    "model": "IdentityAccount",
+    "query": {
+      "fields": [
+        {
+          "key": "query",
+          "labelKey": "Query_Keyword",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        },
+        {
+          "key": "status",
+          "labelKey": "Query_Status",
+          "source": "model",
+          "field": "Status",
+          "operator": "="
+        }
+      ],
+      "defaultSort": {
+        "field": "ECODE",
+        "direction": "asc"
+      },
+      "defaultPageSize": 20
+    },
+    "advancedFilter": {
+      "enabled": true,
+      "titleKey": "AdvancedFilter_Title",
+      "sections": [
+        {
+          "key": "accountFlags",
+          "titleKey": "AdvancedFilter_AccountFlags",
+          "fields": [
+            {
+              "key": "isPersonnelBound",
+              "labelKey": "Query_IsPersonnelBound",
+              "source": "model",
+              "field": "IsPersonnelBound",
+              "operator": "="
+            },
+            {
+              "key": "isLocalAdministrator",
+              "labelKey": "Query_IsLocalAdministrator",
+              "source": "model",
+              "field": "IsLocalAdministrator",
+              "operator": "="
+            }
+          ]
+        }
+      ]
+    },
+    "columns": [
+      {
+        "key": "accountCode",
+        "labelKey": "Column_ECODE",
+        "source": "model",
+        "field": "ECODE",
+        "sortable": true,
+        "hideable": false,
+        "responsivePriority": "high"
+      },
+      {
+        "key": "displayName",
+        "labelKey": "Column_ENAME",
+        "source": "model",
+        "field": "ENAME",
+        "sortable": true,
+        "responsivePriority": "high"
+      },
+      {
+        "key": "status",
+        "labelKey": "Column_Status",
+        "source": "model",
+        "field": "Status",
+        "sortable": true,
+        "responsivePriority": "high"
+      },
+      {
+        "key": "isPersonnelBound",
+        "labelKey": "Column_IsPersonnelBound",
+        "source": "model",
+        "field": "IsPersonnelBound",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "isLocalAdministrator",
+        "labelKey": "Column_IsLocalAdministrator",
+        "source": "model",
+        "field": "IsLocalAdministrator",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "personnelDisableHold",
+        "labelKey": "Column_PersonnelDisableHold",
+        "source": "model",
+        "field": "PersonnelDisableHold",
+        "responsivePriority": "low"
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "refresh",
+        "labelKey": "Action_Refresh",
+        "standardAction": "refresh"
+      }
+    ],
+    "rowActions": []
+  }
+}

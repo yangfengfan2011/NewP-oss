@@ -154,6 +154,9 @@ public sealed class IdentityAccountsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 查询账号目录；同时接受既有 page 与标准宿主 pageIndex，并把允许的排序意图交给 Identity 查询服务。
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<IdentityAccountPageResponse>> List(
         [FromQuery] string? query,
@@ -161,12 +164,27 @@ public sealed class IdentityAccountsController : ControllerBase
         [FromQuery] bool? isPersonnelBound,
         [FromQuery] bool? isLocalAdministrator,
         [FromQuery] int? page,
+        [FromQuery] int? pageIndex,
         [FromQuery] int? pageSize,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDirection,
         CancellationToken cancellationToken)
     {
-        var normalizedPage = page ?? 1;
+        var normalizedPage = pageIndex ?? page ?? 1;
         var normalizedPageSize = pageSize ?? 20;
         if (normalizedPage < 1 || normalizedPageSize is < 1 or > 100)
+        {
+            return ProblemResult(400, "IDENTITY_QUERY_INVALID");
+        }
+
+        var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? null : sortBy.Trim();
+        var normalizedSortDirection = string.IsNullOrWhiteSpace(sortDirection)
+            ? null
+            : sortDirection.Trim().ToLowerInvariant();
+        if ((normalizedSortBy is not null
+                && normalizedSortBy is not ("ECODE" or "ENAME" or "Status"))
+            || (normalizedSortDirection is not null
+                && normalizedSortDirection is not ("asc" or "desc")))
         {
             return ProblemResult(400, "IDENTITY_QUERY_INVALID");
         }
@@ -178,7 +196,9 @@ public sealed class IdentityAccountsController : ControllerBase
                 isPersonnelBound,
                 isLocalAdministrator,
                 normalizedPage,
-                normalizedPageSize),
+                normalizedPageSize,
+                normalizedSortBy,
+                normalizedSortDirection),
             cancellationToken);
         return Ok(IdentityAccountPageResponse.From(result));
     }
@@ -337,6 +357,8 @@ public sealed record IdentityAccountPageResponse(
     int PageSize,
     int TotalCount)
 {
+    public int Total => TotalCount;
+
     internal static IdentityAccountPageResponse From(IdentityManagementAccountPage page) => new(
         page.Items.Select(IdentityAccountViewResponse.From).ToArray(),
         page.Page,

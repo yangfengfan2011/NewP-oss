@@ -18,7 +18,8 @@
     "entry": "identity",
     "bindingMode": "behavior-bindings",
     "bindings": [
-      "identity.accounts.page"
+      "identity.accounts.page",
+      "identity.account.list"
     ]
   },
   "security": {

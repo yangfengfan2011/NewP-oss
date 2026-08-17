@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "AccountListView": {
+    "Title": {
+      "zhs": "账号管理",
+      "en": "Account Management"
+    },
+    "Description": {
+      "zhs": "查询账号状态、人员绑定与本地管理员标记。",
+      "en": "Query account status, personnel binding, and local administrator markers."
+    },
+    "Query_Keyword": {
+      "zhs": "ECODE / ENAME",
+      "en": "ECODE / ENAME"
+    },
+    "Query_Status": {
+      "zhs": "状态",
+      "en": "Status"
+    },
+    "Query_IsPersonnelBound": {
+      "zhs": "已绑定人员",
+      "en": "Personnel Bound"
+    },
+    "Query_IsLocalAdministrator": {
+      "zhs": "本地管理员",
+      "en": "Local Administrator"
+    },
+    "AdvancedFilter_Title": {
+      "zhs": "高级筛选",
+      "en": "Advanced Filters"
+    },
+    "AdvancedFilter_AccountFlags": {
+      "zhs": "账号标记",
+      "en": "Account Markers"
+    },
+    "Column_ECODE": {
+      "zhs": "登录账号",
+      "en": "Account Code"
+    },
+    "Column_ENAME": {
+      "zhs": "显示名称",
+      "en": "Display Name"
+    },
+    "Column_Status": {
+      "zhs": "状态",
+      "en": "Status"
+    },
+    "Column_IsPersonnelBound": {
+      "zhs": "人员绑定",
+      "en": "Personnel Bound"
+    },
+    "Column_IsLocalAdministrator": {
+      "zhs": "本地管理员",
+      "en": "Local Administrator"
+    },
+    "Column_PersonnelDisableHold": {
+      "zhs": "人员停用阻断",
+      "en": "Personnel Disable Hold"
+    },
+    "Action_Refresh": {
+      "zhs": "刷新",
+      "en": "Refresh"
+    }
+  }
+}

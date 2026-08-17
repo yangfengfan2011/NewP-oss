@@ -15,19 +15,24 @@
       {
         "name": "Status",
         "storage": { "type": "string" },
-        "contract": { "valueType": "enum", "clrType": "ICP.Platform.Identity.Contracts.IdentityAccountStatus" }
+        "contract": { "valueType": "enum", "clrType": "ICP.Platform.Identity.Contracts.IdentityAccountStatus" },
+        "uiType": "select",
+        "dataSource": { "type": "enum", "key": "IdentityAccountStatus" }
       },
       {
         "name": "IsLocalAdministrator",
-        "storage": { "type": "bool" }
+        "storage": { "type": "bool" },
+        "uiType": "switch"
       },
       {
         "name": "IsPersonnelBound",
-        "storage": { "type": "bool" }
+        "storage": { "type": "bool" },
+        "uiType": "switch"
       },
       {
         "name": "PersonnelDisableHold",
-        "storage": { "type": "bool" }
+        "storage": { "type": "bool" },
+        "uiType": "switch"
       },
       {
         "name": "Revision",

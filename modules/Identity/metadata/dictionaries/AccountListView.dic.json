@@ -61,6 +61,26 @@
     "Action_Refresh": {
       "zhs": "刷新",
       "en": "Refresh"
+    },
+    "Action_Create": {
+      "zhs": "创建账号",
+      "en": "Create Account"
+    },
+    "Action_Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Section_Basic": {
+      "zhs": "账号信息",
+      "en": "Account Information"
+    },
+    "Field_ECODE": {
+      "zhs": "登录账号",
+      "en": "Account Code"
+    },
+    "Field_ENAME": {
+      "zhs": "显示名称",
+      "en": "Display Name"
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
   createStandardCrudClient,
+  createStandardCrudOperationResultPresenterRegistry,
   normalizeStandardCrudListResult,
   normalizeStandardCrudSubmitValues,
   StandardCrudRequestError,
@@ -16,6 +17,7 @@ import type {
   StandardCrudFieldDefinition,
   StandardCrudFormSection,
   StandardCrudListQueryRequest,
+  StandardCrudOperationResult,
   StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import AntdButton from 'antd/es/button';
@@ -641,6 +643,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     modelDocuments,
   }), [view, registration, modelDocuments]);
   const client = useMemo(() => createStandardCrudClient(schema.apiRoute, platformFetch), [schema.apiRoute]);
+  const operationResultPresenterRegistry = useMemo(
+    () => createStandardCrudOperationResultPresenterRegistry(registration.operationResultPresenters ?? []),
+    [registration.operationResultPresenters],
+  );
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
   const shouldRenderActionColumn = Boolean(
     registration.renderRowActions
@@ -728,6 +734,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string>>({});
   const [hasSaveConflict, setHasSaveConflict] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const [deleteActionError, setDeleteActionError] = useState<DeleteActionErrorState | null>(null);
   const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
   const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
@@ -744,6 +751,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
   const exportRequestPendingRef = useRef(false);
+  const mutationRequestPendingRef = useRef(false);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const handledListRouteSearchRef = useRef<string | null>(null);
@@ -1041,11 +1049,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const openViewDrawer = async (
     id: string,
     source: CrudDrawerState['source'] = 'user-action',
-    options: { syncRoute?: boolean } = {},
+    options: { syncRoute?: boolean; targetMode?: 'view' | 'edit' } = {},
   ): Promise<boolean> => {
     const requestId = detailRequestIdRef.current + 1;
     detailRequestIdRef.current = requestId;
-    setDrawerState({ mode: 'view', id, source });
+    setDrawerState({ mode: options.targetMode ?? 'view', id, source });
     setDetailFields({});
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     if (source === 'user-action' && options.syncRoute !== false) {
@@ -1056,7 +1064,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setSaveError(null);
     try {
       const [detail, prepared] = await Promise.all([
-        client.getDetail(id),
+        registration.loadDetail ? registration.loadDetail(id) : client.getDetail(id),
         prepareDrawerForms(),
       ]);
       if (detailRequestIdRef.current !== requestId) {
@@ -1088,22 +1096,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     if (source === 'user-action') {
       syncDrawerRoute('edit', id);
     }
-    const loaded = await openViewDrawer(id, source, { syncRoute: false });
+    const loaded = await openViewDrawer(id, source, { syncRoute: false, targetMode: 'edit' });
     if (!loaded) {
       return;
     }
-
-    setDrawerState((current) => (
-      current.mode === 'view' && current.id === id
-        ? { mode: 'edit', id, source }
-        : current
-    ));
   };
 
   const handleDrawerSave = async () => {
-    if (saving) {
+    if (mutationRequestPendingRef.current) {
       return;
     }
+    mutationRequestPendingRef.current = true;
     try {
       setSaving(true);
       setSaveError(null);
@@ -1120,14 +1123,22 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           }
         : normalizedValues;
 
+      let operationResult: StandardCrudOperationResult | undefined;
       if (drawerState.mode === 'create') {
-        await client.create(values);
+        operationResult = registration.operationHandlers?.create
+          ? await registration.operationHandlers.create({ values, detailFields })
+          : { operation: 'create', payload: await client.create(values) };
       } else if (drawerState.mode === 'edit' && drawerState.id) {
-        await client.update(drawerState.id, values);
+        operationResult = registration.operationHandlers?.update
+          ? await registration.operationHandlers.update({ id: drawerState.id, values, detailFields })
+          : { operation: 'update', payload: await client.update(drawerState.id, values) };
       }
 
       context.refresh();
       closeDrawer();
+      if (operationResult && operationResultPresenterRegistry.resolve(operationResult)) {
+        setPresentedOperationResult(operationResult);
+      }
     } catch (saveFailure) {
       if (saveFailure instanceof StandardCrudRequestError) {
         const fields = drawerState.mode === 'create' ? createFields : editFields;
@@ -1141,6 +1152,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
       }
     } finally {
+      mutationRequestPendingRef.current = false;
       setSaving(false);
     }
   };
@@ -1562,8 +1574,21 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const reloadConflictedRecord = async () => {
     if (drawerState.mode !== 'edit' || !drawerState.id) return;
     const id = drawerState.id;
-    const loaded = await openViewDrawer(id, 'route-compatibility', { syncRoute: false });
+    const draftValues = formValuesRef.current;
+    const previousInitialValues = initialFormValuesRef.current;
+    const loaded = await openViewDrawer(id, 'route-compatibility', { syncRoute: false, targetMode: 'edit' });
     if (loaded) {
+      const latestValues = initialFormValuesRef.current;
+      const preservedDraft = { ...latestValues };
+      for (const field of editFields) {
+        if (
+          field.readOnly !== true
+          && JSON.stringify(draftValues[field.key]) !== JSON.stringify(previousInitialValues[field.key])
+        ) {
+          preservedDraft[field.key] = draftValues[field.key];
+        }
+      }
+      setFormValues(preservedDraft);
       setDrawerState({ mode: 'edit', id, source: 'route-compatibility' });
       setSaveError(null);
       setSaveFieldErrors({});
@@ -1640,6 +1665,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       {messageContextHolder}
+      {presentedOperationResult
+        ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
+            result: presentedOperationResult,
+            close: () => setPresentedOperationResult(null),
+          })
+        : null}
       <CrudWorkspacePage
         title={pageTitle}
         primaryActions={headerActions}

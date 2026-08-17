@@ -107,11 +107,23 @@
     ],
     "pageActions": [
       {
+        "key": "create",
+        "labelKey": "Action_Create",
+        "standardAction": "create",
+        "variant": "primary"
+      },
+      {
         "key": "refresh",
         "labelKey": "Action_Refresh",
         "standardAction": "refresh"
       }
     ],
-    "rowActions": []
+    "rowActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit"
+      }
+    ]
   }
 }

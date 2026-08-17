@@ -932,6 +932,60 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
   });
 
+  it('hands an opaque create result to the registered presenter and blocks duplicate submits', async () => {
+    const create = vi.fn().mockResolvedValue({
+      operation: 'create',
+      payload: { receipt: 'opaque-result' },
+    });
+    mockStandardCrudModule({
+      operationHandlers: { create },
+      operationResultPresenters: [{
+        supports: (result) => result.operation === 'create',
+        render: ({ result, close }) => (
+          <div>
+            <span>{String((result.payload as { receipt?: string }).receipt)}</span>
+            <button type="button" onClick={close}>关闭结果</button>
+          </div>
+        ),
+      }],
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [], total: 0, page: 1, pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost();
+    await flushProTableRequest();
+    const createButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '新建人员');
+    await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('基础信息');
+    const personNoInput = document.body.querySelector<HTMLInputElement>('#PersonNo');
+    const nameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(personNoInput, 'P002');
+      personNoInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, '李四');
+      nameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.trim() === '保存并关闭');
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      values: expect.objectContaining({ PersonNo: 'P002', ENAME: '李四' }),
+      detailFields: {},
+    }));
+    expect(document.body.textContent).toContain('opaque-result');
+    const closeResult = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '关闭结果');
+    await act(async () => closeResult?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(document.body.textContent).not.toContain('opaque-result');
+  });
+
   it('restores dirty drawer URL on browser back and clears it after discard', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch')
@@ -981,7 +1035,16 @@ describe('StandardCrudListPageHost', () => {
         code: 'StandardCrud.ConcurrencyConflict',
         message: '记录已经变化',
         fieldErrors: [{ field: 'ENAME', code: 'Organization.Person.NameChanged', message: '姓名已被其他人修改' }],
-      }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }));
+      }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '王五', Revision: 5 }, summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '李四', Revision: 6 }, summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValue(new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '李四' }], total: 1, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 
     await renderHost();
     await flushProTableRequest();
@@ -1006,6 +1069,20 @@ describe('StandardCrudListPageHost', () => {
     const updateCall = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'PUT');
     expect(updateCall?.[0]).toBe('/api/organization/persons/Person_1');
     expect(JSON.parse(String(updateCall?.[1]?.body))).toMatchObject({ ENAME: '李四', Revision: 4 });
+
+    const reloadButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '重新加载当前数据');
+    await act(async () => reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('李四');
+
+    const retrySaveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '保存修改');
+    await act(async () => retrySaveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    const updateCalls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PUT');
+    expect(updateCalls).toHaveLength(2);
+    expect(JSON.parse(String(updateCalls[1]?.[1]?.body))).toMatchObject({ ENAME: '李四', Revision: 5 });
   });
 
   it('renders a clear error when registration is missing', async () => {

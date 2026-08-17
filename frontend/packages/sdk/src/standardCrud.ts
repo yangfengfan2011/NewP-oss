@@ -28,6 +28,59 @@ export interface StandardCrudDetail {
 /** 标准 create/update 请求体外形，字段含义由模块资源注册和后端 descriptor 共同约束。 */
 export type StandardCrudMutationValues = Record<string, unknown>;
 
+/** 标准 CRUD 操作种类只描述通用生命周期，不携带任何模块或资源身份。 */
+export type StandardCrudOperationKind = 'create' | 'update' | 'action';
+
+/** 操作结果保持不透明；只有声明支持该结果的模块 presenter 才能解释 payload。 */
+export interface StandardCrudOperationResult {
+  operation: StandardCrudOperationKind;
+  payload: unknown;
+}
+
+/** 模块 presenter 获得当前内存结果和一次性关闭入口，不拥有 Host 的其他页面状态。 */
+export interface StandardCrudOperationResultPresenterContext {
+  result: StandardCrudOperationResult;
+  close: () => void;
+}
+
+/** 操作结果 presenter 通过公开 shape 判定支持范围，并在模块边界内完成具体展示。 */
+export interface StandardCrudOperationResultPresenter {
+  supports: (result: StandardCrudOperationResult) => boolean;
+  render: (context: StandardCrudOperationResultPresenterContext) => ReactNode;
+}
+
+/** 共享 registry 只解析已注册 presenter，不解释 payload 或引入模块特判。 */
+export interface StandardCrudOperationResultPresenterRegistry {
+  resolve: (result: StandardCrudOperationResult) => StandardCrudOperationResultPresenter | undefined;
+}
+
+/** 模块 mutation handler 只接收当前表单、详情快照和可选资源标识，不接触 Shell 状态。 */
+export interface StandardCrudOperationHandlerContext {
+  id?: string;
+  values: StandardCrudMutationValues;
+  detailFields: Record<string, unknown>;
+}
+
+/** 模块可用正式业务 API 覆盖通用 mutation transport，并返回不透明操作结果。 */
+export type StandardCrudOperationHandler = (
+  context: StandardCrudOperationHandlerContext,
+) => Promise<StandardCrudOperationResult>;
+
+/** 创建和普通编辑的模块无关 handler 集合；安全动作继续使用既有 action handler seam。 */
+export interface StandardCrudOperationHandlers {
+  create?: StandardCrudOperationHandler;
+  update?: StandardCrudOperationHandler;
+}
+
+/** 创建模块无关的操作结果 presenter registry。 */
+export function createStandardCrudOperationResultPresenterRegistry(
+  presenters: StandardCrudOperationResultPresenter[],
+): StandardCrudOperationResultPresenterRegistry {
+  return {
+    resolve: (result) => presenters.find((presenter) => presenter.supports(result)),
+  };
+}
+
 /** 标准 CRUD 字段类型只描述渲染意图，具体控件流程由 Shell 运行时按资源注册装配。 */
 export type StandardCrudFieldKind =
   | 'text'
@@ -233,12 +286,15 @@ export interface StandardCrudResourceRegistration<
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
+  operationHandlers?: StandardCrudOperationHandlers;
+  operationResultPresenters?: StandardCrudOperationResultPresenter[];
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
   validateMutationValues?: (values: Record<string, unknown>, mode: StandardCrudFormMode) => string | null;
   createEmptyFilters: () => TFilter;
   buildListQuery: (filters: TFilter) => Record<string, string | number | boolean | null | undefined>;
   mapListItem: (value: unknown) => TRow;
   getRowId: (row: TRow) => string;
+  loadDetail?: (id: string) => Promise<StandardCrudDetail>;
   buildColumns?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => StandardCrudTableColumn<TRow>[];
   renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildStandardCrudPath,
   createStandardCrudClient,
+  createStandardCrudOperationResultPresenterRegistry,
   normalizeStandardCrudListResult,
   normalizeStandardCrudSummaryBlock,
   readStandardCrudBoolean,
@@ -10,6 +11,24 @@ import {
 } from '@icp-platform/sdk';
 
 describe('standard CRUD SDK helpers', () => {
+  it('resolves an opaque operation result through a module-neutral presenter registry', () => {
+    const result = { operation: 'create' as const, payload: { receipt: 'opaque' } };
+    const unsupported = {
+      supports: vi.fn(() => false),
+      render: vi.fn(() => null),
+    };
+    const supported = {
+      supports: vi.fn(() => true),
+      render: vi.fn(() => null),
+    };
+
+    const registry = createStandardCrudOperationResultPresenterRegistry([unsupported, supported]);
+
+    expect(registry.resolve(result)).toBe(supported);
+    expect(unsupported.supports).toHaveBeenCalledWith(result);
+    expect(supported.supports).toHaveBeenCalledWith(result);
+  });
+
   it('normalizes list results with stable paging defaults', () => {
     const result = normalizeStandardCrudListResult(
       {

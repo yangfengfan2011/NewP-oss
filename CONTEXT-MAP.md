@@ -15,6 +15,7 @@
 
 - **Identity → LocalAuth**：Identity 拥有用户账号与账号状态；LocalAuth 只管理和验证与账号一对一关联的本地凭据。
 - **Identity → Authentication**：Identity 与 Authentication 都是 Host readiness 的必需内建能力。账号停用、删除或凭据重置会撤销该账号的全部认证会话；账号恢复不会恢复旧会话。
+- **Identity → Standard CRUD**：Identity 拥有用户账号、账号安全命令、一次性凭据结果与安全事件；Standard CRUD 只承载账号管理的共享列表、表单和详情呈现。Identity 通过 metadata 与模块 binding 接入共享宿主，Shell 不包含 Identity 资源或字段特判，通用 CRUD 写入也不能替代 Identity 的专用安全命令。
 - **Authentication → Host**：Authentication 拥有服务端认证会话及其有效性；Host 只负责 Cookie 接入和逐请求验证，不拥有会话状态。首阶段只支持单个活动 Host，Host 使用稳定应用名和受保护的持久化 Data Protection 密钥环保证正常重启后仍能解析既有 Cookie，多实例共享认证不在本阶段范围内。
 - **Organization → Identity / Authentication**：Organization 通过账号目录查询用户账号，并由 Person 保存不可变的 IdentityAccount EID 来拥有永久一对一绑定；Identity 不保存 Person EID，Person.Name 与 IdentityAccount.ENAME 分别维护且不自动同步。账号目录暂时不可用时，已绑定人员仍可降级读取 Organization 自有绑定事实，但新绑定安全关闭。Organization 应用层通过 Identity.Contracts、Authentication.Contracts 与平台事务执行器编排人员停用、关联账号停用、人员停用阻断和全部会话撤销的单事务提交；Host 不承载该业务流程。人员恢复只解除阻断条件，不会自动恢复账号或旧会话。
 - **Organization → Authorization**：Organization 声明业务权限和 endpoint access rule，并只通过稳定契约读取授权摘要；它不拥有角色、权限分配或授权存储实现。

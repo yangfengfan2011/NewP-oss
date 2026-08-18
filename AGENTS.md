@@ -11,6 +11,7 @@
 ## 工作流与按需入口
 
 - **Skill 工作流**：用户点名或任务触发 Matt Pocock skill 时，以该 `SKILL.md` 为流程源；本文件只提供仓库事实、边界和交付护栏，不重复技能步骤。
+- **AI 代码生成**：AI 新增或修改手写代码前读取 `docs/developer/code-quality-standard.md`；首次编辑前完成生成准备，每个切片满足其完成条件。
 - **Issue 与规格**：需要持久化新规格或任务时，默认使用 GitHub Issues，并先读取 `docs/agents/issue-tracker.md`；涉及分流标签时同时读取 `docs/agents/triage-labels.md`。显式调用的 skill 另有本地工件约定时，遵守该 skill；任何 GitHub 写操作都必须由用户请求或已调用 skill 明确授权。
 - **连续交付与审查**：连续执行多个 GitHub child issue、运行终局 `$code-review`、修复审查 finding，或依赖验收 Gate 关闭父票时，读取 `docs/agents/delivery-gates.md`。完整双轴审查只对冻结候选执行一次；终局以范围内、由本次变更引入且有稳定证据的 P0/P1 为零作为完成条件，修复后按该文档执行封闭复审。
 - **领域与 ADR**：任务涉及领域术语、上下文边界或架构决策时，读取 `docs/agents/domain.md`。`CONTEXT-MAP.md` 或上下文文档尚未创建时，按该文档的降级规则继续，不把缺失本身当作阻塞。

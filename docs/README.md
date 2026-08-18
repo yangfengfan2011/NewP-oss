@@ -19,6 +19,7 @@
 - 外部声明式插件：[external-plugin-development.md](developer/external-plugin-development.md)
 - 持久化与 migration stream：[persistence-development-workflow.md](developer/persistence-development-workflow.md)
 - 模型 DTO 同步：[model-dto-sync-usage-guide.md](developer/model-dto-sync-usage-guide.md)
+- AI 代码生成：[code-quality-standard.md](developer/code-quality-standard.md)
 - 代码注释：[code-commenting-guidelines.md](developer/code-commenting-guidelines.md)
 - 审查清单：[codex-review-checklist.md](collaboration/codex-review-checklist.md)
 

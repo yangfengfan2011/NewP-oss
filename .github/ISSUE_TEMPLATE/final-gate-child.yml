@@ -1,0 +1,53 @@
+name: 终局 Gate Child
+description: 冻结候选、正式验证与双轴审查
+title: "[Final Gate] "
+labels:
+  - wayfinder:task
+body:
+  - type: input
+    id: parent
+    attributes:
+      label: Parent
+      placeholder: "#71"
+    validations:
+      required: true
+  - type: input
+    id: dependencies
+    attributes:
+      label: Native dependencies
+      description: 创建时用 --parent 和 --blocked-by 建立原生关系；这里只记录计划核对值。
+      placeholder: "Parent #71；Blocked by #76"
+    validations:
+      required: true
+  - type: textarea
+    id: entry_audit
+    attributes:
+      label: Entry audit plan
+      description: Issue 在规划期创建；填写进入终局前要核对的 owner、runner/journey、运行证据和成功信号，不表示这些条件已经完成。
+      placeholder: |
+        | 行为 | 证明层级 | 负责 child | Runner/Journey | 进入终局前证据 | 成功信号 |
+        |---|---|---|---|---|---|
+        | ... | browser-gate | #... | ... | ... | ... |
+    validations:
+      required: true
+  - type: textarea
+    id: candidate_plan
+    attributes:
+      label: Candidate and commands plan
+      description: 规划 baseline、候选形成条件、资格运行、Gate-only、verify、证据路径和资源 cleanup；实际 candidate commit/tree 在进入终局时回写。
+    validations:
+      required: true
+  - type: textarea
+    id: failure_plan
+    attributes:
+      label: Failure routing and qualification budget
+      description: 规划失败归属、退出 Qualification 后的定向收敛，以及最多两次完整资格运行的停止条件。
+    validations:
+      required: true
+  - type: textarea
+    id: review_plan
+    attributes:
+      label: Frozen review and closeout plan
+      description: 规划 fixed point、Standards/Spec 来源、P0/P1 分类，以及同一冻结 commit/tree 的 Gate、verify、审查和关闭证据。
+    validations:
+      required: true

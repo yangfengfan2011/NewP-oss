@@ -23,6 +23,10 @@ Host 与 Shell 默认地址分别为 `http://127.0.0.1:5000` 和 `http://127.0.0
 
 开发 Host 优先使用 `NEWP_DEV_SQLSERVER_CONNECTION_STRING`，未设置时由 Host 正常加载 `apps/host-api/appsettings.Development.json`。已经配置本地连接时无需为每次启动重复设置环境变量。
 
+日常开发、定向 API 验证和浏览器 smoke 直接复用该连接指向的开发 catalog，不为每次运行新建数据库；每项任务使用唯一数据前缀并清理自身数据。空库启动、迁移或回滚、建库或删库、破坏性 DDL、并发或故障隔离，以及正式 Acceptance，按[连续交付门禁](../agents/delivery-gates.md)使用一次性 catalog。
+
+仓库根目录的 `.env` 被 Git 忽略，但 `scripts/dev.ps1` 当前不会自动解析它。`NEWP_DEV_ADMIN_ECODE` 与 `NEWP_DEV_ADMIN_PASSWORD` 是可选的应用管理员登录凭据，只用于认证 smoke，不是 SQL Server 用户名和密码；使用前必须由受信任的本地入口注入当前进程环境。数据库连接仍由上述连接字符串来源提供。
+
 Acceptance 按以下顺序解析管理连接：
 
 1. `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`

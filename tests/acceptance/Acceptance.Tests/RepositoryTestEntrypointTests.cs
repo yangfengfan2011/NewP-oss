@@ -324,6 +324,33 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void IdentityFoundationAcceptanceRunner_UsesFormalPersonRevisionsForUpdateAndLifecycle()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "IdentityFoundationAcceptanceRunner.cs"));
+
+        var updateRevision = "personUpdatePayload[\"Revision\"] = personRevision;";
+        var updateResponseRevision = "ReadNestedLong(updatedPerson.RootElement, \"fields\", \"Revision\")";
+        var refresh = "GetJsonAsync(admin, $\"/api/organization/persons/{personEid}\", cancellationToken)";
+        var refreshedRevision = "ReadNestedLong(currentPerson.RootElement, \"fields\", \"Revision\")";
+        var disable = "expectedRevision = currentPersonRevision";
+
+        Assert.Contains(updateRevision, runner, StringComparison.Ordinal);
+        Assert.Contains(updateResponseRevision, runner, StringComparison.Ordinal);
+        Assert.Contains(refresh, runner, StringComparison.Ordinal);
+        Assert.Contains(refreshedRevision, runner, StringComparison.Ordinal);
+        Assert.Contains(disable, runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("expectedRevision = personRevision + 1", runner, StringComparison.Ordinal);
+        Assert.True(runner.IndexOf(updateRevision, StringComparison.Ordinal) < runner.IndexOf(refresh, StringComparison.Ordinal));
+        Assert.True(runner.IndexOf(refresh, StringComparison.Ordinal) < runner.IndexOf(disable, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void IdentityFoundationAcceptanceRunner_ExecutesRequiredBuiltinReadinessFixturesBeforeRecordingSecurityEvidence()
     {
         var repositoryRoot = GetRepositoryRoot();

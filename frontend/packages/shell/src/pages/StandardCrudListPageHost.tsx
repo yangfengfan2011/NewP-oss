@@ -1084,6 +1084,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       setDetailFields({});
       setFormValues({});
       setDetailError(loadError instanceof Error ? loadError.message : '加载详情失败');
+      if (options.targetMode === 'edit') {
+        setDrawerState({ mode: 'view', id, source });
+        syncDrawerRoute('view', id);
+      }
       return false;
     } finally {
       if (detailRequestIdRef.current === requestId) {
@@ -1593,7 +1597,23 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     resolveDrawerTitle(undefined, '查看', pageTitle, createActionLabel),
   );
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
-  const canEdit = Boolean(editAction && hasActionPermission(editAction, grantedPermissions));
+  const drawerRow = drawerState.id
+    ? rows.find((row) => registration.getRowId(row) === drawerState.id)
+    : undefined;
+  const drawerEditActionState = editAction && drawerDetailPresentation?.kind === 'ready'
+    ? registration.actionStateResolver?.({
+        action: editAction,
+        detail: { fields: drawerDetailPresentation.sourceFields, summaries: {} },
+        row: drawerRow,
+      })
+    : undefined;
+  const canEdit = Boolean(
+    editAction
+    && drawerDetailPresentation?.kind === 'ready'
+    && hasActionPermission(editAction, grantedPermissions)
+    && drawerEditActionState?.visible !== false
+    && drawerEditActionState?.available !== false,
+  );
 
   const reloadConflictedRecord = async () => {
     if (drawerState.mode !== 'edit' || !drawerState.id) return;

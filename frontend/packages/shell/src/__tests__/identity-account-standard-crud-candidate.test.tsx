@@ -271,13 +271,20 @@ describe('Identity account Standard CRUD production route', () => {
     expect(buttonTexts).toContain('retired');
     const accountLink = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'retired');
     await act(async () => accountLink?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await waitForBodyText('审计信息');
+    let drawer: Element | null = null;
+    await vi.waitFor(() => {
+      drawer = document.body.querySelector('.ant-drawer-open');
+      expect(drawer?.textContent).toContain('审计信息');
+    });
 
-    const drawer = document.body.querySelector('.ant-drawer');
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/User_2/snapshot'))).toHaveLength(1);
     expect(drawer?.textContent).toContain('账号信息');
     expect(drawer?.textContent).toContain('安全保护');
     expect(drawer?.textContent).toContain('已删除');
-    expect(Array.from(drawer?.querySelectorAll('button') ?? []).map((button) => button.textContent)).not.toContain('编辑');
+    const drawerButtons = Array.from(drawer?.querySelectorAll('button') ?? []);
+    const drawerButtonLabels = drawerButtons.map((button) => button.textContent?.replace(/\s+/g, '') ?? '');
+    expect(drawerButtonLabels).not.toContain('编辑');
+    expect(drawerButtonLabels).toContain('查看完整详情');
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/security-events'))).toBe(false);
   });
 
@@ -674,6 +681,93 @@ describe('Identity account Standard CRUD production route', () => {
     await waitForBodyText('detail-reset-only-once');
 
     expect(window.location.href).not.toContain('detail-reset-only-once');
+  });
+
+  it('refreshes a conflicted full-detail edit while preserving the draft for an explicit retry', async () => {
+    const stale = {
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+      createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z', updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
+    };
+    const latest = { ...stale, ename: 'Alice Server', revision: 8 };
+    let snapshot = stale;
+    let snapshotLoads = 0;
+    const updateBodies: Record<string, unknown>[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/User_2/snapshot')) {
+        snapshotLoads += 1;
+        return new Response(JSON.stringify(snapshot), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/security-events')) {
+        return new Response(JSON.stringify({ items: [], page: 1, pageSize: 20, totalCount: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        updateBodies.push(body);
+        if (updateBodies.length === 1) {
+          snapshot = latest;
+          return new Response(JSON.stringify({ code: 'IDENTITY_REVISION_CONFLICT', current: latest }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/problem+json' },
+          });
+        }
+        snapshot = { ...latest, ename: 'Alice Draft', revision: 9 };
+        return new Response(JSON.stringify(snapshot), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected Identity detail request: ${url}`);
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={['/candidate/User_2']}>
+        <LocalizationProvider
+          defaultLanguage="zhs"
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+          catalogs={{ zhs: accountListCatalog }}
+        >
+          <RuntimeMetadataProvider value={runtimeMetadata}>
+            <Routes>
+              <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
+            </Routes>
+          </RuntimeMetadataProvider>
+        </LocalizationProvider>
+      </MemoryRouter>,
+    ));
+    await waitForBodyText('重置凭据');
+    const edit = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '编辑');
+    await act(async () => edit?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('保存修改');
+
+    const nameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, 'Alice Draft');
+      nameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const save = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '保存修改');
+    await act(async () => save?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    await vi.waitFor(() => expect(snapshotLoads).toBe(2));
+    expect(updateBodies).toEqual([{ ename: 'Alice Draft', expectedRevision: 7 }]);
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice Draft');
+
+    const retry = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '保存修改');
+    await act(async () => retry?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(updateBodies).toHaveLength(2));
+
+    expect(updateBodies[1]).toEqual({ ename: 'Alice Draft', expectedRevision: 8 });
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')).toBeNull());
+    expect(snapshotLoads).toBe(3);
   });
 
   it('refreshes to the latest security state after a list action 409 without replaying the command', async () => {

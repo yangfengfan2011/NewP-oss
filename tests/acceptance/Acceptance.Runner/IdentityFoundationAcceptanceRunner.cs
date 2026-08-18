@@ -323,13 +323,16 @@ internal sealed class IdentityFoundationAcceptanceRunner
             cancellationToken);
         var personEid = ReadNestedString(person.RootElement, "fields", "EID");
         var personRevision = ReadNestedLong(person.RootElement, "fields", "Revision");
-        await SendJsonAndReadAsync(
+        var personUpdatePayload = PersonPayload(personNo, "Identity Acceptance Person Updated", true);
+        personUpdatePayload["Revision"] = personRevision;
+        var updatedPerson = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}",
-            PersonPayload(personNo, "Identity Acceptance Person Updated", true),
+            personUpdatePayload,
             HttpStatusCode.OK,
             cancellationToken);
+        var updatedPersonRevision = ReadNestedLong(updatedPerson.RootElement, "fields", "Revision");
 
         var binding = await SendJsonAndReadAsync(
             admin,
@@ -351,11 +354,18 @@ internal sealed class IdentityFoundationAcceptanceRunner
             await EnsureProblemAsync(conflict, HttpStatusCode.Conflict, "ORGANIZATION_PERSON_ALREADY_BOUND", "permanent binding conflict", cancellationToken);
         }
 
+        var currentPerson = await GetJsonAsync(admin, $"/api/organization/persons/{personEid}", cancellationToken);
+        var currentPersonRevision = ReadNestedLong(currentPerson.RootElement, "fields", "Revision");
+        if (currentPersonRevision < updatedPersonRevision)
+        {
+            throw new InvalidOperationException("Person revision moved backwards after permanent binding.");
+        }
+
         var disabledPerson = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}/status",
-            new { isEnabled = false, expectedRevision = personRevision + 1, reason = "纵向验收人员停用" },
+            new { isEnabled = false, expectedRevision = currentPersonRevision, reason = "纵向验收人员停用" },
             HttpStatusCode.OK,
             cancellationToken);
         EnsureBoolean(ReadObject(disabledPerson.RootElement, "account"), "personnelDisableHold", true, "personnel disable hold");

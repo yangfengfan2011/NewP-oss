@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo
 import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
+  StandardCrudRequestError,
   createStandardCrudClient,
   createStandardCrudOperationResultPresenterRegistry,
   normalizeStandardCrudDetail,
@@ -321,7 +322,36 @@ function StandardCrudDetailPageContent<TDetail>({
                 fields={editFields}
                 sections={formSchema.sections}
                 registration={registration}
-                onSave={(values) => client.update(id, values).then(() => undefined)}
+                onSave={async (values) => {
+                  try {
+                    const operationResult = registration.operationHandlers?.update
+                      ? await registration.operationHandlers.update({
+                          id,
+                          values,
+                          detailFields: currentNormalizedDetail.fields,
+                        })
+                      : { operation: 'update' as const, payload: await client.update(id, values) };
+                    if (operationResult && operationResultPresenterRegistry.resolve(operationResult)) {
+                      setPresentedOperationResult(operationResult);
+                    }
+                  } catch (saveError) {
+                    if (saveError instanceof StandardCrudRequestError && saveError.status === 409) {
+                      const rawLatestDetail = registration.loadDetail
+                        ? await registration.loadDetail(id)
+                        : await client.getDetail(id);
+                      const normalizedLatestDetail = normalizeStandardCrudDetail(rawLatestDetail);
+                      const mappedLatestDetail = registration.mapDetail
+                        ? registration.mapDetail(normalizedLatestDetail)
+                        : normalizedLatestDetail as TDetail;
+                      setLoadedDetail({
+                        id,
+                        normalized: normalizedLatestDetail,
+                        value: mappedLatestDetail,
+                      });
+                    }
+                    throw saveError;
+                  }
+                }}
                 onSaved={() => {
                   setEditing(false);
                   refresh();

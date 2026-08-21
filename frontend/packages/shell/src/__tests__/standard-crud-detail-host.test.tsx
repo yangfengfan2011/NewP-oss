@@ -7,6 +7,7 @@ import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import {
   ModuleRegistry,
+  StandardCrudRequestError,
   createStandardCrudRestDataAdapter,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
@@ -617,5 +618,94 @@ describe('StandardCrudDetailPageHost', () => {
     });
 
     expect(container.textContent).toContain('opaque-action-result');
+  });
+
+  it('reloads the latest snapshot after a 409 edit conflict and only retries after an explicit resubmit', async () => {
+    const initialDetail = {
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, Revision: 4 },
+      summaries: {},
+    };
+    const latestDetail = {
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '王五', DepartmentId: null, Revision: 5 },
+      summaries: {},
+    };
+    const refreshedDetail = {
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '李四', DepartmentId: null, Revision: 6 },
+      summaries: {},
+    };
+    const get = vi.fn()
+      .mockResolvedValueOnce({ normalized: initialDetail, value: initialDetail })
+      .mockResolvedValueOnce({ normalized: latestDetail, value: latestDetail })
+      .mockResolvedValueOnce({ normalized: refreshedDetail, value: refreshedDetail });
+    const update = vi.fn()
+      .mockRejectedValueOnce(new StandardCrudRequestError('记录已经变化', 409, { ENAME: '姓名已被其他人修改' }))
+      .mockResolvedValueOnce({ operation: 'update', payload: { receipt: 'opaque-update-result' } });
+    const registration: StandardCrudResourceRegistration = {
+      ...createPersonRegistration(),
+      dataAdapter: {
+        ...createPersonDataAdapter(),
+        get,
+        update,
+      },
+      concurrencyRevisionField: 'Revision',
+      operationResultPresenters: [{
+        supports: (result) => result.operation === 'update',
+        render: ({ result, close }) => (
+          <div>
+            <span>{String((result.payload as { receipt?: string }).receipt)}</span>
+            <button type="button" onClick={close}>关闭更新结果</button>
+          </div>
+        ),
+      }],
+    };
+
+    await renderHost('Person_1', registration);
+    await vi.waitFor(() => expect(container.textContent).toContain('编辑'));
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '编辑');
+    await act(async () => editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')).not.toBeNull());
+
+    const nameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, '李四');
+      nameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.trim() === '保存修改');
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain('重新加载当前数据'));
+    expect(document.body.textContent).toContain('姓名已被其他人修改');
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('李四');
+    expect(update).toHaveBeenNthCalledWith(
+      1,
+      'Person_1',
+      { ENAME: '李四', Revision: 4 },
+      initialDetail.fields,
+    );
+
+    const reloadButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '重新加载当前数据');
+    await act(async () => reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('王五'));
+
+    const latestNameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(latestNameInput, '李四');
+      latestNameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      const retrySaveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.trim() === '保存修改');
+      retrySaveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await vi.waitFor(() => expect(container.textContent).toContain('opaque-update-result'));
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      'Person_1',
+      { ENAME: '李四', Revision: 5 },
+      latestDetail.fields,
+    );
+    expect(get).toHaveBeenCalledTimes(3);
   });
 });

@@ -284,7 +284,6 @@ export interface StandardCrudResourceRegistration<
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
   operationResultPresenters?: StandardCrudOperationResultPresenter[];
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
-  validateMutationValues?: (values: Record<string, unknown>, mode: StandardCrudFormMode) => string | null;
   buildColumns?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => StandardCrudTableColumn<TRow>[];
   renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;

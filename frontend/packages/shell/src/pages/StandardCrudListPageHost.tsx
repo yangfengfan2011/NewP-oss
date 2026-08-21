@@ -6,8 +6,6 @@ import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
   createStandardCrudOperationResultPresenterRegistry,
-  normalizeStandardCrudSubmitValues,
-  StandardCrudRequestError,
   useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type {
@@ -59,6 +57,7 @@ import {
 } from '../standard-crud/standardCrudDetailPresentation';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
+import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -726,10 +725,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string>>({});
-  const [hasSaveConflict, setHasSaveConflict] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
@@ -743,7 +738,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
   const exportRequestPendingRef = useRef(false);
-  const mutationRequestPendingRef = useRef(false);
   const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const handledListRouteSearchRef = useRef<string | null>(null);
@@ -833,6 +827,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     total,
   };
   const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
+    refresh: context.refresh,
+    onResult: (result) => {
+      if (operationResultPresenterRegistry.resolve(result)) {
+        setPresentedOperationResult(result);
+      }
+    },
+  });
+  const mutationExecution = useStandardCrudMutationExecution({
+    registration,
     refresh: context.refresh,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
@@ -930,8 +933,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     invalidateDetailRequests();
     setDetailLoading(false);
     setDrawerState(CLOSED_DRAWER_STATE);
-    setSaveFieldErrors({});
-    setHasSaveConflict(false);
+    mutationExecution.clearError();
     if (options.syncRoute !== false) {
       clearDrawerRoute();
     }
@@ -1037,9 +1039,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setFormValues(initialValues);
     initialFormValuesRef.current = initialValues;
     setDetailError(null);
-    setSaveError(null);
-    setSaveFieldErrors({});
-    setHasSaveConflict(false);
+    mutationExecution.clearError();
     setDrawerState({ mode: 'create', source });
     if (source === 'user-action') {
       syncDrawerRoute('create');
@@ -1061,7 +1061,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     }
     setDetailLoading(true);
     setDetailError(null);
-    setSaveError(null);
+    mutationExecution.clearError();
     try {
       const [loadedDetail, prepared] = await Promise.all([
         dataAdapter.get(id),
@@ -1107,70 +1107,24 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const handleDrawerSave = async () => {
-    if (mutationRequestPendingRef.current) {
-      return;
-    }
-    mutationRequestPendingRef.current = true;
-    try {
-      setSaving(true);
-      setSaveError(null);
-      setSaveFieldErrors({});
-      setHasSaveConflict(false);
-      const mutationFields = drawerState.mode === 'create' ? createFields : editFields;
-      const normalizedValues = registration.buildMutationValues
-        ? registration.buildMutationValues(formValues)
-        : normalizeStandardCrudSubmitValues(mutationFields, formValues);
-      const values = drawerState.mode === 'edit' && registration.concurrencyRevisionField
-        ? {
-            ...normalizedValues,
-            [registration.concurrencyRevisionField]: detailFields[registration.concurrencyRevisionField],
-          }
-        : normalizedValues;
-
-      let operationResult: StandardCrudOperationResult | undefined;
-      if (drawerState.mode === 'create') {
-        if (!dataAdapter.create) {
-          throw new Error(`标准资源 "${registration.resourceKey}" 未提供创建能力。`);
-        }
-        operationResult = await dataAdapter.create(values, detailFields);
-      } else if (drawerState.mode === 'edit' && drawerState.id) {
-        if (!dataAdapter.update) {
-          throw new Error(`标准资源 "${registration.resourceKey}" 未提供更新能力。`);
-        }
-        operationResult = await dataAdapter.update(drawerState.id, values, detailFields);
-      }
-
-      context.refresh();
+    const succeeded = await mutationExecution.execute({
+      mode: drawerState.mode === 'create' ? 'create' : 'edit',
+      id: drawerState.id,
+      fields: drawerState.mode === 'create' ? createFields : editFields,
+      values: formValues,
+      detailFields,
+    });
+    if (succeeded) {
       closeDrawer();
-      if (operationResult && operationResultPresenterRegistry.resolve(operationResult)) {
-        setPresentedOperationResult(operationResult);
-      }
-    } catch (saveFailure) {
-      if (saveFailure instanceof StandardCrudRequestError) {
-        const fields = drawerState.mode === 'create' ? createFields : editFields;
-        const fieldByModel = new Map(fields.map((field) => [field.modelField, field.key]));
-        setSaveFieldErrors(Object.fromEntries(Object.entries(saveFailure.fieldErrors).map(([key, value]) => [fieldByModel.get(key) ?? key, value])));
-        setHasSaveConflict(saveFailure.status === 409);
-        setSaveError(saveFailure.status === 409
-          ? '记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。'
-          : saveFailure.message);
-      } else {
-        setSaveError(saveFailure instanceof Error ? saveFailure.message : '保存标准资源失败');
-      }
-    } finally {
-      mutationRequestPendingRef.current = false;
-      setSaving(false);
     }
   };
 
   const handleFormChange = (fieldKey: string, value: unknown) => {
     const fields = drawerState.mode === 'create' ? createFields : editFields;
     setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
-    setSaveFieldErrors((current) => {
-      if (!current[fieldKey]) return current;
-      const { [fieldKey]: _removed, ...rest } = current;
-      return rest;
-    });
+    if (mutationExecution.fieldErrors[fieldKey] || mutationExecution.conflict) {
+      mutationExecution.clearError();
+    }
   };
 
   useEffect(() => {
@@ -1598,25 +1552,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const reloadConflictedRecord = async () => {
     if (drawerState.mode !== 'edit' || !drawerState.id) return;
     const id = drawerState.id;
-    const draftValues = formValuesRef.current;
-    const previousInitialValues = initialFormValuesRef.current;
     const loaded = await openViewDrawer(id, 'route-compatibility', { syncRoute: false, targetMode: 'edit' });
     if (loaded) {
-      const latestValues = initialFormValuesRef.current;
-      const preservedDraft = { ...latestValues };
-      for (const field of editFields) {
-        if (
-          field.readOnly !== true
-          && JSON.stringify(draftValues[field.key]) !== JSON.stringify(previousInitialValues[field.key])
-        ) {
-          preservedDraft[field.key] = draftValues[field.key];
-        }
-      }
-      setFormValues(preservedDraft);
       setDrawerState({ mode: 'edit', id, source: 'route-compatibility' });
-      setSaveError(null);
-      setSaveFieldErrors({});
-      setHasSaveConflict(false);
+      mutationExecution.clearError();
     }
   };
 
@@ -1770,9 +1709,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             mutationTitle={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
             detailLoading={detailLoading}
             detailError={detailError}
-            saving={saving}
-            saveError={saveError}
-            saveFieldErrors={saveFieldErrors}
+            saving={mutationExecution.pending}
+            saveError={mutationExecution.error}
+            saveFieldErrors={mutationExecution.fieldErrors}
             formId={drawerFormId}
             fields={drawerState.mode === 'create' ? createFields : editFields}
             sections={drawerState.mode === 'create' ? createFormSchema.sections : editFormSchema.sections}
@@ -1793,8 +1732,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 {t(`${schema.dicKey}.Action_ViewFullDetail`, '查看完整详情')}
               </AntdButton>
             ) : undefined}
-            saveErrorActions={hasSaveConflict ? (
-              <AntdButton onClick={() => void reloadConflictedRecord()} disabled={saving}>
+            saveErrorActions={mutationExecution.conflict ? (
+              <AntdButton onClick={() => void reloadConflictedRecord()} disabled={mutationExecution.pending}>
                 重新加载当前数据
               </AntdButton>
             ) : undefined}

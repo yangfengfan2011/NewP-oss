@@ -1083,11 +1083,17 @@ describe('StandardCrudListPageHost', () => {
       button.textContent?.trim() === '重新加载当前数据');
     await act(async () => reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushProTableRequest();
-    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('李四');
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('王五');
 
-    const retrySaveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
-      button.textContent?.trim() === '保存修改');
-    await act(async () => retrySaveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const latestNameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(latestNameInput, '李四');
+      latestNameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      const retrySaveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.trim() === '保存修改');
+      retrySaveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     await flushProTableRequest();
     const updateCalls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PUT');
     expect(updateCalls).toHaveLength(2);

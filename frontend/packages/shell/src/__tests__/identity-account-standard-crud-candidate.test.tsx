@@ -683,7 +683,7 @@ describe('Identity account Standard CRUD production route', () => {
     expect(window.location.href).not.toContain('detail-reset-only-once');
   });
 
-  it('refreshes a conflicted full-detail edit while preserving the draft for an explicit retry', async () => {
+  it('reloads a conflicted full-detail edit only after an explicit refresh and rebuilds from the latest snapshot', async () => {
     const stale = {
       eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
       isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
@@ -756,9 +756,22 @@ describe('Identity account Standard CRUD production route', () => {
       button.textContent?.trim() === '保存修改');
     await act(async () => save?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
-    await vi.waitFor(() => expect(snapshotLoads).toBe(2));
     expect(updateBodies).toEqual([{ ename: 'Alice Draft', expectedRevision: 7 }]);
+    expect(snapshotLoads).toBe(1);
     expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice Draft');
+
+    const reload = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '重新加载当前数据');
+    await act(async () => reload?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    await vi.waitFor(() => expect(snapshotLoads).toBe(2));
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice Server');
+
+    const reloadedNameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(reloadedNameInput, 'Alice Draft');
+      reloadedNameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 
     const retry = Array.from(document.body.querySelectorAll('button')).find((button) =>
       button.textContent?.trim() === '保存修改');

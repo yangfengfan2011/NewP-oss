@@ -16,6 +16,10 @@ _Avoid_: Resource compiler、metadata 解释器、业务命令处理器
 共享宿主对单条模块业务动作的确认、输入、互斥执行、结果交接和数据刷新过程。模块拥有业务副作用与输入语义，但不拥有呈现面刷新或冲突重放策略。
 _Avoid_: 模块刷新回调、Operation artifact、业务命令编排器
 
+**Standard CRUD 变更执行（Standard CRUD Mutation Execution）**：
+共享宿主对创建和普通更新的值规范化、能力选择、并发版本注入、字段错误映射、冲突恢复、结果交接和单次刷新过程。列表 Drawer 与完整详情页必须共用这条生命周期；模块只声明普通写入 Adapter 与可选值构造，不声明宿主内的校验回调或自动重放策略。
+_Avoid_: validate callback、冲突自动重放、呈现面自选刷新
+
 **Model（模型）**：
 资源字段目录、数据源以及创建和编辑表单结构的事实源。它不拥有详情展示结构。
 _Avoid_: 查看表单、详情布局

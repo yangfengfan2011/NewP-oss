@@ -2,7 +2,6 @@ import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo
 import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
-  StandardCrudRequestError,
   createStandardCrudOperationResultPresenterRegistry,
   type StandardCrudDetail,
   type StandardCrudFieldDefinition,
@@ -317,34 +316,14 @@ function StandardCrudDetailPageContent<TDetail>({
                 fields={editFields}
                 sections={formSchema.sections}
                 registration={registration}
-                onSave={async (values) => {
-                  try {
-                    if (!dataAdapter.update) {
-                      throw new Error(`标准资源 "${registration.resourceKey}" 未提供更新能力。`);
-                    }
-                    const operationResult = await dataAdapter.update(
-                      id,
-                      values,
-                      currentNormalizedDetail.fields,
-                    );
-                    if (operationResult && operationResultPresenterRegistry.resolve(operationResult)) {
-                      setPresentedOperationResult(operationResult);
-                    }
-                  } catch (saveError) {
-                    if (saveError instanceof StandardCrudRequestError && saveError.status === 409) {
-                      const latestDetail = await dataAdapter.get(id);
-                      setLoadedDetail({
-                        id,
-                        normalized: latestDetail.normalized,
-                        value: latestDetail.value,
-                      });
-                    }
-                    throw saveError;
-                  }
-                }}
                 onSaved={() => {
                   setEditing(false);
-                  refresh();
+                }}
+                onRefresh={refresh}
+                onResult={(result) => {
+                  if (operationResultPresenterRegistry.resolve(result)) {
+                    setPresentedOperationResult(result);
+                  }
                 }}
                 titleForSection={(sectionTitleKey) => t(`${schema.dicKey}.${sectionTitleKey}`, sectionTitleKey)}
               />

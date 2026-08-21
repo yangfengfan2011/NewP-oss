@@ -46,9 +46,16 @@ const retiredFlatDataRegistration: StandardCrudResourceRegistration = {
   apiRoute: '/api/sample/records',
 };
 
+const retiredMutationValidationRegistration: StandardCrudResourceRegistration = {
+  ...registration,
+  // @ts-expect-error 提交校验与错误映射由共享 Mutation 生命周期管理。
+  validateMutationValues: () => null,
+};
+
 void retiredViewMode;
 void retiredDetailActions;
 void retiredDetailRenderer;
 void retiredHeaderRenderer;
 void retiredFlatDataRegistration;
+void retiredMutationValidationRegistration;
 void (undefined as unknown as StandardCrudDetailExtensionContext<unknown>);

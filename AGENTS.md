@@ -13,7 +13,7 @@
 - **Skill 工作流**：用户点名或任务触发 Matt Pocock skill 时，以该 `SKILL.md` 为流程源；本文件只提供仓库事实、边界和交付护栏，不重复技能步骤。
 - **AI 代码生成**：AI 新增或修改手写代码前读取 `docs/developer/code-quality-standard.md`；首次编辑前完成生成准备，每个切片满足其完成条件。
 - **Issue 与规格**：需要持久化新规格或任务时，默认使用 GitHub Issues，并先读取 `docs/agents/issue-tracker.md`；涉及分流标签时同时读取 `docs/agents/triage-labels.md`。显式调用的 skill 另有本地工件约定时，遵守该 skill；任何 GitHub 写操作都必须由用户请求或已调用 skill 明确授权。
-- **连续交付与审查**：连续执行多个 GitHub child issue、运行终局 `$code-review`、修复审查 finding，或依赖验收 Gate 关闭父票时，读取 `docs/agents/delivery-gates.md`。完整双轴审查只对冻结候选执行一次；终局以范围内、由本次变更引入且有稳定证据的 P0/P1 为零作为完成条件，修复后按该文档执行封闭复审。
+- **大型交付、连续交付与审查**：平台能力或跨模块公共契约拟拆为多个实施 child，连续执行多个 GitHub child issue、运行终局 `$code-review`、修复审查 finding，或依赖验收 Gate 关闭父票时，读取 `docs/agents/delivery-gates.md`。完整双轴审查只对冻结候选执行一次；终局以范围内、由本次变更引入且有稳定证据的 P0/P1 为零作为完成条件，修复后按该文档执行封闭复审。
 - **领域与 ADR**：任务涉及领域术语、上下文边界或架构决策时，读取 `docs/agents/domain.md`。`CONTEXT-MAP.md` 或上下文文档尚未创建时，按该文档的降级规则继续，不把缺失本身当作阻塞。
 - **模块接入**：任务涉及 Host、Shell、Contracts、SDK、插件装配或跨模块能力时，读取 `docs/architecture/componentization-guardrails.md`。
 - **文档入口**：需要仓库文档时先由 `docs/README.md` 路由，只把其中列出的当前文档、适用 Context 和未被取代的 ADR 作为指导材料。
@@ -55,6 +55,8 @@
 ## 设计门禁
 
 - 新模块或平台能力、公共 Contracts/SDK、Host/Shell 受控入口、跨模块边界、元数据协议、持久化或迁移、安全边界，以及难以回退的架构变化，在实现前必须有已确认的设计工件。
+- 平台能力、跨模块公共契约或预计拆为多个实施 child 的大型交付，在展开完整实施图或批量编码前，必须先通过一个有界的最小纵向可行性验证；验证从真实事实源或 authoring 输入贯通适用的 projection、compiler、artifact 或 contract 与 runtime consumer，证明至少一个真实场景能够端到端运行。
+- 可行性验证形成端到端证据前不得扩大实施图；同一交付发生第二次公共 seam 设计重置，或同一 owner 因下游采用缺口第二次重开时，暂停后续实施并等待任务发起者重新作出 Go/No-Go 决策。
 - 设计工件可以由当前 GitHub issue/spec、用户指定文档或已调用 skill 的规定产物承载，至少写清入口、边界、非目标、验收条件、验证方式、失败信号和回滚思路。
 - 不改变公共契约、模块边界、持久化或安全语义的局部缺陷修复、测试补充、注释和纯文档修正，可以在确认问题证据、影响范围和定向验证后直接实施。
 - 设计完成后、实现开始前做一次一致性检查，确认设计与当前源码、契约、目录归属和仓库边界一致。

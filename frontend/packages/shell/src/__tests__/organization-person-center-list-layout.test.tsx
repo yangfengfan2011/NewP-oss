@@ -338,9 +338,13 @@ describe('organization person center list layout', () => {
   it('loads person center as a standard CRUD frontend resource', () => {
     expect(personResource).toMatchObject({
       resourceKey: 'organization.person',
-      apiRoute: '/api/organization/persons',
       listViewKey: 'organization.person.list',
       detailViewKey: 'organization.person.detail',
+      dataAdapter: {
+        list: expect.any(Function),
+        get: expect.any(Function),
+        getRowId: expect.any(Function),
+      },
     });
   });
 

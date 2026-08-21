@@ -8,6 +8,10 @@ Standard CRUD 上下文定义平台共享宿主用于组合资源列表、创建
 通过平台共享宿主提供列表、创建、编辑或详情能力的资源。它可以只启用其中一部分能力，不等于模块的全部业务页面。
 _Avoid_: 通用页面、业务专用页面
 
+**Standard CRUD 数据 Adapter（Standard CRUD Data Adapter）**：
+把资源拥有者的读取与普通写入结果转换成共享宿主可消费的规范列表、详情和操作结果的运行时角色。它不解释 Model 或 View，不拥有业务专用命令，也不产生新的 authoring 或候选事实。
+_Avoid_: Resource compiler、metadata 解释器、业务命令处理器
+
 **Model（模型）**：
 资源字段目录、数据源以及创建和编辑表单结构的事实源。它不拥有详情展示结构。
 _Avoid_: 查看表单、详情布局

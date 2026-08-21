@@ -85,7 +85,6 @@ export interface StandardCrudRuntimeQuerySchema {
 export interface StandardCrudListRuntimeSchema {
   viewKey: string;
   resourceKey: string;
-  apiRoute: string;
   dicKey: string;
   titleKey: string;
   descriptionKey: string;
@@ -126,7 +125,6 @@ export interface StandardCrudResolvedDetailSectionSchema {
 export interface StandardCrudResolvedDetailSchema {
   viewKey: string;
   resourceKey: string;
-  apiRoute: string;
   dicKey: string;
   titleKey: string;
   descriptionKey: string;
@@ -544,7 +542,6 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
   return {
     viewKey,
     resourceKey: registration.resourceKey,
-    apiRoute: registration.apiRoute,
     dicKey: readString(view.dicKey, registration.resourceKey),
     titleKey: readString(view.titleKey, 'Title'),
     descriptionKey: readString(view.descriptionKey, 'Description'),
@@ -813,7 +810,6 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   const schema: StandardCrudListRuntimeSchema = {
     viewKey,
     resourceKey: registration.resourceKey,
-    apiRoute: registration.apiRoute,
     dicKey,
     titleKey,
     descriptionKey,

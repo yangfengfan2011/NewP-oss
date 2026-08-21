@@ -5,7 +5,6 @@ import { resolveStandardCrudDetailPresentation } from './standardCrudDetailPrese
 const schema = {
   viewKey: 'organization.person.detail',
   resourceKey: 'organization.person',
-  apiRoute: '/api/organization/persons',
   dicKey: 'PersonDetailView',
   titleKey: 'Title',
   descriptionKey: 'Description',

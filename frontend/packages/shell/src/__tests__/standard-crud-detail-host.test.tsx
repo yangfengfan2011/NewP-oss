@@ -5,7 +5,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import {
+  ModuleRegistry,
+  createStandardCrudRestDataAdapter,
+  type StandardCrudResourceRegistration,
+} from '@icp-platform/sdk';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -114,16 +118,21 @@ const referenceDetailFieldRenderers = {
   }) => String(detailFields.DepartmentName ?? value ?? ''),
 };
 
+function createPersonDataAdapter(rowId = 'Person_1') {
+  return createStandardCrudRestDataAdapter({
+    apiRoute: '/api/organization/persons',
+    fetcher: (input, init) => globalThis.fetch(input, init),
+    mapListItem: (value) => value as Record<string, unknown>,
+    getRowId: () => rowId,
+  });
+}
+
 function createPersonRegistration(): StandardCrudResourceRegistration {
   return {
     resourceKey: 'organization.person',
-    apiRoute: '/api/organization/persons',
+    dataAdapter: createPersonDataAdapter(),
     listViewKey: 'organization.person.list',
     detailViewKey: 'organization.person.detail',
-    createEmptyFilters: () => ({}),
-    buildListQuery: () => ({}),
-    mapListItem: (value) => value as Record<string, unknown>,
-    getRowId: () => 'Person_1',
     detailFieldRenderers: referenceDetailFieldRenderers,
     lookupProviders: [{ key: 'organization.departments', load: async () => [] }],
     actionHandlers: { disablePerson: vi.fn() },
@@ -196,14 +205,10 @@ describe('StandardCrudDetailPageHost', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter('row-1'),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
             detailRoutePath: '/organization/persons/:id',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
@@ -322,13 +327,9 @@ describe('StandardCrudDetailPageHost', () => {
     );
     const registration: StandardCrudResourceRegistration = {
       resourceKey: 'organization.person',
-      apiRoute: '/api/organization/persons',
+      dataAdapter: createPersonDataAdapter('Person_2'),
       listViewKey: 'organization.person.list',
       detailViewKey: 'organization.person.detail',
-      createEmptyFilters: () => ({}),
-      buildListQuery: () => ({}),
-      mapListItem: (value) => value as Record<string, unknown>,
-      getRowId: () => 'Person_2',
       detailFieldRenderers: referenceDetailFieldRenderers,
       lookupProviders: [{
         key: 'organization.departments',
@@ -349,7 +350,17 @@ describe('StandardCrudDetailPageHost', () => {
       fields: { EID: 'Person_2', PersonNo: 'P002', ENAME: '模块详情', DepartmentId: null },
       summaries: {},
     });
-    const registration = { ...createPersonRegistration(), loadDetail };
+    const baseRegistration = createPersonRegistration();
+    const registration = {
+      ...baseRegistration,
+      dataAdapter: {
+        ...baseRegistration.dataAdapter,
+        get: async (id: string) => {
+          const normalized = await loadDetail(id);
+          return { normalized, value: normalized };
+        },
+      },
+    };
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     await renderHost('Person_2', registration);
@@ -366,14 +377,10 @@ describe('StandardCrudDetailPageHost', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter('row-1'),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
             detailRoutePath: '/organization/persons/:id',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
@@ -415,14 +422,10 @@ describe('StandardCrudDetailPageHost', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter('row-1'),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
             detailRoutePath: '/organization/persons/:id',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
@@ -469,15 +472,11 @@ describe('StandardCrudDetailPageHost', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter('row-1'),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
             detailRoutePath: '/organization/persons/:id',
             permissions: ['Organization.Person.View'],
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             detailFieldRenderers: referenceDetailFieldRenderers,
             lookupProviders: [{
               key: 'organization.departments',
@@ -569,10 +568,16 @@ describe('StandardCrudDetailPageHost', () => {
     };
     const registration: StandardCrudResourceRegistration = {
       ...createPersonRegistration(),
-      loadDetail: async () => ({
-        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, Revision: 4 },
-        summaries: {},
-      }),
+      dataAdapter: {
+        ...createPersonDataAdapter(),
+        get: async () => {
+          const normalized = {
+            fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, Revision: 4 },
+            summaries: {},
+          };
+          return { normalized, value: normalized };
+        },
+      },
       actionStateResolver: ({ action }) => ({
         visible: action.key !== 'edit',
         available: true,

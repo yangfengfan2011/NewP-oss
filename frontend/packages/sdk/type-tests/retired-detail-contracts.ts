@@ -10,13 +10,16 @@ const retiredViewMode: StandardCrudFormMode = 'view';
 
 const registration: StandardCrudResourceRegistration = {
   resourceKey: 'sample.record',
-  apiRoute: '/api/sample/records',
+  dataAdapter: {
+    list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    get: async () => ({
+      normalized: { fields: {}, summaries: {} },
+      value: { fields: {}, summaries: {} },
+    }),
+    getRowId: () => 'record-1',
+  },
   listViewKey: 'sample.record.list',
   detailViewKey: 'sample.record.detail',
-  createEmptyFilters: () => ({}),
-  buildListQuery: () => ({}),
-  mapListItem: () => ({}),
-  getRowId: () => 'record-1',
 };
 
 const retiredDetailActions: StandardCrudResourceRegistration = {
@@ -37,8 +40,15 @@ const retiredHeaderRenderer: StandardCrudResourceRegistration = {
   renderDetailHeaderActions: () => null,
 };
 
+const retiredFlatDataRegistration: StandardCrudResourceRegistration = {
+  ...registration,
+  // @ts-expect-error 资源数据入口已收敛到 dataAdapter，不再向 Host 暴露 API 路径。
+  apiRoute: '/api/sample/records',
+};
+
 void retiredViewMode;
 void retiredDetailActions;
 void retiredDetailRenderer;
 void retiredHeaderRenderer;
+void retiredFlatDataRegistration;
 void (undefined as unknown as StandardCrudDetailExtensionContext<unknown>);

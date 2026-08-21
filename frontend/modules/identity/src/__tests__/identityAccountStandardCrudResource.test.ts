@@ -8,6 +8,12 @@ const updateAccountNameMock = vi.hoisted(() => vi.fn());
 const setAccountStatusMock = vi.hoisted(() => vi.fn());
 const resetCredentialMock = vi.hoisted(() => vi.fn());
 const deleteAccountMock = vi.hoisted(() => vi.fn());
+const platformFetchMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@icp-platform/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@icp-platform/core')>(),
+  platformFetch: platformFetchMock,
+}));
 
 vi.mock('../api/identityClient', async (importOriginal) => ({
   ...await importOriginal<typeof import('../api/identityClient')>(),
@@ -35,19 +41,28 @@ describe('Identity account Standard CRUD resource candidate', () => {
     setAccountStatusMock.mockReset();
     resetCredentialMock.mockReset();
     deleteAccountMock.mockReset();
+    platformFetchMock.mockReset();
   });
 
-  it('maps the existing Identity list response into metadata protocol fields', () => {
-    const row = identityAccountStandardCrudResource.mapListItem({
-      eid: 'User_2',
-      ecode: 'alice',
-      ename: 'Alice',
-      status: 'Disabled',
-      revision: 7,
-      isLocalAdministrator: false,
-      isPersonnelBound: true,
-      personnelDisableHold: false,
-    });
+  it('maps the existing Identity list response into metadata protocol fields', async () => {
+    platformFetchMock.mockResolvedValue(new Response(JSON.stringify({
+      items: [{
+        eid: 'User_2',
+        ecode: 'alice',
+        ename: 'Alice',
+        status: 'Disabled',
+        revision: 7,
+        isLocalAdministrator: false,
+        isPersonnelBound: true,
+        personnelDisableHold: false,
+      }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const result = await identityAccountStandardCrudResource.dataAdapter.list();
+    const row = result.items[0];
 
     expect(row).toMatchObject({
       id: 'User_2',
@@ -60,27 +75,13 @@ describe('Identity account Standard CRUD resource candidate', () => {
       IsPersonnelBound: true,
       PersonnelDisableHold: false,
     });
-    expect(identityAccountStandardCrudResource.getRowId(row)).toBe('User_2');
+    expect(identityAccountStandardCrudResource.dataAdapter.getRowId(row)).toBe('User_2');
   });
 
-  it('keeps the existing Identity API filter names and exposes Deleted as an explicit option', () => {
-    expect(identityAccountStandardCrudResource.createEmptyFilters()).toEqual({
-      query: '',
-      status: '',
-      isPersonnelBound: '',
-      isLocalAdministrator: '',
-    });
-    expect(identityAccountStandardCrudResource.buildListQuery({
-      query: 'ali',
-      status: 'Deleted',
-      isPersonnelBound: 'true',
-      isLocalAdministrator: 'false',
-    })).toEqual({
-      query: 'ali',
-      status: 'Deleted',
-      isPersonnelBound: 'true',
-      isLocalAdministrator: 'false',
-    });
+  it('keeps filters in metadata and exposes Deleted as an explicit option', () => {
+    expect(identityAccountStandardCrudResource).not.toHaveProperty('createEmptyFilters');
+    expect(identityAccountStandardCrudResource).not.toHaveProperty('buildListQuery');
+    expect(identityAccountStandardCrudResource).not.toHaveProperty('apiRoute');
     expect(identityAccountStandardCrudResource.enumOptions?.IdentityAccountStatus).toEqual([
       { value: 'Enabled', label: '启用' },
       { value: 'Disabled', label: '停用' },
@@ -95,10 +96,10 @@ describe('Identity account Standard CRUD resource candidate', () => {
     };
     createAccountMock.mockResolvedValue(issuance);
 
-    const result = await identityAccountStandardCrudResource.operationHandlers?.create?.({
-      values: { ECODE: ' alice ', ENAME: ' Alice ' },
-      detailFields: {},
-    });
+    const result = await identityAccountStandardCrudResource.dataAdapter.create?.(
+      { ECODE: ' alice ', ENAME: ' Alice ' },
+      {},
+    );
 
     expect(createAccountMock).toHaveBeenCalledTimes(1);
     expect(createAccountMock).toHaveBeenCalledWith({ ecode: 'alice', ename: 'Alice' });
@@ -109,11 +110,11 @@ describe('Identity account Standard CRUD resource candidate', () => {
     const account = { eid: 'User_2', ecode: 'alice', ename: 'Alice 2', revision: 8 };
     updateAccountNameMock.mockResolvedValue(account);
 
-    const result = await identityAccountStandardCrudResource.operationHandlers?.update?.({
-      id: 'User_2',
-      values: { ECODE: 'must-not-be-sent', ENAME: ' Alice 2 ' },
-      detailFields: { Revision: 7 },
-    });
+    const result = await identityAccountStandardCrudResource.dataAdapter.update?.(
+      'User_2',
+      { ECODE: 'must-not-be-sent', ENAME: ' Alice 2 ' },
+      { Revision: 7 },
+    );
 
     expect(updateAccountNameMock).toHaveBeenCalledTimes(1);
     expect(updateAccountNameMock).toHaveBeenCalledWith('User_2', { ename: 'Alice 2', expectedRevision: 7 });
@@ -128,13 +129,13 @@ describe('Identity account Standard CRUD resource candidate', () => {
       updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
     });
 
-    const detail = await identityAccountStandardCrudResource.loadDetail?.('User_2');
+    const detail = await identityAccountStandardCrudResource.dataAdapter.get('User_2');
 
     expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2');
-    expect(detail?.fields).toMatchObject({
+    expect(detail.normalized.fields).toMatchObject({
       EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Enabled', Revision: 7,
     });
-    expect(detail?.summaries).toEqual({
+    expect(detail.normalized.summaries).toEqual({
       securityEvents: { status: 'ready', data: { accountEid: 'User_2' } },
     });
     expect(identityAccountStandardCrudResource.detailViewKey).toBe('identity.account.detail');
@@ -149,10 +150,10 @@ describe('Identity account Standard CRUD resource candidate', () => {
       { ECODE: ['账号不可用'] },
     ));
 
-    await expect(identityAccountStandardCrudResource.operationHandlers?.create?.({
-      values: { ECODE: 'alice', ENAME: 'Alice' },
-      detailFields: {},
-    })).rejects.toMatchObject({
+    await expect(identityAccountStandardCrudResource.dataAdapter.create?.(
+      { ECODE: 'alice', ENAME: 'Alice' },
+      {},
+    )).rejects.toMatchObject({
       status: 403,
       fieldErrors: { ECODE: '账号不可用' },
     });
@@ -167,10 +168,10 @@ describe('Identity account Standard CRUD resource candidate', () => {
       { ECODE: ['请填写登录账号'] },
     ));
 
-    await expect(identityAccountStandardCrudResource.operationHandlers?.create?.({
-      values: { ECODE: '', ENAME: 'Alice' },
-      detailFields: {},
-    })).rejects.toMatchObject({
+    await expect(identityAccountStandardCrudResource.dataAdapter.create?.(
+      { ECODE: '', ENAME: 'Alice' },
+      {},
+    )).rejects.toMatchObject({
       status: 400,
       fieldErrors: { ECODE: '请填写登录账号' },
     });
@@ -184,21 +185,21 @@ describe('Identity account Standard CRUD resource candidate', () => {
         isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false },
     ));
 
-    await expect(identityAccountStandardCrudResource.operationHandlers?.update?.({
-      id: 'User_2',
-      values: { ENAME: 'Draft Alice' },
-      detailFields: { Revision: 7 },
-    })).rejects.toMatchObject({ status: 409 });
+    await expect(identityAccountStandardCrudResource.dataAdapter.update?.(
+      'User_2',
+      { ENAME: 'Draft Alice' },
+      { Revision: 7 },
+    )).rejects.toMatchObject({ status: 409 });
     expect(updateAccountNameMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry when account creation has an unknown network result', async () => {
     createAccountMock.mockRejectedValue(new TypeError('Failed to fetch'));
 
-    await expect(identityAccountStandardCrudResource.operationHandlers?.create?.({
-      values: { ECODE: 'alice', ENAME: 'Alice' },
-      detailFields: {},
-    })).rejects.toThrow('创建结果未知');
+    await expect(identityAccountStandardCrudResource.dataAdapter.create?.(
+      { ECODE: 'alice', ENAME: 'Alice' },
+      {},
+    )).rejects.toThrow('创建结果未知');
     expect(createAccountMock).toHaveBeenCalledTimes(1);
   });
 

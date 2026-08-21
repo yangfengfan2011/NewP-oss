@@ -7,6 +7,7 @@ import type {
 import {
   compileStandardCrudRouteProjection,
 } from '../navigation/standardCrudRouteAdapter';
+import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 const modules: FrontendModule[] = [
   {
@@ -14,13 +15,9 @@ const modules: FrontendModule[] = [
     standardCrudResources: [
       {
         resourceKey: 'organization.person',
-        apiRoute: '/api/organization/persons',
+        dataAdapter: createStandardCrudTestDataAdapter(),
         listViewKey: 'organization.person.list',
         detailViewKey: 'organization.person.detail',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value: unknown) => value,
-        getRowId: () => 'row-1',
         buildColumns: () => [],
       },
     ],
@@ -129,13 +126,9 @@ describe('standard CRUD route adapter', () => {
         standardCrudResources: [
           {
             resourceKey: 'employee.person',
-            apiRoute: '/api/employees',
+            dataAdapter: createStandardCrudTestDataAdapter(),
             listViewKey: 'employee.person.list',
             detailViewKey: 'employee.person.detail',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             buildColumns: () => [],
           },
         ],
@@ -404,12 +397,8 @@ describe('standard CRUD route projection compiler', () => {
       metadata: { moduleId: key, displayName: key, version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: `${key}.records`,
-        apiRoute: `/api/${key}`,
+        dataAdapter: createStandardCrudTestDataAdapter(),
         listViewKey: `${key}.records.list`,
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value) => value as Record<string, unknown>,
-        getRowId: () => 'row-1',
       }],
     }));
     const nav: RuntimeNavItemDocument[] = [{

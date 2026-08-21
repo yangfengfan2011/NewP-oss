@@ -1,13 +1,11 @@
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
+import { useAuthorization, useLocalization } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
-  createStandardCrudClient,
   createStandardCrudOperationResultPresenterRegistry,
-  normalizeStandardCrudListResult,
   normalizeStandardCrudSubmitValues,
   StandardCrudRequestError,
   useStandardCrudLookupRuntime,
@@ -642,7 +640,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
-  const client = useMemo(() => createStandardCrudClient(schema.apiRoute, platformFetch), [schema.apiRoute]);
+  const dataAdapter = registration.dataAdapter;
   const operationResultPresenterRegistry = useMemo(
     () => createStandardCrudOperationResultPresenterRegistry(registration.operationResultPresenters ?? []),
     [registration.operationResultPresenters],
@@ -651,7 +649,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const shouldRenderActionColumn = Boolean(
     registration.renderRowActions
     || schema.rowActions.length > 0
-    || registration.getRowId,
+    || dataAdapter.getRowId,
   );
   const defaultColumnState = useMemo<StandardCrudColumnState>(() => Object.fromEntries([
     ...schema.columns.map((column, index) => [column.key, {
@@ -1063,16 +1061,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setDetailError(null);
     setSaveError(null);
     try {
-      const [detail, prepared] = await Promise.all([
-        registration.loadDetail ? registration.loadDetail(id) : client.getDetail(id),
+      const [loadedDetail, prepared] = await Promise.all([
+        dataAdapter.get(id),
         prepareDrawerForms(),
       ]);
       if (detailRequestIdRef.current !== requestId) {
         return false;
       }
 
-      const nextFormValues = prepared.buildDetailFormValues(detail.fields, prepared.editFields);
-      setDetailFields(detail.fields);
+      const nextFormValues = prepared.buildDetailFormValues(loadedDetail.normalized.fields, prepared.editFields);
+      setDetailFields(loadedDetail.normalized.fields);
       setFormValues(nextFormValues);
       initialFormValuesRef.current = nextFormValues;
       return true;
@@ -1129,13 +1127,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
       let operationResult: StandardCrudOperationResult | undefined;
       if (drawerState.mode === 'create') {
-        operationResult = registration.operationHandlers?.create
-          ? await registration.operationHandlers.create({ values, detailFields })
-          : { operation: 'create', payload: await client.create(values) };
+        if (!dataAdapter.create) {
+          throw new Error(`标准资源 "${registration.resourceKey}" 未提供创建能力。`);
+        }
+        operationResult = await dataAdapter.create(values, detailFields);
       } else if (drawerState.mode === 'edit' && drawerState.id) {
-        operationResult = registration.operationHandlers?.update
-          ? await registration.operationHandlers.update({ id: drawerState.id, values, detailFields })
-          : { operation: 'update', payload: await client.update(drawerState.id, values) };
+        if (!dataAdapter.update) {
+          throw new Error(`标准资源 "${registration.resourceKey}" 未提供更新能力。`);
+        }
+        operationResult = await dataAdapter.update(drawerState.id, values, detailFields);
       }
 
       context.refresh();
@@ -1224,8 +1224,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ...(listRequestFields.length > 0 ? { fields: listRequestFields.join(',') } : {}),
         }),
         load: async (query) => {
-          const rawResult = await client.list(query as StandardCrudListQueryRequest);
-          const result = normalizeStandardCrudListResult(rawResult, registration.mapListItem);
+          const result = await dataAdapter.list(query as StandardCrudListQueryRequest);
 
           return {
             items: result.items,
@@ -1236,7 +1235,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }),
     // reloadTick 是显式请求失效令牌，即使不进入闭包也必须重建 request。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter, listRequestFields],
+    [dataAdapter, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter, listRequestFields],
   );
 
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
@@ -1252,7 +1251,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         <AntdButton
           className="np-standard-crud-cell-action"
           type="link"
-          onClick={() => confirmDiscardIfNeeded(() => { void openViewDrawer(registration.getRowId(row)); })}
+          onClick={() => confirmDiscardIfNeeded(() => { void openViewDrawer(dataAdapter.getRowId(row)); })}
         >
           {String(readRowActionValue(row, column.field) ?? '-')}
         </AntdButton>
@@ -1291,7 +1290,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         sorter: false,
         responsive: undefined,
         render: (row: TRow) => {
-          const rowId = registration.getRowId(row);
+          const rowId = dataAdapter.getRowId(row);
           const rowDeleteActionError = rowActionDefinitions.some((action) => action.standardAction === 'delete' && deleteActionError?.key === `${action.key}:${rowId}`)
             ? deleteActionError
             : null;
@@ -1370,7 +1369,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                         // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
                         await handler({ id: rowId, row, refresh: () => undefined });
                       } else {
-                        await client.delete(rowId);
+                        if (!dataAdapter.remove) {
+                          throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
+                        }
+                        await dataAdapter.remove(rowId);
                       }
 
                       context.refresh();
@@ -1475,7 +1477,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         appliedFilters as Record<string, unknown>,
         schema.advancedFilter,
       );
-      const response = await client.exportList({
+      if (!dataAdapter.exportList) {
+        throw new Error(`标准资源 "${registration.resourceKey}" 未提供导出能力。`);
+      }
+      const response = await dataAdapter.exportList({
         mode,
         columns: exportColumns,
         query: {
@@ -1598,7 +1603,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
   const drawerRow = drawerState.id
-    ? rows.find((row) => registration.getRowId(row) === drawerState.id)
+    ? rows.find((row) => dataAdapter.getRowId(row) === drawerState.id)
     : undefined;
   const drawerEditActionState = editAction && drawerDetailPresentation?.kind === 'ready'
     ? registration.actionStateResolver?.({
@@ -1672,7 +1677,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const content = (
     <div className="np-standard-crud-table">
       <CrudTableSection<TRow>
-        rowKey={registration.getRowId}
+        rowKey={dataAdapter.getRowId}
         columns={columns}
         request={tableRequest}
         query={tableQuery}

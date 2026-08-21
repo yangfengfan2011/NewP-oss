@@ -6,7 +6,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import {
+  ModuleRegistry,
+  createStandardCrudRestDataAdapter,
+  type StandardCrudResourceRegistration,
+} from '@icp-platform/sdk';
 import StandardListPageHost from '../pages/StandardListPageHost';
 import { buildCustomPageRegistry } from '../registries/customPageRegistry';
 
@@ -178,13 +182,14 @@ describe('StandardListPageHost', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createStandardCrudRestDataAdapter({
+              apiRoute: '/api/organization/persons',
+              fetcher: (input, init) => globalThis.fetch(input, init),
+              mapListItem: (value) => value as { id: string; name: string },
+              getRowId: (row) => row.id,
+            }),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({ keyword: '' }),
-            buildListQuery: (filters: { keyword: string }) => filters,
-            mapListItem: (value: unknown) => value as { id: string; name: string },
-            getRowId: (row: { id: string }) => row.id,
             buildColumns: () => [{ key: 'name', title: '姓名' }],
           },
         ],
@@ -225,13 +230,14 @@ describe('StandardListPageHost', () => {
     );
     const registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>> = {
       resourceKey: 'organization.person',
-      apiRoute: '/api/organization/persons',
+      dataAdapter: createStandardCrudRestDataAdapter({
+        apiRoute: '/api/organization/persons',
+        fetcher: (input, init) => globalThis.fetch(input, init),
+        mapListItem: (value) => value as Record<string, unknown>,
+        getRowId: (row) => String(row.id),
+      }),
       listViewKey: 'organization.person.list',
       detailViewKey: 'organization.person.detail',
-      createEmptyFilters: () => ({ keyword: '' }),
-      buildListQuery: (filters) => filters,
-      mapListItem: (value) => value as Record<string, unknown>,
-      getRowId: (row) => String(row.id),
       buildColumns: () => [{ key: 'name', title: '姓名' }],
     };
 

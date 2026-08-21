@@ -1,6 +1,7 @@
 import {
   ROUTE_CAPABILITY_KINDS,
   createStandardCrudClient,
+  createStandardCrudRestDataAdapter,
   type FrontendBehaviorBindings,
   type FrontendModule,
   type StandardCrudActionHandler,
@@ -295,7 +296,15 @@ async function projectStandardDataModule(
 
     return {
       resourceKey: bindingKey,
-      apiRoute: projected.apiRoute,
+      dataAdapter: createStandardCrudRestDataAdapter({
+        apiRoute: projected.apiRoute,
+        fetcher: platformFetch,
+        mapListItem: asRecord,
+        getRowId: (row: Record<string, unknown>) => {
+          const id = row.EID ?? row.eid ?? row.Id ?? row.id;
+          return typeof id === 'string' ? id : '';
+        },
+      }),
       listViewKey: `${projection.moduleSlug}.${resourceSlug}.list`,
       listRoutePath: projected.pageRoute,
       detailViewKey: projected.detailViewKey,
@@ -316,13 +325,6 @@ async function projectStandardDataModule(
       actionHandlers: resource.fields.some((field) => field.name === 'IsEnabled')
         ? createStandardDataStateActionHandlers(projected.apiRoute)
         : undefined,
-      createEmptyFilters: () => ({}),
-      buildListQuery: (filters: Record<string, string>) => filters,
-      mapListItem: asRecord,
-      getRowId: (row: Record<string, unknown>) => {
-        const id = row.EID ?? row.eid ?? row.Id ?? row.id;
-        return typeof id === 'string' ? id : '';
-      },
     };
   });
   const permissionCodes = projection.resources

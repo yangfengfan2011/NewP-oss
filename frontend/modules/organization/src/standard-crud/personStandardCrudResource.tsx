@@ -1,4 +1,6 @@
+import { platformFetch } from '@icp-platform/core';
 import {
+  createStandardCrudRestDataAdapter,
   type StandardCrudDetailFieldRendererContext,
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
@@ -31,38 +33,6 @@ const LazyPersonUserBindingSummary = lazy(async () => {
   const module = await import('./personStandardCrudRenderers');
   return { default: module.PersonUserBindingSummary };
 });
-
-interface PersonListFilters {
-  [key: string]: string;
-  keyword: string;
-  employmentStatus: string;
-  companyId: string;
-  departmentId: string;
-  positionId: string;
-  isEnabled: string;
-}
-
-function createEmptyFilters(): PersonListFilters {
-  return {
-    keyword: '',
-    employmentStatus: '',
-    companyId: '',
-    departmentId: '',
-    positionId: '',
-    isEnabled: '',
-  };
-}
-
-function buildListQuery(filters: PersonListFilters): Record<string, string | null> {
-  return {
-    keyword: filters.keyword,
-    employmentStatus: filters.employmentStatus,
-    companyId: filters.companyId,
-    departmentId: filters.departmentId,
-    positionId: filters.positionId,
-    isEnabled: filters.isEnabled,
-  };
-}
 
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
@@ -142,10 +112,18 @@ function renderPersonReferenceDisplay({
     : String(displayValue);
 }
 
-// 该注册只保留模块私有 provider、renderer、handler 和 mapper；标准字段、列、查询和动作由 metadata + Shell 内核合成。
-export const personStandardCrudResource: StandardCrudResourceRegistration<PersonListFilters, PersonListRow, PersonDetailView> = {
-  resourceKey: 'organization.person',
+const personStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
   apiRoute: '/api/organization/persons',
+  fetcher: (input, init) => platformFetch(input, init),
+  mapListItem: mapPersonListItem,
+  getRowId: (row: PersonListRow) => row.id,
+  mapDetail: mapPersonDetailView,
+});
+
+// 该注册只保留数据 Adapter 与模块私有 provider、renderer、handler；标准字段、列、查询和动作由 metadata + Shell 内核合成。
+export const personStandardCrudResource: StandardCrudResourceRegistration<Record<string, unknown>, PersonListRow, PersonDetailView> = {
+  resourceKey: 'organization.person',
+  dataAdapter: personStandardCrudDataAdapter,
   listViewKey: 'organization.person.list',
   detailViewKey: 'organization.person.detail',
   concurrencyRevisionField: 'Revision',
@@ -206,9 +184,4 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Person
       refresh();
     },
   },
-  createEmptyFilters,
-  buildListQuery,
-  mapListItem: mapPersonListItem,
-  getRowId: (row) => row.id,
-  mapDetail: mapPersonDetailView,
 };

@@ -54,24 +54,6 @@ export interface StandardCrudOperationResultPresenterRegistry {
   resolve: (result: StandardCrudOperationResult) => StandardCrudOperationResultPresenter | undefined;
 }
 
-/** 模块 mutation handler 只接收当前表单、详情快照和可选资源标识，不接触 Shell 状态。 */
-export interface StandardCrudOperationHandlerContext {
-  id?: string;
-  values: StandardCrudMutationValues;
-  detailFields: Record<string, unknown>;
-}
-
-/** 模块可用正式业务 API 覆盖通用 mutation transport，并返回不透明操作结果。 */
-export type StandardCrudOperationHandler = (
-  context: StandardCrudOperationHandlerContext,
-) => Promise<StandardCrudOperationResult>;
-
-/** 创建和普通编辑的模块无关 handler 集合；安全动作继续使用既有 action handler seam。 */
-export interface StandardCrudOperationHandlers {
-  create?: StandardCrudOperationHandler;
-  update?: StandardCrudOperationHandler;
-}
-
 /** 创建模块无关的操作结果 presenter registry。 */
 export function createStandardCrudOperationResultPresenterRegistry(
   presenters: StandardCrudOperationResultPresenter[],
@@ -281,7 +263,7 @@ export interface StandardCrudResourceRegistration<
   TDetail = StandardCrudDetail,
 > {
   resourceKey: string;
-  apiRoute: string;
+  dataAdapter: StandardCrudDataAdapter<TRow, TDetail>;
   listViewKey: string;
   listRoutePath?: string;
   detailViewKey?: string;
@@ -301,20 +283,13 @@ export interface StandardCrudResourceRegistration<
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
-  operationHandlers?: StandardCrudOperationHandlers;
   operationResultPresenters?: StandardCrudOperationResultPresenter[];
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
   validateMutationValues?: (values: Record<string, unknown>, mode: StandardCrudFormMode) => string | null;
-  createEmptyFilters: () => TFilter;
-  buildListQuery: (filters: TFilter) => Record<string, string | number | boolean | null | undefined>;
-  mapListItem: (value: unknown) => TRow;
-  getRowId: (row: TRow) => string;
-  loadDetail?: (id: string) => Promise<StandardCrudDetail>;
   buildColumns?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => StandardCrudTableColumn<TRow>[];
   renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderRowActions?: (row: TRow, context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
-  mapDetail?: (detail: StandardCrudDetail) => TDetail;
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
@@ -336,6 +311,55 @@ export interface StandardCrudClient {
   update: (id: string, values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   delete: (id: string) => Promise<void>;
   disable: (id: string) => Promise<StandardCrudDetail>;
+}
+
+/** 一次详情读取同时保留共享呈现数据和模块动作需要的映射值。 */
+export interface StandardCrudLoadedDetail<TDetail = StandardCrudDetail> {
+  normalized: StandardCrudDetail;
+  value: TDetail;
+}
+
+/** 共享宿主消费的规范资源数据 Interface。 */
+export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail = StandardCrudDetail> {
+  list: (query?: StandardCrudListQueryRequest) => Promise<StandardCrudListResult<TRow>>;
+  get: (id: string) => Promise<StandardCrudLoadedDetail<TDetail>>;
+  create?: (
+    values: StandardCrudMutationValues,
+    detailFields?: Record<string, unknown>,
+  ) => Promise<StandardCrudOperationResult>;
+  update?: (
+    id: string,
+    values: StandardCrudMutationValues,
+    detailFields?: Record<string, unknown>,
+  ) => Promise<StandardCrudOperationResult>;
+  remove?: (id: string) => Promise<void>;
+  exportList?: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
+  getRowId: (row: TRow) => string;
+}
+
+/** 标准 REST 资源总是支持规范写入；其他 Adapter 可以按资源能力选择是否实现。 */
+export interface StandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDetail>
+  extends StandardCrudDataAdapter<TRow, TDetail> {
+  create: (
+    values: StandardCrudMutationValues,
+    detailFields?: Record<string, unknown>,
+  ) => Promise<StandardCrudOperationResult>;
+  update: (
+    id: string,
+    values: StandardCrudMutationValues,
+    detailFields?: Record<string, unknown>,
+  ) => Promise<StandardCrudOperationResult>;
+  remove: (id: string) => Promise<void>;
+  exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
+}
+
+/** 标准 REST Adapter 的固定配置；模块只提供传输、行映射和稳定标识读取。 */
+export interface StandardCrudRestDataAdapterOptions<TRow, TDetail = StandardCrudDetail> {
+  apiRoute: string;
+  fetcher: typeof fetch;
+  mapListItem: (value: unknown) => TRow;
+  getRowId: (row: TRow) => string;
+  mapDetail?: (detail: StandardCrudDetail) => TDetail;
 }
 
 /** 标准 CRUD 请求错误保留 HTTP 状态与字段错误，供 Shell 做冲突、鉴权和 Form.Item 反馈。 */
@@ -922,5 +946,34 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
           '停用标准资源失败',
         ),
       ),
+  };
+}
+
+/** 把标准 REST 列表响应收敛为共享宿主唯一消费的规范分页结果。 */
+export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDetail>(
+  options: StandardCrudRestDataAdapterOptions<TRow, TDetail>,
+): StandardCrudRestDataAdapter<TRow, TDetail> {
+  const client = createStandardCrudClient(options.apiRoute, options.fetcher);
+
+  return {
+    list: async (query) => normalizeStandardCrudListResult(await client.list(query), options.mapListItem),
+    get: async (id) => {
+      const normalized = await client.getDetail(id);
+      return {
+        normalized,
+        value: options.mapDetail ? options.mapDetail(normalized) : normalized as TDetail,
+      };
+    },
+    create: async (values) => ({
+      operation: 'create',
+      payload: await client.create(values),
+    }),
+    update: async (id, values) => ({
+      operation: 'update',
+      payload: await client.update(id, values),
+    }),
+    remove: (id) => client.delete(id),
+    exportList: (request) => client.exportList(request),
+    getRowId: options.getRowId,
   };
 }

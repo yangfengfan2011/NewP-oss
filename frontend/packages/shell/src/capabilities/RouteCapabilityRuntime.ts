@@ -166,13 +166,14 @@ function isStandardCrudResourceRegistration(value: unknown): value is StandardCr
   }
 
   const resource = value as Partial<StandardCrudResourceRegistration>;
+  const dataAdapter = resource.dataAdapter;
   return typeof resource.resourceKey === 'string'
-    && typeof resource.apiRoute === 'string'
     && typeof resource.listViewKey === 'string'
-    && typeof resource.createEmptyFilters === 'function'
-    && typeof resource.buildListQuery === 'function'
-    && typeof resource.mapListItem === 'function'
-    && typeof resource.getRowId === 'function';
+    && typeof dataAdapter === 'object'
+    && dataAdapter !== null
+    && typeof dataAdapter.list === 'function'
+    && typeof dataAdapter.get === 'function'
+    && typeof dataAdapter.getRowId === 'function';
 }
 
 function isRenderableComponent(value: unknown): value is ComponentType {

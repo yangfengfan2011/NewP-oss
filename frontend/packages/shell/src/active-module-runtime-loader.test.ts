@@ -178,13 +178,16 @@ describe('active-module-runtime-loader', () => {
     const resourceLoad = vi.fn().mockResolvedValue({
       default: {
         resourceKey: 'records.resource',
-        apiRoute: '/api/records',
+        dataAdapter: {
+          list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+          get: async () => {
+            const normalized = { fields: {}, summaries: {} };
+            return { normalized, value: normalized };
+          },
+          getRowId: () => 'record-1',
+        },
         listViewKey: 'records.list',
         detailViewKey: 'records.detail',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value: unknown) => value as Record<string, unknown>,
-        getRowId: () => 'record-1',
       },
     });
     const bindings: FrontendBehaviorBindings = {
@@ -536,7 +539,6 @@ describe('active-module-runtime-loader', () => {
       candidate.resourceKey === 'Partner.AssetCatalog.Asset');
     expect(resource).toMatchObject({
       resourceKey: 'Partner.AssetCatalog.Asset',
-      apiRoute: '/api/standard/partner-asset-catalog/assets',
       listViewKey: 'partner-asset-catalog.asset.list',
       listRoutePath: '/assets',
       detailViewKey: 'partner.asset.detail',
@@ -547,7 +549,15 @@ describe('active-module-runtime-loader', () => {
       expect.objectContaining({ key: 'Name', modelField: 'Name', kind: 'text', required: true }),
       expect.objectContaining({ key: 'IsEnabled', modelField: 'IsEnabled', kind: 'boolean', required: false }),
     ]);
-    expect(resource?.getRowId({ EID: 'asset-1' })).toBe('asset-1');
+    expect(resource?.dataAdapter).toMatchObject({
+      list: expect.any(Function),
+      get: expect.any(Function),
+      create: expect.any(Function),
+      update: expect.any(Function),
+      remove: expect.any(Function),
+      exportList: expect.any(Function),
+    });
+    expect(resource?.dataAdapter.getRowId({ EID: 'asset-1' })).toBe('asset-1');
     expect(Object.keys(resource?.actionHandlers ?? {})).toEqual(['disable', 'enable']);
     expect(module.standardCrudResources).toHaveLength(2);
     expect(module.standardCrudResources?.find((candidate) =>

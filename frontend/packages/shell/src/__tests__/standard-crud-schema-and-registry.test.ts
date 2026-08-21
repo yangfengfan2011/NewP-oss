@@ -9,13 +9,16 @@ import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 
 const personRegistration = {
   resourceKey: 'organization.person',
-  apiRoute: '/api/organization/persons',
+  dataAdapter: {
+    list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    get: async () => {
+      const normalized = { fields: {}, summaries: {} };
+      return { normalized, value: normalized };
+    },
+    getRowId: () => 'row-1',
+  },
   listViewKey: 'organization.person.list',
   detailViewKey: 'organization.person.detail',
-  createEmptyFilters: () => ({ keyword: '' }),
-  buildListQuery: (filters: { keyword: string }) => filters,
-  mapListItem: (value: unknown) => value,
-  getRowId: () => 'row-1',
   buildColumns: () => [],
   lookupProviders: [
     { key: 'organization.departments', load: async () => [] },
@@ -256,7 +259,6 @@ describe('standard CRUD schema resolver and registry', () => {
     expect(schema).toMatchObject({
       viewKey: 'organization.person.list',
       resourceKey: 'organization.person',
-      apiRoute: '/api/organization/persons',
       dicKey: 'PersonListView',
       titleKey: 'Title',
       detailViewKey: 'organization.person.detail',

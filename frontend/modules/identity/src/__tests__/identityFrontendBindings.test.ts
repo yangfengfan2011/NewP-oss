@@ -14,9 +14,13 @@ describe('Identity frontend capability bindings', () => {
     const loadedDetail = await identityFrontendBindings.standardCrudCapabilities?.[1]?.load();
     expect(loaded?.default).toMatchObject({
       resourceKey: 'identity.account',
-      apiRoute: '/api/identity/accounts',
       listViewKey: 'identity.account.list',
       detailViewKey: 'identity.account.detail',
+      dataAdapter: {
+        list: expect.any(Function),
+        get: expect.any(Function),
+        getRowId: expect.any(Function),
+      },
     });
     expect(loadedDetail?.default).toBe(loaded?.default);
   });

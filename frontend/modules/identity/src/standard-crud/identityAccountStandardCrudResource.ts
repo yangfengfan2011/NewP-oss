@@ -1,8 +1,11 @@
+import { platformFetch } from '@icp-platform/core';
 import {
+  createStandardCrudRestDataAdapter,
   isStandardCrudRecord,
   readStandardCrudBoolean,
   readStandardCrudString,
   StandardCrudRequestError,
+  type StandardCrudDataAdapter,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import {
@@ -22,14 +25,6 @@ import {
 } from './IdentityAccountSecurityActionInput';
 import { identityAccountSecurityEventsSummaryRenderer } from './IdentityAccountSecurityEventsSummary';
 
-export interface IdentityAccountListFilters {
-  [key: string]: string;
-  query: string;
-  status: string;
-  isPersonnelBound: string;
-  isLocalAdministrator: string;
-}
-
 export interface IdentityAccountListRow {
   [key: string]: unknown;
   id: string;
@@ -41,24 +36,6 @@ export interface IdentityAccountListRow {
   IsLocalAdministrator: boolean;
   IsPersonnelBound: boolean;
   PersonnelDisableHold: boolean;
-}
-
-function createEmptyFilters(): IdentityAccountListFilters {
-  return {
-    query: '',
-    status: '',
-    isPersonnelBound: '',
-    isLocalAdministrator: '',
-  };
-}
-
-function buildListQuery(filters: IdentityAccountListFilters): Record<string, string | null> {
-  return {
-    query: filters.query,
-    status: filters.status,
-    isPersonnelBound: filters.isPersonnelBound,
-    isLocalAdministrator: filters.isLocalAdministrator,
-  };
 }
 
 function mapIdentityAccountListItem(value: unknown): IdentityAccountListRow {
@@ -318,13 +295,31 @@ async function updateIdentityAccount(
   }
 }
 
+const identityAccountRestListAdapter = createStandardCrudRestDataAdapter({
+  apiRoute: '/api/identity/accounts',
+  fetcher: (input, init) => platformFetch(input, init),
+  mapListItem: mapIdentityAccountListItem,
+  getRowId: (row: IdentityAccountListRow) => row.id,
+});
+
+const identityAccountDataAdapter: StandardCrudDataAdapter<IdentityAccountListRow> = {
+  list: identityAccountRestListAdapter.list,
+  getRowId: identityAccountRestListAdapter.getRowId,
+  get: async (id) => {
+    const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id));
+    return { normalized, value: normalized };
+  },
+  create: (values) => createIdentityAccount(values),
+  update: (id, values, detailFields) => updateIdentityAccount(id, values, detailFields ?? {}),
+};
+
 // 该候选注册标准列表、普通表单与正式 Identity 写入；生产导航切换仍由后续迁移票拥有。
 export const identityAccountStandardCrudResource: StandardCrudResourceRegistration<
-  IdentityAccountListFilters,
+  Record<string, unknown>,
   IdentityAccountListRow
 > = {
   resourceKey: 'identity.account',
-  apiRoute: '/api/identity/accounts',
+  dataAdapter: identityAccountDataAdapter,
   listViewKey: 'identity.account.list',
   detailViewKey: 'identity.account.detail',
   concurrencyRevisionField: 'Revision',
@@ -334,10 +329,6 @@ export const identityAccountStandardCrudResource: StandardCrudResourceRegistrati
       { value: 'Disabled', label: '停用' },
       { value: 'Deleted', label: '已删除' },
     ],
-  },
-  operationHandlers: {
-    create: ({ values }) => createIdentityAccount(values),
-    update: ({ id, values, detailFields }) => updateIdentityAccount(id, values, detailFields),
   },
   operationResultPresenters: [identityAccountOperationResultPresenter],
   actionStateResolver: resolveIdentityAccountActionState,
@@ -354,9 +345,4 @@ export const identityAccountStandardCrudResource: StandardCrudResourceRegistrati
   summaryRenderers: {
     securityEvents: identityAccountSecurityEventsSummaryRenderer,
   },
-  createEmptyFilters,
-  buildListQuery,
-  mapListItem: mapIdentityAccountListItem,
-  getRowId: (row) => row.id,
-  loadDetail: async (id) => mapIdentityAccountDetail(await getAccountSnapshot(id)),
 };

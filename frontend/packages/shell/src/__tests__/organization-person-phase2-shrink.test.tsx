@@ -22,35 +22,24 @@ describe('organization person standard CRUD phase 2 registration', () => {
     expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['refresh', 'delete', 'disable', 'enable']);
   });
 
-  it('retains metadata-compatible permissions and runtime adapters', () => {
+  it('keeps permissions in metadata and exposes one runtime data adapter', () => {
     const personnelNavigation = organizationNavDocument.navigation.items.find(
       (item) => item.targetKey === personStandardCrudResource.listViewKey,
     );
 
     expect(personStandardCrudResource.permissions).toBeUndefined();
     expect(personnelNavigation?.permissions).toEqual(['Organization.Person.View']);
-    expect(personStandardCrudResource.createEmptyFilters?.()).toEqual({
-      keyword: '',
-      employmentStatus: '',
-      companyId: '',
-      departmentId: '',
-      positionId: '',
-      isEnabled: '',
-    });
-    expect(personStandardCrudResource.buildListQuery?.({
-      keyword: 'P001',
-      employmentStatus: 'FullTime',
-      companyId: 'company-1',
-      departmentId: 'department-1',
-      positionId: 'position-1',
-      isEnabled: 'false',
-    })).toEqual({
-      keyword: 'P001',
-      employmentStatus: 'FullTime',
-      companyId: 'company-1',
-      departmentId: 'department-1',
-      positionId: 'position-1',
-      isEnabled: 'false',
+    expect(personStandardCrudResource).not.toHaveProperty('createEmptyFilters');
+    expect(personStandardCrudResource).not.toHaveProperty('buildListQuery');
+    expect(personStandardCrudResource).not.toHaveProperty('apiRoute');
+    expect(personStandardCrudResource.dataAdapter).toMatchObject({
+      list: expect.any(Function),
+      get: expect.any(Function),
+      create: expect.any(Function),
+      update: expect.any(Function),
+      remove: expect.any(Function),
+      exportList: expect.any(Function),
+      getRowId: expect.any(Function),
     });
   });
 

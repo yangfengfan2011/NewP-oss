@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { LocalizationProvider } from '@icp-platform/core';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
@@ -323,13 +323,14 @@ describe('StandardCrudListPageHost', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createStandardCrudRestDataAdapter({
+              apiRoute: '/api/organization/persons',
+              fetcher: (input, init) => globalThis.fetch(input, init),
+              mapListItem: (value) => value as { id: string; name: string },
+              getRowId: (row) => row.id,
+            }),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({ legacyKeyword: 'legacy' }),
-            buildListQuery: () => ({ legacyKeyword: 'legacy', legacyUsed: 'true' }),
-            mapListItem: (value: unknown) => value as { id: string; name: string },
-            getRowId: (row: { id: string }) => row.id,
             enumOptions: {
               EmploymentStatus: [
                 { value: 'FullTime', label: '正式' },
@@ -938,7 +939,15 @@ describe('StandardCrudListPageHost', () => {
       payload: { receipt: 'opaque-result' },
     });
     mockStandardCrudModule({
-      operationHandlers: { create },
+      dataAdapter: {
+        ...createStandardCrudRestDataAdapter({
+          apiRoute: '/api/organization/persons',
+          fetcher: (input, init) => globalThis.fetch(input, init),
+          mapListItem: (value) => value as { id: string; name: string },
+          getRowId: (row) => row.id,
+        }),
+        create,
+      },
       operationResultPresenters: [{
         supports: (result) => result.operation === 'create',
         render: ({ result, close }) => (
@@ -976,10 +985,10 @@ describe('StandardCrudListPageHost', () => {
     await flushProTableRequest();
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      values: expect.objectContaining({ PersonNo: 'P002', ENAME: '李四' }),
-      detailFields: {},
-    }));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ PersonNo: 'P002', ENAME: '李四' }),
+      {},
+    );
     expect(document.body.textContent).toContain('opaque-result');
     const closeResult = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '关闭结果');
     await act(async () => closeResult?.dispatchEvent(new MouseEvent('click', { bubbles: true })));

@@ -1,11 +1,9 @@
 import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
-import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
+import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
   StandardCrudRequestError,
-  createStandardCrudClient,
   createStandardCrudOperationResultPresenterRegistry,
-  normalizeStandardCrudDetail,
   type StandardCrudDetail,
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
@@ -160,7 +158,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
   const titleKey = readMetadataString(view.titleKey, 'Title');
   const descriptionKey = readMetadataString(view.descriptionKey, 'Description');
-  const client = useMemo(() => createStandardCrudClient(registration.apiRoute, platformFetch), [registration.apiRoute]);
+  const dataAdapter = registration.dataAdapter;
   const operationResultPresenterRegistry = useMemo(
     () => createStandardCrudOperationResultPresenterRegistry(registration.operationResultPresenters ?? []),
     [registration.operationResultPresenters],
@@ -193,14 +191,10 @@ function StandardCrudDetailPageContent<TDetail>({
       try {
         setLoading(true);
         setError(null);
-        const rawDetail = registration.loadDetail
-          ? await registration.loadDetail(id)
-          : await client.getDetail(id);
-        const normalized = normalizeStandardCrudDetail(rawDetail);
-        const mapped = registration.mapDetail ? registration.mapDetail(normalized) : normalized;
+        const detail = await dataAdapter.get(id);
 
         if (!cancelled) {
-          setLoadedDetail({ id, normalized, value: mapped });
+          setLoadedDetail({ id, normalized: detail.normalized, value: detail.value });
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -219,7 +213,7 @@ function StandardCrudDetailPageContent<TDetail>({
     return () => {
       cancelled = true;
     };
-  }, [client, editFields, id, registration, reloadTick]);
+  }, [dataAdapter, editFields, id, registration, reloadTick]);
 
   const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
   const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
@@ -324,29 +318,24 @@ function StandardCrudDetailPageContent<TDetail>({
                 registration={registration}
                 onSave={async (values) => {
                   try {
-                    const operationResult = registration.operationHandlers?.update
-                      ? await registration.operationHandlers.update({
-                          id,
-                          values,
-                          detailFields: currentNormalizedDetail.fields,
-                        })
-                      : { operation: 'update' as const, payload: await client.update(id, values) };
+                    if (!dataAdapter.update) {
+                      throw new Error(`标准资源 "${registration.resourceKey}" 未提供更新能力。`);
+                    }
+                    const operationResult = await dataAdapter.update(
+                      id,
+                      values,
+                      currentNormalizedDetail.fields,
+                    );
                     if (operationResult && operationResultPresenterRegistry.resolve(operationResult)) {
                       setPresentedOperationResult(operationResult);
                     }
                   } catch (saveError) {
                     if (saveError instanceof StandardCrudRequestError && saveError.status === 409) {
-                      const rawLatestDetail = registration.loadDetail
-                        ? await registration.loadDetail(id)
-                        : await client.getDetail(id);
-                      const normalizedLatestDetail = normalizeStandardCrudDetail(rawLatestDetail);
-                      const mappedLatestDetail = registration.mapDetail
-                        ? registration.mapDetail(normalizedLatestDetail)
-                        : normalizedLatestDetail as TDetail;
+                      const latestDetail = await dataAdapter.get(id);
                       setLoadedDetail({
                         id,
-                        normalized: normalizedLatestDetail,
-                        value: mappedLatestDetail,
+                        normalized: latestDetail.normalized,
+                        value: latestDetail.value,
                       });
                     }
                     throw saveError;

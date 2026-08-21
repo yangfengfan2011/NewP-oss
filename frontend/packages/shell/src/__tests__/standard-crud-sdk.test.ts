@@ -3,6 +3,7 @@ import {
   buildStandardCrudPath,
   createStandardCrudClient,
   createStandardCrudOperationResultPresenterRegistry,
+  createStandardCrudRestDataAdapter,
   normalizeStandardCrudListResult,
   normalizeStandardCrudSummaryBlock,
   readStandardCrudBoolean,
@@ -50,6 +51,157 @@ describe('standard CRUD SDK helpers', () => {
       sortBy: 'ENAME',
       sortDirection: 'asc',
     });
+  });
+
+  it('loads a canonical page through the standard REST data adapter', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      items: [{ EID: 'Person_1', ENAME: '张三' }],
+      total: 7,
+      page: 2,
+      pageSize: 20,
+      sortBy: 'ENAME',
+      sortDirection: 'asc',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => ({
+        id: readStandardCrudString(item, ['EID']),
+        name: readStandardCrudString(item, ['ENAME']),
+      }),
+      getRowId: (row) => row.id,
+    });
+
+    const result = await adapter.list({
+      pageIndex: 2,
+      pageSize: 20,
+      sortBy: 'ENAME',
+      sortDirection: 'asc',
+    });
+
+    expect(result).toEqual({
+      items: [{ id: 'Person_1', name: '张三' }],
+      total: 7,
+      page: 2,
+      pageSize: 20,
+      sortBy: 'ENAME',
+      sortDirection: 'asc',
+    });
+    expect(adapter.getRowId(result.items[0])).toBe('Person_1');
+  });
+
+  it('loads one normalized and module-mapped detail through the data adapter', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      fields: { EID: 'Person_1', ENAME: '张三' },
+      summaries: {},
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'Person_1',
+      mapDetail: (detail) => ({
+        id: readStandardCrudString(detail.fields, ['EID']),
+        name: readStandardCrudString(detail.fields, ['ENAME']),
+      }),
+    });
+
+    const detail = await adapter.get('Person_1');
+
+    expect(detail).toEqual({
+      normalized: {
+        fields: { EID: 'Person_1', ENAME: '张三' },
+        summaries: {},
+      },
+      value: { id: 'Person_1', name: '张三' },
+    });
+  });
+
+  it('returns a module-neutral create outcome through the standard REST data adapter', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      fields: { EID: 'Person_1', ENAME: '张三' },
+      summaries: {},
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'Person_1',
+    });
+
+    const result = await adapter.create({ ENAME: '张三' });
+
+    expect(result).toEqual({
+      operation: 'create',
+      payload: {
+        fields: { EID: 'Person_1', ENAME: '张三' },
+        summaries: {},
+      },
+    });
+  });
+
+  it('returns a module-neutral update outcome through the standard REST data adapter', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      fields: { EID: 'Person_1', ENAME: '李四', Revision: 2 },
+      summaries: {},
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'Person_1',
+    });
+
+    const result = await adapter.update('Person_1', { ENAME: '李四', Revision: 1 });
+
+    expect(result).toEqual({
+      operation: 'update',
+      payload: {
+        fields: { EID: 'Person_1', ENAME: '李四', Revision: 2 },
+        summaries: {},
+      },
+    });
+  });
+
+  it('delegates remove and export through the standard REST data adapter', async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        return new Response(null, { status: 204 });
+      }
+
+      return new Response('EID,ENAME\nPerson_1,张三', {
+        status: 200,
+        headers: { 'Content-Disposition': 'attachment; filename="persons.csv"' },
+      });
+    });
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'Person_1',
+    });
+
+    await adapter.remove('Person_1');
+    const exported = await adapter.exportList({
+      mode: 'all',
+      columns: [{ key: 'name', field: 'ENAME', title: '姓名' }],
+      query: { pageIndex: 1, pageSize: 20, filters: {} },
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'DELETE' });
+    expect(exported.fileName).toBe('persons.csv');
   });
 
   it('uses item count as list fallback when paging fields are missing', () => {

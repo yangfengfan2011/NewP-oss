@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
+import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 describe('active module registry commit', () => {
   beforeEach(() => {
@@ -94,13 +95,9 @@ describe('active module registry commit', () => {
           },
           standardCrudResources: [{
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createStandardCrudTestDataAdapter('Person_1'),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: () => ({}),
-            getRowId: () => 'Person_1',
           }],
         } satisfies FrontendModule],
       }),
@@ -161,13 +158,9 @@ describe('active module registry commit', () => {
           },
           standardCrudResources: [{
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createStandardCrudTestDataAdapter('Person_1'),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: () => ({}),
-            getRowId: () => 'Person_1',
             ...registrationExtension,
           }],
         } as unknown as FrontendModule],

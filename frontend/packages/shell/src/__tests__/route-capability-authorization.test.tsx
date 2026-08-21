@@ -7,6 +7,7 @@ import { Outlet, useParams } from 'react-router-dom';
 import { ModuleRegistry, type AuthUser } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/organization/src';
 import App from '../App';
+import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -362,13 +363,9 @@ describe('route capability authorization ordering', () => {
       metadata: { moduleId: 'records', displayName: 'Records', version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: 'records.resource',
-        apiRoute: '/api/records',
+        dataAdapter: createStandardCrudTestDataAdapter('record-42'),
         listViewKey: 'records.list',
         detailViewKey: 'records.detail',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value) => value as Record<string, unknown>,
-        getRowId: () => 'record-42',
       }],
     }], 'snapshot-detail-route');
 
@@ -389,12 +386,8 @@ describe('route capability authorization ordering', () => {
       metadata: { moduleId: 'records-redirect', displayName: 'Records Redirect', version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: 'records-redirect.resource',
-        apiRoute: '/api/records',
+        dataAdapter: createStandardCrudTestDataAdapter('record-42'),
         listViewKey: 'records-redirect.list',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value) => value as Record<string, unknown>,
-        getRowId: () => 'record-42',
       }],
     }], 'snapshot-drawer-redirect');
 

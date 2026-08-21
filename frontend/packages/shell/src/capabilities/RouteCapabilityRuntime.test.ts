@@ -18,6 +18,17 @@ vi.mock('../pages/StandardCrudDetailPageHost', () => ({
   },
 }));
 
+function createTestDataAdapter(rowId = 'record-1') {
+  return {
+    list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    get: async () => {
+      const normalized = { fields: {}, summaries: {} };
+      return { normalized, value: normalized };
+    },
+    getRowId: () => rowId,
+  };
+}
+
 describe('RouteCapabilityRuntime', () => {
   beforeEach(() => {
     ModuleRegistry.replaceAll([], `snapshot-empty-${crypto.randomUUID()}`);
@@ -56,13 +67,9 @@ describe('RouteCapabilityRuntime', () => {
   it('loads a lazy standard CRUD implementation once for concurrent authorized route requests', async () => {
     const resource = {
       resourceKey: 'records.resource',
-      apiRoute: '/api/records',
+      dataAdapter: createTestDataAdapter(),
       listViewKey: 'records.list',
       detailViewKey: 'records.detail',
-      createEmptyFilters: () => ({}),
-      buildListQuery: () => ({}),
-      mapListItem: (value: unknown) => value as Record<string, unknown>,
-      getRowId: () => 'record-1',
     };
     const load = vi.fn().mockResolvedValue({ default: resource });
     ModuleRegistry.replaceAll([{
@@ -87,12 +94,8 @@ describe('RouteCapabilityRuntime', () => {
   it('normalizes a lazy standard CRUD loader failure and allows a retry', async () => {
     const resource = {
       resourceKey: 'retry.records',
-      apiRoute: '/api/retry-records',
+      dataAdapter: createTestDataAdapter(),
       listViewKey: 'retry.records.list',
-      createEmptyFilters: () => ({}),
-      buildListQuery: () => ({}),
-      mapListItem: (value: unknown) => value as Record<string, unknown>,
-      getRowId: () => 'record-1',
     };
     const failure = new Error('resource chunk unavailable');
     const primary = vi.fn().mockRejectedValue(failure);
@@ -136,12 +139,8 @@ describe('RouteCapabilityRuntime', () => {
   it('rejects a late lazy standard CRUD implementation from an old snapshot', async () => {
     const resource = {
       resourceKey: 'stale.records',
-      apiRoute: '/api/stale-records',
+      dataAdapter: createTestDataAdapter(),
       listViewKey: 'stale.records.list',
-      createEmptyFilters: () => ({}),
-      buildListQuery: () => ({}),
-      mapListItem: (value: unknown) => value as Record<string, unknown>,
-      getRowId: () => 'record-1',
     };
     let completeLoad!: (value: { default: typeof resource }) => void;
     const load = vi.fn(() => new Promise<{ default: typeof resource }>((resolve) => {
@@ -171,12 +170,8 @@ describe('RouteCapabilityRuntime', () => {
     const load = vi.fn().mockResolvedValue({
       default: {
         resourceKey: 'mismatched.records',
-        apiRoute: '/api/mismatched-records',
+        dataAdapter: createTestDataAdapter(),
         listViewKey: 'another.records.list',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value: unknown) => value as Record<string, unknown>,
-        getRowId: () => 'record-1',
       },
     });
     ModuleRegistry.replaceAll([{
@@ -443,13 +438,9 @@ describe('RouteCapabilityRuntime', () => {
       metadata: { moduleId: 'detail', displayName: 'Detail', version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: 'example.resource',
-        apiRoute: '/api/examples',
+        dataAdapter: createTestDataAdapter('example-id'),
         listViewKey: 'example.list',
         detailViewKey: 'example.detail',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value) => value as Record<string, unknown>,
-        getRowId: () => 'example-id',
       }],
     }], 'snapshot-standard-detail');
 
@@ -466,12 +457,8 @@ describe('RouteCapabilityRuntime', () => {
       metadata: { moduleId: 'crud-list', displayName: 'CRUD List', version: '1.0.0' },
       standardCrudResources: [{
         resourceKey: 'crud-list.resource',
-        apiRoute: '/api/crud-list',
+        dataAdapter: createTestDataAdapter('crud-list-id'),
         listViewKey: 'crud-list.view',
-        createEmptyFilters: () => ({}),
-        buildListQuery: () => ({}),
-        mapListItem: (value) => value as Record<string, unknown>,
-        getRowId: () => 'crud-list-id',
       }],
     }], 'snapshot-standard-crud-list');
 

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
-import { ModuleRegistry } from '@icp-platform/sdk';
+import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
@@ -14,6 +14,15 @@ vi.mock('@icp-platform/core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@icp-platform/core')>(),
   platformFetch: platformFetchMock,
 }));
+
+function createPersonDataAdapter() {
+  return createStandardCrudRestDataAdapter({
+    apiRoute: '/api/organization/persons',
+    fetcher: (input, init) => globalThis.fetch(input, init),
+    mapListItem: (value) => value as Record<string, unknown>,
+    getRowId: () => 'row-1',
+  });
+}
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -108,13 +117,9 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter(),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             buildColumns: () => [],
             concurrencyRevisionField: 'Revision',
           },
@@ -156,13 +161,9 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter(),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             buildColumns: () => [],
             concurrencyRevisionField: 'Revision',
           },
@@ -210,7 +211,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
         standardCrudResources: [
           {
             resourceKey: 'organization.person',
-            apiRoute: '/api/organization/persons',
+            dataAdapter: createPersonDataAdapter(),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
             lookupProviders: [
@@ -218,10 +219,6 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
               { key: 'departments', load: vi.fn(async () => [{ value: 'Dept_1', label: '一部' }]) },
               { key: 'positions', load: vi.fn(async () => [{ value: 'Position_1', label: '主管' }]) },
             ],
-            createEmptyFilters: () => ({}),
-            buildListQuery: () => ({}),
-            mapListItem: (value: unknown) => value,
-            getRowId: () => 'row-1',
             buildColumns: () => [],
           },
         ],

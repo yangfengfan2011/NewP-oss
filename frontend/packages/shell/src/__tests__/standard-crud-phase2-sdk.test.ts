@@ -12,6 +12,7 @@ import {
   type StandardCrudOption,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
+import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 describe('standard CRUD phase 2 SDK helpers', () => {
   it('builds i18n labels from dictionary and local keys', () => {
@@ -157,12 +158,8 @@ describe('standard CRUD phase 2 SDK helpers', () => {
     };
     const registration: StandardCrudResourceRegistration = {
       resourceKey: 'organization.person',
-      apiRoute: '/api/organization/persons',
+      dataAdapter: createStandardCrudTestDataAdapter(),
       listViewKey: 'organization.person.list',
-      createEmptyFilters: () => ({}),
-      buildListQuery: () => ({}),
-      mapListItem: (value) => value as Record<string, unknown>,
-      getRowId: () => 'row-1',
       listActions: [action],
       enumOptions: {
         EmploymentStatus: [{ value: 'FullTime', label: '正式' }],

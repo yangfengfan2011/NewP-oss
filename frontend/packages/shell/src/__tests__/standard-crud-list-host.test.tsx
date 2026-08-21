@@ -314,6 +314,19 @@ describe('StandardCrudListPageHost', () => {
     };
   }
 
+  function createRuntimePersonListViewDocument(): typeof personListViewDocument {
+    return {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        columnSource: 'runtime',
+        columns: undefined,
+        rowActions: [],
+        pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh', standardAction: 'refresh' }],
+      },
+    } as typeof personListViewDocument;
+  }
+
   function mockStandardCrudModule(
     overrides: Partial<NonNullable<ReturnType<typeof ModuleRegistry.getAllModules>[number]['standardCrudResources']>[number]> = {},
   ) {
@@ -380,6 +393,448 @@ describe('StandardCrudListPageHost', () => {
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')?.textContent).toContain('第 1 / 1 页');
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
+  });
+
+  it('keeps computed rows on the existing list adapter when columns come from metadata', async () => {
+    const columnProvider = { load: vi.fn(async () => ({ columns: [] })) };
+    const list = vi.fn(async () => ({
+      items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '计算部门' }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }));
+    mockStandardCrudModule({
+      columnProvider,
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+    });
+
+    await renderHost();
+    await flushProTableRequest();
+
+    expect(columnProvider.load).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('计算部门');
+  });
+
+  it('loads and validates runtime columns before reading rows with the same context token', async () => {
+    let resolveColumns: ((value: {
+      columns: Array<{ key: string; field: string; title: string; valueKind: 'text' | 'number' }>;
+      contextToken: string;
+    }) => void) | undefined;
+    const columnResult = new Promise<{
+      columns: Array<{ key: string; field: string; title: string; valueKind: 'text' | 'number' }>;
+      contextToken: string;
+    }>((resolve) => { resolveColumns = resolve; });
+    const list = vi.fn(async () => ({
+      items: [{ id: 'member-1', memberName: '示例成员', currentWeekDay1: 8 }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }));
+    const loadColumns = vi.fn(() => columnResult);
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+      columnProvider: { load: loadColumns },
+    });
+    await renderHost({}, createRuntimePersonListViewDocument());
+    expect(loadColumns).toHaveBeenCalledTimes(1);
+    expect(list).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveColumns?.({
+        columns: [
+          { key: 'member', field: 'memberName', title: '成员', valueKind: 'text' },
+          { key: 'current-week.day-1', field: 'currentWeekDay1', title: '8月17日', valueKind: 'number' },
+        ],
+        contextToken: 'opaque-week-token',
+      });
+      await columnResult;
+    });
+    await flushProTableRequest();
+
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ fields: 'EID,memberName,currentWeekDay1', pageIndex: 1, pageSize: 20 }),
+      { columnContextToken: 'opaque-week-token' },
+    );
+    expect(container.textContent).toContain('8月17日');
+    expect(container.textContent).toContain('示例成员');
+    expect(container.textContent).toContain('8');
+  });
+
+  it('does not read rows when a runtime column set is invalid', async () => {
+    const list = vi.fn();
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: () => 'member-1',
+      },
+      columnProvider: { load: async () => ({ columns: [] }) },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await waitForBodyText('runtime column provider returned an empty column set');
+
+    expect(list).not.toHaveBeenCalled();
+    expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.replace(/\s/g, '') === '重试')).toBe(true);
+  });
+
+  it('does not read rows when the runtime column context token is blank', async () => {
+    const list = vi.fn();
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: () => 'member-1',
+      },
+      columnProvider: {
+        load: async () => ({
+          columns: [{ key: 'member', field: 'memberName', title: '成员' }],
+          contextToken: '   ',
+        }),
+      },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await waitForBodyText('runtime column provider returned an empty context token');
+
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('restores a persisted runtime column order after refresh changes titles for the same stable keys', async () => {
+    window.localStorage.setItem(
+      'icp.standard-crud.columns:anonymous:organization.person.list',
+      JSON.stringify({
+        'current-week.day-1': { show: true, order: 0 },
+        member: { show: true, order: 1 },
+      }),
+    );
+    const loadColumns = vi.fn()
+      .mockResolvedValueOnce({
+        columns: [
+          { key: 'member', field: 'memberName', title: '成员' },
+          { key: 'current-week.day-1', field: 'currentWeekDay1', title: '8月17日' },
+        ],
+        contextToken: 'week-1',
+      })
+      .mockResolvedValueOnce({
+        columns: [
+          { key: 'member', field: 'memberName', title: '成员' },
+          { key: 'current-week.day-1', field: 'currentWeekDay1', title: '8月24日' },
+        ],
+        contextToken: 'week-2',
+      });
+    const list = vi.fn(async () => ({
+      items: [{ id: 'member-1', memberName: '示例成员', currentWeekDay1: 3 }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }));
+    mockStandardCrudModule({
+      columnProvider: { load: loadColumns },
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await waitForBodyText('8月17日');
+    await flushProTableRequest();
+    const initialHeaders = Array.from(container.querySelectorAll('.ant-table-thead th')).map((header) => header.textContent ?? '');
+    expect(initialHeaders.indexOf('8月17日')).toBeLessThan(initialHeaders.indexOf('成员'));
+
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="刷新"]')?.click());
+    await waitForBodyText('8月24日');
+    await flushProTableRequest();
+
+    const refreshedHeaders = Array.from(container.querySelectorAll('.ant-table-thead th')).map((header) => header.textContent ?? '');
+    expect(refreshedHeaders.indexOf('8月24日')).toBeLessThan(refreshedHeaders.indexOf('成员'));
+    expect(container.textContent).not.toContain('8月17日');
+    expect(loadColumns).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'week-2' });
+  });
+
+  it('normalizes an obsolete runtime sort before issuing one row request for the refreshed column set', async () => {
+    const loadColumns = vi.fn()
+      .mockResolvedValueOnce({
+        columns: [{ key: 'workload', field: 'oldWorkload', title: '旧工作量', sortable: true }],
+        contextToken: 'old-week',
+      })
+      .mockResolvedValueOnce({
+        columns: [{ key: 'workload', field: 'newWorkload', title: '新工作量', sortable: true }],
+        contextToken: 'new-week',
+      });
+    let refreshedRequestSearch = '';
+    const list = vi.fn()
+      .mockResolvedValueOnce({ items: [{ id: 'member-1', oldWorkload: 2 }], total: 1, page: 1, pageSize: 20 })
+      .mockImplementationOnce(async () => {
+        refreshedRequestSearch = currentLocationSearch;
+        return { items: [{ id: 'member-1', newWorkload: 4 }], total: 1, page: 1, pageSize: 20 };
+      });
+    mockStandardCrudModule({
+      columnProvider: { load: loadColumns },
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+    });
+
+    await renderHost(
+      {},
+      createRuntimePersonListViewDocument(),
+      '/organization/persons?sortBy=oldWorkload&sortDirection=desc',
+    );
+    await waitForBodyText('旧工作量');
+    expect(list.mock.calls[0]?.[0]).toMatchObject({ sortBy: 'oldWorkload', sortDirection: 'desc' });
+
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="刷新"]')?.click());
+    await waitForBodyText('新工作量');
+    await flushProTableRequest();
+
+    expect(currentLocationSearch).not.toContain('sortBy');
+    expect(currentLocationSearch).not.toContain('sortDirection');
+    expect(refreshedRequestSearch).not.toContain('sortBy');
+    expect(refreshedRequestSearch).not.toContain('sortDirection');
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list.mock.calls[1]?.[0]).not.toHaveProperty('sortBy');
+    expect(list.mock.calls[1]?.[0]).not.toHaveProperty('sortDirection');
+    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'new-week' });
+  });
+
+  it('renders a runtime ISO date without shifting it in a negative time zone', async () => {
+    const NativeDate = globalThis.Date;
+    class NegativeOffsetDate extends NativeDate {
+      private readonly parsedAsUtcDateOnly: boolean;
+
+      constructor(value?: string | number, month?: number, date?: number) {
+        if (typeof value === 'number' && month !== undefined) {
+          super(value, month, date ?? 1);
+          this.parsedAsUtcDateOnly = false;
+        } else if (value !== undefined) {
+          super(value);
+          this.parsedAsUtcDateOnly = value === '2026-08-17';
+        } else {
+          super();
+          this.parsedAsUtcDateOnly = false;
+        }
+      }
+
+      override toLocaleDateString(): string {
+        return this.parsedAsUtcDateOnly ? '2026-08-16' : '2026-08-17';
+      }
+    }
+    vi.stubGlobal('Date', NegativeOffsetDate);
+    mockStandardCrudModule({
+      columnProvider: {
+        load: async () => ({
+          columns: [{ key: 'work-date', field: 'workDate', title: '工作日期', valueKind: 'date' }],
+          contextToken: 'date-week',
+        }),
+      },
+      dataAdapter: {
+        list: async () => ({
+          items: [{ id: 'member-1', workDate: '2026-08-17' }],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        }),
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+    });
+
+    try {
+      await renderHost({}, createRuntimePersonListViewDocument());
+      await waitForBodyText('2026-08-17');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    [
+      [
+        { key: 'member', field: 'memberName', title: '成员' },
+        { key: 'member', field: 'otherName', title: '其他成员' },
+      ],
+      'runtime column key "member" is duplicated',
+    ],
+    [[{ key: 'actions', field: 'actions', title: '动作' }], 'runtime column key "actions" is reserved'],
+    [[{ key: 'member', field: '', title: '成员' }], 'runtime column "member" must declare field'],
+    [[{ key: 'member', field: 'memberName', title: '' }], 'runtime column "member" must declare title'],
+    [[{ key: 'member', field: 'memberName', title: '成员', valueKind: 'renderer' }], 'runtime column "member" has unsupported valueKind "renderer"'],
+  ])('rejects malformed runtime column descriptors before reading rows', async (columns, message) => {
+    const list = vi.fn();
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: () => 'member-1',
+      },
+      columnProvider: { load: async () => ({ columns }) } as never,
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await waitForBodyText(message as string);
+
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('restarts the complete runtime column generation when a row request is retried', async () => {
+    const loadColumns = vi.fn(async () => ({
+      columns: [{ key: 'member', field: 'memberName', title: '成员', valueKind: 'text' as const }],
+      contextToken: 'week-token',
+    }));
+    const list = vi.fn()
+      .mockRejectedValueOnce(new Error('示例行加载失败'))
+      .mockResolvedValueOnce({
+        items: [{ id: 'member-1', memberName: '恢复后的成员' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      });
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+      columnProvider: { load: loadColumns },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await waitForBodyText('示例行加载失败');
+    const retryButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.replace(/\s/g, '') === '重试',
+    );
+    await act(async () => retryButton?.click());
+    await waitForBodyText('恢复后的成员');
+
+    expect(loadColumns).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'week-token' });
+  });
+
+  it('discards a stale runtime column generation after committed filters change', async () => {
+    type ColumnResult = { columns: Array<{ key: string; field: string; title: string; valueKind: 'text' }>; contextToken: string };
+    let resolveFirst: ((value: ColumnResult) => void) | undefined;
+    let resolveSecond: ((value: ColumnResult) => void) | undefined;
+    const first = new Promise<ColumnResult>((resolve) => { resolveFirst = resolve; });
+    const second = new Promise<ColumnResult>((resolve) => { resolveSecond = resolve; });
+    const loadColumns = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const list = vi.fn(async () => ({
+      items: [{ id: 'member-2', memberName: '新代际成员' }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }));
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+      columnProvider: { load: loadColumns },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await act(async () => testNavigate?.('/organization/persons?keyword=new'));
+    expect(loadColumns).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveSecond?.({
+        columns: [{ key: 'new-member', field: 'memberName', title: '新列', valueKind: 'text' }],
+        contextToken: 'new-token',
+      });
+      await second;
+    });
+    await waitForBodyText('新代际成员');
+    await act(async () => {
+      resolveFirst?.({
+        columns: [{ key: 'old-member', field: 'memberName', title: '旧列', valueKind: 'text' }],
+        contextToken: 'old-token',
+      });
+      await first;
+    });
+
+    expect(container.textContent).toContain('新列');
+    expect(container.textContent).not.toContain('旧列');
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list.mock.calls[0]?.[1]).toEqual({ columnContextToken: 'new-token' });
+  });
+
+  it('reuses runtime columns and discards stale rows when sorting within one generation', async () => {
+    type RowResult = { items: Array<{ id: string; memberName: string }>; total: number; page: number; pageSize: number };
+    let resolveFirst: ((value: RowResult) => void) | undefined;
+    let resolveSecond: ((value: RowResult) => void) | undefined;
+    const first = new Promise<RowResult>((resolve) => { resolveFirst = resolve; });
+    const second = new Promise<RowResult>((resolve) => { resolveSecond = resolve; });
+    const loadColumns = vi.fn(async () => ({
+      columns: [{ key: 'member', field: 'memberName', title: '成员', valueKind: 'text' as const, sortable: true }],
+      contextToken: 'stable-token',
+    }));
+    const list = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second)
+      .mockResolvedValue({
+        items: [{ id: 'member-3', memberName: '第二页结果' }],
+        total: 40,
+        page: 2,
+        pageSize: 20,
+      });
+    mockStandardCrudModule({
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+      columnProvider: { load: loadColumns },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument());
+    await flushProTableRequest();
+    const memberHeader = Array.from(container.querySelectorAll('.ant-table-thead th')).find((header) =>
+      header.textContent?.includes('成员'));
+    await act(async () => memberHeader?.querySelector<HTMLElement>('.ant-table-column-sorters')?.click());
+    await flushProTableRequest();
+    expect(list).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveSecond?.({ items: [{ id: 'member-2', memberName: '新排序结果' }], total: 40, page: 1, pageSize: 20 });
+      await second;
+    });
+    await waitForBodyText('新排序结果');
+    await act(async () => {
+      resolveFirst?.({ items: [{ id: 'member-1', memberName: '旧排序结果' }], total: 40, page: 1, pageSize: 20 });
+      await first;
+    });
+
+    expect(loadColumns).toHaveBeenCalledTimes(1);
+    expect(list.mock.calls[1]?.[0]).toMatchObject({ sortBy: 'memberName', sortDirection: 'asc' });
+    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'stable-token' });
+    expect(container.textContent).toContain('新排序结果');
+    expect(container.textContent).not.toContain('旧排序结果');
+
+    await act(async () => testNavigate?.('/organization/persons?page=2&pageSize=20&sortBy=memberName&sortDirection=asc'));
+    await waitForBodyText('第二页结果');
+
+    expect(loadColumns).toHaveBeenCalledTimes(1);
+    expect(list.mock.calls[2]?.[0]).toMatchObject({ pageIndex: 2, pageSize: 20 });
+    expect(list.mock.calls[2]?.[1]).toEqual({ columnContextToken: 'stable-token' });
   });
 
   it('restores committed filters paging and server sorting from the URL', async () => {
@@ -836,7 +1291,6 @@ describe('StandardCrudListPageHost', () => {
         disablePerson,
         enablePerson: vi.fn(),
       },
-      buildColumns: undefined,
       renderFilters: undefined,
       listActions: undefined,
       fields: undefined,

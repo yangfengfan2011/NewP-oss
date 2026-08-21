@@ -56,6 +56,7 @@ interface StandardCrudProjectionOwner {
   detailViewKey?: string;
   path: string;
   permissions?: string[];
+  projectsDrawer: boolean;
 }
 
 /**
@@ -87,7 +88,12 @@ export function compileStandardCrudRouteProjection(
       const listView = requireUniqueView(viewDocuments, listBinding.targetKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
       const detailViewKey = readNonEmptyString(listView.view.detailViewKey);
       if (!detailViewKey) {
-        fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', listBinding.targetKey);
+        owners.push({
+          path: nav.path,
+          permissions: nav.permissions,
+          projectsDrawer: false,
+        });
+        continue;
       }
 
       requireUniqueView(viewDocuments, detailViewKey, 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE');
@@ -103,6 +109,7 @@ export function compileStandardCrudRouteProjection(
         detailViewKey,
         path: nav.path,
         permissions: nav.permissions,
+        projectsDrawer: true,
       });
     }
   }
@@ -125,7 +132,8 @@ export function compileStandardCrudRouteProjection(
     'STANDARD_CRUD_DETAIL_PATH_CONFLICT',
   );
 
-  const drawerRedirects = owners.map((owner) => ({
+  const drawerOwners = owners.filter((owner) => owner.projectsDrawer);
+  const drawerRedirects = drawerOwners.map((owner) => ({
     from: `${normalizeListPath(owner.path)}/new`,
     to: `${owner.path}?drawer=create`,
   }));
@@ -142,7 +150,7 @@ export function compileStandardCrudRouteProjection(
     })),
     ...drawerRedirects.map((entry, index) => ({
       path: entry.from,
-      permissions: owners[index].permissions,
+      permissions: drawerOwners[index].permissions,
       diagnostic: 'STANDARD_CRUD_DRAWER_FALLBACK_CONFLICT' as const,
     })),
   ];
@@ -189,6 +197,7 @@ function compileLegacyResourceOwner(
     detailViewKey: resource.detailViewKey,
     path: nav.path,
     permissions: nav.permissions,
+    projectsDrawer: true,
   };
 }
 

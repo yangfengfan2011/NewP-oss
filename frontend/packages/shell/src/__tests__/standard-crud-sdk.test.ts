@@ -93,6 +93,20 @@ describe('standard CRUD SDK helpers', () => {
     expect(adapter.getRowId(result.items[0])).toBe('Person_1');
   });
 
+  it('rejects a column context token instead of silently dropping it in the standard REST adapter', async () => {
+    const fetcher = vi.fn();
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/sample-items',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'sample-1',
+    });
+
+    await expect(adapter.list({}, { columnContextToken: 'opaque-token' }))
+      .rejects.toThrow('Standard REST data adapter does not support a column context token');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('loads one normalized and module-mapped detail through the data adapter', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       fields: { EID: 'Person_1', ENAME: '张三' },

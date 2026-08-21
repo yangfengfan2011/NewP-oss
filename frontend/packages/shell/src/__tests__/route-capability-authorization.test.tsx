@@ -425,7 +425,7 @@ describe('route capability authorization ordering', () => {
 
     await vi.waitFor(() => {
       expect(container.textContent).toContain(
-        'MODULE_PROJECTION_FAILED: STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING: invalid.records.list',
+        'MODULE_PROJECTION_FAILED: STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN: invalid.records.detail',
       );
     });
     expect(load).not.toHaveBeenCalled();

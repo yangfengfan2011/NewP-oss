@@ -231,11 +231,31 @@ export interface StandardCrudDetailFieldRendererContext {
 /** 详情字段 renderer binding；选择、顺序、分区和默认 renderer 仍由 Resolved Detail Schema 决定。 */
 export type StandardCrudDetailFieldRenderer = (context: StandardCrudDetailFieldRendererContext) => ReactNode;
 
-/** 标准列表列声明；复杂单元格可通过受控 render 回调保留在模块边界内。 */
-export interface StandardCrudTableColumn<TRow> {
+/** 运行时列只传递可序列化的标准标量描述，不把模块 UI 实现带入 Shell。 */
+export interface StandardCrudRuntimeColumn {
   key: string;
+  field: string;
   title: string;
-  render?: (item: TRow) => ReactNode;
+  valueKind?: 'text' | 'number' | 'date' | 'datetime' | 'boolean';
+  sortable?: boolean;
+  hideable?: boolean;
+}
+
+/** 一次 Provider 解析得到的完整列集；上下文令牌由模块解释并保持不透明。 */
+export interface StandardCrudColumnSet {
+  columns: StandardCrudRuntimeColumn[];
+  contextToken?: string;
+}
+
+/** Provider 只接收已提交筛选条件与取消信号，不读取 Shell 私有状态。 */
+export interface StandardCrudColumnContext<TFilter> {
+  filters: Readonly<TFilter>;
+  signal: AbortSignal;
+}
+
+/** 模块拥有的运行时列入口；远程协议和业务计算都封装在模块 Adapter 内。 */
+export interface StandardCrudListColumnProvider<TFilter> {
+  load: (context: StandardCrudColumnContext<TFilter>) => Promise<StandardCrudColumnSet>;
 }
 
 /** 列表扩展上下文，只暴露 Host 允许模块影响的筛选、刷新和当前行数据入口。 */
@@ -284,7 +304,7 @@ export interface StandardCrudResourceRegistration<
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
   operationResultPresenters?: StandardCrudOperationResultPresenter[];
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
-  buildColumns?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => StandardCrudTableColumn<TRow>[];
+  columnProvider?: StandardCrudListColumnProvider<TFilter>;
   renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
   renderRowActions?: (row: TRow, context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
@@ -298,6 +318,11 @@ export interface StandardCrudListQueryRequest {
   sortBy?: string;
   sortDirection?: 'asc' | 'desc';
   fields?: string;
+}
+
+/** 行读取上下文只承载列代际绑定，不参与 URL、筛选或标准 REST 查询序列化。 */
+export interface StandardCrudListReadContext {
+  columnContextToken?: string;
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
@@ -319,7 +344,10 @@ export interface StandardCrudLoadedDetail<TDetail = StandardCrudDetail> {
 
 /** 共享宿主消费的规范资源数据 Interface。 */
 export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail = StandardCrudDetail> {
-  list: (query?: StandardCrudListQueryRequest) => Promise<StandardCrudListResult<TRow>>;
+  list: (
+    query?: StandardCrudListQueryRequest,
+    readContext?: StandardCrudListReadContext,
+  ) => Promise<StandardCrudListResult<TRow>>;
   get: (id: string) => Promise<StandardCrudLoadedDetail<TDetail>>;
   create?: (
     values: StandardCrudMutationValues,
@@ -954,7 +982,12 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
   const client = createStandardCrudClient(options.apiRoute, options.fetcher);
 
   return {
-    list: async (query) => normalizeStandardCrudListResult(await client.list(query), options.mapListItem),
+    list: async (query, readContext) => {
+      if (readContext?.columnContextToken) {
+        throw new Error('Standard REST data adapter does not support a column context token');
+      }
+      return normalizeStandardCrudListResult(await client.list(query), options.mapListItem);
+    },
     get: async (id) => {
       const normalized = await client.getDetail(id);
       return {

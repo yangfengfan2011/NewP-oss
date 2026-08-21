@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "example",
+        "titleKey": "Navigation.Example",
+        "icon": "module",
+        "path": "/examples/standard-crud/runtime-columns",
+        "order": 999,
+        "entryType": "standard-list",
+        "targetKey": "example.runtime-workload.list",
+        "permissions": [
+          "Example.View"
+        ]
+      }
+    ]
+  }
+}

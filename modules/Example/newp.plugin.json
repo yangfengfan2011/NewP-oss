@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Example",
+  "displayName": "功能示例",
+  "version": "1.0.0",
+  "description": "功能示例 模块",
+  "entryAssembly": "../../ExampleModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "example.backend"
+  },
+  "frontend": {
+    "behaviorKey": "example.frontend",
+    "entry": "example",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "example.runtime-workload.list"
+    ]
+  },
+  "security": {
+    "permissions": [
+      {
+        "code": "Example.View",
+        "displayName": "查看功能示例",
+        "description": "允许访问功能示例页面",
+        "group": "功能示例"
+      }
+    ]
+  }
+}

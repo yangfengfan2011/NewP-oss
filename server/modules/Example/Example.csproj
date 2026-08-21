@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Modules.Example</RootNamespace>
+    <AssemblyName>ExampleModule</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\modules\Example\newp.plugin.json">
+      <LogicalName>ICP.Platform.Modules.Example.newp.plugin.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

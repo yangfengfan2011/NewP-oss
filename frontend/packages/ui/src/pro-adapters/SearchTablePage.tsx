@@ -70,6 +70,15 @@ export interface SearchTablePageProps<TRow> {
   onColumnStateChange?: (state: StandardCrudColumnState) => void;
   filteredEmpty?: boolean;
   className?: string;
+  /** 调用方拥有跨请求生命周期时，可只把已协调的数据状态交给通用表格呈现。 */
+  controlledResult?: {
+    data: TRow[];
+    total: number;
+    loading: boolean;
+    hasLoaded: boolean;
+    error: string | null;
+    onRetry: () => void;
+  };
 }
 
 function resolveColumnKey<TRow>(column: ProColumns<TRow>): string {
@@ -116,6 +125,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   onColumnStateChange,
   filteredEmpty = false,
   className,
+  controlledResult,
 }: SearchTablePageProps<TRow>) {
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -137,6 +147,9 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   })), [columns]);
 
   useEffect(() => {
+    if (controlledResult) {
+      return undefined;
+    }
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
@@ -178,7 +191,13 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
     };
     // 查询对象可能由调用方每次 render 重建；只以可序列化字段和重试令牌触发请求。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection, retryVersion]);
+  }, [controlledResult, request, effectiveQuery.current, effectiveQuery.pageSize, effectiveQuery.sortBy, effectiveQuery.sortDirection, retryVersion]);
+
+  const effectiveData = controlledResult?.data ?? data;
+  const effectiveTotal = controlledResult?.total ?? total;
+  const effectiveLoading = controlledResult?.loading ?? loading;
+  const effectiveHasLoaded = controlledResult?.hasLoaded ?? hasLoaded;
+  const effectiveLoadError = controlledResult?.error ?? loadError;
 
   const rowNumberStart = (effectiveQuery.current - 1) * effectiveQuery.pageSize;
   const tableColumns = useMemo(() => {
@@ -220,8 +239,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         className={className}
         rowKey={rowKey}
         columns={tableColumns}
-        dataSource={data}
-        loading={loading}
+        dataSource={effectiveData}
+        loading={effectiveLoading}
         headerTitle={headerTitle}
         search={false}
         cardBordered={false}
@@ -246,10 +265,10 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         locale={{
           emptyText: (
             <StandardCrudListState
-              initialLoading={loading && !hasLoaded}
-              error={loadError}
+              initialLoading={effectiveLoading && !effectiveHasLoaded}
+              error={effectiveLoadError}
               filtered={filteredEmpty}
-              onRetry={() => setRetryVersion((current) => current + 1)}
+              onRetry={controlledResult?.onRetry ?? (() => setRetryVersion((current) => current + 1))}
             />
           ),
         }}
@@ -277,10 +296,10 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         <Pagination
           current={effectiveQuery.current}
           pageSize={effectiveQuery.pageSize}
-          total={Math.max(total, 1)}
+          total={Math.max(effectiveTotal, 1)}
           showSizeChanger
           pageSizeOptions={[20, 50, 100]}
-          showTotal={() => `第 ${effectiveQuery.current} / ${Math.max(1, Math.ceil(total / effectiveQuery.pageSize))} 页，共 ${total} 条`}
+          showTotal={() => `第 ${effectiveQuery.current} / ${Math.max(1, Math.ceil(effectiveTotal / effectiveQuery.pageSize))} 页，共 ${effectiveTotal} 条`}
           locale={{ items_per_page: '条/页' }}
           onChange={(nextCurrent, nextPageSize) => {
             updateQuery({

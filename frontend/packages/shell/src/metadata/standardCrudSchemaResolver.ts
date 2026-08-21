@@ -93,6 +93,7 @@ export interface StandardCrudListRuntimeSchema {
   query: StandardCrudRuntimeQuerySchema;
   queryFields: StandardCrudRuntimeFieldSchema[];
   advancedFilter: StandardCrudAdvancedFilterSchema;
+  columnSource: 'metadata' | 'runtime';
   columns: StandardCrudRuntimeColumnSchema[];
   pageActions: StandardCrudRuntimeActionSchema[];
   rowActions: StandardCrudRuntimeActionSchema[];
@@ -806,6 +807,10 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   const advancedFilter = readAdvancedFilter(resolveAdvancedFilterSource(view, queryRecord), model);
   const query = readQuery(queryRecord, model);
   query.advancedFilter = advancedFilter;
+  const columnSourceValue = readString(view.columnSource, 'metadata');
+  if (columnSourceValue !== 'metadata' && columnSourceValue !== 'runtime') {
+    throw new Error(`unsupported column source "${columnSourceValue}"`);
+  }
 
   const schema: StandardCrudListRuntimeSchema = {
     viewKey,
@@ -818,6 +823,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     query,
     queryFields: query.fields,
     advancedFilter,
+    columnSource: columnSourceValue,
     columns: readRecordArray(view.columns)
       .map(readColumn)
       .filter((column) => column.key.length > 0),
@@ -829,6 +835,18 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
       .filter((action) => action.key.length > 0),
     exportModes: readArray<unknown>(exportConfig.modes).filter((mode): mode is string => typeof mode === 'string'),
   };
+
+  if (schema.columnSource === 'runtime') {
+    if (!registration.columnProvider) {
+      throw new Error(`runtime column source requires a column provider on resource "${registration.resourceKey}"`);
+    }
+    if (schema.columns.length > 0) {
+      throw new Error('runtime column source cannot declare metadata columns');
+    }
+    if (schema.exportModes.length > 0) {
+      throw new Error('runtime column source does not support export');
+    }
+  }
 
   assertDictionaryKey(dicKey, titleKey, context?.defaultLanguageCatalog);
   assertDictionaryKey(dicKey, descriptionKey, context?.defaultLanguageCatalog);

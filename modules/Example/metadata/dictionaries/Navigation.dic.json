@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "Example": {
+      "zhs": "功能示例",
+      "en": "功能示例"
+    }
+  }
+}

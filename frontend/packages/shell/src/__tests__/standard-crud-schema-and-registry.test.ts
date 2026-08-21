@@ -19,7 +19,6 @@ const personRegistration = {
   },
   listViewKey: 'organization.person.list',
   detailViewKey: 'organization.person.detail',
-  buildColumns: () => [],
   lookupProviders: [
     { key: 'organization.departments', load: async () => [] },
     { key: 'organization.positions', load: async () => [] },
@@ -30,6 +29,71 @@ const personRegistration = {
 };
 
 describe('standard CRUD schema resolver and registry', () => {
+  it('resolves a runtime column source when the resource registers a provider', () => {
+    const schema = buildStandardCrudListSchema(
+      {
+        key: 'example.runtime-workload.list',
+        mode: 'list',
+        columnSource: 'runtime',
+      },
+      {
+        ...personRegistration,
+        resourceKey: 'example.runtime-workload',
+        listViewKey: 'example.runtime-workload.list',
+        columnProvider: { load: async () => ({ columns: [] }) },
+      },
+    );
+
+    expect(schema.columnSource).toBe('runtime');
+    expect(schema.columns).toEqual([]);
+  });
+
+  it('keeps metadata columns as the default source', () => {
+    const schema = buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        columns: [{ key: 'name', labelKey: 'Column_Name', source: 'projection', field: 'name' }],
+      },
+      personRegistration,
+    );
+
+    expect(schema.columnSource).toBe('metadata');
+    expect(schema.columns).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      name: 'provider is missing',
+      view: { key: 'example.runtime.list', columnSource: 'runtime' },
+      registration: personRegistration,
+      message: 'runtime column source requires a column provider',
+    },
+    {
+      name: 'metadata columns are mixed in',
+      view: {
+        key: 'example.runtime.list',
+        columnSource: 'runtime',
+        columns: [{ key: 'name', labelKey: 'Column_Name', source: 'projection', field: 'name' }],
+      },
+      registration: {
+        ...personRegistration,
+        columnProvider: { load: async () => ({ columns: [] }) },
+      },
+      message: 'runtime column source cannot declare metadata columns',
+    },
+    {
+      name: 'export is declared',
+      view: { key: 'example.runtime.list', columnSource: 'runtime', export: { modes: ['csv'] } },
+      registration: {
+        ...personRegistration,
+        columnProvider: { load: async () => ({ columns: [] }) },
+      },
+      message: 'runtime column source does not support export',
+    },
+  ])('rejects an invalid runtime column configuration when $name', ({ view, registration, message }) => {
+    expect(() => buildStandardCrudListSchema(view, registration)).toThrow(message);
+  });
+
   it('resolves ordered detail sections against the canonical field catalog and renderer bindings', () => {
     const schema = resolveStandardCrudDetailSchema(
       [{

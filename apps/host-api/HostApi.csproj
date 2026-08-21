@@ -89,4 +89,15 @@
     <ProjectReference Include="..\..\server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\server\modules\Example\Example.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\modules\Example\newp.plugin.json">
+      <Link>modules\Example\plugin.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

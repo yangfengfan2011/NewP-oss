@@ -117,6 +117,8 @@ export {
 
 export type {
   StandardCrudClient,
+  StandardCrudColumnContext,
+  StandardCrudColumnSet,
   StandardCrudDataAdapter,
   StandardCrudActionContext,
   StandardCrudActionDefinition,
@@ -138,7 +140,9 @@ export type {
   StandardCrudFormMode,
   StandardCrudFormSection,
   StandardCrudListExtensionContext,
+  StandardCrudListColumnProvider,
   StandardCrudListQueryRequest,
+  StandardCrudListReadContext,
   StandardCrudListResult,
   StandardCrudLoadedDetail,
   LoadStandardCrudLookupOptionsInput,
@@ -155,13 +159,13 @@ export type {
   StandardCrudOperationResultPresenterRegistry,
   StandardCrudOption,
   StandardCrudResourceRegistration,
+  StandardCrudRuntimeColumn,
   StandardCrudRestDataAdapterOptions,
   StandardCrudRestDataAdapter,
   StandardCrudSummaryBlock,
   StandardCrudSummaryRenderer,
   StandardCrudSummaryRendererContext,
   StandardCrudSummaryStatus,
-  StandardCrudTableColumn,
   UseStandardCrudLookupRuntimeInput,
 } from './standardCrud';
 

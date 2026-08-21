@@ -6,7 +6,11 @@ import type {
 } from '../metadata/runtimeMetadataManifest';
 import {
   compileStandardCrudRouteProjection,
+  resolveStandardCrudListRoute,
 } from '../navigation/standardCrudRouteAdapter';
+import exampleModuleBindings from '../../../../modules/example/src/index';
+import exampleNavigationDocument from '../../../../../modules/Example/metadata/navigation/Example.nav.json';
+import exampleListViewDocument from '../../../../../modules/Example/metadata/views/RuntimeWorkloadList.view.json';
 import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 const modules: FrontendModule[] = [
@@ -18,7 +22,6 @@ const modules: FrontendModule[] = [
         dataAdapter: createStandardCrudTestDataAdapter(),
         listViewKey: 'organization.person.list',
         detailViewKey: 'organization.person.detail',
-        buildColumns: () => [],
       },
     ],
   },
@@ -118,6 +121,25 @@ describe('standard CRUD route adapter', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it('projects the formal Example registration as a list-only route', () => {
+    const exampleModule: FrontendModule = {
+      metadata: { moduleId: 'example', displayName: 'Example', version: '1.0.0' },
+      standardCrudCapabilities: exampleModuleBindings.standardCrudCapabilities,
+    };
+    const navigation = exampleNavigationDocument as unknown as RuntimeNavItemDocument;
+    const listView = exampleListViewDocument as unknown as RuntimeViewDocument;
+
+    expect(resolveStandardCrudListRoute([navigation], 'example.runtime-workload.list')).toEqual({
+      path: '/examples/standard-crud/runtime-columns',
+      permissions: ['Example.View'],
+    });
+    expect(compileStandardCrudRouteProjection([exampleModule], [navigation], [listView], [])).toEqual({
+      detailEntries: [],
+      drawerRedirects: [],
+      fallbackRoutes: [],
+    });
+  });
+
   it('fails closed on duplicate detail route paths instead of relying on registration order', () => {
     const duplicateModules: FrontendModule[] = [
       ...modules,
@@ -129,7 +151,6 @@ describe('standard CRUD route adapter', () => {
             dataAdapter: createStandardCrudTestDataAdapter(),
             listViewKey: 'employee.person.list',
             detailViewKey: 'employee.person.detail',
-            buildColumns: () => [],
           },
         ],
       },
@@ -267,7 +288,7 @@ describe('standard CRUD route projection compiler', () => {
           ? [lazyViews[0]]
           : lazyViews;
       const diagnostic = variant === 'missing-key'
-        ? 'STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING'
+        ? 'STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN'
         : variant === 'unknown-view'
           ? 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE'
           : 'STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE';

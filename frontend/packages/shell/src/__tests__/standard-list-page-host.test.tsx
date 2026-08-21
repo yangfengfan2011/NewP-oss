@@ -190,7 +190,6 @@ describe('StandardListPageHost', () => {
             }),
             listViewKey: 'organization.person.list',
             detailViewKey: 'organization.person.detail',
-            buildColumns: () => [{ key: 'name', title: '姓名' }],
           },
         ],
         standardListViews: [
@@ -238,7 +237,6 @@ describe('StandardListPageHost', () => {
       }),
       listViewKey: 'organization.person.list',
       detailViewKey: 'organization.person.detail',
-      buildColumns: () => [{ key: 'name', title: '姓名' }],
     };
 
     await renderHost([{

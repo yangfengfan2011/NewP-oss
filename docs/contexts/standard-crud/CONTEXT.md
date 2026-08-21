@@ -12,6 +12,26 @@ _Avoid_: 通用页面、业务专用页面
 把资源拥有者的读取与普通写入结果转换成共享宿主可消费的规范列表、详情和操作结果的运行时角色。它不解释 Model 或 View，不拥有业务专用命令，也不产生新的 authoring 或候选事实。
 _Avoid_: Resource compiler、metadata 解释器、业务命令处理器
 
+**列来源（Column Source）**：
+List View 对具体列表列集所有权的选择。metadata 来源由 List View 拥有静态列集；runtime 来源只声明委托，由模块在运行时提供完整列集。
+_Avoid_: 动态列回调、混合列覆盖
+
+**运行时列 Provider（Runtime Column Provider）**：
+由资源模块拥有、按当前列表上下文异步解析完整运行时列集的角色。它只返回可序列化列描述，不返回 UI 行为，也不向 metadata 暴露模块 API 地址。
+_Avoid_: buildColumns、Shell 列计算器、远程 renderer
+
+**运行时列集（Runtime Column Set）**：
+运行时列 Provider 在一个加载代际内返回的有序完整列描述及可选列上下文令牌。列的稳定语义标识不随标题中的日期或其他展示文本变化。
+_Avoid_: 列补丁、React 列节点
+
+**列上下文令牌（Column Context Token）**：
+把一次运行时列解析与后续列表行读取绑定到同一模块业务快照的不透明值。共享宿主只在内存中转交它，不解释、持久化或写入 URL。
+_Avoid_: 查询筛选条件、列偏好键、Shell 快照标识
+
+**计算型行数据（Computed Row Data）**：
+模块经过业务逻辑计算或组合后，通过 Standard CRUD 数据 Adapter 的既有列表入口返回的行数据。它与列来源相互独立，不形成第二套列表读取入口。
+_Avoid_: 动态行 Provider、第二列表 API seam
+
 **Standard CRUD 动作执行（Standard CRUD Action Execution）**：
 共享宿主对单条模块业务动作的确认、输入、互斥执行、结果交接和数据刷新过程。模块拥有业务副作用与输入语义，但不拥有呈现面刷新或冲突重放策略。
 _Avoid_: 模块刷新回调、Operation artifact、业务命令编排器

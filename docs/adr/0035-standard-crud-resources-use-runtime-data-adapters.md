@@ -4,6 +4,8 @@ status: accepted
 
 # Standard CRUD 资源通过运行时数据 Adapter 接入共享宿主
 
+运行时列的具体列集所有权与列优先加载顺序由 ADR-0038 扩展；本 ADR 中 List View 拥有列表展示结构的结论只适用于 metadata 列来源。
+
 Standard CRUD 共享宿主统一消费一个小的 `StandardCrudDataAdapter` Interface，而不再分别解释资源的 HTTP 路径、列表映射、行标识、详情装载和普通写入 fallback。平台提供标准 REST Adapter；拥有不同传输和写入语义的模块提供自己的 Adapter。两类 Adapter 都输出规范列表、详情和普通操作结果，因此 Shell 只拥有页面生命周期，不了解模块 DTO 或 endpoint 差异。
 
 Model、List View 与 Detail View 继续分别拥有字段、查询、表单和详情展示结构；Data Adapter 不解释 metadata，也不产生 Candidate、artifact 或新的运行时事实源。模块专用命令、renderer、lookup 和敏感结果仍由模块 binding 拥有，不进入标准 REST Adapter。

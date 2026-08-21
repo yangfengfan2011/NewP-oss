@@ -239,13 +239,11 @@ function createStandardDataStateActionHandlers(apiRoute: string): Record<string,
   };
 
   return {
-    disable: async ({ id, refresh }) => {
+    disable: async ({ id }) => {
       await client.disable(requireId(id, '停用'));
-      refresh();
     },
-    enable: async ({ id, refresh }) => {
+    enable: async ({ id }) => {
       await client.update(requireId(id, '启用'), { IsEnabled: true });
-      refresh();
     },
   };
 }

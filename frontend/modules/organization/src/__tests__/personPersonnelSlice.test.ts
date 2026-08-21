@@ -131,7 +131,6 @@ describe('personnel center first vertical slice', () => {
       id: 'person-1',
       row: { id: 'person-1', revision: 4 } as never,
       input: '   ',
-      refresh: vi.fn(),
     })).rejects.toThrow('请填写停用原因');
   });
 });

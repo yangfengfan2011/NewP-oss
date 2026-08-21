@@ -567,14 +567,13 @@ describe('active-module-runtime-loader', () => {
       detailViewKey: undefined,
       detailRoutePath: undefined,
     });
-    const refresh = vi.fn();
-    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {}, refresh });
+    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {} });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
       1,
       '/api/standard/partner-asset-catalog/assets/asset-1/disable',
       { method: 'POST' },
     );
-    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {}, refresh });
+    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {} });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
       2,
       '/api/standard/partner-asset-catalog/assets/asset-1',
@@ -584,7 +583,6 @@ describe('active-module-runtime-loader', () => {
         body: JSON.stringify({ IsEnabled: true }),
       },
     );
-    expect(refresh).toHaveBeenCalledTimes(2);
     expect(module.permissions?.map((permission) => permission.code)).toEqual([
       'Partner.AssetCatalog.Asset.View',
       'Partner.AssetCatalog.Asset.Create',

@@ -361,7 +361,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       { method: 'GET' },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
-      'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID',
+      'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID,Revision',
     );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
@@ -913,6 +913,55 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
 
     expect(deleteHandler).toHaveBeenCalledTimes(1);
+    expect(listRequestCount).toBe(2);
+  });
+
+  it('普通行动作成功后由 Host 刷新一次且不向 handler 暴露刷新能力', async () => {
+    const resource = organizationModule.standardCrudResources?.[0];
+    if (!resource) {
+      throw new Error('未找到人员标准 CRUD 资源。');
+    }
+
+    const enableHandler = vi.fn(async () => {});
+    const sampleModule = {
+      ...organizationModule,
+      standardCrudResources: [{
+        ...resource,
+        actionHandlers: {
+          ...(resource.actionHandlers ?? {}),
+          enable: enableHandler,
+        },
+      }],
+    };
+    let listRequestCount = 0;
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      listRequestCount += 1;
+      return new Response(JSON.stringify({
+        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: false }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = renderHost(container, undefined, undefined, sampleModule.standardCrudResources[0]);
+    });
+    await flushAsync();
+
+    const enableButton = await findOverflowRowActionButton(container, '张三', '启用');
+    expect(enableButton).toBeDefined();
+    await act(async () => enableButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushAsync();
+    await clickPopconfirmButton('确认');
+    await flushAsync();
+
+    expect(enableHandler).toHaveBeenCalledTimes(1);
+    expect(enableHandler.mock.calls[0]?.[0]).not.toHaveProperty('refresh');
     expect(listRequestCount).toBe(2);
   });
 

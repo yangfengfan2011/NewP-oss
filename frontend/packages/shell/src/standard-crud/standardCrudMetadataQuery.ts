@@ -39,6 +39,7 @@ export interface StandardCrudListFieldColumnSource {
 export interface StandardCrudListFieldActionSource {
   visibleWhen?: { field?: string };
   disabledWhen?: { field?: string };
+  dataDependency?: { fields?: string[] };
 }
 
 export interface StandardCrudListState {
@@ -229,6 +230,9 @@ export function collectStandardCrudListRequestFields(
   for (const action of rowActions) {
     add(action.visibleWhen?.field);
     add(action.disabledWhen?.field);
+    for (const field of action.dataDependency?.fields ?? []) {
+      add(field);
+    }
   }
 
   return fields;

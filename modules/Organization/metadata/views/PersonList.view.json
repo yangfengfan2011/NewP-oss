@@ -190,6 +190,12 @@
         "permissions": [
           "Organization.Person.Update"
         ],
+        "dataDependency": {
+          "fields": [
+            "Revision"
+          ],
+          "reasonKey": "Action_DataUnavailable"
+        },
         "visibleWhen": {
           "field": "IsEnabled",
           "operator": "equals",
@@ -205,6 +211,12 @@
         "permissions": [
           "Organization.Person.Update"
         ],
+        "dataDependency": {
+          "fields": [
+            "Revision"
+          ],
+          "reasonKey": "Action_DataUnavailable"
+        },
         "visibleWhen": {
           "field": "IsEnabled",
           "operator": "equals",

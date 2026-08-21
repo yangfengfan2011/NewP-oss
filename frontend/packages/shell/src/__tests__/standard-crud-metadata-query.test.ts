@@ -69,11 +69,14 @@ describe('standard CRUD metadata query helpers', () => {
         { field: 'PersonNo' },
       ],
       [
-        { visibleWhen: { field: ' IsEnabled ' } },
+        {
+          visibleWhen: { field: ' IsEnabled ' },
+          dataDependency: { fields: [' Revision ', 'IsEnabled'] },
+        },
         { visibleWhen: { field: 'IsEnabled' } },
         {},
       ],
-    )).toEqual(['EID', 'PersonNo', 'DepartmentName', 'IsEnabled']);
+    )).toEqual(['EID', 'PersonNo', 'DepartmentName', 'IsEnabled', 'Revision']);
   });
 
   it('restores only declared filters paging and sortable metadata from URL', () => {

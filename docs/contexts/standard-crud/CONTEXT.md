@@ -12,6 +12,10 @@ _Avoid_: 通用页面、业务专用页面
 把资源拥有者的读取与普通写入结果转换成共享宿主可消费的规范列表、详情和操作结果的运行时角色。它不解释 Model 或 View，不拥有业务专用命令，也不产生新的 authoring 或候选事实。
 _Avoid_: Resource compiler、metadata 解释器、业务命令处理器
 
+**Standard CRUD 动作执行（Standard CRUD Action Execution）**：
+共享宿主对单条模块业务动作的确认、输入、互斥执行、结果交接和数据刷新过程。模块拥有业务副作用与输入语义，但不拥有呈现面刷新或冲突重放策略。
+_Avoid_: 模块刷新回调、Operation artifact、业务命令编排器
+
 **Model（模型）**：
 资源字段目录、数据源以及创建和编辑表单结构的事实源。它不拥有详情展示结构。
 _Avoid_: 查看表单、详情布局

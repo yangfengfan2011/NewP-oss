@@ -269,7 +269,8 @@ function StandardCrudDetailPageContent<TDetail>({
           onResult={(result) => {
             if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
           }}
-          context={{ id, detail: currentDetail as TDetail, refresh }}
+          refresh={refresh}
+          context={{ id, detail: currentDetail as TDetail }}
         />
       )
       : undefined

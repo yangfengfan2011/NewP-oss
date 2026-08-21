@@ -19,7 +19,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'organization.positions',
     ]);
     expect(Object.keys(personStandardCrudResource.summaryRenderers ?? {})).toEqual(['userBinding', 'authorizationSummary']);
-    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['refresh', 'delete', 'disable', 'enable']);
+    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['delete', 'disable', 'enable']);
   });
 
   it('keeps permissions in metadata and exposes one runtime data adapter', () => {
@@ -57,7 +57,13 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'PersonNo', 'ENAME', 'EmploymentStatus', 'IsEnabled',
     ]);
     expect(view.columns.find((column) => column.key === 'name')).toMatchObject({ standardAction: 'view' });
-    expect(view.rowActions.find((action) => action.standardAction === 'disable')).toMatchObject({ inputKey: 'disableReason' });
+    expect(view.rowActions.find((action) => action.standardAction === 'disable')).toMatchObject({
+      inputKey: 'disableReason',
+      dataDependency: { fields: ['Revision'] },
+    });
+    expect(view.rowActions.find((action) => action.standardAction === 'enable')).toMatchObject({
+      dataDependency: { fields: ['Revision'] },
+    });
     expect(detailView.pageActions.find((action) => action.standardAction === 'disable')).toMatchObject({
       inputKey: 'disableReason',
     });

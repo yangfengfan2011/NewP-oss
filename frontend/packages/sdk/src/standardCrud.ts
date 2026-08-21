@@ -174,13 +174,12 @@ export interface StandardCrudActionDefinition {
   inputKey?: string;
 }
 
-/** 标准动作上下文；Shell 提供当前资源和数据快照，模块处理器不得依赖 Shell 内部状态。 */
+/** 标准动作上下文；Shell 只向模块处理器提供当前资源数据，不暴露页面状态与失效策略。 */
 export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> {
   id?: string;
   detail?: TDetail;
   row?: TRow;
   input?: unknown;
-  refresh: () => void;
 }
 
 /** 模块动作状态只表达通用可见性与可用性；业务事实和组合规则留在模块 resolver 内。 */

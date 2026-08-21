@@ -214,7 +214,6 @@ async function setIdentityAccountLifecycleStatus(
       expectedRevision: snapshot.revision,
       reason: input.reason,
     });
-    context.refresh();
   } catch (error) {
     throw toIdentitySecurityActionError(error);
   }
@@ -231,7 +230,6 @@ async function deleteIdentityAccount(
   }
   try {
     await deleteAccount(context.id, { expectedRevision: snapshot.revision, reason: input.reason });
-    context.refresh();
   } catch (error) {
     throw toIdentitySecurityActionError(error);
   }
@@ -248,7 +246,6 @@ async function resetIdentityAccountCredential(
       expectedRevision: snapshot.revision,
       reason: input.reason,
     });
-    context.refresh();
     return { operation: 'action' as const, payload: issuance };
   } catch (error) {
     throw toIdentitySecurityActionError(error);

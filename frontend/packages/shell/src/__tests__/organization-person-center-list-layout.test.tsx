@@ -244,7 +244,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
       { method: 'GET' },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();

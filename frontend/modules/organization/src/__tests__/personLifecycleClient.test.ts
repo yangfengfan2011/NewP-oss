@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { StandardCrudRequestError } from '@icp-platform/sdk';
 
 const platformFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', () => ({ platformFetch: platformFetchMock }));
@@ -53,7 +54,10 @@ describe('person lifecycle client', () => {
       reason: '人员中心停用人员',
     }).then(
       () => expect.fail('请求应失败'),
-      (error: unknown) => expect(error).toMatchObject({ message: code }),
+      (error: unknown) => {
+        expect(error).toBeInstanceOf(StandardCrudRequestError);
+        expect(error).toMatchObject({ message: code, status });
+      },
     );
   });
 });

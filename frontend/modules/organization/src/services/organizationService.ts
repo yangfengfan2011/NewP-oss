@@ -6,6 +6,7 @@ import {
   readStandardCrudBoolean,
   readStandardCrudNullableString,
   readStandardCrudString,
+  StandardCrudRequestError,
   type StandardCrudDetail,
   type StandardCrudListResult,
   type StandardCrudMutationValues,
@@ -187,7 +188,10 @@ async function readResponseErrorMessage(response: Response, fallback: string): P
 async function requestJson<T>(path: string, init: RequestInit, errorMessage: string): Promise<T> {
   const response = await platformFetch(path, init);
   if (!response.ok) {
-    throw new Error(await readResponseErrorMessage(response, errorMessage));
+    throw new StandardCrudRequestError(
+      await readResponseErrorMessage(response, errorMessage),
+      response.status,
+    );
   }
 
   if (response.status === 204) {

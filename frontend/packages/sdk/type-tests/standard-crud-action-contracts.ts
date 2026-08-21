@@ -1,5 +1,6 @@
 import type {
   StandardCrudActionDefinition,
+  StandardCrudActionHandler,
   StandardCrudActionState,
 } from '../src/index';
 
@@ -18,5 +19,11 @@ const genericAction: StandardCrudActionDefinition = {
   visibleWhen: { Status: 'Enabled' },
 };
 
+const moduleActionHandler: StandardCrudActionHandler = async (context) => {
+  // @ts-expect-error 页面刷新属于 Shell 动作生命周期，不暴露给模块 handler。
+  context.refresh();
+};
+
 void genericState;
 void genericAction;
+void moduleActionHandler;

@@ -143,18 +143,14 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
     ),
   },
   actionHandlers: {
-    refresh: ({ refresh }) => {
-      refresh();
-    },
-    delete: async ({ id, refresh }) => {
+    delete: async ({ id }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法删除。');
       }
 
       await deletePerson(id);
-      refresh();
     },
-    disable: async ({ id, detail, row, input, refresh }) => {
+    disable: async ({ id, detail, row, input }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法停用。');
       }
@@ -169,9 +165,8 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
         expectedRevision: detail?.revision ?? row?.revision ?? 0,
         reason,
       });
-      refresh();
     },
-    enable: async ({ id, detail, row, refresh }) => {
+    enable: async ({ id, detail, row }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法启用。');
       }
@@ -181,7 +176,6 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
         expectedRevision: detail?.revision ?? row?.revision ?? 0,
         reason: '人员中心恢复人员',
       });
-      refresh();
     },
   },
 };

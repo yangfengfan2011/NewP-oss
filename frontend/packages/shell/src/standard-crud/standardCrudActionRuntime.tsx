@@ -1,8 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { Button } from '@icp-platform/ui/core';
 import { CrudDangerAction } from '@icp-platform/ui/crud-detail';
-import Modal from 'antd/es/modal';
-import { StandardCrudRequestError } from '@icp-platform/sdk';
 import type {
   StandardCrudActionContext,
   StandardCrudActionDefinition,
@@ -11,6 +9,8 @@ import type {
   StandardCrudActionStateResolver,
   StandardCrudOperationResult,
 } from '@icp-platform/sdk';
+import { StandardCrudActionReviewDialog } from './StandardCrudActionReviewDialog';
+import { useStandardCrudActionExecution } from './useStandardCrudActionExecution';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actions: StandardCrudPresentationActionDefinition[];
@@ -19,6 +19,7 @@ export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
   onResult?: (result: StandardCrudOperationResult) => void;
+  refresh: () => void;
   context: StandardCrudActionContext<TDetail, TRow>;
 }
 
@@ -46,12 +47,12 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actionInputs = {},
   actionStateResolver,
   onResult,
+  refresh,
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
   const [inputValue, setInputValue] = useState<unknown>(undefined);
+  const actionExecution = useStandardCrudActionExecution<TDetail, TRow>({ refresh, onResult });
   const resolvedActions = actions.map((action) => {
     const state = actionStateResolver?.({ action, detail: context.detail, row: context.row });
     return {
@@ -71,24 +72,16 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       return false;
     }
 
-    try {
-      setPendingKey(action.key);
-      setError(null);
-      const result = await handler({ ...context, ...(action.inputKey ? { input } : {}) });
-      if (result) {
-        onResult?.(result);
-      }
-      return true;
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : '执行操作失败');
-      if (actionError instanceof StandardCrudRequestError && actionError.status === 409) {
-        setInputAction(null);
-        context.refresh();
-      }
-      return false;
-    } finally {
-      setPendingKey(null);
+    const outcome = await actionExecution.execute({
+      key: action.key,
+      handler,
+      context: { ...context, ...(action.inputKey ? { input } : {}) },
+      refreshOnSuccess: action.standardAction !== 'edit',
+    });
+    if (outcome.status === 'failed' && outcome.conflict) {
+      setInputAction(null);
     }
+    return outcome.status === 'succeeded';
   }
 
   function requestAction(action: StandardCrudPresentationActionDefinition) {
@@ -108,18 +101,19 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {visibleActions.map((action) => {
           const isDangerAction = action.variant === 'danger' || action.standardAction === 'delete';
-          const disabled = pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
+          const hasActionInput = Boolean(action.inputKey && actionInputs[action.inputKey]);
+          const disabled = actionExecution.pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
 
-          if (isDangerAction && action.confirmMessage) {
+          if (isDangerAction && action.confirmMessage && !hasActionInput) {
             return (
               <div key={action.key} data-action-key={action.key}>
                 <CrudDangerAction
                   confirmMessage={action.confirmMessage}
-                  loading={pendingKey === action.key}
+                  loading={actionExecution.pendingKey === action.key}
                   disabled={disabled}
                   onConfirm={() => requestAction(action)}
                 >
-                  {pendingKey === action.key ? '处理中...' : action.labelKey}
+                  {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
                 </CrudDangerAction>
                 {action.runtimeDisabled && action.disabledReason ? (
                   <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
@@ -136,7 +130,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
                 disabled={disabled}
                 onClick={() => requestAction(action)}
               >
-                {pendingKey === action.key ? '处理中...' : action.labelKey}
+                {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
               </Button>
               {action.runtimeDisabled && action.disabledReason ? (
                 <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
@@ -145,38 +139,32 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           );
         })}
       </div>
-      {error ? (
+      {actionExecution.error ? (
         <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-          {error}
+          {actionExecution.error.message}
         </span>
       ) : null}
-      <Modal
-        open={inputAction !== null}
-        title={inputAction?.labelKey}
-        okText="确认"
-        cancelText="取消"
-        destroyOnHidden
-        confirmLoading={inputAction ? pendingKey === inputAction.key : false}
-        onCancel={() => {
-          if (pendingKey === null) setInputAction(null);
-        }}
-        onOk={() => {
-          if (!inputAction) return;
-          void runAction(inputAction, inputValue).then((succeeded) => {
-            if (succeeded) setInputAction(null);
-          });
-        }}
-      >
-        {inputAction?.inputKey
-          ? actionInputs[inputAction.inputKey]?.({
-              action: inputAction,
-              value: inputValue,
-              onChange: setInputValue,
-              detail: context.detail,
-              row: context.row,
-            })
-          : null}
-      </Modal>
+      {inputAction?.inputKey && actionInputs[inputAction.inputKey] ? (
+        <StandardCrudActionReviewDialog
+          action={inputAction}
+          title={inputAction.labelKey}
+          confirmMessage={inputAction.confirmMessage}
+          inputRenderer={actionInputs[inputAction.inputKey]}
+          value={inputValue}
+          detail={context.detail}
+          row={context.row}
+          pending={actionExecution.pendingKey === inputAction.key}
+          onChange={setInputValue}
+          onCancel={() => {
+            if (actionExecution.pendingKey === null) setInputAction(null);
+          }}
+          onConfirm={() => {
+            void runAction(inputAction, inputValue).then((succeeded) => {
+              if (succeeded) setInputAction(null);
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

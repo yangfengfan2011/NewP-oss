@@ -59,7 +59,8 @@ describe('standard CRUD action runtime', () => {
           actionInputs={actionInputs}
           actionStateResolver={actionStateResolver}
           onResult={onResult}
-          context={{ id: 'Person_1', detail: { revision: 4 }, refresh }}
+          refresh={refresh}
+          context={{ id: 'Person_1', detail: { revision: 4 } }}
         />,
       );
     });
@@ -125,7 +126,8 @@ describe('standard CRUD action runtime', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1', refresh: expect.any(Function) }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1' }));
+    expect(handler.mock.calls[0]?.[0]).not.toHaveProperty('refresh');
   });
 
   it('uses Popconfirm for delete standard action even without danger variant', async () => {
@@ -146,7 +148,8 @@ describe('standard CRUD action runtime', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1', refresh: expect.any(Function) }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1' }));
+    expect(handler.mock.calls[0]?.[0]).not.toHaveProperty('refresh');
   });
 
   it('does not run danger handler when Popconfirm is canceled', async () => {
@@ -192,6 +195,30 @@ describe('standard CRUD action runtime', () => {
     const buttons = Array.from(container.querySelectorAll('button'));
     expect(buttons[0].textContent).toBe('处理中...');
     expect(buttons.every((button) => button.disabled)).toBe(true);
+
+    await act(async () => {
+      resolveHandler?.();
+    });
+  });
+
+  it('executes a remote action only once when it is triggered repeatedly before pending renders', async () => {
+    let resolveHandler: (() => void) | undefined;
+    const handler = vi.fn(() => new Promise<void>((resolve) => {
+      resolveHandler = resolve;
+    }));
+
+    await renderActions({
+      actions: [{ key: 'archive', labelKey: '归档' }],
+      handlers: { archive: handler },
+    });
+
+    const button = container.querySelector('button');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       resolveHandler?.();
@@ -259,6 +286,32 @@ describe('standard CRUD action runtime', () => {
     expect(document.body.querySelector('input[aria-label="归档说明"]')).toBeNull();
   });
 
+  it('uses one review dialog for a danger action that also requires input', async () => {
+    const handler = vi.fn();
+
+    await renderActions({
+      actions: [{
+        key: 'disable',
+        labelKey: '停用',
+        variant: 'danger',
+        confirmMessage: '确认停用当前记录？',
+        inputKey: 'reason',
+      }],
+      handlers: { disable: handler },
+      actionInputs: {
+        reason: ({ value, onChange }) => (
+          <input aria-label="停用原因" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+        ),
+      },
+    });
+
+    await clickActionButton('停用');
+
+    expect(document.body.textContent).toContain('确认停用当前记录？');
+    expect(document.body.querySelector('input[aria-label="停用原因"]')).not.toBeNull();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('applies module action state without exposing business fields in the shared contract', async () => {
     const resolver: StandardCrudActionStateResolver = vi.fn(({ action, detail }) => ({
       visible: action.key !== 'hidden',
@@ -291,15 +344,18 @@ describe('standard CRUD action runtime', () => {
   it('hands an opaque action result to the shared result callback', async () => {
     const result: StandardCrudOperationResult = { operation: 'action', payload: { receipt: 'opaque' } };
     const onResult = vi.fn();
+    const refresh = vi.fn();
 
     await renderActions({
       actions: [{ key: 'rotate', labelKey: '轮换' }],
       handlers: { rotate: vi.fn().mockResolvedValue(result) },
       onResult,
+      refresh,
     });
     await clickActionButton('轮换');
 
     expect(onResult).toHaveBeenCalledWith(result);
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes and closes stale confirmation on 409 without replaying the action', async () => {

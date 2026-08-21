@@ -239,27 +239,23 @@ describe('Identity account Standard CRUD resource candidate', () => {
     ['disable', 'Disabled', 'Enabled'],
   ] as const)('executes %s once with ExpectedRevision and the required trimmed reason', async (actionKey, targetStatus, currentStatus) => {
     setAccountStatusMock.mockResolvedValue({ eid: 'User_2', status: targetStatus, revision: 8 });
-    const refresh = vi.fn();
 
     await identityAccountStandardCrudResource.actionHandlers?.[actionKey]?.({
       id: 'User_2',
       row: actionRow({ Status: currentStatus }),
       input: { reason: '  风险处置  ' },
-      refresh,
     });
 
     expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
     expect(setAccountStatusMock).toHaveBeenCalledWith('User_2', {
       targetStatus, expectedRevision: 7, reason: '风险处置',
     });
-    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('requires the full current ECODE before calling the irreversible delete command', async () => {
     const context = {
       id: 'User_2',
       row: actionRow({ Status: 'Disabled' }),
-      refresh: vi.fn(),
     };
 
     await expect(identityAccountStandardCrudResource.actionHandlers?.delete?.({
@@ -287,7 +283,6 @@ describe('Identity account Standard CRUD resource candidate', () => {
       id: 'User_2',
       detail: { fields: { EID: 'User_2', ECODE: 'alice', Status: 'Enabled', Revision: 7 }, summaries: {} },
       input: { reason: '凭据泄露' },
-      refresh: vi.fn(),
     });
 
     expect(resetCredentialMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '凭据泄露' });
@@ -304,7 +299,6 @@ describe('Identity account Standard CRUD resource candidate', () => {
       id: 'User_2',
       row: actionRow({ Status: 'Disabled' }),
       input: { reason: '恢复账号' },
-      refresh: vi.fn(),
     })).rejects.toThrow(message);
     expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
   });
@@ -321,7 +315,6 @@ describe('Identity account Standard CRUD resource candidate', () => {
       id: 'User_2',
       row: actionRow(),
       input: { reason: '风险处置' },
-      refresh: vi.fn(),
     })).rejects.toThrow('最新状态 Disabled，Revision 8');
     expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
   });
@@ -333,7 +326,6 @@ describe('Identity account Standard CRUD resource candidate', () => {
       id: 'User_2',
       row: actionRow({ Status: 'Disabled' }),
       input: { reason: '账号退役', confirmation: 'alice' },
-      refresh: vi.fn(),
     })).rejects.toThrow('操作结果未知');
     expect(deleteAccountMock).toHaveBeenCalledTimes(1);
   });

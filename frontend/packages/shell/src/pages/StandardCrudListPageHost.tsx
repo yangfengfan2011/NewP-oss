@@ -12,6 +12,7 @@ import {
 } from '@icp-platform/sdk';
 import type {
   StandardCrudExportMode,
+  StandardCrudDetail,
   StandardCrudFieldDefinition,
   StandardCrudFormSection,
   StandardCrudListQueryRequest,
@@ -56,6 +57,8 @@ import {
   reportStandardCrudDetailDiagnostics,
   resolveStandardCrudDetailPresentation,
 } from '../standard-crud/standardCrudDetailPresentation';
+import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
+import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -106,11 +109,6 @@ const EMPTY_STANDARD_CRUD_FORM_SCHEMA: StandardCrudDrawerFormSchema = {
   fields: [],
   sections: [],
 };
-
-interface DeleteActionErrorState {
-  key: string;
-  message: string;
-}
 
 interface RowActionItem {
   key: string;
@@ -733,10 +731,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [hasSaveConflict, setHasSaveConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
-  const [deleteActionError, setDeleteActionError] = useState<DeleteActionErrorState | null>(null);
-  const [deletingActionKey, setDeletingActionKey] = useState<string | null>(null);
-  const [rowActionError, setRowActionError] = useState<DeleteActionErrorState | null>(null);
-  const [rowActionPendingKey, setRowActionPendingKey] = useState<string | null>(null);
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
     row: TRow;
@@ -838,6 +832,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     rows,
     total,
   };
+  const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
+    refresh: context.refresh,
+    onResult: (result) => {
+      if (operationResultPresenterRegistry.resolve(result)) {
+        setPresentedOperationResult(result);
+      }
+    },
+  });
   const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
   const activeFormFields = drawerState.mode === 'create'
     ? createFields
@@ -1240,7 +1242,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
-  const refreshAction = schema.pageActions.find((action) => action.standardAction === 'refresh');
   const rowActionDefinitions = schema.rowActions;
   const registeredColumns = registration.buildColumns?.(context) ?? [];
   const registeredColumnByKey = new Map(registeredColumns.map((column) => [column.key, column]));
@@ -1291,11 +1292,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         responsive: undefined,
         render: (row: TRow) => {
           const rowId = dataAdapter.getRowId(row);
-          const rowDeleteActionError = rowActionDefinitions.some((action) => action.standardAction === 'delete' && deleteActionError?.key === `${action.key}:${rowId}`)
-            ? deleteActionError
-            : null;
-          const rowExtraActionError = rowActionDefinitions.some((action) => action.standardAction !== 'delete' && rowActionError?.key === `${action.key}:${rowId}`)
-            ? rowActionError
+          const rowExecutionError = rowActionDefinitions.some((action) => actionExecution.error?.key === `${action.key}:${rowId}`)
+            ? actionExecution.error
             : null;
           const rowActions: RowActionItem[] = rowActionDefinitions
             .filter((action) => hasActionPermission(action, grantedPermissions))
@@ -1343,10 +1341,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                     key: action.key,
                     label,
                     danger: true,
-                    loading: rowActionPendingKey === pendingKey,
-                    disabled: rowActionPendingKey !== null || !handler || disabledReason !== undefined,
+                    loading: actionExecution.pendingKey === pendingKey,
+                    disabled: actionExecution.pendingKey !== null || !handler || disabledReason !== undefined,
                     disabledReason,
                     onClick: async () => {
+                      actionExecution.clearError();
                       setRowInputValue(undefined);
                       setRowInputAction({ action, row, rowId, pendingKey, label });
                     },
@@ -1357,33 +1356,24 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   label,
                   danger: isDangerRowAction(action),
                   confirmMessage,
-                  loading: deletingActionKey === pendingKey,
-                  disabled: deletingActionKey !== null || disabledReason !== undefined,
+                  loading: actionExecution.pendingKey === pendingKey,
+                  disabled: actionExecution.pendingKey !== null || disabledReason !== undefined,
                   disabledReason,
                   onClick: async () => {
-                    try {
-                      setDeletingActionKey(pendingKey);
-                      setDeleteActionError(null);
-
-                      if (handler) {
-                        // 删除成功后的刷新由 Host 统一收口；这里保留 refresh 形参仅兼容既有 handler 签名。
-                        await handler({ id: rowId, row, refresh: () => undefined });
-                      } else {
-                        if (!dataAdapter.remove) {
-                          throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
-                        }
-                        await dataAdapter.remove(rowId);
+                    const deleteHandler = handler ?? (async () => {
+                      if (!dataAdapter.remove) {
+                        throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
                       }
-
-                      context.refresh();
+                      await dataAdapter.remove(rowId);
+                    });
+                    const outcome = await actionExecution.execute({
+                      key: pendingKey,
+                      handler: deleteHandler,
+                      context: { id: rowId, row },
+                      fallbackErrorMessage: '删除标准资源失败',
+                    });
+                    if (outcome.status === 'succeeded') {
                       closeDrawerForRow(rowId);
-                    } catch (deleteError) {
-                      setDeleteActionError({
-                        key: pendingKey,
-                        message: deleteError instanceof Error ? deleteError.message : '删除标准资源失败',
-                      });
-                    } finally {
-                      setDeletingActionKey(null);
                     }
                   },
                 };
@@ -1394,8 +1384,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 label,
                 danger: isDangerRowAction(action),
                 confirmMessage: inputRenderer ? undefined : confirmMessage,
-                loading: rowActionPendingKey === pendingKey,
-                disabled: rowActionPendingKey !== null || !handler || disabledReason !== undefined,
+                loading: actionExecution.pendingKey === pendingKey,
+                disabled: actionExecution.pendingKey !== null || !handler || disabledReason !== undefined,
                 disabledReason,
                 onClick: async () => {
                   if (!handler) {
@@ -1403,26 +1393,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   }
 
                   if (inputRenderer) {
+                    actionExecution.clearError();
                     setRowInputValue(undefined);
                     setRowInputAction({ action, row, rowId, pendingKey, label });
                     return;
                   }
 
-                  try {
-                    setRowActionPendingKey(pendingKey);
-                    setRowActionError(null);
-                    const result = await handler({ id: rowId, row, refresh: context.refresh });
-                    if (result && operationResultPresenterRegistry.resolve(result)) {
-                      setPresentedOperationResult(result);
-                    }
-                  } catch (actionError) {
-                    setRowActionError({
-                      key: pendingKey,
-                      message: actionError instanceof Error ? actionError.message : '执行操作失败',
-                    });
-                  } finally {
-                    setRowActionPendingKey(null);
-                  }
+                  await actionExecution.execute({
+                    key: pendingKey,
+                    handler,
+                    context: { id: rowId, row },
+                  });
                 },
               };
             });
@@ -1433,9 +1414,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 <RowActionButtonGroup actions={rowActions} />
                 {registration.renderRowActions ? registration.renderRowActions(row, context) : null}
               </div>
-              {rowDeleteActionError || rowExtraActionError ? (
+              {rowExecutionError ? (
                 <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-                  {(rowDeleteActionError ?? rowExtraActionError)?.message}
+                  {rowExecutionError.message}
                 </span>
               ) : null}
             </div>
@@ -1578,12 +1559,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
 
   const handleRefresh = async () => {
-    const handler = refreshAction ? registration.actionHandlers?.[refreshAction.handlerKey ?? refreshAction.key] : undefined;
-    if (refreshAction && handler) {
-      await handler({ refresh: context.refresh });
-      return;
-    }
-
     context.refresh();
   };
 
@@ -1835,62 +1810,43 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           />
         </Suspense>
       ) : null}
-      {rowInputAction ? (
+      {rowInputAction?.action.inputKey && registration.actionInputRenderers?.[rowInputAction.action.inputKey] ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作确认…</div>}>
-          <Modal
-            open
+          <StandardCrudActionReviewDialog
+            action={rowInputAction.action}
             title={rowInputAction.label}
-            okText="确认"
-            cancelText="取消"
-            confirmLoading={rowActionPendingKey === rowInputAction.pendingKey}
-            destroyOnHidden
+            confirmMessage={rowInputAction.action.confirmMessageKey
+              ? t(
+                  `${schema.dicKey}.${rowInputAction.action.confirmMessageKey}`,
+                  rowInputAction.action.confirmMessageKey,
+                )
+              : undefined}
+            inputRenderer={registration.actionInputRenderers[rowInputAction.action.inputKey]}
+            value={rowInputValue}
+            row={rowInputAction.row}
+            pending={actionExecution.pendingKey === rowInputAction.pendingKey}
+            onChange={setRowInputValue}
             onCancel={() => {
-              if (rowActionPendingKey === null) setRowInputAction(null);
+              if (actionExecution.pendingKey === null) setRowInputAction(null);
             }}
-            onOk={() => {
+            onConfirm={() => {
               const { action, row, rowId, pendingKey } = rowInputAction;
               const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
               if (!handler) return;
               void (async () => {
-                try {
-                  setRowActionPendingKey(pendingKey);
-                  setRowActionError(null);
-                  const result = await handler({ id: rowId, row, input: rowInputValue, refresh: () => undefined });
-                  context.refresh();
+                const outcome = await actionExecution.execute({
+                  key: pendingKey,
+                  handler,
+                  context: { id: rowId, row, input: rowInputValue },
+                });
+                if (outcome.status === 'succeeded') {
                   setRowInputAction(null);
-                  if (result && operationResultPresenterRegistry.resolve(result)) {
-                    setPresentedOperationResult(result);
-                  }
-                } catch (actionError) {
-                  setRowActionError({
-                    key: pendingKey,
-                    message: actionError instanceof Error ? actionError.message : '执行操作失败',
-                  });
-                  if (actionError instanceof StandardCrudRequestError && actionError.status === 409) {
-                    setRowInputAction(null);
-                    context.refresh();
-                  }
-                } finally {
-                  setRowActionPendingKey(null);
+                } else if (outcome.status === 'failed' && outcome.conflict) {
+                  setRowInputAction(null);
                 }
               })();
             }}
-          >
-            {rowInputAction.action.confirmMessageKey ? (
-              <p>{t(
-                `${schema.dicKey}.${rowInputAction.action.confirmMessageKey}`,
-                rowInputAction.action.confirmMessageKey,
-              )}</p>
-            ) : null}
-            {rowInputAction.action.inputKey
-              ? registration.actionInputRenderers?.[rowInputAction.action.inputKey]?.({
-                action: rowInputAction.action,
-                value: rowInputValue,
-                onChange: setRowInputValue,
-                row: rowInputAction.row,
-              })
-              : null}
-          </Modal>
+          />
         </Suspense>
       ) : null}
       {discardConfirmOpen ? (

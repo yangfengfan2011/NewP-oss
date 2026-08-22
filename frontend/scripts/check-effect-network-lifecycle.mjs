@@ -485,6 +485,130 @@ export function analyzeEffectNetworkLifecycleTree({ frontendRoot }) {
   }));
 }
 
+function unwrapStaticExpression(expression) {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current)
+    || ts.isAsExpression(current)
+    || ts.isTypeAssertionExpression(current)
+    || ts.isNonNullExpression(current)
+    || ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isDefinitelyNullishExpression(expression) {
+  const current = unwrapStaticExpression(expression);
+  if (current.kind === ts.SyntaxKind.NullKeyword || ts.isVoidExpression(current)) return true;
+  if (ts.isIdentifier(current)) return current.text === 'undefined';
+  if (ts.isConditionalExpression(current)) {
+    return isDefinitelyNullishExpression(current.whenTrue)
+      && isDefinitelyNullishExpression(current.whenFalse);
+  }
+  return false;
+}
+
+function isDefinitelyTruthyExpression(expression) {
+  const current = unwrapStaticExpression(expression);
+  if (current.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (ts.isStringLiteral(current) || ts.isNoSubstitutionTemplateLiteral(current)) {
+    return current.text.length > 0;
+  }
+  if (ts.isNumericLiteral(current)) return Number(current.text) !== 0;
+  if (
+    ts.isObjectLiteralExpression(current)
+    || ts.isArrayLiteralExpression(current)
+    || ts.isArrowFunction(current)
+    || ts.isFunctionExpression(current)
+    || ts.isClassExpression(current)
+    || ts.isNewExpression(current)
+    || ts.isRegularExpressionLiteral(current)
+  ) return true;
+  if (ts.isTemplateExpression(current)) {
+    return current.head.text.length > 0
+      || current.templateSpans.some(({ literal }) => literal.text.length > 0);
+  }
+  if (ts.isPrefixUnaryExpression(current) && current.operator === ts.SyntaxKind.ExclamationToken) {
+    return isDefinitelyNullishExpression(current.operand)
+      || current.operand.kind === ts.SyntaxKind.FalseKeyword;
+  }
+  if (ts.isConditionalExpression(current)) {
+    return isDefinitelyTruthyExpression(current.whenTrue)
+      && isDefinitelyTruthyExpression(current.whenFalse);
+  }
+  if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+    return isDefinitelyTruthyExpression(current.left) || isDefinitelyTruthyExpression(current.right);
+  }
+  if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+    return isDefinitelyTruthyExpression(current.left)
+      || (isDefinitelyNullishExpression(current.left) && isDefinitelyTruthyExpression(current.right));
+  }
+  return false;
+}
+
+function isDefinitelyNonUndefinedExpression(expression) {
+  const current = unwrapStaticExpression(expression);
+  if (ts.isIdentifier(current)) return false;
+  if (ts.isVoidExpression(current)) return false;
+  if (
+    current.kind === ts.SyntaxKind.NullKeyword
+    || current.kind === ts.SyntaxKind.TrueKeyword
+    || current.kind === ts.SyntaxKind.FalseKeyword
+    || ts.isStringLiteral(current)
+    || ts.isNoSubstitutionTemplateLiteral(current)
+    || ts.isTemplateExpression(current)
+    || ts.isNumericLiteral(current)
+    || ts.isObjectLiteralExpression(current)
+    || ts.isArrayLiteralExpression(current)
+    || ts.isArrowFunction(current)
+    || ts.isFunctionExpression(current)
+    || ts.isClassExpression(current)
+    || ts.isNewExpression(current)
+    || ts.isRegularExpressionLiteral(current)
+    || ts.isPrefixUnaryExpression(current)
+    || ts.isTypeOfExpression(current)
+    || ts.isDeleteExpression(current)
+  ) return true;
+  if (ts.isConditionalExpression(current)) {
+    return isDefinitelyNonUndefinedExpression(current.whenTrue)
+      && isDefinitelyNonUndefinedExpression(current.whenFalse);
+  }
+  if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+    return isDefinitelyTruthyExpression(current.left)
+      || isDefinitelyNonUndefinedExpression(current.right);
+  }
+  if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+    return isDefinitelyTruthyExpression(current.left)
+      || isDefinitelyNonUndefinedExpression(current.right);
+  }
+  return false;
+}
+
+function jsxAttributeDefinitelyProvides(attributes, attributeName, expressionPredicate) {
+  let definitelyProvides = false;
+  for (const attribute of attributes.properties) {
+    if (ts.isJsxSpreadAttribute(attribute)) {
+      // 后置 spread 可能把已确认的 prop 覆盖为 undefined；只有后续显式值才能重新建立证明。
+      definitelyProvides = false;
+      continue;
+    }
+    if (!ts.isJsxAttribute(attribute) || attribute.name.getText() !== attributeName) continue;
+    if (!attribute.initializer) {
+      // JSX shorthand 在运行时明确传入 true；shape 合法性继续由 TypeScript 负责。
+      definitelyProvides = true;
+    } else if (ts.isStringLiteral(attribute.initializer)) {
+      definitelyProvides = expressionPredicate(attribute.initializer);
+    } else {
+      definitelyProvides = attribute.initializer.expression
+        ? expressionPredicate(attribute.initializer.expression)
+        : false;
+    }
+  }
+  return definitelyProvides;
+}
+
 export function analyzeCompatibilityOnlyReAdoptionsSource({ file, source }) {
   const sourceFile = ts.createSourceFile(
     file,
@@ -561,9 +685,11 @@ export function analyzeCompatibilityOnlyReAdoptionsSource({ file, source }) {
           && ts.isIdentifier(tagName.expression)
           && uiNamespaces.has(tagName.expression.text)
           && (tagName.name.text === 'SearchTablePage' || tagName.name.text === 'CrudTableSection');
-      const isControlled = node.attributes.properties.some((attribute) => (
-        ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === 'controlledResult'
-      ));
+      const isControlled = jsxAttributeDefinitelyProvides(
+        node.attributes,
+        'controlledResult',
+        isDefinitelyTruthyExpression,
+      );
       if (isCompatibilityTable && !isControlled) {
         diagnostics.push({
           code: 'COMPATIBILITY_ONLY_SEARCH_TABLE_UNCONTROLLED_READOPTED',
@@ -577,9 +703,11 @@ export function analyzeCompatibilityOnlyReAdoptionsSource({ file, source }) {
           && ts.isIdentifier(tagName.expression)
           && coreNamespaces.has(tagName.expression.text)
           && tagName.name.text === 'AuthorizationProvider';
-      const hasControlledPermissions = node.attributes.properties.some((attribute) => (
-        ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === 'permissions'
-      ));
+      const hasControlledPermissions = jsxAttributeDefinitelyProvides(
+        node.attributes,
+        'permissions',
+        isDefinitelyNonUndefinedExpression,
+      );
       if (isAuthorizationProvider && !hasControlledPermissions) {
         diagnostics.push({
           code: 'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',

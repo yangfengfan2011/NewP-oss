@@ -785,7 +785,70 @@ test('rejects a production AuthorizationProvider adoption without controlled per
   ]);
 });
 
-test('allows the Shell private lookup hook and controlled table and authorization adopters', (t) => {
+test('rejects explicit undefined values that keep compatibility-only JSX paths uncontrolled', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const target = path.join(frontendRoot, 'modules/example/src/UndefinedControlledValuesProbe.tsx');
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `import { AuthorizationProvider } from '@icp-platform/core';
+    import { SearchTablePage } from '@icp-platform/ui/crud-list';
+    export function UndefinedControlledValuesProbe({ request }) {
+      return (
+        <AuthorizationProvider permissions={undefined}>
+          <SearchTablePage
+            rowKey="id"
+            columns={[]}
+            request={request}
+            controlledResult={undefined}
+          />
+        </AuthorizationProvider>
+      );
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.compatibilityDiagnostics.map(({ code }) => code), [
+    'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',
+    'COMPATIBILITY_ONLY_SEARCH_TABLE_UNCONTROLLED_READOPTED',
+  ]);
+});
+
+test('fails closed for unprovable controlled expressions while recognizing JSX shorthand values', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const unknownTarget = path.join(frontendRoot, 'modules/example/src/UnknownControlledValuesProbe.tsx');
+  mkdirSync(path.dirname(unknownTarget), { recursive: true });
+  writeFileSync(unknownTarget, `import { AuthorizationProvider } from '@icp-platform/core';
+    import { SearchTablePage } from '@icp-platform/ui/crud-list';
+    export function UnknownControlledValuesProbe({ request, permissions, controlledResult }) {
+      return (
+        <AuthorizationProvider permissions={permissions}>
+          <SearchTablePage rowKey="id" columns={[]} request={request} controlledResult={controlledResult} />
+        </AuthorizationProvider>
+      );
+    }`);
+  const shorthandTarget = path.join(frontendRoot, 'templates/example/src/ShorthandControlledValuesProbe.tsx');
+  mkdirSync(path.dirname(shorthandTarget), { recursive: true });
+  writeFileSync(shorthandTarget, `import { AuthorizationProvider } from '@icp-platform/core';
+    import { SearchTablePage } from '@icp-platform/ui/crud-list';
+    export function ShorthandControlledValuesProbe({ request }) {
+      return (
+        <AuthorizationProvider permissions>
+          <SearchTablePage rowKey="id" columns={[]} request={request} controlledResult />
+        </AuthorizationProvider>
+      );
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.deepEqual(result.compatibilityDiagnostics.map(({ code }) => code), [
+    'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',
+    'COMPATIBILITY_ONLY_SEARCH_TABLE_UNCONTROLLED_READOPTED',
+  ]);
+});
+
+test('allows the Shell private lookup hook and statically controlled table and authorization adopters', (t) => {
   const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
   t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
   const target = path.join(frontendRoot, 'packages/shell/src/ControlledAdoptersProbe.tsx');
@@ -793,15 +856,22 @@ test('allows the Shell private lookup hook and controlled table and authorizatio
   writeFileSync(target, `import { AuthorizationProvider } from '@icp-platform/core';
     import { CrudTableSection } from '@icp-platform/ui/crud';
     import { useStandardCrudLookupRuntime } from './standard-crud/standardCrudLookupRuntime';
-    export function ControlledAdoptersProbe({ input, request, controlledResult }) {
+    export function ControlledAdoptersProbe({ input, request, maybePermissions }) {
       useStandardCrudLookupRuntime(input);
       return (
-        <AuthorizationProvider permissions={[]}>
+        <AuthorizationProvider permissions={maybePermissions ?? []}>
           <CrudTableSection
             rowKey="id"
             columns={[]}
             request={request}
-            controlledResult={controlledResult}
+            controlledResult={{
+              data: [],
+              total: 0,
+              loading: false,
+              hasLoaded: true,
+              error: null,
+              onRetry: () => undefined,
+            }}
             onRefresh={() => undefined}
           />
         </AuthorizationProvider>

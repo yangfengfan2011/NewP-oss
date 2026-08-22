@@ -93,6 +93,36 @@ describe('standard CRUD SDK helpers', () => {
     expect(adapter.getRowId(result.items[0])).toBe('Person_1');
   });
 
+  it('passes the list read signal to fetch without serializing it into the request URL', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'Person_1',
+    });
+    const abortController = new AbortController();
+
+    await adapter.list(
+      { pageIndex: 1, pageSize: 20 },
+      { signal: abortController.signal },
+    );
+
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/organization/persons?pageIndex=1&pageSize=20',
+      { method: 'GET', signal: abortController.signal },
+    );
+    expect(String(fetcher.mock.calls[0][0])).not.toContain('signal');
+  });
+
   it('rejects a column context token instead of silently dropping it in the standard REST adapter', async () => {
     const fetcher = vi.fn();
     const adapter = createStandardCrudRestDataAdapter({

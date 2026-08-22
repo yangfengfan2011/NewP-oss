@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
@@ -148,7 +148,9 @@ describe('organization person center list layout', () => {
           catalogs={{ zhs: personListCatalog }}
         >
           <RuntimeMetadataProvider value={standardCrudListViewMetadata}>
-            <StandardCrudListPageHost viewKey="organization.person.list" registration={personResource} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <StandardCrudListPageHost viewKey="organization.person.list" registration={personResource} />
+            </PlatformQueryProvider>
           </RuntimeMetadataProvider>
         </LocalizationProvider>
       </MemoryRouter>,
@@ -245,7 +247,7 @@ describe('organization person center list layout', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
@@ -398,21 +400,23 @@ describe('organization person center list layout', () => {
 
     await act(async () => renderStandardCrudListHost());
     await flushProTableRequest();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(container.querySelector('.np-standard-crud-cell-action')).not.toBeNull());
     await act(async () => {
       container.querySelector('.np-standard-crud-cell-action')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushProTableRequest();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(String(vi.mocked(fetch).mock.calls[1]?.[0])).toContain('/api/organization/persons/person-1');
 
-    await act(async () => {
-      await vi.waitFor(() => {
-        expect(document.body.textContent).toContain('查看人员');
-        expect(document.body.textContent).toContain('查看完整详情');
-        expect(document.body.textContent).toContain('基础信息');
-        expect(document.body.textContent).toContain('组织信息');
-        expect(document.body.textContent).toContain('审计信息');
-        expect(document.body.textContent).toContain('creator-1');
-        expect(document.body.textContent).toContain('editor-2');
-      }, { timeout: 5_000 });
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain('查看人员');
+      expect(document.body.textContent).toContain('查看完整详情');
+      expect(document.body.textContent).toContain('基础信息');
+      expect(document.body.textContent).toContain('组织信息');
+      expect(document.body.textContent).toContain('审计信息');
+      expect(document.body.textContent).toContain('creator-1');
+      expect(document.body.textContent).toContain('editor-2');
     });
     expect(document.body.textContent).not.toContain('账号绑定');
     expect(document.body.textContent).not.toContain('授权摘要');
@@ -447,10 +451,13 @@ describe('organization person center list layout', () => {
 
     await act(async () => renderStandardCrudListHost());
     await flushProTableRequest();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(container.querySelector('.np-standard-crud-cell-action')).not.toBeNull());
     await act(async () => {
       container.querySelector('.np-standard-crud-cell-action')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(document.body.textContent).toContain('动作所需数据不可用'));
     const editButton = Array.from(document.body.querySelectorAll('.ant-drawer-footer button')).find(
       (button) => button.textContent?.replace(/\s+/g, '') === '编辑',
@@ -477,10 +484,14 @@ describe('organization person center list layout', () => {
 
     await act(async () => renderStandardCrudListHost());
     await flushProTableRequest();
+    await vi.waitFor(() => expect(container.querySelector('.np-row-actions-more')).not.toBeNull());
     await act(async () => {
       container.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    await vi.waitFor(() => expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some(
+      (item) => item.textContent?.includes('删除'),
+    )).toBe(true));
     const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
       (item) => item.textContent?.includes('删除'),
     );
@@ -520,10 +531,14 @@ describe('organization person center list layout', () => {
       renderStandardCrudListHost();
     });
     await flushProTableRequest();
+    await vi.waitFor(() => expect(container.querySelector('.np-row-actions-more')).not.toBeNull());
 
     await act(async () => {
       container.querySelector('.np-row-actions-more')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    await vi.waitFor(() => expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some(
+      (item) => item.textContent?.includes('停用'),
+    )).toBe(true));
     const disableMenuItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
       (item) => item.textContent?.includes('停用'),
     );

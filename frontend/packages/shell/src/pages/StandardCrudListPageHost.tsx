@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuthorization, useLocalization } from '@icp-platform/core';
+import { useAuthorization, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
@@ -30,7 +30,6 @@ import {
   CrudSearchBar,
   CrudTableSection,
   CrudWorkspacePage,
-  createSearchTableRequest,
   loadStandardCrudColumnPreference,
   saveStandardCrudColumnPreference,
 } from '@icp-platform/ui/crud-list';
@@ -52,6 +51,7 @@ import {
   serializeStandardCrudListState,
 } from '../standard-crud/standardCrudMetadataQuery';
 import type { StandardCrudListState } from '../standard-crud/standardCrudMetadataQuery';
+import { createStandardCrudListQueryKey } from '../standard-crud/standardCrudQueryKeys';
 import {
   reportStandardCrudDetailDiagnostics,
   resolveStandardCrudDetailPresentation,
@@ -920,15 +920,75 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     syncCommittedListState(next);
   };
 
+  const metadataListRequest = useMemo<StandardCrudListQueryRequest>(() => ({
+    ...buildStandardCrudListQuery(
+      schema.query,
+      appliedFilters as Record<string, unknown>,
+      schema.advancedFilter,
+    ),
+    ...(listRequestFields.length > 0 ? { fields: listRequestFields.join(',') } : {}),
+    pageIndex: tableQuery.current,
+    pageSize: tableQuery.pageSize,
+    ...(tableQuery.sortBy && tableQuery.sortDirection
+      ? { sortBy: tableQuery.sortBy, sortDirection: tableQuery.sortDirection }
+      : {}),
+  }), [appliedFilters, listRequestFields, schema.advancedFilter, schema.query, tableQuery]);
+  const metadataListQueryKey = useMemo(
+    () => createStandardCrudListQueryKey(registration.resourceKey, metadataListRequest),
+    [metadataListRequest, registration.resourceKey],
+  );
+  const metadataListQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
+    key: metadataListQueryKey,
+    enabled: schema.columnSource !== 'runtime',
+    load: async ({ signal }) => {
+      const result = await dataAdapter.list(metadataListRequest, { signal });
+      return { items: result.items, total: result.total };
+    },
+  });
+  const metadataListError = metadataListQuery.status === 'error'
+    ? metadataListQuery.error instanceof Error ? metadataListQuery.error.message : '加载列表失败'
+    : null;
+  const effectiveRows = useMemo(
+    () => schema.columnSource === 'runtime' ? rows : metadataListQuery.data?.items ?? [],
+    [metadataListQuery.data?.items, rows, schema.columnSource],
+  );
+  const effectiveTotal = schema.columnSource === 'runtime' ? total : metadataListQuery.data?.total ?? 0;
+  const effectiveLoading = schema.columnSource === 'runtime'
+    ? loading
+    : metadataListQuery.status === 'idle' || metadataListQuery.isFetching;
+  const effectiveHasLoaded = schema.columnSource === 'runtime'
+    ? hasLoaded
+    : metadataListQuery.status === 'success' || metadataListQuery.status === 'error';
+  const effectiveListError = schema.columnSource === 'runtime' ? listError : metadataListError;
+
+  useEffect(() => {
+    if (schema.columnSource === 'runtime' || metadataListQuery.status !== 'success' || !metadataListQuery.data) return;
+    const lastPage = Math.max(1, Math.ceil(metadataListQuery.data.total / tableQuery.pageSize));
+    if (tableQuery.current <= lastPage) return;
+    syncCommittedListState({
+      filters: appliedFilters,
+      page: lastPage,
+      pageSize: tableQuery.pageSize,
+      sortBy: tableQuery.sortBy,
+      sortDirection: tableQuery.sortDirection,
+    }, { replace: true });
+    // 结果只负责把越界页归一回合法查询；其他 handler 身份变化不得触发二次导航。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadataListQuery.data, metadataListQuery.status, schema.columnSource,
+    tableQuery.current, tableQuery.pageSize, tableQuery.sortBy, tableQuery.sortDirection]);
+
   const context = {
     filters,
     setFilters,
     applyFilters,
     resetFilters,
-    refresh: () => setReloadTick((current) => current + 1),
-    loading,
-    rows,
-    total,
+    refresh: () => {
+      if (schema.columnSource === 'runtime') setReloadTick((current) => current + 1);
+      else metadataListQuery.refresh();
+    },
+    loading: effectiveLoading,
+    rows: effectiveRows,
+    total: effectiveTotal,
   };
   const runtimeColumnContextKey = useMemo(() => JSON.stringify(buildStandardCrudListQuery(
     schema.query,
@@ -1414,31 +1474,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
-  const tableRequest = useMemo(
-    () =>
-      createSearchTableRequest<Record<string, unknown>, TRow, TRow>({
-        buildQuery: () => ({
-          ...buildStandardCrudListQuery(
-            schema.query,
-            appliedFilters as Record<string, unknown>,
-            schema.advancedFilter,
-          ),
-          ...(listRequestFields.length > 0 ? { fields: listRequestFields.join(',') } : {}),
-        }),
-        load: async (query) => {
-          const result = await dataAdapter.list(query as StandardCrudListQueryRequest);
-
-          return {
-            items: result.items,
-            total: result.total,
-          };
-        },
-        mapRow: (row) => row,
-      }),
-    // reloadTick 是显式请求失效令牌，即使不进入闭包也必须重建 request。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dataAdapter, registration, appliedFilters, reloadTick, schema.query, schema.advancedFilter, listRequestFields],
-  );
+  // SearchTablePage 仍保留旧 request Interface；controlledResult 生效时该兼容函数不会执行远程读取。
+  const tableRequest = useMemo(() => async () => ({
+    data: effectiveRows,
+    total: effectiveTotal,
+    success: effectiveListError === null,
+  }), [effectiveListError, effectiveRows, effectiveTotal]);
 
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
@@ -1756,7 +1797,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ))}
         </div>
       )}
-      loading={loading}
+      loading={effectiveLoading}
       onSearch={context.applyFilters}
       onReset={context.resetFilters}
       more={schema.advancedFilter.enabled ? (
@@ -1787,7 +1828,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
   const drawerFormId = `${schema.resourceKey}-drawer-form`;
   const drawerRow = drawerState.id
-    ? rows.find((row) => dataAdapter.getRowId(row) === drawerState.id)
+    ? effectiveRows.find((row) => dataAdapter.getRowId(row) === drawerState.id)
     : undefined;
   const drawerEditActionState = editAction && drawerDetailPresentation?.kind === 'ready'
     ? registration.actionStateResolver?.({
@@ -1873,15 +1914,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           }
         }}
         filteredEmpty={Object.values(appliedFilters).some((value) => value !== undefined && value !== null && value !== '')}
-        loading={loading}
-        controlledResult={schema.columnSource === 'runtime' ? {
-          data: rows,
-          total,
-          loading,
-          hasLoaded,
-          error: listError,
-          onRetry: () => setReloadTick((current) => current + 1),
-        } : undefined}
+        loading={effectiveLoading}
+        controlledResult={{
+          data: effectiveRows,
+          total: effectiveTotal,
+          loading: effectiveLoading,
+          hasLoaded: effectiveHasLoaded,
+          error: effectiveListError,
+          onRetry: schema.columnSource === 'runtime'
+            ? () => setReloadTick((current) => current + 1)
+            : metadataListQuery.retry,
+        }}
         toolbar={exportToolbar}
         onRefresh={() => void handleRefresh()}
       />

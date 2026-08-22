@@ -780,9 +780,57 @@ internal sealed class PersonnelAcceptanceRunner
         await page.Locator("#password").FillAsync(adminPassword);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await WaitForPostLoginNavigationAsync(page);
-        await OpenPersonnelFromShellAsync(page);
+        BrowserRequestDuplicateGuard? initialRequestGuard = null;
+        BrowserRequestDuplicateGuardReport? initialRequestReport = null;
+        EventHandler<IRequest>? initialRequestObserver = null;
+        object? requestFingerprintEvidence = null;
+        if (phase == "initial")
+        {
+            initialRequestGuard = new BrowserRequestDuplicateGuard(
+                "GET",
+                "/api/organization/persons",
+                []);
+            initialRequestObserver = (_, request) =>
+                initialRequestGuard.Observe(request.Method, request.Url, request.PostData);
+            page.Request += initialRequestObserver;
+        }
 
-        await AssertPersonListAndDrawerAsync(page, person, fixture);
+        try
+        {
+            await OpenPersonnelFromShellAsync(page);
+            await AssertPersonListAndDrawerAsync(page, person, fixture);
+            if (initialRequestGuard is not null)
+            {
+                initialRequestReport = await initialRequestGuard.WaitForQuietPeriodAsync(
+                    TimeSpan.FromMilliseconds(250),
+                    TimeSpan.FromSeconds(5),
+                    cancellationToken);
+                if (initialRequestObserver is not null)
+                {
+                    page.Request -= initialRequestObserver;
+                    initialRequestObserver = null;
+                }
+
+                var initialRequestEvidenceRef = await WriteEvidenceAsync(
+                    "personnel/browser-initial-request-fingerprints.json",
+                    initialRequestReport,
+                    cancellationToken);
+                requestFingerprintEvidence = new
+                {
+                    evidenceRef = initialRequestEvidenceRef,
+                    decision = initialRequestReport.Decision
+                };
+                initialRequestReport.EnsurePassed();
+            }
+        }
+        finally
+        {
+            if (initialRequestObserver is not null)
+            {
+                page.Request -= initialRequestObserver;
+            }
+        }
+
         IReadOnlyList<string> interceptedResponseAssertions = [];
         var browserAssertions = new List<string>
         {
@@ -860,6 +908,7 @@ internal sealed class PersonnelAcceptanceRunner
             status = "passed",
             phase,
             url = page.Url,
+            requestFingerprintEvidence,
             browserAssertions = browserAssertions,
             interceptedResponseAssertions = interceptedResponseAssertions.Select(check => new
             {

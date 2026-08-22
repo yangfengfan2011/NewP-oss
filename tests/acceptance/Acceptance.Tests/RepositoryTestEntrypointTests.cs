@@ -61,8 +61,19 @@ public class RepositoryTestEntrypointTests
             Path.Combine(repositoryRoot, "frontend", "package.json")));
 
         var scripts = packageJson.RootElement.GetProperty("scripts");
+        var rootTest = scripts.GetProperty("test").GetString();
 
-        Assert.Equal("pnpm -r --if-present test", scripts.GetProperty("test").GetString());
+        Assert.StartsWith(
+            "pnpm run test:effect-network-lifecycle && pnpm run check:effect-network-lifecycle && ",
+            rootTest,
+            StringComparison.Ordinal);
+        Assert.EndsWith("pnpm -r --if-present test", rootTest, StringComparison.Ordinal);
+        Assert.Equal(
+            "node --test scripts/check-effect-network-lifecycle.test.mjs",
+            scripts.GetProperty("test:effect-network-lifecycle").GetString());
+        Assert.Equal(
+            "node scripts/check-effect-network-lifecycle.mjs",
+            scripts.GetProperty("check:effect-network-lifecycle").GetString());
     }
 
     [Fact]
@@ -142,6 +153,53 @@ public class RepositoryTestEntrypointTests
         Assert.DoesNotContain(".ant-drawer-content #PersonNo", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("window.location.pathname !== '/login'", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("page.GotoAsync($\"http://127.0.0.1:{_shellPort}/organization/persons\"", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PersonnelAcceptanceRunner_GuardsOnlyTheInitialPersonnelReadyRequestWindow()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+        var browserScenarioStart = runner.IndexOf(
+            "private async Task RunBrowserScenarioAsync",
+            StringComparison.Ordinal);
+        var browserScenarioEnd = runner.IndexOf(
+            "private async Task AssertSubmittedQueryAndKeyboardAsync",
+            browserScenarioStart,
+            StringComparison.Ordinal);
+        Assert.True(browserScenarioStart >= 0 && browserScenarioEnd > browserScenarioStart);
+        var browserScenario = runner[browserScenarioStart..browserScenarioEnd];
+
+        var loginReady = browserScenario.IndexOf("WaitForPostLoginNavigationAsync(page)", StringComparison.Ordinal);
+        var guardCreation = browserScenario.IndexOf("new BrowserRequestDuplicateGuard(", StringComparison.Ordinal);
+        var observerAttached = browserScenario.IndexOf("page.Request += initialRequestObserver", StringComparison.Ordinal);
+        var openPersonnel = browserScenario.IndexOf("OpenPersonnelFromShellAsync(page)", StringComparison.Ordinal);
+        var semanticReady = browserScenario.IndexOf("AssertPersonListAndDrawerAsync(page, person, fixture)", StringComparison.Ordinal);
+        var quietPeriod = browserScenario.IndexOf("WaitForQuietPeriodAsync", StringComparison.Ordinal);
+        var requestEvidence = browserScenario.IndexOf("browser-initial-request-fingerprints.json", StringComparison.Ordinal);
+        var failClosed = browserScenario.IndexOf("initialRequestReport.EnsurePassed()", StringComparison.Ordinal);
+
+        Assert.True(loginReady < guardCreation);
+        Assert.True(guardCreation < observerAttached);
+        Assert.True(observerAttached < openPersonnel);
+        Assert.True(openPersonnel < semanticReady);
+        Assert.True(semanticReady < quietPeriod);
+        Assert.True(quietPeriod < requestEvidence);
+        Assert.True(requestEvidence < failClosed);
+        Assert.Contains("if (phase == \"initial\")", browserScenario, StringComparison.Ordinal);
+        Assert.Contains("[]);", browserScenario, StringComparison.Ordinal);
+        Assert.Contains(
+            "initialRequestGuard.Observe(request.Method, request.Url, request.PostData)",
+            browserScenario,
+            StringComparison.Ordinal);
+        Assert.Contains("finally", browserScenario, StringComparison.Ordinal);
+        Assert.Contains("page.Request -= initialRequestObserver", browserScenario, StringComparison.Ordinal);
+        Assert.Contains("requestFingerprintEvidence", browserScenario, StringComparison.Ordinal);
     }
 
     [Fact]

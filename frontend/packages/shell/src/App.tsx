@@ -4,6 +4,7 @@ import {
   AuthorizationProvider,
   FirstPasswordChangePage,
   LocalizationProvider,
+  PlatformQueryProvider,
   resolveAuthenticationDestination,
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
@@ -100,6 +101,15 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AuthorizationProvider>
+  );
+}
+
+function AuthScopedPlatformQueryProvider({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  return (
+    <PlatformQueryProvider scopeKey={auth.user?.id ?? 'anonymous'}>
+      {children}
+    </PlatformQueryProvider>
   );
 }
 
@@ -315,18 +325,20 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
           catalogs={localizationManifest.catalogs}
         >
           <AuthProvider initialUser={initialUser}>
-            <PlatformProvider
-              uiConfig={shellUiConfig}
-              shellView={shellView}
-              setShellView={setShellView}
-              canSwitchShellView={canSwitchShellView}
-            >
-              <RuntimeMetadataProvider value={runtimeMetadata}>
-                <AuthorizationGate>
-                  <AppRoutes />
-                </AuthorizationGate>
-              </RuntimeMetadataProvider>
-            </PlatformProvider>
+            <AuthScopedPlatformQueryProvider>
+              <PlatformProvider
+                uiConfig={shellUiConfig}
+                shellView={shellView}
+                setShellView={setShellView}
+                canSwitchShellView={canSwitchShellView}
+              >
+                <RuntimeMetadataProvider value={runtimeMetadata}>
+                  <AuthorizationGate>
+                    <AppRoutes />
+                  </AuthorizationGate>
+                </RuntimeMetadataProvider>
+              </PlatformProvider>
+            </AuthScopedPlatformQueryProvider>
           </AuthProvider>
         </LocalizationProvider>
       </BrowserRouter>

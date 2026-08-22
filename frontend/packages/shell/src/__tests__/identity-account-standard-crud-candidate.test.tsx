@@ -3,7 +3,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import identityModule from '../../../../modules/identity/src/index';
@@ -175,7 +175,9 @@ describe('Identity account Standard CRUD production route', () => {
             catalogs={{ zhs: accountListCatalog }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
-              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              <PlatformQueryProvider scopeKey="user-1">
+                <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              </PlatformQueryProvider>
             </RuntimeMetadataProvider>
           </LocalizationProvider>
         </MemoryRouter>,
@@ -185,7 +187,7 @@ describe('Identity account Standard CRUD production route', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/identity/accounts?status=Deleted&fields=EID%2CECODE%2CENAME%2CStatus%2CIsPersonnelBound%2CIsLocalAdministrator%2CPersonnelDisableHold&pageIndex=2&pageSize=20&sortBy=ECODE&sortDirection=asc',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.textContent).toContain('账号管理');
@@ -254,7 +256,9 @@ describe('Identity account Standard CRUD production route', () => {
             catalogs={{ zhs: accountListCatalog }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
-              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              <PlatformQueryProvider scopeKey="user-1">
+                <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              </PlatformQueryProvider>
             </RuntimeMetadataProvider>
           </LocalizationProvider>
         </MemoryRouter>,
@@ -418,7 +422,9 @@ describe('Identity account Standard CRUD production route', () => {
             catalogs={{ zhs: accountListCatalog }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
-              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              <PlatformQueryProvider scopeKey="user-1">
+                <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              </PlatformQueryProvider>
             </RuntimeMetadataProvider>
           </LocalizationProvider>
         </MemoryRouter>,
@@ -471,7 +477,9 @@ describe('Identity account Standard CRUD production route', () => {
             catalogs={{ zhs: accountListCatalog }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
-              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              <PlatformQueryProvider scopeKey="user-1">
+                <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              </PlatformQueryProvider>
             </RuntimeMetadataProvider>
           </LocalizationProvider>
         </MemoryRouter>,
@@ -538,7 +546,9 @@ describe('Identity account Standard CRUD production route', () => {
           catalogs={{ zhs: accountListCatalog }}
         >
           <RuntimeMetadataProvider value={runtimeMetadata}>
-            <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            </PlatformQueryProvider>
           </RuntimeMetadataProvider>
         </LocalizationProvider>
       </MemoryRouter>,
@@ -595,7 +605,9 @@ describe('Identity account Standard CRUD production route', () => {
           catalogs={{ zhs: accountListCatalog }}
         >
           <RuntimeMetadataProvider value={runtimeMetadata}>
-            <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            </PlatformQueryProvider>
           </RuntimeMetadataProvider>
         </LocalizationProvider>
       </MemoryRouter>,
@@ -812,7 +824,9 @@ describe('Identity account Standard CRUD production route', () => {
           catalogs={{ zhs: accountListCatalog }}
         >
           <RuntimeMetadataProvider value={runtimeMetadata}>
-            <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+            </PlatformQueryProvider>
           </RuntimeMetadataProvider>
         </LocalizationProvider>
       </MemoryRouter>,
@@ -873,7 +887,9 @@ describe('Identity account Standard CRUD production route', () => {
             catalogs={{ zhs: accountListCatalog }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
-              <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              <PlatformQueryProvider scopeKey="user-1">
+                <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              </PlatformQueryProvider>
             </RuntimeMetadataProvider>
           </LocalizationProvider>
         </MemoryRouter>,

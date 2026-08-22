@@ -34,7 +34,8 @@ const state = vi.hoisted(() => ({
   standardCrudDetailViewKey: undefined as string | undefined,
 }));
 
-vi.mock('@icp-platform/core', () => ({
+vi.mock('@icp-platform/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@icp-platform/core')>()),
   AuthorizationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FirstPasswordChangePage: () => <div>change password</div>,
   LocalizationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,

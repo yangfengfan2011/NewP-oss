@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
@@ -267,16 +267,18 @@ describe('StandardCrudListPageHost', () => {
               },
             }}
           >
-            <RuntimeMetadataProvider
-              value={{
-                manifest: { modules: [] },
-                navDocuments: [],
-                modelDocuments: [personModelDocument],
-                viewDocuments: [viewDocument, personDetailViewDocument],
-              }}
-            >
-              <StandardCrudListPageHost viewKey="organization.person.list" />
-            </RuntimeMetadataProvider>
+            <PlatformQueryProvider scopeKey="user-1">
+              <RuntimeMetadataProvider
+                value={{
+                  manifest: { modules: [] },
+                  navDocuments: [],
+                  modelDocuments: [personModelDocument],
+                  viewDocuments: [viewDocument, personDetailViewDocument],
+                }}
+              >
+                <StandardCrudListPageHost viewKey="organization.person.list" />
+              </RuntimeMetadataProvider>
+            </PlatformQueryProvider>
           </LocalizationProvider>
         </MemoryRouter>,
       );
@@ -386,13 +388,68 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.textContent).toContain('张三');
     expect(countTextOccurrences(container.textContent ?? '', '共 1 条')).toBe(1);
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')?.textContent).toContain('第 1 / 1 页');
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
+  });
+
+  it('shares one metadata list request between two StrictMode hosts with the same query', async () => {
+    mockStandardCrudModule();
+    let releaseList!: () => void;
+    const listGate = new Promise<void>((resolve) => { releaseList = resolve; });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      await listGate;
+      return new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <StrictMode>
+          <MemoryRouter initialEntries={['/organization/persons']}>
+            <LocalizationProvider
+              defaultLanguage="zhs"
+              supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+              catalogs={{ zhs: personListCatalog }}
+            >
+              <PlatformQueryProvider scopeKey="user-1">
+                <RuntimeMetadataProvider
+                  value={{
+                    manifest: { modules: [] },
+                    navDocuments: [],
+                    modelDocuments: [personModelDocument],
+                    viewDocuments: [personListViewDocument, personDetailViewDocument],
+                  }}
+                >
+                  <StandardCrudListPageHost viewKey="organization.person.list" />
+                  <StandardCrudListPageHost viewKey="organization.person.list" />
+                </RuntimeMetadataProvider>
+              </PlatformQueryProvider>
+            </LocalizationProvider>
+          </MemoryRouter>
+        </StrictMode>,
+      );
+    });
+
+    const listCalls = fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/organization/persons'));
+    expect(listCalls).toHaveLength(1);
+
+    await act(async () => releaseList());
+    await flushProTableRequest();
   });
 
   it('keeps computed rows on the existing list adapter when columns come from metadata', async () => {
@@ -862,7 +919,7 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/organization/persons?keyword=%E5%BC%A0&fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=2&pageSize=50&sortBy=ENAME&sortDirection=desc',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pagination')?.textContent).toContain('共 80 条');
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('51');
@@ -903,7 +960,7 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=desc',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     const descendingPersonNoHeader = Array.from(
       container.querySelectorAll<HTMLElement>('.ant-table-thead th'),
@@ -963,7 +1020,7 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       '/api/organization/persons?keyword=new&fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -1027,7 +1084,7 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName%2CIsEnabled&pageIndex=1&pageSize=20',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
   });
 
@@ -1313,7 +1370,7 @@ describe('StandardCrudListPageHost', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CDepartmentName&pageIndex=1&pageSize=20',
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.textContent).toContain('关键字');
     expect(container.textContent).toContain('任职状态');

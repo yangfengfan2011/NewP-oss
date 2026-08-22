@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock }
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, type FrontendModule, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import baseOrganizationModule from '../../../../modules/organization/src/index';
 import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
@@ -204,7 +204,9 @@ function renderHost(
             modelDocuments: [personModelDocument],
           }}
         >
-          <StandardCrudListPageHost viewKey="organization.person.list" registration={registration} />
+          <PlatformQueryProvider scopeKey="user-1">
+            <StandardCrudListPageHost viewKey="organization.person.list" registration={registration} />
+          </PlatformQueryProvider>
         </RuntimeMetadataProvider>
       </LocalizationProvider>
     </MemoryRouter>,
@@ -358,7 +360,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).not.toContain('true');
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining('fields='),
-      { method: 'GET' },
+      { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
       'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID,Revision',

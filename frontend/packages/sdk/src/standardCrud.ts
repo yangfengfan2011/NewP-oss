@@ -320,14 +320,15 @@ export interface StandardCrudListQueryRequest {
   fields?: string;
 }
 
-/** 行读取上下文只承载列代际绑定，不参与 URL、筛选或标准 REST 查询序列化。 */
+/** 行读取执行上下文承载取消和列代际绑定，不参与 URL、筛选或标准 REST 查询序列化。 */
 export interface StandardCrudListReadContext {
   columnContextToken?: string;
+  signal?: AbortSignal;
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudClient {
-  list: (query?: StandardCrudListQueryRequest) => Promise<unknown>;
+  list: (query?: StandardCrudListQueryRequest, readContext?: StandardCrudListReadContext) => Promise<unknown>;
   exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
   getDetail: (id: string) => Promise<StandardCrudDetail>;
   create: (values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
@@ -943,7 +944,15 @@ async function requestBlob(
 /** 创建标准 CRUD fetch 客户端；调用方可注入 fetcher 用于测试、鉴权包装或 Host 级横切处理。 */
 export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch): StandardCrudClient {
   return {
-    list: (query) => requestJson<unknown>(fetcher, buildStandardCrudPath(apiRoute, query), { method: 'GET' }, '加载标准列表失败'),
+    list: (query, readContext) => requestJson<unknown>(
+      fetcher,
+      buildStandardCrudPath(apiRoute, query),
+      {
+        method: 'GET',
+        ...(readContext?.signal ? { signal: readContext.signal } : {}),
+      },
+      '加载标准列表失败',
+    ),
     exportList: (request) =>
       requestBlob(
         fetcher,
@@ -1015,7 +1024,7 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
       if (readContext?.columnContextToken) {
         throw new Error('Standard REST data adapter does not support a column context token');
       }
-      return normalizeStandardCrudListResult(await client.list(query), options.mapListItem);
+      return normalizeStandardCrudListResult(await client.list(query, readContext), options.mapListItem);
     },
     get: async (id) => {
       const normalized = await client.getDetail(id);

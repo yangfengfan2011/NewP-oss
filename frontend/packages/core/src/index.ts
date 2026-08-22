@@ -1,6 +1,7 @@
 export * from './authorization';
 export * from './authentication';
 export * from './http';
+export * from './query';
 export {
   LocalizationProvider,
   useEnumeration,

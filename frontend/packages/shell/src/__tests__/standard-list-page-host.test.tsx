@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import {
   ModuleRegistry,
@@ -70,16 +70,18 @@ describe('StandardListPageHost', () => {
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
             catalogs={{ zhs: {} }}
           >
-            <RuntimeMetadataProvider
-              value={{
-              manifest: { modules: [] },
-              navDocuments: [],
-              viewDocuments,
-              modelDocuments: [{ type: 'model', Person: { fields: [{ name: 'name' }] } }],
-              }}
-            >
-              <StandardListPageHost viewKey="organization.person.list" registration={registration} />
-            </RuntimeMetadataProvider>
+            <PlatformQueryProvider scopeKey="user-1">
+              <RuntimeMetadataProvider
+                value={{
+                manifest: { modules: [] },
+                navDocuments: [],
+                viewDocuments,
+                modelDocuments: [{ type: 'model', Person: { fields: [{ name: 'name' }] } }],
+                }}
+              >
+                <StandardListPageHost viewKey="organization.person.list" registration={registration} />
+              </RuntimeMetadataProvider>
+            </PlatformQueryProvider>
           </LocalizationProvider>
         </MemoryRouter>,
       );

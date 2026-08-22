@@ -51,7 +51,11 @@ import {
   serializeStandardCrudListState,
 } from '../standard-crud/standardCrudMetadataQuery';
 import type { StandardCrudListState } from '../standard-crud/standardCrudMetadataQuery';
-import { createStandardCrudListQueryKey } from '../standard-crud/standardCrudQueryKeys';
+import {
+  createStandardCrudListQueryKey,
+  createStandardCrudRuntimeColumnsQueryKey,
+  createStandardCrudRuntimeRowsQueryKey,
+} from '../standard-crud/standardCrudQueryKeys';
 import {
   reportStandardCrudDetailDiagnostics,
   resolveStandardCrudDetailPresentation,
@@ -139,12 +143,11 @@ interface StandardCrudRuntimeColumnGeneration {
   id: number;
   columns: StandardCrudRuntimeColumn[];
   contextToken?: string;
-  contextKey: string;
-  reloadTick: number;
 }
 
 const STANDARD_CRUD_RESERVED_COLUMN_KEYS = new Set(['__rowNumber', 'actions']);
 const STANDARD_CRUD_RUNTIME_VALUE_KINDS = new Set(['text', 'number', 'date', 'datetime', 'boolean']);
+let nextRuntimeColumnGenerationId = 0;
 
 function validateRuntimeColumnSet(
   value: { columns: StandardCrudRuntimeColumn[]; contextToken?: string },
@@ -719,9 +722,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }), [view, registration, modelDocuments]);
   const dataAdapter = registration.dataAdapter;
   const [runtimeColumnGeneration, setRuntimeColumnGeneration] = useState<StandardCrudRuntimeColumnGeneration | null>(null);
-  const runtimeGenerationIdRef = useRef(0);
-  const runtimeColumnAbortRef = useRef<AbortController | null>(null);
-  const runtimeRowRequestIdRef = useRef(0);
   const resolvedColumns = useMemo<ResolvedStandardCrudListColumn[]>(() => (
     schema.columnSource === 'runtime'
       ? (runtimeColumnGeneration?.columns ?? []).map((column) => ({
@@ -819,12 +819,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     sortBy: initialListState.sortBy,
     sortDirection: initialListState.sortDirection,
   }));
-  const [rows, setRows] = useState<TRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [reloadTick, setReloadTick] = useState(0);
   const [drawerState, setDrawerState] = useState<CrudDrawerState>(CLOSED_DRAWER_STATE);
   const [detailFields, setDetailFields] = useState<Record<string, unknown>>({});
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -946,21 +940,137 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       return { items: result.items, total: result.total };
     },
   });
+  const runtimeColumnsQueryKey = useMemo(
+    () => createStandardCrudRuntimeColumnsQueryKey({
+      resourceKey: registration.resourceKey,
+      filters: appliedFilters,
+    }),
+    [appliedFilters, registration.resourceKey],
+  );
+  const runtimeColumnsQuery = usePlatformQuery<StandardCrudRuntimeColumnGeneration>({
+    key: runtimeColumnsQueryKey,
+    enabled: schema.columnSource === 'runtime' && registration.columnProvider !== undefined,
+    load: async ({ signal }) => {
+      const provider = registration.columnProvider;
+      if (!provider) throw new Error('runtime column source requires a column provider');
+      const result = validateRuntimeColumnSet(await provider.load({ filters: appliedFilters, signal }));
+      nextRuntimeColumnGenerationId += 1;
+      return {
+        id: nextRuntimeColumnGenerationId,
+        columns: result.columns,
+        ...(result.contextToken ? { contextToken: result.contextToken } : {}),
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (
+      schema.columnSource !== 'runtime'
+      || runtimeColumnsQuery.status !== 'success'
+      || runtimeColumnsQuery.isFetching
+      || !runtimeColumnsQuery.data
+    ) {
+      setRuntimeColumnGeneration(null);
+      return;
+    }
+
+    const normalizedListState = parseStandardCrudListState(
+      schema.query,
+      new URLSearchParams(location.search),
+      runtimeColumnsQuery.data.columns,
+      schema.advancedFilter,
+    );
+    syncCommittedListState({
+      ...normalizedListState,
+      filters: appliedFilters,
+    }, { replace: true });
+    setRuntimeColumnGeneration(runtimeColumnsQuery.data);
+    // 列 Query 的成功结果先完成排序归一化，随后才成为行 Query 可消费的完整列代际。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtimeColumnsQuery.data, runtimeColumnsQuery.isFetching, runtimeColumnsQuery.status, schema.columnSource]);
+
+  const runtimeListRequest = useMemo<StandardCrudListQueryRequest>(() => {
+    const fields = collectStandardCrudListRequestFields(
+      runtimeColumnGeneration?.columns ?? [],
+      schema.rowActions,
+    );
+    return {
+      ...buildStandardCrudListQuery(
+        schema.query,
+        appliedFilters as Record<string, unknown>,
+        schema.advancedFilter,
+      ),
+      ...(fields.length > 0 ? { fields: fields.join(',') } : {}),
+      pageIndex: tableQuery.current,
+      pageSize: tableQuery.pageSize,
+      ...(tableQuery.sortBy && tableQuery.sortDirection
+        ? { sortBy: tableQuery.sortBy, sortDirection: tableQuery.sortDirection }
+        : {}),
+    };
+  }, [appliedFilters, runtimeColumnGeneration?.columns, schema.advancedFilter, schema.query,
+    schema.rowActions, tableQuery]);
+  const runtimeRowsQueryKey = useMemo(
+    () => createStandardCrudRuntimeRowsQueryKey({
+      resourceKey: registration.resourceKey,
+      request: runtimeListRequest,
+      columnContextToken: runtimeColumnGeneration?.contextToken,
+      columnGeneration: runtimeColumnGeneration?.id ?? 0,
+    }),
+    [registration.resourceKey, runtimeColumnGeneration?.contextToken, runtimeColumnGeneration?.id,
+      runtimeListRequest],
+  );
+  const runtimeRowsEnabled = schema.columnSource === 'runtime'
+    && runtimeColumnsQuery.status === 'success'
+    && !runtimeColumnsQuery.isFetching
+    && runtimeColumnGeneration !== null
+    && runtimeColumnGeneration.id === runtimeColumnsQuery.data?.id;
+  const runtimeRowsQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
+    key: runtimeRowsQueryKey,
+    enabled: runtimeRowsEnabled,
+    load: async ({ signal }) => {
+      if (!runtimeColumnGeneration) throw new Error('runtime rows require a successful column generation');
+      const result = await dataAdapter.list(runtimeListRequest, {
+        ...(runtimeColumnGeneration.contextToken
+          ? { columnContextToken: runtimeColumnGeneration.contextToken }
+          : {}),
+        signal,
+      });
+      return { items: result.items, total: result.total };
+    },
+  });
   const metadataListError = metadataListQuery.status === 'error'
     ? metadataListQuery.error instanceof Error ? metadataListQuery.error.message : '加载列表失败'
     : null;
+  const runtimeColumnsError = runtimeColumnsQuery.status === 'error'
+    ? runtimeColumnsQuery.error instanceof Error ? runtimeColumnsQuery.error.message : '加载运行时列失败'
+    : null;
+  const runtimeRowsError = runtimeRowsQuery.status === 'error'
+    ? runtimeRowsQuery.error instanceof Error ? runtimeRowsQuery.error.message : '加载列表失败'
+    : null;
   const effectiveRows = useMemo(
-    () => schema.columnSource === 'runtime' ? rows : metadataListQuery.data?.items ?? [],
-    [metadataListQuery.data?.items, rows, schema.columnSource],
+    () => schema.columnSource === 'runtime' ? runtimeRowsQuery.data?.items ?? [] : metadataListQuery.data?.items ?? [],
+    [metadataListQuery.data?.items, runtimeRowsQuery.data?.items, schema.columnSource],
   );
-  const effectiveTotal = schema.columnSource === 'runtime' ? total : metadataListQuery.data?.total ?? 0;
+  const effectiveTotal = schema.columnSource === 'runtime'
+    ? runtimeRowsQuery.data?.total ?? 0
+    : metadataListQuery.data?.total ?? 0;
   const effectiveLoading = schema.columnSource === 'runtime'
-    ? loading
+    ? runtimeColumnsQuery.status === 'idle'
+      || runtimeColumnsQuery.isFetching
+      || (runtimeColumnsQuery.status === 'success' && (
+        !runtimeRowsEnabled
+        || runtimeRowsQuery.status === 'idle'
+        || runtimeRowsQuery.isFetching
+      ))
     : metadataListQuery.status === 'idle' || metadataListQuery.isFetching;
   const effectiveHasLoaded = schema.columnSource === 'runtime'
-    ? hasLoaded
+    ? runtimeColumnsQuery.status === 'error'
+      || runtimeRowsQuery.status === 'success'
+      || runtimeRowsQuery.status === 'error'
     : metadataListQuery.status === 'success' || metadataListQuery.status === 'error';
-  const effectiveListError = schema.columnSource === 'runtime' ? listError : metadataListError;
+  const effectiveListError = schema.columnSource === 'runtime'
+    ? runtimeColumnsError ?? runtimeRowsError
+    : metadataListError;
 
   useEffect(() => {
     if (schema.columnSource === 'runtime' || metadataListQuery.status !== 'success' || !metadataListQuery.data) return;
@@ -978,160 +1088,40 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }, [metadataListQuery.data, metadataListQuery.status, schema.columnSource,
     tableQuery.current, tableQuery.pageSize, tableQuery.sortBy, tableQuery.sortDirection]);
 
+  useEffect(() => {
+    if (schema.columnSource !== 'runtime' || runtimeRowsQuery.status !== 'success' || !runtimeRowsQuery.data) return;
+    const lastPage = Math.max(1, Math.ceil(runtimeRowsQuery.data.total / tableQuery.pageSize));
+    if (tableQuery.current <= lastPage) return;
+    syncCommittedListState({
+      filters: appliedFilters,
+      page: lastPage,
+      pageSize: tableQuery.pageSize,
+      sortBy: tableQuery.sortBy,
+      sortDirection: tableQuery.sortDirection,
+    }, { replace: true });
+    // 结果只负责把越界页归一回合法查询；其他 handler 身份变化不得触发二次导航。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtimeRowsQuery.data, runtimeRowsQuery.status, schema.columnSource,
+    tableQuery.current, tableQuery.pageSize, tableQuery.sortBy, tableQuery.sortDirection]);
+
+  const refreshRuntimeGeneration = () => {
+    if (runtimeColumnsQuery.status === 'error') runtimeColumnsQuery.retry();
+    else runtimeColumnsQuery.refresh();
+  };
+
   const context = {
     filters,
     setFilters,
     applyFilters,
     resetFilters,
     refresh: () => {
-      if (schema.columnSource === 'runtime') setReloadTick((current) => current + 1);
+      if (schema.columnSource === 'runtime') refreshRuntimeGeneration();
       else metadataListQuery.refresh();
     },
     loading: effectiveLoading,
     rows: effectiveRows,
     total: effectiveTotal,
   };
-  const runtimeColumnContextKey = useMemo(() => JSON.stringify(buildStandardCrudListQuery(
-    schema.query,
-    appliedFilters as Record<string, unknown>,
-    schema.advancedFilter,
-  )), [appliedFilters, schema.advancedFilter, schema.query]);
-
-  useEffect(() => {
-    if (schema.columnSource !== 'runtime') {
-      runtimeColumnAbortRef.current?.abort();
-      runtimeColumnAbortRef.current = null;
-      setRuntimeColumnGeneration(null);
-      return undefined;
-    }
-
-    const provider = registration.columnProvider;
-    if (!provider) return undefined;
-    const loadColumns = provider.load;
-
-    const generationId = runtimeGenerationIdRef.current + 1;
-    runtimeGenerationIdRef.current = generationId;
-    runtimeRowRequestIdRef.current += 1;
-    runtimeColumnAbortRef.current?.abort();
-    const abortController = new AbortController();
-    runtimeColumnAbortRef.current = abortController;
-    setRuntimeColumnGeneration(null);
-    setRows([]);
-    setTotal(0);
-    setListError(null);
-    setHasLoaded(false);
-    setLoading(true);
-
-    async function resolveRuntimeColumns(): Promise<void> {
-      try {
-        const result = validateRuntimeColumnSet(await loadColumns({
-          filters: appliedFilters,
-          signal: abortController.signal,
-        }));
-        if (abortController.signal.aborted || runtimeGenerationIdRef.current !== generationId) return;
-
-        const normalizedListState = parseStandardCrudListState(
-          schema.query,
-          new URLSearchParams(location.search),
-          result.columns,
-          schema.advancedFilter,
-        );
-        syncCommittedListState({
-          ...normalizedListState,
-          filters: appliedFilters,
-        }, { replace: true });
-        setRuntimeColumnGeneration({
-          id: generationId,
-          columns: result.columns,
-          contextToken: result.contextToken,
-          contextKey: runtimeColumnContextKey,
-          reloadTick,
-        });
-      } catch (error) {
-        if (abortController.signal.aborted || runtimeGenerationIdRef.current !== generationId) return;
-        setListError(error instanceof Error ? error.message : '加载运行时列失败');
-        setHasLoaded(true);
-        setLoading(false);
-      }
-    }
-
-    void resolveRuntimeColumns();
-    return () => abortController.abort();
-    // 只有完整代际触发器才能重新解析列；分页和排序由独立行请求复用当前列集与 token。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registration.columnProvider, reloadTick, runtimeColumnContextKey, schema.columnSource]);
-
-  useEffect(() => {
-    if (
-      schema.columnSource !== 'runtime'
-      || !runtimeColumnGeneration
-      || runtimeColumnGeneration.contextKey !== runtimeColumnContextKey
-      || runtimeColumnGeneration.reloadTick !== reloadTick
-    ) {
-      return undefined;
-    }
-
-    const requestId = runtimeRowRequestIdRef.current + 1;
-    runtimeRowRequestIdRef.current = requestId;
-    const generationId = runtimeColumnGeneration.id;
-    setLoading(true);
-    setListError(null);
-
-    async function loadRuntimeRows(): Promise<void> {
-      try {
-        const fields = collectStandardCrudListRequestFields(runtimeColumnGeneration!.columns, schema.rowActions);
-        const result = await dataAdapter.list({
-          ...buildStandardCrudListQuery(
-            schema.query,
-            appliedFilters as Record<string, unknown>,
-            schema.advancedFilter,
-          ),
-          ...(fields.length > 0 ? { fields: fields.join(',') } : {}),
-          pageIndex: tableQuery.current,
-          pageSize: tableQuery.pageSize,
-          ...(tableQuery.sortBy && tableQuery.sortDirection
-            ? { sortBy: tableQuery.sortBy, sortDirection: tableQuery.sortDirection }
-            : {}),
-        }, runtimeColumnGeneration!.contextToken
-          ? { columnContextToken: runtimeColumnGeneration!.contextToken }
-          : undefined);
-        if (runtimeGenerationIdRef.current !== generationId || runtimeRowRequestIdRef.current !== requestId) return;
-
-        const lastPage = Math.max(1, Math.ceil(result.total / tableQuery.pageSize));
-        if (tableQuery.current > lastPage) {
-          syncCommittedListState({
-            filters: appliedFilters,
-            page: lastPage,
-            pageSize: tableQuery.pageSize,
-            sortBy: tableQuery.sortBy,
-            sortDirection: tableQuery.sortDirection,
-          }, { replace: true });
-          return;
-        }
-        setRows(result.items);
-        setTotal(result.total);
-        setHasLoaded(true);
-      } catch (error) {
-        if (runtimeGenerationIdRef.current !== generationId || runtimeRowRequestIdRef.current !== requestId) return;
-        setRows([]);
-        setTotal(0);
-        setListError(error instanceof Error ? error.message : '加载列表失败');
-        setHasLoaded(true);
-      } finally {
-        if (runtimeGenerationIdRef.current === generationId && runtimeRowRequestIdRef.current === requestId) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadRuntimeRows();
-    return () => {
-      if (runtimeRowRequestIdRef.current === requestId) runtimeRowRequestIdRef.current += 1;
-    };
-    // 行请求只受本代列集和规范查询驱动；handler 身份变化不得产生额外请求。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtimeColumnGeneration, runtimeColumnContextKey, reloadTick, schema.columnSource,
-    tableQuery.current, tableQuery.pageSize, tableQuery.sortBy, tableQuery.sortDirection]);
 
   const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
     refresh: context.refresh,
@@ -1869,23 +1859,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     });
   };
 
-  const handleTableResult = (result: { data: TRow[]; total: number; success: boolean }) => {
-    const lastPage = Math.max(1, Math.ceil(result.total / tableQuery.pageSize));
-    if (tableQuery.current > lastPage) {
-      syncCommittedListState({
-        filters: appliedFilters,
-        page: lastPage,
-        pageSize: tableQuery.pageSize,
-        sortBy: tableQuery.sortBy,
-        sortDirection: tableQuery.sortDirection,
-      }, { replace: true });
-      return;
-    }
-
-    setRows(result.data);
-    setTotal(result.total);
-  };
-
   const content = (
     <div className="np-standard-crud-table">
       <CrudTableSection<TRow>
@@ -1894,12 +1867,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         request={tableRequest}
         query={tableQuery}
         onQueryChange={handleTableQueryChange}
-        onLoadResult={handleTableResult}
-        onLoadError={() => {
-          setRows([]);
-          setTotal(0);
-        }}
-        onLoadingChange={setLoading}
         columnState={columnState}
         defaultColumnState={defaultColumnState}
         onColumnStateChange={(next) => {
@@ -1924,7 +1891,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           hasLoaded: effectiveHasLoaded,
           error: effectiveListError,
           onRetry: schema.columnSource === 'runtime'
-            ? () => setReloadTick((current) => current + 1)
+            ? refreshRuntimeGeneration
             : metadataListQuery.retry,
         }}
         toolbar={exportToolbar}
@@ -1965,13 +1932,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 onClick={() => {
                   context.resetFilters();
                 }}
-                disabled={loading}
+                disabled={effectiveLoading}
               >
                 {t(`${schema.dicKey}.Action_ResetAdvanced`, '重置条件')}
               </AntdButton>
               <AntdButton
                 type="primary"
-                loading={loading}
+                loading={effectiveLoading}
                 onClick={() => {
                   context.applyFilters();
                   setAdvancedFilterOpen(false);

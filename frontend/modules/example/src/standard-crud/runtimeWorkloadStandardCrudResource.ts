@@ -93,7 +93,11 @@ export function createRuntimeWorkloadStandardCrudResource(
         const dto = await requestJson<RuntimeWorkloadListResultDto>(
           fetcher,
           buildPath(`${API_ROUTE}/rows`, query),
-          { method: 'GET', headers: { [COLUMN_CONTEXT_HEADER]: contextToken } },
+          {
+            method: 'GET',
+            headers: { [COLUMN_CONTEXT_HEADER]: contextToken },
+            signal: readContext?.signal,
+          },
         );
         return {
           items: dto.items,

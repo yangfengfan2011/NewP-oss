@@ -7,9 +7,85 @@ import type {
 import {
   createStandardCrudListQueryKey,
   createStandardCrudLookupQueryKey,
+  createStandardCrudRuntimeColumnsQueryKey,
+  createStandardCrudRuntimeRowsQueryKey,
 } from '../standard-crud/standardCrudQueryKeys';
 
 describe('Standard CRUD query keys', () => {
+  it('keys runtime columns by resource and every serializable committed filter', () => {
+    const firstKey = createStandardCrudRuntimeColumnsQueryKey({
+      resourceKey: 'example.runtime-workload',
+      filters: {
+        keyword: '陈',
+        context: { team: 'north', week: 34 },
+        ignoredSignal: new AbortController().signal,
+        ignoredCallback: () => 'ignored',
+      },
+    });
+    const reorderedKey = createStandardCrudRuntimeColumnsQueryKey({
+      resourceKey: 'example.runtime-workload',
+      filters: {
+        ignoredCallback: () => 'different',
+        context: { week: 34, team: 'north' },
+        keyword: '陈',
+        ignoredSignal: new AbortController().signal,
+      },
+    });
+
+    expect(firstKey).toEqual([
+      'standard-crud.runtime-columns',
+      'example.runtime-workload',
+      { context: { team: 'north', week: 34 }, keyword: '陈' },
+    ]);
+    expect(reorderedKey).toEqual(firstKey);
+    expect(createStandardCrudRuntimeColumnsQueryKey({
+      resourceKey: 'example.other-workload',
+      filters: { keyword: '陈', context: { team: 'north', week: 34 } },
+    })).not.toEqual(firstKey);
+    expect(createStandardCrudRuntimeColumnsQueryKey({
+      resourceKey: 'example.runtime-workload',
+      filters: { keyword: '张', context: { team: 'north', week: 34 } },
+    })).not.toEqual(firstKey);
+    expect(JSON.stringify(firstKey)).not.toContain('ignored');
+  });
+
+  it('keys runtime rows by request projection and the successful column generation', () => {
+    const createKey = (
+      request: StandardCrudListQueryRequest,
+      columnContextToken = 'week-token',
+      columnGeneration = 7,
+    ) => createStandardCrudRuntimeRowsQueryKey({
+      resourceKey: 'example.runtime-workload',
+      request,
+      columnContextToken,
+      columnGeneration,
+    });
+    const request = {
+      keyword: '陈',
+      fields: 'EID,memberName,currentWeekDay1',
+      pageIndex: 2,
+      pageSize: 20,
+      sortBy: 'memberName',
+      sortDirection: 'asc',
+    };
+    const base = createKey(request);
+
+    expect(base).toEqual([
+      'standard-crud.runtime-rows',
+      'example.runtime-workload',
+      {
+        columnContextToken: 'week-token',
+        columnGeneration: 7,
+        request,
+      },
+    ]);
+    expect(createKey({ ...request, pageIndex: 3 })).not.toEqual(base);
+    expect(createKey({ ...request, sortDirection: 'desc' })).not.toEqual(base);
+    expect(createKey({ ...request, fields: 'EID,memberName,nextWeekDay1' })).not.toEqual(base);
+    expect(createKey(request, 'next-week-token')).not.toEqual(base);
+    expect(createKey(request, 'week-token', 8)).not.toEqual(base);
+  });
+
   it('canonicalizes object order and nested undefined values without leaking illegal key values', () => {
     const firstRequest = {
       sequence: [1, undefined, 2],

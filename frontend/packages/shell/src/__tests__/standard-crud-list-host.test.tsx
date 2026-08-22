@@ -248,13 +248,14 @@ describe('StandardCrudListPageHost', () => {
     catalogOverrides: Record<string, string> = {},
     viewDocument: typeof personListViewDocument = personListViewDocument,
     initialEntry = '/organization/persons',
+    options: { strictMode?: boolean } = {},
   ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
+      const host = (
         <MemoryRouter initialEntries={[initialEntry]}>
           <NavigationProbe />
           <LocalizationProvider
@@ -280,8 +281,9 @@ describe('StandardCrudListPageHost', () => {
               </RuntimeMetadataProvider>
             </PlatformQueryProvider>
           </LocalizationProvider>
-        </MemoryRouter>,
+        </MemoryRouter>
       );
+      root.render(options.strictMode ? <StrictMode>{host}</StrictMode> : host);
     });
   }
 
@@ -593,11 +595,72 @@ describe('StandardCrudListPageHost', () => {
 
     expect(list).toHaveBeenCalledWith(
       expect.objectContaining({ fields: 'EID,memberName,currentWeekDay1', pageIndex: 1, pageSize: 20 }),
-      { columnContextToken: 'opaque-week-token' },
+      expect.objectContaining({
+        columnContextToken: 'opaque-week-token',
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(container.textContent).toContain('8月17日');
     expect(container.textContent).toContain('示例成员');
     expect(container.textContent).toContain('8');
+  });
+
+  it('shares one column-first runtime generation across StrictMode replay', async () => {
+    let releaseColumns: (() => void) | undefined;
+    let releaseRows: (() => void) | undefined;
+    const columnsGate = new Promise<void>((resolve) => { releaseColumns = resolve; });
+    const rowsGate = new Promise<void>((resolve) => { releaseRows = resolve; });
+    const columnSignals: AbortSignal[] = [];
+    const rowSignals: AbortSignal[] = [];
+    const loadColumns = vi.fn(async ({ signal }: { signal: AbortSignal }) => {
+      columnSignals.push(signal);
+      await columnsGate;
+      return {
+        columns: [{ key: 'member', field: 'memberName', title: '成员', valueKind: 'text' as const }],
+        contextToken: 'strict-week-token',
+      };
+    });
+    const list = vi.fn(async (_request, readContext) => {
+      if (readContext?.signal) rowSignals.push(readContext.signal);
+      await rowsGate;
+      return {
+        items: [{ id: 'member-1', memberName: 'StrictMode 成员' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      };
+    });
+    mockStandardCrudModule({
+      columnProvider: { load: loadColumns },
+      dataAdapter: {
+        list,
+        get: async () => ({ normalized: { fields: {}, summaries: {} }, value: { fields: {}, summaries: {} } }),
+        getRowId: (row) => String((row as { id: string }).id),
+      },
+    });
+
+    await renderHost({}, createRuntimePersonListViewDocument(), '/organization/persons', { strictMode: true });
+    expect(loadColumns).toHaveBeenCalledTimes(1);
+    expect(list).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseColumns?.();
+      await columnsGate;
+    });
+    await flushProTableRequest();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(columnSignals).toHaveLength(1);
+    expect(columnSignals[0]?.aborted).toBe(false);
+    expect(rowSignals).toHaveLength(1);
+    expect(rowSignals[0]?.aborted).toBe(false);
+
+    await act(async () => {
+      releaseRows?.();
+      await rowsGate;
+    });
+    await waitForBodyText('StrictMode 成员');
+    expect(loadColumns).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(1);
   });
 
   it('does not read rows when a runtime column set is invalid', async () => {
@@ -693,7 +756,10 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).not.toContain('8月17日');
     expect(loadColumns).toHaveBeenCalledTimes(2);
     expect(list).toHaveBeenCalledTimes(2);
-    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'week-2' });
+    expect(list.mock.calls[1]?.[1]).toMatchObject({
+      columnContextToken: 'week-2',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('normalizes an obsolete runtime sort before issuing one row request for the refreshed column set', async () => {
@@ -741,7 +807,10 @@ describe('StandardCrudListPageHost', () => {
     expect(list).toHaveBeenCalledTimes(2);
     expect(list.mock.calls[1]?.[0]).not.toHaveProperty('sortBy');
     expect(list.mock.calls[1]?.[0]).not.toHaveProperty('sortDirection');
-    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'new-week' });
+    expect(list.mock.calls[1]?.[1]).toMatchObject({
+      columnContextToken: 'new-week',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('renders a runtime ISO date without shifting it in a negative time zone', async () => {
@@ -855,7 +924,10 @@ describe('StandardCrudListPageHost', () => {
 
     expect(loadColumns).toHaveBeenCalledTimes(2);
     expect(list).toHaveBeenCalledTimes(2);
-    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'week-token' });
+    expect(list.mock.calls[1]?.[1]).toMatchObject({
+      columnContextToken: 'week-token',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('discards a stale runtime column generation after committed filters change', async () => {
@@ -905,7 +977,10 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).toContain('新列');
     expect(container.textContent).not.toContain('旧列');
     expect(list).toHaveBeenCalledTimes(1);
-    expect(list.mock.calls[0]?.[1]).toEqual({ columnContextToken: 'new-token' });
+    expect(list.mock.calls[0]?.[1]).toMatchObject({
+      columnContextToken: 'new-token',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('reuses runtime columns and discards stale rows when sorting within one generation', async () => {
@@ -956,7 +1031,10 @@ describe('StandardCrudListPageHost', () => {
 
     expect(loadColumns).toHaveBeenCalledTimes(1);
     expect(list.mock.calls[1]?.[0]).toMatchObject({ sortBy: 'memberName', sortDirection: 'asc' });
-    expect(list.mock.calls[1]?.[1]).toEqual({ columnContextToken: 'stable-token' });
+    expect(list.mock.calls[1]?.[1]).toMatchObject({
+      columnContextToken: 'stable-token',
+      signal: expect.any(AbortSignal),
+    });
     expect(container.textContent).toContain('新排序结果');
     expect(container.textContent).not.toContain('旧排序结果');
 
@@ -965,7 +1043,10 @@ describe('StandardCrudListPageHost', () => {
 
     expect(loadColumns).toHaveBeenCalledTimes(1);
     expect(list.mock.calls[2]?.[0]).toMatchObject({ pageIndex: 2, pageSize: 20 });
-    expect(list.mock.calls[2]?.[1]).toEqual({ columnContextToken: 'stable-token' });
+    expect(list.mock.calls[2]?.[1]).toMatchObject({
+      columnContextToken: 'stable-token',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('restores committed filters paging and server sorting from the URL', async () => {

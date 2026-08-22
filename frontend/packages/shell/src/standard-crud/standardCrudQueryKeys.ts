@@ -13,6 +13,42 @@ export interface StandardCrudLookupQueryKeyInput {
   detailFields?: Record<string, unknown>;
 }
 
+export interface StandardCrudRuntimeColumnsQueryKeyInput {
+  resourceKey: string;
+  filters: Record<string, unknown>;
+}
+
+export interface StandardCrudRuntimeRowsQueryKeyInput {
+  resourceKey: string;
+  request: StandardCrudListQueryRequest;
+  columnContextToken?: string;
+  columnGeneration: number;
+}
+
+export function createStandardCrudRuntimeColumnsQueryKey(
+  input: StandardCrudRuntimeColumnsQueryKeyInput,
+): PlatformQueryKey {
+  return [
+    'standard-crud.runtime-columns',
+    input.resourceKey,
+    normalizeLookupQueryKeyObject(input.filters, new Set()),
+  ];
+}
+
+export function createStandardCrudRuntimeRowsQueryKey(
+  input: StandardCrudRuntimeRowsQueryKeyInput,
+): PlatformQueryKey {
+  return [
+    'standard-crud.runtime-rows',
+    input.resourceKey,
+    normalizeQueryKeyObject({
+      columnContextToken: input.columnContextToken ?? null,
+      columnGeneration: input.columnGeneration,
+      request: input.request,
+    }, new Set()),
+  ];
+}
+
 export function createStandardCrudListQueryKey(
   resourceKey: string,
   request: StandardCrudListQueryRequest,

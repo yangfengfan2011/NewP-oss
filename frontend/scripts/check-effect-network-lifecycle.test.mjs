@@ -744,6 +744,14 @@ test('matches the reviewed current-tree baseline with no effect write commands',
       classification: 'read-query',
     },
     {
+      id: 'packages/shell/src/pages/StandardCrudListPageHost.tsx::runtimeColumnsQuery::usePlatformQuery.load::provider.load',
+      classification: 'read-query',
+    },
+    {
+      id: 'packages/shell/src/pages/StandardCrudListPageHost.tsx::runtimeRowsQuery::usePlatformQuery.load::dataAdapter.list',
+      classification: 'read-query',
+    },
+    {
       id: 'packages/shell/src/standard-crud/standardCrudLookupRuntime.ts::query::usePlatformQuery.load::loadLookupQuery>loadStandardCrudLookupOptions',
       classification: 'read-query',
     },
@@ -763,7 +771,7 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /12 reviewed effect findings, 2 platform query loads, 0 write commands/);
+  assert.match(result.stdout, /10 reviewed effect findings, 4 platform query loads, 0 write commands/);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

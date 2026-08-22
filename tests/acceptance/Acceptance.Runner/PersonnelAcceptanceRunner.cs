@@ -1577,19 +1577,15 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
-    // 危险动作先经过 metadata confirm，再进入模块拥有的必填原因输入弹层。
+    // 带输入的危险动作在一个 Review Dialog 中同时呈现 metadata 确认文案和模块拥有的必填原因。
     private static async Task<ILocator> OpenDisableReasonDialogAsync(IPage page)
     {
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true })
             .ClickAsync();
-        var confirmation = page.GetByRole(AriaRole.Tooltip)
-            .Filter(new LocatorFilterOptions { HasTextString = "确认停用当前人员吗？" })
-            .Last;
-        await confirmation.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
-            .Last
-            .ClickAsync();
-        var reasonInput = page.GetByLabel("停用原因", new PageGetByLabelOptions { Exact = true });
+        var inputModal = page.Locator(".ant-modal-content:visible").Last;
+        await inputModal.GetByText("确认停用当前人员吗？", new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var reasonInput = inputModal.GetByLabel("停用原因", new LocatorGetByLabelOptions { Exact = true });
         await reasonInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         return reasonInput;
     }

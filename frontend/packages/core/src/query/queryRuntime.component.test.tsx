@@ -2,7 +2,7 @@
 
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PlatformQueryProvider,
   usePlatformQuery,
@@ -59,6 +59,10 @@ describe('Platform Query Runtime', () => {
   let root: Root | undefined;
   let container: HTMLDivElement | undefined;
 
+  beforeEach(() => {
+    vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+  });
+
   afterEach(async () => {
     if (root) await act(async () => root?.unmount());
     container?.remove();
@@ -88,6 +92,144 @@ describe('Platform Query Runtime', () => {
     });
 
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('records sanitized started, joined, and completed events for one shared initial generation', async () => {
+    const pending = createDeferred<PersonList>();
+    const load = vi.fn(() => pending.promise);
+    const debug = vi.mocked(console.debug);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(
+        <PlatformQueryProvider scopeKey="User_1">
+          <QueryResultProbe
+            queryKey={['organization.persons', { filter: 'private-query-value' }]}
+            load={load}
+            observe={() => undefined}
+          />
+          <QueryResultProbe
+            queryKey={['organization.persons', { filter: 'private-query-value' }]}
+            load={load}
+            observe={() => undefined}
+          />
+        </PlatformQueryProvider>,
+      );
+    });
+    await act(async () => pending.resolve({ items: [{ id: 'Person_1' }] }));
+
+    const records = debug.mock.calls
+      .filter(([message]) => message === 'platform-query.lifecycle')
+      .map(([, record]) => record as Record<string, unknown>);
+    expect(records.map(({ event, owner, generation, subscriberCount, reason }) => ({
+      event,
+      owner,
+      generation,
+      subscriberCount,
+      reason,
+    }))).toEqual([
+      {
+        event: 'started',
+        owner: 'organization.persons',
+        generation: 1,
+        subscriberCount: 1,
+        reason: 'initial',
+      },
+      {
+        event: 'joined',
+        owner: 'organization.persons',
+        generation: 1,
+        subscriberCount: 2,
+        reason: 'initial',
+      },
+      {
+        event: 'completed',
+        owner: 'organization.persons',
+        generation: 1,
+        subscriberCount: 2,
+        reason: 'initial',
+      },
+    ]);
+    expect(records.map(({ keyHash }) => keyHash)).toEqual([
+      expect.stringMatching(/^[0-9a-f]{8}$/),
+      expect.stringMatching(/^[0-9a-f]{8}$/),
+      expect.stringMatching(/^[0-9a-f]{8}$/),
+    ]);
+    expect(new Set(records.map(({ keyHash }) => keyHash))).toHaveProperty('size', 1);
+    expect(records.every(({ durationMs }) => typeof durationMs === 'number' && durationMs >= 0)).toBe(true);
+    expect(JSON.stringify(records)).not.toContain('private-query-value');
+  });
+
+  it('does not let an observability sink failure interrupt a successful public query', async () => {
+    const pending = createDeferred<PersonList>();
+    const load = vi.fn(() => pending.promise);
+    let observed: PlatformQueryResult<PersonList> | undefined;
+    vi.mocked(console.debug).mockImplementation(() => {
+      throw new Error('observability sink unavailable');
+    });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(
+        <PlatformQueryProvider scopeKey="User_1">
+          <QueryResultProbe
+            queryKey={['organization.persons']}
+            load={load}
+            observe={(result) => { observed = result; }}
+          />
+        </PlatformQueryProvider>,
+      );
+    });
+    await act(async () => pending.resolve({ items: [{ id: 'Person_1' }] }));
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(observed).toMatchObject({
+      status: 'success',
+      data: { items: [{ id: 'Person_1' }] },
+      error: undefined,
+      isFetching: false,
+    });
+  });
+
+  it('does not let an observability sink failure replace the public query error', async () => {
+    const pending = createDeferred<PersonList>();
+    const load = vi.fn(() => pending.promise);
+    const queryFailure = new Error('adapter failure remains observable');
+    let observed: PlatformQueryResult<PersonList> | undefined;
+    vi.mocked(console.debug).mockImplementation(() => {
+      throw new Error('observability sink unavailable');
+    });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(
+        <PlatformQueryProvider scopeKey="User_1">
+          <QueryResultProbe
+            queryKey={['organization.persons']}
+            load={load}
+            observe={(result) => { observed = result; }}
+          />
+        </PlatformQueryProvider>,
+      );
+    });
+    await act(async () => pending.reject(queryFailure));
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(observed).toMatchObject({
+      status: 'error',
+      data: undefined,
+      error: queryFailure,
+      isFetching: false,
+    });
   });
 
   it('shares one parsed result object and success state between simultaneous subscribers', async () => {
@@ -180,6 +322,7 @@ describe('Platform Query Runtime', () => {
       signal.addEventListener('abort', aborted);
       return pending.promise;
     });
+    const debug = vi.mocked(console.debug);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement('div');
     document.body.append(container);
@@ -200,6 +343,17 @@ describe('Platform Query Runtime', () => {
 
     await act(async () => vi.advanceTimersByTime(1));
     expect(aborted).toHaveBeenCalledTimes(1);
+    expect(debug.mock.calls
+      .filter(([message]) => message === 'platform-query.lifecycle')
+      .map(([, record]) => record)
+      .find((record) => (record as { event?: string }).event === 'orphan-aborted'))
+      .toMatchObject({
+        owner: 'organization.persons',
+        generation: 1,
+        event: 'orphan-aborted',
+        subscriberCount: 0,
+        reason: 'initial',
+      });
 
     await act(async () => {
       root!.render(
@@ -342,9 +496,10 @@ describe('Platform Query Runtime', () => {
     )
       .mockReturnValueOnce(initial.promise)
       .mockReturnValueOnce(retry.promise);
-    const failure = new Error('person list unavailable');
+    const failure = new Error('private adapter failure detail');
     const recovered: PersonList = { items: [{ id: 'Recovered' }] };
     let observed: PlatformQueryResult<PersonList> | undefined;
+    const debug = vi.mocked(console.debug);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement('div');
     document.body.append(container);
@@ -354,7 +509,7 @@ describe('Platform Query Runtime', () => {
       root.render(
         <PlatformQueryProvider scopeKey="User_1">
           <QueryResultProbe
-            queryKey={['organization.persons']}
+            queryKey={['organization.persons', { filter: 'private-query-value' }]}
             load={load}
             observe={(result) => { observed = result; }}
           />
@@ -365,6 +520,21 @@ describe('Platform Query Runtime', () => {
 
     expect(load).toHaveBeenCalledTimes(1);
     expect(observed).toMatchObject({ status: 'error', error: failure, isFetching: false });
+    const failedRecord = debug.mock.calls
+      .filter(([message]) => message === 'platform-query.lifecycle')
+      .map(([, record]) => record as Record<string, unknown>)
+      .find(({ event }) => event === 'failed');
+    expect(failedRecord).toMatchObject({
+      owner: 'organization.persons',
+      generation: 1,
+      event: 'failed',
+      subscriberCount: 1,
+      reason: 'initial',
+    });
+    expect(JSON.stringify(failedRecord)).not.toContain('private adapter failure detail');
+    expect(JSON.stringify(failedRecord)).not.toContain('private-query-value');
+    expect(failedRecord).not.toHaveProperty('error');
+    expect(failedRecord).not.toHaveProperty('data');
 
     await act(async () => {
       observed!.retry();
@@ -471,6 +641,57 @@ describe('Platform Query Runtime', () => {
 
     await act(async () => actions!.invalidate(['organization.inactive']));
     expect(inactiveLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('records retry, refresh, and invalidate reasons without settling a retired generation', async () => {
+    const attempts = [
+      createDeferred<PersonList>(),
+      createDeferred<PersonList>(),
+      createDeferred<PersonList>(),
+      createDeferred<PersonList>(),
+    ];
+    let attemptIndex = 0;
+    const load = vi.fn(() => attempts[attemptIndex++].promise);
+    const debug = vi.mocked(console.debug);
+    let observed: PlatformQueryResult<PersonList> | undefined;
+    let actions: PlatformQueryActions | undefined;
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(
+        <PlatformQueryProvider scopeKey="User_1">
+          <QueryActionsProbe observe={(value) => { actions = value; }} />
+          <QueryResultProbe
+            queryKey={['organization.persons']}
+            load={load}
+            observe={(result) => { observed = result; }}
+          />
+        </PlatformQueryProvider>,
+      );
+    });
+    await act(async () => attempts[0].reject(new Error('initial failure')));
+    await act(async () => observed!.retry());
+    await act(async () => attempts[1].resolve({ items: [{ id: 'Retry' }] }));
+    await act(async () => observed!.refresh());
+    await act(async () => actions!.invalidate(['organization.persons'], { exact: true }));
+    await act(async () => attempts[2].resolve({ items: [{ id: 'RetiredRefresh' }] }));
+    await act(async () => attempts[3].resolve({ items: [{ id: 'Invalidated' }] }));
+
+    const records = debug.mock.calls
+      .filter(([message]) => message === 'platform-query.lifecycle')
+      .map(([, record]) => record as { event: string; generation: number; reason: string });
+    expect(records.map(({ event, generation, reason }) => ({ event, generation, reason }))).toEqual([
+      { event: 'started', generation: 1, reason: 'initial' },
+      { event: 'failed', generation: 1, reason: 'initial' },
+      { event: 'started', generation: 2, reason: 'retry' },
+      { event: 'completed', generation: 2, reason: 'retry' },
+      { event: 'started', generation: 3, reason: 'refresh' },
+      { event: 'started', generation: 4, reason: 'invalidate' },
+      { event: 'completed', generation: 4, reason: 'invalidate' },
+    ]);
   });
 
   it('immediately retires the old subject and loads the active query in a changed scope', async () => {

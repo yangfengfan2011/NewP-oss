@@ -8,6 +8,7 @@ import {
   analyzeEffectNetworkLifecycleSource,
   analyzeEffectNetworkLifecycleTree,
   evaluateEffectNetworkLifecycle,
+  runEffectNetworkLifecycleGate,
 } from './check-effect-network-lifecycle.mjs';
 import { effectNetworkLifecycleAllowlist } from './effect-network-lifecycle.allowlist.mjs';
 
@@ -729,10 +730,95 @@ test('scans production TypeScript under packages, modules, and templates only', 
   ]);
 });
 
+test('rejects a production re-adoption of the public SDK legacy lookup runtime', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const target = path.join(frontendRoot, 'modules/example/src/LegacyLookupProbe.tsx');
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `import { useStandardCrudLookupRuntime as useLegacyLookups } from '@icp-platform/sdk';
+    export function LegacyLookupProbe(input) {
+      useLegacyLookups(input);
+      return null;
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), [
+    'COMPATIBILITY_ONLY_SDK_LOOKUP_RUNTIME_READOPTED',
+  ]);
+});
+
+test('rejects a production SearchTablePage adoption without controlledResult', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const target = path.join(frontendRoot, 'modules/example/src/UncontrolledTableProbe.tsx');
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `import { SearchTablePage as LegacyTable } from '@icp-platform/ui/crud-list';
+    export function UncontrolledTableProbe({ request }) {
+      return <LegacyTable rowKey="id" columns={[]} request={request} />;
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), [
+    'COMPATIBILITY_ONLY_SEARCH_TABLE_UNCONTROLLED_READOPTED',
+  ]);
+});
+
+test('rejects a production AuthorizationProvider adoption without controlled permissions', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const target = path.join(frontendRoot, 'templates/example/src/UncontrolledAuthorizationProbe.tsx');
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `import * as Platform from '@icp-platform/core';
+    export function UncontrolledAuthorizationProbe() {
+      return <Platform.AuthorizationProvider isAuthenticated>{null}</Platform.AuthorizationProvider>;
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), [
+    'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',
+  ]);
+});
+
+test('allows the Shell private lookup hook and controlled table and authorization adopters', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const target = path.join(frontendRoot, 'packages/shell/src/ControlledAdoptersProbe.tsx');
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `import { AuthorizationProvider } from '@icp-platform/core';
+    import { CrudTableSection } from '@icp-platform/ui/crud';
+    import { useStandardCrudLookupRuntime } from './standard-crud/standardCrudLookupRuntime';
+    export function ControlledAdoptersProbe({ input, request, controlledResult }) {
+      useStandardCrudLookupRuntime(input);
+      return (
+        <AuthorizationProvider permissions={[]}>
+          <CrudTableSection
+            rowKey="id"
+            columns={[]}
+            request={request}
+            controlledResult={controlledResult}
+            onRefresh={() => undefined}
+          />
+        </AuthorizationProvider>
+      );
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.deepEqual(result.compatibilityDiagnostics, []);
+  assert.equal(result.ok, true);
+});
+
 test('matches the reviewed current-tree baseline with no effect write commands', () => {
   const frontendRoot = path.resolve(import.meta.dirname, '..');
   const findings = analyzeEffectNetworkLifecycleTree({ frontendRoot });
   const result = evaluateEffectNetworkLifecycle({ findings, allowlist: effectNetworkLifecycleAllowlist });
+  const gateResult = runEffectNetworkLifecycleGate({ frontendRoot });
   const effectFindings = findings.filter(({ hook }) => hook !== 'usePlatformQuery.load');
   const queryLoadFindings = findings.filter(({ hook }) => hook === 'usePlatformQuery.load');
 
@@ -765,6 +851,7 @@ test('matches the reviewed current-tree baseline with no effect write commands',
     },
   ]);
   assert.deepEqual(result, { ok: true, diagnostics: [] });
+  assert.deepEqual(gateResult.compatibilityDiagnostics, []);
   assert.equal(
     effectFindings.some(({ triggerChain }) => triggerChain.includes('metadataListQuery') || triggerChain.includes('runtime.reset')),
     false,

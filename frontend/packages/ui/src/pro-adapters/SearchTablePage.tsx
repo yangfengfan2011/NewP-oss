@@ -56,6 +56,7 @@ export function createSearchTableRequest<TFilter extends Record<string, unknown>
 export interface SearchTablePageProps<TRow> {
   rowKey: string | ((row: TRow) => string);
   columns: ProColumns<TRow>[];
+  /** @deprecated 仓库内正式采用者使用 controlledResult；删除需独立的 versioned public-contract 决策。 */
   request: (params: Record<string, unknown>) => Promise<{ data: TRow[]; total: number; success: boolean }>;
   headerTitle?: ReactNode;
   toolbar?: ReactNode;

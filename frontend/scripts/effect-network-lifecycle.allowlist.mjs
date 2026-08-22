@@ -18,8 +18,8 @@ export const effectNetworkLifecycleAllowlist = [
     triggerChain: 'fetchPermissions>fetch',
     classification: 'read-query',
     owner: 'Core Authorization',
-    reason: '旧 uncontrolled AuthorizationProvider 入口仍自行读取当前主体权限；Shell 主路径使用受控值。',
-    exitCondition: '删除 uncontrolled 入口，或把权限读取迁入 Platform Query Runtime。',
+    reason: '仓库内正式采用者已迁移到受控权限快照；uncontrolled AuthorizationProvider 仅保留 public compatibility。',
+    exitCondition: '通过独立的 versioned public-contract 决策删除 deprecated uncontrolled props。',
   },
   {
     id: 'packages/sdk/src/standardCrud.ts::useStandardCrudLookupRuntime::useEffect::loadLookups>loadStandardCrudLookupOptions>provider.load',
@@ -29,8 +29,8 @@ export const effectNetworkLifecycleAllowlist = [
     triggerChain: 'loadLookups>loadStandardCrudLookupOptions>provider.load',
     classification: 'read-query',
     owner: 'SDK Standard CRUD',
-    reason: 'Lookup 仍使用 hook 实例内的 pending ref，不能跨调用者共享。',
-    exitCondition: 'Lookup 由 Platform Query Runtime 管理并移除此 effect 加载链。',
+    reason: '仓库内正式采用者已迁移到 Platform Query Runtime；旧 SDK Hook 仅保留 public compatibility。',
+    exitCondition: '通过独立的 versioned public-contract 决策删除 deprecated Hook。',
   },
   {
     id: 'packages/shell/src/App.tsx::App::useEffect::loadRuntimeLocalizationManifest',
@@ -62,7 +62,7 @@ export const effectNetworkLifecycleAllowlist = [
     triggerChain: 'loadTableData>request',
     classification: 'read-query',
     owner: 'UI',
-    reason: 'SearchTablePage 保留 uncontrolled request 兼容路径；当前 Standard CRUD metadata list 已改用 controlledResult。',
-    exitCondition: '所有调用者使用 controlledResult 后删除 request effect，或其内部改用 Platform Query Runtime。',
+    reason: '仓库内正式采用者已迁移到 controlledResult；uncontrolled request 仅保留 public compatibility。',
+    exitCondition: '通过独立的 versioned public-contract 决策删除 deprecated uncontrolled request。',
   },
 ];

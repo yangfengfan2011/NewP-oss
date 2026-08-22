@@ -1,3 +1,11 @@
+import {
+  createPlatformQueryLifecycleIdentity,
+  readPlatformQueryLifecycleClock,
+  recordPlatformQueryLifecycle,
+  type PlatformQueryLifecycleIdentity,
+  type PlatformQueryLifecycleReason,
+} from './queryLifecycleObservability';
+
 interface QueryLoadContext {
   readonly signal: AbortSignal;
 }
@@ -13,10 +21,13 @@ interface PlatformQuerySnapshot<T> {
 
 interface QueryEntry {
   readonly keySegments: readonly string[];
+  readonly lifecycleIdentity: PlatformQueryLifecycleIdentity;
   load: QueryLoader<unknown>;
   abortController: AbortController | undefined;
   pending: Promise<unknown> | undefined;
-  pendingReason: 'initial' | 'refresh' | 'retry' | 'invalidate' | undefined;
+  pendingReason: PlatformQueryLifecycleReason | undefined;
+  generation: number;
+  generationStartedAt: number | undefined;
   snapshot: PlatformQuerySnapshot<unknown>;
   readonly listeners: Set<() => void>;
   subscriberCount: number;
@@ -47,7 +58,7 @@ export class PlatformQueryRuntime {
   ): () => void {
     let entry = this.entries.get(queryKey);
     if (!entry) {
-      entry = this.createEntry(keySegments, load);
+      entry = this.createEntry(queryKey, keySegments, load);
       this.entries.set(queryKey, entry);
     }
     entry.load = load as QueryLoader<unknown>;
@@ -58,7 +69,11 @@ export class PlatformQueryRuntime {
     }
     entry.listeners.add(listener);
     entry.subscriberCount += 1;
-    if (!entry.pending && entry.snapshot.status === 'idle') this.startGeneration(entry, load);
+    if (!entry.pending && entry.snapshot.status === 'idle') {
+      this.startGeneration(entry, load);
+    } else {
+      this.recordLifecycle(entry, 'joined', entry.pendingReason ?? 'initial');
+    }
 
     let subscribed = true;
     return () => {
@@ -72,7 +87,15 @@ export class PlatformQueryRuntime {
       // React StrictMode 会立即重新订阅；延迟到下一个短暂宽限期后再取消真正失去订阅者的请求。
       entry.orphanTimer = setTimeout(() => {
         if (entry.subscriberCount !== 0 || this.entries.get(queryKey) !== entry) return;
-        entry.abortController?.abort();
+        const abortController = entry.abortController;
+        if (entry.pending && abortController) {
+          this.recordLifecycle(entry, 'orphan-aborted', entry.pendingReason ?? 'initial');
+        }
+        entry.abortController = undefined;
+        entry.pending = undefined;
+        entry.pendingReason = undefined;
+        entry.generationStartedAt = undefined;
+        abortController?.abort();
         this.entries.delete(queryKey);
       }, ORPHAN_GRACE_PERIOD_MS);
     };
@@ -118,13 +141,16 @@ export class PlatformQueryRuntime {
     this.entries.clear();
   }
 
-  private createEntry<T>(keySegments: readonly string[], load: QueryLoader<T>): QueryEntry {
+  private createEntry<T>(queryKey: string, keySegments: readonly string[], load: QueryLoader<T>): QueryEntry {
     return {
       keySegments,
+      lifecycleIdentity: createPlatformQueryLifecycleIdentity(queryKey, keySegments),
       load: load as QueryLoader<unknown>,
       abortController: undefined,
       pending: undefined,
       pendingReason: undefined,
+      generation: 0,
+      generationStartedAt: undefined,
       snapshot: IDLE_SNAPSHOT,
       listeners: new Set(),
       subscriberCount: 0,
@@ -143,12 +169,15 @@ export class PlatformQueryRuntime {
     entry.abortController = abortController;
     entry.pending = pending;
     entry.pendingReason = reason;
+    entry.generation += 1;
+    entry.generationStartedAt = readPlatformQueryLifecycleClock();
     entry.snapshot = {
       status: entry.snapshot.status === 'success' ? 'success' : 'pending',
       data: previousData,
       error: undefined,
       isFetching: true,
     };
+    this.recordLifecycle(entry, 'started', reason);
     this.publish(entry);
 
     void pending.then(
@@ -163,23 +192,45 @@ export class PlatformQueryRuntime {
       this.settleFailure(entry, pending, new Error(RAW_RESPONSE_UNSUPPORTED));
       return;
     }
+    this.recordLifecycle(entry, 'completed', entry.pendingReason ?? 'initial');
     entry.abortController = undefined;
     entry.pending = undefined;
     entry.pendingReason = undefined;
+    entry.generationStartedAt = undefined;
     entry.snapshot = { status: 'success', data, error: undefined, isFetching: false };
     this.publish(entry);
   }
 
   private settleFailure(entry: QueryEntry, pending: Promise<unknown>, error: unknown): void {
     if (entry.pending !== pending) return;
+    this.recordLifecycle(entry, 'failed', entry.pendingReason ?? 'initial');
     entry.abortController = undefined;
     entry.pending = undefined;
     entry.pendingReason = undefined;
+    entry.generationStartedAt = undefined;
     entry.snapshot = { status: 'error', data: undefined, error, isFetching: false };
     this.publish(entry);
   }
 
   private publish(entry: QueryEntry): void {
     entry.listeners.forEach((listener) => listener());
+  }
+
+  /** 观测只读取生命周期元数据，禁止传入 raw key、结果或错误内容。 */
+  private recordLifecycle(
+    entry: QueryEntry,
+    event: 'started' | 'joined' | 'completed' | 'failed' | 'orphan-aborted',
+    reason: PlatformQueryLifecycleReason,
+  ): void {
+    recordPlatformQueryLifecycle({
+      ...entry.lifecycleIdentity,
+      generation: entry.generation,
+      event,
+      subscriberCount: entry.subscriberCount,
+      durationMs: entry.generationStartedAt === undefined
+        ? 0
+        : Math.max(0, readPlatformQueryLifecycleClock() - entry.generationStartedAt),
+      reason,
+    });
   }
 }

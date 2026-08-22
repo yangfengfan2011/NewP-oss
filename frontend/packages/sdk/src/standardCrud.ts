@@ -685,7 +685,8 @@ export function applyStandardCrudLookupValueChange(
 /**
  * 标准 CRUD lookup React 运行时。
  *
- * Host 与兼容创建页共享这一入口维护 loading/error/options，业务页面只做受控表单 wiring。
+ * @deprecated 仓库内正式 Host 已改用 Platform Query Runtime；此入口只保留 public source compatibility，
+ * 删除需要独立的 versioned public-contract 决策。
  */
 export function useStandardCrudLookupRuntime({
   fields,

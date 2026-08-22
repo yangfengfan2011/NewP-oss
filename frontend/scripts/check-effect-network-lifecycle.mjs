@@ -12,6 +12,10 @@ const SHARED_LOADER_NAMES = new Set([
   'loadRuntimeMetadata',
 ]);
 
+function isPackageImport(moduleName, packageName) {
+  return moduleName === packageName || moduleName.startsWith(`${packageName}/`);
+}
+
 function lineOf(sourceFile, node) {
   return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 }
@@ -451,7 +455,7 @@ export function evaluateEffectNetworkLifecycle({ findings, allowlist }) {
   return { ok: diagnostics.length === 0, diagnostics };
 }
 
-export function analyzeEffectNetworkLifecycleTree({ frontendRoot }) {
+function collectProductionTypeScriptFiles(frontendRoot) {
   const files = [];
   const excludedDirectories = new Set(['node_modules', 'dist', 'coverage', '__tests__', '.vite']);
   function walk(directory) {
@@ -471,7 +475,127 @@ export function analyzeEffectNetworkLifecycleTree({ frontendRoot }) {
   }
   for (const root of ['packages', 'modules', 'templates']) walk(path.join(frontendRoot, root));
   files.sort((left, right) => left.localeCompare(right));
-  return files.flatMap((absoluteFile) => analyzeEffectNetworkLifecycleSource({
+  return files;
+}
+
+export function analyzeEffectNetworkLifecycleTree({ frontendRoot }) {
+  return collectProductionTypeScriptFiles(frontendRoot).flatMap((absoluteFile) => analyzeEffectNetworkLifecycleSource({
+    file: path.relative(frontendRoot, absoluteFile).replaceAll('\\', '/'),
+    source: readFileSync(absoluteFile, 'utf8'),
+  }));
+}
+
+export function analyzeCompatibilityOnlyReAdoptionsSource({ file, source }) {
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const legacyLookupAliases = new Set();
+  const sdkNamespaces = new Set();
+  const tableAliases = new Set();
+  const uiNamespaces = new Set();
+  const authorizationProviderAliases = new Set();
+  const coreNamespaces = new Set();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const moduleName = statement.moduleSpecifier.text;
+    const bindings = statement.importClause?.namedBindings;
+    if (isPackageImport(moduleName, '@icp-platform/sdk') && bindings && ts.isNamespaceImport(bindings)) {
+      sdkNamespaces.add(bindings.name.text);
+    }
+    if (isPackageImport(moduleName, '@icp-platform/sdk') && bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if ((element.propertyName?.text ?? element.name.text) === 'useStandardCrudLookupRuntime') {
+          legacyLookupAliases.add(element.name.text);
+        }
+      }
+    }
+    if (isPackageImport(moduleName, '@icp-platform/ui') && bindings && ts.isNamespaceImport(bindings)) {
+      uiNamespaces.add(bindings.name.text);
+    }
+    if (isPackageImport(moduleName, '@icp-platform/ui') && bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        const importedName = element.propertyName?.text ?? element.name.text;
+        if (importedName === 'SearchTablePage' || importedName === 'CrudTableSection') {
+          tableAliases.add(element.name.text);
+        }
+      }
+    }
+    if (isPackageImport(moduleName, '@icp-platform/core') && bindings && ts.isNamespaceImport(bindings)) {
+      coreNamespaces.add(bindings.name.text);
+    }
+    if (isPackageImport(moduleName, '@icp-platform/core') && bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if ((element.propertyName?.text ?? element.name.text) === 'AuthorizationProvider') {
+          authorizationProviderAliases.add(element.name.text);
+        }
+      }
+    }
+  }
+
+  const diagnostics = [];
+  function visit(node) {
+    if (ts.isCallExpression(node)) {
+      const isLegacyLookupCall = ts.isIdentifier(node.expression)
+        ? legacyLookupAliases.has(node.expression.text)
+        : ts.isPropertyAccessExpression(node.expression)
+          && ts.isIdentifier(node.expression.expression)
+          && sdkNamespaces.has(node.expression.expression.text)
+          && node.expression.name.text === 'useStandardCrudLookupRuntime';
+      if (isLegacyLookupCall) {
+        diagnostics.push({
+          code: 'COMPATIBILITY_ONLY_SDK_LOOKUP_RUNTIME_READOPTED',
+          id: `${file}::${enclosingFunctionName(node)}::useStandardCrudLookupRuntime`,
+          line: lineOf(sourceFile, node),
+        });
+      }
+    }
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tagName = node.tagName;
+      const isCompatibilityTable = ts.isIdentifier(tagName)
+        ? tableAliases.has(tagName.text)
+        : ts.isPropertyAccessExpression(tagName)
+          && ts.isIdentifier(tagName.expression)
+          && uiNamespaces.has(tagName.expression.text)
+          && (tagName.name.text === 'SearchTablePage' || tagName.name.text === 'CrudTableSection');
+      const isControlled = node.attributes.properties.some((attribute) => (
+        ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === 'controlledResult'
+      ));
+      if (isCompatibilityTable && !isControlled) {
+        diagnostics.push({
+          code: 'COMPATIBILITY_ONLY_SEARCH_TABLE_UNCONTROLLED_READOPTED',
+          id: `${file}::${enclosingFunctionName(node)}::${tagName.getText(sourceFile)}`,
+          line: lineOf(sourceFile, node),
+        });
+      }
+      const isAuthorizationProvider = ts.isIdentifier(tagName)
+        ? authorizationProviderAliases.has(tagName.text)
+        : ts.isPropertyAccessExpression(tagName)
+          && ts.isIdentifier(tagName.expression)
+          && coreNamespaces.has(tagName.expression.text)
+          && tagName.name.text === 'AuthorizationProvider';
+      const hasControlledPermissions = node.attributes.properties.some((attribute) => (
+        ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === 'permissions'
+      ));
+      if (isAuthorizationProvider && !hasControlledPermissions) {
+        diagnostics.push({
+          code: 'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',
+          id: `${file}::${enclosingFunctionName(node)}::${tagName.getText(sourceFile)}`,
+          line: lineOf(sourceFile, node),
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return diagnostics;
+}
+
+export function analyzeCompatibilityOnlyReAdoptionsTree({ frontendRoot }) {
+  return collectProductionTypeScriptFiles(frontendRoot).flatMap((absoluteFile) => analyzeCompatibilityOnlyReAdoptionsSource({
     file: path.relative(frontendRoot, absoluteFile).replaceAll('\\', '/'),
     source: readFileSync(absoluteFile, 'utf8'),
   }));
@@ -480,7 +604,9 @@ export function analyzeEffectNetworkLifecycleTree({ frontendRoot }) {
 export function runEffectNetworkLifecycleGate({ frontendRoot, allowlist = effectNetworkLifecycleAllowlist }) {
   const findings = analyzeEffectNetworkLifecycleTree({ frontendRoot });
   const evaluation = evaluateEffectNetworkLifecycle({ findings, allowlist });
-  return { ...evaluation, findings };
+  const compatibilityDiagnostics = analyzeCompatibilityOnlyReAdoptionsTree({ frontendRoot });
+  const diagnostics = [...evaluation.diagnostics, ...compatibilityDiagnostics];
+  return { ok: diagnostics.length === 0, diagnostics, findings, compatibilityDiagnostics };
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : undefined;

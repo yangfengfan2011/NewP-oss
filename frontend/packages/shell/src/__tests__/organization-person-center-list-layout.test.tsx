@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
@@ -33,6 +33,7 @@ async function flushProTableRequest(): Promise<void> {
 
 const serviceMocks = vi.hoisted(() => ({
   setPersonLifecycleStatus: vi.fn(),
+  getCompanies: vi.fn(async () => []),
 }));
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -41,7 +42,7 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
   return {
     ...actual,
     setPersonLifecycleStatus: serviceMocks.setPersonLifecycleStatus,
-    getCompanies: async () => [],
+    getCompanies: serviceMocks.getCompanies,
     getDepartments: async () => [],
     getEmploymentStatusLabel: (value: string) => value,
   };
@@ -138,9 +139,9 @@ describe('organization person center list layout', () => {
     };
   });
 
-  function renderStandardCrudListHost() {
+  function renderStandardCrudListHost(strictMode = false) {
     root = createRoot(container);
-    root.render(
+    const host = (
       <MemoryRouter initialEntries={['/organization/persons']}>
         <LocalizationProvider
           defaultLanguage="zhs"
@@ -153,8 +154,9 @@ describe('organization person center list layout', () => {
             </PlatformQueryProvider>
           </RuntimeMetadataProvider>
         </LocalizationProvider>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
+    root.render(strictMode ? <StrictMode>{host}</StrictMode> : host);
   }
 
   beforeEach(() => {
@@ -335,6 +337,61 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
+  });
+
+  it('single-flights the real company lookup while the StrictMode list still loads', async () => {
+    const actualService = await vi.importActual<
+      typeof import('../../../../modules/organization/src/services/organizationService')
+    >('../../../../modules/organization/src/services/organizationService');
+    serviceMocks.getCompanies.mockImplementation(actualService.getCompanies);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === '/api/organization/companies') {
+        return new Response(JSON.stringify([{
+          id: 'company-1',
+          code: 'HQ',
+          name: '总部',
+          isEnabled: true,
+          sortOrder: 1,
+          createdAt: '2026-08-22T00:00:00Z',
+        }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.startsWith('/api/organization/persons?')) {
+        return new Response(JSON.stringify({
+          items: [{
+            EID: 'person-1',
+            PersonNo: 'P0001',
+            ENAME: '张三',
+            CompanyName: '总部',
+            DepartmentName: '研发部',
+            EmploymentStatus: 'FullTime',
+            IsEnabled: true,
+          }],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      throw new Error(`unexpected request: ${url}`);
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => renderStandardCrudListHost(true));
+    await flushProTableRequest();
+
+    await vi.waitFor(() => expect(container.textContent).toContain('张三'));
+    expect(serviceMocks.getCompanies).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.getCompanies).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(fetchSpy.mock.calls.filter(([url, init]) => (
+      url === '/api/organization/companies' && init?.method === 'GET'
+    ))).toHaveLength(1);
+    expect(fetchSpy.mock.calls.filter(([url, init]) => (
+      typeof url === 'string'
+      && url.startsWith('/api/organization/persons?')
+      && init?.method === 'GET'
+    ))).toHaveLength(1);
   });
 
   it('loads person center as a standard CRUD frontend resource', () => {

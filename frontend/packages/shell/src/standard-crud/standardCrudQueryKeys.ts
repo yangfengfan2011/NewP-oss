@@ -1,5 +1,17 @@
 import type { PlatformQueryKey, PlatformQueryKeyValue } from '@icp-platform/core';
-import type { StandardCrudListQueryRequest } from '@icp-platform/sdk';
+import type {
+  StandardCrudFieldDefinition,
+  StandardCrudListQueryRequest,
+  StandardCrudLookupProvider,
+} from '@icp-platform/sdk';
+
+export interface StandardCrudLookupQueryKeyInput {
+  resourceKey: string;
+  fields: StandardCrudFieldDefinition[];
+  providers: StandardCrudLookupProvider[];
+  values: Record<string, unknown>;
+  detailFields?: Record<string, unknown>;
+}
 
 export function createStandardCrudListQueryKey(
   resourceKey: string,
@@ -9,6 +21,47 @@ export function createStandardCrudListQueryKey(
     'standard-crud.list',
     resourceKey,
     normalizeQueryKeyObject(request as Record<string, unknown>, new Set()),
+  ];
+}
+
+export function createStandardCrudLookupQueryKey(
+  input: StandardCrudLookupQueryKeyInput,
+): PlatformQueryKey {
+  const detailFields = input.detailFields ?? {};
+  const lookupFields = input.fields
+    .filter((field) => field.kind === 'lookup')
+    .map((field) => {
+      const providerKey = field.lookup?.providerKey ?? '';
+      const dependencyKeys = field.lookup?.dependsOn ?? [];
+      const labelField = field.lookup?.currentValueLabelField;
+      const currentValue = input.values[field.key];
+      const currentValueLabel = (typeof currentValue === 'string' || typeof currentValue === 'number')
+        && currentValue !== ''
+        && labelField
+        && typeof detailFields[labelField] === 'string'
+        ? detailFields[labelField]
+        : null;
+
+      return {
+        currentValueLabel,
+        dependencyKeys,
+        dependencyValues: normalizeLookupQueryKeyObject(
+          Object.fromEntries(dependencyKeys.map((key) => [key, input.values[key]])),
+          new Set(),
+        ),
+        fieldKey: field.key,
+        providerAvailable: input.providers.some((provider) => provider.key === providerKey),
+        providerKey,
+      };
+    });
+
+  return [
+    'standard-crud.lookup',
+    input.resourceKey,
+    {
+      fields: lookupFields,
+      values: normalizeLookupQueryKeyObject(input.values, new Set()),
+    },
   ];
 }
 
@@ -54,4 +107,53 @@ function normalizeQueryKeyValue(
   }
 
   throw new TypeError(`Standard CRUD query key does not support ${typeof value} values`);
+}
+
+function normalizeLookupQueryKeyObject(
+  value: Record<string, unknown>,
+  ancestors: Set<object>,
+): { readonly [name: string]: PlatformQueryKeyValue } {
+  if (ancestors.has(value)) throw new TypeError('Standard CRUD query key cannot contain cyclic values');
+  ancestors.add(value);
+
+  const normalized: Record<string, PlatformQueryKeyValue> = {};
+  Object.keys(value).sort().forEach((name) => {
+    const item = normalizeLookupQueryKeyValue(value[name], ancestors, false);
+    if (item !== undefined) normalized[name] = item;
+  });
+  ancestors.delete(value);
+  return normalized;
+}
+
+function normalizeLookupQueryKeyValue(
+  value: unknown,
+  ancestors: Set<object>,
+  arrayItem: boolean,
+): PlatformQueryKeyValue | undefined {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+    return arrayItem ? null : undefined;
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError('Standard CRUD query key numbers must be finite');
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (ancestors.has(value)) throw new TypeError('Standard CRUD query key cannot contain cyclic values');
+    ancestors.add(value);
+    const normalized = Array.from(
+      value,
+      (item) => normalizeLookupQueryKeyValue(item, ancestors, true) ?? null,
+    );
+    ancestors.delete(value);
+    return normalized;
+  }
+  if (typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      return normalizeLookupQueryKeyObject(value as Record<string, unknown>, ancestors);
+    }
+  }
+
+  return arrayItem ? null : undefined;
 }

@@ -53,6 +53,48 @@ describe('personnel center first vertical slice', () => {
     ]);
   });
 
+  it('forwards the lookup execution signal through every organization GET', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('[]', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    const controller = new AbortController();
+    const providers = personStandardCrudResource.lookupProviders ?? [];
+    const companyProvider = providers.find(provider => provider.key === 'organization.companies');
+    const departmentProvider = providers.find(provider => provider.key === 'organization.departments');
+    const positionProvider = providers.find(provider => provider.key === 'organization.positions');
+
+    await companyProvider?.load(
+      { fieldKey: 'companyId', values: {}, dependencyValues: {} },
+      { signal: controller.signal },
+    );
+    await departmentProvider?.load(
+      {
+        fieldKey: 'departmentId',
+        values: { companyId: 'company-1' },
+        dependencyValues: { companyId: 'company-1' },
+      },
+      { signal: controller.signal },
+    );
+    await positionProvider?.load(
+      {
+        fieldKey: 'positionId',
+        values: { departmentId: 'department-1' },
+        dependencyValues: { departmentId: 'department-1' },
+      },
+      { signal: controller.signal },
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    fetchSpy.mock.calls.forEach(([, init]) => {
+      expect(init).toEqual(expect.objectContaining({
+        method: 'GET',
+        signal: controller.signal,
+      }));
+    });
+  });
+
   it('projects display names without falling back to raw organization ids', () => {
     const row = mapPersonListItem({
       EID: 'person-1',

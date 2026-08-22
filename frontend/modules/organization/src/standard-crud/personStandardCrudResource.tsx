@@ -37,7 +37,7 @@ const LazyPersonUserBindingSummary = lazy(async () => {
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.companies',
-    load: async ({ fieldKey }) => (await getCompanies())
+    load: async ({ fieldKey }, context) => (await getCompanies(context?.signal))
       .filter((company) => fieldKey === 'companyId' || company.isEnabled)
       .map((company) => ({
         value: company.id,
@@ -46,13 +46,13 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
   },
   {
     key: 'organization.departments',
-    load: async ({ fieldKey, dependencyValues }) => {
+    load: async ({ fieldKey, dependencyValues }, context) => {
       const companyId = dependencyValues.CompanyId ?? dependencyValues.companyId;
       if (typeof companyId !== 'string' || companyId.length === 0) {
         return [];
       }
 
-      return (await getDepartments(companyId))
+      return (await getDepartments(companyId, context?.signal))
         .filter((department) => fieldKey === 'departmentId' || department.isEnabled)
         .map((department) => ({
           value: department.id,
@@ -62,13 +62,13 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
   },
   {
     key: 'organization.positions',
-    load: async ({ fieldKey, dependencyValues }) => {
+    load: async ({ fieldKey, dependencyValues }, context) => {
       const departmentId = dependencyValues.DepartmentId ?? dependencyValues.departmentId;
       if (typeof departmentId !== 'string' || departmentId.length === 0) {
         return [];
       }
 
-      return (await getPositions(departmentId))
+      return (await getPositions(departmentId, context?.signal))
         .filter((position) => fieldKey === 'positionId' || position.isEnabled)
         .map((position) => ({
           value: position.id,

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   applyStandardCrudLookupValueChange,
-  useStandardCrudLookupRuntime,
   type StandardCrudFieldDefinition,
   type StandardCrudFormSection,
   type StandardCrudLookupProvider,
@@ -10,6 +9,7 @@ import {
 import AntdButton from 'antd/es/button';
 import { FormPage, StandardCrudForm } from '@icp-platform/ui/crud-form';
 import { buildStandardCrudDetailFormValues } from '../standard-crud/standardCrudDetailFormValues';
+import { useStandardCrudLookupRuntime } from '../standard-crud/standardCrudLookupRuntime';
 import {
   type StandardCrudMutationRegistration,
   useStandardCrudMutationExecution,
@@ -46,6 +46,7 @@ export default function StandardCrudDetailEditor({
     () => buildStandardCrudDetailFormValues(detail.fields, fields),
   );
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+    resourceKey,
     fields,
     providers: registration.lookupProviders ?? [],
     values: formValues,

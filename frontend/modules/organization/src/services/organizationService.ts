@@ -201,8 +201,8 @@ async function requestJson<T>(path: string, init: RequestInit, errorMessage: str
   return response.json() as Promise<T>;
 }
 
-async function fetchJson<T>(path: string, errorMessage: string): Promise<T> {
-  return requestJson<T>(path, { method: 'GET' }, errorMessage);
+async function fetchJson<T>(path: string, errorMessage: string, signal?: AbortSignal): Promise<T> {
+  return requestJson<T>(path, { method: 'GET', signal }, errorMessage);
 }
 
 function readDateString(record: Record<string, unknown>, keys: string[], fallback = ''): string {
@@ -305,21 +305,23 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
   };
 }
 
-export async function getCompanies(): Promise<CompanyDto[]> {
-  return fetchJson<CompanyDto[]>('/api/organization/companies', '加载公司列表失败');
+export async function getCompanies(signal?: AbortSignal): Promise<CompanyDto[]> {
+  return fetchJson<CompanyDto[]>('/api/organization/companies', '加载公司列表失败', signal);
 }
 
-export async function getDepartments(companyId: string): Promise<DepartmentDto[]> {
+export async function getDepartments(companyId: string, signal?: AbortSignal): Promise<DepartmentDto[]> {
   return fetchJson<DepartmentDto[]>(
     `/api/organization/departments?companyId=${encodeURIComponent(companyId)}`,
     '加载部门列表失败',
+    signal,
   );
 }
 
-export async function getPositions(departmentId: string): Promise<PositionDto[]> {
+export async function getPositions(departmentId: string, signal?: AbortSignal): Promise<PositionDto[]> {
   return fetchJson<PositionDto[]>(
     `/api/organization/positions?departmentId=${encodeURIComponent(departmentId)}`,
     '加载岗位列表失败',
+    signal,
   );
 }
 

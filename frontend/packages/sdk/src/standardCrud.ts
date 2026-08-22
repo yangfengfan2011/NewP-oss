@@ -93,10 +93,18 @@ export interface StandardCrudLookupRequest {
   dependencyValues: Record<string, unknown>;
 }
 
+/** lookup 单次执行上下文；只承载不可序列化的生命周期信号。 */
+export interface StandardCrudLookupExecutionContext {
+  readonly signal: AbortSignal;
+}
+
 /** lookup Provider 只返回候选项，不拥有当前值保留、加载状态或错误展示流程。 */
 export interface StandardCrudLookupProvider {
   key: string;
-  load: (request: StandardCrudLookupRequest) => Promise<StandardCrudOption[]>;
+  load: (
+    request: StandardCrudLookupRequest,
+    context?: StandardCrudLookupExecutionContext,
+  ) => Promise<StandardCrudOption[]>;
 }
 
 export interface LoadStandardCrudLookupOptionsInput {
@@ -580,6 +588,7 @@ function readStandardCrudCurrentLookupOption(
  */
 export async function loadStandardCrudLookupOptions(
   input: LoadStandardCrudLookupOptionsInput,
+  context?: StandardCrudLookupExecutionContext,
 ): Promise<LoadStandardCrudLookupOptionsResult> {
   const { field, providers, values, detailFields = {} } = input;
 
@@ -608,11 +617,13 @@ export async function loadStandardCrudLookupOptions(
   }
 
   try {
-    const options = await provider.load({
+    const request: StandardCrudLookupRequest = {
       fieldKey: field.key,
       values,
       dependencyValues,
-    });
+    };
+    const executionContext = context ? [context] as const : [];
+    const options = await provider.load(request, ...executionContext);
 
     return {
       options: preserveStandardCrudCurrentOption(options, current),

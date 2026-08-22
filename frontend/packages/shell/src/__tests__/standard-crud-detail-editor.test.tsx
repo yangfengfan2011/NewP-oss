@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
@@ -70,8 +70,9 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
           catalogs={{ zhs: {} }}
         >
-          <RuntimeMetadataProvider
-            value={{
+          <PlatformQueryProvider scopeKey="user-1">
+            <RuntimeMetadataProvider
+              value={{
               manifest: { modules: [] },
               navDocuments: [],
               viewDocuments: [
@@ -96,10 +97,11 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
                 },
               ],
               modelDocuments: [modelDocument],
-            }}
-          >
-            <StandardCrudDetailPageHost viewKey="organization.person.detail" id="Person_1" />
-          </RuntimeMetadataProvider>
+              }}
+            >
+              <StandardCrudDetailPageHost viewKey="organization.person.detail" id="Person_1" />
+            </RuntimeMetadataProvider>
+          </PlatformQueryProvider>
         </LocalizationProvider>,
       );
     });

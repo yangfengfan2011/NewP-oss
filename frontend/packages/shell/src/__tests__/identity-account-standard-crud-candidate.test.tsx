@@ -671,11 +671,13 @@ describe('Identity account Standard CRUD production route', () => {
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
           catalogs={{ zhs: accountListCatalog }}
         >
-          <RuntimeMetadataProvider value={runtimeMetadata}>
-            <Routes>
-              <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
-            </Routes>
-          </RuntimeMetadataProvider>
+          <PlatformQueryProvider scopeKey="user-1">
+            <RuntimeMetadataProvider value={runtimeMetadata}>
+              <Routes>
+                <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
+              </Routes>
+            </RuntimeMetadataProvider>
+          </PlatformQueryProvider>
         </LocalizationProvider>
       </MemoryRouter>,
     ));
@@ -746,11 +748,13 @@ describe('Identity account Standard CRUD production route', () => {
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
           catalogs={{ zhs: accountListCatalog }}
         >
-          <RuntimeMetadataProvider value={runtimeMetadata}>
-            <Routes>
-              <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
-            </Routes>
-          </RuntimeMetadataProvider>
+          <PlatformQueryProvider scopeKey="user-1">
+            <RuntimeMetadataProvider value={runtimeMetadata}>
+              <Routes>
+                <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
+              </Routes>
+            </RuntimeMetadataProvider>
+          </PlatformQueryProvider>
         </LocalizationProvider>
       </MemoryRouter>,
     ));

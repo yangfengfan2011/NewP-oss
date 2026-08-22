@@ -3,13 +3,16 @@
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import { PlatformQueryProvider } from '@icp-platform/core';
 import {
-  useStandardCrudLookupRuntime,
   type StandardCrudFieldDefinition,
   type StandardCrudLookupProvider,
   type StandardCrudOption,
 } from '@icp-platform/sdk';
-import { loadStandardCrudLookupOptions } from '../standard-crud/standardCrudLookupRuntime';
+import {
+  loadStandardCrudLookupOptions,
+  useStandardCrudLookupRuntime,
+} from '../standard-crud/standardCrudLookupRuntime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -36,7 +39,7 @@ function provider(options: StandardCrudOption[]): StandardCrudLookupProvider {
 }
 
 describe('standard CRUD lookup runtime', () => {
-  it('loads identical lookup input once while StrictMode remounts effects', async () => {
+  it('shares one typed lookup result across StrictMode and two same-key callers', async () => {
     let resolveLookup!: (value: StandardCrudOption[]) => void;
     const pendingLookup = new Promise<StandardCrudOption[]>((resolve) => {
       resolveLookup = resolve;
@@ -52,27 +55,38 @@ describe('standard CRUD lookup runtime', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    function LookupRuntimeProbe() {
-      useStandardCrudLookupRuntime({ fields, providers, values });
-      return null;
+    function LookupRuntimeProbe({ testId }: { testId: string }) {
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields,
+        providers,
+        values,
+      });
+      return <span data-testid={testId}>{state.lookupOptions.departmentId?.[0]?.label ?? ''}</span>;
     }
 
     try {
       await act(async () => {
         root.render(
           <StrictMode>
-            <LookupRuntimeProbe />
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe testId="first" />
+              <LookupRuntimeProbe testId="second" />
+            </PlatformQueryProvider>
           </StrictMode>,
         );
         await Promise.resolve();
       });
 
-      expect(departments.load).toHaveBeenCalledTimes(1);
-      expect(departments.load).toHaveBeenCalledWith({
-        fieldKey: 'departmentId',
-        values,
-        dependencyValues: { tenantId: 'tenant-a' },
+      await act(async () => {
+        resolveLookup([{ value: 'finance', label: '财务部' }]);
+        await pendingLookup;
+        await Promise.resolve();
       });
+
+      expect(departments.load).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('[data-testid="first"]')?.textContent).toBe('财务部');
+      expect(container.querySelector('[data-testid="second"]')?.textContent).toBe('财务部');
     } finally {
       await act(async () => {
         resolveLookup([{ value: 'finance', label: '财务部' }]);
@@ -83,7 +97,7 @@ describe('standard CRUD lookup runtime', () => {
     }
   });
 
-  it('loads the same serialized lookup input again after a failed request', async () => {
+  it('retries a failed provider exactly once only after explicit retry', async () => {
     const departments: StandardCrudLookupProvider = {
       key: 'departments',
       load: vi.fn()
@@ -97,9 +111,16 @@ describe('standard CRUD lookup runtime', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
+    let retryLookup = () => undefined;
 
     function LookupRuntimeProbe({ values }: { values: Record<string, unknown> }) {
-      const state = useStandardCrudLookupRuntime({ fields, providers, values });
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields,
+        providers,
+        values,
+      });
+      retryLookup = state.retry;
       return <span>{state.lookupErrors.departmentId ?? state.lookupOptions.departmentId?.[0]?.label ?? ''}</span>;
     }
 
@@ -107,7 +128,9 @@ describe('standard CRUD lookup runtime', () => {
       await act(async () => {
         root.render(
           <StrictMode>
-            <LookupRuntimeProbe values={firstValues} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe values={firstValues} />
+            </PlatformQueryProvider>
           </StrictMode>,
         );
         await Promise.resolve();
@@ -120,19 +143,32 @@ describe('standard CRUD lookup runtime', () => {
       await act(async () => {
         root.render(
           <StrictMode>
-            <LookupRuntimeProbe values={retryValues} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe values={retryValues} />
+            </PlatformQueryProvider>
           </StrictMode>,
         );
         await Promise.resolve();
         await Promise.resolve();
       });
 
-      expect(departments.load).toHaveBeenCalledTimes(2);
-      expect(departments.load).toHaveBeenLastCalledWith({
-        fieldKey: 'departmentId',
-        values: retryValues,
-        dependencyValues: { tenantId: 'tenant-a' },
+      expect(departments.load).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        retryLookup();
+        await Promise.resolve();
+        await Promise.resolve();
       });
+
+      expect(departments.load).toHaveBeenCalledTimes(2);
+      expect(departments.load).toHaveBeenLastCalledWith(
+        {
+          fieldKey: 'departmentId',
+          values: retryValues,
+          dependencyValues: { tenantId: 'tenant-a' },
+        },
+        { signal: expect.any(AbortSignal) },
+      );
       expect(container.textContent).toContain('财务部');
     } finally {
       await act(async () => root.unmount());
@@ -157,7 +193,12 @@ describe('standard CRUD lookup runtime', () => {
     const root = createRoot(container);
 
     function LookupRuntimeProbe({ values }: { values: Record<string, unknown> }) {
-      const state = useStandardCrudLookupRuntime({ fields, providers, values });
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields,
+        providers,
+        values,
+      });
       return <span>{state.lookupOptions.departmentId?.[0]?.label ?? ''}</span>;
     }
 
@@ -165,7 +206,9 @@ describe('standard CRUD lookup runtime', () => {
       await act(async () => {
         root.render(
           <StrictMode>
-            <LookupRuntimeProbe values={tenantAValues} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe values={tenantAValues} />
+            </PlatformQueryProvider>
           </StrictMode>,
         );
         await Promise.resolve();
@@ -176,7 +219,9 @@ describe('standard CRUD lookup runtime', () => {
       await act(async () => {
         root.render(
           <StrictMode>
-            <LookupRuntimeProbe values={tenantBValues} />
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe values={tenantBValues} />
+            </PlatformQueryProvider>
           </StrictMode>,
         );
         await Promise.resolve();
@@ -184,15 +229,164 @@ describe('standard CRUD lookup runtime', () => {
       });
 
       expect(departments.load).toHaveBeenCalledTimes(2);
-      expect(departments.load).toHaveBeenLastCalledWith({
-        fieldKey: 'departmentId',
-        values: tenantBValues,
-        dependencyValues: { tenantId: 'tenant-b' },
-      });
+      expect(departments.load).toHaveBeenLastCalledWith(
+        {
+          fieldKey: 'departmentId',
+          values: tenantBValues,
+          dependencyValues: { tenantId: 'tenant-b' },
+        },
+        { signal: expect.any(AbortSignal) },
+      );
       expect(container.textContent).toContain('tenant-b');
     } finally {
       await act(async () => root.unmount());
       container.remove();
+    }
+  });
+
+  it('does not let a slow old lookup key overwrite a faster new key', async () => {
+    let resolveTenantA!: (value: StandardCrudOption[]) => void;
+    let resolveTenantB!: (value: StandardCrudOption[]) => void;
+    const tenantAResult = new Promise<StandardCrudOption[]>((resolve) => {
+      resolveTenantA = resolve;
+    });
+    const tenantBResult = new Promise<StandardCrudOption[]>((resolve) => {
+      resolveTenantB = resolve;
+    });
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn((request) => request.dependencyValues.tenantId === 'tenant-a'
+        ? tenantAResult
+        : tenantBResult),
+    };
+    const fields = [lookupField()];
+    const providers = [departments];
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    function LookupRuntimeProbe({ tenantId }: { tenantId: string }) {
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields,
+        providers,
+        values: { tenantId },
+      });
+      return <span>{state.lookupOptions.departmentId?.[0]?.label ?? ''}</span>;
+    }
+
+    try {
+      await act(async () => {
+        root.render(
+          <StrictMode>
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe tenantId="tenant-a" />
+            </PlatformQueryProvider>
+          </StrictMode>,
+        );
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        root.render(
+          <StrictMode>
+            <PlatformQueryProvider scopeKey="user-1">
+              <LookupRuntimeProbe tenantId="tenant-b" />
+            </PlatformQueryProvider>
+          </StrictMode>,
+        );
+        await Promise.resolve();
+      });
+      expect(departments.load).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        resolveTenantB([{ value: 'tenant-b', label: 'tenant-b' }]);
+        await tenantBResult;
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('tenant-b');
+
+      await act(async () => {
+        resolveTenantA([{ value: 'tenant-a', label: 'tenant-a' }]);
+        await tenantAResult;
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('tenant-b');
+    } finally {
+      resolveTenantA([]);
+      resolveTenantB([]);
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps the request alive for grace re-subscription and aborts after the final leave', async () => {
+    vi.useFakeTimers();
+    let receivedSignal: AbortSignal | undefined;
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn((_request, context) => {
+        receivedSignal = context?.signal;
+        return new Promise<StandardCrudOption[]>(() => undefined);
+      }),
+    };
+    const fields = [lookupField()];
+    const providers = [departments];
+    const values = { tenantId: 'tenant-a' };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    function LookupRuntimeProbe() {
+      useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields,
+        providers,
+        values,
+      });
+      return null;
+    }
+
+    const renderProbe = (visible: boolean) => (
+      <StrictMode>
+        <PlatformQueryProvider scopeKey="user-1">
+          {visible ? <LookupRuntimeProbe /> : null}
+        </PlatformQueryProvider>
+      </StrictMode>
+    );
+
+    try {
+      await act(async () => {
+        root.render(renderProbe(true));
+        await Promise.resolve();
+      });
+      expect(departments.load).toHaveBeenCalledTimes(1);
+      expect(receivedSignal?.aborted).toBe(false);
+
+      await act(async () => {
+        root.render(renderProbe(false));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+      });
+      await act(async () => {
+        root.render(renderProbe(true));
+        await Promise.resolve();
+      });
+      expect(departments.load).toHaveBeenCalledTimes(1);
+      expect(receivedSignal?.aborted).toBe(false);
+
+      await act(async () => {
+        root.render(renderProbe(false));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(51);
+      });
+      expect(receivedSignal?.aborted).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      vi.useRealTimers();
     }
   });
 
@@ -214,6 +408,28 @@ describe('standard CRUD lookup runtime', () => {
       values,
       dependencyValues: { tenantId: 'tenant-a' },
     });
+  });
+
+  it('forwards the exact lookup execution signal only when one is provided', async () => {
+    const options: StandardCrudOption[] = [{ value: 'finance', label: '财务部' }];
+    const departments = provider(options);
+    const controller = new AbortController();
+
+    await loadStandardCrudLookupOptions({
+      field: lookupField(),
+      providers: [departments],
+      values: { tenantId: 'tenant-a' },
+      detailFields: {},
+    }, { signal: controller.signal });
+
+    expect(departments.load).toHaveBeenCalledWith(
+      {
+        fieldKey: 'departmentId',
+        values: { tenantId: 'tenant-a' },
+        dependencyValues: { tenantId: 'tenant-a' },
+      },
+      { signal: controller.signal },
+    );
   });
 
   it('preserves the current value when provider results do not include it', async () => {

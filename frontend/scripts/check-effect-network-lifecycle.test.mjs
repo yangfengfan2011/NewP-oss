@@ -336,6 +336,30 @@ test('rejects a platformFetch POST declared by a platform query load', () => {
   }]);
 });
 
+test('recognizes the SDK lookup option loader as a read-only platform query load', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'packages/shell/src/standard-crud/LookupRuntimeProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+      import { loadStandardCrudLookupOptions } from '@icp-platform/sdk';
+
+      export function LookupRuntimeProbe(input) {
+        return usePlatformQuery({
+          key: ['standard-crud.lookup', input.resourceKey],
+          load: ({ signal }) => loadStandardCrudLookupOptions(input, { signal }),
+        });
+      }
+    `,
+  });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    {
+      hook: 'usePlatformQuery.load',
+      triggerChain: 'loadStandardCrudLookupOptions',
+      classification: 'read-query',
+    },
+  ]);
+});
+
 test('rejects dataAdapter.create reached through a referenced platform query load', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
     file: 'modules/example/src/AdapterWriteProbe.tsx',
@@ -714,10 +738,16 @@ test('matches the reviewed current-tree baseline with no effect write commands',
 
   assert.equal(findings.filter(({ classification }) => classification === 'write-command').length, 0);
   assert.deepEqual(effectFindings.map(({ id }) => id), effectNetworkLifecycleAllowlist.map(({ id }) => id));
-  assert.deepEqual(queryLoadFindings.map(({ id, classification }) => ({ id, classification })), [{
-    id: 'packages/shell/src/pages/StandardCrudListPageHost.tsx::metadataListQuery::usePlatformQuery.load::dataAdapter.list',
-    classification: 'read-query',
-  }]);
+  assert.deepEqual(queryLoadFindings.map(({ id, classification }) => ({ id, classification })), [
+    {
+      id: 'packages/shell/src/pages/StandardCrudListPageHost.tsx::metadataListQuery::usePlatformQuery.load::dataAdapter.list',
+      classification: 'read-query',
+    },
+    {
+      id: 'packages/shell/src/standard-crud/standardCrudLookupRuntime.ts::query::usePlatformQuery.load::loadLookupQuery>loadStandardCrudLookupOptions',
+      classification: 'read-query',
+    },
+  ]);
   assert.deepEqual(result, { ok: true, diagnostics: [] });
   assert.equal(
     effectFindings.some(({ triggerChain }) => triggerChain.includes('metadataListQuery') || triggerChain.includes('runtime.reset')),
@@ -733,7 +763,7 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /12 reviewed effect findings, 1 platform query loads, 0 write commands/);
+  assert.match(result.stdout, /12 reviewed effect findings, 2 platform query loads, 0 write commands/);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

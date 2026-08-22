@@ -6,7 +6,6 @@ import {
   ModuleRegistry,
   applyStandardCrudLookupValueChange,
   createStandardCrudOperationResultPresenterRegistry,
-  useStandardCrudLookupRuntime,
 } from '@icp-platform/sdk';
 import type {
   StandardCrudExportMode,
@@ -33,6 +32,7 @@ import {
   loadStandardCrudColumnPreference,
   saveStandardCrudColumnPreference,
 } from '@icp-platform/ui/crud-list';
+import { useStandardCrudLookupRuntime } from '../standard-crud/standardCrudLookupRuntime';
 import type { SearchTableQueryState, StandardCrudColumnState } from '@icp-platform/ui/crud-list';
 import { useAuth } from '../contexts/AuthContext';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
@@ -808,6 +808,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }))
   ), [registration.lookupProviders, schema.advancedFilter.sections, schema.query.fields]);
   const queryLookupRuntime = useStandardCrudLookupRuntime({
+    resourceKey: registration.resourceKey,
     fields: queryLookupFields,
     providers: registration.lookupProviders ?? [],
     values: filters,
@@ -1156,6 +1157,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ? editFields
       : [];
   const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+    resourceKey: registration.resourceKey,
     fields: activeFormFields,
     providers: registration.lookupProviders ?? [],
     values: formValues,

@@ -148,6 +148,7 @@ export type {
   LoadStandardCrudLookupOptionsInput,
   LoadStandardCrudLookupOptionsResult,
   StandardCrudLookupConfig,
+  StandardCrudLookupExecutionContext,
   StandardCrudLookupProvider,
   StandardCrudLookupRequest,
   StandardCrudLookupRuntimeState,

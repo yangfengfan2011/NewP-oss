@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import {
   ModuleRegistry,
@@ -181,20 +181,22 @@ describe('StandardCrudDetailPageHost', () => {
           zhs: personDetailCatalog,
         }}
       >
-        <RuntimeMetadataProvider
-          value={{
-            manifest: { modules: [] },
-            navDocuments: [],
-            modelDocuments: [personDetailModelDocument],
-            viewDocuments: [detailViewDocument],
-          }}
-        >
-          <StandardCrudDetailPageHost
-            viewKey="organization.person.detail"
-            id={id}
-            registration={registration}
-          />
-        </RuntimeMetadataProvider>
+        <PlatformQueryProvider scopeKey="user-1">
+          <RuntimeMetadataProvider
+            value={{
+              manifest: { modules: [] },
+              navDocuments: [],
+              modelDocuments: [personDetailModelDocument],
+              viewDocuments: [detailViewDocument],
+            }}
+          >
+            <StandardCrudDetailPageHost
+              viewKey="organization.person.detail"
+              id={id}
+              registration={registration}
+            />
+          </RuntimeMetadataProvider>
+        </PlatformQueryProvider>
       </LocalizationProvider>,
     );
   }

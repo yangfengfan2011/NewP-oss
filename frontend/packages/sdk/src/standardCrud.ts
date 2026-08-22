@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 
 /** 标准摘要块状态；平台只解释状态语义，专属展示内容仍由模块扩展承接。 */
 export type StandardCrudSummaryStatus = 'ready' | 'notConfigured' | 'dependencyUnavailable';
@@ -679,6 +679,12 @@ export function useStandardCrudLookupRuntime({
   const [lookupOptions, setLookupOptions] = useState<Record<string, StandardCrudOption[]>>({});
   const [lookupLoading, setLookupLoading] = useState<Record<string, boolean>>({});
   const [lookupErrors, setLookupErrors] = useState<Record<string, string | null>>({});
+  const inFlightLookupsRef = useRef<Array<{
+    providerKey: string;
+    providerLoad: StandardCrudLookupProvider['load'];
+    inputKey: string;
+    promise: Promise<LoadStandardCrudLookupOptionsResult>;
+  }>>([]);
   const detailFields = inputDetailFields ?? EMPTY_STANDARD_CRUD_LOOKUP_DETAIL_FIELDS;
 
   useEffect(() => {
@@ -694,12 +700,35 @@ export function useStandardCrudLookupRuntime({
       for (const field of lookupFields) {
         try {
           setLookupLoading((current) => ({ ...current, [field.key]: true }));
-          const result = await loadStandardCrudLookupOptions({
-            field,
-            providers,
-            values,
-            detailFields,
-          });
+          const providerKey = field.lookup?.providerKey ?? '';
+          const provider = providers.find((candidate) => candidate.key === providerKey);
+          const inputKey = JSON.stringify([field, values, detailFields]);
+          const existingLookup = provider && inFlightLookupsRef.current.find(
+            (candidate) => candidate.providerKey === providerKey
+              && candidate.providerLoad === provider.load
+              && candidate.inputKey === inputKey,
+          );
+          let pendingLookup = existingLookup?.promise;
+          if (!pendingLookup) {
+            pendingLookup = loadStandardCrudLookupOptions({
+              field,
+              providers,
+              values,
+              detailFields,
+            });
+
+            if (provider) {
+              const entry = { providerKey, providerLoad: provider.load, inputKey, promise: pendingLookup };
+              inFlightLookupsRef.current.push(entry);
+
+              // lookup 输入可序列化；相同输入只共享 pending 代际，结果和失败都不留存。
+              const clearEntry = () => {
+                inFlightLookupsRef.current = inFlightLookupsRef.current.filter((candidate) => candidate !== entry);
+              };
+              void pendingLookup.then(clearEntry, clearEntry);
+            }
+          }
+          const result = await pendingLookup;
           if (!cancelled) {
             setLookupOptions((current) => ({ ...current, [field.key]: result.options }));
             setLookupErrors((current) => ({ ...current, [field.key]: result.error }));

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { SearchTablePage, createSearchTableRequest } from '@icp-platform/ui';
@@ -29,6 +29,88 @@ describe('Pro Components adapter contract', () => {
     expect(result.success).toBe(true);
     expect(result.total).toBe(1);
     expect(result.data[0].name).toBe('用户-Alice');
+  });
+
+  it('loads an identical initial query once while StrictMode remounts effects', async () => {
+    let resolveRequest!: (value: { data: Array<{ EID: string; name: string }>; total: number; success: boolean }) => void;
+    const pendingRequest = new Promise<{ data: Array<{ EID: string; name: string }>; total: number; success: boolean }>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const request = vi.fn(() => pendingRequest);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root.render(
+          <StrictMode>
+            <SearchTablePage
+              rowKey="EID"
+              columns={[{ key: 'name', dataIndex: 'name', title: '姓名' }]}
+              request={request}
+              query={{ current: 1, pageSize: 20 }}
+            />
+          </StrictMode>,
+        );
+        await Promise.resolve();
+      });
+
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(request).toHaveBeenCalledWith({ current: 1, pageSize: 20 });
+    } finally {
+      await act(async () => {
+        resolveRequest({ data: [{ EID: 'Person_1', name: '张三' }], total: 1, success: true });
+        await pendingRequest;
+      });
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('starts the same query again after a failed StrictMode load is retried', async () => {
+    const request = vi.fn()
+      .mockRejectedValueOnce(new Error('临时加载失败'))
+      .mockResolvedValueOnce({ data: [{ EID: 'Person_1', name: '恢复结果' }], total: 1, success: true });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root.render(
+          <StrictMode>
+            <SearchTablePage
+              rowKey="EID"
+              columns={[{ key: 'name', dataIndex: 'name', title: '姓名' }]}
+              request={request}
+              query={{ current: 1, pageSize: 20 }}
+            />
+          </StrictMode>,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('临时加载失败');
+
+      const retryButton = Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent?.replaceAll(' ', '') === '重试');
+      expect(retryButton).toBeDefined();
+
+      await act(async () => {
+        retryButton?.click();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain('恢复结果');
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 
   it('only commits the latest response and exposes sorting only for declared columns', async () => {
@@ -64,6 +146,8 @@ describe('Pro Components adapter contract', () => {
       root.render(<SearchTablePage {...commonProps} query={{ current: 2, pageSize: 20 }} />);
       await Promise.resolve();
     });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenLastCalledWith({ current: 2, pageSize: 20 });
     await act(async () => {
       resolveSlow?.({ data: [{ EID: 'Person_1', name: '过期结果' }], total: 40, success: true });
       await Promise.resolve();

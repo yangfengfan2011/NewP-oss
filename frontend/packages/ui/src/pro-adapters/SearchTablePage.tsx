@@ -136,6 +136,11 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [uncontrolledQuery, setUncontrolledQuery] = useState<SearchTableQueryState>({ current: 1, pageSize: 20 });
   const requestIdRef = useRef(0);
+  const inFlightRequestsRef = useRef<Array<{
+    request: SearchTablePageProps<TRow>['request'];
+    queryKey: string;
+    promise: Promise<{ data: TRow[]; total: number; success: boolean }>;
+  }>>([]);
   const eventHandlersRef = useRef({ onLoadResult, onLoadError, onLoadingChange });
   eventHandlersRef.current = { onLoadResult, onLoadError, onLoadingChange };
   const effectiveQuery = query ?? uncontrolledQuery;
@@ -152,12 +157,33 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
     }
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const queryKey = JSON.stringify([
+      effectiveQuery.current,
+      effectiveQuery.pageSize,
+      effectiveQuery.sortBy ?? null,
+      effectiveQuery.sortDirection ?? null,
+    ]);
 
     async function loadTableData() {
       try {
         setLoading(true);
         eventHandlersRef.current.onLoadingChange?.(true);
-        const result = await request(effectiveQuery);
+        const existingRequest = inFlightRequestsRef.current.find(
+          (candidate) => candidate.request === request && candidate.queryKey === queryKey,
+        );
+        let pendingRequest = existingRequest?.promise;
+        if (!pendingRequest) {
+          pendingRequest = Promise.resolve().then(() => request(effectiveQuery));
+          const entry = { request, queryKey, promise: pendingRequest };
+          inFlightRequestsRef.current.push(entry);
+
+          // StrictMode 会重挂 effect；这里只复用相同输入的进行中请求，完成或失败后立即释放。
+          const clearEntry = () => {
+            inFlightRequestsRef.current = inFlightRequestsRef.current.filter((candidate) => candidate !== entry);
+          };
+          void pendingRequest.then(clearEntry, clearEntry);
+        }
+        const result = await pendingRequest;
 
         if (requestIdRef.current === requestId) {
           setData(result.data);

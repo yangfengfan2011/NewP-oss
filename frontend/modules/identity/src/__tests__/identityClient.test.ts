@@ -66,4 +66,21 @@ describe('identity management client', () => {
       { method: 'GET', signal: abortController.signal },
     );
   });
+
+  it('forwards the security-event query signal to the final GET', async () => {
+    platformFetchMock.mockResolvedValue(new Response(JSON.stringify({
+      items: [], page: 2, pageSize: 20, totalCount: 0,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const abortController = new AbortController();
+
+    await listAccountSecurityEvents('User/1', 2, 20, { signal: abortController.signal });
+
+    expect(platformFetchMock).toHaveBeenCalledWith(
+      '/api/identity/accounts/User%2F1/security-events?page=2&pageSize=20',
+      { method: 'GET', signal: abortController.signal },
+    );
+  });
 });

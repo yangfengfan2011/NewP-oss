@@ -45,6 +45,10 @@ export interface IdentitySecurityCommand {
   reason: string;
 }
 
+interface IdentitySecurityEventsReadContext {
+  readonly signal?: AbortSignal;
+}
+
 export class IdentityApiError extends Error {
   constructor(
     public readonly code: string,
@@ -71,10 +75,14 @@ export function listAccountSecurityEvents(
   accountEid: string,
   page: number,
   pageSize: number,
+  readContext?: IdentitySecurityEventsReadContext,
 ): Promise<IdentityPage<IdentitySecurityEvent>> {
   return requestJson(
     `/api/identity/accounts/${encodeURIComponent(accountEid)}/security-events?page=${page}&pageSize=${pageSize}`,
-    { method: 'GET' },
+    {
+      method: 'GET',
+      ...(readContext?.signal ? { signal: readContext.signal } : {}),
+    },
   );
 }
 

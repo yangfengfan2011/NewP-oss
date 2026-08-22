@@ -1,16 +1,5 @@
 export const effectNetworkLifecycleAllowlist = [
   {
-    id: 'modules/identity/src/standard-crud/IdentityAccountSecurityEventsSummary.tsx::IdentityAccountSecurityEventsSummary::useEffect::loadPage>listAccountSecurityEvents',
-    file: 'modules/identity/src/standard-crud/IdentityAccountSecurityEventsSummary.tsx',
-    enclosingFunction: 'IdentityAccountSecurityEventsSummary',
-    hook: 'useEffect',
-    triggerChain: 'loadPage>listAccountSecurityEvents',
-    classification: 'read-query',
-    owner: 'Identity',
-    reason: '安全事件摘要仍以 effect 和 cancelled 标记维护分页读取生命周期。',
-    exitCondition: '安全事件摘要改为通过 Platform Query Runtime 声明查询。',
-  },
-  {
     id: 'packages/core/src/authentication/index.tsx::useAuthenticationState::useEffect::readCurrentUser>platformFetch',
     file: 'packages/core/src/authentication/index.tsx',
     enclosingFunction: 'useAuthenticationState',

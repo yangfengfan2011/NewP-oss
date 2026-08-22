@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { usePlatformQuery } from '@icp-platform/core';
 import type { StandardCrudSummaryRenderer } from '@icp-platform/sdk';
-import { Alert, Card, Empty, Pagination, Spin, Table } from 'antd';
+import { Alert, Button, Card, Empty, Pagination, Space, Spin, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   listAccountSecurityEvents,
@@ -28,39 +29,43 @@ export function IdentityAccountSecurityEventsSummary({
   title,
 }: IdentityAccountSecurityEventsSummaryProps) {
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<IdentityPage<IdentitySecurityEvent> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadPage() {
-      try {
-        setLoading(true);
-        setError(null);
-        const next = await listAccountSecurityEvents(accountEid, page, EVENT_PAGE_SIZE);
-        if (!cancelled) setResult(next);
-      } catch {
-        if (!cancelled) {
-          setResult(null);
-          setError('安全事件加载失败，请稍后重试。');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void loadPage();
-    return () => {
-      cancelled = true;
-    };
-  }, [accountEid, page]);
+  // 查询身份只包含影响安全事件事实的 Identity 输入；标题与安全命令状态不参与复用。
+  const query = usePlatformQuery<IdentityPage<IdentitySecurityEvent>>({
+    key: ['identity.security-events', accountEid, page, EVENT_PAGE_SIZE],
+    load: ({ signal }) => listAccountSecurityEvents(accountEid, page, EVENT_PAGE_SIZE, { signal }),
+  });
+  const result = query.data;
+  const loading = result === undefined && (query.status === 'idle' || query.isFetching);
+  const refreshing = result !== undefined && query.isFetching;
+  const error = query.status === 'error';
 
   return (
-    <Card title={title} extra={result ? `共 ${result.totalCount} 条` : undefined}>
+    <Card
+      title={title}
+      extra={result ? (
+        <Space size="small">
+          <span>{`共 ${result.totalCount} 条`}</span>
+          <Button
+            type="link"
+            size="small"
+            aria-label="刷新安全事件"
+            loading={refreshing}
+            onClick={query.refresh}
+          >
+            刷新
+          </Button>
+        </Space>
+      ) : undefined}
+    >
       {loading ? <Spin aria-label="安全事件加载中" /> : null}
-      {!loading && error ? <Alert type="error" showIcon message={error} /> : null}
+      {!loading && error ? (
+        <Alert
+          type="error"
+          showIcon
+          message="安全事件加载失败，请稍后重试。"
+          action={<Button size="small" aria-label="重试安全事件" onClick={query.retry}>重试</Button>}
+        />
+      ) : null}
       {!loading && !error && result?.items.length === 0 ? <Empty description="暂无安全事件。" /> : null}
       {!loading && !error && result && result.items.length > 0 ? (
         <Table<IdentitySecurityEvent>

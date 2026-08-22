@@ -3,7 +3,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { AuthorizationProvider, LocalizationProvider } from '@icp-platform/core';
+import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonDetailPage from '../../../../modules/organization/src/pages/PersonDetailPage';
@@ -97,18 +97,20 @@ describe('organization person center detail layout', () => {
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
           catalogs={{ zhs: personDetailCatalog }}
         >
-          <AuthorizationProvider permissions={['Organization.Person.View', 'Organization.Person.Update']}>
-            <RuntimeMetadataProvider
-              value={{
-                manifest: { modules: [] },
-                navDocuments: [],
-                viewDocuments: [personDetailViewDocument],
-                modelDocuments: [personModelDocument],
-              }}
-            >
-              <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" registration={registration} />
-            </RuntimeMetadataProvider>
-          </AuthorizationProvider>
+          <PlatformQueryProvider scopeKey="user-1">
+            <AuthorizationProvider permissions={['Organization.Person.View', 'Organization.Person.Update']}>
+              <RuntimeMetadataProvider
+                value={{
+                  manifest: { modules: [] },
+                  navDocuments: [],
+                  viewDocuments: [personDetailViewDocument],
+                  modelDocuments: [personModelDocument],
+                }}
+              >
+                <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" registration={registration} />
+              </RuntimeMetadataProvider>
+            </AuthorizationProvider>
+          </PlatformQueryProvider>
         </LocalizationProvider>,
       );
     });
@@ -216,7 +218,10 @@ describe('organization person center detail layout', () => {
       permissions: ['Organization.Person.View', 'Organization.Person.Update'],
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons/person-1', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith('/api/organization/persons/person-1', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    });
     await vi.waitFor(() => {
       expect(container.querySelector('.ant-descriptions')).not.toBeNull();
     });

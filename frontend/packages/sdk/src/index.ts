@@ -128,6 +128,7 @@ export type {
   StandardCrudActionState,
   StandardCrudActionStateResolver,
   StandardCrudDetail,
+  StandardCrudDetailReadContext,
   StandardCrudDetailFieldRenderer,
   StandardCrudDetailFieldRendererContext,
   StandardCrudExportColumnRequest,

@@ -51,4 +51,19 @@ describe('identity management client', () => {
       { method: 'GET' },
     );
   });
+
+  it('forwards the account snapshot signal to the final GET', async () => {
+    platformFetchMock.mockResolvedValue(new Response(JSON.stringify({ eid: 'User_1', ecode: 'alice' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const abortController = new AbortController();
+
+    await getAccountSnapshot('User/1', { signal: abortController.signal });
+
+    expect(platformFetchMock).toHaveBeenCalledWith(
+      '/api/identity/accounts/User%2F1/snapshot',
+      { method: 'GET', signal: abortController.signal },
+    );
+  });
 });

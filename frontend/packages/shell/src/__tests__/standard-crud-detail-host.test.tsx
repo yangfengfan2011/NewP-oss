@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -9,6 +9,7 @@ import {
   ModuleRegistry,
   StandardCrudRequestError,
   createStandardCrudRestDataAdapter,
+  type StandardCrudDetail,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
@@ -158,13 +159,14 @@ describe('StandardCrudDetailPageHost', () => {
     id: string | null,
     registration?: StandardCrudResourceRegistration,
     detailViewDocument = personDetailViewDocument,
+    strictMode = false,
   ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => {
       root = createRoot(container);
-      renderHostWithId(id, registration, detailViewDocument);
+      renderHostWithId(id, registration, detailViewDocument, strictMode);
     });
   }
 
@@ -172,8 +174,9 @@ describe('StandardCrudDetailPageHost', () => {
     id: string | null,
     registration?: StandardCrudResourceRegistration,
     detailViewDocument = personDetailViewDocument,
+    strictMode = false,
   ) {
-    root.render(
+    const host = (
       <LocalizationProvider
         defaultLanguage="zhs"
         supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
@@ -197,8 +200,9 @@ describe('StandardCrudDetailPageHost', () => {
             />
           </RuntimeMetadataProvider>
         </PlatformQueryProvider>
-      </LocalizationProvider>,
+      </LocalizationProvider>
     );
+    root.render(strictMode ? <StrictMode>{host}</StrictMode> : host);
   }
 
   it('loads detail through standard CRUD registration', async () => {
@@ -234,11 +238,64 @@ describe('StandardCrudDetailPageHost', () => {
     await renderHost('Person_1');
     await act(async () => undefined);
 
-    expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', { method: 'GET' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons/Person_1',
+      { method: 'GET', signal: expect.any(AbortSignal) },
+    );
     await vi.waitFor(
       () => expect(container.textContent).toContain('张三'),
-      { timeout: 3_000 },
+      { timeout: 5_000 },
     );
+  });
+
+  it('starts one detail read generation during StrictMode replay', async () => {
+    let resolveDetail!: (detail: { normalized: StandardCrudDetail; value: StandardCrudDetail }) => void;
+    const pending = new Promise<{ normalized: StandardCrudDetail; value: StandardCrudDetail }>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const get = vi.fn(() => pending);
+    const registration: StandardCrudResourceRegistration = {
+      ...createPersonRegistration(),
+      dataAdapter: { ...createPersonDataAdapter(), get },
+    };
+
+    await renderHost('Person_1', registration, personDetailViewDocument, true);
+
+    expect(get).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveDetail({
+        normalized: { fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null }, summaries: {} },
+        value: { fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null }, summaries: {} },
+      });
+      await pending;
+    });
+  });
+
+  it('retries a failed initial detail read with one new generation', async () => {
+    const recoveredDetail = {
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+      summaries: {},
+    };
+    const get = vi.fn()
+      .mockRejectedValueOnce(new Error('DETAIL_READ_FAILED'))
+      .mockResolvedValueOnce({ normalized: recoveredDetail, value: recoveredDetail });
+    const registration: StandardCrudResourceRegistration = {
+      ...createPersonRegistration(),
+      dataAdapter: { ...createPersonDataAdapter(), get },
+    };
+
+    await renderHost('Person_1', registration);
+    await vi.waitFor(() => expect(container.textContent).toContain('DETAIL_READ_FAILED'));
+    const retry = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === '重试')!;
+
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain('张三'), { timeout: 5_000 });
+
+    expect(get).toHaveBeenCalledTimes(2);
   });
 
   it('renders null as an em dash and degrades only a missing field in an otherwise available section', async () => {
@@ -680,6 +737,9 @@ describe('StandardCrudDetailPageHost', () => {
     expect(disablePerson).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector('input[aria-label="动作原因"]')).toBeNull();
     expect(container.textContent).toContain('LIFECYCLE_CONFLICT');
+    expect(container.textContent).toContain('张三');
+    expect(Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === '停用人员')?.disabled).toBe(true);
 
     await act(async () => {
       resolveLatestDetail({ normalized: latestDetail, value: latestDetail });

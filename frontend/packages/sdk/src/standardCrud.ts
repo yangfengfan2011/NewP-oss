@@ -334,11 +334,16 @@ export interface StandardCrudListReadContext {
   signal?: AbortSignal;
 }
 
+/** 详情读取执行上下文只承载取消，不参与资源标识、查询 key 或 URL。 */
+export interface StandardCrudDetailReadContext {
+  signal?: AbortSignal;
+}
+
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudClient {
   list: (query?: StandardCrudListQueryRequest, readContext?: StandardCrudListReadContext) => Promise<unknown>;
   exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
-  getDetail: (id: string) => Promise<StandardCrudDetail>;
+  getDetail: (id: string, readContext?: StandardCrudDetailReadContext) => Promise<StandardCrudDetail>;
   create: (values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   update: (id: string, values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
   delete: (id: string) => Promise<void>;
@@ -357,7 +362,7 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
     query?: StandardCrudListQueryRequest,
     readContext?: StandardCrudListReadContext,
   ) => Promise<StandardCrudListResult<TRow>>;
-  get: (id: string) => Promise<StandardCrudLoadedDetail<TDetail>>;
+  get: (id: string, readContext?: StandardCrudDetailReadContext) => Promise<StandardCrudLoadedDetail<TDetail>>;
   create?: (
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
@@ -975,9 +980,17 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         },
         '导出标准列表失败',
       ),
-    getDetail: async (id) =>
+    getDetail: async (id, readContext) =>
       normalizeStandardCrudDetail(
-        await requestJson<unknown>(fetcher, `${apiRoute}/${encodeURIComponent(id)}`, { method: 'GET' }, '加载标准详情失败'),
+        await requestJson<unknown>(
+          fetcher,
+          `${apiRoute}/${encodeURIComponent(id)}`,
+          {
+            method: 'GET',
+            ...(readContext?.signal ? { signal: readContext.signal } : {}),
+          },
+          '加载标准详情失败',
+        ),
       ),
     create: async (values) =>
       normalizeStandardCrudDetail(
@@ -1037,8 +1050,8 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
       }
       return normalizeStandardCrudListResult(await client.list(query, readContext), options.mapListItem);
     },
-    get: async (id) => {
-      const normalized = await client.getDetail(id);
+    get: async (id, readContext) => {
+      const normalized = await client.getDetail(id, readContext);
       return {
         normalized,
         value: options.mapDetail ? options.mapDetail(normalized) : normalized as TDetail,

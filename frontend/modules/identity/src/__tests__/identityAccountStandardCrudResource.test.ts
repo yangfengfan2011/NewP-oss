@@ -129,9 +129,13 @@ describe('Identity account Standard CRUD resource candidate', () => {
       updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
     });
 
-    const detail = await identityAccountStandardCrudResource.dataAdapter.get('User_2');
+    const abortController = new AbortController();
+    const detail = await identityAccountStandardCrudResource.dataAdapter.get(
+      'User_2',
+      { signal: abortController.signal },
+    );
 
-    expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2');
+    expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2', { signal: abortController.signal });
     expect(detail.normalized.fields).toMatchObject({
       EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Enabled', Revision: 7,
     });

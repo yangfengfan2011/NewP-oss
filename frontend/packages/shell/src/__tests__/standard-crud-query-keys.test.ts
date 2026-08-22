@@ -5,6 +5,7 @@ import type {
   StandardCrudLookupProvider,
 } from '@icp-platform/sdk';
 import {
+  createStandardCrudDetailQueryKey,
   createStandardCrudListQueryKey,
   createStandardCrudLookupQueryKey,
   createStandardCrudRuntimeColumnsQueryKey,
@@ -12,6 +13,16 @@ import {
 } from '../standard-crud/standardCrudQueryKeys';
 
 describe('Standard CRUD query keys', () => {
+  it('keys every detail surface only by resource and record identity', () => {
+    const pageKey = createStandardCrudDetailQueryKey('organization.person', 'Person_1');
+    const drawerKey = createStandardCrudDetailQueryKey('organization.person', 'Person_1');
+
+    expect(pageKey).toEqual(['standard-crud.detail', 'organization.person', 'Person_1']);
+    expect(drawerKey).toEqual(pageKey);
+    expect(createStandardCrudDetailQueryKey('organization.person', 'Person_2')).not.toEqual(pageKey);
+    expect(createStandardCrudDetailQueryKey('identity.account', 'Person_1')).not.toEqual(pageKey);
+  });
+
   it('keys runtime columns by resource and every serializable committed filter', () => {
     const firstKey = createStandardCrudRuntimeColumnsQueryKey({
       resourceKey: 'example.runtime-workload',

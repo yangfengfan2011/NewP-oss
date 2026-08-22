@@ -60,6 +60,7 @@ import {
   reportStandardCrudDetailDiagnostics,
   resolveStandardCrudDetailPresentation,
 } from '../standard-crud/standardCrudDetailPresentation';
+import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
@@ -762,9 +763,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ? defaultColumnState
       : loadStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, defaultColumnState)
   ));
-  const [drawerFormSchemas, setDrawerFormSchemas] = useState<StandardCrudDrawerFormSchemas | null>(null);
-  const createFormSchema = drawerFormSchemas?.create ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
-  const editFormSchema = drawerFormSchemas?.edit ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
+  const [preparedDrawerForms, setPreparedDrawerForms] = useState<PreparedStandardCrudDrawerForms | null>(null);
+  const createFormSchema = preparedDrawerForms?.create ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
+  const editFormSchema = preparedDrawerForms?.edit ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
   const createFields = useMemo(
     () => localizeStandardCrudFields(resolveCreateFormFields(createFormSchema.fields), schema.dicKey, t),
     [createFormSchema.fields, schema.dicKey, t],
@@ -820,10 +821,20 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     sortDirection: initialListState.sortDirection,
   }));
   const [drawerState, setDrawerState] = useState<CrudDrawerState>(CLOSED_DRAWER_STATE);
-  const [detailFields, setDetailFields] = useState<Record<string, unknown>>({});
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const drawerDetailQuery = useStandardCrudDetailQuery({
+    resourceKey: registration.resourceKey,
+    id: drawerState.mode === 'view' || drawerState.mode === 'edit' ? drawerState.id : null,
+    dataAdapter,
+  });
+  const detailFields = useMemo(
+    () => drawerDetailQuery.detail?.normalized.fields ?? {},
+    [drawerDetailQuery.detail],
+  );
+  const [drawerPreparationError, setDrawerPreparationError] = useState<string | null>(null);
+  const detailError = drawerPreparationError ?? drawerDetailQuery.error;
+  const detailLoading = drawerDetailQuery.loading;
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
+  const [clearConflictOnDetailLoad, setClearConflictOnDetailLoad] = useState(false);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
@@ -837,12 +848,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [exportingMode, setExportingMode] = useState<StandardCrudExportMode | null>(null);
   const exportRequestPendingRef = useRef(false);
-  const detailRequestIdRef = useRef(0);
   const handledRouteSearchRef = useRef<string | null>(null);
   const handledListRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
   const formValuesRef = useRef(formValues);
   const initialFormValuesRef = useRef<Record<string, unknown>>({});
+  const appliedDrawerDetailRef = useRef<{ id: string; snapshot: unknown } | null>(null);
   const drawerTriggerRef = useRef<HTMLElement | null>(null);
   const discardProceedRef = useRef<(() => void) | null>(null);
   const committedListStateRef = useRef<StandardCrudListState>({
@@ -1140,6 +1151,39 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }
     },
   });
+  const clearMutationError = mutationExecution.clearError;
+  useEffect(() => {
+    const id = drawerState.id;
+    const loadedDetail = drawerDetailQuery.detail;
+    if (
+      !id
+      || (drawerState.mode !== 'view' && drawerState.mode !== 'edit')
+      || !loadedDetail
+      || drawerDetailQuery.refreshing
+      || !preparedDrawerForms
+    ) {
+      return;
+    }
+
+    const applied = appliedDrawerDetailRef.current;
+    const shouldApply = applied?.id !== id || drawerState.mode === 'view' || clearConflictOnDetailLoad;
+    if (!shouldApply || (applied?.id === id && applied.snapshot === loadedDetail)) {
+      return;
+    }
+
+    const nextFormValues = preparedDrawerForms.buildDetailFormValues(
+      loadedDetail.normalized.fields,
+      editFields,
+    );
+    setFormValues(nextFormValues);
+    initialFormValuesRef.current = nextFormValues;
+    appliedDrawerDetailRef.current = { id, snapshot: loadedDetail };
+    if (clearConflictOnDetailLoad) {
+      clearMutationError();
+      setClearConflictOnDetailLoad(false);
+    }
+  }, [clearConflictOnDetailLoad, drawerDetailQuery.detail, drawerDetailQuery.refreshing,
+    drawerState.id, drawerState.mode, editFields, clearMutationError, preparedDrawerForms]);
   const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
   const activeFormFields = drawerState.mode === 'create'
     ? createFields
@@ -1181,10 +1225,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         : drawerDetailPresentation.diagnostics,
     );
   }, [drawerDetailPresentation, resolvedDrawerDetailSchema]);
-
-  const invalidateDetailRequests = () => {
-    detailRequestIdRef.current += 1;
-  };
 
   const buildDrawerSearch = (mode: Exclude<CrudDrawerMode, 'closed'>, id?: string): string => {
     const params = new URLSearchParams(location.search);
@@ -1228,8 +1268,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const closeDrawer = (options: { syncRoute?: boolean } = {}) => {
-    invalidateDetailRequests();
-    setDetailLoading(false);
+    appliedDrawerDetailRef.current = null;
+    setClearConflictOnDetailLoad(false);
+    setDrawerPreparationError(null);
     setDrawerState(CLOSED_DRAWER_STATE);
     mutationExecution.clearError();
     if (options.syncRoute !== false) {
@@ -1313,9 +1354,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         lookupProviders: registration.lookupProviders ?? [],
       }),
     };
-    setDrawerFormSchemas(nextSchemas);
-
-    return {
+    const prepared = {
       ...nextSchemas,
       createFields: localizeStandardCrudFields(
         resolveCreateFormFields(nextSchemas.create.fields),
@@ -1325,18 +1364,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       editFields: localizeStandardCrudFields(nextSchemas.edit.fields, schema.dicKey, t),
       buildDetailFormValues: runtime.buildStandardCrudDetailFormValues,
     };
+    setPreparedDrawerForms(prepared);
+    return prepared;
   };
 
   const openCreateDrawer = async (source: CrudDrawerState['source'] = 'user-action') => {
     const prepared = await prepareDrawerForms();
-    invalidateDetailRequests();
+    appliedDrawerDetailRef.current = null;
     const initialValues = Object.fromEntries(prepared.createFields.map((field) => [field.key, field.defaultValue ?? '']));
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
-    setDetailFields({});
-    setDetailLoading(false);
     setFormValues(initialValues);
     initialFormValuesRef.current = initialValues;
-    setDetailError(null);
+    setDrawerPreparationError(null);
     mutationExecution.clearError();
     setDrawerState({ mode: 'create', source });
     if (source === 'user-action') {
@@ -1349,48 +1388,27 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     source: CrudDrawerState['source'] = 'user-action',
     options: { syncRoute?: boolean; targetMode?: 'view' | 'edit' } = {},
   ): Promise<boolean> => {
-    const requestId = detailRequestIdRef.current + 1;
-    detailRequestIdRef.current = requestId;
+    appliedDrawerDetailRef.current = null;
     setDrawerState({ mode: options.targetMode ?? 'view', id, source });
-    setDetailFields({});
+    setFormValues({});
+    initialFormValuesRef.current = {};
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     if (source === 'user-action' && options.syncRoute !== false) {
       syncDrawerRoute('view', id);
     }
-    setDetailLoading(true);
-    setDetailError(null);
+    setDrawerPreparationError(null);
     mutationExecution.clearError();
     try {
-      const [loadedDetail, prepared] = await Promise.all([
-        dataAdapter.get(id),
-        prepareDrawerForms(),
-      ]);
-      if (detailRequestIdRef.current !== requestId) {
-        return false;
-      }
-
-      const nextFormValues = prepared.buildDetailFormValues(loadedDetail.normalized.fields, prepared.editFields);
-      setDetailFields(loadedDetail.normalized.fields);
-      setFormValues(nextFormValues);
-      initialFormValuesRef.current = nextFormValues;
+      await prepareDrawerForms();
       return true;
     } catch (loadError) {
-      if (detailRequestIdRef.current !== requestId) {
-        return false;
-      }
-
-      setDetailFields({});
       setFormValues({});
-      setDetailError(loadError instanceof Error ? loadError.message : '加载详情失败');
+      setDrawerPreparationError(loadError instanceof Error ? loadError.message : '加载详情失败');
       if (options.targetMode === 'edit') {
         setDrawerState({ mode: 'view', id, source });
         syncDrawerRoute('view', id);
       }
       return false;
-    } finally {
-      if (detailRequestIdRef.current === requestId) {
-        setDetailLoading(false);
-      }
     }
   };
 
@@ -1403,6 +1421,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       return;
     }
   };
+
+  useEffect(() => {
+    if (drawerState.mode !== 'edit' || !drawerState.id || !drawerDetailQuery.error) return;
+    setDrawerState({ mode: 'view', id: drawerState.id, source: drawerState.source });
+    syncDrawerRoute('view', drawerState.id);
+    // URL 同步 helper 的身份变化不应重复处理同一次 query failure。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerDetailQuery.error, drawerState.id, drawerState.mode, drawerState.source]);
 
   const handleDrawerSave = async () => {
     const succeeded = await mutationExecution.execute({
@@ -1832,19 +1858,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const canEdit = Boolean(
     editAction
     && drawerDetailPresentation?.kind === 'ready'
+    && !drawerDetailQuery.refreshing
     && hasActionPermission(editAction, grantedPermissions)
     && drawerEditActionState?.visible !== false
     && drawerEditActionState?.available !== false,
   );
 
-  const reloadConflictedRecord = async () => {
+  const reloadConflictedRecord = () => {
     if (drawerState.mode !== 'edit' || !drawerState.id) return;
-    const id = drawerState.id;
-    const loaded = await openViewDrawer(id, 'route-compatibility', { syncRoute: false, targetMode: 'edit' });
-    if (loaded) {
-      setDrawerState({ mode: 'edit', id, source: 'route-compatibility' });
-      mutationExecution.clearError();
-    }
+    setClearConflictOnDetailLoad(true);
+    drawerDetailQuery.refresh();
   };
 
   const handleTableQueryChange = (nextQuery: SearchTableQueryState) => {
@@ -1984,7 +2007,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             mutationTitle={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
             detailLoading={detailLoading}
             detailError={detailError}
-            saving={mutationExecution.pending}
+            saving={mutationExecution.pending || drawerDetailQuery.refreshing}
             saveError={mutationExecution.error}
             saveFieldErrors={mutationExecution.fieldErrors}
             formId={drawerFormId}
@@ -2007,8 +2030,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 {t(`${schema.dicKey}.Action_ViewFullDetail`, '查看完整详情')}
               </AntdButton>
             ) : undefined}
+            detailErrorActions={drawerDetailQuery.error ? (
+              <AntdButton onClick={drawerDetailQuery.retry}>重试</AntdButton>
+            ) : undefined}
             saveErrorActions={mutationExecution.conflict ? (
-              <AntdButton onClick={() => void reloadConflictedRecord()} disabled={mutationExecution.pending}>
+              <AntdButton
+                onClick={reloadConflictedRecord}
+                disabled={mutationExecution.pending || drawerDetailQuery.refreshing}
+              >
                 重新加载当前数据
               </AntdButton>
             ) : undefined}

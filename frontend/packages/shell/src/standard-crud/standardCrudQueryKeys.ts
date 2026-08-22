@@ -25,6 +25,13 @@ export interface StandardCrudRuntimeRowsQueryKeyInput {
   columnGeneration: number;
 }
 
+export function createStandardCrudDetailQueryKey(
+  resourceKey: string,
+  id: string,
+): PlatformQueryKey {
+  return ['standard-crud.detail', resourceKey, id];
+}
+
 export function createStandardCrudRuntimeColumnsQueryKey(
   input: StandardCrudRuntimeColumnsQueryKeyInput,
 ): PlatformQueryKey {

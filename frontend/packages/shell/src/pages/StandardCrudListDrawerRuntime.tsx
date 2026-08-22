@@ -29,6 +29,7 @@ export interface StandardCrudListDrawerRuntimeProps {
   lookupErrors: Record<string, string | null>;
   canEdit: boolean;
   viewSecondaryAction?: ReactNode;
+  detailErrorActions?: ReactNode;
   saveErrorActions?: ReactNode;
   onChange: (fieldKey: string, value: unknown) => void;
   onEdit: () => void;
@@ -59,6 +60,7 @@ export default function StandardCrudListDrawerRuntime({
   lookupErrors,
   canEdit,
   viewSecondaryAction,
+  detailErrorActions,
   saveErrorActions,
   onChange,
   onEdit,
@@ -84,6 +86,7 @@ export default function StandardCrudListDrawerRuntime({
         title={viewTitle}
         loading={detailLoading}
         error={detailError ?? (fatalDiagnostic ? `详情数据契约失败：${fatalDiagnostic.code}` : null)}
+        errorActions={detailError ? detailErrorActions : undefined}
         primaryLabel="编辑"
         secondaryAction={fatalDiagnostic ? undefined : viewSecondaryAction}
         hidePrimary={!canEdit || !editAction || fatalDiagnostic !== null}
@@ -108,9 +111,10 @@ export default function StandardCrudListDrawerRuntime({
     <CrudFormDrawer
       open
       title={mutationTitle}
+      loading={mode === 'edit' && detailLoading}
       saving={saving}
-      error={saveError}
-      errorActions={saveErrorActions}
+      error={mode === 'edit' ? detailError ?? saveError : saveError}
+      errorActions={mode === 'edit' && detailError ? detailErrorActions : saveErrorActions}
       submitFormId={formId}
       primaryLabel={mode === 'create' ? '保存并关闭' : '保存修改'}
       onClose={onClose}

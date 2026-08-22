@@ -167,6 +167,30 @@ describe('standard CRUD SDK helpers', () => {
     });
   });
 
+  it('passes the detail read signal to the standard REST fetch without changing its URL', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      fields: { EID: 'Person_1', ENAME: '张三' },
+      summaries: {},
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const adapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: fetcher as unknown as typeof fetch,
+      mapListItem: (item) => item,
+      getRowId: () => 'Person_1',
+    });
+    const abortController = new AbortController();
+
+    await adapter.get('Person_1', { signal: abortController.signal });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/organization/persons/Person_1',
+      { method: 'GET', signal: abortController.signal },
+    );
+  });
+
   it('returns a module-neutral create outcome through the standard REST data adapter', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       fields: { EID: 'Person_1', ENAME: '张三' },

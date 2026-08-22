@@ -302,8 +302,8 @@ const identityAccountRestListAdapter = createStandardCrudRestDataAdapter({
 const identityAccountDataAdapter: StandardCrudDataAdapter<IdentityAccountListRow> = {
   list: identityAccountRestListAdapter.list,
   getRowId: identityAccountRestListAdapter.getRowId,
-  get: async (id) => {
-    const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id));
+  get: async (id, readContext) => {
+    const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id, readContext));
     return { normalized, value: normalized };
   },
   create: (values) => createIdentityAccount(values),

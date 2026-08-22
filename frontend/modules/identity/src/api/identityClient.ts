@@ -1,4 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
+import type { StandardCrudDetailReadContext } from '@icp-platform/sdk';
 
 export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
 
@@ -56,9 +57,13 @@ export class IdentityApiError extends Error {
   }
 }
 
-export function getAccountSnapshot(accountEid: string): Promise<IdentityAccount> {
+export function getAccountSnapshot(
+  accountEid: string,
+  readContext?: StandardCrudDetailReadContext,
+): Promise<IdentityAccount> {
   return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/snapshot`, {
     method: 'GET',
+    ...(readContext?.signal ? { signal: readContext.signal } : {}),
   });
 }
 

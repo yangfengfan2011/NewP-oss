@@ -327,16 +327,18 @@ describe('Identity account Standard CRUD production route', () => {
         supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
         catalogs={{ zhs: accountListCatalog }}
       >
-        <RuntimeMetadataProvider value={runtimeMetadata}>
-          <MemoryRouter initialEntries={entries} initialIndex={initialIndex}>
-            <Routes>
-              <Route
-                path="/identity/accounts/:id"
-                element={<IdentityAccountDetailCandidate registration={registration} />}
-              />
-            </Routes>
-          </MemoryRouter>
-        </RuntimeMetadataProvider>
+        <PlatformQueryProvider scopeKey="user-1">
+          <RuntimeMetadataProvider value={runtimeMetadata}>
+            <MemoryRouter initialEntries={entries} initialIndex={initialIndex}>
+              <Routes>
+                <Route
+                  path="/identity/accounts/:id"
+                  element={<IdentityAccountDetailCandidate registration={registration} />}
+                />
+              </Routes>
+            </MemoryRouter>
+          </RuntimeMetadataProvider>
+        </PlatformQueryProvider>
       </LocalizationProvider>
     );
     await act(async () => root.render(renderRouter([
@@ -364,7 +366,6 @@ describe('Identity account Standard CRUD production route', () => {
       '/api/identity/accounts/User_2/snapshot',
       '/api/identity/accounts/User_1/snapshot',
       '/api/identity/accounts/User_2/snapshot',
-      '/api/identity/accounts/User_2/snapshot',
     ]);
     expect(identityNavigationDocument.navigation.items.find((item) => item.key === 'identity.accounts')).toMatchObject({
       entryType: 'standard-list',
@@ -388,13 +389,15 @@ describe('Identity account Standard CRUD production route', () => {
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
             catalogs={{ zhs: accountListCatalog }}
           >
-            <RuntimeMetadataProvider value={runtimeMetadata}>
-              <StandardCrudDetailPageHost
-                viewKey="identity.account.detail"
-                id="User_2"
-                registration={registration}
-              />
-            </RuntimeMetadataProvider>
+            <PlatformQueryProvider scopeKey="user-1">
+              <RuntimeMetadataProvider value={runtimeMetadata}>
+                <StandardCrudDetailPageHost
+                  viewKey="identity.account.detail"
+                  id="User_2"
+                  registration={registration}
+                />
+              </RuntimeMetadataProvider>
+            </PlatformQueryProvider>
           </LocalizationProvider>
         </MemoryRouter>,
       );

@@ -248,7 +248,10 @@ describe('StandardCrudListPageHost', () => {
     catalogOverrides: Record<string, string> = {},
     viewDocument: typeof personListViewDocument = personListViewDocument,
     initialEntry = '/organization/persons',
-    options: { strictMode?: boolean } = {},
+    options: {
+      strictMode?: boolean;
+      modelDocument?: typeof personModelDocument;
+    } = {},
   ) {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -273,7 +276,7 @@ describe('StandardCrudListPageHost', () => {
                 value={{
                   manifest: { modules: [] },
                   navDocuments: [],
-                  modelDocuments: [personModelDocument],
+                  modelDocuments: [options.modelDocument ?? personModelDocument],
                   viewDocuments: [viewDocument, personDetailViewDocument],
                 }}
               >
@@ -1566,6 +1569,199 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.textContent).toContain('组织信息');
     expect(document.body.textContent).toContain('人员编号');
     expect(document.body.textContent).toContain('姓名');
+  });
+
+  it('reuses one detail generation when the compatibility route changes a drawer from view to edit', async () => {
+    const get = vi.fn().mockResolvedValue({
+      normalized: {
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+        summaries: {},
+      },
+      value: {
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+        summaries: {},
+      },
+    });
+    const restAdapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: (input, init) => globalThis.fetch(input, init),
+      mapListItem: (value) => value as { id: string; name: string },
+      getRowId: (row) => row.id,
+    });
+    mockStandardCrudModule({ dataAdapter: { ...restAdapter, get } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost({}, personListViewDocument, '/organization/persons?drawer=view&id=Person_1', { strictMode: true });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(1), { timeout: 3_000 });
+
+    await act(async () => testNavigate?.('/organization/persons?drawer=edit&id=Person_1'));
+    await vi.waitFor(
+      () => expect(document.body.querySelector<HTMLInputElement>('#ENAME')).not.toBeNull(),
+      { timeout: 3_000 },
+    );
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('张三');
+  });
+
+  it('retries a failed initial drawer detail read with one new generation', async () => {
+    const recoveredDetail = {
+      normalized: {
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+        summaries: {},
+      },
+      value: {
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+        summaries: {},
+      },
+    };
+    const get = vi.fn()
+      .mockRejectedValueOnce(new Error('DRAWER_DETAIL_READ_FAILED'))
+      .mockResolvedValueOnce(recoveredDetail);
+    const restAdapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: (input, init) => globalThis.fetch(input, init),
+      mapListItem: (value) => value as { id: string; name: string },
+      getRowId: (row) => row.id,
+    });
+    mockStandardCrudModule({ dataAdapter: { ...restAdapter, get } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost({}, personListViewDocument, '/organization/persons?drawer=view&id=Person_1');
+    await vi.waitFor(
+      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('DRAWER_DETAIL_READ_FAILED'),
+      { timeout: 3_000 },
+    );
+    const drawer = document.body.querySelector('.ant-drawer')!;
+    const retry = Array.from(drawer.querySelectorAll('button'))
+      .find((button) => button.textContent?.replace(/\s+/g, '') === '重试')!;
+
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    await vi.waitFor(
+      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('张三'),
+      { timeout: 5_000 },
+    );
+
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not offer query retry when drawer form preparation fails', async () => {
+    const get = vi.fn().mockResolvedValue({
+      normalized: {
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+        summaries: {},
+      },
+      value: {
+        fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
+        summaries: {},
+      },
+    });
+    const restAdapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: (input, init) => globalThis.fetch(input, init),
+      mapListItem: (value) => value as { id: string; name: string },
+      getRowId: (row) => row.id,
+    });
+    mockStandardCrudModule({ dataAdapter: { ...restAdapter, get } });
+    const invalidFormModelDocument = {
+      ...personModelDocument,
+      Person: {
+        ...personModelDocument.Person,
+        fields: personModelDocument.Person.fields.map((field, index) => index === 0
+          ? { ...field, uiType: 'unsupported-test-type' }
+          : field),
+      },
+    } as unknown as typeof personModelDocument;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三' }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost(
+      {},
+      personListViewDocument,
+      '/organization/persons?drawer=view&id=Person_1',
+      { modelDocument: invalidFormModelDocument },
+    );
+    await vi.waitFor(
+      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('unsupported uiType'),
+      { timeout: 3_000 },
+    );
+
+    const drawerButtons = Array.from(document.body.querySelectorAll('.ant-drawer button'));
+    expect(drawerButtons.some((button) => button.textContent?.replace(/\s+/g, '') === '重试')).toBe(false);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a slow drawer result from replacing the active id after compatibility navigation', async () => {
+    interface LoadedPersonDetail {
+      normalized: { fields: Record<string, unknown>; summaries: Record<string, unknown> };
+      value: { fields: Record<string, unknown>; summaries: Record<string, unknown> };
+    }
+    const pendingById = new Map<string, {
+      resolve: (detail: LoadedPersonDetail) => void;
+      signal: AbortSignal;
+    }>();
+    const get = vi.fn((id: string, context?: { signal?: AbortSignal }) => new Promise<LoadedPersonDetail>((resolve) => {
+      pendingById.set(id, { resolve, signal: context!.signal! });
+    }));
+    const restAdapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: (input, init) => globalThis.fetch(input, init),
+      mapListItem: (value) => value as { id: string; name: string },
+      getRowId: (row) => row.id,
+    });
+    mockStandardCrudModule({ dataAdapter: { ...restAdapter, get } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [
+        { id: 'Person_A', PersonNo: 'P001', ENAME: '张三' },
+        { id: 'Person_B', PersonNo: 'P002', ENAME: '李四' },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await renderHost({}, personListViewDocument, '/organization/persons?drawer=view&id=Person_A');
+    await vi.waitFor(() => expect(pendingById.has('Person_A')).toBe(true), { timeout: 3_000 });
+
+    await act(async () => testNavigate?.('/organization/persons?drawer=view&id=Person_B'));
+    await vi.waitFor(() => expect(pendingById.has('Person_B')).toBe(true), { timeout: 3_000 });
+    await act(async () => pendingById.get('Person_B')!.resolve({
+      normalized: { fields: { EID: 'Person_B', PersonNo: 'P002', ENAME: '李四' }, summaries: {} },
+      value: { fields: { EID: 'Person_B', PersonNo: 'P002', ENAME: '李四' }, summaries: {} },
+    }));
+    await vi.waitFor(
+      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('李四'),
+      { timeout: 3_000 },
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(pendingById.get('Person_A')!.signal.aborted).toBe(true);
+
+    await act(async () => pendingById.get('Person_A')!.resolve({
+      normalized: { fields: { EID: 'Person_A', PersonNo: 'P001', ENAME: '张三' }, summaries: {} },
+      value: { fields: { EID: 'Person_A', PersonNo: 'P001', ENAME: '张三' }, summaries: {} },
+    }));
+    expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('李四');
+    expect(document.body.querySelector('.ant-drawer')?.textContent).not.toContain('张三');
   });
 
   it('protects dirty drawer values with Ant Modal before closing', async () => {

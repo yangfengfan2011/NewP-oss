@@ -3,7 +3,6 @@ import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
   createStandardCrudOperationResultPresenterRegistry,
-  type StandardCrudDetail,
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
   type StandardCrudOperationResult,
@@ -14,6 +13,7 @@ import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaR
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import StandardCrudResolvedDetailSections from '../standard-crud/StandardCrudResolvedDetailSections';
 import {
@@ -51,12 +51,6 @@ class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; mes
     return this.props.children;
   }
 }
-
-type LoadedDetail<TDetail> = {
-  id: string;
-  normalized: StandardCrudDetail;
-  value: TDetail | StandardCrudDetail;
-};
 
 function findStandardCrudModelDocument(modelDocuments: MetadataRecord[], modelKey: unknown): MetadataRecord {
   if (typeof modelKey !== 'string' || modelKey.trim().length === 0) {
@@ -172,50 +166,20 @@ function StandardCrudDetailPageContent<TDetail>({
     () => localizeStandardCrudFields(formSchema.fields, dicKey, t),
     [formSchema.fields, dicKey, t],
   );
-  const [loadedDetail, setLoadedDetail] = useState<LoadedDetail<TDetail> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadTick, setReloadTick] = useState(0);
   const [editing, setEditing] = useState(false);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
+  const detailQuery = useStandardCrudDetailQuery({
+    resourceKey: registration.resourceKey,
+    id,
+    dataAdapter,
+  });
 
   useEffect(() => {
     setEditing(false);
   }, [id]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDetail() {
-      try {
-        setLoading(true);
-        setError(null);
-        const detail = await dataAdapter.get(id);
-
-        if (!cancelled) {
-          setLoadedDetail({ id, normalized: detail.normalized, value: detail.value });
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setLoadedDetail(null);
-          setError(loadError instanceof Error ? loadError.message : '加载标准 CRUD 详情失败');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadDetail();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dataAdapter, editFields, id, registration, reloadTick]);
-
-  const currentDetail = loadedDetail?.id === id ? loadedDetail.value : null;
-  const currentNormalizedDetail = loadedDetail?.id === id ? loadedDetail.normalized : null;
+  const currentDetail = detailQuery.detail?.value ?? null;
+  const currentNormalizedDetail = detailQuery.detail?.normalized ?? null;
   const schema = useMemo(
     () => resolveStandardCrudDetailSchema(viewDocuments, registration, { modelDocuments }),
     [modelDocuments, registration, viewDocuments],
@@ -240,12 +204,12 @@ function StandardCrudDetailPageContent<TDetail>({
       textFor={(key, fallback) => t(`${schema.dicKey}.${key}`, fallback)}
     />
   ) : null;
-  const refresh = () => setReloadTick((current) => current + 1);
+  const refresh = detailQuery.refresh;
   const detailActionHandlers = useMemo(() => ({
     ...registration.actionHandlers,
     edit: () => setEditing(true),
   }), [registration.actionHandlers]);
-  const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
+  const showLoading = detailQuery.loading;
   // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
   const detailHeaderActions = currentDetail && readyPresentation
     ? readyPresentation.pageActions.length > 0
@@ -254,7 +218,7 @@ function StandardCrudDetailPageContent<TDetail>({
           actions={readyPresentation.pageActions.map((action) => ({
             ...action,
             labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-            runtimeDisabled: showLoading || action.disabled,
+            runtimeDisabled: detailQuery.refreshing || action.disabled,
             disabledReason: action.disabledReasonKey
               ? t(`${schema.dicKey}.${action.disabledReasonKey}`, action.disabledReasonKey)
               : undefined,
@@ -294,8 +258,11 @@ function StandardCrudDetailPageContent<TDetail>({
 
       {showLoading ? (
         <LoadingState message="正在加载详情..." />
-      ) : error ? (
-        <ErrorState message={error} />
+      ) : detailQuery.error ? (
+        <ErrorState>
+          <span>{detailQuery.error}</span>
+          <button type="button" className="sh-btn sh-btn-primary" onClick={detailQuery.retry}>重试</button>
+        </ErrorState>
       ) : presentation?.kind === 'fatal' ? (
         <ErrorState message={`详情数据契约失败：${presentation.diagnostic.code}`} />
       ) : currentNormalizedDetail && readyPresentation ? (

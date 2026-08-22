@@ -882,7 +882,10 @@ internal sealed class PersonnelAcceptanceRunner
                 "detail-edit-permission",
                 "detail-disable-required-reason",
                 "detail-disable-success",
-                "detail-disable-conflict"
+                "detail-disable-conflict",
+                "detail-disable-conflict-dialog-auto-closed",
+                "detail-disable-conflict-detail-refreshed",
+                "detail-disable-conflict-command-not-replayed"
             ]);
             interceptedResponseAssertions = await CaptureDetailContractDriftBrowserEvidenceAsync(
                 browser,
@@ -1444,7 +1447,7 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
-    // 完整详情旅程覆盖 Drawer 入口、直达/刷新/前后退、共享内容、摘要和停用输入/冲突恢复。
+    // 完整详情旅程覆盖共享内容与停用生命周期；409 后观察 Dialog 自动关闭、单次刷新且命令不重放。
     private async Task AssertFullDetailJourneyAsync(
         IPage page,
         PersonData person,
@@ -1518,20 +1521,53 @@ internal sealed class PersonnelAcceptanceRunner
         reasonInput = await OpenDisableReasonDialogAsync(page);
         inputModal = page.Locator(".ant-modal-content:visible").Last;
         await reasonInput.FillAsync("Personnel detail stale disable");
-        var conflictResponseTask = page.WaitForResponseAsync(static response =>
-            response.Request.Method == "PUT"
-            && response.Url.EndsWith("/status", StringComparison.Ordinal));
-        await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
-            .ClickAsync();
-        var conflictResponse = await conflictResponseTask;
-        if (conflictResponse.Status != (int)HttpStatusCode.Conflict)
+        var personDetailApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
+        var conflictActionGuard = new BrowserRequestDuplicateGuard(
+            "PUT",
+            $"{personDetailApiPath}/status",
+            []);
+        EventHandler<IRequest> conflictActionObserver = (_, request) =>
+            conflictActionGuard.Observe(request.Method, request.Url, request.PostData);
+        page.Request += conflictActionObserver;
+        try
         {
-            throw new InvalidOperationException($"Browser stale disable returned {conflictResponse.Status}, expected 409.");
+            var conflictResponseTask = page.WaitForResponseAsync(static response =>
+                response.Request.Method == "PUT"
+                && response.Url.EndsWith("/status", StringComparison.Ordinal));
+            var refreshedDetailResponseTask = page.WaitForResponseAsync(response =>
+                response.Request.Method == "GET"
+                && response.Url.EndsWith(personDetailApiPath, StringComparison.Ordinal));
+            await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
+                .ClickAsync();
+            var conflictResponse = await conflictResponseTask;
+            if (conflictResponse.Status != (int)HttpStatusCode.Conflict)
+            {
+                throw new InvalidOperationException($"Browser stale disable returned {conflictResponse.Status}, expected 409.");
+            }
+            await inputModal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+            await page.GetByText("LIFECYCLE_CONFLICT", new PageGetByTextOptions { Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            var refreshedDetailResponse = await refreshedDetailResponseTask;
+            if (refreshedDetailResponse.Status != (int)HttpStatusCode.OK)
+            {
+                throw new InvalidOperationException(
+                    $"Browser conflict refresh returned {refreshedDetailResponse.Status}, expected 200.");
+            }
+
+            var conflictActionReport = await conflictActionGuard.WaitForQuietPeriodAsync(
+                TimeSpan.FromMilliseconds(250),
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+            conflictActionReport.EnsurePassed();
+            if (conflictActionReport.Fingerprints.Sum(static fingerprint => fingerprint.PhysicalCount) != 1)
+            {
+                throw new InvalidOperationException("Browser stale disable command was replayed after the 409 response.");
+            }
         }
-        await page.GetByText("LIFECYCLE_CONFLICT", new PageGetByTextOptions { Exact = true })
-            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^取\\s*消$") })
-            .ClickAsync();
+        finally
+        {
+            page.Request -= conflictActionObserver;
+        }
     }
 
     // 完整详情两容器共享字段结构；完整页额外必须展示两个真实 ready 摘要块和权限动作。

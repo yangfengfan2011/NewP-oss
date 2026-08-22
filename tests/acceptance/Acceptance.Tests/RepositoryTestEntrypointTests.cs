@@ -232,7 +232,6 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("listQuery[\"id\"], person.Id", runner, StringComparison.Ordinal);
         Assert.Contains("restoredDrawer.WaitForAsync", runner, StringComparison.Ordinal);
         Assert.Contains("restoredDrawer.GetByText(person.Name", runner, StringComparison.Ordinal);
-        Assert.Contains("LocatorGetByRoleOptions { NameRegex = new Regex(\"^取\\\\s*消$\") }", runner, StringComparison.Ordinal);
         Assert.Contains("Name = \"退出登录\", Exact = true", runner, StringComparison.Ordinal);
         Assert.Contains("requestedCapabilityUrls", runner, StringComparison.Ordinal);
         Assert.Contains("personStandardCrudResource", runner, StringComparison.Ordinal);
@@ -266,6 +265,57 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("inputModal.GetByLabel(\"停用原因\"", journey, StringComparison.Ordinal);
         Assert.DoesNotContain("AriaRole.Tooltip", journey, StringComparison.Ordinal);
         Assert.DoesNotContain("PageGetByRoleOptions { NameRegex = new Regex(\"^确\\\\s*认$\") }", journey, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PersonnelAcceptanceRunner_ObservesConflictLifecycleWithoutCancelingClosedReviewDialog()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+        var journeyStart = runner.IndexOf(
+            "private async Task AssertFullDetailJourneyAsync",
+            StringComparison.Ordinal);
+        var journeyEnd = runner.IndexOf(
+            "private async Task AssertFullDetailContentAsync",
+            journeyStart,
+            StringComparison.Ordinal);
+        Assert.True(journeyStart >= 0 && journeyEnd > journeyStart);
+        var journey = runner[journeyStart..journeyEnd];
+
+        var guardCreation = journey.IndexOf("new BrowserRequestDuplicateGuard(", StringComparison.Ordinal);
+        var observerAttached = journey.IndexOf("page.Request += conflictActionObserver", StringComparison.Ordinal);
+        var commandResponse = journey.IndexOf("var conflictResponseTask = page.WaitForResponseAsync", StringComparison.Ordinal);
+        var refreshResponse = journey.IndexOf("var refreshedDetailResponseTask = page.WaitForResponseAsync", StringComparison.Ordinal);
+        var dialogClosed = journey.IndexOf(
+            "await inputModal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden })",
+            refreshResponse,
+            StringComparison.Ordinal);
+        var conflictVisible = journey.IndexOf("GetByText(\"LIFECYCLE_CONFLICT\"", StringComparison.Ordinal);
+        var refreshCompleted = journey.IndexOf("var refreshedDetailResponse = await refreshedDetailResponseTask", StringComparison.Ordinal);
+        var quietPeriod = journey.IndexOf("conflictActionGuard.WaitForQuietPeriodAsync", StringComparison.Ordinal);
+        var failClosed = journey.IndexOf("conflictActionReport.EnsurePassed()", StringComparison.Ordinal);
+
+        Assert.True(guardCreation < observerAttached);
+        Assert.True(observerAttached < commandResponse);
+        Assert.True(commandResponse < refreshResponse);
+        Assert.True(refreshResponse < dialogClosed);
+        Assert.True(dialogClosed < conflictVisible);
+        Assert.True(conflictVisible < refreshCompleted);
+        Assert.True(refreshCompleted < quietPeriod);
+        Assert.True(quietPeriod < failClosed);
+        Assert.Contains("response.Request.Method == \"GET\"", journey, StringComparison.Ordinal);
+        Assert.Contains("response.Url.EndsWith(personDetailApiPath, StringComparison.Ordinal)", journey, StringComparison.Ordinal);
+        Assert.Contains("Fingerprints.Sum(static fingerprint => fingerprint.PhysicalCount) != 1", journey, StringComparison.Ordinal);
+        Assert.Contains("page.Request -= conflictActionObserver", journey, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocatorGetByRoleOptions { NameRegex = new Regex(\"^取\\\\s*消$\") }", journey, StringComparison.Ordinal);
+        Assert.Contains("detail-disable-conflict-dialog-auto-closed", runner, StringComparison.Ordinal);
+        Assert.Contains("detail-disable-conflict-detail-refreshed", runner, StringComparison.Ordinal);
+        Assert.Contains("detail-disable-conflict-command-not-replayed", runner, StringComparison.Ordinal);
     }
 
     [Fact]

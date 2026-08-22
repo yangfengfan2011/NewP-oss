@@ -620,6 +620,80 @@ describe('StandardCrudDetailPageHost', () => {
     expect(container.textContent).toContain('opaque-action-result');
   });
 
+  it('keeps 409 action feedback across the full detail refresh lifecycle without replaying the command', async () => {
+    const initialDetail = {
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, Revision: 4 },
+      summaries: {},
+    };
+    const latestDetail = {
+      fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '李四', DepartmentId: null, Revision: 5 },
+      summaries: {},
+    };
+    let resolveLatestDetail!: (detail: { normalized: typeof latestDetail; value: typeof latestDetail }) => void;
+    const latestDetailRequest = new Promise<{ normalized: typeof latestDetail; value: typeof latestDetail }>((resolve) => {
+      resolveLatestDetail = resolve;
+    });
+    const get = vi.fn()
+      .mockResolvedValueOnce({ normalized: initialDetail, value: initialDetail })
+      .mockReturnValueOnce(latestDetailRequest);
+    const disablePerson = vi.fn().mockRejectedValueOnce(new StandardCrudRequestError('LIFECYCLE_CONFLICT', 409));
+    const view = {
+      ...personDetailViewDocument,
+      view: {
+        ...personDetailViewDocument.view,
+        pageActions: personDetailViewDocument.view.pageActions.map((action) => action.key === 'disable'
+          ? { ...action, inputKey: 'reason' }
+          : action),
+      },
+    };
+    const registration: StandardCrudResourceRegistration = {
+      ...createPersonRegistration(),
+      dataAdapter: {
+        ...createPersonDataAdapter(),
+        get,
+      },
+      actionInputRenderers: {
+        reason: ({ value, onChange }) => (
+          <input aria-label="动作原因" value={String(value ?? '')} onChange={(event) => onChange(event.target.value)} />
+        ),
+      },
+      actionHandlers: { disablePerson },
+    };
+
+    await renderHost('Person_1', registration, view);
+    await vi.waitFor(() => expect(container.textContent).toContain('停用人员'));
+    expect(disablePerson).not.toHaveBeenCalled();
+
+    const disable = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '停用人员');
+    await act(async () => disable?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(document.body.querySelector('input[aria-label="动作原因"]')).not.toBeNull());
+    await act(async () => {
+      const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '确认');
+      confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    expect(disablePerson).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector('input[aria-label="动作原因"]')).toBeNull();
+    expect(container.textContent).toContain('LIFECYCLE_CONFLICT');
+
+    await act(async () => {
+      resolveLatestDetail({ normalized: latestDetail, value: latestDetail });
+      await latestDetailRequest;
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain('李四'));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(disablePerson).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('LIFECYCLE_CONFLICT');
+
+    const retry = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '停用人员');
+    await act(async () => retry?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(document.body.querySelector('input[aria-label="动作原因"]')).not.toBeNull());
+    expect(disablePerson).toHaveBeenCalledTimes(1);
+  });
+
   it('reloads the latest snapshot after a 409 edit conflict and only retries after an explicit resubmit', async () => {
     const initialDetail = {
       fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null, Revision: 4 },

@@ -246,14 +246,15 @@ function StandardCrudDetailPageContent<TDetail>({
     edit: () => setEditing(true),
   }), [registration.actionHandlers]);
   const showLoading = loading || (loadedDetail !== null && loadedDetail.id !== id);
-  const detailHeaderActions = !showLoading && currentDetail && readyPresentation
+  // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
+  const detailHeaderActions = currentDetail && readyPresentation
     ? readyPresentation.pageActions.length > 0
       ? (
         <StandardCrudActions
           actions={readyPresentation.pageActions.map((action) => ({
             ...action,
             labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-            runtimeDisabled: action.disabled,
+            runtimeDisabled: showLoading || action.disabled,
             disabledReason: action.disabledReasonKey
               ? t(`${schema.dicKey}.${action.disabledReasonKey}`, action.disabledReasonKey)
               : undefined,

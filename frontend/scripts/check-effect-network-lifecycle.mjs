@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { effectNetworkLifecycleAllowlist } from './effect-network-lifecycle.allowlist.mjs';
 
-const COMMAND_NAME_PATTERN = /^(create|update|delete|remove|enable|disable|set|reset|change|login|logout|save|submit|execute|activate|deactivate|restore)/i;
+const COMMAND_NAME_PATTERN = /^(create|update|delete|remove|action|enable|disable|set|reset|change|login|logout|save|submit|execute|activate|deactivate|restore)/i;
 const READ_NAME_PATTERN = /^(get|list|load|read|fetch|query|search|find|lookup|request|export)/i;
 const SHARED_LOADER_NAMES = new Set([
   'loadRuntimeLocalizationManifest',
@@ -52,6 +52,63 @@ function readImportedCallables(sourceFile) {
   return imports;
 }
 
+function readPlatformQueryImports(sourceFile) {
+  const aliases = new Set();
+  const namespaces = new Set();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || statement.moduleSpecifier.text !== '@icp-platform/core') continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) namespaces.add(bindings.name.text);
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if ((element.propertyName?.text ?? element.name.text) === 'usePlatformQuery') {
+          aliases.add(element.name.text);
+        }
+      }
+    }
+  }
+  return { aliases, namespaces };
+}
+
+function isPlatformQueryHook(expression, platformQueryImports) {
+  return ts.isIdentifier(expression)
+    ? platformQueryImports.aliases.has(expression.text)
+    : ts.isPropertyAccessExpression(expression)
+      && ts.isIdentifier(expression.expression)
+      && platformQueryImports.namespaces.has(expression.expression.text)
+      && expression.name.text === 'usePlatformQuery';
+}
+
+function readPlatformQueryLoadCallback(call, platformQueryImports, localBindings, sourceFile) {
+  if (!isPlatformQueryHook(call.expression, platformQueryImports)) return undefined;
+  const options = call.arguments[0];
+  if (!options || !ts.isObjectLiteralExpression(options)) return undefined;
+  const loadProperty = options.properties.find((property) => (
+    (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property) || ts.isMethodDeclaration(property))
+    && ((ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)) && property.name.text === 'load')
+  ));
+  if (!loadProperty) return undefined;
+  if (ts.isMethodDeclaration(loadProperty) && loadProperty.body) {
+    return { body: loadProperty.body, functionChain: [], visitedBindings: new Set() };
+  }
+  if (ts.isMethodDeclaration(loadProperty)) return undefined;
+  const initializer = ts.isPropertyAssignment(loadProperty) ? loadProperty.initializer : loadProperty.name;
+  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+    return { body: initializer.body, functionChain: [], visitedBindings: new Set() };
+  }
+  if (ts.isIdentifier(initializer)) {
+    const binding = resolveLocalBinding(initializer.text, call, localBindings, sourceFile);
+    if (binding?.body) {
+      return {
+        body: binding.body,
+        functionChain: [initializer.text],
+        visitedBindings: new Set([binding.declaration]),
+      };
+    }
+  }
+  return undefined;
+}
+
 function classifyImportedCallable(imported) {
   if (!imported) return undefined;
   const apiOrServiceSource = /(^|\/)(api|services)(\/|$)/i.test(imported.source)
@@ -89,10 +146,7 @@ function classifyTransportCall(call) {
   return 'unknown-network';
 }
 
-function classifyMemberSink(expression, sourceFile) {
-  if (!ts.isPropertyAccessExpression(expression)) return undefined;
-  const receiver = expression.expression.getText(sourceFile);
-  const method = expression.name.text;
+function classifyMemberName(receiver, method) {
   const isDataAdapter = receiver === 'dataAdapter' || receiver.endsWith('.dataAdapter');
   const isClientOrService = /(?:client|service)$/i.test(receiver);
   if (isDataAdapter || isClientOrService) {
@@ -100,8 +154,13 @@ function classifyMemberSink(expression, sourceFile) {
     if (READ_NAME_PATTERN.test(method)) return 'read-query';
     return 'unknown-network';
   }
-  if ((receiver === 'provider' || receiver.endsWith('.provider')) && method === 'load') return 'read-query';
+  if (/(?:^|\.)[^.]*provider$/i.test(receiver) && method === 'load') return 'read-query';
   return undefined;
+}
+
+function classifyMemberSink(expression, sourceFile) {
+  if (!ts.isPropertyAccessExpression(expression)) return undefined;
+  return classifyMemberName(expression.expression.getText(sourceFile), expression.name.text);
 }
 
 function enclosingFunctionName(node) {
@@ -156,7 +215,25 @@ function collectLocalBindings(sourceFile) {
         ts.isPropertyAccessExpression(node.initializer)
         && classifyMemberSink(node.initializer, sourceFile)
       ) {
-        add(node.name.text, node, undefined, node.initializer);
+        add(node.name.text, node, undefined, {
+          text: node.initializer.getText(sourceFile),
+          classification: classifyMemberSink(node.initializer, sourceFile),
+        });
+      }
+    } else if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer) {
+      const receiver = node.initializer.getText(sourceFile);
+      for (const element of node.name.elements) {
+        if (!ts.isIdentifier(element.name)) continue;
+        const method = element.propertyName && (ts.isIdentifier(element.propertyName) || ts.isStringLiteralLike(element.propertyName))
+          ? element.propertyName.text
+          : element.name.text;
+        const classification = classifyMemberName(receiver, method);
+        if (classification) {
+          add(element.name.text, node, undefined, {
+            text: `${receiver}.${method}`,
+            classification,
+          });
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -187,6 +264,7 @@ export function analyzeEffectNetworkLifecycleSource({ file, source }) {
   );
   const effectImports = readEffectHookImports(sourceFile);
   const importedCallables = readImportedCallables(sourceFile);
+  const platformQueryImports = readPlatformQueryImports(sourceFile);
   const localBindings = collectLocalBindings(sourceFile);
   const rawFindings = new Map();
 
@@ -221,6 +299,16 @@ export function analyzeEffectNetworkLifecycleSource({ file, source }) {
         const owner = enclosingFunctionName(node);
         const binding = resolveLocalBinding(callback.text, node, localBindings, sourceFile);
         if (binding) inspectEffect(binding.body, [callback.text], owner, hook, new Set([binding.declaration]));
+      }
+      const queryLoad = readPlatformQueryLoadCallback(node, platformQueryImports, localBindings, sourceFile);
+      if (queryLoad) {
+        inspectEffect(
+          queryLoad.body,
+          queryLoad.functionChain,
+          enclosingFunctionName(node),
+          'usePlatformQuery.load',
+          queryLoad.visitedBindings,
+        );
       }
     }
     ts.forEachChild(node, visit);
@@ -258,9 +346,9 @@ export function analyzeEffectNetworkLifecycleSource({ file, source }) {
       if (binding?.memberAlias) {
         const triggerChain = [
           ...functionChain,
-          `${node.expression.text}(${binding.memberAlias.getText(sourceFile)})`,
+          `${node.expression.text}(${binding.memberAlias.text})`,
         ].join('>');
-        recordFinding(node, triggerChain, classifyMemberSink(binding.memberAlias, sourceFile), owner, hook);
+        recordFinding(node, triggerChain, binding.memberAlias.classification, owner, hook);
       } else if (binding?.body && !visitedBindings.has(binding.declaration)) {
         inspectEffect(
           binding.body,
@@ -331,6 +419,14 @@ export function evaluateEffectNetworkLifecycle({ findings, allowlist }) {
     && entry.triggerChain === finding.triggerChain
     && entry.classification === finding.classification;
   for (const finding of findings) {
+    if (finding.hook === 'usePlatformQuery.load') {
+      if (finding.classification === 'write-command') {
+        diagnostics.push({ code: 'PLATFORM_QUERY_LOAD_WRITE_COMMAND', id: finding.id });
+      } else if (finding.classification === 'unknown-network') {
+        diagnostics.push({ code: 'PLATFORM_QUERY_LOAD_UNCLASSIFIED_NETWORK', id: finding.id });
+      }
+      continue;
+    }
     if (finding.classification === 'write-command') {
       diagnostics.push({ code: 'EFFECT_NETWORK_WRITE_COMMAND', id: finding.id });
       continue;
@@ -341,6 +437,9 @@ export function evaluateEffectNetworkLifecycle({ findings, allowlist }) {
     }
   }
   for (const entry of allowlist) {
+    if (entry.hook === 'usePlatformQuery.load') {
+      diagnostics.push({ code: 'EFFECT_NETWORK_ALLOWLIST_QUERY_LOAD_FORBIDDEN', id: entry.id });
+    }
     if (entry.classification === 'write-command') {
       diagnostics.push({ code: 'EFFECT_NETWORK_ALLOWLIST_WRITE_FORBIDDEN', id: entry.id });
     }
@@ -388,8 +487,10 @@ if (invokedPath === import.meta.url) {
   const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const result = runEffectNetworkLifecycleGate({ frontendRoot });
   const writeCount = result.findings.filter(({ classification }) => classification === 'write-command').length;
+  const queryLoadCount = result.findings.filter(({ hook }) => hook === 'usePlatformQuery.load').length;
+  const effectFindingCount = result.findings.length - queryLoadCount;
   if (result.ok) {
-    console.log(`[effect-network-lifecycle] ${result.findings.length} reviewed findings, ${writeCount} write commands`);
+    console.log(`[effect-network-lifecycle] ${effectFindingCount} reviewed effect findings, ${queryLoadCount} platform query loads, ${writeCount} write commands`);
   } else {
     for (const diagnostic of result.diagnostics) {
       console.error(`[effect-network-lifecycle] ${diagnostic.code}: ${diagnostic.id}`);

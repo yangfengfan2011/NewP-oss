@@ -397,8 +397,34 @@ describe('StandardCrudListPageHost', () => {
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
   });
 
-  it('shares one metadata list request between two StrictMode hosts with the same query', async () => {
-    mockStandardCrudModule();
+  it('keeps StrictMode query replay read-only, shares one request, and runs one confirmed delete handler', async () => {
+    const createCommand = vi.fn(async () => ({ operation: 'create' as const, payload: undefined }));
+    const updateCommand = vi.fn(async () => ({ operation: 'update' as const, payload: undefined }));
+    const removeCommand = vi.fn(async () => undefined);
+    const deleteCommand = vi.fn(async () => undefined);
+    const disableAction = vi.fn(async () => undefined);
+    const enableAction = vi.fn(async () => undefined);
+    const refreshAction = vi.fn(async () => undefined);
+    const dataAdapter = createStandardCrudRestDataAdapter({
+      apiRoute: '/api/organization/persons',
+      fetcher: (input, init) => globalThis.fetch(input, init),
+      mapListItem: (value) => value as { id: string; name: string },
+      getRowId: (row) => row.id,
+    });
+    mockStandardCrudModule({
+      dataAdapter: {
+        ...dataAdapter,
+        create: createCommand,
+        update: updateCommand,
+        remove: removeCommand,
+      },
+      actionHandlers: {
+        refresh: refreshAction,
+        deletePerson: deleteCommand,
+        disablePerson: disableAction,
+        enablePerson: enableAction,
+      },
+    });
     let releaseList!: () => void;
     const listGate = new Promise<void>((resolve) => { releaseList = resolve; });
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
@@ -447,9 +473,57 @@ describe('StandardCrudListPageHost', () => {
 
     const listCalls = fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/organization/persons'));
     expect(listCalls).toHaveLength(1);
+    expect(createCommand).not.toHaveBeenCalled();
+    expect(updateCommand).not.toHaveBeenCalled();
+    expect(removeCommand).not.toHaveBeenCalled();
+    expect(deleteCommand).not.toHaveBeenCalled();
+    expect(disableAction).not.toHaveBeenCalled();
+    expect(enableAction).not.toHaveBeenCalled();
+    expect(refreshAction).not.toHaveBeenCalled();
 
     await act(async () => releaseList());
     await flushProTableRequest();
+    await waitForBodyText('张三');
+
+    expect(createCommand).not.toHaveBeenCalled();
+    expect(updateCommand).not.toHaveBeenCalled();
+    expect(removeCommand).not.toHaveBeenCalled();
+    expect(deleteCommand).not.toHaveBeenCalled();
+    expect(disableAction).not.toHaveBeenCalled();
+    expect(enableAction).not.toHaveBeenCalled();
+    expect(refreshAction).not.toHaveBeenCalled();
+
+    const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '更多');
+    expect(moreButton).toBeDefined();
+    await act(async () => moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    const visibleDropdown = Array.from(document.body.querySelectorAll<HTMLElement>('.ant-dropdown'))
+      .filter((dropdown) => !dropdown.classList.contains('ant-dropdown-hidden'))
+      .at(-1);
+    const deleteButton = Array.from(
+      (visibleDropdown ?? document.body).querySelectorAll<HTMLElement>('button, a, [role="button"], [role="menuitem"]'),
+    ).find((button) => button.textContent?.replace(/\s+/g, '') === '删除');
+    expect(deleteButton).toBeDefined();
+    await act(async () => deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('确认删除该人员吗？');
+    expect(document.body.textContent).toContain('确认删除该人员吗？');
+
+    const confirmButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '确认');
+    expect(confirmButton).toBeDefined();
+    await act(async () => confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    expect(deleteCommand).toHaveBeenCalledTimes(1);
+    expect(deleteCommand).toHaveBeenCalledWith(expect.objectContaining({ id: 'Person_1' }));
+    expect(createCommand).not.toHaveBeenCalled();
+    expect(updateCommand).not.toHaveBeenCalled();
+    expect(removeCommand).not.toHaveBeenCalled();
+    expect(disableAction).not.toHaveBeenCalled();
+    expect(enableAction).not.toHaveBeenCalled();
+    expect(refreshAction).not.toHaveBeenCalled();
   });
 
   it('keeps computed rows on the existing list adapter when columns come from metadata', async () => {

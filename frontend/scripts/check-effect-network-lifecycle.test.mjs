@@ -279,7 +279,7 @@ test('uses imported API symbol semantics even when the local name is aliased', (
   ]);
 });
 
-test('does not report declarative platform queries or non-network effects', () => {
+test('reports declarative platform query reads without treating non-network effects as sinks', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
     file: 'packages/shell/src/MetadataListProbe.tsx',
     source: `import { useEffect, useLayoutEffect } from 'react';
@@ -305,7 +305,229 @@ test('does not report declarative platform queries or non-network effects', () =
     `,
   });
 
-  assert.deepEqual(findings, []);
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    { hook: 'usePlatformQuery.load', triggerChain: 'dataAdapter.list', classification: 'read-query' },
+  ]);
+});
+
+test('rejects a platformFetch POST declared by a platform query load', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/QueryWriteProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+      import { platformFetch } from '@icp-platform/core';
+
+      export function QueryWriteProbe() {
+        return usePlatformQuery({
+          key: ['example.items'],
+          load: () => platformFetch('/api/items', { method: 'POST' }),
+        });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    { hook: 'usePlatformQuery.load', triggerChain: 'platformFetch', classification: 'write-command' },
+  ]);
+  assert.deepEqual(result.diagnostics, [{
+    code: 'PLATFORM_QUERY_LOAD_WRITE_COMMAND',
+    id: 'modules/example/src/QueryWriteProbe.tsx::QueryWriteProbe::usePlatformQuery.load::platformFetch',
+  }]);
+});
+
+test('rejects dataAdapter.create reached through a referenced platform query load', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/AdapterWriteProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+
+      export function AdapterWriteProbe({ dataAdapter }) {
+        const createItem = () => dataAdapter.create({ name: 'new item' });
+        return usePlatformQuery({
+          key: ['example.items'],
+          load: createItem,
+        });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    {
+      hook: 'usePlatformQuery.load',
+      triggerChain: 'createItem>dataAdapter.create',
+      classification: 'write-command',
+    },
+  ]);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), ['PLATFORM_QUERY_LOAD_WRITE_COMMAND']);
+});
+
+test('rejects a client delete through two cyclic helpers and a destructured member alias', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/NestedDeleteProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+
+      export function NestedDeleteProbe({ client }) {
+        const { delete: removeItem } = client;
+        function first() {
+          second();
+        }
+        function second() {
+          removeItem('Item_1');
+          first();
+        }
+        const loadItems = () => first();
+        return usePlatformQuery({ key: ['example.items'], load: loadItems });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ triggerChain, classification }) => ({ triggerChain, classification })), [
+    {
+      triggerChain: 'loadItems>first>second>removeItem(client.delete)',
+      classification: 'write-command',
+    },
+  ]);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), ['PLATFORM_QUERY_LOAD_WRITE_COMMAND']);
+});
+
+test('rejects a useCallback write behind an aliased platform query hook and shorthand load', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/AliasedQueryProbe.tsx',
+    source: `import { useCallback } from 'react';
+      import { usePlatformQuery as useQuery } from '@icp-platform/core';
+
+      export function AliasedQueryProbe({ dataAdapter }) {
+        const load = useCallback(() => dataAdapter.update('Item_1', {}), [dataAdapter]);
+        return useQuery({ key: ['example.items'], load });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    {
+      hook: 'usePlatformQuery.load',
+      triggerChain: 'load>dataAdapter.update',
+      classification: 'write-command',
+    },
+  ]);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), ['PLATFORM_QUERY_LOAD_WRITE_COMMAND']);
+});
+
+test('fails closed for a computed HTTP method in a platform query load method', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/DynamicMethodQueryProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+      import { platformFetch } from '@icp-platform/core';
+
+      export function DynamicMethodQueryProbe({ method }) {
+        return usePlatformQuery({
+          key: ['example.items'],
+          load() {
+            return platformFetch('/api/items', { method });
+          },
+        });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    { hook: 'usePlatformQuery.load', triggerChain: 'platformFetch', classification: 'unknown-network' },
+  ]);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), ['PLATFORM_QUERY_LOAD_UNCLASSIFIED_NETWORK']);
+});
+
+test('fails closed for an unclassified client sink behind a namespace platform query hook', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/OpaqueClientQueryProbe.tsx',
+    source: `import * as Platform from '@icp-platform/core';
+
+      export function OpaqueClientQueryProbe({ inventoryClient }) {
+        return Platform.usePlatformQuery({
+          key: ['example.inventory'],
+          load: () => inventoryClient.run(),
+        });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    {
+      hook: 'usePlatformQuery.load',
+      triggerChain: 'inventoryClient.run',
+      classification: 'unknown-network',
+    },
+  ]);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), ['PLATFORM_QUERY_LOAD_UNCLASSIFIED_NETWORK']);
+});
+
+test('classifies a client action in a platform query load as a write command', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/ActionQueryProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+
+      export function ActionQueryProbe({ client }) {
+        return usePlatformQuery({
+          key: ['example.items'],
+          load: () => client.action('Item_1'),
+        });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ triggerChain, classification }) => ({ triggerChain, classification })), [
+    { triggerChain: 'client.action', classification: 'write-command' },
+  ]);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), ['PLATFORM_QUERY_LOAD_WRITE_COMMAND']);
+});
+
+test('allows known query reads and ignores an unrelated object load property', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/QueryReadProbe.tsx',
+    source: `import { usePlatformQuery, platformFetch } from '@icp-platform/core';
+
+      const unrelated = {
+        load: () => platformFetch('/api/items', { method: 'DELETE' }),
+      };
+
+      export function QueryReadProbe({ dataAdapter, lookupClient, lookupProvider }) {
+        return usePlatformQuery({
+          key: ['example.items'],
+          load: async () => {
+            await dataAdapter.list({});
+            await dataAdapter.get('Item_1');
+            await platformFetch('/api/items', { method: 'GET' });
+            await platformFetch('/api/items', { method: 'HEAD' });
+            await lookupClient.lookup({});
+            return lookupProvider.load({});
+          },
+        });
+      }
+    `,
+  });
+
+  const result = evaluateEffectNetworkLifecycle({ findings, allowlist: [] });
+
+  assert.deepEqual(findings.map(({ triggerChain, classification }) => ({ triggerChain, classification })), [
+    { triggerChain: 'dataAdapter.list', classification: 'read-query' },
+    { triggerChain: 'dataAdapter.get', classification: 'read-query' },
+    { triggerChain: 'platformFetch#1', classification: 'read-query' },
+    { triggerChain: 'platformFetch#2', classification: 'read-query' },
+    { triggerChain: 'lookupClient.lookup', classification: 'read-query' },
+    { triggerChain: 'lookupProvider.load', classification: 'read-query' },
+  ]);
+  assert.deepEqual(result, { ok: true, diagnostics: [] });
 });
 
 test('reports only approved shared-loader entrypoints from loader modules', () => {
@@ -355,6 +577,31 @@ test('never permits a write command through the allowlist', () => {
   assert.deepEqual(result.diagnostics.map(({ code }) => code), [
     'EFFECT_NETWORK_WRITE_COMMAND',
     'EFFECT_NETWORK_ALLOWLIST_WRITE_FORBIDDEN',
+  ]);
+});
+
+test('never admits a platform query load into the effect allowlist', () => {
+  const finding = {
+    id: 'modules/example/src/Query.tsx::Query::usePlatformQuery.load::dataAdapter.list',
+    file: 'modules/example/src/Query.tsx',
+    enclosingFunction: 'Query',
+    hook: 'usePlatformQuery.load',
+    triggerChain: 'dataAdapter.list',
+    classification: 'read-query',
+    line: 4,
+  };
+  const allowlistEntry = {
+    ...finding,
+    owner: 'Example',
+    reason: 'query reads do not need an effect exception',
+    exitCondition: 'remove the invalid entry',
+  };
+
+  const result = evaluateEffectNetworkLifecycle({ findings: [finding], allowlist: [allowlistEntry] });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.diagnostics.map(({ code }) => code), [
+    'EFFECT_NETWORK_ALLOWLIST_QUERY_LOAD_FORBIDDEN',
   ]);
 });
 
@@ -462,12 +709,18 @@ test('matches the reviewed current-tree baseline with no effect write commands',
   const frontendRoot = path.resolve(import.meta.dirname, '..');
   const findings = analyzeEffectNetworkLifecycleTree({ frontendRoot });
   const result = evaluateEffectNetworkLifecycle({ findings, allowlist: effectNetworkLifecycleAllowlist });
+  const effectFindings = findings.filter(({ hook }) => hook !== 'usePlatformQuery.load');
+  const queryLoadFindings = findings.filter(({ hook }) => hook === 'usePlatformQuery.load');
 
   assert.equal(findings.filter(({ classification }) => classification === 'write-command').length, 0);
-  assert.deepEqual(findings.map(({ id }) => id), effectNetworkLifecycleAllowlist.map(({ id }) => id));
+  assert.deepEqual(effectFindings.map(({ id }) => id), effectNetworkLifecycleAllowlist.map(({ id }) => id));
+  assert.deepEqual(queryLoadFindings.map(({ id, classification }) => ({ id, classification })), [{
+    id: 'packages/shell/src/pages/StandardCrudListPageHost.tsx::metadataListQuery::usePlatformQuery.load::dataAdapter.list',
+    classification: 'read-query',
+  }]);
   assert.deepEqual(result, { ok: true, diagnostics: [] });
   assert.equal(
-    findings.some(({ triggerChain }) => triggerChain.includes('metadataListQuery') || triggerChain.includes('runtime.reset')),
+    effectFindings.some(({ triggerChain }) => triggerChain.includes('metadataListQuery') || triggerChain.includes('runtime.reset')),
     false,
   );
 });
@@ -480,7 +733,7 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /12 reviewed findings, 0 write commands/);
+  assert.match(result.stdout, /12 reviewed effect findings, 1 platform query loads, 0 write commands/);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

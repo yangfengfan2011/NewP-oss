@@ -36,11 +36,12 @@ internal sealed class ModuleMigrationExecutor(
     private IReadOnlyList<CompiledMigrationHistoryEntry>? _expectedHistory;
     private ProviderTargetSnapshot? _providerTarget;
 
-    public void ValidateBeforeConnection()
+    // 连接前完成静态校验并返回运行时后续 reconciliation 使用的同一份 canonical history。
+    public IReadOnlyList<CompiledMigrationHistoryEntry> ValidateBeforeConnection()
     {
-        if (_validatedStreams is not null)
+        if (_expectedHistory is not null)
         {
-            return;
+            return _expectedHistory;
         }
 
         if (!string.Equals(
@@ -56,11 +57,13 @@ internal sealed class ModuleMigrationExecutor(
             _ => new Lazy<IReadOnlyList<ValidatedMigrationStream>>(
                 CompileValidatedStreams,
                 LazyThreadSafetyMode.ExecutionAndPublication)).Value;
-        _expectedHistory = BuildExpectedHistory(_validatedStreams);
+        var expectedHistory = BuildExpectedHistory(_validatedStreams);
         _ = UnifiedMigrationHistoryReconciler.Reconcile(
             plan.HistoryVersion,
             [],
-            _expectedHistory);
+            expectedHistory);
+        _expectedHistory = expectedHistory;
+        return expectedHistory;
     }
 
     private IReadOnlyList<ValidatedMigrationStream> CompileValidatedStreams()

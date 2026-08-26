@@ -21,10 +21,10 @@ public sealed class DatabaseOwnershipPolicyTests
 
     private static readonly string[] KnownMigrations =
     [
-        "20260812144154_PlatformFoundation",
-        "20260810033908_Identity_000001_Foundation",
-        "20260810033909_Authentication_000001_Foundation",
-        "20260812144235_Organization_000001_Foundation"
+        "20000101000000_TestPolicy_000001_Initial",
+        "20000101000001_TestPolicy_000002_Expand",
+        "20000101000002_TestPolicy_000003_Transition",
+        "20000101000003_TestPolicy_000004_Finalize"
     ];
 
     [Fact]
@@ -109,7 +109,7 @@ public sealed class DatabaseOwnershipPolicyTests
             new DatabaseOwnershipInspection(
                 ExpectedMarker,
                 5,
-                [.. KnownMigrations, "20260901000000_FutureMigration"],
+                [.. KnownMigrations, "20990101000000_TestPolicy_000005_Future"],
                 Tables("ConfigItem", "Role", "Permission", "RolePermission", "UserRole")),
             KnownMigrations);
 
@@ -313,7 +313,7 @@ public sealed class DatabaseOwnershipPolicyTests
             new DatabaseOwnershipInspection(
                 ExpectedMarker,
                 1,
-                ["20260409154403_InitialCreate"],
+                ["19990101000000_TestLegacy_000001_Initial"],
                 Tables("ConfigItem")),
             KnownMigrations);
 
@@ -326,9 +326,9 @@ public sealed class DatabaseOwnershipPolicyTests
 
     private static CompiledMigrationHistoryEntry[] BuildHistory() =>
     [
-        Entry(0, "20260409154403_InitialCreate", "platform.core", '1'),
-        Entry(1, "20260810033908_Identity_000001_Foundation", "Identity", '2'),
-        Entry(2, "20260810033909_Authentication_000001_Foundation", "Authentication", '3')
+        Entry(0, "20000101000000_TestHistory_000001_Initial", "Test.Owner.Alpha", '1'),
+        Entry(1, "20000101000001_TestHistory_000002_Expand", "Test.Owner.Beta", '2'),
+        Entry(2, "20000101000002_TestHistory_000003_Finalize", "Test.Owner.Gamma", '3')
     ];
 
     private static CompiledMigrationHistoryEntry Entry(int position, string migrationId, string owner, char digest) =>

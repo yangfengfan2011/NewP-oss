@@ -33,10 +33,6 @@ public sealed class SqlServerPersistenceSmokeTests
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_SQLSERVER_SMOKE";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION";
-    private const string PlatformFoundationMigration = "20260812144154_PlatformFoundation";
-    private const string IdentityFoundationMigration = "20260810033908_Identity_000001_Foundation";
-    private const string AuthenticationFoundationMigration = "20260810033909_Authentication_000001_Foundation";
-    private const string OrganizationFoundationMigration = "20260812144235_Organization_000001_Foundation";
     private const string ModuleMigrationOne = "20260813001000_CreateAssetCatalog";
     private const string ModuleMigrationTwo = "20260813002000_AddUniqueAssetCode";
     private const string ModuleSchema = "np_partner_assetcatalog";
@@ -141,6 +137,10 @@ public sealed class SqlServerPersistenceSmokeTests
             applicationConnectionString,
             identity,
             TestPersistencePlan.CreateCurrentSqlServer());
+        var expectedHistory = ReadCanonicalHistory(provider);
+        var expectedMigrationIds = expectedHistory
+            .Select(static entry => entry.MigrationId)
+            .ToArray();
 
         Assert.False(await RunMigrationsAsync(provider));
 
@@ -151,14 +151,7 @@ public sealed class SqlServerPersistenceSmokeTests
         }
 
         var historyBeforeWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
-        Assert.Equal(
-            [
-                IdentityFoundationMigration,
-                AuthenticationFoundationMigration,
-                PlatformFoundationMigration,
-                OrganizationFoundationMigration
-            ],
-            historyBeforeWarmStart);
+        Assert.Equal(expectedMigrationIds, historyBeforeWarmStart);
         foreach (var table in new[]
         {
             "ConfigItem", "ValueListItem", "Role", "Permission", "RolePermission", "UserRole",
@@ -170,13 +163,13 @@ public sealed class SqlServerPersistenceSmokeTests
         }
         Assert.Equal(0, await CountBusinessDefaultConstraintsAsync(applicationConnectionString));
         Assert.Equal(0, await CountNullableAuditColumnsAsync(applicationConnectionString));
-        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
+        Assert.Equal(expectedHistory.Count, await CountMigrationFactsAsync(applicationConnectionString));
 
         Assert.False(await RunMigrationsAsync(provider));
 
         var historyAfterWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
         Assert.Equal(historyBeforeWarmStart, historyAfterWarmStart);
-        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
+        Assert.Equal(expectedHistory.Count, await CountMigrationFactsAsync(applicationConnectionString));
 
         await ExecuteNonQueryAsync(applicationConnectionString, """
             INSERT INTO [dbo].[__EFMigrationsHistory] ([MigrationId], [ProductVersion])
@@ -202,8 +195,10 @@ public sealed class SqlServerPersistenceSmokeTests
         var applicationConnectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
         var configuration = BuildSqlServerConfiguration(applicationConnectionString);
         Assert.Equal(identity, WorktreeDatabaseIdentity.Resolve(FindRepositoryRoot()));
+        IReadOnlyList<CompiledMigrationHistoryEntry> expectedHistory;
         await using (var app = BuildHostApplication(configuration, "Production"))
         {
+            expectedHistory = ReadCanonicalHistory(app.Services);
             await app.ApplyPlatformPersistenceAsync();
             var readiness = await ReadPersistenceReadinessAsync(app);
             Assert.Equal(ReadinessState.Ready, readiness.State);
@@ -211,8 +206,10 @@ public sealed class SqlServerPersistenceSmokeTests
         }
 
         var historyBeforeWarmStart = await ReadAppliedMigrationsAsync(applicationConnectionString);
-        Assert.Equal(4, historyBeforeWarmStart.Length);
-        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
+        Assert.Equal(
+            expectedHistory.Select(static entry => entry.MigrationId),
+            historyBeforeWarmStart);
+        Assert.Equal(expectedHistory.Count, await CountMigrationFactsAsync(applicationConnectionString));
 
         await using (var restarted = BuildHostApplication(configuration, "Development"))
         {
@@ -221,7 +218,7 @@ public sealed class SqlServerPersistenceSmokeTests
             Assert.Equal(ReadinessState.Ready, readiness.State);
         }
         Assert.Equal(historyBeforeWarmStart, await ReadAppliedMigrationsAsync(applicationConnectionString));
-        Assert.Equal(4, await CountMigrationFactsAsync(applicationConnectionString));
+        Assert.Equal(expectedHistory.Count, await CountMigrationFactsAsync(applicationConnectionString));
     }
 
     private static WebApplication BuildHostApplication(
@@ -827,6 +824,14 @@ public sealed class SqlServerPersistenceSmokeTests
         var runner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
         await runner.MigrateAsync();
         return runner.DatabaseAhead;
+    }
+
+    private static IReadOnlyList<CompiledMigrationHistoryEntry> ReadCanonicalHistory(IServiceProvider provider)
+    {
+        using var scope = provider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var plan = scope.ServiceProvider.GetRequiredService<CompiledPersistencePlan>();
+        return new ModuleMigrationExecutor(dbContext, plan).ValidateBeforeConnection();
     }
 
     private static ServiceProvider BuildProvider(

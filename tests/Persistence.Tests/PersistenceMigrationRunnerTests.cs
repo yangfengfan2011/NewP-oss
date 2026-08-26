@@ -108,6 +108,20 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(PersistenceHistoryFailureCodes.VersionUnsupported, exception.FailureCode);
     }
 
+    [Fact]
+    public void ValidateBeforeConnection_LegalMigrationAppend_ExtendsCanonicalHistoryAndPreservesPrefix()
+    {
+        var initialHistory = ReadCanonicalHistory(BuildAppendableModulePlan(includeSecondMigration: false));
+        var appendedHistory = ReadCanonicalHistory(BuildAppendableModulePlan(includeSecondMigration: true));
+
+        Assert.Equal(
+            initialHistory.ToArray(),
+            appendedHistory.Take(initialHistory.Count).ToArray());
+        Assert.Equal(
+            [CreateAssetCatalogMigration.MigrationId, AddUniqueAssetCodeMigration.MigrationId],
+            appendedHistory.Select(static entry => entry.MigrationId));
+    }
+
     [Theory]
     [InlineData(ForbiddenSqlMigration.MigrationId)]
     [InlineData(TransactionSuppressedSqlMigration.MigrationId)]
@@ -421,6 +435,113 @@ public sealed class PersistenceMigrationRunnerTests
         provider = services.BuildServiceProvider();
         scope = provider.CreateAsyncScope();
         return scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
+    }
+
+    private static IReadOnlyList<CompiledMigrationHistoryEntry> ReadCanonicalHistory(
+        CompiledPersistencePlan plan)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Persistence:Adapter"] = "EfCore",
+                ["Persistence:Provider"] = "SqlServer",
+                ["ConnectionStrings:SqlServer"] =
+                    "Server=(localdb)\\MSSQLLocalDB;Database=never-connect;Integrated Security=True;TrustServerCertificate=True;"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddEfCorePersistence(
+            configuration,
+            plan,
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        return new ModuleMigrationExecutor(dbContext, plan).ValidateBeforeConnection();
+    }
+
+    private static CompiledPersistencePlan BuildAppendableModulePlan(bool includeSecondMigration)
+    {
+        const string owner = "Partner.AssetCatalog";
+        const string schema = "np_partner_assetcatalog";
+        var asset = new ModelDefinition(
+            "Asset",
+            "Asset",
+            ModelKind.Entity,
+            [
+                new FieldDefinition(
+                    "Id",
+                    "Id",
+                    FieldKind.Scalar,
+                    FieldValueType.ObjectId,
+                    "string",
+                    Required: true,
+                    IsPrimaryKey: true,
+                    IsAuditField: false),
+                new FieldDefinition(
+                    "Code",
+                    "Code",
+                    FieldKind.Scalar,
+                    FieldValueType.Text,
+                    "nvarchar(256)",
+                    Required: true,
+                    IsPrimaryKey: false,
+                    IsAuditField: false)
+            ],
+            includeSecondMigration
+                ? [new IndexDefinition("UX_Asset_Code", ["Code"], IsUnique: true)]
+                : [],
+            owner,
+            schema);
+        var firstModelDigest = PersistenceModelDigest.Compute([asset with { Indexes = [] }]);
+        var modelDigest = PersistenceModelDigest.Compute([asset]);
+        var migrations = new List<CompiledMigrationStep>
+        {
+            new(
+                "000001",
+                CreateAssetCatalogMigration.MigrationId,
+                null,
+                new string('1', 64),
+                new string('0', 64),
+                firstModelDigest,
+                "safe-expand")
+        };
+        if (includeSecondMigration)
+        {
+            migrations.Add(new CompiledMigrationStep(
+                "000002",
+                AddUniqueAssetCodeMigration.MigrationId,
+                new string('1', 64),
+                new string('2', 64),
+                firstModelDigest,
+                modelDigest,
+                "safe-expand"));
+        }
+
+        var assemblyPath = typeof(CreateAssetCatalogMigration).Assembly.Location;
+        var assemblyBytes = File.ReadAllBytes(assemblyPath);
+        var stream = new ModuleMigrationStream(
+            owner,
+            PersistenceProvider.SqlServer,
+            assemblyPath,
+            "test-appendable-manifest.json",
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(assemblyBytes)),
+            modelDigest,
+            migrations[^1].MigrationId,
+            IsPlatformStream: false,
+            migrations)
+        {
+            AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+        };
+        return new CompiledPersistencePlan(
+            "test-appendable-candidate",
+            modelDigest,
+            modelDigest,
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            [asset],
+            [stream]);
     }
 
     private static CompiledPersistencePlan BuildPlan(

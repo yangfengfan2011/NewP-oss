@@ -140,7 +140,6 @@ export type {
   StandardCrudFieldKind,
   StandardCrudFormMode,
   StandardCrudFormSection,
-  StandardCrudListExtensionContext,
   StandardCrudListColumnProvider,
   StandardCrudListQueryRequest,
   StandardCrudListReadContext,

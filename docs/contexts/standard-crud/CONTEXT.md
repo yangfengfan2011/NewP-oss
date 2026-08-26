@@ -8,6 +8,10 @@ Standard CRUD 上下文定义平台共享宿主用于组合资源列表、创建
 通过平台共享宿主提供列表、创建、编辑或详情能力的资源。它可以只启用其中一部分能力，不等于模块的全部业务页面。
 _Avoid_: 通用页面、业务专用页面
 
+**List View（列表视图）**：
+标准 CRUD 列表静态展示结构的唯一 authoring 事实源，拥有 metadata 列、查询字段、高级筛选分区、页级操作和行级操作；runtime 列模式只把完整列集委托给 Runtime Column Provider。模块 binding 不通过 React 回调覆盖标准列表区域，需要完全自定义结构时使用自定义页面 capability。
+_Avoid_: renderFilters、renderHeaderActions、renderRowActions、列表 slot
+
 **Standard CRUD 数据 Adapter（Standard CRUD Data Adapter）**：
 把资源拥有者的读取与普通写入结果转换成共享宿主可消费的规范列表、详情和操作结果的运行时角色。它不解释 Model 或 View，不拥有业务专用命令，也不产生新的 authoring 或候选事实。
 _Avoid_: Resource compiler、metadata 解释器、业务命令处理器

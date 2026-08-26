@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** 标准摘要块状态；平台只解释状态语义，专属展示内容仍由模块扩展承接。 */
 export type StandardCrudSummaryStatus = 'ready' | 'notConfigured' | 'dependencyUnavailable';
@@ -266,18 +266,6 @@ export interface StandardCrudListColumnProvider<TFilter> {
   load: (context: StandardCrudColumnContext<TFilter>) => Promise<StandardCrudColumnSet>;
 }
 
-/** 列表扩展上下文，只暴露 Host 允许模块影响的筛选、刷新和当前行数据入口。 */
-export interface StandardCrudListExtensionContext<TFilter, TRow> {
-  filters: TFilter;
-  setFilters: Dispatch<SetStateAction<TFilter>>;
-  applyFilters: () => void;
-  resetFilters: () => void;
-  refresh: () => void;
-  loading: boolean;
-  rows: TRow[];
-  total: number;
-}
-
 /**
  * 模块向 Shell 注册标准 CRUD 资源的公共契约。
  *
@@ -313,9 +301,6 @@ export interface StandardCrudResourceRegistration<
   operationResultPresenters?: StandardCrudOperationResultPresenter[];
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
   columnProvider?: StandardCrudListColumnProvider<TFilter>;
-  renderFilters?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
-  renderHeaderActions?: (context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
-  renderRowActions?: (row: TRow, context: StandardCrudListExtensionContext<TFilter, TRow>) => ReactNode;
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */

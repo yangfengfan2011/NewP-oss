@@ -402,6 +402,46 @@ describe('StandardCrudListPageHost', () => {
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
   });
 
+  it('does not render an action column when the List View has no row actions', async () => {
+    mockStandardCrudModule({ detailViewKey: undefined });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const listViewWithoutRowActions = {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        rowActions: [],
+      },
+    } as typeof personListViewDocument;
+
+    await renderHost({}, listViewWithoutRowActions);
+    await flushProTableRequest();
+
+    const headers = Array.from(container.querySelectorAll('.ant-table-thead th'))
+      .map((header) => header.textContent?.trim());
+    const row = container.querySelector('.ant-table-tbody tr.ant-table-row');
+    expect(headers).not.toContain('操作');
+    expect(row?.querySelectorAll('td')).toHaveLength(4);
+    expect(row?.querySelector('td.ant-table-cell-fix-right')).toBeNull();
+
+    const columnSetting = container.querySelector<HTMLElement>('.ant-pro-table-list-toolbar-setting-item');
+    expect(columnSetting).not.toBeNull();
+    await act(async () => columnSetting?.querySelector('svg')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    const columnSettingOverlay = document.body.querySelector<HTMLElement>('.ant-pro-table-column-setting-overlay');
+    expect(columnSettingOverlay).not.toBeNull();
+    expect(columnSettingOverlay?.textContent).not.toContain('操作');
+  });
+
   it('keeps StrictMode query replay read-only, shares one request, and runs one confirmed delete handler', async () => {
     const createCommand = vi.fn(async () => ({ operation: 'create' as const, payload: undefined }));
     const updateCommand = vi.fn(async () => ({ operation: 'update' as const, payload: undefined }));
@@ -1266,30 +1306,6 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).not.toContain('Description');
   });
 
-  it('prefers metadata page actions over custom header actions', async () => {
-    mockStandardCrudModule({
-      renderHeaderActions: () => <button type="button">自定义操作</button>,
-    });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({
-        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
-
-    await renderHost();
-    await flushProTableRequest();
-
-    expect(container.textContent).not.toContain('自定义操作');
-    expect(container.textContent).toContain('新建人员');
-    expect(container.textContent).toContain('刷新');
-  });
-
   it('exports current page through standard CRUD backend using view columns', async () => {
     mockStandardCrudModule();
     Object.defineProperty(URL, 'createObjectURL', {
@@ -1506,7 +1522,6 @@ describe('StandardCrudListPageHost', () => {
         disablePerson,
         enablePerson: vi.fn(),
       },
-      renderFilters: undefined,
       listActions: undefined,
       fields: undefined,
       formSections: undefined,

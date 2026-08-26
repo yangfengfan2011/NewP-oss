@@ -746,11 +746,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [registration.operationResultPresenters],
   );
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
-  const shouldRenderActionColumn = Boolean(
-    registration.renderRowActions
-    || schema.rowActions.length > 0
-    || dataAdapter.getRowId,
-  );
+  const shouldRenderActionColumn = schema.rowActions.length > 0;
   const defaultColumnState = useMemo<StandardCrudColumnState>(() => Object.fromEntries([
     ...resolvedColumns.map((column, index) => [column.key, {
       order: index,
@@ -1120,22 +1116,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     else runtimeColumnsQuery.refresh();
   };
 
-  const context = {
-    filters,
-    setFilters,
-    applyFilters,
-    resetFilters,
-    refresh: () => {
-      if (schema.columnSource === 'runtime') refreshRuntimeGeneration();
-      else metadataListQuery.refresh();
-    },
-    loading: effectiveLoading,
-    rows: effectiveRows,
-    total: effectiveTotal,
+  const refreshList = () => {
+    if (schema.columnSource === 'runtime') refreshRuntimeGeneration();
+    else metadataListQuery.refresh();
   };
 
   const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
-    refresh: context.refresh,
+    refresh: refreshList,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
@@ -1144,7 +1131,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   });
   const mutationExecution = useStandardCrudMutationExecution({
     registration,
-    refresh: context.refresh,
+    refresh: refreshList,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
@@ -1672,7 +1659,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             <div style={{ display: 'grid', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <RowActionButtonGroup actions={rowActions} />
-                {registration.renderRowActions ? registration.renderRowActions(row, context) : null}
               </div>
               {rowExecutionError ? (
                 <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
@@ -1789,9 +1775,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         ))}
       </>
     )
-    : schema.pageActions.length === 0 && registration.renderHeaderActions
-      ? registration.renderHeaderActions(context)
-      : undefined;
+    : undefined;
 
   const filterBar = (
     <CrudSearchBar
@@ -1816,8 +1800,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         </div>
       )}
       loading={effectiveLoading}
-      onSearch={context.applyFilters}
-      onReset={context.resetFilters}
+      onSearch={applyFilters}
+      onReset={resetFilters}
       more={schema.advancedFilter.enabled ? (
         <AntdButton type="text" size="middle" onClick={() => setAdvancedFilterOpen(true)}>
           {t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
@@ -1825,10 +1809,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ) : undefined}
     />
   );
-
-  const handleRefresh = async () => {
-    context.refresh();
-  };
 
   const createActionLabel = createAction ? t(`${schema.dicKey}.${createAction.labelKey}`, createAction.labelKey) : undefined;
   const editActionLabel = editAction ? t(`${schema.dicKey}.${editAction.labelKey}`, editAction.labelKey) : undefined;
@@ -1918,7 +1898,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             : metadataListQuery.retry,
         }}
         toolbar={exportToolbar}
-        onRefresh={() => void handleRefresh()}
+        onRefresh={refreshList}
       />
     </div>
   );
@@ -1953,7 +1933,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             <Space className="np-advanced-filter-drawer-actions">
               <AntdButton
                 onClick={() => {
-                  context.resetFilters();
+                  resetFilters();
                 }}
                 disabled={effectiveLoading}
               >
@@ -1963,7 +1943,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 type="primary"
                 loading={effectiveLoading}
                 onClick={() => {
-                  context.applyFilters();
+                  applyFilters();
                   setAdvancedFilterOpen(false);
                 }}
               >

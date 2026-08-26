@@ -167,7 +167,6 @@ describe('standard CRUD phase 2 SDK helpers', () => {
     };
 
     expect(registration.buildColumns).toBeUndefined();
-    expect(registration.renderFilters).toBeUndefined();
     expect(registration.enumOptions?.EmploymentStatus[0]).toEqual({ value: 'FullTime', label: '正式' });
     expect(registration.listActions?.[0]).toMatchObject({
       confirmMessage: '确认停用？',

@@ -11,7 +11,6 @@ describe('organization person standard CRUD phase 2 registration', () => {
     expect(personStandardCrudResource.formSections).toBeUndefined();
     expect(personStandardCrudResource.listActions).toBeUndefined();
     expect(personStandardCrudResource.buildColumns).toBeUndefined();
-    expect(personStandardCrudResource.renderFilters).toBeUndefined();
     expect(personStandardCrudResource.buildMutationValues).toBeUndefined();
     expect(personStandardCrudResource.lookupProviders?.map((provider) => provider.key)).toEqual([
       'organization.companies',

@@ -15,6 +15,12 @@
 
 需要筛选标签、评论或状态时，使用 `gh` 的 `--json` 与 `--jq` 参数，只保留当前任务需要的字段。
 
+## 规格到交付
+
+1. 新功能、公共 seam、跨模块能力或其他非局部设计经确认后，实施前使用 `$to-spec` 综合当前对话和源码事实，发布一个带 `ready-for-agent` 的唯一 Spec Issue。局部缺陷和纯文档修正可以直接使用有界 Issue；已经开始实施的 Issue 不重复发布 Spec。
+2. Spec 发布后选择最小交付形态：一个 owner、一个回滚边界且可在一个执行上下文完成时，保留单 Issue 并按纵向检查点实施；只有存在多个可独立验收的增量、真实 blocker 或不同 owner 时，才使用 `$to-tickets` 创建纵向 child，每张票都必须独立可验证，不能按前端、后端或测试水平拆分。
+3. 新公共 seam 的真实采用者可行性是 Spec 内的 Go/No-Go 检查点；证据形成前不创建完整 child 图。详细预算、停止条件和拆票时机遵循 `delivery-gates.md`，不为满足流程单独创建可行性 child。
+
 ## 是否将 Pull Request 作为分流入口
 
 **PRs as a request surface: no.**

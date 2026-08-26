@@ -19,13 +19,6 @@
         }
       ],
       "defaultPageSize": 20
-    },
-    "pageActions": [
-      {
-        "key": "refresh",
-        "labelKey": "Action_Refresh",
-        "standardAction": "refresh"
-      }
-    ]
+    }
   }
 }

@@ -789,6 +789,18 @@ describe('standard CRUD schema resolver and registry', () => {
     )).toThrow('unsupported standard action "archive"');
   });
 
+  it('rejects a refresh standard action in List View pageActions with a stable diagnostic', () => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh', standardAction: 'refresh' }],
+      },
+      personRegistration,
+    )).toThrow(
+      'list view "organization.person.list" page action "refresh" cannot declare standard action "refresh"',
+    );
+  });
+
   it('fails when an action handlerKey is not registered on the current resource', () => {
     expect(() => buildStandardCrudListSchema(
       {

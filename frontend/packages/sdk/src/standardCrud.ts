@@ -269,8 +269,8 @@ export interface StandardCrudListColumnProvider<TFilter> {
 /**
  * 模块向 Shell 注册标准 CRUD 资源的公共契约。
  *
- * 第一批承接列表/详情主流程；第二批继续声明字段、表单、lookup、动作和 summary
- * renderer 的稳定扩展点。具体加载、执行、状态切换和回滚仍由 Shell 运行时收口。
+ * 第一批承接列表/详情主流程；第二批继续声明字段、表单、lookup、动作行为和 summary
+ * renderer 的稳定扩展点。列表操作结构只由 List View 声明，具体加载、执行、状态切换和回滚仍由 Shell 运行时收口。
  */
 export interface StandardCrudResourceRegistration<
   TFilter = Record<string, string>,
@@ -292,7 +292,6 @@ export interface StandardCrudResourceRegistration<
   formSections?: StandardCrudFormSection[];
   lookupProviders?: StandardCrudLookupProvider[];
   enumOptions?: Record<string, StandardCrudOption[]>;
-  listActions?: StandardCrudActionDefinition[];
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;

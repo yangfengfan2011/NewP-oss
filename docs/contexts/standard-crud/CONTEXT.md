@@ -9,7 +9,7 @@ Standard CRUD 上下文定义平台共享宿主用于组合资源列表、创建
 _Avoid_: 通用页面、业务专用页面
 
 **List View（列表视图）**：
-标准 CRUD 列表静态展示结构的唯一 authoring 事实源，拥有 metadata 列、查询字段、高级筛选分区、页级操作和行级操作；runtime 列模式只把完整列集委托给 Runtime Column Provider。模块 binding 不通过 React 回调覆盖标准列表区域，需要完全自定义结构时使用自定义页面 capability。
+标准 CRUD 列表静态展示结构的唯一 authoring 事实源，拥有 metadata 列、查询字段、高级筛选分区、可选业务页级操作和行级操作；runtime 列模式只把完整列集委托给 Runtime Column Provider。搜索、重置和刷新由 Shell/UI 作为标准固定交互提供，不进入 List View `pageActions`。模块 binding 不通过 React 回调覆盖标准列表区域，需要完全自定义结构时使用自定义页面 capability。
 _Avoid_: renderFilters、renderHeaderActions、renderRowActions、列表 slot
 
 **Standard CRUD 数据 Adapter（Standard CRUD Data Adapter）**：

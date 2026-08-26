@@ -9,7 +9,6 @@ describe('organization person standard CRUD phase 2 registration', () => {
   it('shrinks registration to metadata-first runtime hooks only', () => {
     expect(personStandardCrudResource.fields).toBeUndefined();
     expect(personStandardCrudResource.formSections).toBeUndefined();
-    expect(personStandardCrudResource.listActions).toBeUndefined();
     expect(personStandardCrudResource.buildColumns).toBeUndefined();
     expect(personStandardCrudResource.buildMutationValues).toBeUndefined();
     expect(personStandardCrudResource.lookupProviders?.map((provider) => provider.key)).toEqual([
@@ -56,6 +55,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'PersonNo', 'ENAME', 'EmploymentStatus', 'IsEnabled',
     ]);
     expect(view.columns.find((column) => column.key === 'name')).toMatchObject({ standardAction: 'view' });
+    expect(view.pageActions.map((action) => action.standardAction)).toEqual(['create']);
     expect(view.rowActions.find((action) => action.standardAction === 'disable')).toMatchObject({
       inputKey: 'disableReason',
       dataDependency: { fields: ['Revision'] },

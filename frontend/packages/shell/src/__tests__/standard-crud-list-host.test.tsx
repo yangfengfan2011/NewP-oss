@@ -147,7 +147,6 @@ const personListViewDocument = {
     ],
     pageActions: [
       { key: 'create', labelKey: 'Action_Create', standardAction: 'create', variant: 'primary' },
-      { key: 'refresh', labelKey: 'Action_Refresh', standardAction: 'refresh' },
     ],
     rowActions: [
       { key: 'view', labelKey: 'Action_View', standardAction: 'view' },
@@ -212,7 +211,6 @@ const personListCatalog = {
   'PersonListView.Column_Name': '姓名',
   'PersonListView.Column_DepartmentName': '部门',
   'PersonListView.Action_Create': '新建人员',
-  'PersonListView.Action_Refresh': '刷新',
   'PersonListView.Action_View': '查看',
   'PersonListView.Action_Edit': '编辑',
   'PersonListView.Action_Delete': '删除',
@@ -329,7 +327,7 @@ describe('StandardCrudListPageHost', () => {
         columnSource: 'runtime',
         columns: undefined,
         rowActions: [],
-        pageActions: [{ key: 'refresh', labelKey: 'Action_Refresh', standardAction: 'refresh' }],
+        pageActions: [],
       },
     } as typeof personListViewDocument;
   }
@@ -362,7 +360,6 @@ describe('StandardCrudListPageHost', () => {
               load: async () => [],
             }],
             actionHandlers: {
-              refresh: vi.fn(),
               deletePerson: vi.fn(),
               disablePerson: vi.fn(),
               enablePerson: vi.fn(),
@@ -400,6 +397,42 @@ describe('StandardCrudListPageHost', () => {
     expect(container.querySelector('.ant-pagination')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')?.textContent).toContain('第 1 / 1 页');
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
+  });
+
+  it('keeps one fixed refresh button and reloads the current query without List View page actions', async () => {
+    mockStandardCrudModule();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const listViewWithoutPageActions = {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        pageActions: [],
+      },
+    } as typeof personListViewDocument;
+
+    await renderHost({}, listViewWithoutPageActions);
+    await flushProTableRequest();
+
+    const refreshButtons = Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-label="刷新"]'));
+    expect(refreshButtons).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const initialRequest = String(fetchMock.mock.calls[0]?.[0]);
+
+    await act(async () => refreshButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(initialRequest);
   });
 
   it('does not render an action column when the List View has no row actions', async () => {
@@ -449,7 +482,6 @@ describe('StandardCrudListPageHost', () => {
     const deleteCommand = vi.fn(async () => undefined);
     const disableAction = vi.fn(async () => undefined);
     const enableAction = vi.fn(async () => undefined);
-    const refreshAction = vi.fn(async () => undefined);
     const dataAdapter = createStandardCrudRestDataAdapter({
       apiRoute: '/api/organization/persons',
       fetcher: (input, init) => globalThis.fetch(input, init),
@@ -464,7 +496,6 @@ describe('StandardCrudListPageHost', () => {
         remove: removeCommand,
       },
       actionHandlers: {
-        refresh: refreshAction,
         deletePerson: deleteCommand,
         disablePerson: disableAction,
         enablePerson: enableAction,
@@ -524,7 +555,6 @@ describe('StandardCrudListPageHost', () => {
     expect(deleteCommand).not.toHaveBeenCalled();
     expect(disableAction).not.toHaveBeenCalled();
     expect(enableAction).not.toHaveBeenCalled();
-    expect(refreshAction).not.toHaveBeenCalled();
 
     await act(async () => releaseList());
     await flushProTableRequest();
@@ -536,7 +566,6 @@ describe('StandardCrudListPageHost', () => {
     expect(deleteCommand).not.toHaveBeenCalled();
     expect(disableAction).not.toHaveBeenCalled();
     expect(enableAction).not.toHaveBeenCalled();
-    expect(refreshAction).not.toHaveBeenCalled();
 
     const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent?.replace(/\s+/g, '') === '更多');
@@ -568,7 +597,6 @@ describe('StandardCrudListPageHost', () => {
     expect(removeCommand).not.toHaveBeenCalled();
     expect(disableAction).not.toHaveBeenCalled();
     expect(enableAction).not.toHaveBeenCalled();
-    expect(refreshAction).not.toHaveBeenCalled();
   });
 
   it('keeps computed rows on the existing list adapter when columns come from metadata', async () => {
@@ -1517,12 +1545,10 @@ describe('StandardCrudListPageHost', () => {
     const disablePerson = vi.fn();
     mockStandardCrudModule({
       actionHandlers: {
-        refresh: vi.fn(),
         deletePerson: vi.fn(),
         disablePerson,
         enablePerson: vi.fn(),
       },
-      listActions: undefined,
       fields: undefined,
       formSections: undefined,
     });

@@ -58,10 +58,6 @@
       "zhs": "人员停用阻断",
       "en": "Personnel Disable Hold"
     },
-    "Action_Refresh": {
-      "zhs": "刷新",
-      "en": "Refresh"
-    },
     "Action_Create": {
       "zhs": "创建账号",
       "en": "Create Account"

@@ -35,7 +35,14 @@ const retiredRowActionsRenderer: StandardCrudResourceRegistration = {
   renderRowActions: () => null,
 };
 
+const retiredListActions: StandardCrudResourceRegistration = {
+  ...registration,
+  // @ts-expect-error 页级和行级操作结构只由 List View 声明。
+  listActions: [],
+};
+
 void retiredFilterRenderer;
 void retiredHeaderActionsRenderer;
 void retiredRowActionsRenderer;
+void retiredListActions;
 void (undefined as unknown as StandardCrudListExtensionContext<unknown, unknown>);

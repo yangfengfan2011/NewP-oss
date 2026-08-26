@@ -195,6 +195,8 @@ describe('Identity account Standard CRUD production route', () => {
     expect(container.textContent).toContain('Alice');
     expect(container.textContent).toContain('已删除');
     expect(container.textContent).toContain('共 21 条');
+    expect(container.querySelectorAll('button[aria-label="刷新"]')).toHaveLength(1);
+    expect(accountListViewDocument.view.pageActions.map((action) => action.standardAction)).toEqual(['create']);
   });
 
   it('resolves one complete account Detail View with module-owned security action bindings', () => {

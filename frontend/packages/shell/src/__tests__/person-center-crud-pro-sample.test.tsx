@@ -1212,6 +1212,7 @@ describe('人员中心 CRUD Pro 样板', () => {
 
     const refreshButton = findAntdButtonByText(document.body, '刷新');
     expect(refreshButton).toBeDefined();
+    expect(document.body.querySelectorAll('button[aria-label="刷新"]')).toHaveLength(1);
     await act(async () => refreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 

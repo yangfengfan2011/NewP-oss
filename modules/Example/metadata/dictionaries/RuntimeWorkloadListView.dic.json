@@ -17,10 +17,6 @@
     "Query_Keyword_Placeholder": {
       "zhs": "按示例成员姓名搜索",
       "en": "Search example members"
-    },
-    "Action_Refresh": {
-      "zhs": "刷新",
-      "en": "Refresh"
     }
   }
 }

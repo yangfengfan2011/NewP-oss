@@ -138,6 +138,7 @@ describe('standard CRUD route adapter', () => {
       drawerRedirects: [],
       fallbackRoutes: [],
     });
+    expect(exampleListViewDocument.view).not.toHaveProperty('pageActions');
   });
 
   it('fails closed on duplicate detail route paths instead of relying on registration order', () => {

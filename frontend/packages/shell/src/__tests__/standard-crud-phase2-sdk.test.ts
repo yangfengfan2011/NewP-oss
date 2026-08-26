@@ -7,7 +7,6 @@ import {
   preserveStandardCrudCurrentOption,
   readStandardCrudFieldValue,
   resolveStandardCrudSummaryMessage,
-  type StandardCrudActionDefinition,
   type StandardCrudFieldDefinition,
   type StandardCrudOption,
   type StandardCrudResourceRegistration,
@@ -147,20 +146,11 @@ describe('standard CRUD phase 2 SDK helpers', () => {
     ).toEqual({ companyId: 'Company_2', departmentId: '', positionId: '', name: '张三' });
   });
 
-  it('allows metadata action keys and enum option bridge on resource registrations', () => {
-    const action: StandardCrudActionDefinition = {
-      key: 'disable',
-      labelKey: 'Actions.Disable',
-      standardAction: 'disable',
-      confirmMessage: '确认停用？',
-      confirmMessageKey: 'Actions.DisableConfirm',
-      handlerKey: 'disable',
-    };
+  it('allows enum option bridge on resource registrations', () => {
     const registration: StandardCrudResourceRegistration = {
       resourceKey: 'organization.person',
       dataAdapter: createStandardCrudTestDataAdapter(),
       listViewKey: 'organization.person.list',
-      listActions: [action],
       enumOptions: {
         EmploymentStatus: [{ value: 'FullTime', label: '正式' }],
       },
@@ -168,10 +158,5 @@ describe('standard CRUD phase 2 SDK helpers', () => {
 
     expect(registration.buildColumns).toBeUndefined();
     expect(registration.enumOptions?.EmploymentStatus[0]).toEqual({ value: 'FullTime', label: '正式' });
-    expect(registration.listActions?.[0]).toMatchObject({
-      confirmMessage: '确认停用？',
-      confirmMessageKey: 'Actions.DisableConfirm',
-      handlerKey: 'disable',
-    });
   });
 });

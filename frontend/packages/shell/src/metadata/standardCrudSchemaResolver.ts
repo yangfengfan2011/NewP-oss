@@ -836,6 +836,14 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     exportModes: readArray<unknown>(exportConfig.modes).filter((mode): mode is string => typeof mode === 'string'),
   };
 
+  for (const action of schema.pageActions) {
+    if (action.standardAction === 'refresh') {
+      throw new Error(
+        `list view "${viewKey}" page action "${action.key}" cannot declare standard action "refresh"`,
+      );
+    }
+  }
+
   if (schema.columnSource === 'runtime') {
     if (!registration.columnProvider) {
       throw new Error(`runtime column source requires a column provider on resource "${registration.resourceKey}"`);

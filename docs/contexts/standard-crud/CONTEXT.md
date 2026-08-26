@@ -68,6 +68,38 @@ _Avoid_: 两套详情表单
 一次详情响应相对于 Resolved Detail Schema 的运行时可用状态，区分 present-null、missing field、unavailable section、critical id failure 和 action dependency unavailable；它不改变 Detail View 结构，也不参与候选注册。
 _Avoid_: 响应字段白名单、Model 推断、候选字段校验
 
+**原始字段值（Raw Field Value）**：
+模型字段用于持久化、排序、筛选、写回和系统集成的规范值；请求其显示值时仍必须同时保留，不能被可读文本覆盖。
+_Avoid_: 显示文本、格式化值、前端别名
+
+**显示值（Display Value）**：
+与原始字段值成对返回、供读取界面直接呈现的字符串或空值；它可以表达引用名称、枚举文本或按请求展示上下文生成的时间文本，但不是独立 Model 字段。
+_Avoid_: 原始值替代、DTO alias、页面临时格式
+
+**字段显示规则（Field Display Rule）**：
+由 Model 拥有、声明一个字段如何从原始字段值形成显示值的静态语义；资源页面和数据 Adapter 不重复声明同一转换。
+_Avoid_: 页面 formatter、资源别名表、renderer 数据查询
+
+**标准时间显示格式（Standard Temporal Display Format）**：
+时间字段显示规则允许选择的有限格式，只包含“日期”和“日期时间到秒”；时间点与本地日期时间可以显式选择其中一种，它只控制显示值，不改变字段的原始时间语义。
+_Avoid_: 任意 formatter、metadata 格式串、值类型替代
+
 **展示投影（Display Projection）**：
-为字段 renderer 提供可读名称的查询结果，例如组织引用的名称。它不是可独立选择的 Model 字段，也不扩展解析后字段目录。
-_Avoid_: 详情字段、DTO alias
+依据字段显示规则，从原始字段值统一形成显示值的读取投影；列表、单条读取、写入成功结果、选项和用户可读导出不得各自定义转换规则。
+_Avoid_: 页面 renderer 特判、资源手工别名、第二套读取结果
+
+**用户可读导出（Human-readable Export）**：
+面向用户查看和继续处理的导出结果，默认使用与交互读取一致的显示值；面向系统交换的原始导出是另一项显式能力。
+_Avoid_: 机器交换文件、隐式 raw export
+
+**日历日期（Calendar Date）**：
+只表示年月日且不对应时间线上的唯一时刻的字段值；展示时不应用用户时区转换。
+_Avoid_: UTC 日期、零点时间点
+
+**时间点（Instant）**：
+表示时间线上唯一时刻的字段值，规范原始值使用 UTC；显示值可以按请求展示上下文转换，Entity 审计时间属于此类。
+_Avoid_: 本地日期时间、无时区 datetime
+
+**本地日期时间（Local Date Time）**：
+表示某个业务所在地墙上时间、但本身不绑定查看者时区的字段值；展示时不得自动转换为当前用户时区。
+_Avoid_: UTC 时间点、浏览器本地时间

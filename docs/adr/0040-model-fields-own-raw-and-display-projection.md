@@ -22,4 +22,4 @@ Model 至少区分日历日期、时间点和本地日期时间。字段显示�
 
 任何读取入口丢失原始值、同一字段在不同入口使用不同显示规则、逐行目录查询、前端资源特判、显示解析覆盖原始字段、UTC 传输无明确时区、日历日期或本地日期时间被错误转换、活动会话时区可被普通请求覆盖、跨展示上下文复用缓存、旧别名与规范伴随字段并存，或显示值进入写请求，都属于交付失败信号。#118 交付 raw/display projection kernel 及 reference、user 的正式采用；#139 独立交付认证会话时区、请求 locale、时间展示语义和展示上下文生命周期。两个 Map 共享本 ADR 的长期方向，但分别拥有独立的验收 Gate、migration、风险与回滚边界，不要求一次发布或一并恢复。
 
-最小纵向可行性验证按两个 Map 分开形成证据。#118 由功能示例模块的真实 Standard CRUD display-value sample 资源验证 reference 与 user 的 raw/canonical companion、批量解析，以及列表、单条读取、创建与更新成功结果和用户可读导出的正式消费；List View 与 Detail View 只引用原始 Model 字段，不手写伴随字段、formatter 或 renderer。#139 另行验证时间字段标准格式、认证会话时区、请求 locale、DST 语义与展示上下文隔离。任一 Map 在自己的纵向证据形成前不得展开其批量采用；Group、options 和 enum 在真实 owner 或正式 consumer 冻结前只作为候选，不阻塞 #118。
+最小纵向可行性验证按两个 Map 分开形成证据。#118 的 reference 证据由 Person #121、#122、#130 和 #131 验证 raw/canonical companion、投影、正式消费与写入拒绝；user 证据由 Example #134 和 #137 验证 raw/canonical companion、批量解析以及 Standard CRUD、Shell 和用户可读导出的正式消费。List View 与 Detail View 只引用原始 Model 字段，不手写伴随字段、formatter 或 renderer。#139 另行验证时间字段标准格式、认证会话时区、请求 locale、DST 语义与展示上下文隔离。任一 Map 在自己的纵向证据形成前不得展开其批量采用；Group、options 和 enum 在真实 owner 或正式 consumer 冻结前只作为候选，不阻塞 #118。

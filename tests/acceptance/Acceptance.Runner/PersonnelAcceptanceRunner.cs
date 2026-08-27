@@ -499,14 +499,53 @@ internal sealed class PersonnelAcceptanceRunner
 
         var personNo = $"ACC-{_runId[..10]}";
         var personName = $"Personnel Gate Person {_runId[..8]}";
+        var displayCompanionPayload = PersonPayload(
+            personNo,
+            personName,
+            fixture.CompanyId,
+            fixture.DepartmentId);
+        displayCompanionPayload["CompanyId_DisplayValue"] = fixture.CompanyName;
+        await AssertCanonicalDisplayCompanionWriteRejectedAsync(
+            admin,
+            HttpMethod.Post,
+            "/api/organization/persons",
+            displayCompanionPayload,
+            "canonical-display-companion-create-read-only",
+            checks,
+            cancellationToken);
         var createdPerson = await CreatePersonAsync(
             admin,
             personNo,
             personName,
             fixture.CompanyId,
             fixture.DepartmentId,
-            cancellationToken);
+            cancellationToken,
+            fixture.CompanyName);
+        checks.Add(new { check = "create-with-company-display-envelope", status = 201 });
         var updatedName = $"{personName} Updated";
+        var updateDisplayCompanionPayload = PersonPayload(
+            personNo,
+            $"{personName} Rejected Update",
+            fixture.CompanyId,
+            fixture.DepartmentId);
+        updateDisplayCompanionPayload["Revision"] = createdPerson.Revision;
+        updateDisplayCompanionPayload["CompanyId_DisplayValue"] = fixture.CompanyName;
+        await AssertCanonicalDisplayCompanionWriteRejectedAsync(
+            admin,
+            HttpMethod.Put,
+            $"/api/organization/persons/{Uri.EscapeDataString(createdPerson.Id)}",
+            updateDisplayCompanionPayload,
+            "canonical-display-companion-update-read-only",
+            checks,
+            cancellationToken);
+        await AssertPersonMutationStateAsync(
+            admin,
+            createdPerson.Id,
+            personName,
+            fixture.CompanyId,
+            fixture.CompanyName,
+            createdPerson.Revision,
+            cancellationToken);
         var updatePayload = PersonPayload(personNo, updatedName, fixture.CompanyId, fixture.DepartmentId);
         updatePayload["Revision"] = createdPerson.Revision;
         using (var updated = await SendJsonWithAntiforgeryAsync(
@@ -518,6 +557,7 @@ internal sealed class PersonnelAcceptanceRunner
         {
             var updatedBody = await updated.Content.ReadAsStringAsync(cancellationToken);
             EnsureStatus(updated, HttpStatusCode.OK, updatedBody, "admin edit person");
+            AssertPersonCompanyDisplayEnvelope(updatedBody, fixture.CompanyId, fixture.CompanyName);
             _person = ReadPerson(updatedBody, personNo, updatedName);
         }
         var person = _person;
@@ -2250,6 +2290,80 @@ internal sealed class PersonnelAcceptanceRunner
         checks.Add(new { check, status = 400, code });
     }
 
+    // canonical display companion 是正式 REST 输出字段；真实 Personnel POST/PUT 必须稳定拒绝客户端回写。
+    private static async Task AssertCanonicalDisplayCompanionWriteRejectedAsync(
+        HttpClient client,
+        HttpMethod method,
+        string path,
+        IReadOnlyDictionary<string, object?> payload,
+        string check,
+        ICollection<object> checks,
+        CancellationToken cancellationToken)
+    {
+        const string expectedCode = "StandardCrud.DisplayValueFieldReadOnly";
+        const string expectedReasonKey = "standardCrud.displayValueFieldReadOnly";
+        const string expectedField = "CompanyId_DisplayValue";
+        const string expectedMessage = "标准 CRUD 显示字段 CompanyId_DisplayValue 只允许输出，不能提交写入。";
+        using var response = await SendJsonWithAntiforgeryAsync(
+            client,
+            method,
+            path,
+            payload,
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.BadRequest, body, check);
+        using var json = JsonDocument.Parse(body);
+        var code = ReadString(json.RootElement, "code");
+        var reasonKey = ReadString(json.RootElement, "reasonKey");
+        var message = ReadString(json.RootElement, "message");
+        var fieldErrors = ReadArray(json.RootElement, "fieldErrors");
+        if (!string.Equals(code, expectedCode, StringComparison.Ordinal)
+            || !string.Equals(reasonKey, expectedReasonKey, StringComparison.Ordinal)
+            || !string.Equals(message, expectedMessage, StringComparison.Ordinal)
+            || fieldErrors.GetArrayLength() != 1)
+        {
+            throw new InvalidOperationException($"{check} did not return the frozen standard error contract.");
+        }
+
+        var fieldError = fieldErrors[0];
+        if (!string.Equals(ReadString(fieldError, "field"), expectedField, StringComparison.Ordinal)
+            || !string.Equals(ReadString(fieldError, "code"), expectedCode, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{check} did not identify the submitted companion field.");
+        }
+
+        checks.Add(new { check, status = 400, code, reasonKey, field = expectedField });
+    }
+
+    // 被拒绝的 PUT 必须保持此前详情不变，随后才能用同一 revision 证明合法 raw PUT 仍可成功。
+    private static async Task AssertPersonMutationStateAsync(
+        HttpClient client,
+        string personId,
+        string expectedName,
+        string expectedCompanyId,
+        string expectedCompanyDisplayValue,
+        long expectedRevision,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            $"/api/organization/persons/{Uri.EscapeDataString(personId)}",
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "detail after rejected canonical display companion update");
+        using var json = JsonDocument.Parse(body);
+        var fields = ReadObject(json.RootElement, "fields");
+        if (!string.Equals(ReadString(fields, "ENAME"), expectedName, StringComparison.Ordinal)
+            || !string.Equals(ReadString(fields, "CompanyId"), expectedCompanyId, StringComparison.Ordinal)
+            || !string.Equals(
+                ReadString(fields, "CompanyId_DisplayValue"),
+                expectedCompanyDisplayValue,
+                StringComparison.Ordinal)
+            || ReadLong(fields, "Revision") != expectedRevision)
+        {
+            throw new InvalidOperationException("Rejected canonical display companion update changed the Personnel detail state.");
+        }
+    }
+
     private static async Task PutCompanyAsync(
         HttpClient client,
         string id,
@@ -2338,7 +2452,8 @@ internal sealed class PersonnelAcceptanceRunner
         string name,
         string? companyId,
         string? departmentId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? expectedCompanyDisplayValue = null)
     {
         using var response = await SendJsonWithAntiforgeryAsync(
             client,
@@ -2348,7 +2463,33 @@ internal sealed class PersonnelAcceptanceRunner
             cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.Created, body, $"create person {personNo}");
+        if (expectedCompanyDisplayValue is not null)
+        {
+            AssertPersonCompanyDisplayEnvelope(body, companyId, expectedCompanyDisplayValue);
+        }
         return ReadPerson(body, personNo, name);
+    }
+
+    private static void AssertPersonCompanyDisplayEnvelope(
+        string body,
+        string? expectedCompanyId,
+        string expectedCompanyDisplayValue)
+    {
+        if (string.IsNullOrWhiteSpace(expectedCompanyId))
+        {
+            throw new InvalidOperationException("Personnel company display envelope requires a raw CompanyId expectation.");
+        }
+
+        using var json = JsonDocument.Parse(body);
+        var fields = ReadObject(json.RootElement, "fields");
+        if (!string.Equals(ReadString(fields, "CompanyId"), expectedCompanyId, StringComparison.Ordinal)
+            || !string.Equals(
+                ReadString(fields, "CompanyId_DisplayValue"),
+                expectedCompanyDisplayValue,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Personnel create detail did not preserve the server-owned company raw/display envelope.");
+        }
     }
 
     private static PersonData ReadPerson(string body, string personNo, string name)

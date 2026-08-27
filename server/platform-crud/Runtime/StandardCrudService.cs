@@ -161,12 +161,21 @@ public sealed class StandardCrudService : IStandardCrudService
         return _repository.OptionsAsync(descriptor, query, cancellationToken);
     }
 
+    /// <summary>
+    /// 按 descriptor 校验并创建资源；canonical display companion 只允许输出，写入前过滤业务白名单字段并返回带详情的创建结果。
+    /// </summary>
     public async Task<StandardCrudMutationResult> CreateAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
+        var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
+        if (readOnlyDisplayFieldError is not null)
+        {
+            return StandardCrudMutationResult.Failure(readOnlyDisplayFieldError);
+        }
+
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.CreateFields),
             StringComparer.Ordinal);
@@ -227,6 +236,12 @@ public sealed class StandardCrudService : IStandardCrudService
             }
 
             expectedRevision = submittedRevision;
+        }
+
+        var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
+        if (readOnlyDisplayFieldError is not null)
+        {
+            return StandardCrudMutationResult.Failure(readOnlyDisplayFieldError);
         }
 
         var allowed = new Dictionary<string, object?>(
@@ -522,6 +537,45 @@ public sealed class StandardCrudService : IStandardCrudService
 
         return filtered;
     }
+
+    // 只有 canonical raw/display companion 属于 output-only；legacy 别名与未知字段继续沿既有边界处理。
+    private static StandardCrudError? FindReadOnlyDisplayFieldError(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values)
+    {
+        foreach (var displayField in descriptor.DisplayValueFields)
+        {
+            if (!IsCanonicalDisplayCompanion(displayField)
+                || !values.ContainsKey(displayField.Field))
+            {
+                continue;
+            }
+
+            return CreateReadOnlyDisplayFieldError(displayField.Field);
+        }
+
+        return null;
+    }
+
+    // canonical companion 以 source + "_DisplayValue" 为唯一稳定命名；其余 display 声明不参与本次写拒绝。
+    private static bool IsCanonicalDisplayCompanion(ICP.Platform.Query.Descriptors.PlatformDisplayValueField displayField) =>
+        string.Equals(displayField.Field, string.Concat(displayField.SourceField, "_DisplayValue"), StringComparison.Ordinal);
+
+    // display companion 只能由服务端在读取和写后详情阶段补齐，客户端提交视为稳定 400。
+    private static StandardCrudError CreateReadOnlyDisplayFieldError(string field) => new()
+    {
+        StatusCode = 400,
+        Code = "StandardCrud.DisplayValueFieldReadOnly",
+        ReasonKey = "standardCrud.displayValueFieldReadOnly",
+        Message = $"标准 CRUD 显示字段 {field} 只允许输出，不能提交写入。",
+        FieldErrors =
+        [
+            new StandardCrudFieldError(
+                field,
+                "StandardCrud.DisplayValueFieldReadOnly",
+                $"标准 CRUD 显示字段 {field} 只允许输出，不能提交写入。")
+        ]
+    };
 
     private static IReadOnlyDictionary<string, object?> Project(
         IReadOnlyDictionary<string, object?> row,

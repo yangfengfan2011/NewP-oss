@@ -13,20 +13,153 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudServiceWriteTests
 {
     [Fact]
-    public async Task CreateAsync_OnlyPersistsCreateFieldsAndReturnsDetail()
+    public async Task CreateAsync_IgnoresUnexpectedAndLegacyDisplayFields()
     {
-        var service = Service();
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
 
-        var result = await service.CreateAsync(Descriptor(), new Dictionary<string, object?>
+        var result = await service.CreateAsync(DescriptorWithMutationDisplayValueFields(), new Dictionary<string, object?>
         {
             ["PersonNo"] = "P001",
             ["ENAME"] = "张三",
+            ["CompanyId"] = "company-1",
+            ["DepartmentName"] = "客户端伪造部门",
+            ["PositionName"] = "客户端伪造岗位",
             ["Unexpected"] = "ignored"
         });
 
         Assert.True(result.Succeeded);
         Assert.False(result.Detail!.Fields.ContainsKey("Unexpected"));
         Assert.Equal("张三", result.Detail.Fields["ENAME"]);
+        Assert.Equal("company-1", result.Detail.Fields["CompanyId"]);
+        Assert.Equal("示例公司", result.Detail.Fields["CompanyId_DisplayValue"]);
+        Assert.Equal(1, repository.CreateCallCount);
+        Assert.DoesNotContain("Unexpected", repository.LastCreatedValues!.Keys);
+        Assert.DoesNotContain("DepartmentName", repository.LastCreatedValues.Keys);
+        Assert.DoesNotContain("PositionName", repository.LastCreatedValues.Keys);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenCanonicalDisplayCompanionIsSubmitted_ReturnsBadRequestBeforeRepositoryCreate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
+
+        var result = await service.CreateAsync(
+            DescriptorWithMutationDisplayValueFields(),
+            new Dictionary<string, object?>
+            {
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["CompanyId"] = "company-1",
+                ["CompanyId_DisplayValue"] = "客户端伪造公司"
+            });
+
+        Assert.False(
+            result.Succeeded,
+            $"canonical display companion 当前被静默忽略并返回成功；仓储创建调用数：{repository.CreateCallCount}。");
+        Assert.Equal(0, repository.CreateCallCount);
+        AssertDisplayValueFieldReadOnlyError(result);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenUndeclaredDisplayLikeFieldIsSubmitted_IgnoresIt()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
+
+        var result = await service.CreateAsync(
+            DescriptorWithMutationDisplayValueFields(),
+            new Dictionary<string, object?>
+            {
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["CompanyId"] = "company-1",
+                ["GhostId_DisplayValue"] = "未声明的伪 companion"
+            });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, repository.CreateCallCount);
+        Assert.DoesNotContain("GhostId_DisplayValue", repository.LastCreatedValues!.Keys);
+        Assert.DoesNotContain("GhostId_DisplayValue", result.Detail!.Fields.Keys);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenCanonicalDisplayCompanionIsSubmitted_ReturnsBadRequestBeforeRepositoryUpdate()
+    {
+        var descriptor = DescriptorWithMutationDisplayValueFields();
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "原姓名",
+                ["CompanyId"] = "company-1",
+                ["DepartmentId"] = null,
+                ["PositionId"] = null,
+                ["IsEnabled"] = true
+            }
+        ]);
+        var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?>
+            {
+                ["ENAME"] = "客户端伪造姓名",
+                ["CompanyId_DisplayValue"] = "客户端伪造公司"
+            });
+
+        Assert.False(
+            result.Succeeded,
+            $"canonical display companion 当前被静默忽略并返回成功；仓储更新调用数：{repository.UpdateCallCount}。");
+        Assert.Equal(0, repository.UpdateCallCount);
+        AssertDisplayValueFieldReadOnlyError(result);
+        var current = await repository.GetByIdAsync(descriptor, "person-1");
+        Assert.Equal("原姓名", current!["ENAME"]);
+        Assert.Equal("company-1", current["CompanyId"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_IgnoresUnexpectedAndLegacyDisplayFields()
+    {
+        var descriptor = DescriptorWithMutationDisplayValueFields();
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "原姓名",
+                ["CompanyId"] = "company-1",
+                ["DepartmentId"] = null,
+                ["PositionId"] = null,
+                ["IsEnabled"] = true
+            }
+        ]);
+        var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?>
+            {
+                ["ENAME"] = "新姓名",
+                ["CompanyId"] = "company-2",
+                ["DepartmentName"] = "客户端伪造部门",
+                ["PositionName"] = "客户端伪造岗位",
+                ["Unexpected"] = "ignored"
+            });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("company-2", result.Detail!.Fields["CompanyId"]);
+        Assert.Equal("示例公司", result.Detail.Fields["CompanyId_DisplayValue"]);
+        Assert.Equal(1, repository.UpdateCallCount);
+        Assert.DoesNotContain("Unexpected", repository.LastUpdatedValues!.Keys);
+        Assert.DoesNotContain("DepartmentName", repository.LastUpdatedValues.Keys);
+        Assert.DoesNotContain("PositionName", repository.LastUpdatedValues.Keys);
     }
 
     [Fact]
@@ -226,6 +359,35 @@ public sealed class StandardCrudServiceWriteTests
 
         Assert.True(result.Succeeded);
         Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
+    }
+
+    [Fact]
+    public async Task DisableAsync_WithCanonicalDisplayValueFields_StillUpdatesEnabledField()
+    {
+        var descriptor = DescriptorWithMutationDisplayValueFields();
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["CompanyId"] = "company-1",
+                ["DepartmentId"] = null,
+                ["PositionId"] = null,
+                ["IsEnabled"] = true
+            }
+        ]);
+        var service = Service(repository, [new FixedPersonDisplayValueResolver()]);
+
+        var result = await service.DisableAsync(descriptor, "person-1");
+
+        Assert.True(result.Succeeded);
+        Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
+        Assert.Equal(1, repository.UpdateCallCount);
+        var update = Assert.Single(repository.LastUpdatedValues!);
+        Assert.Equal("IsEnabled", update.Key);
+        Assert.Equal(false, update.Value);
     }
 
     [Fact]
@@ -449,8 +611,18 @@ public sealed class StandardCrudServiceWriteTests
         Assert.Equal(404, repeated.Error?.StatusCode);
     }
 
-    private static StandardCrudService Service(InMemoryStandardCrudRepository? repository = null) =>
-        new(repository ?? new InMemoryStandardCrudRepository([]), EmptyQueryExecutor(), [], [], [], [], [], []);
+    private static StandardCrudService Service(
+        IStandardCrudRepository? repository = null,
+        IEnumerable<IStandardCrudDisplayValueResolver>? displayValueResolvers = null) =>
+        new(
+            repository ?? new InMemoryStandardCrudRepository([]),
+            EmptyQueryExecutor(),
+            [],
+            displayValueResolvers ?? [],
+            [],
+            [],
+            [],
+            []);
 
     private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
         new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));
@@ -485,6 +657,45 @@ public sealed class StandardCrudServiceWriteTests
         DeletePolicy = policy,
         ConcurrencyRevisionField = concurrencyRevisionField
     };
+
+    private static StandardCrudDescriptor DescriptorWithMutationDisplayValueFields() => new()
+    {
+        ResourceKey = "organization.person",
+        ModuleId = "Organization",
+        ModelName = "Person",
+        Route = "api/organization/persons",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        EnabledField = "IsEnabled",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "IsEnabled"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "IsEnabled"],
+            CreateFields: ["PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId"],
+            UpdateFields: ["ENAME", "CompanyId", "DepartmentId", "PositionId", "IsEnabled"]),
+        DisplayValueFields =
+        [
+            new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME"),
+            new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
+            new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
+        ]
+    };
+
+    private static void AssertDisplayValueFieldReadOnlyError(StandardCrudMutationResult result)
+    {
+        var error = Assert.IsType<StandardCrudError>(result.Error);
+        Assert.Equal(400, error.StatusCode);
+        Assert.Equal("StandardCrud.DisplayValueFieldReadOnly", error.Code);
+        Assert.Equal("standardCrud.displayValueFieldReadOnly", error.ReasonKey);
+        Assert.Equal(
+            "标准 CRUD 显示字段 CompanyId_DisplayValue 只允许输出，不能提交写入。",
+            error.Message);
+        var fieldError = Assert.Single(error.FieldErrors);
+        Assert.Equal("CompanyId_DisplayValue", fieldError.Field);
+        Assert.Equal("StandardCrud.DisplayValueFieldReadOnly", fieldError.Code);
+        Assert.Equal(
+            "标准 CRUD 显示字段 CompanyId_DisplayValue 只允许输出，不能提交写入。",
+            fieldError.Message);
+    }
 
     private static StandardCrudDescriptor DescriptorWithUniqueConstraint(bool includePersonNoInUpdate = false) => new()
     {
@@ -660,6 +871,102 @@ public sealed class StandardCrudServiceWriteTests
             LastExcludedId = excludedId;
             return base.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken);
         }
+    }
+
+    private sealed class RecordingMutationStandardCrudRepository : IStandardCrudRepository
+    {
+        private readonly InMemoryStandardCrudRepository _inner;
+
+        public RecordingMutationStandardCrudRepository(IEnumerable<Dictionary<string, object?>> rows)
+        {
+            _inner = new InMemoryStandardCrudRepository(rows);
+        }
+
+        public int CreateCallCount { get; private set; }
+        public int UpdateCallCount { get; private set; }
+        public IReadOnlyDictionary<string, object?>? LastCreatedValues { get; private set; }
+        public IReadOnlyDictionary<string, object?>? LastUpdatedValues { get; private set; }
+
+        public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            _inner.GetByIdAsync(descriptor, id, cancellationToken);
+
+        public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudListQuery query,
+            CancellationToken cancellationToken = default) =>
+            _inner.OptionsAsync(descriptor, query, cancellationToken);
+
+        public Task<bool> ExistsAsync(
+            StandardCrudDescriptor descriptor,
+            StandardCrudUniqueConstraint constraint,
+            IReadOnlyDictionary<string, object?> equalityValues,
+            string? excludedId = null,
+            CancellationToken cancellationToken = default) =>
+            _inner.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken);
+
+        public Task<IReadOnlyDictionary<string, object?>> CreateAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default)
+        {
+            CreateCallCount++;
+            LastCreatedValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            return _inner.CreateAsync(descriptor, values, cancellationToken);
+        }
+
+        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default)
+        {
+            UpdateCallCount++;
+            LastUpdatedValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            return _inner.UpdateAsync(descriptor, id, values, cancellationToken);
+        }
+
+        public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            IReadOnlyDictionary<string, object?> values,
+            long expectedRevision,
+            CancellationToken cancellationToken = default)
+        {
+            UpdateCallCount++;
+            LastUpdatedValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            return _inner.UpdateAsync(descriptor, id, values, expectedRevision, cancellationToken);
+        }
+
+        public Task<bool> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            _inner.DeleteAsync(descriptor, id, cancellationToken);
+    }
+
+    private sealed class FixedPersonDisplayValueResolver : IStandardCrudDisplayValueResolver
+    {
+        public string ResourceKey => "organization.person";
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+            IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(
+                rows.Select(_ => (IReadOnlyDictionary<string, object?>)requestedDisplayFields.ToDictionary(
+                    field => field.Field,
+                    field => (object?)(field.Field switch
+                        {
+                            "CompanyId_DisplayValue" => "示例公司",
+                            "DepartmentName" => "示例部门",
+                            "PositionName" => "示例岗位",
+                            _ => string.Empty
+                        }),
+                    StringComparer.Ordinal)).ToList());
     }
 
     private sealed class RecordingPlatformQueryExecutor : IPlatformQueryExecutor

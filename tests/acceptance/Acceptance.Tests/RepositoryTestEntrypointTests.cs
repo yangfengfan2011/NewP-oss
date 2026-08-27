@@ -190,6 +190,77 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void PersonnelAcceptanceRunner_RejectsCanonicalDisplayCompanionBeforeRawWritesAndChecksEnvelope()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+        var apiStart = runner.IndexOf("private async Task RunApiScenarioAsync", StringComparison.Ordinal);
+        var apiEnd = runner.IndexOf("private async Task RunBrowserScenarioAsync", apiStart, StringComparison.Ordinal);
+        Assert.True(apiStart >= 0 && apiEnd > apiStart);
+        var apiScenario = runner[apiStart..apiEnd];
+
+        var companionPayload = apiScenario.IndexOf(
+            "displayCompanionPayload[\"CompanyId_DisplayValue\"] = fixture.CompanyName;",
+            StringComparison.Ordinal);
+        var rejection = companionPayload < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "await AssertCanonicalDisplayCompanionWriteRejectedAsync(",
+                companionPayload,
+                StringComparison.Ordinal);
+        var rawCreate = rejection < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "var createdPerson = await CreatePersonAsync(",
+                rejection,
+                StringComparison.Ordinal);
+        var updateCompanionPayload = rawCreate < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "updateDisplayCompanionPayload[\"CompanyId_DisplayValue\"] = fixture.CompanyName;",
+                rawCreate,
+                StringComparison.Ordinal);
+        var updateRejection = updateCompanionPayload < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "await AssertCanonicalDisplayCompanionWriteRejectedAsync(",
+                updateCompanionPayload,
+                StringComparison.Ordinal);
+        var unchangedState = updateRejection < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "await AssertPersonMutationStateAsync(",
+                updateRejection,
+                StringComparison.Ordinal);
+        var rawUpdate = unchangedState < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "using (var updated = await SendJsonWithAntiforgeryAsync(",
+                unchangedState,
+                StringComparison.Ordinal);
+
+        Assert.True(companionPayload >= 0);
+        Assert.True(rejection > companionPayload);
+        Assert.True(rawCreate > rejection);
+        Assert.True(updateCompanionPayload > rawCreate);
+        Assert.True(updateRejection > updateCompanionPayload);
+        Assert.True(unchangedState > updateRejection);
+        Assert.True(rawUpdate > unchangedState);
+        Assert.Contains("updateDisplayCompanionPayload[\"Revision\"] = createdPerson.Revision;", runner, StringComparison.Ordinal);
+        Assert.Contains("updatePayload[\"Revision\"] = createdPerson.Revision;", runner, StringComparison.Ordinal);
+        Assert.Contains("StandardCrud.DisplayValueFieldReadOnly", runner, StringComparison.Ordinal);
+        Assert.Contains("standardCrud.displayValueFieldReadOnly", runner, StringComparison.Ordinal);
+        Assert.Contains("ReadArray(json.RootElement, \"fieldErrors\")", runner, StringComparison.Ordinal);
+        Assert.Contains("AssertPersonCompanyDisplayEnvelope(body, companyId, expectedCompanyDisplayValue)", runner, StringComparison.Ordinal);
+        Assert.Contains("AssertPersonCompanyDisplayEnvelope(updatedBody, fixture.CompanyId, fixture.CompanyName)", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PersonnelAcceptanceRunner_GuardsOnlyTheInitialPersonnelReadyRequestWindow()
     {
         var repositoryRoot = GetRepositoryRoot();

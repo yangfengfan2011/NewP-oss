@@ -1,6 +1,8 @@
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.Extensions;
+using ICP.Platform.Modules.Example;
+using ICP.Platform.Modules.Identity;
 using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -134,6 +136,17 @@ public class ModuleSystemTests
         Assert.Equal(2, sorted.Count);
         Assert.Equal("A", sorted[0].ModuleId);
         Assert.Equal("B", sorted[1].ModuleId);
+    }
+
+    [Fact]
+    public void AssemblyModuleLoader_SortsEmbeddedCapsuleModulesByManifestDependencies()
+    {
+        var loader = new AssemblyModuleLoader([typeof(ExampleModule).Assembly, typeof(IdentityModule).Assembly]);
+        IReadOnlyList<IModule> modules = [new ExampleModule(), new IdentityModule()];
+
+        var sorted = loader.SortByDependencies(modules);
+
+        Assert.Equal(["Identity", "Example"], sorted.Select(static module => module.ModuleId).ToArray());
     }
 
     [Fact]

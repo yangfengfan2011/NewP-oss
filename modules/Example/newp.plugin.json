@@ -5,7 +5,9 @@
   "version": "1.0.0",
   "description": "功能示例 模块",
   "entryAssembly": "../../ExampleModule.dll",
-  "dependencies": [],
+  "dependencies": [
+    "Identity"
+  ],
   "hostVersion": {
     "min": "1.0.0",
     "max": "2.0.0"

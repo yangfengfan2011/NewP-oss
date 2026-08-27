@@ -220,6 +220,24 @@ public sealed class AuthenticationSessionRegistryTests
                 Revision = 1
             });
 
+        public ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyDictionary<string, IdentityAccountSnapshot>>(
+                accountEids
+                    .Distinct(StringComparer.Ordinal)
+                    .ToDictionary(
+                        accountEid => accountEid,
+                        accountEid => new IdentityAccountSnapshot
+                        {
+                            AccountEid = accountEid,
+                            ECODE = "alice",
+                            ENAME = "Alice",
+                            Status = status,
+                            Revision = 1
+                        },
+                        StringComparer.Ordinal));
+
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(
             IdentityAccountSearch search,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -228,6 +246,11 @@ public sealed class AuthenticationSessionRegistryTests
     private sealed class ThrowingAccountDirectory : IIdentityAccountDirectory
     {
         public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
+            throw new SimulatedStoreException();
+
+        public ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default) =>
             throw new SimulatedStoreException();
 
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(

@@ -528,6 +528,35 @@ public sealed class IdentityAccountApplicationServiceTests
     }
 
     [Fact]
+    public async Task AccountDirectory_FindManyAsync_ReturnsDistinctActiveAccountsByExactEid()
+    {
+        var fixture = new Fixture();
+        var alice = await fixture.CreateAsync();
+        var bob = await fixture.Service.CreateAsync(new CreateIdentityAccountCommand("bob", "Bob", fixture.Actor));
+        var deleted = await fixture.Service.CreateAsync(new CreateIdentityAccountCommand("carol", "Carol", fixture.Actor));
+        await fixture.Service.DeleteAsync(new DeleteIdentityAccountCommand(
+            deleted.Account.AccountEid,
+            deleted.Account.Revision,
+            "retired",
+            fixture.Actor));
+        IIdentityAccountDirectory directory = new IdentityAccountDirectory(fixture.Repository);
+
+        var snapshots = await directory.FindManyAsync(
+            [
+                alice.Account.AccountEid,
+                bob.Account.AccountEid,
+                alice.Account.AccountEid,
+                deleted.Account.AccountEid,
+                " ",
+                "User_Missing"
+            ]);
+
+        Assert.Equal([alice.Account.AccountEid, bob.Account.AccountEid], snapshots.Keys);
+        Assert.Equal("Alice", snapshots[alice.Account.AccountEid].ENAME);
+        Assert.Equal("Bob", snapshots[bob.Account.AccountEid].ENAME);
+    }
+
+    [Fact]
     public async Task LifecycleParticipant_RegistersPermanentPersonnelBindingAndConvergesRetry()
     {
         var fixture = new Fixture();

@@ -44,6 +44,13 @@
         "field": "ENAME",
         "sortable": true,
         "responsivePriority": "high"
+      },
+      {
+        "key": "reviewerUserEid",
+        "labelKey": "Column_ReviewerUserEID",
+        "source": "model",
+        "field": "ReviewerUserEID",
+        "responsivePriority": "medium"
       }
     ],
     "pageActions": [

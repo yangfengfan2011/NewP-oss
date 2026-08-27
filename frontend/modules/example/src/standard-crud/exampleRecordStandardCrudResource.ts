@@ -2,6 +2,7 @@ import { platformFetch } from '@icp-platform/core';
 import {
   createStandardCrudRestDataAdapter,
   isStandardCrudRecord,
+  readStandardCrudNullableString,
   readStandardCrudString,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
@@ -11,6 +12,8 @@ export interface ExampleRecordListRow extends Record<string, unknown> {
   EID: string;
   ECODE: string;
   ENAME: string;
+  ReviewerUserEID: string | null;
+  ReviewerUserEID_DisplayValue: string | null;
 }
 
 function mapExampleRecordListItem(value: unknown): ExampleRecordListRow {
@@ -22,6 +25,11 @@ function mapExampleRecordListItem(value: unknown): ExampleRecordListRow {
     EID: eid,
     ECODE: readStandardCrudString(row, ['ECODE', 'ecode']),
     ENAME: readStandardCrudString(row, ['ENAME', 'ename']),
+    ReviewerUserEID: readStandardCrudNullableString(row, ['ReviewerUserEID', 'reviewerUserEID']),
+    ReviewerUserEID_DisplayValue: readStandardCrudNullableString(
+      row,
+      ['ReviewerUserEID_DisplayValue', 'reviewerUserEID_DisplayValue'],
+    ),
   };
 }
 

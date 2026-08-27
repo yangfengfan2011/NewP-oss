@@ -79,7 +79,7 @@ public sealed class ModelMetadataProjector
             ForeignKeys: foreignKeys);
     }
 
-    // 将单个 authoring 字段投影为不含 UI 布局、但保留展示语义的规范 artifact。
+    // 将单个 authoring 字段投影为不含 UI 布局、但保留字段种类与展示语义的规范 artifact。
     private static FieldDefinition ProjectField(
         ModelMetadataField field,
         StorageTypeMapDocument? typeMap,
@@ -176,6 +176,7 @@ public sealed class ModelMetadataProjector
         }
     }
 
+    // contract.valueType 是 authoring 对外值语义的真源；缺失时才回退到 storage 类型推断。
     private static FieldValueType ResolveValueType(string? contractValueType, string storageType)
     {
         if (!string.IsNullOrWhiteSpace(contractValueType))
@@ -185,6 +186,7 @@ public sealed class ModelMetadataProjector
                 "enum" => FieldValueType.Enum,
                 "integer" => FieldValueType.Integer,
                 "objectid" => FieldValueType.ObjectId,
+                "user" => FieldValueType.User,
                 "bool" => FieldValueType.Boolean,
                 "datetime" => FieldValueType.DateTime,
                 "description" => FieldValueType.Description,

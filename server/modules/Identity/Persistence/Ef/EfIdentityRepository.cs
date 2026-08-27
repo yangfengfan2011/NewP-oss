@@ -57,6 +57,31 @@ public sealed class EfIdentityRepository : IIdentityRepository
         return entity is null ? null : MapAccount(entity);
     }
 
+    /// <summary>
+    /// 通过 exact EID 集合批量读取账号聚合，供跨上下文显示解析避免逐行查询。
+    /// </summary>
+    public async ValueTask<IReadOnlyDictionary<string, IdentityAccount>> FindAccountsByIdsAsync(
+        IReadOnlyCollection<string> accountEids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(accountEids);
+        var ids = accountEids
+            .Where(static accountEid => !string.IsNullOrWhiteSpace(accountEid))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (ids.Length == 0)
+        {
+            return new Dictionary<string, IdentityAccount>(StringComparer.Ordinal);
+        }
+
+        return (await Accounts
+            .AsNoTracking()
+            .Where(row => ids.Contains(EF.Property<string>(row, "EID")))
+            .ToListAsync(cancellationToken))
+            .Select(MapAccount)
+            .ToDictionary(static account => account.EID, StringComparer.Ordinal);
+    }
+
     public async ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(
         string normalizedCode,
         CancellationToken cancellationToken = default)

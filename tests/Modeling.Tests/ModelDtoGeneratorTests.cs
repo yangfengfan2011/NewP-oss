@@ -33,6 +33,36 @@ public class ModelDtoGeneratorTests
     }
 
     [Fact]
+    public void Generate_ForUserFieldWithDisplayRule_AddsDisplayValueCompanionWithoutAffectingAuditUsers()
+    {
+        var definition = new ModelDefinition(
+            "ExampleRecord",
+            "ExampleRecord",
+            ModelKind.Entity,
+            new[]
+            {
+                new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true),
+                new FieldDefinition(
+                    "ReviewerUserEID",
+                    "ReviewerUserEID",
+                    FieldKind.Scalar,
+                    FieldValueType.User,
+                    "string",
+                    false,
+                    false,
+                    false,
+                    new FieldDisplayRuleDefinition("user", "IdentityAccount", "EID", "ENAME"))
+            },
+            Array.Empty<IndexDefinition>());
+
+        var code = GenerateCode(definition);
+
+        Assert.Contains("public string? ReviewerUserEID { get; init; }", code);
+        Assert.Contains("public string? ReviewerUserEID_DisplayValue { get; init; }", code);
+        Assert.DoesNotContain("CreatedBy_DisplayValue", code);
+    }
+
+    [Fact]
     public void Generate_UsesStableAliasesForFixedFields()
     {
         var definition = new ModelDefinition(

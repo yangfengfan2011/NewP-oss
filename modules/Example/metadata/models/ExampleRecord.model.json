@@ -13,7 +13,8 @@
         "titleKey": "Section_Basic",
         "fields": [
           "ECODE",
-          "ENAME"
+          "ENAME",
+          "ReviewerUserEID"
         ]
       }
     ],
@@ -43,6 +44,31 @@
             "mode": "editable",
             "required": true
           }
+        }
+      },
+      {
+        "name": "ReviewerUserEID",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        },
+        "contract": {
+          "valueType": "user"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        },
+        "display": {
+          "type": "user",
+          "targetModel": "IdentityAccount",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
         }
       }
     ],

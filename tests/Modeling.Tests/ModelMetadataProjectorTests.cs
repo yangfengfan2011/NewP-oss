@@ -374,6 +374,42 @@ public class ModelMetadataProjectorTests
     }
 
     [Fact]
+    public void Project_FieldContractValueTypeUser_ProjectsUserValueType()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Example",
+            Model = new ModelMetadataModel
+            {
+                Name = "ExampleRecord",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "ReviewerUserEID",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "string",
+                            Nullable = true
+                        },
+                        Contract = new ModelMetadataContractSection
+                        {
+                            ValueType = "user"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        Assert.Contains(definition.Fields, static field =>
+            field is { Name: "ReviewerUserEID", ValueType: FieldValueType.User });
+    }
+
+    [Fact]
     public void Project_AddsLinkFixedFieldsAndOptionalBuiltinFields()
     {
         var document = new ModelMetadataDocument

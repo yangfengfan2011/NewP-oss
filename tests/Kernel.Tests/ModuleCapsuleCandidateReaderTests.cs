@@ -164,11 +164,77 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
         Assert.Equal(bundle, Assert.Single(compiledPersistence.MigrationBundles));
     }
 
+    [Fact]
+    public void ReadBuiltIn_ExampleManifestDependencyFlowsIntoCanonicalPlanOrdering()
+    {
+        var runtimeModulesRoot = Path.Combine(_root, "runtime-modules");
+        CopyBuiltInModuleToRuntimeView("Identity", runtimeModulesRoot);
+        CopyBuiltInModuleToRuntimeView("Example", runtimeModulesRoot);
+
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(runtimeModulesRoot);
+        var example = Assert.Single(candidates, static candidate => candidate.ModuleId == "Example");
+
+        Assert.Equal(["Identity"], example.Dependencies);
+
+        var compilation = new CanonicalModulePlanCompiler().Compile("example-dependency", candidates);
+
+        Assert.True(compilation.IsSuccess, string.Join(Environment.NewLine, compilation.Diagnostics.Select(static item => item.Message)));
+        var compiledExample = Assert.Single(compilation.Plan!.Modules, static module => module.ModuleId == "Example");
+        Assert.Equal(["Identity"], compiledExample.Dependencies);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
         {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    private void CopyBuiltInModuleToRuntimeView(string moduleId, string runtimeModulesRoot)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sourceModuleRoot = Path.Combine(repositoryRoot, "modules", moduleId);
+        var runtimeModuleRoot = Path.Combine(runtimeModulesRoot, moduleId);
+        Directory.CreateDirectory(runtimeModuleRoot);
+        File.Copy(
+            Path.Combine(sourceModuleRoot, "newp.plugin.json"),
+            Path.Combine(runtimeModuleRoot, "plugin.json"),
+            overwrite: true);
+        CopyDirectory(
+            Path.Combine(sourceModuleRoot, "metadata"),
+            Path.Combine(runtimeModuleRoot, "metadata"));
+    }
+
+    private static void CopyDirectory(string sourceRoot, string targetRoot)
+    {
+        Directory.CreateDirectory(targetRoot);
+        foreach (var directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(directory.Replace(sourceRoot, targetRoot, StringComparison.Ordinal));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            var targetPath = file.Replace(sourceRoot, targetRoot, StringComparison.Ordinal);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.Copy(file, targetPath, overwrite: true);
+        }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "ICP-Platform.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root not found.");
     }
 }

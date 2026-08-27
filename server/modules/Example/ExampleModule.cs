@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Sdk;
 using ICP.Platform.Modules.Example.Services;
+using ICP.Platform.Crud.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.Example;
@@ -15,6 +16,7 @@ public sealed class ExampleModule : ModuleCapsuleBindingBase
     {
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
+        services.AddScoped<IStandardCrudDisplayValueResolver, ExampleRecordDisplayValueResolver>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IRuntimeWorkloadService, RuntimeWorkloadService>();
     }

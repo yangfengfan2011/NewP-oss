@@ -74,6 +74,13 @@ public interface IIdentityAccountDirectory
     ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 按稳定账号 EID 集合批量读取跨上下文公开账号快照；不返回已删除账号。
+    /// </summary>
+    ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+        IReadOnlyCollection<string> accountEids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 按受限条件搜索账号目录，不返回已删除账号，除非查询明确指定该状态。
     /// </summary>
     ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(

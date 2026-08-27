@@ -205,6 +205,16 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
 
         public ValueTask AcquireLocalAdministratorBootstrapLockAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IdentityAccount?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default) => ValueTask.FromResult<IdentityAccount?>(Current.EID == accountEid ? Clone(Current) : null);
+        public ValueTask<IReadOnlyDictionary<string, IdentityAccount>> FindAccountsByIdsAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyDictionary<string, IdentityAccount>>(
+                accountEids.Contains(Current.EID, StringComparer.Ordinal)
+                    ? new Dictionary<string, IdentityAccount>(StringComparer.Ordinal)
+                    {
+                        [Current.EID] = Clone(Current)
+                    }
+                    : new Dictionary<string, IdentityAccount>(StringComparer.Ordinal));
         public ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) => ValueTask.FromResult<IdentityAccount?>(Current.NormalizedECODE == normalizedCode ? Clone(Current) : null);
         public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<IdentityAccount>>([Clone(Current)]);
         public ValueTask<LocalCredential?> FindCredentialAsync(string accountEid, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -260,6 +270,27 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
                 IsPersonnelBound = user.IsPersonnelBound,
                 PersonnelDisableHold = user.PersonnelDisableHold
             };
+        }
+
+        public async ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default)
+        {
+            var accounts = await repository.FindAccountsByIdsAsync(accountEids, cancellationToken);
+            return accounts.ToDictionary(
+                pair => pair.Key,
+                static pair => new IdentityAccountSnapshot
+                {
+                    AccountEid = pair.Value.EID,
+                    ECODE = pair.Value.ECODE,
+                    ENAME = pair.Value.ENAME,
+                    Status = pair.Value.Status,
+                    Revision = pair.Value.Revision,
+                    IsLocalAdministrator = pair.Value.IsLocalAdministrator,
+                    IsPersonnelBound = pair.Value.IsPersonnelBound,
+                    PersonnelDisableHold = pair.Value.PersonnelDisableHold
+                },
+                StringComparer.Ordinal);
         }
 
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(IdentityAccountSearch search, CancellationToken cancellationToken = default) =>

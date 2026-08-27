@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\Identity\Contracts\Identity.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

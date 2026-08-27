@@ -21,13 +21,25 @@ describe('Example persisted record Standard CRUD resource', () => {
 
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        items: [{ EID: 'ExampleRecord_1', ECODE: 'EX-001', ENAME: '示例记录' }],
+        items: [{
+          EID: 'ExampleRecord_1',
+          ECODE: 'EX-001',
+          ENAME: '示例记录',
+          ReviewerUserEID: 'User_1',
+          ReviewerUserEID_DisplayValue: 'Alice',
+        }],
         total: 1,
         page: 1,
         pageSize: 20,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        fields: { EID: 'ExampleRecord_1', ECODE: 'EX-001', ENAME: '示例记录' },
+        fields: {
+          EID: 'ExampleRecord_1',
+          ECODE: 'EX-001',
+          ENAME: '示例记录',
+          ReviewerUserEID: 'User_1',
+          ReviewerUserEID_DisplayValue: 'Alice',
+        },
         summaries: {},
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     const resource = createExampleRecordStandardCrudResource(fetcher as unknown as typeof fetch);
@@ -42,7 +54,14 @@ describe('Example persisted record Standard CRUD resource', () => {
       EID: 'ExampleRecord_1',
       ECODE: 'EX-001',
       ENAME: '示例记录',
+      ReviewerUserEID: 'User_1',
+      ReviewerUserEID_DisplayValue: 'Alice',
     }]);
-    expect(detail.normalized.fields).toMatchObject({ ECODE: 'EX-001', ENAME: '示例记录' });
+    expect(detail.normalized.fields).toMatchObject({
+      ECODE: 'EX-001',
+      ENAME: '示例记录',
+      ReviewerUserEID: 'User_1',
+      ReviewerUserEID_DisplayValue: 'Alice',
+    });
   });
 });

@@ -51,6 +51,11 @@ namespace ICP.Platform.Modules.Example.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("ENAME");
 
+                    b.Property<string>("ReviewerUserEID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("ReviewerUserEID");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("UpdatedAt");

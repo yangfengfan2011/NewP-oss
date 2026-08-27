@@ -237,6 +237,34 @@ public class ModelMetadataValidatorTests
     }
 
     [Fact]
+    public void Validate_AllowsUserDisplayRuleOnUserField()
+    {
+        var document = DocumentWithFields(
+            UserFieldWithDisplay());
+
+        new ModelMetadataValidator().Validate(document);
+    }
+
+    [Theory]
+    [InlineData("UserAccount", "EID", "ENAME")]
+    [InlineData("IdentityAccount", "Id", "ENAME")]
+    [InlineData("IdentityAccount", "EID", "DisplayName")]
+    public void Validate_ThrowsWhenUserDisplayTargetDoesNotUseIdentityAccountCanonicalFields(
+        string targetModel,
+        string targetIdField,
+        string targetDisplayField)
+    {
+        var document = DocumentWithFields(
+            UserFieldWithDisplay(targetModel, targetIdField, targetDisplayField));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Equal(
+            "Field 'ReviewerUserEID' user display must target IdentityAccount/EID/ENAME.",
+            ex.Message);
+    }
+
+    [Fact]
     public void Validate_ThrowsWhenReferenceDisplayCompanionConflictsWithAuthoredField()
     {
         var document = DocumentWithFields(
@@ -311,6 +339,24 @@ public class ModelMetadataValidatorTests
             Key = "organization.companies"
         },
         Display = ReferenceDisplayRule(displayType, targetModel, targetIdField, targetDisplayField)
+    };
+
+    private static ModelMetadataField UserFieldWithDisplay(
+        string targetModel = "IdentityAccount",
+        string targetIdField = "EID",
+        string targetDisplayField = "ENAME") => new()
+    {
+        Name = "ReviewerUserEID",
+        Storage = new ModelMetadataStorageSection
+        {
+            Type = "string",
+            Nullable = true
+        },
+        Contract = new ModelMetadataContractSection
+        {
+            ValueType = "user"
+        },
+        Display = ReferenceDisplayRule("user", targetModel, targetIdField, targetDisplayField)
     };
 
     private static ModelMetadataDisplayRule ReferenceDisplayRule(

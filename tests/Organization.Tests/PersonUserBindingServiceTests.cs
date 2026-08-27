@@ -197,6 +197,14 @@ public sealed class PersonUserBindingServiceTests
         public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(accounts.FirstOrDefault(account => account.AccountEid == accountEid));
 
+        public ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyDictionary<string, IdentityAccountSnapshot>>(
+                accounts
+                    .Where(account => accountEids.Contains(account.AccountEid, StringComparer.Ordinal))
+                    .ToDictionary(account => account.AccountEid, account => account, StringComparer.Ordinal));
+
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(
             IdentityAccountSearch search,
             CancellationToken cancellationToken = default)

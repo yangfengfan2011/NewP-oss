@@ -1,4 +1,7 @@
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modules.Example.Persistence.Descriptors;
+using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Example.Crud;
 
@@ -20,11 +23,12 @@ public static class ExampleRecordCrudDescriptorFactory
         DefaultSortDirection = "asc",
         Authorization = StandardCrudAuthorization.ByConvention(ExamplePermissions.RecordStem),
         FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "ECODE", "ENAME"],
-            DetailFields: ["EID", "ECODE", "ENAME", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
-            CreateFields: ["ECODE", "ENAME"],
-            UpdateFields: ["ENAME"]),
+            ListFields: ["EID", "ECODE", "ENAME", "ReviewerUserEID"],
+            DetailFields: ["EID", "ECODE", "ENAME", "ReviewerUserEID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+            CreateFields: ["ECODE", "ENAME", "ReviewerUserEID"],
+            UpdateFields: ["ENAME", "ReviewerUserEID"]),
         OptionLabelFields = ["ECODE", "ENAME"],
+        DisplayValueFields = BuildDisplayValueFields(),
         DeletePolicy = StandardCrudDeletePolicy.Hard,
         RequiredFields =
         [
@@ -57,4 +61,12 @@ public static class ExampleRecordCrudDescriptorFactory
             }
         ]
     };
+
+    // Example 的 display companion 只从 owner metadata 投影；user target 由 modeling validator 固定，不再引入跨模块 metadata 依赖。
+    private static IReadOnlyList<PlatformDisplayValueField> BuildDisplayValueFields()
+    {
+        var models = ExampleModelDefinitions.All;
+        var exampleRecord = models.Single(model => string.Equals(model.Name, "ExampleRecord", StringComparison.Ordinal));
+        return new ModelDisplayValueFieldProjector().Project(exampleRecord, models);
+    }
 }

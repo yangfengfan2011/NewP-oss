@@ -25,6 +25,18 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
     public ValueTask<IdentityAccount?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Clone(Accounts.SingleOrDefault(item => item.EID == accountEid)));
 
+    /// <summary>
+    /// 测试仓储按 exact EID 集合返回账号快照副本，保持与 EF 仓储相同的批量入口。
+    /// </summary>
+    public ValueTask<IReadOnlyDictionary<string, IdentityAccount>> FindAccountsByIdsAsync(
+        IReadOnlyCollection<string> accountEids,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<IReadOnlyDictionary<string, IdentityAccount>>(
+            Accounts
+                .Where(item => accountEids.Contains(item.EID, StringComparer.Ordinal))
+                .Select(item => Clone(item)!)
+                .ToDictionary(static item => item.EID, StringComparer.Ordinal));
+
     public ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Clone(Accounts.SingleOrDefault(item => item.NormalizedECODE == normalizedCode)));
 

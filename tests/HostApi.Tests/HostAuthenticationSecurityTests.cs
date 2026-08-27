@@ -492,6 +492,11 @@ public sealed class HostAuthenticationSecurityTests
         public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(IdentityAccountSearch search, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

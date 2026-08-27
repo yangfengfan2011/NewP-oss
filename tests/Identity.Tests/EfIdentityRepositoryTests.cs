@@ -165,6 +165,33 @@ public sealed class EfIdentityRepositoryTests
         Assert.DoesNotContain("never-a-secret", securityEvent.Reason, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Repository_FindAccountsByIdsAsync_UsesOneSqlCommandAndKeepsDeletedResultsForDirectoryToFilter()
+    {
+        var sql = new List<string>();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlite(connection)
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .LogTo(sql.Add, LogLevel.Information)
+            .Options;
+        await using var context = new EfPlatformDbContext(options, IdentityModelDefinitions.All);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfIdentityRepository(context);
+        repository.AddAccount(Account("User_1", "alice", IdentityAccountStatus.Enabled, isPersonnelBound: false));
+        repository.AddAccount(Account("User_2", "bob", IdentityAccountStatus.Deleted, isPersonnelBound: false));
+        await context.SaveChangesAsync();
+        sql.Clear();
+
+        var results = await repository.FindAccountsByIdsAsync(["User_1", "User_2", "User_1", " ", "User_Missing"]);
+
+        Assert.Equal(["User_1", "User_2"], results.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.Equal(IdentityAccountStatus.Enabled, results["User_1"].Status);
+        Assert.Equal(IdentityAccountStatus.Deleted, results["User_2"].Status);
+        Assert.Equal(1, sql.Count(static entry => entry.Contains("Executed DbCommand", StringComparison.Ordinal)));
+    }
+
     private static DbContextOptions<EfPlatformDbContext> CreateOptions() =>
         new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))

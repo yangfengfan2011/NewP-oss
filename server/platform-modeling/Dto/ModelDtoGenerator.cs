@@ -6,7 +6,7 @@ namespace ICP.Platform.Modeling.Dto;
 public sealed class ModelDtoGenerator
 {
     /// <summary>
-    /// 将模型定义转换为单个 DTO 描述；引用字段和枚举字段会追加展示值属性。
+    /// 将模型定义转换为单个 DTO 描述；需要 canonical display companion 的字段会追加展示值属性。
     /// </summary>
     public ModelDtoDescriptor Describe(ModelDefinition definition)
     {
@@ -32,8 +32,8 @@ public sealed class ModelDtoGenerator
                 !field.Required,
                 ResolvePropertyInitializer(field, typeName)));
 
-            // 参考字段和枚举字段需要同时保留展示值，避免 UI 再维护一套补充 DTO。
-            if (IsReferenceOrEnum(field))
+            // 只为已声明 display 语义的字段保留 companion，避免把所有 audit user 扩成公共协议。
+            if (RequiresDisplayValueCompanion(field))
             {
                 properties.Add(new ModelDtoProperty(ResolveDisplayValuePropertyName(field), "string", true));
             }
@@ -81,9 +81,15 @@ public sealed class ModelDtoGenerator
         return builder.ToString();
     }
 
-    private static bool IsReferenceOrEnum(FieldDefinition field)
+    /// <summary>
+    /// 判断字段是否需要生成规范 display companion；User 仅在显式 display rule 下生成。
+    /// </summary>
+    private static bool RequiresDisplayValueCompanion(FieldDefinition field)
     {
-        return field.Kind == FieldKind.Reference || field.ValueType == FieldValueType.Enum;
+        return field.Kind == FieldKind.Reference
+            || field.ValueType == FieldValueType.Enum
+            || (field.ValueType == FieldValueType.User
+                && string.Equals(field.DisplayRule?.Type, "user", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string ResolvePropertyName(FieldDefinition field)

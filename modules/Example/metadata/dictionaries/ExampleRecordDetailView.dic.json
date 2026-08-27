@@ -26,6 +26,10 @@
       "zhs": "示例名称",
       "en": "Example Name"
     },
+    "Field_ReviewerUserEID": {
+      "zhs": "复核账号",
+      "en": "Reviewer Account"
+    },
     "Field_CreatedBy": {
       "zhs": "创建人",
       "en": "Created By"

@@ -25,10 +25,10 @@ public sealed class ExampleMigrationPlanTests
         var model = Assert.Single(definitions);
         Assert.Equal("ExampleRecord", model.Name);
         Assert.Equal("ExampleRecord", model.TableName);
-        Assert.Equal(["CreatedAt", "CreatedBy", "ECODE", "EID", "ENAME", "UpdatedAt", "UpdatedBy"],
+        Assert.Equal(["CreatedAt", "CreatedBy", "ECODE", "EID", "ENAME", "ReviewerUserEID", "UpdatedAt", "UpdatedBy"],
             model.Fields.Select(static field => field.Name).Order(StringComparer.Ordinal));
         Assert.Equal(
-            "4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8",
+            "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c",
             PersistenceModelDigest.Compute(definitions));
     }
 
@@ -41,22 +41,35 @@ public sealed class ExampleMigrationPlanTests
             plan.Models,
             static candidate => candidate.OwnerModuleId == "Example" && candidate.Name == "ExampleRecord");
         Assert.Equal("ExampleRecord", model.TableName);
-        Assert.Equal(["CreatedAt", "CreatedBy", "ECODE", "EID", "ENAME", "UpdatedAt", "UpdatedBy"],
+        Assert.Equal(["CreatedAt", "CreatedBy", "ECODE", "EID", "ENAME", "ReviewerUserEID", "UpdatedAt", "UpdatedBy"],
             model.Fields.Select(static field => field.Name).Order(StringComparer.Ordinal));
 
         var stream = Assert.Single(plan.Streams, static candidate => candidate.ModuleId == "Example");
         Assert.False(stream.IsPlatformStream);
         Assert.Equal(PersistenceProvider.SqlServer, stream.Provider);
-        var migration = Assert.Single(stream.Migrations);
-        Assert.Equal("000001", migration.Sequence);
-        Assert.EndsWith("_Example_000001_Foundation", migration.MigrationId, StringComparison.Ordinal);
-        Assert.Equal(new string('0', 64), migration.FromModelDigest);
-        Assert.Equal(stream.ModelDigest, migration.ToModelDigest);
-        Assert.Equal("safe-expand", migration.Compatibility);
+        Assert.Equal("a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c", stream.ModelDigest);
+        Assert.Collection(
+            stream.Migrations,
+            migration =>
+            {
+                Assert.Equal("000001", migration.Sequence);
+                Assert.EndsWith("_Example_000001_Foundation", migration.MigrationId, StringComparison.Ordinal);
+                Assert.Equal(new string('0', 64), migration.FromModelDigest);
+                Assert.Equal("4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8", migration.ToModelDigest);
+                Assert.Equal("safe-expand", migration.Compatibility);
+            },
+            migration =>
+            {
+                Assert.Equal("000002", migration.Sequence);
+                Assert.EndsWith("_Example_000002_ReviewerUserEID", migration.MigrationId, StringComparison.Ordinal);
+                Assert.Equal("4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8", migration.FromModelDigest);
+                Assert.Equal(stream.ModelDigest, migration.ToModelDigest);
+                Assert.Equal("safe-expand", migration.Compatibility);
+            });
     }
 
     [Fact]
-    public void ExampleSqlServerManifest_DeclaresDeterministicFoundationFromZero()
+    public void ExampleSqlServerManifest_DeclaresDeterministicLinearExpansion()
     {
         var repositoryRoot = FindRepositoryRoot();
         var manifestPath = Path.Combine(
@@ -67,38 +80,62 @@ public sealed class ExampleMigrationPlanTests
             "Example.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
-        var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
+        var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
+        Assert.Equal(2, migrations.Length);
+        var foundation = migrations[0];
+        var reviewerUser = migrations[1];
 
         Assert.Equal("Example", root.GetProperty("moduleId").GetString());
-        Assert.Equal("4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8",
+        Assert.Equal("a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c",
             root.GetProperty("modelDigest").GetString());
-        Assert.Equal(new string('0', 64), migration.GetProperty("fromModelDigest").GetString());
-        Assert.Equal("safe-expand", migration.GetProperty("compatibility").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), migration.GetProperty("toModelDigest").GetString());
-        Assert.Equal(JsonValueKind.Null, migration.GetProperty("previousContentDigest").ValueKind);
+        Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
+        Assert.Equal("4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8", foundation.GetProperty("toModelDigest").GetString());
+        Assert.Equal("safe-expand", foundation.GetProperty("compatibility").GetString());
+        Assert.Equal(JsonValueKind.Null, foundation.GetProperty("previousContentDigest").ValueKind);
+        Assert.Equal("4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8", reviewerUser.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), reviewerUser.GetProperty("toModelDigest").GetString());
+        Assert.Equal("safe-expand", reviewerUser.GetProperty("compatibility").GetString());
+        Assert.Equal(
+            foundation.GetProperty("contentDigest").GetString(),
+            reviewerUser.GetProperty("previousContentDigest").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(
-                typeof(Example_000001_Foundation).Assembly.Location))));
+                typeof(Example_000002_ReviewerUserEID).Assembly.Location))));
 
-        var migrationDirectory = Path.Combine(
+        var foundationPath = Path.Combine(
             repositoryRoot,
             "server",
             "modules",
             "Example",
             "Migrations.SqlServer",
-            "Migrations");
-        var sourcePath = Assert.Single(Directory.GetFiles(migrationDirectory, "*_Foundation.cs"));
-        var source = File.ReadAllText(sourcePath);
+            "Migrations",
+            "20260827110703_Example_000001_Foundation.cs");
+        var foundationSource = File.ReadAllText(foundationPath);
         Assert.Equal(
-            migration.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
-        Assert.Equal(1, Count(source, "migrationBuilder.CreateTable"));
-        Assert.Contains("name: \"ExampleRecord\"", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("defaultValue", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("defaultValueSql", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("migrationBuilder.Sql", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("SqlOperation", source, StringComparison.Ordinal);
+            foundation.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(foundationPath))));
+        Assert.Equal(1, Count(foundationSource, "migrationBuilder.CreateTable"));
+        Assert.Contains("name: \"ExampleRecord\"", foundationSource, StringComparison.Ordinal);
+
+        var reviewerUserPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Example",
+            "Migrations.SqlServer",
+            "Migrations",
+            "20260827120035_Example_000002_ReviewerUserEID.cs");
+        var reviewerUserSource = File.ReadAllText(reviewerUserPath);
+        Assert.Equal(
+            reviewerUser.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(reviewerUserPath))));
+        Assert.Equal(1, Count(reviewerUserSource, "migrationBuilder.AddColumn"));
+        Assert.Contains("ReviewerUserEID", reviewerUserSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", reviewerUserSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValueSql", reviewerUserSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", reviewerUserSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("SqlOperation", reviewerUserSource, StringComparison.Ordinal);
     }
 
     [Fact]

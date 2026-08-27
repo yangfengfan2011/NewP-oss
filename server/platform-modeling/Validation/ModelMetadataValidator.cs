@@ -140,19 +140,23 @@ public sealed class ModelMetadataValidator
         foreach (var field in document.Model.Fields.Where(static field => field.Display is not null))
         {
             var display = field.Display!;
-            if (!string.Equals(display.Type, "reference", StringComparison.OrdinalIgnoreCase))
+            if (!IsSupportedDisplayType(display.Type))
             {
                 throw new InvalidOperationException(
                     $"Field '{field.Name}' has unsupported display.type '{display.Type}'.");
             }
 
-            if (!IsReferenceField(field))
+            if (!IsDisplaySourceField(field, display.Type))
             {
                 throw new InvalidOperationException(
-                    $"Field '{field.Name}' must be a reference field to declare reference display.");
+                    $"Field '{field.Name}' must match display.type '{display.Type}' source semantics.");
             }
 
-            if (string.IsNullOrWhiteSpace(display.TargetModel)
+            if (string.Equals(display.Type, "user", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateUserDisplayTarget(field.Name, display);
+            }
+            else if (string.IsNullOrWhiteSpace(display.TargetModel)
                 || string.IsNullOrWhiteSpace(display.TargetIdField)
                 || string.IsNullOrWhiteSpace(display.TargetDisplayField))
             {
@@ -175,6 +179,36 @@ public sealed class ModelMetadataValidator
         return string.Equals(field.DataSource?.Type, "model", StringComparison.OrdinalIgnoreCase)
             || (string.Equals(field.DataSource?.Type, "provider", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(field.UiType, "lookup", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // display.type 目前只允许 reference 与 user；新增类型前必须先闭合 source 语义、target 约束与 runtime consumer。
+    private static bool IsSupportedDisplayType(string displayType) =>
+        string.Equals(displayType, "reference", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(displayType, "user", StringComparison.OrdinalIgnoreCase);
+
+    // reference 只能来自真实引用字段；user 只能来自 contract.valueType=user 的 raw 字段，避免 authoring 随意声明 companion。
+    private static bool IsDisplaySourceField(ModelMetadataField field, string displayType)
+    {
+        if (string.Equals(displayType, "reference", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsReferenceField(field);
+        }
+
+        return string.Equals(field.Contract?.ValueType, "user", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // user display 的公共 seam 固定到 IdentityAccount/EID/ENAME，避免各模块各自声明 user target 破坏解析 owner 唯一性。
+    private static void ValidateUserDisplayTarget(string fieldName, ModelMetadataDisplayRule display)
+    {
+        if (string.Equals(display.TargetModel, "IdentityAccount", StringComparison.Ordinal)
+            && string.Equals(display.TargetIdField, "EID", StringComparison.Ordinal)
+            && string.Equals(display.TargetDisplayField, "ENAME", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Field '{fieldName}' user display must target IdentityAccount/EID/ENAME.");
     }
 
     private static void ValidateIndexContracts(ModelMetadataDocument document)

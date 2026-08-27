@@ -304,6 +304,25 @@ public sealed class PersonLifecycleServiceTests
             return ValueTask.FromResult<IdentityAccountSnapshot?>(identity.Account.AccountEid == accountEid ? identity.Account with { } : null);
         }
 
+        public ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
+            IReadOnlyCollection<string> accountEids,
+            CancellationToken cancellationToken = default)
+        {
+            if (unavailable)
+            {
+                throw new TimeoutException("identity-directory-unavailable");
+            }
+
+            var results = accountEids
+                .Where(accountEid => string.Equals(identity.Account.AccountEid, accountEid, StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .ToDictionary(
+                    accountEid => accountEid,
+                    _ => identity.Account with { },
+                    StringComparer.Ordinal);
+            return ValueTask.FromResult<IReadOnlyDictionary<string, IdentityAccountSnapshot>>(results);
+        }
+
         public ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(IdentityAccountSearch search, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

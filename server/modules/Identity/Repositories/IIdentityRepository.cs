@@ -8,6 +8,13 @@ public interface IIdentityRepository
 
     ValueTask<IdentityAccount?> FindAccountAsync(string accountEid, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 按 exact EID 集合批量读取账号聚合，调用方负责决定是否暴露或过滤结果。
+    /// </summary>
+    ValueTask<IReadOnlyDictionary<string, IdentityAccount>> FindAccountsByIdsAsync(
+        IReadOnlyCollection<string> accountEids,
+        CancellationToken cancellationToken = default);
+
     ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default);
 
     ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default);

@@ -14,7 +14,8 @@
         "titleKey": "Section_Basic",
         "fields": [
           "ECODE",
-          "ENAME"
+          "ENAME",
+          "ReviewerUserEID"
         ]
       },
       {

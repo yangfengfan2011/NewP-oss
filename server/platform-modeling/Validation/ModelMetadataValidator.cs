@@ -108,7 +108,7 @@ public sealed class ModelMetadataValidator
         }
     }
 
-    // 字段名、内建字段覆写和索引引用都属于 authoring 契约约束，必须先在 validator 阶段拦住。
+    // 字段名重复、内核固定字段 storage 覆写和 display 规则错误都必须在 authoring validator 阶段拦住。
     private static void ValidateFieldContracts(
         ModelMetadataDocument document,
         HashSet<string> allowedBuiltinFields)
@@ -128,6 +128,53 @@ public sealed class ModelMetadataValidator
                     $"Field '{field.Name}' is kernel-managed and must not redefine storage.");
             }
         }
+
+        ValidateDisplayRules(document, seenFieldNames);
+    }
+
+    // 展示规则必须在 authoring 阶段闭合字段语义和保留伴随字段命名，避免进入 runtime 后再猜测。
+    private static void ValidateDisplayRules(
+        ModelMetadataDocument document,
+        HashSet<string> authoredFieldNames)
+    {
+        foreach (var field in document.Model.Fields.Where(static field => field.Display is not null))
+        {
+            var display = field.Display!;
+            if (!string.Equals(display.Type, "reference", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Field '{field.Name}' has unsupported display.type '{display.Type}'.");
+            }
+
+            if (!IsReferenceField(field))
+            {
+                throw new InvalidOperationException(
+                    $"Field '{field.Name}' must be a reference field to declare reference display.");
+            }
+
+            if (string.IsNullOrWhiteSpace(display.TargetModel)
+                || string.IsNullOrWhiteSpace(display.TargetIdField)
+                || string.IsNullOrWhiteSpace(display.TargetDisplayField))
+            {
+                throw new InvalidOperationException(
+                    $"Field '{field.Name}' reference display must define non-empty targetModel, targetIdField, and targetDisplayField.");
+            }
+
+            var companionField = $"{field.Name}_DisplayValue";
+            if (authoredFieldNames.Contains(companionField))
+            {
+                throw new InvalidOperationException(
+                    $"Field '{companionField}' conflicts with the generated display companion for '{field.Name}'.");
+            }
+        }
+    }
+
+    // model 数据源与 provider-backed lookup 都是当前 Model 协议认可的引用字段。
+    private static bool IsReferenceField(ModelMetadataField field)
+    {
+        return string.Equals(field.DataSource?.Type, "model", StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(field.DataSource?.Type, "provider", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(field.UiType, "lookup", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ValidateIndexContracts(ModelMetadataDocument document)

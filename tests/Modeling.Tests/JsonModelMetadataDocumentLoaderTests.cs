@@ -82,4 +82,59 @@ public class JsonModelMetadataDocumentLoaderTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void LoadFromFile_ReadsReferenceDisplayRule()
+    {
+        var path = Path.GetTempFileName();
+
+        try
+        {
+            File.WriteAllText(
+                path,
+                """
+                {
+                  "schemaVersion": "1.0",
+                  "moduleId": "Organization",
+                  "model": {
+                    "name": "Person",
+                    "kind": "Entity",
+                    "fields": [
+                      {
+                        "name": "CompanyId",
+                        "uiType": "lookup",
+                        "storage": {
+                          "type": "guid",
+                          "nullable": true
+                        },
+                        "dataSource": {
+                          "type": "provider",
+                          "key": "organization.companies"
+                        },
+                        "display": {
+                          "type": "reference",
+                          "targetModel": "Company",
+                          "targetIdField": "EID",
+                          "targetDisplayField": "ENAME"
+                        }
+                      }
+                    ]
+                  }
+                }
+                """);
+
+            var document = new JsonModelMetadataDocumentLoader().LoadFromFile(path);
+
+            var display = Assert.Single(document.Model.Fields).Display;
+            Assert.NotNull(display);
+            Assert.Equal("reference", display!.Type);
+            Assert.Equal("Company", display.TargetModel);
+            Assert.Equal("EID", display.TargetIdField);
+            Assert.Equal("ENAME", display.TargetDisplayField);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

@@ -19,6 +19,31 @@ public sealed class PersistenceModelDigestTests
         Assert.NotEqual(firstDigest, secondDigest);
     }
 
+    [Fact]
+    public void Compute_DisplayRuleChanges_DigestDoesNotChange()
+    {
+        var withoutDisplayRule = BuildModel(["Code", "Name"]);
+        var withDisplayRule = withoutDisplayRule with
+        {
+            Fields = withoutDisplayRule.Fields
+                .Select(field => field.Name == "Code"
+                    ? field with
+                    {
+                        DisplayRule = new FieldDisplayRuleDefinition(
+                            "reference",
+                            "Partner",
+                            "Id",
+                            "Name")
+                    }
+                    : field)
+                .ToArray()
+        };
+
+        Assert.Equal(
+            PersistenceModelDigest.Compute([withoutDisplayRule]),
+            PersistenceModelDigest.Compute([withDisplayRule]));
+    }
+
     private static ModelDefinition BuildModel(IReadOnlyList<string> indexFields) =>
         new(
             "Asset",

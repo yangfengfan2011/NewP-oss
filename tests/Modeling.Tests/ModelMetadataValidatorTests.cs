@@ -202,4 +202,126 @@ public class ModelMetadataValidatorTests
 
         Assert.Contains("storage", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Validate_ThrowsWhenDisplayRuleTypeIsUnsupported()
+    {
+        var field = ReferenceFieldWithDisplay("computed");
+        var document = DocumentWithFields(field);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Contains("CompanyId", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("display.type", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_ThrowsWhenReferenceDisplayRuleIsDeclaredOnScalarField()
+    {
+        var document = DocumentWithFields(
+            new ModelMetadataField
+            {
+                Name = "CompanyId",
+                Storage = new ModelMetadataStorageSection
+                {
+                    Type = "guid",
+                    Nullable = true
+                },
+                Display = ReferenceDisplayRule()
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Contains("CompanyId", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("reference", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_ThrowsWhenReferenceDisplayCompanionConflictsWithAuthoredField()
+    {
+        var document = DocumentWithFields(
+            ReferenceFieldWithDisplay("reference"),
+            new ModelMetadataField
+            {
+                Name = "CompanyId_DisplayValue",
+                Storage = new ModelMetadataStorageSection
+                {
+                    Type = "string",
+                    Nullable = true
+                }
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Contains("CompanyId_DisplayValue", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("display", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(" ", "EID", "ENAME")]
+    [InlineData("Company", " ", "ENAME")]
+    [InlineData("Company", "EID", " ")]
+    public void Validate_ThrowsWhenReferenceDisplayTargetIsBlank(
+        string targetModel,
+        string targetIdField,
+        string targetDisplayField)
+    {
+        var document = DocumentWithFields(
+            ReferenceFieldWithDisplay(
+                "reference",
+                targetModel,
+                targetIdField,
+                targetDisplayField));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Equal(
+            "Field 'CompanyId' reference display must define non-empty targetModel, targetIdField, and targetDisplayField.",
+            ex.Message);
+    }
+
+    private static ModelMetadataDocument DocumentWithFields(params ModelMetadataField[] fields) => new()
+    {
+        SchemaVersion = "1.0",
+        ModuleId = "Organization",
+        Model = new ModelMetadataModel
+        {
+            Name = "Person",
+            Kind = "Entity",
+            Fields = [.. fields]
+        }
+    };
+
+    private static ModelMetadataField ReferenceFieldWithDisplay(
+        string displayType,
+        string targetModel = "Company",
+        string targetIdField = "EID",
+        string targetDisplayField = "ENAME") => new()
+    {
+        Name = "CompanyId",
+        UiType = "lookup",
+        Storage = new ModelMetadataStorageSection
+        {
+            Type = "guid",
+            Nullable = true
+        },
+        DataSource = new ModelMetadataDataSource
+        {
+            Type = "provider",
+            Key = "organization.companies"
+        },
+        Display = ReferenceDisplayRule(displayType, targetModel, targetIdField, targetDisplayField)
+    };
+
+    private static ModelMetadataDisplayRule ReferenceDisplayRule(
+        string type = "reference",
+        string targetModel = "Company",
+        string targetIdField = "EID",
+        string targetDisplayField = "ENAME") => new()
+    {
+        Type = type,
+        TargetModel = targetModel,
+        TargetIdField = targetIdField,
+        TargetDisplayField = targetDisplayField
+    };
 }

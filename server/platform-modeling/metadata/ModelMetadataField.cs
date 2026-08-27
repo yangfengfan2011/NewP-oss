@@ -20,4 +20,6 @@ public sealed class ModelMetadataField
     public ModelMetadataFormSection? Form { get; init; }
 
     public ModelMetadataDataSource? DataSource { get; init; }
+
+    public ModelMetadataDisplayRule? Display { get; init; }
 }

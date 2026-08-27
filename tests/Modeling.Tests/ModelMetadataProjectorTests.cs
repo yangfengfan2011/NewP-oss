@@ -223,6 +223,55 @@ public class ModelMetadataProjectorTests
     }
 
     [Fact]
+    public void Project_CarriesReferenceDisplayRuleIntoFieldDefinition()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Organization",
+            Model = new ModelMetadataModel
+            {
+                Name = "Person",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "CompanyId",
+                        UiType = "lookup",
+                        Storage = new ModelMetadataStorageSection
+                        {
+                            Type = "guid",
+                            Nullable = true
+                        },
+                        DataSource = new ModelMetadataDataSource
+                        {
+                            Type = "provider",
+                            Key = "organization.companies"
+                        },
+                        Display = new ModelMetadataDisplayRule
+                        {
+                            Type = "reference",
+                            TargetModel = "Company",
+                            TargetIdField = "EID",
+                            TargetDisplayField = "ENAME"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        var display = Assert.Single(definition.Fields, field => field.Name == "CompanyId").DisplayRule;
+        Assert.NotNull(display);
+        Assert.Equal("reference", display!.Type);
+        Assert.Equal("Company", display.TargetModel);
+        Assert.Equal("EID", display.TargetIdField);
+        Assert.Equal("ENAME", display.TargetDisplayField);
+    }
+
+    [Fact]
     public void Project_TreatsProviderLookupDataSourceFieldsAsReferencesWithoutChangingStorageType()
     {
         var document = new ModelMetadataDocument

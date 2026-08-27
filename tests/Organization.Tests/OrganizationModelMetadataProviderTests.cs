@@ -73,4 +73,19 @@ public class OrganizationModelMetadataProviderTests
         Assert.Contains(person.Fields, static field => field.Name == "DepartmentId" && !field.Required);
         Assert.Contains(person.Fields, static field => field.Name == "EmploymentStatus" && !field.Required);
     }
+
+    [Fact]
+    public void Person_CompanyReferenceDisplayRule_IsProjectedFromMetadata()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
+
+        var display = Assert.Single(person.Fields, field => field.Name == "CompanyId").DisplayRule;
+
+        Assert.NotNull(display);
+        Assert.Equal("reference", display!.Type);
+        Assert.Equal("Company", display.TargetModel);
+        Assert.Equal("EID", display.TargetIdField);
+        Assert.Equal("ENAME", display.TargetDisplayField);
+    }
 }

@@ -1,10 +1,12 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.Planning;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Query.Descriptors;
 using Microsoft.Extensions.DependencyInjection;
@@ -98,6 +100,25 @@ public sealed class PersonStandardCrudResourceTests
             field.Field == "PositionName" &&
             field.SourceField == "PositionId" &&
             field.TargetModelName == "Position");
+    }
+
+    [Fact]
+    public void PersonCrudDescriptor_UsesCompanyDisplayFieldProjectedFromRealModelMetadata()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
+        var projected = Assert.Single(
+            new ModelDisplayValueFieldProjector().Project(person, definitions),
+            field => field.SourceField == "CompanyId");
+
+        var descriptor = PersonCrudDescriptorFactory.Create();
+        var actual = Assert.Single(
+            descriptor.DisplayValueFields,
+            field => field.SourceField == "CompanyId");
+
+        Assert.Equal(projected, actual);
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "DepartmentName");
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
     }
 
     [Fact]

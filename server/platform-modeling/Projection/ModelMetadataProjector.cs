@@ -79,6 +79,7 @@ public sealed class ModelMetadataProjector
             ForeignKeys: foreignKeys);
     }
 
+    // 将单个 authoring 字段投影为不含 UI 布局、但保留展示语义的规范 artifact。
     private static FieldDefinition ProjectField(
         ModelMetadataField field,
         StorageTypeMapDocument? typeMap,
@@ -106,8 +107,19 @@ public sealed class ModelMetadataProjector
             storeType,
             !storage.Nullable,
             false,
-            false);
+            false,
+            ProjectDisplayRule(field.Display));
     }
+
+    // validator 已完成规则闭合；projector 只把 metadata 形状转换为定义层形状。
+    private static FieldDisplayRuleDefinition? ProjectDisplayRule(ModelMetadataDisplayRule? display) =>
+        display is null
+            ? null
+            : new FieldDisplayRuleDefinition(
+                display.Type,
+                display.TargetModel,
+                display.TargetIdField,
+                display.TargetDisplayField);
 
     private static FieldKind ResolveFieldKind(ModelMetadataField field)
     {

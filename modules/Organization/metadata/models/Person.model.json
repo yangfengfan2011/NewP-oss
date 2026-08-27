@@ -76,6 +76,12 @@
         "dataSource": {
           "type": "provider",
           "key": "organization.companies"
+        },
+        "display": {
+          "type": "reference",
+          "targetModel": "Company",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
         }
       },
       {

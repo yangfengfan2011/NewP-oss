@@ -36,7 +36,8 @@ public sealed class PersonStandardCrudResourceTests
 
         Assert.Equal("organization.person", descriptor.ResourceKey);
         Assert.Equal("api/organization/persons", descriptor.Route);
-        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "CompanyName");
+        Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "CompanyId_DisplayValue");
+        Assert.DoesNotContain(descriptor.DisplayValueFields, field => field.Field == "CompanyName");
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "DepartmentName");
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
         Assert.Contains("userBinding", descriptor.SummaryBlockKeys);
@@ -83,11 +84,12 @@ public sealed class PersonStandardCrudResourceTests
         var descriptor = PersonCrudDescriptorFactory.Create();
 
         Assert.Contains(descriptor.DisplayValueFields, field =>
-            field.Field == "CompanyName" &&
+            field.Field == "CompanyId_DisplayValue" &&
             field.SourceField == "CompanyId" &&
             field.TargetModelName == "Company" &&
             field.TargetIdField == "EID" &&
             field.TargetDisplayField == "ENAME");
+        Assert.DoesNotContain(descriptor.DisplayValueFields, field => field.Field == "CompanyName");
         Assert.Contains(descriptor.DisplayValueFields, field =>
             field.Field == "DepartmentName" &&
             field.SourceField == "DepartmentId" &&
@@ -150,6 +152,52 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public async Task PersonCrudDisplayValueResolver_ReturnsOnlyRequestedCompanyCompanionAndBatchesDistinctIds()
+    {
+        var companyRepository = new FakeCompanyRepository(
+        [
+            new Company { Id = "Company_1", Name = "总公司" }
+        ]);
+        var departmentRepository = new FakeDepartmentRepository([]);
+        var positionRepository = new FakePositionRepository([]);
+        var resolver = new PersonCrudDisplayValueResolver(
+            companyRepository,
+            departmentRepository,
+            positionRepository);
+        var descriptor = PersonCrudDescriptorFactory.Create();
+        var companyDisplayField = Assert.Single(
+            descriptor.DisplayValueFields,
+            field => field.Field == "CompanyId_DisplayValue");
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
+        [
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_1" },
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_1" },
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_missing" }
+        ];
+
+        var resolved = await resolver.ResolveListAsync(
+            descriptor,
+            rows,
+            [companyDisplayField],
+            CancellationToken.None);
+
+        Assert.All(resolved, row =>
+        {
+            var entry = Assert.Single(row);
+            Assert.Equal("CompanyId_DisplayValue", entry.Key);
+        });
+        Assert.Equal("总公司", resolved[0]["CompanyId_DisplayValue"]);
+        Assert.Equal("总公司", resolved[1]["CompanyId_DisplayValue"]);
+        Assert.Equal(string.Empty, resolved[2]["CompanyId_DisplayValue"]);
+        Assert.Equal(1, companyRepository.BatchCallCount);
+        Assert.Equal(
+            new[] { "Company_1", "Company_missing" },
+            Assert.Single(companyRepository.RequestedBatches));
+        Assert.Equal(0, departmentRepository.BatchCallCount);
+        Assert.Equal(0, positionRepository.BatchCallCount);
+    }
+
+    [Fact]
     public async Task PersonCrudDisplayValueResolver_ResolvesRequestedDisplayFieldsInBatch()
     {
         var companyRepository = new FakeCompanyRepository(
@@ -182,7 +230,8 @@ public sealed class PersonStandardCrudResourceTests
             descriptor.DisplayValueFields,
             CancellationToken.None);
 
-        Assert.Equal("总公司", resolved[0]["CompanyName"]);
+        Assert.Equal("总公司", resolved[0]["CompanyId_DisplayValue"]);
+        Assert.DoesNotContain("CompanyName", resolved[0].Keys);
         Assert.Equal("研发部", resolved[1]["DepartmentName"]);
         Assert.Equal(string.Empty, resolved[1]["PositionName"]);
         Assert.Equal(1, companyRepository.BatchCallCount);
@@ -201,6 +250,8 @@ public sealed class PersonStandardCrudResourceTests
 
         public int BatchCallCount { get; private set; }
 
+        public List<IReadOnlyCollection<string>> RequestedBatches { get; } = [];
+
         public Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.Values.ToList());
 
@@ -212,6 +263,7 @@ public sealed class PersonStandardCrudResourceTests
             CancellationToken cancellationToken = default)
         {
             BatchCallCount++;
+            RequestedBatches.Add(companyIds.ToArray());
             return Task.FromResult<IReadOnlyDictionary<string, Company>>(
                 _companies.Values
                     .Where(company => companyIds.Contains(company.Id))

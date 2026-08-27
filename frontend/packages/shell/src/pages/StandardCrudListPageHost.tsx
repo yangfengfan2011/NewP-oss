@@ -57,6 +57,7 @@ import {
   createStandardCrudRuntimeRowsQueryKey,
 } from '../standard-crud/standardCrudQueryKeys';
 import {
+  readStandardCrudFieldDisplayValue,
   reportStandardCrudDetailDiagnostics,
   resolveStandardCrudDetailPresentation,
 } from '../standard-crud/standardCrudDetailPresentation';
@@ -427,10 +428,6 @@ function renderMetadataFilterField(
   );
 }
 
-function readTableCellValue<TRow extends Record<string, unknown>>(row: TRow, key: string): unknown {
-  return row[key];
-}
-
 function renderBooleanTableCell(value: unknown): ReactElement | string {
   if (typeof value !== 'boolean') {
     return value == null ? '' : String(value);
@@ -454,7 +451,8 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
   modelDocument: MetadataRecord,
   registration: StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
 ): ReactNode {
-  const value = readTableCellValue(row, column.dataIndex ?? column.key);
+  const fieldKey = column.dataIndex ?? column.key;
+  const value = readStandardCrudFieldDisplayValue(row, fieldKey);
   if (column.metadataSource !== 'model') {
     return value == null ? '' : String(value);
   }

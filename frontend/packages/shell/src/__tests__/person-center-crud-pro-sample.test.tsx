@@ -363,7 +363,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
-      'fields=EID,PersonNo,ENAME,CompanyName,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID,Revision',
+      'fields=EID,PersonNo,ENAME,CompanyId,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID,Revision',
     );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
@@ -416,7 +416,7 @@ describe('人员中心 CRUD Pro 样板', () => {
             PersonNo: 'P0001',
             ENAME: '张三',
             CompanyId: 'Company_1',
-            CompanyName: '示例公司',
+            CompanyId_DisplayValue: '示例公司',
             DepartmentId: 'Department_1',
             DepartmentName: '研发部',
             EmploymentStatus: 'FullTime',
@@ -431,7 +431,8 @@ describe('人员中心 CRUD Pro 样板', () => {
           EID: 'person-1',
           PersonNo: 'P0001',
           ENAME: '张三',
-          CompanyName: '示例公司',
+          CompanyId: 'Company_1',
+          CompanyId_DisplayValue: '示例公司',
           DepartmentName: '研发部',
           EmploymentStatus: 'FullTime',
           IsEnabled: true,

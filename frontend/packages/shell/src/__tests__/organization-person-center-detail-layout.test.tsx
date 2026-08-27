@@ -138,7 +138,7 @@ describe('organization person center detail layout', () => {
         key: 'organization',
         titleKey: 'Section_Organization',
         fields: [
-          { field: 'CompanyId', rendererKey: 'organization.person.reference' },
+          'CompanyId',
           { field: 'DepartmentId', rendererKey: 'organization.person.reference' },
           { field: 'PositionId', rendererKey: 'organization.person.reference' },
           'EmploymentStatus',
@@ -174,7 +174,7 @@ describe('organization person center detail layout', () => {
             PersonNo: 'P0001',
             ENAME: '张三',
             CompanyId: 'company-1',
-            CompanyName: '总部',
+            CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
             PositionId: null,
@@ -230,6 +230,8 @@ describe('organization person center detail layout', () => {
     expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('基础信息');
     expect(container.textContent).toContain('组织信息');
+    expect(container.textContent).toContain('总部');
+    expect(container.textContent).not.toContain('company-1');
     expect(container.textContent).toContain('审计信息');
     expect(container.textContent).toContain('creator-1');
     expect(container.textContent).toContain('2026-04-21T00:00:00Z');
@@ -251,7 +253,7 @@ describe('organization person center detail layout', () => {
             PersonNo: 'P0001',
             ENAME: '张三',
             CompanyId: 'company-1',
-            CompanyName: '总部',
+            CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
             PositionId: null,

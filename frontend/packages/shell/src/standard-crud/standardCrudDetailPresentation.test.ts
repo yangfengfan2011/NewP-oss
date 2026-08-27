@@ -38,6 +38,20 @@ const schema = {
   ],
 } as StandardCrudResolvedDetailSchema;
 
+const companySchema = {
+  ...schema,
+  sections: [{
+    key: 'organization',
+    titleKey: 'Section_Organization',
+    fields: [{
+      key: 'CompanyId',
+      labelKey: 'Field_CompanyId',
+      rendererKey: 'standard.text',
+      rendererSource: 'standard',
+    }],
+  }],
+} as StandardCrudResolvedDetailSchema;
+
 describe('standard CRUD detail presentation', () => {
   it('keeps present null distinct from a missing field', () => {
     const result = resolveStandardCrudDetailPresentation({
@@ -57,6 +71,55 @@ describe('standard CRUD detail presentation', () => {
     if (result.kind !== 'ready') return;
     expect(result.sections[0].fields[1]).toMatchObject({ key: 'ENAME', state: 'present', value: null });
     expect(result.diagnostics).toEqual([]);
+  });
+
+  it('presents a companion display value while keeping the raw field in source fields', () => {
+    const result = resolveStandardCrudDetailPresentation({
+      schema: companySchema,
+      expectedId: 'person-1',
+      fields: {
+        EID: 'person-1',
+        CompanyId: 'company-raw-id',
+        CompanyId_DisplayValue: '示例公司',
+        Revision: 1,
+      },
+    });
+
+    expect(result.kind).toBe('ready');
+    if (result.kind !== 'ready') return;
+    expect(result.sections[0].fields[0]).toMatchObject({
+      key: 'CompanyId',
+      state: 'present',
+      value: '示例公司',
+    });
+    expect(result.sourceFields.CompanyId).toBe('company-raw-id');
+  });
+
+  it.each([
+    ['missing', {}],
+    ['null', { CompanyId_DisplayValue: null }],
+    ['empty', { CompanyId_DisplayValue: '' }],
+    ['blank', { CompanyId_DisplayValue: '   ' }],
+  ])('falls back to the raw field when its companion display value is %s', (_, companionField) => {
+    const result = resolveStandardCrudDetailPresentation({
+      schema: companySchema,
+      expectedId: 'person-1',
+      fields: {
+        EID: 'person-1',
+        CompanyId: 'company-raw-id',
+        Revision: 1,
+        ...companionField,
+      },
+    });
+
+    expect(result.kind).toBe('ready');
+    if (result.kind !== 'ready') return;
+    expect(result.sections[0].fields[0]).toMatchObject({
+      key: 'CompanyId',
+      state: 'present',
+      value: 'company-raw-id',
+    });
+    expect(result.sourceFields.CompanyId).toBe('company-raw-id');
   });
 
   it('degrades only the missing field while rendering other fields in the section', () => {

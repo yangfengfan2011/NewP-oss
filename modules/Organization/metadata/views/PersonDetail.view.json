@@ -21,10 +21,7 @@
         "key": "organization",
         "titleKey": "Section_Organization",
         "fields": [
-          {
-            "field": "CompanyId",
-            "rendererKey": "organization.person.reference"
-          },
+          "CompanyId",
           {
             "field": "DepartmentId",
             "rendererKey": "organization.person.reference"

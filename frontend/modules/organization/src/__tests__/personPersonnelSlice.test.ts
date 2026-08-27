@@ -95,13 +95,13 @@ describe('personnel center first vertical slice', () => {
     });
   });
 
-  it('projects display names without falling back to raw organization ids', () => {
+  it('preserves the canonical CompanyId raw/display pair without a CompanyName alias', () => {
     const row = mapPersonListItem({
       EID: 'person-1',
       PersonNo: 'P001',
       ENAME: '张三',
       CompanyId: 'company-1',
-      CompanyName: '总部',
+      CompanyId_DisplayValue: '总部',
       DepartmentId: 'department-1',
       DepartmentName: '研发部',
       EmploymentStatus: 'FullTime',
@@ -116,11 +116,29 @@ describe('personnel center first vertical slice', () => {
       EmploymentStatus: 'FullTime',
       IsEnabled: true,
     });
+    const nullableAffiliation = mapPersonListItem({
+      EID: 'person-3',
+      PersonNo: 'P003',
+      ENAME: '王五',
+      CompanyId: null,
+      CompanyId_DisplayValue: null,
+      EmploymentStatus: 'FullTime',
+      IsEnabled: true,
+    });
 
-    expect(row.CompanyName).toBe('总部');
+    expect(row).toMatchObject({
+      CompanyId: 'company-1',
+      CompanyId_DisplayValue: '总部',
+      companyId: 'company-1',
+    });
+    expect(row).not.toHaveProperty('CompanyName');
+    expect(row).not.toHaveProperty('companyName');
     expect(row.DepartmentName).toBe('研发部');
-    expect(unresolved.companyName).toBe('');
+    expect(unresolved.CompanyId_DisplayValue).toBeNull();
     expect(unresolved.departmentName).toBe('');
+    expect(nullableAffiliation.CompanyId).toBeNull();
+    expect(nullableAffiliation.CompanyId_DisplayValue).toBeNull();
+    expect(nullableAffiliation.companyId).toBe('');
   });
 
   it('renders reference projections through the explicit detail field binding', () => {
@@ -142,6 +160,8 @@ describe('personnel center first vertical slice', () => {
         EID: 'person-1',
         PersonNo: 'P001',
         ENAME: '张三',
+        CompanyId: 'company-1',
+        CompanyId_DisplayValue: '总部',
         EmploymentStatus: 'FullTime',
         IsEnabled: true,
         Revision: 7,
@@ -157,6 +177,7 @@ describe('personnel center first vertical slice', () => {
     });
 
     expect(detail).toMatchObject({
+      companyId: 'company-1',
       createdBy: 'creator-1',
       createdAt: '2026-08-14T01:02:03Z',
       updatedBy: 'editor-2',
@@ -164,6 +185,7 @@ describe('personnel center first vertical slice', () => {
       userBindingSummary: { status: 'notConfigured', data: null },
       authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
     });
+    expect(detail).not.toHaveProperty('companyName');
   });
 
   it('requires an explicit disable reason before invoking the lifecycle command', async () => {

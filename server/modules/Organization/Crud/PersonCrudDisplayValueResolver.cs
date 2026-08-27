@@ -35,19 +35,35 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
     {
         _ = descriptor;
         var requested = requestedDisplayFields.Select(field => field.Field).ToHashSet(StringComparer.Ordinal);
-        var companyIds = requested.Contains("CompanyName") ? CollectIds(rows, "CompanyId") : [];
-        var departmentIds = requested.Contains("DepartmentName") ? CollectIds(rows, "DepartmentId") : [];
-        var positionIds = requested.Contains("PositionName") ? CollectIds(rows, "PositionId") : [];
+        IReadOnlyDictionary<string, Company> companies = requested.Contains("CompanyId_DisplayValue")
+            ? await _companyRepository.GetByIdsAsync(CollectIds(rows, "CompanyId"), cancellationToken)
+            : new Dictionary<string, Company>(StringComparer.Ordinal);
+        IReadOnlyDictionary<string, Department> departments = requested.Contains("DepartmentName")
+            ? await _departmentRepository.GetByIdsAsync(CollectIds(rows, "DepartmentId"), cancellationToken)
+            : new Dictionary<string, Department>(StringComparer.Ordinal);
+        IReadOnlyDictionary<string, Position> positions = requested.Contains("PositionName")
+            ? await _positionRepository.GetByIdsAsync(CollectIds(rows, "PositionId"), cancellationToken)
+            : new Dictionary<string, Position>(StringComparer.Ordinal);
 
-        var companies = await _companyRepository.GetByIdsAsync(companyIds, cancellationToken);
-        var departments = await _departmentRepository.GetByIdsAsync(departmentIds, cancellationToken);
-        var positions = await _positionRepository.GetByIdsAsync(positionIds, cancellationToken);
-
-        return rows.Select(row => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(StringComparer.Ordinal)
+        return rows.Select(row =>
         {
-            ["CompanyName"] = ReadDisplayName(row, "CompanyId", companies),
-            ["DepartmentName"] = ReadDisplayName(row, "DepartmentId", departments),
-            ["PositionName"] = ReadDisplayName(row, "PositionId", positions)
+            var displayValues = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (requested.Contains("CompanyId_DisplayValue"))
+            {
+                displayValues["CompanyId_DisplayValue"] = ReadDisplayName(row, "CompanyId", companies);
+            }
+
+            if (requested.Contains("DepartmentName"))
+            {
+                displayValues["DepartmentName"] = ReadDisplayName(row, "DepartmentId", departments);
+            }
+
+            if (requested.Contains("PositionName"))
+            {
+                displayValues["PositionName"] = ReadDisplayName(row, "PositionId", positions);
+            }
+
+            return (IReadOnlyDictionary<string, object?>)displayValues;
         }).ToList();
     }
 

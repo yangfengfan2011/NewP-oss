@@ -31,7 +31,7 @@ public static class PersonCrudDescriptorFactory
         SummaryBlockKeys = ["userBinding", "authorizationSummary"],
         DisplayValueFields =
         [
-            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME"),
+            new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME"),
             new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
             new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
         ],

@@ -61,6 +61,18 @@ const owns = (fields: Record<string, unknown>, key: string) =>
 const isAvailableProperty = (fields: Record<string, unknown>, key: string) =>
   owns(fields, key) && fields[key] !== undefined;
 
+/** Reads a companion display value without replacing the raw field retained by the response. */
+export function readStandardCrudFieldDisplayValue(
+  fields: Record<string, unknown>,
+  fieldKey: string,
+): unknown {
+  const displayValue = fields[`${fieldKey}_DisplayValue`];
+  const hasDisplayValue = displayValue !== null
+    && displayValue !== undefined
+    && (typeof displayValue !== 'string' || displayValue.trim().length > 0);
+  return hasDisplayValue ? displayValue : fields[fieldKey];
+}
+
 /**
  * Interprets one detail response against resolved page structure without turning response fields into candidate metadata.
  */
@@ -95,7 +107,11 @@ export function resolveStandardCrudDetailPresentation({
   const sections = schema.sections.map<StandardCrudDetailSectionPresentation>((section) => {
     const sectionFields = section.fields.map<StandardCrudDetailFieldPresentation>((field) => {
       if (isAvailableProperty(fields, field.key)) {
-        return { ...field, state: 'present', value: fields[field.key] };
+        return {
+          ...field,
+          state: 'present',
+          value: readStandardCrudFieldDisplayValue(fields, field.key),
+        };
       }
 
       diagnostics.push({

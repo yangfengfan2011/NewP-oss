@@ -88,13 +88,13 @@ export interface PersonListRow {
   IsEnabled: boolean;
   Revision: number;
   AccountEID?: string | null;
-  CompanyName: string;
+  CompanyId: string | null;
+  CompanyId_DisplayValue: string | null;
   DepartmentName: string;
   PositionName?: string | null;
   personNo: string;
   name: string;
   companyId: string;
-  companyName: string;
   departmentId: string;
   departmentName: string;
   positionId?: string | null;
@@ -121,7 +121,6 @@ export interface PersonDetailView {
   createdAt: string;
   updatedBy: string;
   updatedAt: string;
-  companyName?: string | null;
   departmentName?: string | null;
   positionName?: string | null;
   userBindingSummary: StandardCrudSummaryBlock<PersonUserBindingSummaryData>;
@@ -215,7 +214,7 @@ export function mapPersonListItem(value: unknown): PersonListRow {
   const isEnabled = readStandardCrudBoolean(row, ['IsEnabled'], true);
   const personNo = readStandardCrudString(row, ['PersonNo']);
   const name = readStandardCrudString(row, ['ENAME']);
-  const companyName = readStandardCrudString(row, ['CompanyName']);
+  const rawCompanyId = readStandardCrudNullableString(row, ['CompanyId']);
   const departmentName = readStandardCrudString(row, ['DepartmentName']);
   const positionName = readStandardCrudNullableString(row, ['PositionName']);
   const revision = Number(row.Revision ?? row.revision ?? 0);
@@ -229,13 +228,13 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     IsEnabled: isEnabled,
     Revision: revision,
     AccountEID: readStandardCrudNullableString(row, ['AccountEID']),
-    CompanyName: companyName,
+    CompanyId: rawCompanyId,
+    CompanyId_DisplayValue: readStandardCrudNullableString(row, ['CompanyId_DisplayValue']),
     DepartmentName: departmentName,
     PositionName: positionName,
     personNo,
     name,
-    companyId: readStandardCrudString(row, ['CompanyId']),
-    companyName,
+    companyId: rawCompanyId ?? '',
     departmentId: readStandardCrudString(row, ['DepartmentId']),
     departmentName,
     positionId: readStandardCrudNullableString(row, ['PositionId']),
@@ -269,7 +268,6 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
     createdAt: readDateString(fields, ['CreatedAt']),
     updatedBy: readStandardCrudString(fields, ['UpdatedBy']),
     updatedAt: readDateString(fields, ['UpdatedAt']),
-    companyName: readStandardCrudNullableString(fields, ['CompanyName']),
     departmentName: readStandardCrudNullableString(fields, ['DepartmentName']),
     positionName: readStandardCrudNullableString(fields, ['PositionName']),
     userBindingSummary: normalizeStandardCrudSummaryBlock(summaries['userBinding'], (data) => {

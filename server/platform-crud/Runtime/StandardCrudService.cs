@@ -53,7 +53,7 @@ public sealed class StandardCrudService : IStandardCrudService
         var conditions = BuildConditions(descriptor, query);
         var queryDescriptor = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor);
         var platformRequest = new PlatformQueryRequest(
-            query.Fields,
+            AddDisplayCompanionFields(query.Fields, descriptor.DisplayValueFields),
             query.Page,
             query.PageSize,
             query.SortBy,
@@ -76,6 +76,52 @@ public sealed class StandardCrudService : IStandardCrudService
             result.PageSize,
             result.SortBy,
             result.SortDirection);
+    }
+
+    // canonical relation 任一端被显式请求时统一补齐 raw/display；legacy display 声明保持原请求边界。
+    private static IReadOnlyList<string>? AddDisplayCompanionFields(
+        IReadOnlyList<string>? requestedFields,
+        IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> displayValueFields)
+    {
+        if (requestedFields is not { Count: > 0 })
+        {
+            return requestedFields;
+        }
+
+        var canonicalDisplayFields = displayValueFields
+            .Where(static field => string.Equals(
+                field.Field,
+                string.Concat(field.SourceField, "_DisplayValue"),
+                StringComparison.Ordinal))
+            .ToList();
+        var fields = new List<string>(requestedFields.Count + canonicalDisplayFields.Count);
+        foreach (var requestedField in requestedFields)
+        {
+            var canonicalDisplayField = canonicalDisplayFields.FirstOrDefault(field =>
+                string.Equals(field.SourceField, requestedField, StringComparison.Ordinal)
+                || string.Equals(field.Field, requestedField, StringComparison.Ordinal));
+            if (canonicalDisplayField is null)
+            {
+                if (!fields.Contains(requestedField, StringComparer.Ordinal))
+                {
+                    fields.Add(requestedField);
+                }
+
+                continue;
+            }
+
+            if (!fields.Contains(canonicalDisplayField.SourceField, StringComparer.Ordinal))
+            {
+                fields.Add(canonicalDisplayField.SourceField);
+            }
+
+            if (!fields.Contains(canonicalDisplayField.Field, StringComparer.Ordinal))
+            {
+                fields.Add(canonicalDisplayField.Field);
+            }
+        }
+
+        return fields;
     }
 
     /// <summary>
@@ -331,7 +377,7 @@ public sealed class StandardCrudService : IStandardCrudService
             : [];
     }
 
-    // 显示值补齐以 row copy 方式合并，确保扩展点不能修改仓储返回的原始字段集合。
+    // 显示值补齐以 row copy 方式合并，并拒绝 resolver 覆盖查询返回的原始字段集合。
     private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ApplyDisplayValuesAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
@@ -369,10 +415,25 @@ public sealed class StandardCrudService : IStandardCrudService
                 $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回行数 {resolvedRows.Count}，预期 {values.Count}。");
         }
 
+        var allowedDisplayFields = requestedDisplayFields
+            .Select(static field => field.Field)
+            .ToHashSet(StringComparer.Ordinal);
         for (var index = 0; index < values.Count; index++)
         {
             foreach (var pair in resolvedRows[index])
             {
+                if (rows[index].ContainsKey(pair.Key))
+                {
+                    throw new InvalidOperationException(
+                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器尝试覆盖原始字段 {pair.Key}。");
+                }
+
+                if (!allowedDisplayFields.Contains(pair.Key))
+                {
+                    throw new InvalidOperationException(
+                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回未请求字段 {pair.Key}。");
+                }
+
                 ((Dictionary<string, object?>)values[index])[pair.Key] = pair.Value;
             }
         }

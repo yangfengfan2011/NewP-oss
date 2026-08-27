@@ -214,7 +214,7 @@ describe('organization person center list layout', () => {
             PersonNo: 'P0001',
             ENAME: '张三',
             CompanyId: 'company-1',
-            CompanyName: '总部',
+            CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',
@@ -225,7 +225,7 @@ describe('organization person center list layout', () => {
             PersonNo: 'P0002',
             ENAME: '李四',
             CompanyId: 'company-1',
-            CompanyName: '总部',
+            CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-2',
             DepartmentName: '研发部',
             EmploymentStatus: 'PartTime',
@@ -248,7 +248,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyName%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyId%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
@@ -307,6 +307,8 @@ describe('organization person center list layout', () => {
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('张三');
     expect(container.textContent).toContain('李四');
+    expect(container.textContent).toContain('总部');
+    expect(container.textContent).not.toContain('company-1');
     expect(container.textContent).toContain('启用');
     expect(container.textContent).not.toContain('PartTime');
     expect(container.textContent).not.toContain('FullTime');
@@ -362,7 +364,8 @@ describe('organization person center list layout', () => {
             EID: 'person-1',
             PersonNo: 'P0001',
             ENAME: '张三',
-            CompanyName: '总部',
+            CompanyId: 'company-1',
+            CompanyId_DisplayValue: '总部',
             DepartmentName: '研发部',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
@@ -433,7 +436,7 @@ describe('organization person center list layout', () => {
           PersonNo: 'P0001',
           ENAME: '张三',
           CompanyId: 'company-1',
-          CompanyName: '总部',
+          CompanyId_DisplayValue: '总部',
           DepartmentId: 'department-1',
           DepartmentName: '人力资源部',
           PositionId: 'position-1',
@@ -472,12 +475,14 @@ describe('organization person center list layout', () => {
       expect(document.body.textContent).toContain('基础信息');
       expect(document.body.textContent).toContain('组织信息');
       expect(document.body.textContent).toContain('审计信息');
+      expect(document.body.textContent).toContain('总部');
       expect(document.body.textContent).toContain('creator-1');
       expect(document.body.textContent).toContain('editor-2');
     });
     expect(document.body.textContent).not.toContain('账号绑定');
     expect(document.body.textContent).not.toContain('授权摘要');
     expect(document.body.textContent).not.toContain('person-1');
+    expect(document.body.textContent).not.toContain('company-1');
     expect(document.body.textContent).not.toContain('account-1');
   });
 
@@ -565,7 +570,7 @@ describe('organization person center list layout', () => {
             PersonNo: 'P0001',
             ENAME: '张三',
             CompanyId: 'company-1',
-            CompanyName: '总部',
+            CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',

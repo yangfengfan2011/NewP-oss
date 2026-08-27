@@ -95,7 +95,6 @@ const personSummaryRenderers = {
 };
 
 const personReferenceProjectionByField: Record<string, string> = {
-  CompanyId: 'CompanyName',
   DepartmentId: 'DepartmentName',
   PositionId: 'PositionName',
 };

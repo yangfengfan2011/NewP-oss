@@ -399,6 +399,69 @@ describe('StandardCrudListPageHost', () => {
     expect(container.querySelector('td.np-table-row-number-cell')?.textContent).toBe('1');
   });
 
+  it('renders a companion display value for a metadata column without replacing its raw field contract', async () => {
+    mockStandardCrudModule();
+    const companyListViewDocument = {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        columns: [
+          { key: 'personNo', labelKey: 'Column_PersonNo', source: 'model', field: 'PersonNo' },
+          { key: 'company', labelKey: 'Column_Company', source: 'model', field: 'CompanyId' },
+        ],
+      },
+    } as typeof personListViewDocument;
+    const companyModelDocument = {
+      ...personModelDocument,
+      Person: {
+        ...personModelDocument.Person,
+        fields: [
+          ...personModelDocument.Person.fields,
+          {
+            name: 'CompanyId',
+            storage: { type: 'guid', nullable: true },
+            uiType: 'text',
+            form: {
+              create: { mode: 'editable' },
+              edit: { mode: 'editable' },
+            },
+          },
+        ],
+      },
+    } as typeof personModelDocument;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        items: [{
+          id: 'Person_1',
+          PersonNo: 'P001',
+          CompanyId: 'company-raw-id',
+          CompanyId_DisplayValue: '示例公司',
+        }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await renderHost(
+      { 'PersonListView.Column_Company': '公司' },
+      companyListViewDocument,
+      '/organization/persons',
+      { modelDocument: companyModelDocument },
+    );
+    await flushProTableRequest();
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/organization/persons?fields=EID%2CPersonNo%2CCompanyId&pageIndex=1&pageSize=20',
+      { method: 'GET', signal: expect.any(AbortSignal) },
+    );
+    expect(container.textContent).toContain('示例公司');
+    expect(container.textContent).not.toContain('company-raw-id');
+  });
+
   it('keeps one fixed refresh button and reloads the current query without List View page actions', async () => {
     mockStandardCrudModule();
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(

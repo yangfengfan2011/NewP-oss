@@ -101,10 +101,10 @@
         "responsivePriority": "high"
       },
       {
-        "key": "companyName",
+        "key": "companyId",
         "labelKey": "Column_CompanyName",
-        "source": "projection",
-        "field": "CompanyName",
+        "source": "model",
+        "field": "CompanyId",
         "responsivePriority": "medium"
       },
       {

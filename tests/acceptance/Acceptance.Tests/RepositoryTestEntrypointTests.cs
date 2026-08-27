@@ -156,6 +156,40 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void PersonnelAcceptanceRunner_ExportsRawCompanyFieldAndVerifiesResolvedXlsxCells()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        Assert.Contains(
+            "new { key = \"CompanyId\", field = \"CompanyId\", title = \"公司\" }",
+            runner,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "new { key = \"CompanyName\", field = \"CompanyName\", title = \"公司\" }",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains("var sheetXml = ReadXlsxSheetXml(bytes, mode);", runner, StringComparison.Ordinal);
+        Assert.Contains(
+            "AssertContains(sheetXml, fixture.CompanyName, $\"company display name in {mode} export\")",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AssertDoesNotContain(sheetXml, fixture.CompanyId, $\"company raw id in {mode} export\")",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AssertDoesNotContain(sheetXml, \"CompanyName\", $\"legacy company alias in {mode} export\")",
+            runner,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PersonnelAcceptanceRunner_GuardsOnlyTheInitialPersonnelReadyRequestWindow()
     {
         var repositoryRoot = GetRepositoryRoot();

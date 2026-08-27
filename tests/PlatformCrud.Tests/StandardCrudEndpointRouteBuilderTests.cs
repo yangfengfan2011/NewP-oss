@@ -108,7 +108,15 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         var recording = new RecordingStandardCrudService
         {
             ListResult = new StandardCrudListResult(
-                [new Dictionary<string, object?> { ["EID"] = "Person_1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }],
+                [new Dictionary<string, object?>
+                {
+                    ["EID"] = "Person_1",
+                    ["PersonNo"] = "P001",
+                    ["ENAME"] = "张三",
+                    ["CompanyId"] = "Company_00000000000000000000000000000001",
+                    ["CompanyId_DisplayValue"] = "示例公司",
+                    ["CompanyName"] = "遗留公司别名"
+                }],
                 1,
                 2,
                 5,
@@ -133,7 +141,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
                 {
                     new { key = "personNo", field = "PersonNo", title = "人员编号" },
                     new { key = "name", field = "ENAME", title = "姓名" },
-                    new { key = "companyName", field = "CompanyName", title = "公司" },
+                    new { key = "companyId", field = "CompanyId", title = "公司" },
                     new { key = "blocked", field = "SecretField", title = "秘密字段" }
                 }
             });
@@ -143,12 +151,14 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         Assert.Equal(2, recording.LastListQuery!.Page);
         Assert.Equal(5, recording.LastListQuery.PageSize);
         Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
-        Assert.Equal(["PersonNo", "ENAME", "CompanyName"], recording.LastListQuery.Fields);
+        Assert.Equal(["PersonNo", "ENAME", "CompanyId"], recording.LastListQuery.Fields);
 
         var bytes = await response.Content.ReadAsByteArrayAsync();
         Assert.True(bytes.Length > 0);
-        AssertXlsxContains(bytes, "人员编号", "张三");
-        AssertXlsxDoesNotContain(bytes, "秘密字段");
+        AssertXlsxContains(bytes, "人员编号", "姓名", "公司", "张三");
+        AssertXlsxValuesInOrder(bytes, "人员编号", "姓名", "公司");
+        AssertXlsxDoesNotContain(bytes, "秘密字段", "Company_00000000000000000000000000000001", "遗留公司别名");
+        AssertXlsxContains(bytes, "示例公司");
     }
 
     [Fact]
@@ -375,7 +385,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             OptionLabelFields = ["PersonNo", "ENAME"],
             DisplayValueFields =
         [
-            new PlatformDisplayValueField("CompanyName", "CompanyId", "Company", "EID", "ENAME")
+            new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
         ],
             Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
             DeletePolicy = StandardCrudDeletePolicy.Conditional
@@ -418,9 +428,25 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         }
     }
 
-    private static void AssertXlsxDoesNotContain(byte[] bytes, string unexpectedValue)
+    private static void AssertXlsxValuesInOrder(byte[] bytes, params string[] expectedValues)
     {
-        Assert.DoesNotContain(unexpectedValue, ReadXlsxSheetXml(bytes));
+        var sheetXml = ReadXlsxSheetXml(bytes);
+        var previousIndex = -1;
+        foreach (var expectedValue in expectedValues)
+        {
+            var currentIndex = sheetXml.IndexOf(expectedValue, StringComparison.Ordinal);
+            Assert.True(currentIndex > previousIndex, $"XLSX 值 {expectedValue} 未保持请求顺序。");
+            previousIndex = currentIndex;
+        }
+    }
+
+    private static void AssertXlsxDoesNotContain(byte[] bytes, params string[] unexpectedValues)
+    {
+        var sheetXml = ReadXlsxSheetXml(bytes);
+        foreach (var unexpectedValue in unexpectedValues)
+        {
+            Assert.DoesNotContain(unexpectedValue, sheetXml);
+        }
     }
 
     private static string ReadXlsxSheetXml(byte[] bytes)

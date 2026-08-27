@@ -1460,6 +1460,90 @@ describe('StandardCrudListPageHost', () => {
     ]);
   });
 
+  it.each([
+    { mode: 'current', menuLabel: '导出当前' },
+    { mode: 'all', menuLabel: '导出全部' },
+  ])('keeps the visible CompanyId raw field in $mode export columns', async ({ mode, menuLabel }) => {
+    mockStandardCrudModule({
+      lookupProviders: [
+        { key: 'organization.departments', load: async () => [] },
+        { key: 'organization.companies', load: async () => [] },
+      ],
+    });
+    const companyListViewDocument = {
+      ...createExportablePersonListViewDocument(),
+      view: {
+        ...createExportablePersonListViewDocument().view,
+        columns: [
+          { key: 'company', labelKey: 'Column_Company', source: 'model', field: 'CompanyId' },
+        ],
+      },
+    } as typeof personListViewDocument;
+    const companyModelDocument = {
+      ...personModelDocument,
+      Person: {
+        ...personModelDocument.Person,
+        fields: [
+          ...personModelDocument.Person.fields,
+          {
+            name: 'CompanyId',
+            storage: { type: 'guid', nullable: true },
+            uiType: 'lookup',
+            dataSource: { type: 'provider', key: 'organization.companies' },
+            form: {
+              create: { mode: 'editable' },
+              edit: { mode: 'editable' },
+            },
+          },
+        ],
+      },
+    } as typeof personModelDocument;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:standard-crud-export'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([80, 75]), { status: 200 }));
+
+    await renderHost(
+      { 'PersonListView.Column_Company': '公司' },
+      companyListViewDocument,
+      '/organization/persons',
+      { modelDocument: companyModelDocument },
+    );
+    await flushProTableRequest();
+    await act(async () => {
+      const exportButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '导出');
+      exportButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      const menuItem = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item')).find((item) =>
+        item.textContent?.replace(/\s+/g, '') === menuLabel);
+      menuItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body));
+    expect(body.mode).toBe(mode);
+    expect(body.columns).toEqual([
+      { key: 'company', field: 'CompanyId', title: '公司' },
+    ]);
+    expect(JSON.stringify(body.columns)).not.toContain('CompanyName');
+    expect(JSON.stringify(body.columns)).not.toContain('CompanyId_DisplayValue');
+  });
+
   it('exports only visible columns in the persisted preference order', async () => {
     mockStandardCrudModule();
     window.localStorage.setItem(

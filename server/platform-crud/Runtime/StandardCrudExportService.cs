@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Query.Descriptors;
 using Microsoft.Extensions.Configuration;
 
 namespace ICP.Platform.Crud.Runtime;
@@ -49,7 +50,7 @@ public sealed class StandardCrudExportService
         {
             throw new StandardCrudExportLimitExceededException(_maxRows);
         }
-        var content = _writer.Write("Export", columns, result.Items);
+        var content = _writer.Write("Export", columns.Select(static column => column.ExportColumn).ToList(), result.Items);
 
         return new StandardCrudExportFile(
             $"{descriptor.ResourceKey}-{mode}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.xlsx",
@@ -67,19 +68,36 @@ public sealed class StandardCrudExportService
         };
 
     // 列投影按 descriptor 白名单收口，并保留调用方提交的可见顺序。
-    private static IReadOnlyList<StandardCrudExportColumn> NormalizeColumns(
+    private static IReadOnlyList<NormalizedStandardCrudExportColumn> NormalizeColumns(
         StandardCrudDescriptor descriptor,
         IReadOnlyList<StandardCrudExportColumn> columns)
     {
         var allowedFields = descriptor.FieldSet.ListFields
             .Concat(descriptor.DisplayValueFields.Select(static field => field.Field))
             .ToHashSet(StringComparer.Ordinal);
+        var canonicalDisplayFields = descriptor.DisplayValueFields
+            .GroupBy(static field => field.SourceField, StringComparer.Ordinal)
+            .Select(static group => new
+            {
+                SourceField = group.Key,
+                DisplayField = ResolveCanonicalDisplayField(group.Key, group)
+            })
+            .Where(static entry => entry.DisplayField is not null)
+            .ToDictionary(
+                static entry => entry.SourceField,
+                static entry => entry.DisplayField!,
+                StringComparer.Ordinal);
         var normalized = columns
             .Where(column =>
                 !string.IsNullOrWhiteSpace(column.Field)
                 && !string.IsNullOrWhiteSpace(column.Title)
                 && allowedFields.Contains(column.Field))
             .DistinctBy(column => column.Field, StringComparer.Ordinal)
+            .Select(column => new NormalizedStandardCrudExportColumn(
+                column,
+                canonicalDisplayFields.TryGetValue(column.Field, out var displayField)
+                    ? new StandardCrudExportColumn(column.Key, displayField, column.Title)
+                    : column))
             .ToList();
 
         if (normalized.Count == 0)
@@ -94,7 +112,7 @@ public sealed class StandardCrudExportService
     private static StandardCrudListQuery BuildQuery(
         StandardCrudExportListQuery? query,
         string mode,
-        IReadOnlyList<StandardCrudExportColumn> columns,
+        IReadOnlyList<NormalizedStandardCrudExportColumn> columns,
         int maxRows)
     {
         var pageIndex = query?.PageIndex > 0 ? query.PageIndex : 1;
@@ -116,6 +134,43 @@ public sealed class StandardCrudExportService
             query?.SortBy,
             query?.SortDirection,
             query?.Filters,
-            columns.Select(static column => column.Field).Distinct(StringComparer.Ordinal).ToList());
+            columns.Select(static column => column.QueryField).Distinct(StringComparer.Ordinal).ToList());
+    }
+
+    // 只有 descriptor 声明了唯一 canonical companion 时，raw 字段导出才切换为 display 值。
+    private static string? ResolveCanonicalDisplayField(
+        string sourceField,
+        IGrouping<string, PlatformDisplayValueField> candidates)
+    {
+        var canonicalField = $"{sourceField}_DisplayValue";
+        string? resolvedField = null;
+        foreach (var candidate in candidates)
+        {
+            if (!string.Equals(candidate.Field, canonicalField, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (resolvedField is not null)
+            {
+                throw new InvalidOperationException($"标准 CRUD 导出检测到字段 {sourceField} 的重复 canonical display 声明。");
+            }
+
+            resolvedField = candidate.Field;
+        }
+
+        return resolvedField;
+    }
+
+    /// <summary>
+    /// 同时保留查询所需的 raw 列与工作簿写入列，使 display 替换不改变查询字段契约。
+    /// </summary>
+    /// <param name="QueryColumn">提交给标准 CRUD 查询服务的原始列。</param>
+    /// <param name="ExportColumn">交给 XLSX writer 的可读列。</param>
+    private sealed record NormalizedStandardCrudExportColumn(
+        StandardCrudExportColumn QueryColumn,
+        StandardCrudExportColumn ExportColumn)
+    {
+        public string QueryField => QueryColumn.Field;
     }
 }

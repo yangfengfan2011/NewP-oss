@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -631,7 +632,7 @@ internal sealed class PersonnelAcceptanceRunner
         {
             new { key = "PersonNo", field = "PersonNo", title = "人员编号" },
             new { key = "ENAME", field = "ENAME", title = "姓名" },
-            new { key = "CompanyName", field = "CompanyName", title = "公司" }
+            new { key = "CompanyId", field = "CompanyId", title = "公司" }
         };
         foreach (var mode in new[] { "current", "all" })
         {
@@ -656,6 +657,10 @@ internal sealed class PersonnelAcceptanceRunner
             {
                 throw new InvalidOperationException($"Personnel {mode} export did not return a non-empty XLSX file.");
             }
+            var sheetXml = ReadXlsxSheetXml(bytes, mode);
+            AssertContains(sheetXml, fixture.CompanyName, $"company display name in {mode} export");
+            AssertDoesNotContain(sheetXml, fixture.CompanyId, $"company raw id in {mode} export");
+            AssertDoesNotContain(sheetXml, "CompanyName", $"legacy company alias in {mode} export");
             checks.Add(new { check = $"export-{mode}-with-filter-sort-column-order", status = 200, bytes = bytes.Length });
         }
 
@@ -2564,6 +2569,29 @@ internal sealed class PersonnelAcceptanceRunner
         if (!actual.Contains(expected, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Browser assertion failed for {label}.");
+        }
+    }
+
+    // 导出观察必须读取真实工作表内容，不能把 HTTP 200 与非空 zip 当成 display 值已生效。
+    private static string ReadXlsxSheetXml(byte[] bytes, string mode)
+    {
+        using var stream = new MemoryStream(bytes);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var entry = archive.GetEntry("xl/worksheets/sheet1.xml")
+            ?? throw new InvalidOperationException($"Personnel {mode} export omitted the first worksheet.");
+        using var entryStream = entry.Open();
+        using var reader = new StreamReader(entryStream, Encoding.UTF8);
+        var sheetXml = reader.ReadToEnd();
+        return !string.IsNullOrWhiteSpace(sheetXml)
+            ? sheetXml
+            : throw new InvalidOperationException($"Personnel {mode} export first worksheet was empty.");
+    }
+
+    private static void AssertDoesNotContain(string actual, string unexpected, string label)
+    {
+        if (actual.Contains(unexpected, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Acceptance assertion failed for {label}.");
         }
     }
 

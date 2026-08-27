@@ -2,6 +2,8 @@ using System.Text.Json;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Authentication.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
+using ICP.Platform.Modules.Example.Migrations.SqlServer.Migrations;
+using ICP.Platform.Modules.Example.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
@@ -53,15 +55,24 @@ internal static class TestPersistencePlan
         var organizationModels = AdaptOwner(
             new OrganizationModelMetadataProvider().GetDefinitions(),
             "Organization");
+        var exampleModels = AdaptOwner(
+            new ExampleModelMetadataProvider().GetDefinitions(),
+            "Example");
         var models = foundation.Models
             .Concat(identityModels)
             .Concat(authenticationModels)
             .Concat(organizationModels)
+            .Concat(exampleModels)
             .OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
             .ToArray();
         var streams = foundation.Streams
             .Concat(
             [
+                LoadModuleStream(
+                    "Example",
+                    "Example.SqlServerMigrations.json",
+                    typeof(Example_000001_Foundation).Assembly.Location,
+                    exampleModels),
                 LoadModuleStream(
                     "Identity",
                     "Identity.SqlServerMigrations.json",

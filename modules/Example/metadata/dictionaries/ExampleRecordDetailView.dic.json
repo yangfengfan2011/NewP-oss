@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "ExampleRecordDetailView": {
+    "Title": {
+      "zhs": "示例记录详情",
+      "en": "Example Record Detail"
+    },
+    "Description": {
+      "zhs": "查看持久化示例记录及其审计信息。",
+      "en": "View a persisted example record and its audit information."
+    },
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic Information"
+    },
+    "Section_Audit": {
+      "zhs": "审计信息",
+      "en": "Audit Information"
+    },
+    "Field_ECODE": {
+      "zhs": "示例编码",
+      "en": "Example Code"
+    },
+    "Field_ENAME": {
+      "zhs": "示例名称",
+      "en": "Example Name"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "Created By"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "Created At"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "Updated By"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "Updated At"
+    },
+    "Action_Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    }
+  }
+}

@@ -29,6 +29,7 @@
     <ProjectReference Include="..\\..\\server\\modules\\Identity\\Migrations.SqlServer\\Identity.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\\..\\server\\modules\\Organization\\Migrations.SqlServer\\Organization.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\\..\\server\\modules\\Authentication\\Migrations.SqlServer\\Authentication.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\\..\\server\\modules\\Example\\Migrations.SqlServer\\Example.SqlServerMigrations.csproj" />
   </ItemGroup>
 
 </Project>

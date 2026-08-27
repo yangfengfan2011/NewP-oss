@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Example",
+  "modelDigest": "4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8",
+  "bundleChecksum": "626f6eeea9d7f6a5629e5cd7c1f902c500d1e56543d962baceb21cf8674d239c",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20260827110703_Example_000001_Foundation",
+      "previousContentDigest": null,
+      "contentDigest": "0f114bb897d431077d6c5a1493b8457810433d3f8c2da13cecc4fe407c36ea2e",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

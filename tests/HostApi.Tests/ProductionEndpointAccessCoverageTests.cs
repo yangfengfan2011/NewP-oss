@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Controllers;
@@ -10,6 +11,8 @@ using ICP.Platform.Modules.Authorization.Controllers;
 using ICP.Platform.Modules.ConfigCenter;
 using ICP.Platform.Modules.ConfigCenter.Controllers;
 using ICP.Platform.Modules.Demo;
+using ICP.Platform.Modules.Example;
+using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Modules.Files;
 using ICP.Platform.Modules.Files.Controllers;
 using ICP.Platform.Modules.MetadataConfigCenter;
@@ -21,6 +24,7 @@ using ICP.Platform.Modules.ModuleTemplateSample.Controllers;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Sdk;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -44,9 +48,11 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(MetadataModulesController).Assembly)
             .AddApplicationPart(typeof(SampleStatusController).Assembly)
             .AddApplicationPart(typeof(IdentityAccountsController).Assembly)
-            .AddApplicationPart(typeof(CompaniesController).Assembly);
+            .AddApplicationPart(typeof(CompaniesController).Assembly)
+            .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
+        builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
         using var app = builder.Build();
         app.MapControllers();
         app.MapStandardCrudResources();
@@ -57,6 +63,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         registry.RegisterModule(new AuthorizationModule());
         registry.RegisterModule(new ConfigCenterModule());
         registry.RegisterModule(new DemoModule());
+        registry.RegisterModule(new ExampleModule());
         registry.RegisterModule(new FilesModule());
         registry.RegisterModule(new MetadataConfigCenterModule());
         registry.RegisterModule(new IdentityModule());
@@ -73,10 +80,49 @@ public sealed class ProductionEndpointAccessCoverageTests
                 "/plugins/",
                 StringComparison.Ordinal) == true)
             .ToArray();
+        var exampleRecordEndpoints = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(static source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Where(static endpoint => endpoint.RoutePattern.RawText?.StartsWith(
+                "/api/example/records",
+                StringComparison.Ordinal) == true)
+            .ToArray();
 
         Assert.Contains(
             plan.ActivePermissions,
             static permission => permission.Code == OrganizationPermissions.PersonDelete);
+        Assert.Equal(
+            [
+                "Example.Record.Create",
+                "Example.Record.Delete",
+                "Example.Record.Update",
+                "Example.Record.View"
+            ],
+            plan.ActivePermissions
+                .Where(static permission => permission.Code.StartsWith("Example.Record.", StringComparison.Ordinal))
+                .Select(static permission => permission.Code));
+        Assert.Equal(8, exampleRecordEndpoints.Length);
+        Assert.All(
+            exampleRecordEndpoints,
+            static endpoint =>
+            {
+                Assert.Equal(
+                    "Example",
+                    Assert.Single(endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>()).ModuleId);
+                Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>());
+            });
+        Assert.Equal(
+            [
+                "Example.Record.Create",
+                "Example.Record.Delete",
+                "Example.Record.Update",
+                "Example.Record.View"
+            ],
+            exampleRecordEndpoints
+                .SelectMany(static endpoint => endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>())
+                .Select(static permission => permission.PermissionCode)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal));
         Assert.Equal(4, manifestEndpoints.Length);
         Assert.Contains(
             manifestEndpoints,

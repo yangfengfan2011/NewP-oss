@@ -10,7 +10,9 @@ import {
 } from '../navigation/standardCrudRouteAdapter';
 import exampleModuleBindings from '../../../../modules/example/src/index';
 import exampleNavigationDocument from '../../../../../modules/Example/metadata/navigation/Example.nav.json';
-import exampleListViewDocument from '../../../../../modules/Example/metadata/views/RuntimeWorkloadList.view.json';
+import exampleRuntimeWorkloadListViewDocument from '../../../../../modules/Example/metadata/views/RuntimeWorkloadList.view.json';
+import exampleRecordListViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordList.view.json';
+import exampleRecordDetailViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordDetail.view.json';
 import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 const modules: FrontendModule[] = [
@@ -121,24 +123,42 @@ describe('standard CRUD route adapter', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it('projects the formal Example registration as a list-only route', () => {
+  it('projects the formal Example persisted routes while keeping runtime workload list-only', () => {
     const exampleModule: FrontendModule = {
       metadata: { moduleId: 'example', displayName: 'Example', version: '1.0.0' },
       standardCrudCapabilities: exampleModuleBindings.standardCrudCapabilities,
     };
     const navigation = exampleNavigationDocument as unknown as RuntimeNavItemDocument;
-    const listView = exampleListViewDocument as unknown as RuntimeViewDocument;
+    const runtimeWorkloadListView = exampleRuntimeWorkloadListViewDocument as unknown as RuntimeViewDocument;
+    const recordListView = exampleRecordListViewDocument as unknown as RuntimeViewDocument;
+    const recordDetailView = exampleRecordDetailViewDocument as unknown as RuntimeViewDocument;
 
     expect(resolveStandardCrudListRoute([navigation], 'example.runtime-workload.list')).toEqual({
       path: '/examples/standard-crud/runtime-columns',
       permissions: ['Example.View'],
     });
-    expect(compileStandardCrudRouteProjection([exampleModule], [navigation], [listView], [])).toEqual({
-      detailEntries: [],
-      drawerRedirects: [],
+    expect(resolveStandardCrudListRoute([navigation], 'example.record.list')).toEqual({
+      path: '/examples/standard-crud/persistent-records',
+      permissions: ['Example.Record.View'],
+    });
+    expect(compileStandardCrudRouteProjection(
+      [exampleModule],
+      [navigation],
+      [runtimeWorkloadListView, recordListView, recordDetailView],
+      [],
+    )).toEqual({
+      detailEntries: [{
+        path: '/examples/standard-crud/persistent-records/:id',
+        viewKey: 'example.record.detail',
+        permissions: ['Example.Record.View'],
+      }],
+      drawerRedirects: [{
+        from: '/examples/standard-crud/persistent-records/new',
+        to: '/examples/standard-crud/persistent-records?drawer=create',
+      }],
       fallbackRoutes: [],
     });
-    expect(exampleListViewDocument.view).not.toHaveProperty('pageActions');
+    expect(exampleRuntimeWorkloadListViewDocument.view).not.toHaveProperty('pageActions');
   });
 
   it('fails closed on duplicate detail route paths instead of relying on registration order', () => {

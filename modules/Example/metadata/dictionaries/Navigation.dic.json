@@ -5,6 +5,10 @@
     "Example": {
       "zhs": "功能示例",
       "en": "功能示例"
+    },
+    "ExampleRecords": {
+      "zhs": "持久化记录示例",
+      "en": "Persisted Record Example"
     }
   }
 }

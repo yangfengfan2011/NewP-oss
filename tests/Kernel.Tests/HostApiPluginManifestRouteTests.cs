@@ -143,6 +143,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
 
         var expectedBindings = new[]
         {
+            "example.record.detail",
+            "example.record.list",
             "example.runtime-workload.list",
             "identity.account.detail",
             "identity.account.list",

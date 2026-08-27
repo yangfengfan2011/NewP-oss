@@ -1,3 +1,5 @@
+using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Sdk;
 using ICP.Platform.Modules.Example.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,9 +10,11 @@ public sealed class ExampleModule : ModuleCapsuleBindingBase
 {
     public override string BehaviorKey => "example.backend";
 
-    // Example 只注册演示场景自己的服务；Host 不包含动态列或日期计算。
+    // Example 只注册模块自有的演示服务和资源描述；CRUD 执行流程仍由平台内核收口。
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddStandardCrudKernel();
+        services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IRuntimeWorkloadService, RuntimeWorkloadService>();
     }

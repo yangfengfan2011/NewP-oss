@@ -13,6 +13,15 @@ const loadRuntimeWorkloadStandardCrudResource = createRecoverableCapabilityLoade
   }),
 );
 
+const loadExampleRecordStandardCrudResource = createRecoverableCapabilityLoader<StandardCrudCapabilityModule>(
+  async () => ({
+    default: (await import('./standard-crud/exampleRecordStandardCrudResource.primary')).primary,
+  }),
+  async () => ({
+    default: (await import('./standard-crud/exampleRecordStandardCrudResource.recovery')).recovery,
+  }),
+);
+
 export const exampleBindings: FrontendBehaviorBindings = {
   behaviorKey: 'example.frontend',
   standardCrudCapabilities: [
@@ -20,6 +29,16 @@ export const exampleBindings: FrontendBehaviorBindings = {
       kind: 'standard-list',
       targetKey: 'example.runtime-workload.list',
       load: loadRuntimeWorkloadStandardCrudResource,
+    },
+    {
+      kind: 'standard-list',
+      targetKey: 'example.record.list',
+      load: loadExampleRecordStandardCrudResource,
+    },
+    {
+      kind: 'standard-crud-detail',
+      targetKey: 'example.record.detail',
+      load: loadExampleRecordStandardCrudResource,
     },
   ],
 };

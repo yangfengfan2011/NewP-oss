@@ -31,11 +31,19 @@ _Avoid_: DbContext 配置、插件扫描结果、迁移执行日志
 _Avoid_: 程序集版本、插件版本、数据库 schema 版本号
 
 **Provider Target**：
-从 EF design-time/provider model 投影的版本化、canonical、只读数据库目标，包含 owner、物理表列顺序、provider type、nullability、长度/精度、数据库生成语义、provider annotation、键、外键、索引和 check constraint。它是数据库最终结构事实源，但不替代 model metadata 的 authoring 职责，也不依赖任何 Host 外结构写工具。
+从 EF design-time/provider model 投影的版本化、canonical、只读数据库目标，包含 owner、逻辑列顺序、provider type、nullability、长度/精度、数据库生成语义、provider annotation、键、外键、索引和 check constraint。它是数据库最终结构事实源，但不替代 model metadata 的 authoring 职责，也不依赖任何 Host 外结构写工具。
 _Avoid_: 表单默认值、metadata diff target、运行中数据库快照
 
+**逻辑列顺序（Logical Column Order）**：
+Provider Target/Transition 中用于 canonical plan、契约投影和摘要的稳定字段顺序。它不声明数据库物理列位置，也不要求数据库重排已有列。
+_Avoid_: 数据库 column ordinal、SQL Server column_id、物理存储顺序
+
+**数据库物理列序（Database Physical Column Ordinal）**：
+数据库 provider 为表列分配的物理位置；合法追加列可以使它不同于逻辑列顺序。它不是兼容性不变量，不能单独构成 Schema Drift。
+_Avoid_: Provider Target 逻辑顺序、兼容性 ordinal、重排列目标
+
 **Provider Transition**：
-单个 migration 的版本化 canonical `from`/`to` Provider Target 及内容摘要。执行端从最终 Provider Target 逆推并逐项核对 operation；Drop 等本身不携带旧 facet 的操作必须携带版本化旧对象 descriptor，明确证明旧 owner、旧结构和列 ordinal。Provider Target/Transition 摘要独立演进，不重算或偷换 Model Digest v1 与既有 migration digest。
+单个 migration 的版本化 canonical `from`/`to` Provider Target 及内容摘要。执行端从最终 Provider Target 逆推并逐项核对 operation；Drop 等本身不携带旧 facet 的操作必须携带版本化旧对象 descriptor，明确证明旧 owner、旧结构和逻辑列 ordinal。Provider Target/Transition 摘要独立演进，不重算或偷换 Model Digest v1 与既有 migration digest。
 _Avoid_: 仅按操作类型放行、仅凭 migration id 推断旧对象、重算旧摘要
 
 **迁移数据前置条件（Migration Data Precondition）**：
@@ -67,11 +75,11 @@ _Avoid_: 把 whole-assembly checksum 持久化为旧 step 身份、忽略当前 
 _Avoid_: 把当前 full target 摘要持久化为不可追加的旧步骤身份、投影掉 FK principal、用 history 投影放松 operation 校验
 
 **Schema Drift**：
-数据库实际结构或统一 Migration History 与已验证的归属、迁移链、模型摘要和期望 frontier 不一致。Host 只读一致性检查负责报告并阻断 drift；所有 schema 写入仍只能由 Host 执行 EF Up migrations。
+数据库实际结构或统一 Migration History 与已验证的归属、迁移链、模型摘要和期望 frontier 不一致。列必须按稳定名称及结构 facet 对应；数据库物理列序差异本身不是 drift。Host 只读一致性检查负责报告并阻断 drift；所有 schema 写入仍只能由 Host 执行 EF Up migrations。
 _Avoid_: 正常待执行迁移、自动修复计划、第二个结构写入入口
 
 **只读一致性检查（Read-only Consistency Check）**：
-Host 在 migration 成功后、插件活动快照提交和 readiness Ready 之前运行的统一检查。它重新核对完整 history 前缀与版本化摘要，并把 SQL Server 系统目录投影与 canonical Provider Target 比较；Development、Acceptance 与 Production 使用同一执行顺序。该检查只发出目录和 history SELECT，不生成 SQL 预览，不写 DDL、history 或业务数据。
+Host 在 migration 成功后、插件活动快照提交和 readiness Ready 之前运行的统一检查。它重新核对完整 history 前缀与版本化摘要，并把 SQL Server 系统目录投影与 canonical Provider Target 按稳定对象名及结构 facet 比较；Development、Acceptance 与 Production 使用同一执行顺序。该检查只发出目录和 history SELECT，不生成 SQL 预览，不写 DDL、history 或业务数据。
 _Avoid_: 开发环境开关、漂移修复器、启动后后台轮询
 
 **Provider Adapter**：

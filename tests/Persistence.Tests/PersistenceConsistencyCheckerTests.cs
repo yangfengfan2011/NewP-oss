@@ -19,6 +19,186 @@ public sealed class PersistenceConsistencyCheckerTests
         Assert.Equal(64, ProviderTargetDigest.Compute(target).Length);
     }
 
+    [Fact]
+    public void FindFirstMismatch_WhenActualColumnsHaveDifferentPhysicalOrder_ReturnsNull()
+    {
+        var snapshot = ReplaceAsset(Snapshot(), table => table with
+        {
+            Columns =
+            [
+                table.Columns[1] with { Ordinal = 1 },
+                table.Columns[0] with { Ordinal = 2 }
+            ]
+        });
+
+        var mismatch = SqlServerProviderTargetComparer.FindFirstMismatch(Target(), snapshot);
+
+        Assert.Null(mismatch);
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("extra")]
+    [InlineData("renamed")]
+    [InlineData("duplicate")]
+    public void FindFirstMismatch_WhenActualColumnSetDrifts_ReturnsMismatch(string drift)
+    {
+        var snapshot = Snapshot();
+        snapshot = ReplaceAsset(snapshot, table => table with
+        {
+            Columns = drift switch
+            {
+                "missing" => [table.Columns[0]],
+                "extra" => [.. table.Columns, ActualColumn("Asset", 3, "Extra")],
+                "renamed" => [table.Columns[0], table.Columns[1] with { Name = "RenamedCode" }],
+                "duplicate" => [table.Columns[0], table.Columns[1] with { Name = "Id" }],
+                _ => throw new ArgumentOutOfRangeException(nameof(drift), drift, null)
+            }
+        });
+
+        var mismatch = SqlServerProviderTargetComparer.FindFirstMismatch(Target(), snapshot);
+
+        Assert.NotNull(mismatch);
+    }
+
+    [Fact]
+    public void FindFirstMismatch_WhenExpectedColumnNamesAreDuplicated_ReturnsMismatch()
+    {
+        var target = Target() with
+        {
+            Tables = Target().Tables.Select(table => table.Name == "Asset"
+                ? table with { Columns = [table.Columns[0], table.Columns[0]] }
+                : table).ToArray()
+        };
+
+        var mismatch = SqlServerProviderTargetComparer.FindFirstMismatch(target, Snapshot());
+
+        Assert.NotNull(mismatch);
+    }
+
+    [Theory]
+    [InlineData("provider-type")]
+    [InlineData("nullability")]
+    [InlineData("max-length")]
+    [InlineData("precision")]
+    [InlineData("scale")]
+    [InlineData("unicode")]
+    [InlineData("fixed-length")]
+    [InlineData("collation")]
+    [InlineData("computed")]
+    [InlineData("stored")]
+    [InlineData("identity")]
+    [InlineData("rowversion")]
+    [InlineData("default-value")]
+    [InlineData("default-sql")]
+    public void FindFirstMismatch_WhenNamedColumnFacetDrifts_ReturnsMismatch(string facet)
+    {
+        var target = ReplaceAssetColumn(Target(), column => facet switch
+        {
+            "provider-type" => column with { StoreType = "varchar(128)" },
+            "nullability" => column with { IsNullable = true },
+            "max-length" => column with { MaxLength = 64 },
+            "precision" => column with { Precision = 1 },
+            "scale" => column with { Scale = 1 },
+            "unicode" => column with { IsUnicode = false },
+            "fixed-length" => column with { IsFixedLength = true },
+            "collation" => column with { Collation = "Latin1_General_100_BIN2" },
+            "computed" => column with { ComputedColumnSql = "([Code])" },
+            "stored" => column with { IsStored = true },
+            "identity" => column with { IsIdentity = true },
+            "rowversion" => column with { IsRowVersion = true },
+            "default-value" => column with { DefaultValue = "N'expected'" },
+            "default-sql" => column with { DefaultValueSql = "(N'expected')" },
+            _ => throw new ArgumentOutOfRangeException(nameof(facet), facet, null)
+        });
+
+        var mismatch = SqlServerProviderTargetComparer.FindFirstMismatch(target, Snapshot());
+
+        Assert.NotNull(mismatch);
+    }
+
+    [Theory]
+    [InlineData("primary-key")]
+    [InlineData("unique-constraint")]
+    [InlineData("foreign-key")]
+    [InlineData("index")]
+    public void FindFirstMismatch_WhenOrderedConstraintColumnsAreReversed_ReturnsMismatch(string constraint)
+    {
+        var target = Target() with
+        {
+            Tables = Target().Tables.Select(table => table.Name == "Asset"
+                ? constraint switch
+                {
+                    "primary-key" => table with
+                    {
+                        PrimaryKey = table.PrimaryKey! with { Columns = ["Id", "Code"] }
+                    },
+                    "unique-constraint" => table with
+                    {
+                        UniqueConstraints = [new ProviderKeyTarget("AK_Asset_Id_Code", ["Id", "Code"])]
+                    },
+                    "foreign-key" => table with
+                    {
+                        ForeignKeys =
+                        [
+                            table.ForeignKeys[0] with
+                            {
+                                Columns = ["Id", "Code"],
+                                PrincipalColumns = ["Id", "Code"]
+                            }
+                        ]
+                    },
+                    "index" => table with
+                    {
+                        Indexes = [table.Indexes[0] with { Columns = ["Id", "Code"] }]
+                    },
+                    _ => throw new ArgumentOutOfRangeException(nameof(constraint), constraint, null)
+                }
+                : table).ToArray()
+        };
+        var snapshot = ReplaceAsset(Snapshot(), table => constraint switch
+        {
+            "primary-key" => table with
+            {
+                PrimaryKey = table.PrimaryKey! with { Columns = ["Code", "Id"] }
+            },
+            "unique-constraint" => table with
+            {
+                UniqueConstraints =
+                [
+                    new SqlServerKeySnapshot("dbo", "Asset", "AK_Asset_Id_Code", "UQ", ["Code", "Id"])
+                ]
+            },
+            "foreign-key" => table with
+            {
+                ForeignKeys =
+                [
+                    table.ForeignKeys[0] with
+                    {
+                        Columns = ["Code", "Id"],
+                        PrincipalColumns = ["Code", "Id"]
+                    }
+                ]
+            },
+            "index" => table with
+            {
+                Indexes =
+                [
+                    table.Indexes[0] with
+                    {
+                        Columns = ["Code", "Id"],
+                        IsDescending = [false, false]
+                    }
+                ]
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(constraint), constraint, null)
+        });
+
+        var mismatch = SqlServerProviderTargetComparer.FindFirstMismatch(target, snapshot);
+
+        Assert.NotNull(mismatch);
+    }
+
     [Theory]
     [InlineData("missing-table")]
     [InlineData("column-nullability")]
@@ -251,6 +431,19 @@ public sealed class PersistenceConsistencyCheckerTests
         snapshot with
         {
             Tables = snapshot.Tables.Select(table => table.Name == "Asset" ? replace(table) : table).ToArray()
+        };
+
+    private static ProviderTargetSnapshot ReplaceAssetColumn(
+        ProviderTargetSnapshot target,
+        Func<ProviderColumnTarget, ProviderColumnTarget> replace) =>
+        target with
+        {
+            Tables = target.Tables.Select(table => table.Name == "Asset"
+                ? table with
+                {
+                    Columns = table.Columns.Select(column => column.Name == "Code" ? replace(column) : column).ToArray()
+                }
+                : table).ToArray()
         };
 
     private sealed class FixedTargetSource(ProviderTargetSnapshot target) : IProviderTargetSource

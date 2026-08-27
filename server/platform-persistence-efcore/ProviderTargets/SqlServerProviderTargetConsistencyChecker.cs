@@ -375,36 +375,14 @@ internal static class SqlServerProviderTargetComparer
             || string.Equals(name, "__NewPMigrationHistory", StringComparison.OrdinalIgnoreCase)
             || string.Equals(name, "__NewPDatabaseOwnership", StringComparison.OrdinalIgnoreCase));
 
+    // 数据库物理列顺序不参与兼容性判断，其余表结构仍按既有规则严格比较。
     private static string? CompareTable(
         ProviderTableTarget expected,
         SqlServerTableSnapshot actual)
     {
-        if (expected.Columns.Count != actual.Columns.Count)
+        if (CompareColumns(expected.Columns, actual.Columns) is { } columnMismatch)
         {
-            return "columns";
-        }
-
-        for (var index = 0; index < expected.Columns.Count; index++)
-        {
-            var expectedColumn = expected.Columns[index];
-            var actualColumn = actual.Columns[index];
-            if (!string.Equals(expectedColumn.Name, actualColumn.Name, StringComparison.OrdinalIgnoreCase)
-                || !StoreTypesEqual(expectedColumn.StoreType, actualColumn)
-                || expectedColumn.IsNullable != actualColumn.IsNullable
-                || (expectedColumn.MaxLength is not null && expectedColumn.MaxLength != actualColumn.MaxLength)
-                || (expectedColumn.Precision is not null && expectedColumn.Precision != actualColumn.Precision)
-                || (expectedColumn.Scale is not null && expectedColumn.Scale != actualColumn.Scale)
-                || (expectedColumn.IsUnicode is not null && expectedColumn.IsUnicode != IsUnicode(actualColumn.TypeName))
-                || (expectedColumn.IsFixedLength is not null && expectedColumn.IsFixedLength != IsFixedLength(actualColumn.TypeName))
-                || (expectedColumn.Collation is not null && !string.Equals(expectedColumn.Collation, actualColumn.Collation, StringComparison.OrdinalIgnoreCase))
-                || !SqlEquals(expectedColumn.ComputedColumnSql, actualColumn.ComputedSql)
-                || (expectedColumn.IsStored is not null && expectedColumn.IsStored != actualColumn.IsStored)
-                || expectedColumn.IsIdentity != actualColumn.IsIdentity
-                || expectedColumn.IsRowVersion != actualColumn.IsRowVersion
-                || !DefaultEquals(expectedColumn, actualColumn.DefaultSql))
-            {
-                return "column";
-            }
+            return columnMismatch;
         }
 
         if (!KeyEquals(expected.PrimaryKey, actual.PrimaryKey))
@@ -434,6 +412,59 @@ internal static class SqlServerProviderTargetComparer
 
         return null;
     }
+
+    // 按稳定列名建立一一对应，避免把合法的 SQL Server physical ordinal 差异视为 drift。
+    private static string? CompareColumns(
+        IReadOnlyList<ProviderColumnTarget> expected,
+        IReadOnlyList<SqlServerColumnSnapshot> actual)
+    {
+        if (expected.Count != actual.Count)
+        {
+            return "columns";
+        }
+
+        var actualByName = new Dictionary<string, SqlServerColumnSnapshot>(StringComparer.OrdinalIgnoreCase);
+        foreach (var actualColumn in actual)
+        {
+            if (!actualByName.TryAdd(actualColumn.Name, actualColumn))
+            {
+                return "columns";
+            }
+        }
+
+        var expectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var expectedColumn in expected)
+        {
+            if (!expectedNames.Add(expectedColumn.Name))
+            {
+                return "columns";
+            }
+
+            if (!actualByName.TryGetValue(expectedColumn.Name, out var actualColumn)
+                || !ColumnEquals(expectedColumn, actualColumn))
+            {
+                return "column";
+            }
+        }
+
+        return null;
+    }
+
+    // 列名配对后继续校验既有全部结构 facet，不让 ordinal 解耦弱化 schema drift 检测。
+    private static bool ColumnEquals(ProviderColumnTarget expected, SqlServerColumnSnapshot actual) =>
+        StoreTypesEqual(expected.StoreType, actual)
+        && expected.IsNullable == actual.IsNullable
+        && (expected.MaxLength is null || expected.MaxLength == actual.MaxLength)
+        && (expected.Precision is null || expected.Precision == actual.Precision)
+        && (expected.Scale is null || expected.Scale == actual.Scale)
+        && (expected.IsUnicode is null || expected.IsUnicode == IsUnicode(actual.TypeName))
+        && (expected.IsFixedLength is null || expected.IsFixedLength == IsFixedLength(actual.TypeName))
+        && (expected.Collation is null || string.Equals(expected.Collation, actual.Collation, StringComparison.OrdinalIgnoreCase))
+        && SqlEquals(expected.ComputedColumnSql, actual.ComputedSql)
+        && (expected.IsStored is null || expected.IsStored == actual.IsStored)
+        && expected.IsIdentity == actual.IsIdentity
+        && expected.IsRowVersion == actual.IsRowVersion
+        && DefaultEquals(expected, actual.DefaultSql);
 
     private static bool StoreTypesEqual(string expected, SqlServerColumnSnapshot actual) =>
         string.Equals(NormalizeStoreType(expected), NormalizeStoreType(BuildStoreType(actual)), StringComparison.Ordinal);

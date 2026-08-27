@@ -83,6 +83,12 @@
           "Example.Record.Delete"
         ]
       }
-    ]
+    ],
+    "export": {
+      "modes": [
+        "current",
+        "all"
+      ]
+    }
   }
 }

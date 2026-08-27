@@ -8,6 +8,10 @@ import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core'
 import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
+import exampleRecordListViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordList.view.json';
+import exampleRecordDetailViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordDetail.view.json';
+import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
+import exampleRecordListDictionary from '../../../../../modules/Example/metadata/dictionaries/ExampleRecordListView.dic.json';
 
 const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
 
@@ -1542,6 +1546,120 @@ describe('StandardCrudListPageHost', () => {
     ]);
     expect(JSON.stringify(body.columns)).not.toContain('CompanyName');
     expect(JSON.stringify(body.columns)).not.toContain('CompanyId_DisplayValue');
+  });
+
+  it('projects the formal Example user column into the Shell export request as raw authoring', async () => {
+    const exampleListCatalog = Object.fromEntries(
+      Object.entries(exampleRecordListDictionary.ExampleRecordListView)
+        .map(([key, translations]) => [`ExampleRecordListView.${key}`, translations.zhs]),
+    );
+    vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
+      {
+        metadata: { moduleId: 'example', displayName: 'Example', version: '1.0.0' },
+        standardCrudResources: [
+          {
+            resourceKey: 'example.record',
+            dataAdapter: createStandardCrudRestDataAdapter({
+              apiRoute: '/api/example/records',
+              fetcher: (input, init) => globalThis.fetch(input, init),
+              mapListItem: (value) => ({
+                ...(value as Record<string, unknown>),
+                id: String((value as Record<string, unknown>).EID),
+              }),
+              getRowId: (row) => row.id,
+            }),
+            listViewKey: 'example.record.list',
+            detailViewKey: 'example.record.detail',
+          },
+        ],
+      },
+    ]);
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:example-record-export'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{
+          EID: 'ExampleRecord_1',
+          ECODE: 'ISSUE137-001',
+          ENAME: '用户可读导出',
+          ReviewerUserEID: 'User_issue137_raw',
+          ReviewerUserEID_DisplayValue: 'Issue 137 Reviewer',
+        }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([80, 75]), { status: 200 }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <MemoryRouter initialEntries={['/examples/standard-crud/persistent-records']}>
+          <LocalizationProvider
+            defaultLanguage="zhs"
+            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+            catalogs={{
+              zhs: exampleListCatalog,
+            }}
+          >
+            <PlatformQueryProvider scopeKey="issue-137-user-export">
+              <RuntimeMetadataProvider
+                value={{
+                  manifest: { modules: [] },
+                  navDocuments: [],
+                  modelDocuments: [exampleRecordModelDocument],
+                  viewDocuments: [exampleRecordListViewDocument, exampleRecordDetailViewDocument],
+                }}
+              >
+                <StandardCrudListPageHost viewKey="example.record.list" />
+              </RuntimeMetadataProvider>
+            </PlatformQueryProvider>
+          </LocalizationProvider>
+        </MemoryRouter>,
+      );
+    });
+    await flushProTableRequest();
+
+    await act(async () => {
+      const exportButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.replace(/\s+/g, '') === '导出');
+      exportButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+    const menuLabels = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item'))
+      .map((item) => item.textContent?.replace(/\s+/g, ''));
+    expect(menuLabels).toEqual(expect.arrayContaining(['导出当前', '导出全部']));
+
+    await act(async () => {
+      const currentPageItem = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item')).find((item) =>
+        item.textContent?.replace(/\s+/g, '') === '导出当前');
+      currentPageItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [exportUrl, exportInit] = fetchMock.mock.calls[1];
+    expect(exportUrl).toBe('/api/example/records/export');
+    const body = JSON.parse(String((exportInit as RequestInit).body));
+    expect(body.mode).toBe('current');
+    expect(body.columns).toEqual([
+      { key: 'code', field: 'ECODE', title: '示例编码' },
+      { key: 'name', field: 'ENAME', title: '示例名称' },
+      { key: 'reviewerUserEid', field: 'ReviewerUserEID', title: '复核账号' },
+    ]);
+    expect(JSON.stringify(body.columns)).not.toContain('ReviewerUserEID_DisplayValue');
   });
 
   it('exports only visible columns in the persisted preference order', async () => {

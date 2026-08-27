@@ -1,11 +1,15 @@
+using System.IO.Compression;
+using System.Text;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace ICP.Platform.Modules.Example.Tests;
@@ -44,6 +48,49 @@ public sealed class ExampleRecordStandardCrudServiceTests
         Assert.Equal("User_A", row["ReviewerUserEID"]);
         Assert.Equal("Alice", row["ReviewerUserEID_DisplayValue"]);
         Assert.Equal(1, directory.FindManyCallCount);
+    }
+
+    [Theory]
+    [InlineData("current")]
+    [InlineData("all")]
+    public async Task ExportAsync_WhenReviewerUserColumnRequested_WritesResolvedDisplayWithoutLeakingRawEid(string mode)
+    {
+        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+            [
+                new Dictionary<string, object?>
+                {
+                    ["EID"] = "record-1",
+                    ["ReviewerUserEID"] = "User_issue137_raw"
+                }
+            ],
+            Total: 1,
+            Page: 1,
+            PageSize: 20,
+            SortBy: null,
+            SortDirection: null,
+            ResponseFields: ["ReviewerUserEID", "ReviewerUserEID_DisplayValue"],
+            RequestedDisplayFields: descriptor.DisplayValueFields));
+        var directory = new RecordingAccountDirectory([Account("User_issue137_raw", "Issue 137 Reviewer")]);
+        var service = CreateService(new InMemoryStandardCrudRepository([]), executor, directory);
+        var exportService = new StandardCrudExportService(
+            service,
+            new StandardCrudXlsxWriter(),
+            new ConfigurationBuilder().Build());
+
+        var file = await exportService.ExportAsync(
+            descriptor,
+            new StandardCrudExportRequest(
+                mode,
+                [new StandardCrudExportColumn("reviewerUserEid", "ReviewerUserEID", "复核账号")],
+                new StandardCrudExportListQuery(PageIndex: 1, PageSize: 20)));
+
+        Assert.Equal(["ReviewerUserEID", "ReviewerUserEID_DisplayValue"], executor.LastRequest!.Fields);
+        Assert.Equal(1, directory.FindManyCallCount);
+        var worksheet = ReadWorksheetXml(file.Content);
+        Assert.Contains("复核账号", worksheet, StringComparison.Ordinal);
+        Assert.Contains("Issue 137 Reviewer", worksheet, StringComparison.Ordinal);
+        Assert.DoesNotContain("User_issue137_raw", worksheet, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -184,6 +231,15 @@ public sealed class ExampleRecordStandardCrudServiceTests
         IsPersonnelBound = false,
         PersonnelDisableHold = false
     };
+
+    private static string ReadWorksheetXml(byte[] workbook)
+    {
+        using var stream = new MemoryStream(workbook);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        using var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        using var reader = new StreamReader(worksheet, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
 
     private sealed class RecordingAccountDirectory(IReadOnlyList<IdentityAccountSnapshot> accounts) : IIdentityAccountDirectory
     {

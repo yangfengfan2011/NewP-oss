@@ -26,6 +26,14 @@
       "zhs": "复核账号",
       "en": "Reviewer Account"
     },
+    "Export_Current": {
+      "zhs": "导出当前",
+      "en": "Export Current"
+    },
+    "Export_All": {
+      "zhs": "导出全部",
+      "en": "Export All"
+    },
     "Action_Create": {
       "zhs": "新建记录",
       "en": "Create Record"

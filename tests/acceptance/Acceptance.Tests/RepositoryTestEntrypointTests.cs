@@ -261,6 +261,125 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void PersonnelAcceptanceRunner_FreezesUtcAuditTimestampsAcrossCreateUpdateDetailAndRestart()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+        var apiStart = runner.IndexOf("private async Task RunApiScenarioAsync", StringComparison.Ordinal);
+        var apiEnd = runner.IndexOf("private async Task RunBrowserScenarioAsync", apiStart, StringComparison.Ordinal);
+        Assert.True(apiStart >= 0 && apiEnd > apiStart);
+        var apiScenario = runner[apiStart..apiEnd];
+        var create = apiScenario.IndexOf("var createdPerson = await CreatePersonAsync(", StringComparison.Ordinal);
+        var update = create < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "var updatedPerson = ReadPerson(updatedBody, personNo, updatedName, \"admin edit person\");",
+                create,
+                StringComparison.Ordinal);
+        var detail = update < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "AssertPersonBody(detailBody, person, fixture, \"admin detail\");",
+                update,
+                StringComparison.Ordinal);
+        var preBrowserRestartInvocation = detail < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "await AssertApiAuditCheckpointAfterRestartAsync(cancellationToken);",
+                detail,
+                StringComparison.Ordinal);
+        var adminRelogin = preBrowserRestartInvocation < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "await LoginAdminAsync(admin, cancellationToken);",
+                preBrowserRestartInvocation,
+                StringComparison.Ordinal);
+        var firstSubsequentPersonWrite = adminRelogin < 0
+            ? -1
+            : apiScenario.IndexOf(
+                "using (var invalidReason = await SendJsonWithAntiforgeryAsync(",
+                adminRelogin,
+                StringComparison.Ordinal);
+
+        Assert.True(create >= 0);
+        Assert.True(update > create);
+        Assert.True(detail > update);
+        Assert.True(preBrowserRestartInvocation > detail);
+        Assert.True(adminRelogin > preBrowserRestartInvocation);
+        Assert.True(firstSubsequentPersonWrite > adminRelogin);
+        var normalizedApiScenario = apiScenario.Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains(
+            "AssertPersonBody(detailBody, person, fixture, \"admin detail\");\n"
+            + "        }\n"
+            + "        await AssertApiAuditCheckpointAfterRestartAsync(cancellationToken);\n"
+            + "        await LoginAdminAsync(admin, cancellationToken);",
+            normalizedApiScenario,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "!string.Equals(updatedPerson.CreatedAt, createdPerson.CreatedAt, StringComparison.Ordinal)",
+            apiScenario,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "return ReadPerson(body, personNo, name, $\"create person {personNo}\");",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains("var auditTimestamps = ReadPersonAuditTimestamps(fields, operation);", runner, StringComparison.Ordinal);
+        Assert.Contains("ReadUtcAuditString(fields, \"CreatedAt\", operation)", runner, StringComparison.Ordinal);
+        Assert.Contains("ReadUtcAuditString(fields, \"UpdatedAt\", operation)", runner, StringComparison.Ordinal);
+        Assert.Contains("!value.EndsWith(\"Z\", StringComparison.Ordinal)", runner, StringComparison.Ordinal);
+        Assert.Contains("AssertPersonAuditTimestamps(fields, person, operation);", runner, StringComparison.Ordinal);
+        Assert.Contains("var restoredPerson = ReadPerson(", runner, StringComparison.Ordinal);
+        Assert.Contains("return restoredPerson;", runner, StringComparison.Ordinal);
+
+        var runStart = runner.IndexOf("public async Task<PersonnelAcceptanceExecution> RunAsync", StringComparison.Ordinal);
+        var runEnd = runner.IndexOf(
+            "public async Task<PersonnelProductionColdStartExecution> RunProductionColdStartAsync",
+            runStart,
+            StringComparison.Ordinal);
+        Assert.True(runStart >= 0 && runEnd > runStart);
+        Assert.DoesNotContain(
+            "await AssertApiAuditCheckpointAfterRestartAsync(cancellationToken);",
+            runner[runStart..runEnd],
+            StringComparison.Ordinal);
+
+        var preBrowserRestartStart = runner.IndexOf(
+            "private async Task AssertApiAuditCheckpointAfterRestartAsync",
+            StringComparison.Ordinal);
+        var preBrowserRestartEnd = runner.IndexOf(
+            "private async Task RunBrowserScenarioAsync",
+            preBrowserRestartStart,
+            StringComparison.Ordinal);
+        Assert.True(preBrowserRestartStart >= 0 && preBrowserRestartEnd > preBrowserRestartStart);
+        var preBrowserRestart = runner[preBrowserRestartStart..preBrowserRestartEnd];
+        Assert.Contains(
+            "await RunDevScriptAsync(\"stop-dev.ps1\", \"personnel/pre-browser-restart-stop.json\", cancellationToken);",
+            preBrowserRestart,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await StartDevAsync(\"personnel/pre-browser-restart-dev-start.json\", cancellationToken);",
+            preBrowserRestart,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AssertPersonBody(body, person, fixture, \"detail after pre-browser restart\");",
+            preBrowserRestart,
+            StringComparison.Ordinal);
+
+        var restartStart = runner.IndexOf("private async Task RunRestartScenarioAsync", StringComparison.Ordinal);
+        var restartEnd = runner.IndexOf("private async Task<AcceptanceCleanupResult> TeardownAsync", restartStart, StringComparison.Ordinal);
+        Assert.True(restartStart >= 0 && restartEnd > restartStart);
+        var restartScenario = runner[restartStart..restartEnd];
+        Assert.Contains(
+            "AssertPersonBody(body, person, fixture, \"detail after restart\");",
+            restartScenario,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PersonnelAcceptanceRunner_GuardsOnlyTheInitialPersonnelReadyRequestWindow()
     {
         var repositoryRoot = GetRepositoryRoot();

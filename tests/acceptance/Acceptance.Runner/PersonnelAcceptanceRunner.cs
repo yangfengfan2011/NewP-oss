@@ -558,14 +558,25 @@ internal sealed class PersonnelAcceptanceRunner
             var updatedBody = await updated.Content.ReadAsStringAsync(cancellationToken);
             EnsureStatus(updated, HttpStatusCode.OK, updatedBody, "admin edit person");
             AssertPersonCompanyDisplayEnvelope(updatedBody, fixture.CompanyId, fixture.CompanyName);
-            _person = ReadPerson(updatedBody, personNo, updatedName);
+            var updatedPerson = ReadPerson(updatedBody, personNo, updatedName, "admin edit person");
+            if (!string.Equals(updatedPerson.CreatedAt, createdPerson.CreatedAt, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Personnel update response changed the create audit timestamp.");
+            }
+            _person = updatedPerson;
         }
         var person = _person;
 
-        using var detail = await admin.GetAsync($"/api/organization/persons/{Uri.EscapeDataString(person.Id)}", cancellationToken);
-        var detailBody = await detail.Content.ReadAsStringAsync(cancellationToken);
-        EnsureStatus(detail, HttpStatusCode.OK, detailBody, "admin detail");
-        AssertPersonBody(detailBody, person, fixture);
+        using (var detail = await admin.GetAsync(
+                   $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+                   cancellationToken))
+        {
+            var detailBody = await detail.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(detail, HttpStatusCode.OK, detailBody, "admin detail");
+            AssertPersonBody(detailBody, person, fixture, "admin detail");
+        }
+        await AssertApiAuditCheckpointAfterRestartAsync(cancellationToken);
+        await LoginAdminAsync(admin, cancellationToken);
 
         using (var anonymous = CreateClient(_hostPort))
         {
@@ -791,6 +802,24 @@ internal sealed class PersonnelAcceptanceRunner
             person = new { id = person.Id, personNo, name = updatedName },
             organization = new { fixture.CompanyId, fixture.CompanyName, fixture.DepartmentId, fixture.DepartmentName }
         }, cancellationToken);
+    }
+
+    // 首次浏览器生命周期改写审计字段前，真实重启 Host 并通过正式 detail seam 锁定 API 合法更新 checkpoint。
+    private async Task AssertApiAuditCheckpointAfterRestartAsync(CancellationToken cancellationToken)
+    {
+        var person = _person ?? throw new InvalidOperationException("Personnel API scenario did not create a person.");
+        var fixture = _fixture ?? throw new InvalidOperationException("Personnel fixture was not prepared.");
+        await RunDevScriptAsync("stop-dev.ps1", "personnel/pre-browser-restart-stop.json", cancellationToken);
+        await StartDevAsync("personnel/pre-browser-restart-dev-start.json", cancellationToken);
+
+        using var admin = CreateClient(_hostPort);
+        await LoginAdminAsync(admin, cancellationToken);
+        using var response = await admin.GetAsync(
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "detail after pre-browser restart");
+        AssertPersonBody(body, person, fixture, "detail after pre-browser restart");
     }
 
     // 浏览器场景只通过正式 Shell 路由和 API 完成列表、Drawer、完整详情、动作与权限旅程。
@@ -1704,7 +1733,25 @@ internal sealed class PersonnelAcceptanceRunner
         var enabledBody = await enabled.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(enabled, HttpStatusCode.OK, enabledBody, "enable after browser disable");
         using var enabledJson = JsonDocument.Parse(enabledBody);
-        return person with { Revision = ReadLong(enabledJson.RootElement, "revision") };
+        var enabledRevision = ReadLong(enabledJson.RootElement, "revision");
+
+        using var restoredDetail = await admin.GetAsync(
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+            cancellationToken);
+        var restoredBody = await restoredDetail.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(restoredDetail, HttpStatusCode.OK, restoredBody, "detail after browser lifecycle restore");
+        var restoredPerson = ReadPerson(
+            restoredBody,
+            person.PersonNo,
+            person.Name,
+            "detail after browser lifecycle restore");
+        if (restoredPerson.Revision != enabledRevision
+            || !string.Equals(restoredPerson.CreatedAt, person.CreatedAt, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Browser lifecycle restore returned inconsistent Personnel audit state.");
+        }
+
+        return restoredPerson;
     }
 
     private static async Task SubmitPersonnelKeywordAsync(IPage page, string keywordValue)
@@ -1730,7 +1777,7 @@ internal sealed class PersonnelAcceptanceRunner
             using var response = await admin.GetAsync($"/api/organization/persons/{Uri.EscapeDataString(person.Id)}", cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             EnsureStatus(response, HttpStatusCode.OK, body, "detail after restart");
-            AssertPersonBody(body, person, fixture);
+            AssertPersonBody(body, person, fixture, "detail after restart");
         }
 
         // 重启后的浏览器使用全新 context 重新登录，避免旧 cookie 把持久化与恢复缺陷遮住。
@@ -2467,7 +2514,7 @@ internal sealed class PersonnelAcceptanceRunner
         {
             AssertPersonCompanyDisplayEnvelope(body, companyId, expectedCompanyDisplayValue);
         }
-        return ReadPerson(body, personNo, name);
+        return ReadPerson(body, personNo, name, $"create person {personNo}");
     }
 
     private static void AssertPersonCompanyDisplayEnvelope(
@@ -2492,14 +2539,18 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
-    private static PersonData ReadPerson(string body, string personNo, string name)
+    private static PersonData ReadPerson(string body, string personNo, string name, string operation)
     {
         using var json = JsonDocument.Parse(body);
+        var fields = ReadObject(json.RootElement, "fields");
+        var auditTimestamps = ReadPersonAuditTimestamps(fields, operation);
         return new PersonData(
-            ReadNestedString(json.RootElement, "fields", "EID"),
+            ReadString(fields, "EID"),
             personNo,
             name,
-            ReadNestedLong(json.RootElement, "fields", "Revision"));
+            ReadLong(fields, "Revision"),
+            auditTimestamps.CreatedAt,
+            auditTimestamps.UpdatedAt);
     }
 
     private static Dictionary<string, object?> PersonPayload(
@@ -2518,8 +2569,16 @@ internal sealed class PersonnelAcceptanceRunner
             ["IsEnabled"] = true
         };
 
-    private static void AssertPersonBody(string body, PersonData person, FixtureData fixture)
+    private static void AssertPersonBody(
+        string body,
+        PersonData person,
+        FixtureData fixture,
+        string operation)
     {
+        AssertPersonCompanyDisplayEnvelope(body, fixture.CompanyId, fixture.CompanyName);
+        using var json = JsonDocument.Parse(body);
+        var fields = ReadObject(json.RootElement, "fields");
+        AssertPersonAuditTimestamps(fields, person, operation);
         foreach (var expected in new[] { person.Id, person.PersonNo, person.Name, fixture.CompanyName, fixture.DepartmentName })
         {
             if (!body.Contains(expected, StringComparison.Ordinal))
@@ -2527,6 +2586,32 @@ internal sealed class PersonnelAcceptanceRunner
                 throw new InvalidOperationException($"Personnel detail omitted expected value: {expected}");
             }
         }
+    }
+
+    private static void AssertPersonAuditTimestamps(JsonElement fields, PersonData person, string operation)
+    {
+        var auditTimestamps = ReadPersonAuditTimestamps(fields, operation);
+        if (!string.Equals(auditTimestamps.CreatedAt, person.CreatedAt, StringComparison.Ordinal)
+            || !string.Equals(auditTimestamps.UpdatedAt, person.UpdatedAt, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{operation} changed the persisted Personnel audit timestamps.");
+        }
+    }
+
+    private static PersonAuditTimestamps ReadPersonAuditTimestamps(JsonElement fields, string operation) =>
+        new(
+            ReadUtcAuditString(fields, "CreatedAt", operation),
+            ReadUtcAuditString(fields, "UpdatedAt", operation));
+
+    private static string ReadUtcAuditString(JsonElement fields, string field, string operation)
+    {
+        var value = ReadString(fields, field);
+        if (!value.EndsWith("Z", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{operation} returned {field} without the canonical UTC Z suffix.");
+        }
+
+        return value;
     }
 
     private static void EnsureStatus(HttpResponseMessage response, HttpStatusCode expected, string body, string operation)
@@ -2754,7 +2839,14 @@ internal sealed class PersonnelAcceptanceRunner
         string CompanyName,
         string DepartmentId,
         string DepartmentName);
-    private sealed record PersonData(string Id, string PersonNo, string Name, long Revision);
+    private sealed record PersonData(
+        string Id,
+        string PersonNo,
+        string Name,
+        long Revision,
+        string CreatedAt,
+        string UpdatedAt);
+    private sealed record PersonAuditTimestamps(string CreatedAt, string UpdatedAt);
     private sealed record EntityId(string Id);
     private sealed record DatabaseOwnershipSnapshot(
         int Version,

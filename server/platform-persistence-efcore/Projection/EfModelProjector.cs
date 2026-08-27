@@ -1,11 +1,15 @@
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace ICP.Platform.Persistence.EfCore.Projection;
 
 public sealed class EfModelProjector
 {
+    /// <summary>
+    /// 将规范模型投影为 EF shared-type entity；audit DateTime 字段在 materialize 时恢复 UTC Kind，其余映射保持现有存储语义。
+    /// </summary>
     public void Project(ModelBuilder modelBuilder, IReadOnlyList<ModelDefinition> definitions)
     {
         foreach (var definition in definitions)
@@ -19,6 +23,11 @@ public sealed class EfModelProjector
             {
                 var property = entity.IndexerProperty(MapClrType(field), field.Name)
                     .HasColumnName(field.StoreName);
+
+                if (field.IsAuditField && field.ValueType == FieldValueType.DateTime)
+                {
+                    property.HasConversion(CreateAuditDateTimeConverter());
+                }
 
                 if (ShouldApplyMaxLength(field))
                 {
@@ -82,6 +91,12 @@ public sealed class EfModelProjector
             ? clrType
             : typeof(Nullable<>).MakeGenericType(clrType);
     }
+
+    // EF 对 nullable value type 会直通 null；这里只把 provider 返回的 audit DateTime Kind 规范回 UTC。
+    private static ValueConverter<DateTime, DateTime> CreateAuditDateTimeConverter() =>
+        new(
+            static value => value,
+            static value => DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     private static DeleteBehavior MapDeleteBehavior(ForeignKeyDeleteBehavior behavior) =>
         behavior switch

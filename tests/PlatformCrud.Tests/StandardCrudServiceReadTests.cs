@@ -249,6 +249,54 @@ public sealed class StandardCrudServiceReadTests
             ex.Message);
     }
 
+    [Theory]
+    [InlineData(42)]
+    [InlineData(true)]
+    public async Task ListAsync_WhenDisplayResolverReturnsNonStringDisplayValue_ThrowsStableMessage(object invalidDisplayValue)
+    {
+        var service = new StandardCrudService(
+            new InMemoryStandardCrudRepository([]),
+            DisplayValueQueryExecutor(),
+            [],
+            [new FixedDisplayValueResolver(invalidDisplayValue)],
+            [],
+            [],
+            [],
+            []);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Fields: ["CompanyId"])));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的显示值解析器返回字段 CompanyId_DisplayValue 的值必须是 string 或 null。",
+            ex.Message);
+    }
+
+    [Theory]
+    [InlineData("公司一")]
+    [InlineData(null)]
+    public async Task ListAsync_WhenDisplayResolverReturnsSupportedDisplayValue_PreservesRawField(object? displayValue)
+    {
+        var service = new StandardCrudService(
+            new InMemoryStandardCrudRepository([]),
+            DisplayValueQueryExecutor(),
+            [],
+            [new FixedDisplayValueResolver(displayValue)],
+            [],
+            [],
+            [],
+            []);
+
+        var result = await service.ListAsync(
+            Descriptor(),
+            new StandardCrudListQuery(Fields: ["CompanyId"]));
+
+        var row = Assert.Single(result.Items);
+        Assert.Equal("company-1", row["CompanyId"]);
+        Assert.Equal(displayValue, row["CompanyId_DisplayValue"]);
+    }
+
     [Fact]
     public async Task ListAsync_WhenDisplayResolverReturnsDifferentRowCount_ThrowsStableMessage()
     {
@@ -507,6 +555,21 @@ public sealed class StandardCrudServiceReadTests
             Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(
             [
                 new Dictionary<string, object?> { ["CompanyName"] = "公司一" }
+            ]);
+    }
+
+    private sealed class FixedDisplayValueResolver(object? displayValue) : IStandardCrudDisplayValueResolver
+    {
+        public string ResourceKey => "organization.person";
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
+            StandardCrudDescriptor descriptor,
+            IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+            IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(
+            [
+                new Dictionary<string, object?> { ["CompanyId_DisplayValue"] = displayValue }
             ]);
     }
 

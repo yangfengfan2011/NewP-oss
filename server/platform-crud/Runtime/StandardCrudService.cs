@@ -392,7 +392,7 @@ public sealed class StandardCrudService : IStandardCrudService
             : [];
     }
 
-    // 显示值补齐以 row copy 方式合并，并拒绝 resolver 覆盖查询返回的原始字段集合。
+    // 显示值补齐以 row copy 方式合并，并拒绝 resolver 覆盖原始字段、返回未请求字段或非字符串伴随值。
     private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ApplyDisplayValuesAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
@@ -447,6 +447,12 @@ public sealed class StandardCrudService : IStandardCrudService
                 {
                     throw new InvalidOperationException(
                         $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回未请求字段 {pair.Key}。");
+                }
+
+                if (pair.Value is not null and not string)
+                {
+                    throw new InvalidOperationException(
+                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回字段 {pair.Key} 的值必须是 string 或 null。");
                 }
 
                 ((Dictionary<string, object?>)values[index])[pair.Key] = pair.Value;

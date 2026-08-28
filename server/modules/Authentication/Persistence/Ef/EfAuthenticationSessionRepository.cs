@@ -144,12 +144,14 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
         entity["UpdatedAt"] = revokedAtUtc;
     }
 
+    // 把完整会话聚合映射到 Authentication 拥有的共享运行时实体。
     private static Dictionary<string, object?> ToEntity(AuthenticationSession session) => new(StringComparer.Ordinal)
     {
         ["EID"] = session.EID,
         ["AccountEID"] = session.AccountEID,
         ["TokenHash"] = session.TokenHash,
         ["SessionType"] = session.SessionType.ToString(),
+        ["TimeZoneId"] = session.TimeZoneId,
         ["ExpiresAt"] = session.ExpiresAt,
         ["RevokedAt"] = session.RevokedAt,
         ["RevocationReason"] = session.RevocationReason,
@@ -159,12 +161,14 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
         ["UpdatedAt"] = session.UpdatedAt
     };
 
+    // 从持久化实体恢复完整会话事实，供注册表验证和轮换链消费。
     private static AuthenticationSession Map(IReadOnlyDictionary<string, object?> entity) => new()
     {
         EID = GetString(entity, "EID"),
         AccountEID = GetString(entity, "AccountEID"),
         TokenHash = GetString(entity, "TokenHash"),
         SessionType = Enum.Parse<AuthenticationSessionType>(GetString(entity, "SessionType"), ignoreCase: false),
+        TimeZoneId = GetString(entity, "TimeZoneId"),
         ExpiresAt = GetDateTime(entity, "ExpiresAt"),
         RevokedAt = GetNullableDateTime(entity, "RevokedAt"),
         RevocationReason = entity.TryGetValue("RevocationReason", out var reason) ? reason as string : null,

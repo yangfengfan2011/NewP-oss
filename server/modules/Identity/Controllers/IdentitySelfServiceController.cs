@@ -26,12 +26,14 @@ public sealed class IdentitySelfServiceController : ControllerBase
     }
 
     [HttpPost("password-change")]
+    // 只把当前已验证会话 claim 中的时区交给 Identity 轮换流程。
     public async Task<ActionResult<IdentityPasswordChangeResponse>> ChangePassword(
         [FromBody] ChangeIdentityPasswordRequest request,
         CancellationToken cancellationToken)
     {
         var accountEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(accountEid))
+        var timeZoneId = User.FindFirstValue(AuthenticationSessionClaimTypes.TimeZoneId);
+        if (string.IsNullOrWhiteSpace(accountEid) || string.IsNullOrWhiteSpace(timeZoneId))
         {
             return ProblemResult(StatusCodes.Status401Unauthorized, "AUTH_SESSION_INVALID");
         }
@@ -47,7 +49,8 @@ public sealed class IdentitySelfServiceController : ControllerBase
                     new IdentityActorContext(
                         accountEid,
                         IdentitySecurityActorKind.IdentityAccount,
-                        HttpContext.TraceIdentifier)),
+                        HttpContext.TraceIdentifier),
+                    timeZoneId),
                 cancellationToken);
             Response.Headers.CacheControl = "no-store";
             return Ok(new IdentityPasswordChangeResponse(

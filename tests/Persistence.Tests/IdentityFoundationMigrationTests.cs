@@ -134,11 +134,16 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Contains("name: \"UX_IdentityAccount_NormalizedECODE\"", source, StringComparison.Ordinal);
         Assert.Contains("name: \"UX_LocalCredential_AccountEID\"", source, StringComparison.Ordinal);
         Assert.Contains("name: \"UX_AuthenticationSession_TokenHash\"", source, StringComparison.Ordinal);
+        Assert.Contains("TimeZoneId = table.Column<string>(type: \"nvarchar(256)\", maxLength: 256, nullable: false)", source, StringComparison.Ordinal);
         Assert.Contains("name: \"FK_LocalCredential_IdentityAccount\"", source, StringComparison.Ordinal);
         Assert.Contains("name: \"FK_AuthenticationSession_IdentityAccount\"", source, StringComparison.Ordinal);
         Assert.Contains("RevokedAt = table.Column<DateTime>(type: \"datetime2\", nullable: true)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("AlterColumn", source, StringComparison.Ordinal);
         Assert.DoesNotContain("RenameTable", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValueSql", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SqlOperation", source, StringComparison.Ordinal);
         Assert.Equal(4, Count(source, "CreatedBy = table.Column<string>(type: \"nvarchar(128)\", maxLength: 128, nullable: false)"));
         Assert.Equal(4, Count(source, "UpdatedBy = table.Column<string>(type: \"nvarchar(128)\", maxLength: 128, nullable: false)"));
         Assert.Equal(4, Count(source, "CreatedAt = table.Column<DateTime>(type: \"datetime2\", nullable: false)"));
@@ -161,7 +166,7 @@ public sealed class IdentityFoundationMigrationTests
             "Authentication",
             "Authentication.SqlServerMigrations.json",
             typeof(AuthenticationFoundation).Assembly.Location,
-            "20260810033909_Authentication_000001_Foundation.cs");
+            "20260828151500_Authentication_000001_Foundation.cs");
         AssertOrganizationManifest(repositoryRoot);
     }
 

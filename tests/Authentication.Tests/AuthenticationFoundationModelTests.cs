@@ -47,7 +47,8 @@ public sealed class AuthenticationFoundationModelTests
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [$"{AuthenticationSessionOptions.SectionName}:Lifetime"] = "02:00:00"
+                [$"{AuthenticationSessionOptions.SectionName}:Lifetime"] = "02:00:00",
+                [$"{AuthenticationSessionOptions.SectionName}:DefaultTimeZoneId"] = "Asia/Taipei"
             })
             .Build());
         new AuthenticationModule().ConfigureServices(services);
@@ -55,6 +56,53 @@ public sealed class AuthenticationFoundationModelTests
         using var provider = services.BuildServiceProvider();
 
         Assert.Equal(TimeSpan.FromHours(2), provider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value.Lifetime);
+        Assert.Equal("Asia/Taipei", provider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value.DefaultTimeZoneId);
+    }
+
+    [Theory]
+    [InlineData(null, "AUTH_SESSION_DEFAULT_TIME_ZONE_MISSING")]
+    [InlineData("", "AUTH_SESSION_DEFAULT_TIME_ZONE_BLANK")]
+    [InlineData("   ", "AUTH_SESSION_DEFAULT_TIME_ZONE_BLANK")]
+    [InlineData("China Standard Time", "AUTH_SESSION_DEFAULT_TIME_ZONE_INVALID")]
+    [InlineData("Not/AZone", "AUTH_SESSION_DEFAULT_TIME_ZONE_INVALID")]
+    public void Module_RejectsMissingBlankOrNonIanaDefaultTimeZoneAtOptionsValidation(
+        string? timeZoneId,
+        string expectedFailure)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AuthenticationSessionOptions.SectionName}:DefaultTimeZoneId"] = timeZoneId
+            })
+            .Build());
+        new AuthenticationModule().ConfigureServices(services);
+
+        using var provider = services.BuildServiceProvider();
+
+        var exception = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value);
+        Assert.Contains(expectedFailure, exception.Failures);
+    }
+
+    [Fact]
+    public void Module_ReportsStablePurgeBatchSizeOptionsFailure()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AuthenticationSessionOptions.SectionName}:PurgeBatchSize"] = "0",
+                [$"{AuthenticationSessionOptions.SectionName}:DefaultTimeZoneId"] = "Asia/Shanghai"
+            })
+            .Build());
+        new AuthenticationModule().ConfigureServices(services);
+
+        using var provider = services.BuildServiceProvider();
+
+        var exception = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value);
+        Assert.Contains("AUTH_SESSION_PURGE_BATCH_SIZE_INVALID", exception.Failures);
     }
 
     [Fact]
@@ -67,6 +115,7 @@ public sealed class AuthenticationFoundationModelTests
         Assert.Contains(session.Fields, static field => field is { Name: "TokenHash", Required: true });
         Assert.DoesNotContain(session.Fields, static field => field.Name.Contains("RawToken", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(session.Fields, static field => field is { Name: "SessionType", ValueType: FieldValueType.Enum, Required: true });
+        Assert.Contains(session.Fields, static field => field is { Name: "TimeZoneId", Required: true });
         Assert.Contains(session.Fields, static field => field is { Name: "CreatedBy", Required: true, IsAuditField: true });
         Assert.Contains(session.Fields, static field => field is { Name: "CreatedAt", Required: true, IsAuditField: true });
         Assert.Contains(session.Fields, static field => field is { Name: "UpdatedBy", Required: true, IsAuditField: true });

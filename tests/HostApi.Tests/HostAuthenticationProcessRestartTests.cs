@@ -88,6 +88,7 @@ public sealed class HostAuthenticationProcessRestartTests
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
             var beforeRestart = await client.GetAsync("/api/auth/current-user");
             Assert.Equal(HttpStatusCode.OK, beforeRestart.StatusCode);
+            Assert.Equal("Asia/Shanghai", (await beforeRestart.Content.ReadFromJsonAsync<AuthUserResponse>())?.TimeZoneId);
             StopExactProcess(process);
             process = null;
 
@@ -96,7 +97,9 @@ public sealed class HostAuthenticationProcessRestartTests
             var afterRestart = await client.GetAsync("/api/auth/current-user");
 
             Assert.Equal(HttpStatusCode.OK, afterRestart.StatusCode);
-            Assert.Contains("admin", await afterRestart.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+            var afterRestartUser = await afterRestart.Content.ReadFromJsonAsync<AuthUserResponse>();
+            Assert.Equal("admin", afterRestartUser?.ECODE);
+            Assert.Equal("Asia/Shanghai", afterRestartUser?.TimeZoneId);
             Assert.NotEmpty(Directory.GetFiles(keyRing, "key-*.xml"));
         }
         finally

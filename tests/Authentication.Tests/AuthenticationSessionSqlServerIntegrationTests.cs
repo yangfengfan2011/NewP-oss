@@ -67,7 +67,7 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
             {
                 var registry = CreateRegistry(issuanceContext);
                 rollbackSession = await new EfPlatformTransactionExecutor(issuanceContext)
-                    .ExecuteAsync(token => IssueAsync(registry, token));
+                    .ExecuteAsync(token => IssueAsync(registry, token, "America/Toronto"));
             }
 
             await using (var rollbackContext = CreateContext(applicationConnectionString))
@@ -88,9 +88,9 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
 
             await using (var verification = CreateContext(applicationConnectionString))
             {
-                Assert.Equal(
-                    AuthenticationSessionValidationStatus.Active,
-                    (await CreateRegistry(verification).ValidateAsync(rollbackSession.Credential)).Status);
+                var restored = await CreateRegistry(verification).ValidateAsync(rollbackSession.Credential);
+                Assert.Equal(AuthenticationSessionValidationStatus.Active, restored.Status);
+                Assert.Equal("America/Toronto", restored.Session?.TimeZoneId);
             }
 
             var sessionCountBeforeRegistrationRollback = await CountSessionsAsync(applicationConnectionString);
@@ -173,11 +173,13 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
 
     private static ValueTask<AuthenticationSessionIssuance> IssueAsync(
         IAuthenticationSessionRegistry registry,
-        CancellationToken cancellationToken) => registry.RegisterAsync(new AuthenticationSessionRegistration
+        CancellationToken cancellationToken,
+        string? timeZoneId = null) => registry.RegisterAsync(new AuthenticationSessionRegistration
         {
             AccountEid = "User_1",
             Type = AuthenticationSessionType.Regular,
-            ActorId = "User_1"
+            ActorId = "User_1",
+            TimeZoneId = timeZoneId
         }, cancellationToken);
 
     private static EfPlatformDbContext CreateContext(string connectionString)

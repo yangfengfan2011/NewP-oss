@@ -317,7 +317,8 @@ public sealed class IdentityAccountApplicationServiceTests
                 "temporary-secret",
                 password,
                 created.Account.Revision,
-                fixture.Actor)).AsTask());
+                fixture.Actor,
+                "Asia/Shanghai")).AsTask());
 
         Assert.Equal(IdentityFailureCodes.InvalidPassword, error.FailureCode);
     }
@@ -334,7 +335,8 @@ public sealed class IdentityAccountApplicationServiceTests
                 "12345678",
                 "12345678",
                 created.Account.Revision,
-                fixture.Actor)).AsTask());
+                fixture.Actor,
+                "Asia/Shanghai")).AsTask());
         Assert.Equal(IdentityFailureCodes.CredentialUnchanged, unchanged.FailureCode);
 
         var updated = await fixture.Service.ChangePasswordAsync(new ChangeIdentityPasswordCommand(
@@ -342,7 +344,8 @@ public sealed class IdentityAccountApplicationServiceTests
             "12345678",
             "密码🔐Abc123",
             created.Account.Revision,
-            fixture.Actor));
+            fixture.Actor,
+            "Asia/Taipei"));
 
         Assert.Equal(2, updated.Account.Revision);
         Assert.False(fixture.Repository.Credentials.Single().IsTemporary);
@@ -351,6 +354,7 @@ public sealed class IdentityAccountApplicationServiceTests
         var rotation = Assert.Single(fixture.Sessions.Registrations);
         Assert.Equal(created.Account.AccountEid, rotation.AccountEid);
         Assert.Equal(AuthenticationSessionType.Regular, rotation.Type);
+        Assert.Equal("Asia/Taipei", rotation.TimeZoneId);
         Assert.Equal("session-credential", updated.Session.Credential);
     }
 
@@ -366,7 +370,8 @@ public sealed class IdentityAccountApplicationServiceTests
             "initial-secret",
             acceptedPassword,
             acceptedAccount.Account.Revision,
-            acceptedFixture.Actor));
+            acceptedFixture.Actor,
+            "Asia/Shanghai"));
 
         Assert.Equal(2, changed.Account.Revision);
         Assert.True(acceptedFixture.Repository.VerifyPassword(changed.Account.AccountEid, acceptedPassword));
@@ -379,7 +384,8 @@ public sealed class IdentityAccountApplicationServiceTests
                 "initial-secret",
                 new string('密', 65),
                 rejectedAccount.Account.Revision,
-                rejectedFixture.Actor)).AsTask());
+                rejectedFixture.Actor,
+                "Asia/Shanghai")).AsTask());
         Assert.Equal(IdentityFailureCodes.InvalidPassword, error.FailureCode);
     }
 
@@ -396,7 +402,8 @@ public sealed class IdentityAccountApplicationServiceTests
                 "initial-secret",
                 "replacement-secret",
                 created.Account.Revision,
-                fixture.Actor)).AsTask());
+                fixture.Actor,
+                "Asia/Shanghai")).AsTask());
 
         Assert.True(fixture.Repository.VerifyPassword(created.Account.AccountEid, "initial-secret"));
         Assert.Equal(1, fixture.Repository.Accounts.Single().Revision);
@@ -766,6 +773,7 @@ public sealed class IdentityAccountApplicationServiceTests
                     SessionEid = "session-0001",
                     AccountEid = registration.AccountEid,
                     Type = registration.Type,
+                    TimeZoneId = registration.TimeZoneId ?? "Asia/Shanghai",
                     ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
                 }
             });

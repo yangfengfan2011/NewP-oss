@@ -20,6 +20,7 @@ const authenticatedUser = {
   mustChangePassword: false,
   revision: 1,
   isLocalAdministrator: false,
+  timeZoneId: 'Asia/Taipei',
 };
 
 let observedAuthentication: AuthenticationState | undefined;
@@ -136,6 +137,9 @@ describe('authentication components', () => {
 
   it('uses the login response as the current subject without a follow-up read', async () => {
     invalidatePlatformAntiforgeryToken();
+    vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
+      resolvedOptions: () => ({ timeZone: 'Asia/Taipei' }),
+    }) as Intl.DateTimeFormat);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input instanceof Request ? input.url : String(input);
       if (url.endsWith('/api/auth/antiforgery-token')) {
@@ -161,6 +165,14 @@ describe('authentication components', () => {
       input instanceof Request ? input.url : String(input)
     ));
     expect(requestedUrls.some((url) => url.endsWith('/api/auth/current-user'))).toBe(false);
+    const loginRequest = fetchMock.mock.calls
+      .map(([input]) => input)
+      .find((input) => input instanceof Request && input.url.endsWith('/api/auth/login'));
+    expect(JSON.parse(await (loginRequest as Request).clone().text())).toMatchObject({
+      ecode: 'admin',
+      password: 'password',
+      timeZoneId: 'Asia/Taipei',
+    });
     expect(observedAuthentication?.user).toEqual(authenticatedUser);
   });
 
@@ -184,6 +196,7 @@ describe('authentication components', () => {
       user: {
         id: 'User_1', ecode: 'alice', ename: 'Alice', permissions: [], mustChangePassword: true,
         revision: 1, isLocalAdministrator: false,
+        timeZoneId: 'Asia/Taipei',
       },
       login: vi.fn(),
       logout: vi.fn(),

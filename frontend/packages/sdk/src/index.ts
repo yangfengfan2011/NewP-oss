@@ -244,6 +244,7 @@ export interface AuthUser {
   mustChangePassword: boolean;
   revision: number;
   isLocalAdministrator: boolean;
+  timeZoneId: string;
 }
 
 export class ModuleRegistry {

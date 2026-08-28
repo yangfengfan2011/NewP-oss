@@ -21,12 +21,14 @@ public sealed class AuthControllerTests
     public void AuthenticationHttpContract_UsesOnlyEcodeAndEname()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var request = JsonSerializer.Deserialize<LoginRequest>("""{"ecode":"admin","password":"secret"}""", options);
+        var request = JsonSerializer.Deserialize<LoginRequest>("""{"ecode":"admin","password":"secret","timeZoneId":"Asia/Taipei"}""", options);
         var response = JsonSerializer.Serialize(
-            new AuthUserResponse("User_1", "admin", "Administrator", [], false, 1, true),
+            new AuthUserResponse("User_1", "admin", "Administrator", [], false, 1, true, "Asia/Taipei"),
             options);
 
         Assert.Equal("admin", request?.ECODE);
+        Assert.Equal("Asia/Taipei", request?.TimeZoneId);
+        Assert.Contains("\"timeZoneId\":\"Asia/Taipei\"", response, StringComparison.Ordinal);
         Assert.Contains("\"ecode\":", response, StringComparison.Ordinal);
         Assert.Contains("\"ename\":", response, StringComparison.Ordinal);
         Assert.DoesNotContain("username", response, StringComparison.OrdinalIgnoreCase);
@@ -49,14 +51,16 @@ public sealed class AuthControllerTests
         var cookie = new RecordingCookie();
         var controller = Controller(authenticator, sessions, cookie);
 
-        var result = await controller.Login(new LoginRequest("admin", "secret"), CancellationToken.None);
+        var result = await controller.Login(new LoginRequest("admin", "secret", "Europe/Paris"), CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result);
         var user = Assert.IsType<AuthUserResponse>(response.Value);
         Assert.True(user.MustChangePassword);
         Assert.True(user.IsLocalAdministrator);
         Assert.Equal(1, user.Revision);
+        Assert.Equal("Europe/Paris", user.TimeZoneId);
         Assert.Equal(AuthenticationSessionType.Restricted, sessions.Registration?.Type);
+        Assert.Equal("Europe/Paris", sessions.Registration?.TimeZoneId);
         Assert.Equal("issued-credential", cookie.AppendedCredential);
     }
 
@@ -71,6 +75,7 @@ public sealed class AuthControllerTests
             new("ename", "Administrator"),
             new(HostSessionAuthenticationHandler.SessionTypeClaim, AuthenticationSessionType.Restricted.ToString()),
             new(HostSessionAuthenticationHandler.AccountRevisionClaim, "7"),
+            new(HostSessionAuthenticationHandler.TimeZoneIdClaim, "Asia/Taipei"),
             new("is_local_administrator", "true")
         ], HostSessionAuthenticationHandler.SchemeName));
 
@@ -81,6 +86,54 @@ public sealed class AuthControllerTests
         Assert.True(user.MustChangePassword);
         Assert.True(user.IsLocalAdministrator);
         Assert.Equal(7, user.Revision);
+        Assert.Equal("Asia/Taipei", user.TimeZoneId);
+    }
+
+    [Fact]
+    public async Task CurrentUser_RejectsPrincipalWithoutTrustedSessionTimeZone()
+    {
+        var cookie = new RecordingCookie();
+        var controller = Controller(new StubAuthenticator(), new RecordingSessionRegistry(), cookie);
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new(ClaimTypes.NameIdentifier, "user-1"),
+            new(ClaimTypes.Name, "admin"),
+            new("ename", "Administrator"),
+            new(HostSessionAuthenticationHandler.SessionTypeClaim, AuthenticationSessionType.Regular.ToString()),
+            new(HostSessionAuthenticationHandler.AccountRevisionClaim, "7")
+        ], HostSessionAuthenticationHandler.SchemeName));
+
+        var result = await controller.GetCurrentUser(CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.True(cookie.WasDeleted);
+    }
+
+    [Fact]
+    public async Task Login_InvalidTimeZoneReturnsStableProblemAndDoesNotIssueCookie()
+    {
+        var sessions = new RecordingSessionRegistry
+        {
+            Failure = new AuthenticationSessionException(AuthenticationSessionFailureCodes.InvalidTimeZone)
+        };
+        var cookie = new RecordingCookie();
+        var controller = Controller(new StubAuthenticator
+        {
+            Result = new LocalCredentialAuthenticationResult
+            {
+                Status = LocalCredentialAuthenticationStatus.Succeeded,
+                Account = Account()
+            }
+        }, sessions, cookie);
+
+        var result = await controller.Login(
+            new LoginRequest("admin", "secret", "China Standard Time"),
+            CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        Assert.Equal(AuthenticationSessionFailureCodes.InvalidTimeZone, Assert.IsType<ProblemDetails>(problem.Value).Extensions["code"]);
+        Assert.Null(cookie.AppendedCredential);
     }
 
     [Fact]
@@ -207,10 +260,15 @@ public sealed class AuthControllerTests
     {
         public AuthenticationSessionRegistration? Registration { get; private set; }
         public AuthenticationSessionRevocation? Revocation { get; private set; }
+        public Exception? Failure { get; init; }
 
         public ValueTask<AuthenticationSessionIssuance> RegisterAsync(AuthenticationSessionRegistration registration, CancellationToken cancellationToken = default)
         {
             Registration = registration;
+            if (Failure is not null)
+            {
+                return ValueTask.FromException<AuthenticationSessionIssuance>(Failure);
+            }
             return ValueTask.FromResult(new AuthenticationSessionIssuance
             {
                 Credential = "issued-credential",
@@ -219,6 +277,7 @@ public sealed class AuthControllerTests
                     SessionEid = "session-1",
                     AccountEid = registration.AccountEid,
                     Type = registration.Type,
+                    TimeZoneId = registration.TimeZoneId ?? "Asia/Shanghai",
                     ExpiresAtUtc = DateTime.UtcNow.AddHours(8)
                 }
             });

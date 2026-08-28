@@ -12,5 +12,5 @@ public static class PlatformCoreMigrationFrontiers
     public const string IdentitySqlServerFoundation = "20260810033908_Identity_000001_Foundation";
 
     /// <summary>Authentication 模块 SQL Server 基础 schema 前沿。</summary>
-    public const string AuthenticationSqlServerFoundation = "20260810033909_Authentication_000001_Foundation";
+    public const string AuthenticationSqlServerFoundation = "20260828151500_Authentication_000001_Foundation";
 }

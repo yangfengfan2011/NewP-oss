@@ -304,7 +304,8 @@ public sealed class IdentitySqlServerIntegrationTests
                         {
                             AccountEid = account.EID,
                             Type = AuthenticationSessionType.Restricted,
-                            ActorId = account.EID
+                            ActorId = account.EID,
+                            TimeZoneId = "Asia/Taipei"
                         },
                         token);
                 });
@@ -321,7 +322,8 @@ public sealed class IdentitySqlServerIntegrationTests
                         "initial-secret",
                         "replacement-secret",
                         1,
-                        new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-change")));
+                        new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-change"),
+                        "Asia/Taipei"));
             }
 
             await using (var verification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
@@ -354,7 +356,8 @@ public sealed class IdentitySqlServerIntegrationTests
                         "replacement-secret",
                         "second-replacement",
                         2,
-                        new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-rollback"))).AsTask());
+                        new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-rollback"),
+                        "Asia/Taipei")).AsTask());
             }
 
             await using (var rollbackVerification = CreateIdentityAndAuthenticationContext(applicationConnectionString))

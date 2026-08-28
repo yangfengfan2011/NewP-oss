@@ -120,10 +120,11 @@ export function useAuthenticationState(
   }, [hasInitialSnapshot]);
 
   const login = useCallback(async (ecode: string, password: string) => {
+    const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const response = await platformFetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ecode, password }),
+      body: JSON.stringify({ ecode, password, timeZoneId: timeZoneId || undefined }),
     });
     if (!response.ok) throw new Error(await readProblemCode(response));
     invalidatePlatformAntiforgeryToken();

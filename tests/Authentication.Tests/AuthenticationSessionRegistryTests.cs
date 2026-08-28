@@ -53,6 +53,76 @@ public sealed class AuthenticationSessionRegistryTests
     }
 
     [Fact]
+    public async Task RegisterAsync_FreezesExplicitOrConfiguredIanaTimeZoneAndRejectsInvalidInput()
+    {
+        await using var context = CreateContext();
+        var registry = CreateRegistry(context, options: new AuthenticationSessionOptions
+        {
+            DefaultTimeZoneId = "Asia/Taipei"
+        });
+        var transaction = new EfPlatformTransactionExecutor(context);
+
+        var configured = await transaction.ExecuteAsync(token => IssueAsync(registry, cancellationToken: token));
+        var explicitZone = await transaction.ExecuteAsync(token => IssueAsync(
+            registry,
+            timeZoneId: "Europe/Paris",
+            cancellationToken: token));
+
+        Assert.Equal("Asia/Taipei", configured.Session.TimeZoneId);
+        Assert.Equal("Europe/Paris", explicitZone.Session.TimeZoneId);
+        Assert.Equal(
+            "Asia/Taipei",
+            (await registry.ValidateAsync(configured.Credential)).Session!.TimeZoneId);
+        var exception = await Assert.ThrowsAsync<AuthenticationSessionException>(async () =>
+            await transaction.ExecuteAsync(token => IssueAsync(
+                registry,
+                timeZoneId: "China Standard Time",
+                cancellationToken: token)));
+        Assert.Equal(AuthenticationSessionFailureCodes.InvalidTimeZone, exception.FailureCode);
+        Assert.Equal(2, await context
+            .Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession"))
+            .CountAsync());
+    }
+
+    [Theory]
+    [InlineData("America/Toronto")]
+    [InlineData("America/Atikokan")]
+    public async Task RegisterAsync_PreservesTheValidatedIanaZoneId(string timeZoneId)
+    {
+        await using var context = CreateContext();
+        var registry = CreateRegistry(context);
+
+        var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(
+            registry,
+            timeZoneId: timeZoneId,
+            cancellationToken: token));
+
+        Assert.Equal(timeZoneId, issuance.Session.TimeZoneId);
+        Assert.Equal(timeZoneId, (await registry.ValidateAsync(issuance.Credential)).Session!.TimeZoneId);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Not/AZone")]
+    public async Task RegisterAsync_RejectsExplicitInvalidTimeZoneBeforeAddingSession(string timeZoneId)
+    {
+        await using var context = CreateContext();
+        var registry = CreateRegistry(context);
+
+        var exception = await Assert.ThrowsAsync<AuthenticationSessionException>(async () =>
+            await new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(
+                registry,
+                timeZoneId: timeZoneId,
+                cancellationToken: token)));
+
+        Assert.Equal(AuthenticationSessionFailureCodes.InvalidTimeZone, exception.FailureCode);
+        Assert.Empty(await context
+            .Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession"))
+            .ToListAsync());
+    }
+
+    [Fact]
     public async Task Registry_AllowsMultipleSessionsAndReturnsRestrictedType()
     {
         await using var context = CreateContext();
@@ -189,11 +259,13 @@ public sealed class AuthenticationSessionRegistryTests
         IAuthenticationSessionRegistry registry,
         AuthenticationSessionType type = AuthenticationSessionType.Regular,
         string accountEid = "User_1",
+        string? timeZoneId = null,
         CancellationToken cancellationToken = default) => registry.RegisterAsync(new AuthenticationSessionRegistration
         {
             AccountEid = accountEid,
             Type = type,
-            ActorId = "User_1"
+            ActorId = "User_1",
+            TimeZoneId = timeZoneId
         }, cancellationToken);
 
     private static EfPlatformDbContext CreateContext()

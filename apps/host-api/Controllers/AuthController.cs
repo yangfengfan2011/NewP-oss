@@ -65,6 +65,7 @@ public sealed class AuthController : ControllerBase
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("authentication-login")]
+    // 通过 Authentication 注册表冻结登录时区，成功登记后才签发 Cookie。
     public async Task<ActionResult<AuthUserResponse>> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
@@ -96,19 +97,34 @@ public sealed class AuthController : ControllerBase
         var permissions = await _authorizationService.GetUserPermissionsAsync(
             authentication.Account.AccountEid,
             cancellationToken);
-        var issuance = await _transactionExecutor.ExecuteAsync(
-            token => _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
-            {
-                AccountEid = authentication.Account.AccountEid,
-                Type = authentication.IsTemporary
-                    ? AuthenticationSessionType.Restricted
-                    : AuthenticationSessionType.Regular,
-                ActorId = authentication.Account.AccountEid
-            }, token),
-            cancellationToken);
+        AuthenticationSessionIssuance issuance;
+        try
+        {
+            issuance = await _transactionExecutor.ExecuteAsync(
+                token => _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
+                {
+                    AccountEid = authentication.Account.AccountEid,
+                    Type = authentication.IsTemporary
+                        ? AuthenticationSessionType.Restricted
+                        : AuthenticationSessionType.Regular,
+                    ActorId = authentication.Account.AccountEid,
+                    TimeZoneId = request.TimeZoneId
+                }, token),
+                cancellationToken);
+        }
+        catch (AuthenticationSessionException exception)
+            when (exception.FailureCode == AuthenticationSessionFailureCodes.InvalidTimeZone)
+        {
+            LogLoginFailure(_logger, "InvalidTimeZone", null);
+            return ProblemResult(StatusCodes.Status400BadRequest, exception.FailureCode);
+        }
         _cookie.Append(HttpContext, issuance.Credential, issuance.Session.ExpiresAtUtc);
 
-        return Ok(ToResponse(authentication.Account, permissions, authentication.IsTemporary));
+        return Ok(ToResponse(
+            authentication.Account,
+            permissions,
+            authentication.IsTemporary,
+            issuance.Session.TimeZoneId));
     }
 
     [HttpPost("logout")]
@@ -135,14 +151,17 @@ public sealed class AuthController : ControllerBase
 
     [HttpGet("current-user")]
     [AuthenticatedOnly]
+    // 从当前已验证 principal 投影同一会话时区，不接受请求覆盖。
     public async Task<ActionResult<AuthUserResponse>> GetCurrentUser(CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var accountCode = User.Identity?.Name;
         var ename = User.FindFirstValue("ename");
+        var timeZoneId = User.FindFirstValue(HostSessionAuthenticationHandler.TimeZoneIdClaim);
         if (string.IsNullOrWhiteSpace(userId)
             || string.IsNullOrWhiteSpace(accountCode)
-            || string.IsNullOrWhiteSpace(ename))
+            || string.IsNullOrWhiteSpace(ename)
+            || string.IsNullOrWhiteSpace(timeZoneId))
         {
             _cookie.Delete(HttpContext);
             return ProblemResult(401, "AUTH_SESSION_INVALID");
@@ -174,7 +193,8 @@ public sealed class AuthController : ControllerBase
             permissions,
             restricted,
             revision,
-            isLocalAdministrator));
+            isLocalAdministrator,
+            timeZoneId));
     }
 
     private ObjectResult ProblemResult(int status, string code)
@@ -191,10 +211,12 @@ public sealed class AuthController : ControllerBase
         return result;
     }
 
+    // 组合登录成功响应，并保持响应时区与本次签发的会话快照一致。
     private static AuthUserResponse ToResponse(
         IdentityAccountSnapshot account,
         IReadOnlyList<string> permissions,
-        bool mustChangePassword) =>
+        bool mustChangePassword,
+        string timeZoneId) =>
         new(
             account.AccountEid,
             account.ECODE,
@@ -202,10 +224,11 @@ public sealed class AuthController : ControllerBase
             permissions,
             mustChangePassword,
             account.Revision,
-            account.IsLocalAdministrator);
+            account.IsLocalAdministrator,
+            timeZoneId);
 }
 
-public sealed record LoginRequest(string ECODE, string Password);
+public sealed record LoginRequest(string ECODE, string Password, string? TimeZoneId = null);
 
 public sealed record AntiforgeryTokenResponse(string RequestToken);
 
@@ -216,4 +239,5 @@ public sealed record AuthUserResponse(
     IReadOnlyList<string> Permissions,
     bool MustChangePassword,
     long Revision,
-    bool IsLocalAdministrator);
+    bool IsLocalAdministrator,
+    string TimeZoneId);

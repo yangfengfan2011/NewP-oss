@@ -35,7 +35,8 @@ public sealed class IdentityHttpApiIntegrationTests
         builder.Services.AddAuthorization(options =>
             options.AddPolicy("AdminOnly", policy => policy.RequireRole("LocalAdmin")));
         builder.Services.AddSingleton<IIdentityManagementQueryService, EmptyQueries>();
-        builder.Services.AddSingleton<IIdentityAccountApplicationService, PasswordChangingAccounts>();
+        var accounts = new PasswordChangingAccounts();
+        builder.Services.AddSingleton<IIdentityAccountApplicationService>(accounts);
         var cookie = new RecordingCookie();
         builder.Services.AddSingleton<IHostAuthenticationCookie>(cookie);
 
@@ -63,6 +64,7 @@ public sealed class IdentityHttpApiIntegrationTests
         var changed = await client.SendAsync(passwordChange);
 
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        Assert.Equal("Asia/Shanghai", accounts.LastCommand?.TimeZoneId);
         Assert.Equal("rotated-session-secret", cookie.Credential);
         Assert.DoesNotContain("rotated-session-secret", await changed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
@@ -106,8 +108,12 @@ public sealed class IdentityHttpApiIntegrationTests
 
     private sealed class PasswordChangingAccounts : IIdentityAccountApplicationService
     {
-        public ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(ChangeIdentityPasswordCommand command, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(new IdentityPasswordChangeResult(
+        public ChangeIdentityPasswordCommand? LastCommand { get; private set; }
+
+        public ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(ChangeIdentityPasswordCommand command, CancellationToken cancellationToken = default)
+        {
+            LastCommand = command;
+            return ValueTask.FromResult(new IdentityPasswordChangeResult(
                 Account(command.AccountEid),
                 new AuthenticationSessionIssuance
                 {
@@ -117,9 +123,11 @@ public sealed class IdentityHttpApiIntegrationTests
                         SessionEid = "session-2",
                         AccountEid = command.AccountEid,
                         Type = AuthenticationSessionType.Regular,
+                        TimeZoneId = "Asia/Shanghai",
                         ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
                     }
                 }));
+        }
 
         public ValueTask<IdentityAccountCreationResult> CreateAsync(CreateIdentityAccountCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<IdentityAccountSnapshot> UpdateNameAsync(UpdateIdentityAccountNameCommand command, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -160,7 +168,11 @@ public sealed class IdentityHttpApiIntegrationTests
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
-            var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, accountEid.ToString()) };
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, accountEid.ToString()),
+                new(AuthenticationSessionClaimTypes.TimeZoneId, "Asia/Shanghai")
+            };
             if (Request.Headers.TryGetValue("X-Test-Role", out var role))
             {
                 claims.Add(new Claim(ClaimTypes.Role, role.ToString()));

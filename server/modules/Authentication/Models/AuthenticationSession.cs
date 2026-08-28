@@ -8,6 +8,7 @@ public sealed class AuthenticationSession
     public string AccountEID { get; set; } = string.Empty;
     public string TokenHash { get; set; } = string.Empty;
     public AuthenticationSessionType SessionType { get; set; }
+    public string TimeZoneId { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }
     public string? RevocationReason { get; set; }

@@ -49,6 +49,9 @@ public sealed record AuthenticationSessionRegistration
 
     /// <summary>服务端解析的非空操作者标识。</summary>
     public required string ActorId { get; init; }
+
+    /// <summary>登录显式提交的 IANA 时区；省略或 null 时由 Authentication 使用部署默认值。</summary>
+    public string? TimeZoneId { get; init; }
 }
 
 /// <summary>
@@ -90,6 +93,9 @@ public sealed record AuthenticationSessionSnapshot
     /// <summary>会话类型。</summary>
     public AuthenticationSessionType Type { get; init; }
 
+    /// <summary>登录时冻结并由 Authentication 验证的规范 IANA 时区。</summary>
+    public required string TimeZoneId { get; init; }
+
     /// <summary>固定过期 UTC 时间。</summary>
     public DateTime ExpiresAtUtc { get; init; }
 
@@ -120,6 +126,32 @@ public static class AuthenticationSessionFailureCodes
 {
     /// <summary>会话注册表或账号目录当前不可用。</summary>
     public const string StoreUnavailable = "AUTH_SESSION_STORE_UNAVAILABLE";
+
+    /// <summary>登录提交或部署配置的时区不是有效 IANA 标识。</summary>
+    public const string InvalidTimeZone = "AUTH_SESSION_TIME_ZONE_INVALID";
+}
+
+/// <summary>Authentication 会话向已验证主体投影的稳定 claim 名。</summary>
+public static class AuthenticationSessionClaimTypes
+{
+    /// <summary>当前认证会话在登录时冻结的规范 IANA 时区。</summary>
+    public const string TimeZoneId = "authentication_session_time_zone_id";
+}
+
+/// <summary>
+/// Authentication 会话注册在稳定输入校验失败时返回的异常。
+/// </summary>
+public sealed class AuthenticationSessionException : InvalidOperationException
+{
+    /// <summary>使用稳定失败码创建会话异常。</summary>
+    public AuthenticationSessionException(string failureCode)
+        : base(failureCode)
+    {
+        FailureCode = failureCode;
+    }
+
+    /// <summary>供 Host 映射为稳定问题响应的失败码。</summary>
+    public string FailureCode { get; }
 }
 
 /// <summary>

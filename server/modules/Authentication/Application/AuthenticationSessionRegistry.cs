@@ -34,6 +34,7 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
         _options = options;
     }
 
+    // 在生成凭据和登记实体之前解析最终会话时区，确保非法输入没有持久化副作用。
     public ValueTask<AuthenticationSessionIssuance> RegisterAsync(
         AuthenticationSessionRegistration registration,
         CancellationToken cancellationToken = default)
@@ -50,6 +51,10 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             throw new InvalidOperationException("Authentication session lifetime must be positive.");
         }
 
+        var timeZoneId = AuthenticationSessionTimeZone.Resolve(
+            registration.TimeZoneId,
+            _options.DefaultTimeZoneId);
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var credential = _credentialGenerator.Issue();
         EnsureCredentialIs256Bit(credential);
@@ -59,6 +64,7 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             AccountEID = registration.AccountEid,
             TokenHash = ComputeHash(credential),
             SessionType = registration.Type,
+            TimeZoneId = timeZoneId,
             ExpiresAt = now.Add(_options.Lifetime),
             CreatedBy = registration.ActorId,
             CreatedAt = now,
@@ -191,11 +197,13 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             Session = session is null ? null : ToSnapshot(session)
         };
 
+    // 只把已持久化的可信会话事实投影给 Host，不从请求重新推断时区。
     private static AuthenticationSessionSnapshot ToSnapshot(AuthenticationSession session) => new()
     {
         SessionEid = session.EID,
         AccountEid = session.AccountEID,
         Type = session.SessionType,
+        TimeZoneId = session.TimeZoneId,
         ExpiresAtUtc = session.ExpiresAt,
         RevokedAtUtc = session.RevokedAt,
         RevocationReason = session.RevocationReason

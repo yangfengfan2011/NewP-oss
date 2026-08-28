@@ -20,16 +20,16 @@ public sealed class AuthenticationModule : ModuleCapsuleBindingBase
 {
     public override string BehaviorKey => "authentication.backend";
 
+    // 注册 Authentication 会话能力，并要求部署配置在 Host Ready 前通过验证。
     public override void ConfigureServices(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddPlatformObjectIdGeneration();
         services.AddOptions<AuthenticationSessionOptions>()
             .BindConfiguration(AuthenticationSessionOptions.SectionName)
-            .Validate(
-                options => options.Lifetime > TimeSpan.Zero && options.PurgeBatchSize is >= 1 and <= 1000,
-                "Authentication session options are invalid.")
             .ValidateOnStart();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<AuthenticationSessionOptions>, AuthenticationSessionOptionsValidator>());
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IAuthenticationSessionCredentialGenerator, DefaultAuthenticationSessionCredentialGenerator>();
         services.AddScoped<IAuthenticationSessionRepository, EfAuthenticationSessionRepository>();

@@ -315,6 +315,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
                         SessionEid = "Session_1",
                         AccountEid = "User_1",
                         Type = AuthenticationSessionType.Regular,
+                        TimeZoneId = "Asia/Shanghai",
                         ExpiresAtUtc = expiresAt,
                         RevokedAtUtc = Revoked ? expiresAt.AddHours(-7) : null,
                         RevocationReason = Revoked ? "人员离职" : null

@@ -38,7 +38,8 @@ public sealed record ChangeIdentityPasswordCommand(
     string CurrentPassword,
     string NewPassword,
     long ExpectedRevision,
-    IdentityActorContext Actor);
+    IdentityActorContext Actor,
+    string TimeZoneId);
 
 public sealed record DeleteIdentityAccountCommand(
     string AccountEid,

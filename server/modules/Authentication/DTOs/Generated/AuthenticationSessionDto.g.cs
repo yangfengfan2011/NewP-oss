@@ -15,6 +15,7 @@ public sealed class AuthenticationSessionDto
     public string TokenHash { get; init; }
     public ICP.Platform.Authentication.Contracts.AuthenticationSessionType SessionType { get; init; }
     public string? SessionType_DisplayValue { get; init; }
+    public string TimeZoneId { get; init; }
     public DateTime ExpiresAt { get; init; }
     public DateTime? RevokedAt { get; init; }
     public string? RevocationReason { get; init; }

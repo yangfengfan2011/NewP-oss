@@ -16,6 +16,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
     public const string SessionEidClaim = "authentication_session_eid";
     public const string SessionTypeClaim = "authentication_session_type";
     public const string AccountRevisionClaim = "identity_account_revision";
+    public const string TimeZoneIdClaim = AuthenticationSessionClaimTypes.TimeZoneId;
     private const string StoreUnavailableItem = "HostSession.StoreUnavailable";
 
     private readonly IHostAuthenticationCookie _cookie;
@@ -39,6 +40,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
         _authorizationService = authorizationService;
     }
 
+    // 验证持久化会话并把其可信时区投影到逐请求 principal。
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var protectedValue = _cookie.Read(Context);
@@ -82,6 +84,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
                 new("ename", account.ENAME),
                 new(SessionEidClaim, validation.Session.SessionEid),
                 new(SessionTypeClaim, validation.Session.Type.ToString()),
+                new(TimeZoneIdClaim, validation.Session.TimeZoneId),
                 new(AccountRevisionClaim, account.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                 new("is_local_administrator", account.IsLocalAdministrator ? "true" : "false")
             };

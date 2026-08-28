@@ -182,6 +182,7 @@ public sealed class IdentityManagementControllerTests
                         SessionEid = "session-2",
                         AccountEid = "account-1",
                         Type = AuthenticationSessionType.Regular,
+                        TimeZoneId = "Asia/Shanghai",
                         ExpiresAtUtc = new DateTime(2030, 1, 1, 8, 0, 0, DateTimeKind.Utc)
                     }
                 })
@@ -200,6 +201,33 @@ public sealed class IdentityManagementControllerTests
         Assert.Equal("new-session-secret", response.GetSessionCredential());
         Assert.DoesNotContain("new-session-secret", JsonSerializer.Serialize(ok.Value), StringComparison.Ordinal);
         Assert.Equal("account-1", accounts.LastPasswordChange?.AccountEid);
+        Assert.Equal("Asia/Taipei", accounts.LastPasswordChange?.TimeZoneId);
+    }
+
+    [Fact]
+    public async Task PasswordChange_RejectsPrincipalWithoutTrustedSessionTimeZone()
+    {
+        var accounts = new RecordingAccountApplicationService();
+        var controller = new IdentitySelfServiceController(accounts)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, "account-1")
+                    ], "test"))
+                }
+            }
+        };
+
+        var result = await controller.ChangePassword(
+            new ChangeIdentityPasswordRequest("old-password", "new-password", 1),
+            CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.Null(accounts.LastPasswordChange);
     }
 
     [Fact]
@@ -295,6 +323,7 @@ public sealed class IdentityManagementControllerTests
             [
                 new Claim(ClaimTypes.NameIdentifier, "account-1"),
                 new Claim(ClaimTypes.Name, "alice"),
+                new Claim(AuthenticationSessionClaimTypes.TimeZoneId, "Asia/Taipei"),
                 new Claim(ClaimTypes.Role, "LocalAdmin")
             ], "test"))
         };

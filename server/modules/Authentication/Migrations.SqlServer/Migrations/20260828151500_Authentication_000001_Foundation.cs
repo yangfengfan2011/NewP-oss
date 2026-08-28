@@ -8,7 +8,7 @@ namespace ICP.Platform.Modules.Authentication.Migrations.SqlServer.Migrations;
 [Migration(MigrationId)]
 public sealed class AuthenticationFoundation : Migration
 {
-    public const string MigrationId = "20260810033909_Authentication_000001_Foundation";
+    public const string MigrationId = "20260828151500_Authentication_000001_Foundation";
 
     protected override void Up(MigrationBuilder migrationBuilder)
     {
@@ -26,6 +26,7 @@ public sealed class AuthenticationFoundation : Migration
                 RevocationReason = table.Column<string>(type: "nvarchar(max)", nullable: true),
                 RevokedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                 SessionType = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                TimeZoneId = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 TokenHash = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
                 UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                 UpdatedBy = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)

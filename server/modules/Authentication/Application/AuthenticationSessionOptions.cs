@@ -7,4 +7,6 @@ public sealed class AuthenticationSessionOptions
     public TimeSpan Lifetime { get; set; } = TimeSpan.FromHours(8);
 
     public int PurgeBatchSize { get; set; } = 500;
+
+    public string DefaultTimeZoneId { get; set; } = "Asia/Shanghai";
 }

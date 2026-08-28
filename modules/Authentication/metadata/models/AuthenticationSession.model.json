@@ -18,6 +18,10 @@
         "contract": { "valueType": "enum", "clrType": "ICP.Platform.Authentication.Contracts.AuthenticationSessionType" }
       },
       {
+        "name": "TimeZoneId",
+        "storage": { "type": "string" }
+      },
+      {
         "name": "ExpiresAt",
         "storage": { "type": "datetime" }
       },

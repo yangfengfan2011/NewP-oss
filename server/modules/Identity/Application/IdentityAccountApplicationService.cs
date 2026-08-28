@@ -229,6 +229,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             cancellationToken);
     }
 
+    // 在同一事务中修改凭据、撤销旧会话，并让新会话继承当前认证会话时区。
     public async ValueTask<IdentityPasswordChangeResult> ChangePasswordAsync(
         ChangeIdentityPasswordCommand command,
         CancellationToken cancellationToken = default)
@@ -271,7 +272,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
                     {
                         AccountEid = account.EID,
                         Type = AuthenticationSessionType.Regular,
-                        ActorId = command.Actor.ActorId
+                        ActorId = command.Actor.ActorId,
+                        TimeZoneId = command.TimeZoneId
                     },
                     token);
                 _repository.AddSecurityEvent(CreateEvent(

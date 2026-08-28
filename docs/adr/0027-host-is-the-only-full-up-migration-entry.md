@@ -10,21 +10,21 @@ NewP 当前尚未接入需要独立发布保护的真实生产数据库。继续
 
 ## 边界与保留不变量
 
-- 模块继续拥有自己的 model 元数据和不可变线性 migration stream；现有 model 元数据结构及其 authoring 真源地位不变。Host 不拥有模块业务模型，也不自行发现、补写或排序模块迁移。
+- 模块继续拥有自己的 model 元数据和线性 migration stream；同一已确认候选中的迁移事实不可变，兼容基线冻结后的已发布 migration 不可改写。实验基线期的整条 authoring 基线替换由 [ADR-0042](0042-development-uses-a-resettable-migration-baseline.md) 约束，不允许 Host 自行发现、补写或排序模块迁移。
 - “完整 `Up`”表示执行已确认迁移中面向目标 frontier 的全部 EF Up 操作。Migration 可以定义 `Down`，但 Host 不自动执行 `Down`，也不通过 metadata diff 或临时 SQL 修复数据库。
 - 完整操作集不绕过平台校验。Provider、模块归属、全局唯一 Migration ID、线性迁移链、bundle/content/model/from-to digest、期望 frontier 和程序集完整性必须在 DDL 前通过；无法证明归属的操作仍然拒绝。
 - 所有模块迁移流和 Platform Foundation Stream 共用一份由 Platform Persistence 维护的 EF Migration History。模块不得创建私有 history，也不得绕过 Host 回写迁移事实。
-- `dbo.__EFMigrationsHistory` 继续记录全局执行顺序；每个 migration 同一事务写入 `dbo.__NewPMigrationHistory` 的版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀、Provider Target/Transition 事实。SQL Server 只接受空 catalog 或由当前已编译计划创建的有效 history 前缀；旧 history 和预建业务结构在新增 DDL 前拒绝，不回填或改写。
+- `dbo.__EFMigrationsHistory` 继续记录全局执行顺序；每个 migration 同一事务写入 `dbo.__NewPMigrationHistory` 的版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀、Provider Target/Transition 事实。SQL Server 只接受空 catalog 或由当前已编译计划创建的有效 history 前缀；旧 history 和预建业务结构在新增 DDL 前拒绝，不补写或改写 history 事实。业务行的一次性 Required 字段回填必须另行满足 [ADR-0043](0043-required-fields-use-explicit-write-and-migration-lifecycles.md)。
 - history `BundleDigest` 是从 owner/provider 与不可变 migration step 链输入计算的稳定 membership fact，不是会随 assembly 追加 migration 而变化的 whole-assembly `BundleChecksum`；后者仍在候选计划编译及连接前严格校验当前 artifact 完整性。
 - history 的 Provider Target/Transition fact 沿用 #43 的 v1 canonical 摘要算法，但只投影 migration owner 的完整表结构；owner 表上的列、key、index、FK 及 FK principal 物理引用全部保留。该投影仅保证追加其他 owner 时旧历史稳定，不替代连接前对当前候选 full Provider Target/Transition 的精确 operation 校验。
-- 每个 migration 的 DDL 与对应 history 写入必须处于同一事务；不能参与事务的命令不得进入该执行链。全局迁移锁继续串行化并发 Host 的 schema 写入。
+- 每个 migration 的结构或受限数据操作与对应 history 写入必须处于同一事务；不能参与事务的命令不得进入该执行链。全局迁移锁继续串行化并发 Host 的迁移写入。
 - Plugin Platform 可以贡献候选模型和 migration stream，但不能直接执行迁移。迁移成功也不等于候选插件已经激活，活动快照仍由 Plugin Platform 原子提交。
 
 ## 一致性检查与环境策略
 
 Host 外结构同步工具及直接 SQL apply 路径已移除。Host 只保留启动期必要的只读一致性检查，用于核对统一 history、迁移 frontier、模型摘要、Provider Target 和实际 schema；该检查在所有环境遵循同一语义，不生成或执行修复 DDL，也不是第二个迁移入口。
 
-当前不区分开发与发布迁移策略。首个需要受支持运维的真实生产数据库出现时，必须通过新的已确认设计增加显式安全模式，并写清启用条件、备份/恢复前提、授权流程和失败处理；不得通过环境名隐式改变迁移语义。
+迁移执行语义不因开发或发布环境而改变；所有环境仍通过同一 Host seam 执行并验证完整 `Up`。当前实验基线期与未来兼容基线冻结后的差异只属于 authoring 和数据库生命周期，按 [ADR-0042](0042-development-uses-a-resettable-migration-baseline.md) 显式决定，不得通过环境名隐式放松迁移校验。首个需要受支持运维的真实数据库进入范围前，还必须用新的已确认设计写清备份/恢复前提、发布授权和失败处理。
 
 ## 失败、恢复与验收
 

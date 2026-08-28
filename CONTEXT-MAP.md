@@ -30,6 +30,7 @@
 - **Authorization → Plugin Platform**：Authorization 只接受活动插件快照中的权限和 access rule；未激活插件的声明不能进入有效权限目录。
 - **Authorization → Shell**：Shell 可用当前主体的有效权限改善菜单和按钮可见性，但服务端判定始终是安全事实源。
 - **Standard CRUD → Authorization**：Standard CRUD 消费 metadata 中的权限引用控制交互呈现，但字段是否出现在 View 中不构成数据授权，服务端 endpoint 判定仍是安全事实源。
+- **Standard CRUD ↔ Platform Persistence**：同一 Model authoring 中的字段策略分别投影为 Standard CRUD 写入约束和 Platform Persistence 存储约束；存储必填不自动等于客户端创建必填，表单必填也不自动产生数据库非空或永久 `DEFAULT`。Required 字段的旧数据演进由模块提供语义值，Platform Persistence 统一执行迁移门禁。
 - **Platform Acceptance → Host / Shell**：Platform Acceptance 只通过受支持启动命令、就绪接口、Shell origin 与浏览器可见行为观察系统，不直接组合或启动内部组件。
 - **Platform Acceptance → Organization**：验收 Fixture 只通过受限的应用接口准备公司、部门与 actors；人员中心结果仍必须通过正式 API 与浏览器旅程证明。
 - **Platform Acceptance → Identity / Authentication**：验收从新数据库、离线 bootstrap、受限首次改密开始，通过正式 API、Shell 与浏览器证明账号生命周期、会话撤销、Host 重启恢复和人员账号原子联动，不以内存替身或直接数据库写入替代完成证据。

@@ -2,7 +2,7 @@
 
 Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥有的模型与迁移贡献，编译成共享运行时模型和可确定执行的 provider-specific migration streams。它保障归属、顺序、统一历史、事务与失败语义，并只接受 Host 作为数据库迁移执行入口；它不拥有模块业务模型，也不决定插件是否激活。
 
-迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束。
+迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束；当前基线生命周期由 [ADR-0042：开发期使用可重建迁移基线直到兼容基线冻结](../../adr/0042-development-uses-a-resettable-migration-baseline.md) 约束；Required 字段演进由 [ADR-0043：Required 字段使用显式写入与迁移生命周期](../../adr/0043-required-fields-use-explicit-write-and-migration-lifecycles.md) 约束。
 
 ## Language
 
@@ -15,7 +15,7 @@ _Avoid_: 全局模型、Host 模型、按实体名推断归属
 _Avoid_: 平台拥有的模型、模块 DbContext 集合、运行时扫描结果
 
 **模块迁移流（Module Migration Stream）**：
-一个模块针对一个 provider 拥有的、不可变且线性的 EF migrations 序列。序列中的每个 migration 都携带稳定位置、内容身份和前后模型摘要。
+一个模块针对一个 provider 拥有的线性 EF migrations 序列。它在已确认候选内不可变；实验基线期可以作为整条当前基线被替换，兼容基线冻结后其已发布步骤永久不可改写。
 _Avoid_: 全局迁移列表、metadata diff SQL、任意启动脚本
 
 **迁移包（Migration Bundle）**：
@@ -47,12 +47,36 @@ _Avoid_: Provider Target 逻辑顺序、兼容性 ordinal、重排列目标
 _Avoid_: 仅按操作类型放行、仅凭 migration id 推断旧对象、重算旧摘要
 
 **迁移数据前置条件（Migration Data Precondition）**：
-Host 在全局迁移锁内、DDL 与 history 前执行的只读数据检查。新增非空列要求目标表为空；nullable 收紧为 required 要求现有值全部非空。不满足时返回稳定失败码并回滚当前 migration，不回填、增加业务 DEFAULT 或自动改为可空。
-_Avoid_: 默认值兼容回填、原始 UPDATE、DDL 后补查
+Host 在全局迁移锁内、当前 migration 操作与 history 前执行的只读数据检查。它只裁决当前 step 是否可以执行，不猜测回填值、不增加数据库永久 `DEFAULT`，也不自动改变目标 nullability。
+_Avoid_: 自动修复、DDL 后补查、隐式 nullability 降级
+
+**Required 字段迁移（Required Field Transition）**：
+把新字段或现有 nullable 字段推进为持久化非空约束的有序前向迁移。已有空值时，它由“允许旧行存在的结构扩展、一次性回填、验证并收紧约束”三个独立历史步骤组成。
+_Avoid_: 单步默认值兼容、表单必填、自动改列
+
+**Required 字段回填（Required Field Backfill）**：
+由模型 owner 为 Required 字段迁移显式提供、只修复既有缺失值的一次性数据动作。它不是数据导入、通用数据转换或新记录默认值，也不能保留为数据库永久 `DEFAULT`。
+_Avoid_: 通用 UPDATE seam、启动回调、数据库默认约束
+
+**数据库永久默认值（Persistent Database Default）**：
+由数据库长期为后续写入补值的列约束。NewP 当前不支持该能力，创建默认、服务端赋值和迁移回填都不能投影为它。
+_Avoid_: form default、一次性 backfill、服务端生成值
 
 **迁移前沿（Migration Frontier）**：
 某模块在一个候选快照中期望达到的最后 migration 身份。统一 EF Migration History 是实际执行事实，活动快照只记录其期望 frontier 和持久化计划摘要。
 _Avoid_: 最新文件、最大时间戳、当前插件版本
+
+**实验基线期（Experimental Baseline Phase）**：
+兼容基线尚未冻结、只承诺当前空数据库基线的演进阶段。旧开发 catalog 不享有跨被替换基线的升级兼容；当前有效 history 前缀仍可以通过已确认的前向迁移演进。
+_Avoid_: 开发环境宽松模式、永久迁移策略、旧库兼容期
+
+**兼容基线冻结（Migration Compatibility Freeze）**：
+开始承诺保存既有数据库数据与 migration history 的显式发布里程碑。冻结后的已发布迁移只能通过追加的前向步骤演进，不能由环境名或首次部署自动推断冻结。
+_Avoid_: Production 环境名、分支冻结、隐式上线时间
+
+**开发数据库重建（Development Database Reset）**：
+把归属明确且未受保护的开发 catalog 显式恢复为空数据库基线的生命周期操作。它不是 migration、失败自动恢复或 Host 启动 fallback。
+_Avoid_: 自动删库、schema drift 修复、migration data transform
 
 **完整 Up 迁移（Full Up Migration）**：
 Host 根据统一 Migration History，把已编译计划从当前有效前缀推进到期望 frontier 时执行的完整 EF `Up` 操作序列。它允许 Drop、Rename、Alter 等结构变化，但不放松模块归属、迁移链、摘要、事务和迁移锁校验，也不自动执行 `Down`。
@@ -67,7 +91,7 @@ _Avoid_: 可安全忽略的前缀、自动回滚、激活成功
 _Avoid_: 模块 history table、活动快照状态、手工回写记录
 
 **迁移包完整性摘要（Bundle Checksum）与步骤成员摘要（Bundle Digest）**：
-`BundleChecksum` 是候选当前 migration assembly 的 whole-artifact SHA-256，计划编译及执行连接前必须匹配；assembly 追加 migration 后它可以变化。history 中的 `BundleDigest` 则从 owner、provider 和不可变 step 链输入 canonical 计算，证明该已执行 step 的 bundle membership，并在合法追加 migration 时保持旧前缀稳定。二者不能互换，也不能通过重算数据库旧事实兼容新包。
+`BundleChecksum` 是候选当前 migration assembly 的 whole-artifact SHA-256，计划编译及执行连接前必须匹配；assembly 追加 migration 或实验基线整体替换后它可以变化。history 中的 `BundleDigest` 从候选内不可变 step 链输入计算，并在合法追加 migration 时保持旧前缀稳定；实验基线替换后的旧 fact 不重算兼容，必须重建 catalog。
 _Avoid_: 把 whole-assembly checksum 持久化为旧 step 身份、忽略当前 artifact checksum、追加时改写旧 history
 
 **Provider 历史事实投影（Provider History Fact Projection）**：
@@ -91,5 +115,5 @@ SQL Server 从零摘要开始的平台自有 migration stream，只创建当前�
 _Avoid_: 旧 history 兼容器、平台内核拥有模块私有表、仅凭 migration id 放行
 
 **空数据库基线（Empty Database Baseline）**：
-SQL Server 唯一受支持的重建起点。catalog 可以包含 NewP ownership marker，但不得包含业务表或 migration history；旧 history、已有平台业务表或其他非空业务结构必须在新增 DDL 前稳定拒绝并要求删除重建。
-_Avoid_: 自动升级旧库、删除旧对象后继续、数据回填、永久兼容模式
+SQL Server 唯一受支持的重建起点。catalog 可以包含 NewP ownership marker，但不得包含业务表或 migration history；实验基线替换后的旧 history、已有平台业务表或其他非空业务结构必须在新增 DDL 前稳定拒绝并要求显式重建。
+_Avoid_: 自动升级被替换旧库、删除旧对象后继续、永久兼容模式

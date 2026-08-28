@@ -103,6 +103,7 @@ Shell 不维护业务模块清单，不通过源码目录推断活动模块，�
 - 模型 owner 和 migration bundle 由模块 Capsule / metadata 显式声明。
 - provider 选择、迁移计划编译、锁、执行与失败恢复属于平台持久化内核。
 - 模块只提供自己的迁移产物或导入映射，不直接控制 Host 启动流程。
+- Required 字段的投影、写入顺序、迁移状态与门禁属于平台机制；模块拥有字段语义、值来源和旧行回填值。平台当前不提供数据库永久 `DEFAULT`，也不为回填建立独立 CLI 或通用数据转换 interface。
 - 数据导入不是 schema migration；两者使用不同入口、状态和回滚语义。
 - 禁止在 DI 注册、Controller 构造或模块装载副作用中隐式迁移或导入。
 

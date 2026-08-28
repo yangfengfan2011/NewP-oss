@@ -48,6 +48,26 @@ _Avoid_: validate callback、冲突自动重放、呈现面自选刷新
 资源字段目录、数据源以及创建和编辑表单结构的事实源。它不拥有详情展示结构。
 _Avoid_: 查看表单、详情布局
 
+**存储必填（Storage Requiredness）**：
+字段成功持久化后不得为空的数据不变量。它不表示调用方必须提交该字段，也不等于创建表单必填。
+_Avoid_: 表单 required、客户端必填、数据库默认值
+
+**创建输入必填（Create Input Requirement）**：
+由调用方拥有的字段在创建资源时必须提交非空值的写入约束。服务端拥有的必填值不属于创建输入。
+_Avoid_: 存储非空、服务端生成、编辑必填
+
+**更新非空不变量（Update Non-empty Invariant）**：
+普通更新可以省略字段并保留旧值，但显式提交空值必须拒绝，合并后的候选仍须满足字段的存储不变量。
+_Avoid_: 每次更新必须携带、PUT 全量替换、UpdateOnly required
+
+**服务端拥有的必填值（Server-owned Required Value）**：
+由平台或模块在持久化前生成、成功写入后不得为空的字段值。客户端和表单不能提交或覆盖它。
+_Avoid_: 隐藏的客户端必填、数据库永久 DEFAULT、可编辑默认值
+
+**创建默认值（Create Default Value）**：
+新建交互或应用写入为尚未提交的字段建议或补充的初始值。它不是旧数据回填，也不能保证数据库绕过应用写入时得到值。
+_Avoid_: migration backfill、数据库永久 DEFAULT、历史事实
+
 **解析后字段目录（Resolved Field Catalog）**：
 由 Model 显式字段、Entity 强制固定字段和 Model 选择的可选 builtin 组成的规范字段命名空间。它约束 Detail View 的静态字段名称，不声称每次详情响应都提供其中全部字段。
 _Avoid_: DTO 属性列表、前端映射字段

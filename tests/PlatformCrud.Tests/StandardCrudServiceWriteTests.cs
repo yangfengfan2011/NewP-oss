@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
@@ -63,6 +64,194 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenServerOwnedAuditFieldIsSubmitted_ReturnsBadRequestBeforeRepositoryCreate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "CreatedBy"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                new StandardCrudFieldPolicy
+                {
+                    Field = "CreatedBy",
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.Server
+                }
+            ]
+        };
+
+        var result = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?>
+            {
+                ["ENAME"] = "张三",
+                ["CreatedBy"] = "client-forged"
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(400, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error.Code);
+        Assert.Equal("standardCrud.serverOwnedFieldReadOnly", result.Error.ReasonKey);
+        Assert.Equal(0, repository.CreateCallCount);
+        var fieldError = Assert.Single(result.Error.FieldErrors);
+        Assert.Equal("CreatedBy", fieldError.Field);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRequiredAuditOwnerIsUnavailable_ReturnsStablePlatformErrorWithoutRepositoryCreate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "CreatedBy"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                new StandardCrudFieldPolicy
+                {
+                    Field = "CreatedBy",
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.Server
+                }
+            ]
+        };
+
+        var result = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["ENAME"] = "张三" });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(500, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.ServerOwnedValueUnavailable", result.Error.Code);
+        Assert.Equal("standardCrud.serverOwnedValueUnavailable", result.Error.ReasonKey);
+        Assert.Empty(result.Error.FieldErrors);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRequiredAuditOwnerReturnsNoValue_ReturnsStablePlatformErrorWithoutRepositoryCreate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository, auditStampProvider: new NullAuditStampProvider());
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "CreatedBy"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies = [ServerOwnedAuditPolicy("CreatedBy")]
+        };
+
+        var result = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["ENAME"] = "张三" });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedValueUnavailable", result.Error!.Code);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRequiredAuditOwnerCannotBuildNonEmptyValue_ReturnsStablePlatformErrorWithoutRepositoryCreate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository, auditStampProvider: new MissingActorAuditStampProvider());
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "CreatedBy"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies = [ServerOwnedAuditPolicy("CreatedBy")]
+        };
+
+        var result = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["ENAME"] = "张三" });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedValueUnavailable", result.Error!.Code);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRequiredAuditOwnerIsAvailable_AppliesTrustedValuesBeforeRepositoryCreate()
+    {
+        var now = new DateTime(2026, 8, 28, 10, 30, 0, DateTimeKind.Utc);
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(
+            repository,
+            auditStampProvider: new FixedAuditStampProvider("trusted-subject", now));
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                ServerOwnedAuditPolicy("CreatedBy"),
+                ServerOwnedAuditPolicy("CreatedAt"),
+                ServerOwnedAuditPolicy("UpdatedBy"),
+                ServerOwnedAuditPolicy("UpdatedAt")
+            ]
+        };
+
+        var result = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["ENAME"] = "张三" });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("trusted-subject", repository.LastCreatedValues!["CreatedBy"]);
+        Assert.Equal(now, repository.LastCreatedValues["CreatedAt"]);
+        Assert.Equal("trusted-subject", repository.LastCreatedValues["UpdatedBy"]);
+        Assert.Equal(now, repository.LastCreatedValues["UpdatedAt"]);
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenUndeclaredDisplayLikeFieldIsSubmitted_IgnoresIt()
     {
         var repository = new RecordingMutationStandardCrudRepository([]);
@@ -120,6 +309,160 @@ public sealed class StandardCrudServiceWriteTests
         var current = await repository.GetByIdAsync(descriptor, "person-1");
         Assert.Equal("原姓名", current!["ENAME"]);
         Assert.Equal("company-1", current["CompanyId"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenServerOwnedAuditFieldIsSubmitted_ReturnsBadRequestBeforeRepositoryUpdate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["ENAME"] = "原姓名",
+                ["UpdatedBy"] = "trusted-subject"
+            }
+        ]);
+        var service = Service(repository);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "UpdatedBy"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                new StandardCrudFieldPolicy
+                {
+                    Field = "UpdatedBy",
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.Server
+                }
+            ]
+        };
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?>
+            {
+                ["ENAME"] = "新姓名",
+                ["UpdatedBy"] = "client-forged"
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error!.Code);
+        Assert.Equal(0, repository.UpdateCallCount);
+        var current = await repository.GetByIdAsync(descriptor, "person-1");
+        Assert.Equal("原姓名", current!["ENAME"]);
+        Assert.Equal("trusted-subject", current["UpdatedBy"]);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenRequiredAuditOwnerIsAvailable_AppliesTrustedUpdateValuesBeforeRepositoryUpdate()
+    {
+        var createdAt = new DateTime(2026, 8, 27, 9, 0, 0, DateTimeKind.Utc);
+        var updatedAt = createdAt.AddDays(1);
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["ENAME"] = "原姓名",
+                ["CreatedBy"] = "creator",
+                ["CreatedAt"] = createdAt,
+                ["UpdatedBy"] = "creator",
+                ["UpdatedAt"] = createdAt
+            }
+        ]);
+        var service = Service(
+            repository,
+            auditStampProvider: new FixedAuditStampProvider("trusted-editor", updatedAt));
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                ServerOwnedAuditPolicy("CreatedBy"),
+                ServerOwnedAuditPolicy("CreatedAt"),
+                ServerOwnedAuditPolicy("UpdatedBy"),
+                ServerOwnedAuditPolicy("UpdatedAt")
+            ]
+        };
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "新姓名" });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("trusted-editor", repository.LastUpdatedValues!["UpdatedBy"]);
+        Assert.Equal(updatedAt, repository.LastUpdatedValues["UpdatedAt"]);
+        Assert.DoesNotContain("CreatedBy", repository.LastUpdatedValues.Keys);
+        Assert.DoesNotContain("CreatedAt", repository.LastUpdatedValues.Keys);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenRequiredAuditOwnerIsUnavailable_ReturnsStablePlatformErrorWithoutRepositoryUpdate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["ENAME"] = "原姓名",
+                ["UpdatedBy"] = "creator",
+                ["UpdatedAt"] = new DateTime(2026, 8, 27, 9, 0, 0, DateTimeKind.Utc)
+            }
+        ]);
+        var service = Service(repository);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME", "UpdatedBy", "UpdatedAt"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                ServerOwnedAuditPolicy("UpdatedBy"),
+                ServerOwnedAuditPolicy("UpdatedAt")
+            ]
+        };
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "新姓名" });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedValueUnavailable", result.Error!.Code);
+        Assert.Equal(0, repository.UpdateCallCount);
+        var current = await repository.GetByIdAsync(descriptor, "person-1");
+        Assert.Equal("原姓名", current!["ENAME"]);
     }
 
     [Fact]
@@ -654,7 +997,8 @@ public sealed class StandardCrudServiceWriteTests
 
     private static StandardCrudService Service(
         IStandardCrudRepository? repository = null,
-        IEnumerable<IStandardCrudDisplayValueResolver>? displayValueResolvers = null) =>
+        IEnumerable<IStandardCrudDisplayValueResolver>? displayValueResolvers = null,
+        IEntityAuditStampProvider? auditStampProvider = null) =>
         new(
             repository ?? new InMemoryStandardCrudRepository([]),
             EmptyQueryExecutor(),
@@ -663,7 +1007,15 @@ public sealed class StandardCrudServiceWriteTests
             [],
             [],
             [],
-            []);
+            [],
+            auditStampProvider: auditStampProvider);
+
+    private static StandardCrudFieldPolicy ServerOwnedAuditPolicy(string field) => new()
+    {
+        Field = field,
+        StorageRequired = true,
+        ValueOwner = StandardCrudFieldValueOwner.Server
+    };
 
     private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
         new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));
@@ -1034,6 +1386,21 @@ public sealed class StandardCrudServiceWriteTests
                             _ => string.Empty
                         }),
                     StringComparer.Ordinal)).ToList());
+    }
+
+    private sealed class FixedAuditStampProvider(string actorId, DateTime occurredAtUtc) : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => new(actorId, occurredAtUtc);
+    }
+
+    private sealed class NullAuditStampProvider : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => null!;
+    }
+
+    private sealed class MissingActorAuditStampProvider : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => new(" ", DateTime.UtcNow);
     }
 
     private sealed class RecordingPlatformQueryExecutor : IPlatformQueryExecutor

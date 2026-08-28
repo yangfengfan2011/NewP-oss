@@ -1,6 +1,7 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
 
@@ -17,7 +18,11 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IReadOnlyDictionary<(string ResourceKey, string ActionKey), IStandardCrudActionHandler> _actionHandlers;
     private readonly IReadOnlyDictionary<string, IStandardCrudDeleteGuard> _deleteGuards;
     private readonly IReadOnlyDictionary<string, IStandardCrudConditionalDeleteExecutor> _conditionalDeleteExecutors;
+    private readonly IEntityAuditStampProvider? _auditStampProvider;
 
+    /// <summary>
+    /// 组合标准 CRUD 的共享读写依赖；可信审计 owner 只在资源声明服务端必填审计字段时使用。
+    /// </summary>
     public StandardCrudService(
         IStandardCrudRepository repository,
         IPlatformQueryExecutor queryExecutor,
@@ -27,7 +32,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IEnumerable<IStandardCrudValidator> validators,
         IEnumerable<IStandardCrudActionHandler> actionHandlers,
         IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
-        IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null)
+        IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null,
+        IEntityAuditStampProvider? auditStampProvider = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -39,6 +45,7 @@ public sealed class StandardCrudService : IStandardCrudService
         _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _conditionalDeleteExecutors = (conditionalDeleteExecutors ?? [])
             .ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
+        _auditStampProvider = auditStampProvider;
     }
 
     /// <summary>
@@ -170,6 +177,12 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
+        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values);
+        if (serverOwnedFieldError is not null)
+        {
+            return StandardCrudMutationResult.Failure(serverOwnedFieldError);
+        }
+
         var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
         if (readOnlyDisplayFieldError is not null)
         {
@@ -179,13 +192,19 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.CreateFields),
             StringComparer.Ordinal);
-        ApplyCreateAuditFields(descriptor, allowed);
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: true);
         if (requiredError is not null)
         {
             return StandardCrudMutationResult.Failure(requiredError);
         }
 
+        var serverOwnedValueError = TryResolveRequiredAuditStamp(descriptor, out var auditStamp);
+        if (serverOwnedValueError is not null)
+        {
+            return StandardCrudMutationResult.Failure(serverOwnedValueError);
+        }
+
+        ApplyCreateAuditFields(descriptor, allowed, auditStamp);
         var storageInvariantError = ValidateStorageInvariants(descriptor, allowed);
         if (storageInvariantError is not null)
         {
@@ -244,6 +263,12 @@ public sealed class StandardCrudService : IStandardCrudService
             expectedRevision = submittedRevision;
         }
 
+        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values);
+        if (serverOwnedFieldError is not null)
+        {
+            return StandardCrudMutationResult.Failure(serverOwnedFieldError);
+        }
+
         var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
         if (readOnlyDisplayFieldError is not null)
         {
@@ -253,13 +278,19 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.UpdateFields),
             StringComparer.Ordinal);
-        ApplyUpdateAuditFields(descriptor, allowed);
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: false);
         if (requiredError is not null)
         {
             return StandardCrudMutationResult.Failure(requiredError);
         }
 
+        var serverOwnedValueError = TryResolveRequiredAuditStamp(descriptor, out var auditStamp);
+        if (serverOwnedValueError is not null)
+        {
+            return StandardCrudMutationResult.Failure(serverOwnedValueError);
+        }
+
+        ApplyUpdateAuditFields(descriptor, allowed, auditStamp);
         var candidate = new Dictionary<string, object?>(existing, StringComparer.Ordinal);
         foreach (var pair in allowed)
         {
@@ -556,6 +587,79 @@ public sealed class StandardCrudService : IStandardCrudService
         return filtered;
     }
 
+    // 规范字段策略是值所有权的唯一来源；任何服务端拥有字段出现在请求中都稳定拒绝而非静默过滤。
+    private static StandardCrudError? FindReadOnlyServerOwnedFieldError(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values)
+    {
+        var submitted = descriptor.FieldPolicies.FirstOrDefault(policy =>
+            policy.ValueOwner == StandardCrudFieldValueOwner.Server
+            && values.ContainsKey(policy.Field));
+        return submitted is null
+            ? null
+            : CreateReadOnlyServerOwnedFieldError(submitted.Field);
+    }
+
+    // 服务端拥有字段使用字段级 400，调用方可直接移除伪造值且不会把平台事实误判为普通未知字段。
+    private static StandardCrudError CreateReadOnlyServerOwnedFieldError(string field) => new()
+    {
+        StatusCode = 400,
+        Code = "StandardCrud.ServerOwnedFieldReadOnly",
+        ReasonKey = "standardCrud.serverOwnedFieldReadOnly",
+        Message = $"标准 CRUD 服务端字段 {field} 不能由客户端提交。",
+        FieldErrors =
+        [
+            new StandardCrudFieldError(
+                field,
+                "StandardCrud.ServerOwnedFieldReadOnly",
+                $"标准 CRUD 服务端字段 {field} 不能由客户端提交。")
+        ]
+    };
+
+    // 服务端必填审计字段不能降级为客户端输入；owner 未装配或返回无效值时在仓储调用前独立失败。
+    private StandardCrudError? TryResolveRequiredAuditStamp(
+        StandardCrudDescriptor descriptor,
+        out EntityAuditStamp? stamp)
+    {
+        var requiredAuditField = descriptor.FieldPolicies.FirstOrDefault(policy =>
+            policy.StorageRequired
+            && policy.ValueOwner == StandardCrudFieldValueOwner.Server
+            && IsEntityAuditField(policy.Field));
+        if (requiredAuditField is null)
+        {
+            stamp = null;
+            return null;
+        }
+
+        try
+        {
+            stamp = _auditStampProvider?.GetCurrent();
+        }
+        catch (ArgumentException)
+        {
+            stamp = null;
+        }
+
+        return stamp is null
+            ? ServerOwnedValueUnavailable(descriptor, requiredAuditField.Field)
+            : null;
+    }
+
+    // ADR-0026 固定 Entity 审计四字段；主键等其他服务端字段继续由其既有 owner 处理。
+    private static bool IsEntityAuditField(string field) =>
+        field is "CreatedBy" or "CreatedAt" or "UpdatedBy" or "UpdatedAt";
+
+    // owner 缺失属于平台 500，不生成字段级调用方错误，避免把平台配置缺陷归因于请求。
+    private static StandardCrudError ServerOwnedValueUnavailable(
+        StandardCrudDescriptor descriptor,
+        string field) => new()
+    {
+        StatusCode = 500,
+        Code = "StandardCrud.ServerOwnedValueUnavailable",
+        ReasonKey = "standardCrud.serverOwnedValueUnavailable",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端必填字段 {field} 无法取得可信值。"
+    };
+
     // 只有 canonical raw/display companion 属于 output-only；legacy 别名与未知字段继续沿既有边界处理。
     private static StandardCrudError? FindReadOnlyDisplayFieldError(
         StandardCrudDescriptor descriptor,
@@ -745,18 +849,63 @@ public sealed class StandardCrudService : IStandardCrudService
         return constraint.CaseInsensitive ? normalized.ToUpperInvariant() : normalized;
     }
 
-    // CreatedAt 属于创建行为的内核责任；资源只要在详情中暴露该审计字段，就由内核生成而不是要求客户端提交。
-    private static void ApplyCreateAuditFields(StandardCrudDescriptor descriptor, IDictionary<string, object?> values)
+    // 规范策略存在时由可信 Entity audit owner 一次性生成四字段；未采用策略的资源保留既有 CreatedAt 行为。
+    private static void ApplyCreateAuditFields(
+        StandardCrudDescriptor descriptor,
+        IDictionary<string, object?> values,
+        EntityAuditStamp? stamp)
     {
+        var serverOwnedAuditPolicies = descriptor.FieldPolicies
+            .Where(policy =>
+                policy.ValueOwner == StandardCrudFieldValueOwner.Server
+                && IsEntityAuditField(policy.Field))
+            .ToArray();
+        if (serverOwnedAuditPolicies.Length > 0)
+        {
+            var trustedStamp = stamp ?? throw new InvalidOperationException("Required Entity audit stamp was not resolved.");
+            foreach (var policy in serverOwnedAuditPolicies)
+            {
+                values[policy.Field] = policy.Field switch
+                {
+                    "CreatedBy" or "UpdatedBy" => trustedStamp.ActorId,
+                    "CreatedAt" or "UpdatedAt" => trustedStamp.OccurredAtUtc,
+                    _ => throw new InvalidOperationException($"Unsupported Entity audit field '{policy.Field}'.")
+                };
+            }
+
+            return;
+        }
+
         if (descriptor.FieldSet.DetailFields.Contains("CreatedAt", StringComparer.Ordinal))
         {
             values["CreatedAt"] = DateTime.UtcNow;
         }
     }
 
-    // UpdatedAt 属于更新行为的内核责任：只要资源显式把该字段纳入更新白名单，就由内核覆盖为当前时间。
-    private static void ApplyUpdateAuditFields(StandardCrudDescriptor descriptor, IDictionary<string, object?> values)
+    // 规范策略存在时只刷新服务端拥有的更新审计字段；未采用策略的资源保留既有 UpdatedAt 行为。
+    private static void ApplyUpdateAuditFields(
+        StandardCrudDescriptor descriptor,
+        IDictionary<string, object?> values,
+        EntityAuditStamp? stamp)
     {
+        var serverOwnedUpdateAuditPolicies = descriptor.FieldPolicies
+            .Where(policy =>
+                policy.ValueOwner == StandardCrudFieldValueOwner.Server
+                && policy.Field is "UpdatedBy" or "UpdatedAt")
+            .ToArray();
+        if (serverOwnedUpdateAuditPolicies.Length > 0)
+        {
+            var trustedStamp = stamp ?? throw new InvalidOperationException("Required Entity audit stamp was not resolved.");
+            foreach (var policy in serverOwnedUpdateAuditPolicies)
+            {
+                values[policy.Field] = policy.Field == "UpdatedBy"
+                    ? trustedStamp.ActorId
+                    : trustedStamp.OccurredAtUtc;
+            }
+
+            return;
+        }
+
         if (descriptor.FieldSet.UpdateFields.Contains("UpdatedAt", StringComparer.Ordinal))
         {
             values["UpdatedAt"] = DateTime.UtcNow;

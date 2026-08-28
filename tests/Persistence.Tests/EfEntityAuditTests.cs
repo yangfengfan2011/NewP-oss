@@ -75,6 +75,38 @@ public sealed class EfEntityAuditTests
         Assert.Equal(createdAt, row["UpdatedAt"]);
     }
 
+    [Fact]
+    public async Task SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite()
+    {
+        var databaseName = nameof(SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite);
+        await using var dbContext = CreateDbContext(databaseName, new NullEntityAuditStampProvider());
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(
+            new Dictionary<string, object?> { ["EID"] = "person-1" });
+
+        var exception = await Assert.ThrowsAsync<EntityAuditStampUnavailableException>(
+            () => dbContext.SaveChangesAsync());
+
+        Assert.Equal(EntityAuditFailureCodes.StampUnavailable, exception.FailureCode);
+        dbContext.ChangeTracker.Clear();
+        Assert.Empty(await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_WhenAuditOwnerCannotBuildNonEmptyValue_FailsWithStableCodeBeforeStoreWrite()
+    {
+        var databaseName = nameof(SaveChangesAsync_WhenAuditOwnerCannotBuildNonEmptyValue_FailsWithStableCodeBeforeStoreWrite);
+        await using var dbContext = CreateDbContext(databaseName, new MissingActorEntityAuditStampProvider());
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(
+            new Dictionary<string, object?> { ["EID"] = "person-1" });
+
+        var exception = await Assert.ThrowsAsync<EntityAuditStampUnavailableException>(
+            () => dbContext.SaveChangesAsync());
+
+        Assert.Equal(EntityAuditFailureCodes.StampUnavailable, exception.FailureCode);
+        dbContext.ChangeTracker.Clear();
+        Assert.Empty(await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AsNoTracking().ToListAsync());
+    }
+
     private static EfPlatformDbContext CreateDbContext(
         string databaseName,
         IEntityAuditStampProvider auditStampProvider)
@@ -114,5 +146,15 @@ public sealed class EfEntityAuditTests
         {
             _stamp = new EntityAuditStamp(actorId, occurredAtUtc);
         }
+    }
+
+    private sealed class NullEntityAuditStampProvider : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => null!;
+    }
+
+    private sealed class MissingActorEntityAuditStampProvider : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => new(" ", DateTime.UtcNow);
     }
 }

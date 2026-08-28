@@ -115,6 +115,7 @@ public sealed class EfPlatformDbContext : DbContext
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
+    // 在任何 provider 写入前取得并校验可信 stamp，再覆盖四字段以封闭最终存储不变量。
     private void ApplyEntityAuditFields()
     {
         var entries = ChangeTracker.Entries()
@@ -127,7 +128,7 @@ public sealed class EfPlatformDbContext : DbContext
             return;
         }
 
-        var stamp = _auditStampProvider.GetCurrent();
+        var stamp = ResolveAuditStamp();
         foreach (var entry in entries)
         {
             if (entry.State == EntityState.Added)
@@ -143,6 +144,24 @@ public sealed class EfPlatformDbContext : DbContext
 
             SetAuditValue(entry, "UpdatedBy", stamp.ActorId);
             SetAuditValue(entry, "UpdatedAt", ResolveUpdatedAt(entry, stamp.OccurredAtUtc));
+        }
+    }
+
+    // provider 无法构造非空可信值时统一翻译为稳定平台失败，避免泄漏实现相关参数异常。
+    private EntityAuditStamp ResolveAuditStamp()
+    {
+        try
+        {
+            return _auditStampProvider.GetCurrent()
+                ?? throw new EntityAuditStampUnavailableException();
+        }
+        catch (EntityAuditStampUnavailableException)
+        {
+            throw;
+        }
+        catch (ArgumentException exception)
+        {
+            throw new EntityAuditStampUnavailableException(exception);
         }
     }
 

@@ -7,6 +7,7 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Example.Crud;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
 using Microsoft.Extensions.Configuration;
@@ -268,7 +269,8 @@ public sealed class ExampleRecordStandardCrudServiceTests
             [],
             [],
             [],
-            []);
+            [],
+            auditStampProvider: new SystemEntityAuditStampProvider(TimeProvider.System));
 
     private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
         new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));

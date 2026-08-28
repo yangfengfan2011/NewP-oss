@@ -11,6 +11,7 @@ using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Example.Crud;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
@@ -24,6 +25,9 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class ExampleRequiredFieldHttpApiIntegrationTests
 {
+    private static readonly DateTime TrustedAuditTime =
+        new(2026, 8, 28, 10, 45, 0, DateTimeKind.Utc);
+
     [Fact]
     public async Task ExampleRecordCreateApi_RejectsMissingSourceAndPersistsExplicitSource()
     {
@@ -58,9 +62,137 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         var row = Assert.Single(repository.Rows);
         Assert.Equal("API-002", row["ECODE"]);
         Assert.Equal("Manual", row["RecordSource"]);
+        Assert.Equal("example-api-test-subject", row["CreatedBy"]);
+        Assert.Equal(TrustedAuditTime, row["CreatedAt"]);
+        Assert.Equal("example-api-test-subject", row["UpdatedBy"]);
+        Assert.Equal(TrustedAuditTime, row["UpdatedAt"]);
     }
 
-    private static WebApplication BuildApplication(RecordingRepository repository)
+    [Fact]
+    public async Task ExampleRecordUpdateApi_PreservesOmittedSourceAndRejectsExplicitOrInheritedEmptySource()
+    {
+        var repository = new RecordingRepository();
+        await using var app = BuildApplication(repository);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+        var createdResponse = await client.PostAsJsonAsync(
+            "/api/example/records",
+            new Dictionary<string, object?>
+            {
+                ["ECODE"] = "API-003",
+                ["ENAME"] = "原名称",
+                ["RecordSource"] = "Legacy"
+            });
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var row = Assert.Single(repository.Rows);
+        var id = Assert.IsType<string>(row["EID"]);
+
+        var omittedResponse = await client.PutAsJsonAsync(
+            $"/api/example/records/{id}",
+            new Dictionary<string, object?> { ["ENAME"] = "省略来源更新" });
+
+        Assert.Equal(HttpStatusCode.OK, omittedResponse.StatusCode);
+        Assert.Equal("省略来源更新", row["ENAME"]);
+        Assert.Equal("Legacy", row["RecordSource"]);
+
+        var explicitNullResponse = await client.PutAsJsonAsync(
+            $"/api/example/records/{id}",
+            new Dictionary<string, object?> { ["RecordSource"] = null });
+
+        Assert.Equal(HttpStatusCode.BadRequest, explicitNullResponse.StatusCode);
+        var explicitNullError = await explicitNullResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Example.Record.SourceRequired", explicitNullError.GetProperty("code").GetString());
+        Assert.Equal("Legacy", row["RecordSource"]);
+
+        row["RecordSource"] = "";
+        var inheritedInvalidResponse = await client.PutAsJsonAsync(
+            $"/api/example/records/{id}",
+            new Dictionary<string, object?> { ["ENAME"] = "不应写入" });
+
+        Assert.Equal(HttpStatusCode.Conflict, inheritedInvalidResponse.StatusCode);
+        var inheritedError = await inheritedInvalidResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("StandardCrud.StorageInvariantViolation", inheritedError.GetProperty("code").GetString());
+        Assert.Equal("省略来源更新", row["ENAME"]);
+        Assert.Equal(1, repository.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task ExampleRecordApi_RejectsClientSubmittedAuditValuesWithoutWritingThem()
+    {
+        var repository = new RecordingRepository();
+        await using var app = BuildApplication(repository);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        var forgedCreateResponse = await client.PostAsJsonAsync(
+            "/api/example/records",
+            new Dictionary<string, object?>
+            {
+                ["ECODE"] = "API-004",
+                ["ENAME"] = "伪造创建审计",
+                ["RecordSource"] = "Manual",
+                ["CreatedBy"] = "client-forged"
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, forgedCreateResponse.StatusCode);
+        var forgedCreateError = await forgedCreateResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", forgedCreateError.GetProperty("code").GetString());
+        Assert.Empty(repository.Rows);
+
+        var createdResponse = await client.PostAsJsonAsync(
+            "/api/example/records",
+            new Dictionary<string, object?>
+            {
+                ["ECODE"] = "API-005",
+                ["ENAME"] = "可信审计",
+                ["RecordSource"] = "Manual"
+            });
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var row = Assert.Single(repository.Rows);
+        var id = Assert.IsType<string>(row["EID"]);
+
+        var forgedUpdateResponse = await client.PutAsJsonAsync(
+            $"/api/example/records/{id}",
+            new Dictionary<string, object?>
+            {
+                ["ENAME"] = "不应写入",
+                ["UpdatedBy"] = "client-forged"
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, forgedUpdateResponse.StatusCode);
+        var forgedUpdateError = await forgedUpdateResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", forgedUpdateError.GetProperty("code").GetString());
+        Assert.Equal("可信审计", row["ENAME"]);
+        Assert.Equal("example-api-test-subject", row["UpdatedBy"]);
+        Assert.Equal(0, repository.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task ExampleRecordCreateApi_WhenAuditOwnerIsUnavailable_ReturnsStablePlatformErrorWithoutWriting()
+    {
+        var repository = new RecordingRepository();
+        await using var app = BuildApplication(repository, registerAuditProvider: false);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/example/records",
+            new Dictionary<string, object?>
+            {
+                ["ECODE"] = "API-006",
+                ["ENAME"] = "缺少审计 owner",
+                ["RecordSource"] = "Manual"
+            });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("StandardCrud.ServerOwnedValueUnavailable", error.GetProperty("code").GetString());
+        Assert.Empty(repository.Rows);
+    }
+
+    private static WebApplication BuildApplication(
+        RecordingRepository repository,
+        bool registerAuditProvider = true)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -69,6 +201,11 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddSingleton<IStandardCrudRepository>(repository);
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
+        if (registerAuditProvider)
+        {
+            builder.Services.AddSingleton<IEntityAuditStampProvider>(
+                new FixedAuditStampProvider("example-api-test-subject", TrustedAuditTime));
+        }
         builder.Services.AddSingleton<IIdentityAccountDirectory, EmptyIdentityAccountDirectory>();
         builder.Services.AddSingleton<IStandardCrudDisplayValueResolver, ExampleRecordDisplayValueResolver>();
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
@@ -123,9 +260,16 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
             ValueTask.FromResult<IReadOnlyList<IdentityAccountSnapshot>>([]);
     }
 
+    private sealed class FixedAuditStampProvider(string actorId, DateTime occurredAtUtc) : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => new(actorId, occurredAtUtc);
+    }
+
     private sealed class RecordingRepository : IStandardCrudRepository
     {
         public List<Dictionary<string, object?>> Rows { get; } = [];
+
+        public int UpdateCallCount { get; private set; }
 
         public Task<IReadOnlyDictionary<string, object?>?> GetByIdAsync(
             StandardCrudDescriptor descriptor,
@@ -168,8 +312,23 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
             StandardCrudDescriptor descriptor,
             string id,
             IReadOnlyDictionary<string, object?> values,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default)
+        {
+            var row = Rows.SingleOrDefault(candidate =>
+                string.Equals(candidate[descriptor.IdField]?.ToString(), id, StringComparison.Ordinal));
+            if (row is null)
+            {
+                return Task.FromResult<IReadOnlyDictionary<string, object?>?>(null);
+            }
+
+            UpdateCallCount++;
+            foreach (var pair in values)
+            {
+                row[pair.Key] = pair.Value;
+            }
+
+            return Task.FromResult<IReadOnlyDictionary<string, object?>?>(row);
+        }
 
         public Task<IReadOnlyDictionary<string, object?>?> UpdateAsync(
             StandardCrudDescriptor descriptor,
@@ -177,7 +336,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
             IReadOnlyDictionary<string, object?> values,
             long expectedRevision,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            UpdateAsync(descriptor, id, values, cancellationToken);
 
         public Task<bool> DeleteAsync(
             StandardCrudDescriptor descriptor,

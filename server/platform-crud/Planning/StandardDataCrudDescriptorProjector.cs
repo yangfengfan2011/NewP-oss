@@ -30,6 +30,7 @@ public sealed class StandardDataCrudDescriptorProjector
             .ToArray();
     }
 
+    // Required authoring 先收敛为同一字段集合，再同时投影规范策略和唯一错误展示覆盖。
     private IEnumerable<StandardCrudDescriptor> ProjectModule(CanonicalModulePlanModule module)
     {
         var manifest = ReadJson<StandardPluginPackageManifest>(module.PackageRoot, "plugin.json");
@@ -53,6 +54,9 @@ public sealed class StandardDataCrudDescriptorProjector
             var fields = resource.Fields.Select(static field => field.Name).ToArray();
             var listFields = new[] { "EID" }.Concat(fields).ToArray();
             var detailFields = listFields.Concat(["CreatedAt", "UpdatedAt"]).ToArray();
+            var requiredFields = resource.Fields
+                .Where(static field => field.Required)
+                .ToArray();
 
             yield return new StandardCrudDescriptor
             {
@@ -70,8 +74,17 @@ public sealed class StandardDataCrudDescriptorProjector
                     fields),
                 Authorization = StandardCrudAuthorization.ByConvention(resourceKey),
                 OptionLabelFields = [resource.DisplayField],
-                RequiredFields = resource.Fields
-                    .Where(static field => field.Required)
+                FieldPolicies = requiredFields
+                    .Select(static field => new StandardCrudFieldPolicy
+                    {
+                        Field = field.Name,
+                        StorageRequired = true,
+                        CreateInputRequired = true,
+                        UpdateNonEmpty = true,
+                        ValueOwner = StandardCrudFieldValueOwner.Caller
+                    })
+                    .ToArray(),
+                RequiredFields = requiredFields
                     .Select(field => new StandardCrudRequiredField
                     {
                         Field = field.Name,

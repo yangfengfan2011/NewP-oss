@@ -95,6 +95,54 @@ describe('standard CRUD metadata form schema', () => {
     });
   });
 
+  it('consumes standard-data runtime requiredness in create and edit without a frontend default', () => {
+    const standardDataAssetModel = {
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['Name', 'SerialNo'] }],
+      fields: [
+        {
+          name: 'Name',
+          storage: { type: 'string', nullable: false },
+          uiType: 'text',
+          form: {
+            create: { mode: 'editable', required: true },
+            edit: { mode: 'editable', required: true },
+          },
+        },
+        {
+          name: 'SerialNo',
+          storage: { type: 'string', nullable: true },
+          uiType: 'text',
+          form: {
+            create: { mode: 'editable', required: false },
+            edit: { mode: 'editable', required: false },
+          },
+        },
+      ],
+    };
+
+    const create = buildStandardCrudFormSchemaFromModel(standardDataAssetModel, {
+      mode: 'create',
+      enumOptions: {},
+    });
+    const edit = buildStandardCrudFormSchemaFromModel(standardDataAssetModel, {
+      mode: 'edit',
+      enumOptions: {},
+    });
+
+    expect(create.fields.find((field) => field.key === 'Name')).toMatchObject({
+      required: true,
+      readOnly: false,
+      defaultValue: undefined,
+    });
+    expect(edit.fields.find((field) => field.key === 'Name')).toMatchObject({
+      required: true,
+      readOnly: false,
+      defaultValue: undefined,
+    });
+    expect(create.fields.find((field) => field.key === 'SerialNo')).toMatchObject({ required: false });
+    expect(edit.fields.find((field) => field.key === 'SerialNo')).toMatchObject({ required: false });
+  });
+
   it('rejects unsupported uiType before rendering', () => {
     expect(() => buildStandardCrudFormSchemaFromModel(
       { fields: [{ name: 'DepartmentId', uiType: 'treeSelect' }] },

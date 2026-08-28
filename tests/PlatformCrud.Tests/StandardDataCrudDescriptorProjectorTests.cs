@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Planning;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Plugin.Contracts;
@@ -38,7 +39,19 @@ public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
         Assert.Equal(
             "Partner.AssetCatalog.Asset.View",
             descriptor.Authorization!.GetPermissionCode(ICP.Platform.Crud.Descriptors.StandardCrudOperation.List));
-        Assert.Equal("Name", Assert.Single(descriptor.RequiredFields).Field);
+        var requiredPolicy = Assert.Single(descriptor.FieldPolicies);
+        Assert.Equal("Name", requiredPolicy.Field);
+        Assert.True(requiredPolicy.StorageRequired);
+        Assert.True(requiredPolicy.CreateInputRequired);
+        Assert.True(requiredPolicy.UpdateNonEmpty);
+        Assert.Equal(StandardCrudFieldValueOwner.Caller, requiredPolicy.ValueOwner);
+        Assert.Null(requiredPolicy.CreateDefaultValue);
+        var requiredDisplay = Assert.Single(descriptor.RequiredFields);
+        Assert.Equal("Name", requiredDisplay.Field);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, requiredDisplay.Scope);
+        Assert.Equal("Partner.AssetCatalog.Asset.NameRequired", requiredDisplay.ErrorCode);
+        Assert.Equal("Asset的Name不能为空。", requiredDisplay.Message);
+        Assert.Equal("Partner.AssetCatalog.Asset.Name.required", requiredDisplay.ReasonKey);
         Assert.Equal("SerialNo", Assert.Single(descriptor.UniqueConstraints).Fields.Single());
     }
 

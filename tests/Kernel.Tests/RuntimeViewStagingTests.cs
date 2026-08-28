@@ -68,6 +68,8 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "projections", "standard-data.json")));
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "navigation", "standard-data.nav.json")));
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetList.view.json")));
+        var modelPath = Path.Combine(moduleRuntimeRoot, "metadata", "models", "Asset.model.json");
+        Assert.True(File.Exists(modelPath));
         var detailViewPath = Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetDetail.view.json");
         Assert.True(File.Exists(detailViewPath));
         Assert.False(Directory.Exists(Path.Combine(_installRoot, "public", "Partner.AssetCatalog")));
@@ -96,6 +98,15 @@ public sealed class RuntimeViewStagingTests : IDisposable
             ["Name", "IsEnabled"],
             detail.GetProperty("sections")[0].GetProperty("fields").EnumerateArray()
                 .Select(static field => field.GetString()));
+
+        using var modelDocument = JsonDocument.Parse(File.ReadAllText(modelPath));
+        var model = modelDocument.RootElement.GetProperty("Asset");
+        var nameField = model.GetProperty("fields").EnumerateArray()
+            .Single(static field => field.GetProperty("name").GetString() == "Name");
+        Assert.False(nameField.GetProperty("storage").GetProperty("nullable").GetBoolean());
+        Assert.True(nameField.GetProperty("form").GetProperty("create").GetProperty("required").GetBoolean());
+        Assert.True(nameField.GetProperty("form").GetProperty("edit").GetProperty("required").GetBoolean());
+        Assert.False(nameField.GetProperty("form").GetProperty("create").TryGetProperty("defaultValue", out _));
 
         using var catalog = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(_installRoot, "runtime", "active-module-runtime.json")));

@@ -549,6 +549,7 @@ describe('active-module-runtime-loader', () => {
       expect.objectContaining({ key: 'Name', modelField: 'Name', kind: 'text', required: true }),
       expect.objectContaining({ key: 'IsEnabled', modelField: 'IsEnabled', kind: 'boolean', required: false }),
     ]);
+    expect(resource?.fields?.find((field) => field.key === 'Name')).not.toHaveProperty('defaultValue');
     expect(resource?.dataAdapter).toMatchObject({
       list: expect.any(Function),
       get: expect.any(Function),

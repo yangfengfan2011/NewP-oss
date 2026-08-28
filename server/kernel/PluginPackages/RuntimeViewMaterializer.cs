@@ -536,6 +536,31 @@ public class RuntimeViewMaterializer
                     sortable = true
                 };
             }).ToArray();
+            var modelFields = fields.Select(fieldNode =>
+            {
+                var field = fieldNode?.AsObject()
+                    ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' contains an invalid field.");
+                var fieldName = RequiredString(field, "name", module.ModuleId);
+                var fieldType = RequiredString(field, "type", module.ModuleId);
+                var required = field["required"]?.GetValue<bool>()
+                    ?? throw new JsonException(
+                        $"Standard data field '{module.ModuleId}.{resourceKey}.{fieldName}' is missing required semantics.");
+                return new
+                {
+                    name = fieldName,
+                    storage = new
+                    {
+                        type = MapStandardDataStorageType(fieldType),
+                        nullable = !required
+                    },
+                    uiType = MapStandardDataUiType(fieldType),
+                    form = new
+                    {
+                        create = new { mode = "editable", required },
+                        edit = new { mode = "editable", required }
+                    }
+                };
+            }).ToArray();
             var rowActions = new List<object>();
             if (declaredDetailViewKey is not null)
             {
@@ -596,6 +621,27 @@ public class RuntimeViewMaterializer
                     ["type"] = "view",
                     ["view"] = listView
                 });
+            WriteJson(
+                Path.Combine(metadataRoot, "models", $"{resourceKey}.model.json"),
+                new Dictionary<string, object?>
+                {
+                    ["schemaVersion"] = "1.0",
+                    ["type"] = "model",
+                    [resourceKey] = new
+                    {
+                        kind = "Entity",
+                        sections = new[]
+                        {
+                            new
+                            {
+                                key = "basic",
+                                titleKey = "Section_Basic",
+                                fields = modelFields.Select(static field => field.name).ToArray()
+                            }
+                        },
+                        fields = modelFields
+                    }
+                });
         }
 
         WriteJson(
@@ -607,6 +653,28 @@ public class RuntimeViewMaterializer
                 navigation = new { items = navigationItems }
             });
     }
+
+    // Blueprint 的公开类型映射到现有 Model storage 词汇，不引入新的 profile 字段或运行时 fallback。
+    private static string MapStandardDataStorageType(string fieldType) => fieldType switch
+    {
+        "string" => "string",
+        "date" => "date",
+        "dateTime" => "datetime",
+        "boolean" => "bool",
+        "integer" => "int",
+        "decimal" => "decimal",
+        _ => throw new JsonException($"Standard data field type '{fieldType}' is unsupported.")
+    };
+
+    // Shell 表单种类与既有 standard-data 前端投影保持一致，create/edit 都消费同一 Required 事实。
+    private static string MapStandardDataUiType(string fieldType) => fieldType switch
+    {
+        "boolean" => "switch",
+        "integer" or "decimal" => "number",
+        "date" or "dateTime" => "date",
+        "string" => "text",
+        _ => throw new JsonException($"Standard data field type '{fieldType}' is unsupported.")
+    };
 
     // 显式引用必须在包内唯一解析到同资源的 Detail View，避免激活后再回退或局部失败。
     private static void ValidateDeclaredDetailView(

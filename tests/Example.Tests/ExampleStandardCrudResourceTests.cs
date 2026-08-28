@@ -27,12 +27,12 @@ public sealed class ExampleStandardCrudResourceTests
         Assert.Equal("api/example/records", descriptor.Route);
         Assert.Equal("EID", descriptor.IdField);
         Assert.Equal("ENAME", descriptor.DisplayField);
-        Assert.Equal(["EID", "ECODE", "ENAME", "ReviewerUserEID"], descriptor.FieldSet.ListFields);
+        Assert.Equal(["EID", "ECODE", "ENAME", "ReviewerUserEID", "RecordSource"], descriptor.FieldSet.ListFields);
         Assert.Equal(
-            ["EID", "ECODE", "ENAME", "ReviewerUserEID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+            ["EID", "ECODE", "ENAME", "ReviewerUserEID", "RecordSource", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
             descriptor.FieldSet.DetailFields);
-        Assert.Equal(["ECODE", "ENAME", "ReviewerUserEID"], descriptor.FieldSet.CreateFields);
-        Assert.Equal(["ENAME", "ReviewerUserEID"], descriptor.FieldSet.UpdateFields);
+        Assert.Equal(["ECODE", "ENAME", "ReviewerUserEID", "RecordSource"], descriptor.FieldSet.CreateFields);
+        Assert.Equal(["ENAME", "ReviewerUserEID", "RecordSource"], descriptor.FieldSet.UpdateFields);
         Assert.Equal(StandardCrudDeletePolicy.Hard, descriptor.DeletePolicy);
         var displayField = Assert.Single(descriptor.DisplayValueFields);
         Assert.Equal("ReviewerUserEID_DisplayValue", displayField.Field);
@@ -57,6 +57,28 @@ public sealed class ExampleStandardCrudResourceTests
             descriptor.RequiredFields,
             requirement => string.Equals(requirement.Field, "ENAME", StringComparison.Ordinal));
         Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, nameRequirement.Scope);
+
+        var sourceRequirement = Assert.Single(
+            descriptor.RequiredFields,
+            requirement => string.Equals(requirement.Field, "RecordSource", StringComparison.Ordinal));
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, sourceRequirement.Scope);
+        Assert.Equal("Example.Record.SourceRequired", sourceRequirement.ErrorCode);
+        Assert.Equal("example.record.sourceRequired", sourceRequirement.ReasonKey);
+
+        var sourcePolicy = Assert.Single(
+            descriptor.FieldPolicies,
+            policy => string.Equals(policy.Field, "RecordSource", StringComparison.Ordinal));
+        Assert.True(sourcePolicy.StorageRequired);
+        Assert.True(sourcePolicy.CreateInputRequired);
+        Assert.True(sourcePolicy.UpdateNonEmpty);
+        Assert.Equal(StandardCrudFieldValueOwner.Caller, sourcePolicy.ValueOwner);
+        Assert.Equal("Manual", sourcePolicy.CreateDefaultValue);
+
+        var createdByPolicy = Assert.Single(
+            descriptor.FieldPolicies,
+            policy => string.Equals(policy.Field, "CreatedBy", StringComparison.Ordinal));
+        Assert.True(createdByPolicy.StorageRequired);
+        Assert.Equal(StandardCrudFieldValueOwner.Server, createdByPolicy.ValueOwner);
 
         var codeUniqueConstraint = Assert.Single(descriptor.UniqueConstraints);
         Assert.Equal("code", codeUniqueConstraint.Key);

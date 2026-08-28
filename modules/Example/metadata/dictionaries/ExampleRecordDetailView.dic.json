@@ -30,6 +30,10 @@
       "zhs": "复核账号",
       "en": "Reviewer Account"
     },
+    "Field_RecordSource": {
+      "zhs": "记录来源",
+      "en": "Record Source"
+    },
     "Field_CreatedBy": {
       "zhs": "创建人",
       "en": "Created By"

@@ -132,12 +132,14 @@ public sealed class ExampleRecordStandardCrudServiceTests
             {
                 ["ECODE"] = "R001",
                 ["ENAME"] = "记录一",
-                ["ReviewerUserEID"] = "User_A"
+                ["ReviewerUserEID"] = "User_A",
+                ["RecordSource"] = "Manual"
             });
 
         Assert.True(result.Succeeded);
         Assert.Equal("User_A", result.Detail!.Fields["ReviewerUserEID"]);
         Assert.Equal("Alice", result.Detail.Fields["ReviewerUserEID_DisplayValue"]);
+        Assert.Equal("Manual", result.Detail.Fields["RecordSource"]);
         Assert.Equal(1, repository.CreateCallCount);
         Assert.Equal(1, directory.FindManyCallCount);
     }
@@ -153,7 +155,8 @@ public sealed class ExampleRecordStandardCrudServiceTests
                     ["EID"] = "record-1",
                     ["ECODE"] = "R001",
                     ["ENAME"] = "旧名称",
-                    ["ReviewerUserEID"] = "User_A"
+                    ["ReviewerUserEID"] = "User_A",
+                    ["RecordSource"] = "Legacy"
                 }
             ]);
         var directory = new RecordingAccountDirectory([Account("User_B", "Bob")]);
@@ -171,8 +174,58 @@ public sealed class ExampleRecordStandardCrudServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("User_B", result.Detail!.Fields["ReviewerUserEID"]);
         Assert.Equal("Bob", result.Detail.Fields["ReviewerUserEID_DisplayValue"]);
+        Assert.Equal("Legacy", result.Detail.Fields["RecordSource"]);
         Assert.Equal(1, repository.UpdateCallCount);
         Assert.Equal(1, directory.FindManyCallCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRecordSourceIsMissing_ReturnsStableRequiredErrorWithoutWriting()
+    {
+        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = CreateService(repository, EmptyQueryExecutor(), new RecordingAccountDirectory([]));
+
+        var result = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?>
+            {
+                ["ECODE"] = "R002",
+                ["ENAME"] = "缺少来源"
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(400, result.Error!.StatusCode);
+        Assert.Equal("Example.Record.SourceRequired", result.Error.Code);
+        Assert.Equal("example.record.sourceRequired", result.Error.ReasonKey);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenRecordSourceIsBlank_ReturnsStableRequiredErrorWithoutWriting()
+    {
+        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "record-2",
+                ["ECODE"] = "R002",
+                ["ENAME"] = "记录二",
+                ["RecordSource"] = "Legacy"
+            }
+        ]);
+        var service = CreateService(repository, EmptyQueryExecutor(), new RecordingAccountDirectory([]));
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "record-2",
+            new Dictionary<string, object?> { ["RecordSource"] = "   " });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(400, result.Error!.StatusCode);
+        Assert.Equal("Example.Record.SourceRequired", result.Error.Code);
+        Assert.Equal(0, repository.UpdateCallCount);
     }
 
     [Fact]

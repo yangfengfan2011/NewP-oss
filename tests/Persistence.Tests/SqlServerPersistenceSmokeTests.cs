@@ -42,6 +42,9 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string FullUpSchema = "np_partner_fullup";
     private const string CompiledFullUpMigrationOne = "20260813031000_CreateCompiledFullUpAsset";
     private const string CompiledFullUpMigrationTwo = "20260813032000_TransformCompiledFullUpAsset";
+    private const string ExampleRecordSourceNullableMigration = "20260828082341_Example_000003_RecordSourceNullable";
+    private const string ExampleRecordSourceBackfillMigration = "20260828082358_Example_000004_RecordSourceBackfill";
+    private const string ExampleRecordSourceRequiredMigration = "20260828082459_Example_000005_RecordSourceRequired";
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -87,6 +90,11 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerProviderTransitions_EnforceDataPreconditionsWithoutDefaultsOrBackfill() =>
         RunCatalogScenarioAsync("target", VerifyProviderTransitionDataBoundariesAsync);
+
+    [Fact]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerExampleRequiredField_BackfillsHistoricalPrefixWithoutPermanentDefaultAndRestartsReady() =>
+        RunCatalogScenarioAsync("requiredfield", VerifyExampleRequiredFieldLifecycleAsync);
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -406,6 +414,93 @@ public sealed class SqlServerPersistenceSmokeTests
             "np_partner_transition",
             "TransitionAsset",
             "OptionalValue"));
+    }
+
+    private static async Task VerifyExampleRequiredFieldLifecycleAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var connectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        var configuration = BuildSqlServerConfiguration(connectionString);
+        Assert.Equal(identity, WorktreeDatabaseIdentity.Resolve(FindRepositoryRoot()));
+
+        await using (var historicalHost = BuildHostApplication(
+            configuration,
+            "Acceptance",
+            BuildExampleMigrationPlan(2)))
+        {
+            await historicalHost.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(historicalHost)).State);
+        }
+
+        await ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [dbo].[ExampleRecord]
+                ([EID], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [ReviewerUserEID], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'legacy-row', SYSUTCDATETIME(), N'smoke', N'legacy-code', N'Legacy row', NULL, SYSUTCDATETIME(), N'smoke');
+            """);
+
+        await using (var nullableHost = BuildHostApplication(
+            configuration,
+            "Acceptance",
+            BuildExampleMigrationPlan(3)))
+        {
+            await nullableHost.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(nullableHost)).State);
+        }
+
+        Assert.Null(await ExecuteScalarAsync(
+            connectionString,
+            "SELECT [RecordSource] FROM [dbo].[ExampleRecord] WHERE [EID] = N'legacy-row';"));
+        Assert.True(await ColumnIsNullableAsync(connectionString, "dbo", "ExampleRecord", "RecordSource"));
+        Assert.False(await DefaultConstraintExistsAsync(connectionString, "dbo", "ExampleRecord", "RecordSource"));
+
+        await ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [dbo].[ExampleRecord]
+                ([EID], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [ReviewerUserEID], [RecordSource], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'manual-row', SYSUTCDATETIME(), N'smoke', N'manual-code', N'Manual row', NULL, N'Manual', SYSUTCDATETIME(), N'smoke');
+            """);
+
+        IReadOnlyList<CompiledMigrationHistoryEntry> expectedHistory;
+        await using (var currentHost = BuildHostApplication(configuration, "Production"))
+        {
+            expectedHistory = ReadCanonicalHistory(currentHost.Services);
+            await currentHost.ApplyPlatformPersistenceAsync();
+            var readiness = await ReadPersistenceReadinessAsync(currentHost);
+            Assert.Equal(ReadinessState.Ready, readiness.State);
+            Assert.Null(readiness.FailureCode);
+        }
+
+        Assert.Equal(
+            "Legacy",
+            await ExecuteScalarAsync(
+                connectionString,
+                "SELECT [RecordSource] FROM [dbo].[ExampleRecord] WHERE [EID] = N'legacy-row';"));
+        Assert.Equal(
+            "Manual",
+            await ExecuteScalarAsync(
+                connectionString,
+                "SELECT [RecordSource] FROM [dbo].[ExampleRecord] WHERE [EID] = N'manual-row';"));
+        Assert.False(await ColumnIsNullableAsync(connectionString, "dbo", "ExampleRecord", "RecordSource"));
+        Assert.False(await DefaultConstraintExistsAsync(connectionString, "dbo", "ExampleRecord", "RecordSource"));
+
+        var historyBeforeRestart = await ReadAppliedMigrationsAsync(connectionString);
+        Assert.Equal(expectedHistory.Select(static entry => entry.MigrationId), historyBeforeRestart);
+        Assert.Contains(ExampleRecordSourceNullableMigration, historyBeforeRestart);
+        Assert.Contains(ExampleRecordSourceBackfillMigration, historyBeforeRestart);
+        Assert.Contains(ExampleRecordSourceRequiredMigration, historyBeforeRestart);
+        Assert.Equal(expectedHistory.Count, await CountMigrationFactsAsync(connectionString));
+
+        await using (var restartedHost = BuildHostApplication(configuration, "Development"))
+        {
+            await restartedHost.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(restartedHost)).State);
+        }
+
+        Assert.Equal(historyBeforeRestart, await ReadAppliedMigrationsAsync(connectionString));
+        Assert.Equal(expectedHistory.Count, await CountMigrationFactsAsync(connectionString));
     }
 
     private static async Task VerifyFullUpMigrationLifecycleAsync(
@@ -958,6 +1053,65 @@ public sealed class SqlServerPersistenceSmokeTests
             [],
             models,
             [.. basePlan.Streams, stream]);
+    }
+
+    private static CompiledPersistencePlan BuildExampleMigrationPlan(int stage)
+    {
+        if (stage is not (2 or 3))
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage));
+        }
+
+        var basePlan = TestPersistencePlan.CreateCurrentSqlServer();
+        var currentModel = Assert.Single(basePlan.Models, static model =>
+            string.Equals(model.OwnerModuleId, "Example", StringComparison.Ordinal)
+            && string.Equals(model.Name, "ExampleRecord", StringComparison.Ordinal));
+        var stageModel = stage == 2
+            ? currentModel with
+            {
+                Fields = currentModel.Fields
+                    .Where(static field => !string.Equals(field.Name, "RecordSource", StringComparison.Ordinal))
+                    .ToArray()
+            }
+            : currentModel with
+            {
+                Fields = currentModel.Fields
+                    .Select(static field => string.Equals(field.Name, "RecordSource", StringComparison.Ordinal)
+                        ? field with { Required = false }
+                        : field)
+                    .ToArray()
+            };
+        var expectedModelDigest = stage == 2
+            ? "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c"
+            : "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf";
+        Assert.Equal(expectedModelDigest, PersistenceModelDigest.Compute([stageModel]));
+
+        var models = basePlan.Models
+            .Select(model => ReferenceEquals(model, currentModel) ? stageModel : model)
+            .ToArray();
+        var currentStream = Assert.Single(basePlan.Streams, static stream =>
+            string.Equals(stream.ModuleId, "Example", StringComparison.Ordinal));
+        var migrations = currentStream.Migrations.Take(stage).ToArray();
+        var stageStream = currentStream with
+        {
+            ModelDigest = expectedModelDigest,
+            ExpectedFrontier = migrations[^1].MigrationId,
+            Migrations = migrations
+        };
+        var streams = basePlan.Streams
+            .Select(stream => ReferenceEquals(stream, currentStream) ? stageStream : stream)
+            .ToArray();
+        var planDigest = PersistenceModelDigest.Compute(models);
+        return basePlan with
+        {
+            CandidateId = $"example-required-field-stage-{stage}",
+            SnapshotId = planDigest,
+            ModulePlanHash = planDigest,
+            PlanDigest = planDigest,
+            CanonicalBytes = [],
+            Models = models,
+            Streams = streams
+        };
     }
 
     private static CompiledPersistencePlan BuildProviderTransitionPlan(int stage)

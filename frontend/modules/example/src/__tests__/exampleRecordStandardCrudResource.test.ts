@@ -27,6 +27,7 @@ describe('Example persisted record Standard CRUD resource', () => {
           ENAME: '示例记录',
           ReviewerUserEID: 'User_1',
           ReviewerUserEID_DisplayValue: 'Alice',
+          RecordSource: 'Legacy',
         }],
         total: 1,
         page: 1,
@@ -39,6 +40,7 @@ describe('Example persisted record Standard CRUD resource', () => {
           ENAME: '示例记录',
           ReviewerUserEID: 'User_1',
           ReviewerUserEID_DisplayValue: 'Alice',
+          RecordSource: 'Legacy',
         },
         summaries: {},
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -56,12 +58,14 @@ describe('Example persisted record Standard CRUD resource', () => {
       ENAME: '示例记录',
       ReviewerUserEID: 'User_1',
       ReviewerUserEID_DisplayValue: 'Alice',
+      RecordSource: 'Legacy',
     }]);
     expect(detail.normalized.fields).toMatchObject({
       ECODE: 'EX-001',
       ENAME: '示例记录',
       ReviewerUserEID: 'User_1',
       ReviewerUserEID_DisplayValue: 'Alice',
+      RecordSource: 'Legacy',
     });
   });
 });

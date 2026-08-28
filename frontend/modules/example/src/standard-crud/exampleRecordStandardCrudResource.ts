@@ -14,6 +14,7 @@ export interface ExampleRecordListRow extends Record<string, unknown> {
   ENAME: string;
   ReviewerUserEID: string | null;
   ReviewerUserEID_DisplayValue: string | null;
+  RecordSource: string;
 }
 
 function mapExampleRecordListItem(value: unknown): ExampleRecordListRow {
@@ -30,6 +31,7 @@ function mapExampleRecordListItem(value: unknown): ExampleRecordListRow {
       row,
       ['ReviewerUserEID_DisplayValue', 'reviewerUserEID_DisplayValue'],
     ),
+    RecordSource: readStandardCrudString(row, ['RecordSource', 'recordSource']),
   };
 }
 

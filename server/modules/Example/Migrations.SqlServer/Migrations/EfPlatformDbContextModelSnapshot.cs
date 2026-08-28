@@ -51,6 +51,12 @@ namespace ICP.Platform.Modules.Example.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("ENAME");
 
+                    b.Property<string>("RecordSource")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("RecordSource");
+
                     b.Property<string>("ReviewerUserEID")
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")

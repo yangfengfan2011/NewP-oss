@@ -15,7 +15,8 @@
         "fields": [
           "ECODE",
           "ENAME",
-          "ReviewerUserEID"
+          "ReviewerUserEID",
+          "RecordSource"
         ]
       },
       {

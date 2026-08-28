@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Example",
-  "modelDigest": "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c",
-  "bundleChecksum": "218364b9bbe33758702d9cceb2d3e997406a386a5e219c83a00b8b78fa8d1d04",
+  "modelDigest": "55aabe69f5f70166a7c153061443c74ebc26a8363762a389e227db6e05c22dfa",
+  "bundleChecksum": "bd8e09711e30190476ba219399163f1c4ecf461a4e05b7cd23fd4f7eb18bcc37",
   "migrations": [
     {
       "sequence": "000001",
@@ -22,6 +22,33 @@
       "fromModelDigest": "4c30a1bbfe2e587016b0bb1a84d3115c497a5b70fecf21e6bcd2ded5702a46a8",
       "toModelDigest": "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c",
       "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20260828082341_Example_000003_RecordSourceNullable",
+      "previousContentDigest": "5415dc923fbe42354b39a3e013ddec1c9b75bc0e2dbced3b74bf2b4148ed0a57",
+      "contentDigest": "3a1546c8c7be261732afe740e4630336505bdb38b0068838b0b9ac8f1080af66",
+      "fromModelDigest": "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c",
+      "toModelDigest": "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20260828082358_Example_000004_RecordSourceBackfill",
+      "previousContentDigest": "3a1546c8c7be261732afe740e4630336505bdb38b0068838b0b9ac8f1080af66",
+      "contentDigest": "6e01eaca7f843cf58a65e23091796fdd94f45a60ea37fc748c7ab8f364e98822",
+      "fromModelDigest": "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf",
+      "toModelDigest": "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf",
+      "compatibility": "data-backfill"
+    },
+    {
+      "sequence": "000005",
+      "migrationId": "20260828082459_Example_000005_RecordSourceRequired",
+      "previousContentDigest": "6e01eaca7f843cf58a65e23091796fdd94f45a60ea37fc748c7ab8f364e98822",
+      "contentDigest": "75676849266f0dcba73c89fd1fc60fb41ba8aa91cfceec0ed71108d75d4afa0b",
+      "fromModelDigest": "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf",
+      "toModelDigest": "55aabe69f5f70166a7c153061443c74ebc26a8363762a389e227db6e05c22dfa",
+      "compatibility": "contract"
     }
   ]
 }

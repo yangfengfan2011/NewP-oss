@@ -14,4 +14,5 @@ public sealed class ExampleRecordDto
     public string Code { get; init; }
     public string? ReviewerUserEID { get; init; }
     public string? ReviewerUserEID_DisplayValue { get; init; }
+    public string RecordSource { get; init; }
 }

@@ -52,11 +52,25 @@ public sealed class ExampleModelMetadataProvider : IModelDefinitionProvider
     public IReadOnlyList<ModelDefinition> GetDefinitions()
     {
         var storageTypeMap = _storageTypeMapLoader.LoadFromFile(_storageTypeMapPath);
+        var document = GetDocument(storageTypeMap);
+
+        return [_projector.Project(document, storageTypeMap, "SqlServer")];
+    }
+
+    // CRUD 与 persistence 必须消费同一份已校验 authoring 文档，避免由模块工厂重新声明字段语义。
+    internal ModelMetadataDocument GetDocument()
+    {
+        var storageTypeMap = _storageTypeMapLoader.LoadFromFile(_storageTypeMapPath);
+        return GetDocument(storageTypeMap);
+    }
+
+    // 单次加载同时完成 owner metadata 校验，调用方不能取得未经验证的字段事实。
+    private ModelMetadataDocument GetDocument(StorageTypeMapDocument storageTypeMap)
+    {
         var modelPath = Path.Combine(_modelDirectory, "ExampleRecord.model.json");
         var document = _modelLoader.LoadFromFile(modelPath);
         _validator.Validate(document, storageTypeMap);
-
-        return [_projector.Project(document, storageTypeMap, "SqlServer")];
+        return document;
     }
 
     // 从构建输出向上定位仓库根，使 design-time 与测试均读取提交态 authoring 文件。

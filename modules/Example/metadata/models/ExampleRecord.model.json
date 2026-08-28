@@ -14,7 +14,8 @@
         "fields": [
           "ECODE",
           "ENAME",
-          "ReviewerUserEID"
+          "ReviewerUserEID",
+          "RecordSource"
         ]
       }
     ],
@@ -69,6 +70,25 @@
           "targetModel": "IdentityAccount",
           "targetIdField": "EID",
           "targetDisplayField": "ENAME"
+        }
+      },
+      {
+        "name": "RecordSource",
+        "storage": {
+          "type": "string",
+          "nullable": false
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true,
+            "defaultValue": "Manual"
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
         }
       }
     ],

@@ -8,6 +8,6 @@ public sealed class ExampleBaseDtoSignatureProvider
     public IReadOnlyDictionary<string, string> GetSignatures() =>
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["ExampleRecordDto"] = "sha256:09076b84943b24bc33aedf9fa1a87eb0cc67ca23673528b1d4ec8f87be7c257c",
+            ["ExampleRecordDto"] = "sha256:690edd5a0e1837f7f04e22e64fe8e6bab6bab0c813f1629347aa99d94d7fb049",
         };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 
 describe('standard CRUD metadata form schema', () => {
@@ -70,6 +71,28 @@ describe('standard CRUD metadata form schema', () => {
   it('applies edit mode readonly rules from model metadata', () => {
     const schema = buildStandardCrudFormSchemaFromModel(personModel, { mode: 'edit', enumOptions: {} });
     expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ readOnly: true });
+  });
+
+  it('projects the formal Example RecordSource create default separately from create and edit requiredness', () => {
+    const create = buildStandardCrudFormSchemaFromModel(exampleRecordModelDocument.ExampleRecord, {
+      mode: 'create',
+      enumOptions: {},
+    });
+    const edit = buildStandardCrudFormSchemaFromModel(exampleRecordModelDocument.ExampleRecord, {
+      mode: 'edit',
+      enumOptions: {},
+    });
+
+    expect(create.fields.find((field) => field.key === 'RecordSource')).toMatchObject({
+      required: true,
+      readOnly: false,
+      defaultValue: 'Manual',
+    });
+    expect(edit.fields.find((field) => field.key === 'RecordSource')).toMatchObject({
+      required: true,
+      readOnly: false,
+      defaultValue: undefined,
+    });
   });
 
   it('rejects unsupported uiType before rendering', () => {

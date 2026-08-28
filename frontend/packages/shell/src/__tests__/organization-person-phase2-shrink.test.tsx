@@ -49,7 +49,7 @@ describe('organization person standard CRUD phase 2 registration', () => {
     expect(view.query.fields.map((field) => field.key)).toEqual(['keyword', 'employmentStatus']);
     expect(advancedFields.map((field) => field.key)).toEqual(['companyId', 'departmentId', 'positionId', 'isEnabled']);
     expect(view.columns.map((column) => column.key)).toEqual([
-      'personNo', 'name', 'companyName', 'departmentName', 'positionName', 'employmentStatus', 'isEnabled',
+      'personNo', 'name', 'companyId', 'departmentName', 'positionName', 'employmentStatus', 'isEnabled',
     ]);
     expect(view.columns.filter((column) => column.sortable).map((column) => column.field)).toEqual([
       'PersonNo', 'ENAME', 'EmploymentStatus', 'IsEnabled',

@@ -122,6 +122,20 @@ public sealed class PersistenceMigrationRunnerTests
             appendedHistory.Select(static entry => entry.MigrationId));
     }
 
+    [Fact]
+    public void ValidateBeforeConnection_RequiredFieldThreeStepTransition_GeneratesCanonicalHistory()
+    {
+        var history = ReadCanonicalHistory(BuildRequiredFieldBackfillPlan());
+
+        Assert.Equal(
+            [
+                CreateNullableAssetCodeMigration.MigrationId,
+                BackfillAssetCodeMigration.MigrationId,
+                RequireAssetCodeMigration.MigrationId
+            ],
+            history.Select(static entry => entry.MigrationId));
+    }
+
     [Theory]
     [InlineData(ForbiddenSqlMigration.MigrationId)]
     [InlineData(TransactionSuppressedSqlMigration.MigrationId)]
@@ -604,6 +618,85 @@ public sealed class PersistenceMigrationRunnerTests
             modelDigest,
             [],
             models,
+            [stream]);
+    }
+
+    private static CompiledPersistencePlan BuildRequiredFieldBackfillPlan()
+    {
+        const string owner = "Partner.AssetCatalog";
+        const string schema = "np_partner_assetcatalog";
+        var asset = new ModelDefinition(
+            "Asset",
+            "Asset",
+            ModelKind.Entity,
+            [
+                new FieldDefinition(
+                    "Id",
+                    "Id",
+                    FieldKind.Scalar,
+                    FieldValueType.ObjectId,
+                    "string",
+                    Required: true,
+                    IsPrimaryKey: true,
+                    IsAuditField: false),
+                new FieldDefinition(
+                    "Code",
+                    "Code",
+                    FieldKind.Scalar,
+                    FieldValueType.Text,
+                    "nvarchar(256)",
+                    Required: true,
+                    IsPrimaryKey: false,
+                    IsAuditField: false)
+            ],
+            [],
+            owner,
+            schema);
+        var modelDigest = PersistenceModelDigest.Compute([asset]);
+        var migrationIds = new[]
+        {
+            CreateNullableAssetCodeMigration.MigrationId,
+            BackfillAssetCodeMigration.MigrationId,
+            RequireAssetCodeMigration.MigrationId
+        };
+        var steps = migrationIds
+            .Select((migrationId, index) => new CompiledMigrationStep(
+                $"{index + 1:D6}",
+                migrationId,
+                index == 0 ? null : new string((char)('a' + index - 1), 64),
+                new string((char)('a' + index), 64),
+                modelDigest,
+                modelDigest,
+                index switch
+                {
+                    0 => "safe-expand",
+                    1 => "data-backfill",
+                    _ => "contract"
+                }))
+            .ToArray();
+        var assemblyPath = typeof(CreateNullableAssetCodeMigration).Assembly.Location;
+        var assemblyBytes = File.ReadAllBytes(assemblyPath);
+        var stream = new ModuleMigrationStream(
+            owner,
+            PersistenceProvider.SqlServer,
+            assemblyPath,
+            "test-required-field-backfill-manifest.json",
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(assemblyBytes)),
+            modelDigest,
+            migrationIds[^1],
+            IsPlatformStream: false,
+            steps)
+        {
+            AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+        };
+        return new CompiledPersistencePlan(
+            "test-required-field-backfill-candidate",
+            modelDigest,
+            modelDigest,
+            PersistenceProvider.SqlServer,
+            modelDigest,
+            [],
+            [asset],
             [stream]);
     }
 

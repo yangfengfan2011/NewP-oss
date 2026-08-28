@@ -1,5 +1,6 @@
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Persistence.ProviderTargets;
+using ICP.Platform.Persistence.EfCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
@@ -122,6 +123,7 @@ internal sealed class ProviderMigrationOperationValidator(
                 CreateIndexOperation createIndex => ReverseCreateIndex(stream, createIndex, current),
                 DropIndexOperation dropIndex => ReverseDropIndex(stream, dropIndex, current),
                 RenameIndexOperation renameIndex => ReverseRenameIndex(stream, renameIndex, current),
+                RequiredFieldBackfillOperation backfill => ReverseRequiredFieldBackfill(stream, backfill, current),
                 _ => throw Invalid(step)
             };
         }
@@ -431,6 +433,37 @@ internal sealed class ProviderMigrationOperationValidator(
         {
             Columns = table.Columns.Select(column => column == expected ? oldColumn : column).ToArray()
         });
+    }
+
+    // 回填不改变 Provider Target，但必须位于 owner 自有 nullable 扩展与最终 required 目标之间，并携带匹配 CLR 类型的标量。
+    private ProviderTargetSnapshot ReverseRequiredFieldBackfill(
+        ModuleMigrationStream stream,
+        RequiredFieldBackfillOperation operation,
+        ProviderTargetSnapshot current)
+    {
+        if (!string.Equals(operation.OwnerModuleId, stream.ModuleId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("backfill owner differs from the migration stream owner");
+        }
+
+        var table = FindOwnedTable(stream, current, operation.Schema, operation.Table);
+        var column = table.Columns.SingleOrDefault(candidate =>
+            string.Equals(candidate.Name, operation.Column, StringComparison.Ordinal));
+        var finalTable = FindOwnedTable(stream, providerTarget, operation.Schema, operation.Table);
+        var finalColumn = finalTable.Columns.SingleOrDefault(candidate =>
+            string.Equals(candidate.Name, operation.Column, StringComparison.Ordinal));
+        if (column is null || finalColumn is null || !column.IsNullable || finalColumn.IsNullable)
+        {
+            throw new InvalidOperationException("backfill target is not between nullable expand and required contract");
+        }
+
+        if (operation.Value is null
+            || !string.Equals(operation.Value.GetType().FullName, column.ClrType, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("backfill literal type differs from the provider target column");
+        }
+
+        return current;
     }
 
     private ProviderTargetSnapshot ReverseAddPrimaryKey(

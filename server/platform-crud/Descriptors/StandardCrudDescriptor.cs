@@ -44,6 +44,11 @@ public sealed class StandardCrudDescriptor
     public IReadOnlyList<StandardCrudRequiredField> RequiredFields { get; init; } = [];
 
     /// <summary>
+    /// 获取从 Model authoring 投影的规范字段策略；必填错误声明只能覆盖展示，不能改变这里的语义。
+    /// </summary>
+    public IReadOnlyList<StandardCrudFieldPolicy> FieldPolicies { get; init; } = [];
+
+    /// <summary>
     /// 标准写入前置唯一约束声明；这里只描述字段、作用域和错误契约，查重流程由运行时内核执行。
     /// </summary>
     public IReadOnlyList<StandardCrudUniqueConstraint> UniqueConstraints { get; init; } = [];

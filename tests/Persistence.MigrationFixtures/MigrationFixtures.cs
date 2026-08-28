@@ -1,4 +1,5 @@
 using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Persistence.EfCore.Migrations;
 using ICP.Platform.Persistence.ProviderTargets;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -286,6 +287,68 @@ public sealed class AddUniqueAssetCodeMigration : Migration
             table: "Asset",
             column: "Code",
             unique: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class CreateNullableAssetCodeMigration : Migration
+{
+    public const string MigrationId = "20260828001000_CreateNullableAssetCode";
+
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.EnsureSchema("np_partner_assetcatalog");
+        migrationBuilder.CreateTable(
+            name: "Asset",
+            schema: "np_partner_assetcatalog",
+            columns: table => new
+            {
+                Id = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                Code = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true)
+            },
+            constraints: table => table.PrimaryKey("PK_Asset", asset => asset.Id));
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class BackfillAssetCodeMigration : Migration
+{
+    public const string MigrationId = "20260828002000_BackfillAssetCode";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.BackfillRequiredField(
+            "Partner.AssetCatalog",
+            "Asset",
+            "Code",
+            "Legacy's asset",
+            "np_partner_assetcatalog");
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
+public sealed class RequireAssetCodeMigration : Migration
+{
+    public const string MigrationId = "20260828003000_RequireAssetCode";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.AlterColumn<string>(
+            name: "Code",
+            schema: "np_partner_assetcatalog",
+            table: "Asset",
+            type: "nvarchar(256)",
+            maxLength: 256,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(256)",
+            oldMaxLength: 256,
+            oldNullable: true);
 
     protected override void Down(MigrationBuilder migrationBuilder) { }
 }

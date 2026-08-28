@@ -285,6 +285,43 @@ public sealed class StandardCrudDescriptorTests
     }
 
     [Fact]
+    public void Validate_WhenRequiredErrorOverrideContradictsCanonicalPolicy_ThrowsStableMessage()
+    {
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                new StandardCrudFieldPolicy
+                {
+                    Field = "ENAME",
+                    StorageRequired = true,
+                    CreateInputRequired = true,
+                    UpdateNonEmpty = true,
+                    ValueOwner = StandardCrudFieldValueOwner.Caller
+                }
+            ],
+            RequiredFields = [Required("ENAME", StandardCrudRequiredFieldScope.CreateOnly)]
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的必填错误覆盖 ENAME 范围 CreateOnly 与规范字段策略 CreateAndUpdate 不一致。",
+            ex.Message);
+    }
+
+    [Fact]
     public void Adapter_MapsListFieldsAndDisplayValueFieldsToPlatformQueryDescriptor()
     {
         var descriptor = DescriptorWithDisplayValueFields();

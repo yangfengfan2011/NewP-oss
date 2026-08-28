@@ -2,6 +2,7 @@ using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.EfCore.ProviderTargets;
 using ICP.Platform.Persistence.EfCore.Extensions;
+using ICP.Platform.Persistence.EfCore.Migrations;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Persistence.ProviderTargets;
@@ -333,6 +334,104 @@ public sealed class ProviderTargetTests
 
         Assert.Empty(result.Preconditions);
         Assert.DoesNotContain(result.Transition.From.Tables, static table => table.Name == "CreatedAsset");
+    }
+
+    [Fact]
+    public void Validate_RequiredFieldThreeStepTransition_AcceptsStructuredOwnerBackfillBetweenExpandAndContract()
+    {
+        const string addId = "20260828000100_Example_000003_RecordSourceNullable";
+        const string backfillId = "20260828000200_Example_000004_RecordSourceBackfill";
+        const string contractId = "20260828000300_Example_000005_RecordSourceRequired";
+        var table = Target("Example", "ExampleRecord") with
+        {
+            Columns =
+            [
+                TargetColumn("Id"),
+                TargetColumn("RecordSource")
+            ]
+        };
+        var target = new ProviderTargetSnapshot(
+            ProviderTargetSchemaVersions.TargetV1,
+            PersistenceProvider.SqlServer,
+            [table]);
+        var steps = new[]
+        {
+            new CompiledMigrationStep("000003", addId, null, new string('1', 64), new string('2', 64), new string('3', 64), "safe-expand"),
+            new CompiledMigrationStep("000004", backfillId, new string('1', 64), new string('4', 64), new string('3', 64), new string('3', 64), "data-backfill"),
+            new CompiledMigrationStep("000005", contractId, new string('4', 64), new string('5', 64), new string('3', 64), new string('6', 64), "contract")
+        };
+        var stream = new ModuleMigrationStream(
+            "Example",
+            PersistenceProvider.SqlServer,
+            "unused.dll",
+            "unused.json",
+            new string('a', 64),
+            new string('b', 64),
+            contractId,
+            IsPlatformStream: false,
+            steps);
+        var add = new ExplicitOperationsMigration(addId,
+        [
+            new AddColumnOperation
+            {
+                Name = "RecordSource",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(string),
+                ColumnType = "nvarchar(128)",
+                IsNullable = true,
+                MaxLength = 128
+            }
+        ]);
+        var backfill = new ExplicitOperationsMigration(backfillId,
+        [
+            new RequiredFieldBackfillOperation
+            {
+                OwnerModuleId = "Example",
+                Schema = "dbo",
+                Table = "ExampleRecord",
+                Column = "RecordSource",
+                Value = "Legacy"
+            }
+        ]);
+        var contract = new ExplicitOperationsMigration(contractId,
+        [
+            new AlterColumnOperation
+            {
+                Name = "RecordSource",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(string),
+                ColumnType = "nvarchar(128)",
+                IsNullable = false,
+                MaxLength = 128,
+                OldColumn = new AddColumnOperation
+                {
+                    Name = "RecordSource",
+                    Table = "ExampleRecord",
+                    Schema = "dbo",
+                    ClrType = typeof(string),
+                    ColumnType = "nvarchar(128)",
+                    IsNullable = true,
+                    MaxLength = 128
+                }
+            }
+        ]);
+
+        var result = new ProviderMigrationOperationValidator(Plan(target), target).Validate(
+            stream,
+            [
+                new ProviderMigrationCandidate(steps[0], add),
+                new ProviderMigrationCandidate(steps[1], backfill),
+                new ProviderMigrationCandidate(steps[2], contract)
+            ]);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(result[1].Transition.From, result[1].Transition.To);
+        Assert.Empty(result[1].Preconditions);
+        var contractPrecondition = Assert.Single(result[2].Preconditions);
+        Assert.Equal(PersistenceMigrationFailureCodes.NullValuesPresent, contractPrecondition.FailureCode);
+        Assert.Equal("RecordSource", contractPrecondition.Column);
     }
 
     [Fact]

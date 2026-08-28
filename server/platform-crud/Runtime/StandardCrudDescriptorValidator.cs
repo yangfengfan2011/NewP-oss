@@ -30,6 +30,7 @@ public static class StandardCrudDescriptorValidator
         ValidateConcurrencyRevision(descriptor);
         ValidateSort(descriptor);
         ValidateRequiredFields(descriptor);
+        ValidateFieldPolicies(descriptor);
         ValidateUniqueConstraints(descriptor);
     }
 
@@ -185,6 +186,90 @@ public static class StandardCrudDescriptorValidator
             throw new InvalidOperationException($"标准 CRUD 资源 {resourceKey} 的必填字段{fieldPart} 缺少 {name}。");
         }
     }
+
+    // 规范字段策略拥有 Required 语义；旧 RequiredFields 只保留同字段同范围的稳定错误展示覆盖。
+    private static void ValidateFieldPolicies(StandardCrudDescriptor descriptor)
+    {
+        if (descriptor.FieldPolicies.Count == 0)
+        {
+            return;
+        }
+
+        var fields = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var policy in descriptor.FieldPolicies)
+        {
+            if (!fields.Add(policy.Field))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的规范字段策略 {policy.Field} 重复声明。");
+            }
+
+            if (!descriptor.FieldSet.DetailFields.Contains(policy.Field, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的规范字段策略 {policy.Field} 必须包含在 DetailFields 中。");
+            }
+
+            if (policy.ValueOwner == StandardCrudFieldValueOwner.Server
+                && (policy.CreateInputRequired || policy.UpdateNonEmpty || policy.CreateDefaultValue is not null))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端字段 {policy.Field} 不能声明调用方必填或创建默认值。");
+            }
+
+            var expectedScope = ResolveRequiredScope(policy);
+            if (expectedScope is null)
+            {
+                continue;
+            }
+
+            if (policy.CreateInputRequired
+                && !descriptor.FieldSet.CreateFields.Contains(policy.Field, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的规范字段策略 {policy.Field} 必须包含在 CreateFields 中。");
+            }
+
+            if (policy.UpdateNonEmpty
+                && !descriptor.FieldSet.UpdateFields.Contains(policy.Field, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的规范字段策略 {policy.Field} 必须包含在 UpdateFields 中。");
+            }
+
+            var overrides = descriptor.RequiredFields
+                .Where(required => string.Equals(required.Field, policy.Field, StringComparison.Ordinal))
+                .ToArray();
+            if (overrides.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的规范字段策略 {policy.Field} 必须有且只有一个必填错误覆盖。");
+            }
+
+            if (overrides[0].Scope != expectedScope)
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填错误覆盖 {policy.Field} 范围 {overrides[0].Scope} 与规范字段策略 {expectedScope} 不一致。");
+            }
+        }
+
+        var orphan = descriptor.RequiredFields.FirstOrDefault(required => !fields.Contains(required.Field));
+        if (orphan is not null)
+        {
+            throw new InvalidOperationException(
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的必填错误覆盖 {orphan.Field} 没有对应的规范字段策略。");
+        }
+    }
+
+    // 调用方创建必填与更新非空两个独立布尔值只在兼容错误覆盖边界映射回旧 scope 名称。
+    private static StandardCrudRequiredFieldScope? ResolveRequiredScope(StandardCrudFieldPolicy policy) =>
+        (policy.CreateInputRequired, policy.UpdateNonEmpty) switch
+        {
+            (true, true) => StandardCrudRequiredFieldScope.CreateAndUpdate,
+            (true, false) => StandardCrudRequiredFieldScope.CreateOnly,
+            (false, true) => StandardCrudRequiredFieldScope.UpdateOnly,
+            _ => null
+        };
 
     // 唯一约束只做静态边界校验：字段归属必须清晰，运行时查重由服务内核统一接管。
     private static void ValidateUniqueConstraints(StandardCrudDescriptor descriptor)

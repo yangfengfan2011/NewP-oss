@@ -241,7 +241,44 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenRequiredFieldIsNotSubmitted_DoesNotBlockExistingEmptyValue()
+    public async Task CreateAsync_WhenFinalCandidateMissesCallerOwnedStorageRequiredValue_ReturnsConflictWithoutWriting()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            FieldSet = new StandardCrudFieldSet(
+                ListFields: ["EID", "ENAME"],
+                DetailFields: ["EID", "ENAME"],
+                CreateFields: ["ENAME"],
+                UpdateFields: ["ENAME"]),
+            FieldPolicies =
+            [
+                new StandardCrudFieldPolicy
+                {
+                    Field = "ENAME",
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.Caller
+                }
+            ]
+        };
+
+        var result = await service.CreateAsync(descriptor, new Dictionary<string, object?>());
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.StorageInvariantViolation", result.Error.Code);
+        Assert.Null(repository.LastCreatedValues);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenMergedCandidateKeepsEmptyStorageRequiredValue_ReturnsConflictWithoutWriting()
     {
         var repository = new InMemoryStandardCrudRepository(
         [
@@ -254,8 +291,12 @@ public sealed class StandardCrudServiceWriteTests
             "person-1",
             new Dictionary<string, object?> { ["IsEnabled"] = false });
 
-        Assert.True(result.Succeeded);
-        Assert.False((bool)result.Detail!.Fields["IsEnabled"]!);
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error!.StatusCode);
+        Assert.Equal("StandardCrud.StorageInvariantViolation", result.Error.Code);
+        Assert.Equal("standardCrud.storageInvariantViolation", result.Error.ReasonKey);
+        var current = await repository.GetByIdAsync(DescriptorWithRequiredFields(), "person-1");
+        Assert.True((bool)current!["IsEnabled"]!);
     }
 
     [Fact]
@@ -763,6 +804,32 @@ public sealed class StandardCrudServiceWriteTests
                 ErrorCode = "Organization.Person.EnabledRequired",
                 Message = "人员启用状态不能为空。",
                 ReasonKey = "organization.person.enabledRequired"
+            }
+        ],
+        FieldPolicies =
+        [
+            new StandardCrudFieldPolicy
+            {
+                Field = "PersonNo",
+                StorageRequired = true,
+                CreateInputRequired = true,
+                ValueOwner = StandardCrudFieldValueOwner.Caller
+            },
+            new StandardCrudFieldPolicy
+            {
+                Field = "ENAME",
+                StorageRequired = true,
+                CreateInputRequired = true,
+                UpdateNonEmpty = true,
+                ValueOwner = StandardCrudFieldValueOwner.Caller
+            },
+            new StandardCrudFieldPolicy
+            {
+                Field = "IsEnabled",
+                StorageRequired = true,
+                CreateInputRequired = true,
+                UpdateNonEmpty = true,
+                ValueOwner = StandardCrudFieldValueOwner.Caller
             }
         ]
     };

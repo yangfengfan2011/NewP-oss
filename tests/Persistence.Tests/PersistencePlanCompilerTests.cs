@@ -265,19 +265,23 @@ public sealed class PersistencePlanCompilerTests
             item.Code == "PERSISTENCE_MIGRATION_CHAIN_INVALID");
     }
 
-    [Fact]
-    public void Compile_InstalledModuleBackupRestoreOnlyMigration_IsPreservedForFullUpExecution()
+    [Theory]
+    [InlineData("backup-restore-only")]
+    [InlineData("data-backfill")]
+    [InlineData("contract")]
+    public void Compile_InstalledModuleKnownMigrationCompatibility_IsPreservedForFullUpExecution(
+        string compatibility)
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
         package.RewriteManifest(manifest =>
-            manifest["migrations"]!.AsArray()[0]!["compatibility"] = "backup-restore-only");
+            manifest["migrations"]!.AsArray()[0]!["compatibility"] = compatibility);
         var compiler = new PersistencePlanCompiler(FindStorageTypeMap());
 
         var result = compiler.Compile(BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
 
         Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
         var migration = Assert.Single(Assert.Single(result.Plan!.Streams).Migrations);
-        Assert.Equal("backup-restore-only", migration.Compatibility);
+        Assert.Equal(compatibility, migration.Compatibility);
     }
 
     [Fact]

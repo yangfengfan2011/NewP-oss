@@ -186,6 +186,12 @@ public sealed class StandardCrudService : IStandardCrudService
             return StandardCrudMutationResult.Failure(requiredError);
         }
 
+        var storageInvariantError = ValidateStorageInvariants(descriptor, allowed);
+        if (storageInvariantError is not null)
+        {
+            return StandardCrudMutationResult.Failure(storageInvariantError);
+        }
+
         var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, allowed, excludedId: null, cancellationToken);
         if (uniqueError is not null)
         {
@@ -258,6 +264,12 @@ public sealed class StandardCrudService : IStandardCrudService
         foreach (var pair in allowed)
         {
             candidate[pair.Key] = pair.Value;
+        }
+
+        var storageInvariantError = ValidateStorageInvariants(descriptor, candidate);
+        if (storageInvariantError is not null)
+        {
+            return StandardCrudMutationResult.Failure(storageInvariantError);
         }
 
         var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, candidate, excludedId: id, cancellationToken);
@@ -647,6 +659,26 @@ public sealed class StandardCrudService : IStandardCrudService
         Message = requiredField.Message,
         ReasonKey = requiredField.ReasonKey
     };
+
+    // 合并后的完整候选必须满足由调用方拥有的存储非空不变量；服务端拥有值由其可信持久化 owner 在写入边界补齐。
+    private static StandardCrudError? ValidateStorageInvariants(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> candidate)
+    {
+        var invalid = descriptor.FieldPolicies.FirstOrDefault(policy =>
+            policy.StorageRequired
+            && policy.ValueOwner == StandardCrudFieldValueOwner.Caller
+            && (!candidate.TryGetValue(policy.Field, out var value) || IsMissingRequiredValue(value)));
+        return invalid is null
+            ? null
+            : new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "StandardCrud.StorageInvariantViolation",
+                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的存储必填字段 {invalid.Field} 当前为空。",
+                ReasonKey = "standardCrud.storageInvariantViolation"
+            };
+    }
 
     // 唯一约束属于标准写入前置校验；descriptor 只声明约束，执行顺序由内核统一控制。
     private async Task<StandardCrudError?> ValidateUniqueConstraintsAsync(

@@ -436,6 +436,9 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 migration.Compatibility))
             .ToArray();
 
+    /// <summary>
+    /// 校验迁移清单的 owner、程序集摘要、线性链与平台支持的迁移阶段标签。
+    /// </summary>
     private static void ValidateManifest(
         string moduleId,
         PersistenceProvider provider,
@@ -515,7 +518,11 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 || !DigestPattern().IsMatch(migration.ContentDigest)
                 || !DigestPattern().IsMatch(migration.FromModelDigest)
                 || !DigestPattern().IsMatch(migration.ToModelDigest)
-                || migration.Compatibility is not ("safe-expand" or "backup-restore-only"))
+                || migration.Compatibility is not (
+                    "safe-expand"
+                    or "data-backfill"
+                    or "contract"
+                    or "backup-restore-only"))
             {
                 throw new PersistencePlanValidationException(
                     "PERSISTENCE_MIGRATION_CHAIN_INVALID",

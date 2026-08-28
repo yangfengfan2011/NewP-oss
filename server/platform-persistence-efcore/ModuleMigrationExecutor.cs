@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using ICP.Platform.Kernel.ModuleLoading;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Persistence.EfCore.Migrations;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Persistence.EfCore.ProviderTargets;
 using ICP.Platform.Persistence.ProviderTargets;
@@ -17,6 +18,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ICP.Platform.Persistence.EfCore;
 
@@ -261,6 +264,7 @@ internal sealed class ModuleMigrationExecutor(
         }
     }
 
+    // 使用 provider generator 处理结构 DDL，并在同一顺序中渲染已通过 ownership 校验的结构化数据回填。
     private IReadOnlyList<ValidatedMigrationStream> GenerateSqlCommands(
         IReadOnlyList<ValidatedMigrationStream> streams)
     {
@@ -275,6 +279,7 @@ internal sealed class ModuleMigrationExecutor(
         optionsBuilder.ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>();
         using var generationContext = new EfPlatformDbContext(optionsBuilder.Options, plan);
         var generator = generationContext.GetService<IMigrationsSqlGenerator>();
+        var typeMappingSource = generationContext.GetService<IRelationalTypeMappingSource>();
         // AlterColumn 等完整 Up 会让 SQL Server generator 重建受影响索引；该路径需要
         // design-time facet，不能使用裁剪过的 read-optimized runtime model。
         var designTimeModel = generationContext.GetService<IDesignTimeModel>().Model;
@@ -285,7 +290,9 @@ internal sealed class ModuleMigrationExecutor(
                 Migrations = stream.Migrations
                     .Select(migration =>
                     {
-                        var commands = generator.Generate(
+                        var commands = GenerateMigrationCommands(
+                            generator,
+                            typeMappingSource,
                             migration.Migration.UpOperations,
                             designTimeModel);
                         if (commands.Any(static command => command.TransactionSuppressed))
@@ -306,6 +313,65 @@ internal sealed class ModuleMigrationExecutor(
                     .ToArray()
             })
             .ToArray();
+    }
+
+    // 保留原始 operation 顺序；provider DDL 仍按连续分组生成，受限回填只占用自己的命令位置。
+    private static IReadOnlyList<GeneratedMigrationCommand> GenerateMigrationCommands(
+        IMigrationsSqlGenerator generator,
+        IRelationalTypeMappingSource typeMappingSource,
+        IReadOnlyList<MigrationOperation> operations,
+        IModel model)
+    {
+        var commands = new List<GeneratedMigrationCommand>();
+        var providerOperations = new List<MigrationOperation>();
+        foreach (var operation in operations)
+        {
+            if (operation is not RequiredFieldBackfillOperation backfill)
+            {
+                providerOperations.Add(operation);
+                continue;
+            }
+
+            AppendProviderCommands(generator, providerOperations, model, commands);
+            commands.Add(new GeneratedMigrationCommand(
+                RenderRequiredFieldBackfill(backfill, typeMappingSource),
+                TransactionSuppressed: false));
+        }
+
+        AppendProviderCommands(generator, providerOperations, model, commands);
+        return commands;
+    }
+
+    // 将连续的标准 EF operations 交回 provider generator，并清空已消费的分组。
+    private static void AppendProviderCommands(
+        IMigrationsSqlGenerator generator,
+        List<MigrationOperation> operations,
+        IModel model,
+        List<GeneratedMigrationCommand> destination)
+    {
+        if (operations.Count == 0)
+        {
+            return;
+        }
+
+        destination.AddRange(generator.Generate(operations, model)
+            .Select(static command => new GeneratedMigrationCommand(
+                command.CommandText,
+                command.TransactionSuppressed)));
+        operations.Clear();
+    }
+
+    // 仅渲染“NULL 行写入单个有类型常量”的固定 SQL 形状；标量字面量由当前 provider 映射转义。
+    private static string RenderRequiredFieldBackfill(
+        RequiredFieldBackfillOperation operation,
+        IRelationalTypeMappingSource typeMappingSource)
+    {
+        var typeMapping = typeMappingSource.FindMapping(operation.Value.GetType())
+            ?? throw new InvalidOperationException(
+                $"No relational type mapping exists for required-field backfill value type '{operation.Value.GetType().FullName}'.");
+        var valueLiteral = typeMapping.GenerateSqlLiteral(operation.Value);
+        var column = QuoteIdentifier(operation.Column);
+        return $"UPDATE {QuoteTable(operation.Schema, operation.Table)} SET {column} = {valueLiteral} WHERE {column} IS NULL;";
     }
 
     private async Task<UnifiedMigrationHistoryReconciliation> ReconcileHistoryAsync(CancellationToken cancellationToken)
@@ -1098,4 +1164,8 @@ internal sealed class ModuleMigrationExecutor(
         ModuleMigrationStream Source,
         Assembly Assembly,
         IReadOnlyList<ValidatedMigration> Migrations);
+
+    private sealed record GeneratedMigrationCommand(
+        string CommandText,
+        bool TransactionSuppressed);
 }

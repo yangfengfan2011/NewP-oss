@@ -136,6 +136,21 @@ public sealed class PersistenceMigrationRunnerTests
             history.Select(static entry => entry.MigrationId));
     }
 
+    [Fact]
+    public async Task MigrateAsync_CrossOwnerRequiredFieldBackfill_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildRequiredFieldBackfillPlan(CrossOwnerBackfillAssetCodeMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.OperationForbidden, exception.FailureCode);
+        Assert.Equal("Partner.AssetCatalog", exception.ModuleId);
+        Assert.Equal(CrossOwnerBackfillAssetCodeMigration.MigrationId, exception.MigrationId);
+    }
+
     [Theory]
     [InlineData(ForbiddenSqlMigration.MigrationId)]
     [InlineData(TransactionSuppressedSqlMigration.MigrationId)]
@@ -621,7 +636,8 @@ public sealed class PersistenceMigrationRunnerTests
             [stream]);
     }
 
-    private static CompiledPersistencePlan BuildRequiredFieldBackfillPlan()
+    private static CompiledPersistencePlan BuildRequiredFieldBackfillPlan(
+        string backfillMigrationId = BackfillAssetCodeMigration.MigrationId)
     {
         const string owner = "Partner.AssetCatalog";
         const string schema = "np_partner_assetcatalog";
@@ -656,7 +672,7 @@ public sealed class PersistenceMigrationRunnerTests
         var migrationIds = new[]
         {
             CreateNullableAssetCodeMigration.MigrationId,
-            BackfillAssetCodeMigration.MigrationId,
+            backfillMigrationId,
             RequireAssetCodeMigration.MigrationId
         };
         var steps = migrationIds

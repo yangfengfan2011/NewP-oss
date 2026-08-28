@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.EfCore.ProviderTargets;
@@ -139,13 +141,109 @@ public sealed class ProviderTargetTests
             "20260812000000_Example",
             ordered with { Tables = [second] },
             ordered);
-        Assert.Equal(64, ProviderTargetDigest.Compute(transition).Length);
+        var legacyTransitionBytes = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            transition.SchemaVersion,
+            transition.ModuleId,
+            transition.MigrationId,
+            transition.From,
+            transition.To
+        }, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        });
+        var legacyTransitionDigest = Convert.ToHexStringLower(SHA256.HashData(legacyTransitionBytes));
+        Assert.Equal(legacyTransitionDigest, ProviderTargetDigest.Compute(transition));
         Assert.Throws<InvalidOperationException>(() => ProviderTargetDigest.Compute(
             ordered with { SchemaVersion = "provider-target/v2" }));
         Assert.Throws<InvalidOperationException>(() => ProviderTargetDigest.Compute(
             transition with { SchemaVersion = "provider-transition/v2" }));
         Assert.Throws<InvalidOperationException>(() => ProviderTargetDigest.Compute(
             transition with { From = transition.From with { SchemaVersion = "provider-target/v2" } }));
+    }
+
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("schema")]
+    [InlineData("table")]
+    [InlineData("column")]
+    [InlineData("type")]
+    [InlineData("literal")]
+    [InlineData("order")]
+    public void Digest_RequiredFieldBackfillFactMutationChangesTransitionAndFrozenHistory(
+        string mutation)
+    {
+        var table = Target("Example", "ExampleRecord") with
+        {
+            Columns = [TargetColumn("Id"), TargetColumn("RecordSource"), TargetColumn("RecordCategory")]
+        };
+        var target = new ProviderTargetSnapshot(
+            ProviderTargetSchemaVersions.TargetV1,
+            PersistenceProvider.SqlServer,
+            [table]);
+        var sourceFact = new ProviderRequiredFieldBackfillFact(
+            "Example",
+            "dbo",
+            "ExampleRecord",
+            "RecordSource",
+            typeof(string).FullName!,
+            "Legacy");
+        var secondFact = sourceFact with
+        {
+            Column = "RecordCategory",
+            Literal = "Imported"
+        };
+        var transition = new ProviderTransitionSnapshot(
+            ProviderTargetSchemaVersions.TransitionV1,
+            "Example",
+            "20260828000200_Example_000004_RecordSourceBackfill",
+            target,
+            target)
+        {
+            RequiredFieldBackfills = [sourceFact, secondFact]
+        };
+        IReadOnlyList<ProviderRequiredFieldBackfillFact> changedFacts = mutation switch
+        {
+            "owner" => [sourceFact with { OwnerModuleId = "Other" }, secondFact],
+            "schema" => [sourceFact with { Schema = "other" }, secondFact],
+            "table" => [sourceFact with { Table = "OtherRecord" }, secondFact],
+            "column" => [sourceFact with { Column = "OtherSource" }, secondFact],
+            "type" => [sourceFact with { ClrType = typeof(int).FullName! }, secondFact],
+            "literal" => [sourceFact with { Literal = "Manual" }, secondFact],
+            "order" => [secondFact, sourceFact],
+            _ => throw new ArgumentOutOfRangeException(nameof(mutation))
+        };
+        var changed = transition with { RequiredFieldBackfills = changedFacts };
+        var targetDigest = UnifiedMigrationHistoryDigest.ComputeProviderTargetFactDigest(transition);
+        var originalTransitionDigest = UnifiedMigrationHistoryDigest.ComputeProviderTransitionFactDigest(transition);
+        var changedTransitionDigest = UnifiedMigrationHistoryDigest.ComputeProviderTransitionFactDigest(changed);
+        var originalHistory = BindSingleHistory(targetDigest, originalTransitionDigest);
+        var changedHistory = BindSingleHistory(targetDigest, changedTransitionDigest);
+
+        Assert.NotEqual(originalTransitionDigest, changedTransitionDigest);
+        Assert.NotEqual(originalHistory[0].PlanDigest, changedHistory[0].PlanDigest);
+        var exception = Assert.Throws<PersistenceHistoryException>(() =>
+            UnifiedMigrationHistoryReconciler.Reconcile(
+                PersistenceHistoryVersions.ReconciliationV1,
+                originalHistory,
+                changedHistory));
+        Assert.Equal(PersistenceHistoryFailureCodes.PlanMismatch, exception.FailureCode);
+    }
+
+    [Fact]
+    public void Validate_RequiredFieldBackfillLiteralPreservesExactTypedValueIdentity()
+    {
+        var firstValue = new DateTime(2026, 8, 28, 10, 11, 12, DateTimeKind.Utc).AddTicks(1);
+        var secondValue = firstValue.AddTicks(1);
+
+        var first = ValidateRequiredFieldBackfillTransition(firstValue);
+        var second = ValidateRequiredFieldBackfillTransition(secondValue);
+
+        var firstFact = Assert.Single(first.RequiredFieldBackfills);
+        var secondFact = Assert.Single(second.RequiredFieldBackfills);
+        Assert.NotEqual(firstFact.Literal, secondFact.Literal);
+        Assert.NotEqual(ProviderTargetDigest.Compute(first), ProviderTargetDigest.Compute(second));
     }
 
     [Fact]
@@ -428,10 +526,174 @@ public sealed class ProviderTargetTests
 
         Assert.Equal(3, result.Count);
         Assert.Equal(result[1].Transition.From, result[1].Transition.To);
+        var backfillFact = Assert.Single(result[1].Transition.RequiredFieldBackfills);
+        Assert.Equal(
+            new ProviderRequiredFieldBackfillFact(
+                "Example",
+                "dbo",
+                "ExampleRecord",
+                "RecordSource",
+                typeof(string).FullName!,
+                "\"Legacy\""),
+            backfillFact);
         Assert.Empty(result[1].Preconditions);
         var contractPrecondition = Assert.Single(result[2].Preconditions);
         Assert.Equal(PersistenceMigrationFailureCodes.NullValuesPresent, contractPrecondition.FailureCode);
         Assert.Equal("RecordSource", contractPrecondition.Column);
+    }
+
+    [Fact]
+    public void Validate_RequiredFieldBackfillAndContractInSameMigration_IsRejected()
+    {
+        const string migrationId = "20260828000200_Example_000004_RecordSourceBackfillAndContract";
+        var table = Target("Example", "ExampleRecord") with
+        {
+            Columns = [TargetColumn("Id"), TargetColumn("RecordSource")]
+        };
+        var target = new ProviderTargetSnapshot(
+            ProviderTargetSchemaVersions.TargetV1,
+            PersistenceProvider.SqlServer,
+            [table]);
+        var step = new CompiledMigrationStep(
+            "000004",
+            migrationId,
+            new string('1', 64),
+            new string('2', 64),
+            new string('3', 64),
+            new string('4', 64),
+            "data-backfill");
+        var stream = new ModuleMigrationStream(
+            "Example",
+            PersistenceProvider.SqlServer,
+            "unused.dll",
+            "unused.json",
+            new string('a', 64),
+            new string('b', 64),
+            migrationId,
+            IsPlatformStream: false,
+            [step]);
+        var migration = new ExplicitOperationsMigration(migrationId,
+        [
+            new RequiredFieldBackfillOperation
+            {
+                OwnerModuleId = "Example",
+                Schema = "dbo",
+                Table = "ExampleRecord",
+                Column = "RecordSource",
+                Value = "Legacy"
+            },
+            new AlterColumnOperation
+            {
+                Name = "RecordSource",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(string),
+                ColumnType = "nvarchar(128)",
+                IsNullable = false,
+                MaxLength = 128,
+                OldColumn = new AddColumnOperation
+                {
+                    Name = "RecordSource",
+                    Table = "ExampleRecord",
+                    Schema = "dbo",
+                    ClrType = typeof(string),
+                    ColumnType = "nvarchar(128)",
+                    IsNullable = true,
+                    MaxLength = 128
+                }
+            }
+        ]);
+
+        var exception = Assert.Throws<ProviderOperationValidationException>(() =>
+            new ProviderMigrationOperationValidator(Plan(target), target).Validate(
+                stream,
+                [new ProviderMigrationCandidate(step, migration)]));
+
+        Assert.Equal(migrationId, exception.MigrationId);
+    }
+
+    [Fact]
+    public void Validate_DataBackfillStepWithoutStructuredBackfill_IsRejected()
+    {
+        const string migrationId = "20260828000200_Example_000004_UnstructuredDataBackfill";
+        var table = Target("Example", "ExampleRecord") with
+        {
+            Columns = [TargetColumn("Id"), TargetColumn("RecordSource")]
+        };
+        var target = new ProviderTargetSnapshot(
+            ProviderTargetSchemaVersions.TargetV1,
+            PersistenceProvider.SqlServer,
+            [table]);
+        var step = new CompiledMigrationStep(
+            "000004",
+            migrationId,
+            new string('1', 64),
+            new string('2', 64),
+            new string('3', 64),
+            new string('4', 64),
+            "data-backfill");
+        var stream = new ModuleMigrationStream(
+            "Example",
+            PersistenceProvider.SqlServer,
+            "unused.dll",
+            "unused.json",
+            new string('a', 64),
+            new string('b', 64),
+            migrationId,
+            IsPlatformStream: false,
+            [step]);
+        var migration = new ExplicitOperationsMigration(migrationId,
+        [
+            new AlterColumnOperation
+            {
+                Name = "RecordSource",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(string),
+                ColumnType = "nvarchar(128)",
+                IsNullable = false,
+                MaxLength = 128,
+                OldColumn = new AddColumnOperation
+                {
+                    Name = "RecordSource",
+                    Table = "ExampleRecord",
+                    Schema = "dbo",
+                    ClrType = typeof(string),
+                    ColumnType = "nvarchar(128)",
+                    IsNullable = true,
+                    MaxLength = 128
+                }
+            }
+        ]);
+
+        var exception = Assert.Throws<ProviderOperationValidationException>(() =>
+            new ProviderMigrationOperationValidator(Plan(target), target).Validate(
+                stream,
+                [new ProviderMigrationCandidate(step, migration)]));
+
+        Assert.Equal(migrationId, exception.MigrationId);
+    }
+
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("cross-owner-table")]
+    [InlineData("schema")]
+    [InlineData("table")]
+    [InlineData("column")]
+    [InlineData("type")]
+    [InlineData("phase")]
+    [InlineData("order")]
+    [InlineData("compatibility")]
+    public void Validate_RequiredFieldBackfillBoundaryViolation_IsRejected(string violation)
+    {
+        var validationCase = BuildRequiredFieldBackfillValidationCase(violation);
+
+        var exception = Assert.Throws<ProviderOperationValidationException>(() =>
+            new ProviderMigrationOperationValidator(validationCase.Plan, validationCase.Target).Validate(
+                validationCase.Stream,
+                validationCase.Candidates));
+
+        Assert.Equal(validationCase.BackfillMigrationId, exception.MigrationId);
     }
 
     [Fact]
@@ -576,6 +838,271 @@ public sealed class ProviderTargetTests
         DefaultValue: null,
         DefaultValueSql: null,
         ProviderAnnotations: []);
+
+    private static IReadOnlyList<CompiledMigrationHistoryEntry> BindSingleHistory(
+        string providerTargetDigest,
+        string providerTransitionDigest) =>
+        UnifiedMigrationHistoryDigest.BindPlanDigests(
+        [
+            new CompiledMigrationHistoryEntry(
+                0,
+                PersistenceHistoryVersions.ReconciliationV1,
+                "20260828000200_Example_000004_RecordSourceBackfill",
+                "Example",
+                new string('1', 64),
+                new string('2', 64),
+                new string('3', 64),
+                new string('3', 64),
+                string.Empty,
+                ProviderTargetSchemaVersions.TargetV1,
+                providerTargetDigest,
+                ProviderTargetSchemaVersions.TransitionV1,
+                providerTransitionDigest)
+        ]);
+
+    private static ProviderTransitionSnapshot ValidateRequiredFieldBackfillTransition(DateTime value)
+    {
+        const string backfillId = "20260828000200_Example_000004_OccurredAtBackfill";
+        const string contractId = "20260828000300_Example_000005_OccurredAtRequired";
+        var occurredAt = new ProviderColumnTarget(
+            "OccurredAt",
+            "datetime2(7)",
+            typeof(DateTime).FullName!,
+            IsNullable: false,
+            MaxLength: null,
+            Precision: null,
+            Scale: null,
+            IsUnicode: null,
+            IsFixedLength: null,
+            Collation: null,
+            ComputedColumnSql: null,
+            IsStored: null,
+            IsIdentity: false,
+            IsRowVersion: false,
+            DefaultValue: null,
+            DefaultValueSql: null,
+            ProviderAnnotations: []);
+        var table = Target("Example", "ExampleRecord") with
+        {
+            Columns = [TargetColumn("Id"), occurredAt]
+        };
+        var target = new ProviderTargetSnapshot(
+            ProviderTargetSchemaVersions.TargetV1,
+            PersistenceProvider.SqlServer,
+            [table]);
+        var backfillStep = new CompiledMigrationStep(
+            "000004",
+            backfillId,
+            new string('1', 64),
+            new string('2', 64),
+            new string('3', 64),
+            new string('3', 64),
+            "data-backfill");
+        var contractStep = new CompiledMigrationStep(
+            "000005",
+            contractId,
+            new string('2', 64),
+            new string('4', 64),
+            new string('3', 64),
+            new string('5', 64),
+            "contract");
+        var backfill = new ExplicitOperationsMigration(backfillId,
+        [
+            new RequiredFieldBackfillOperation
+            {
+                OwnerModuleId = "Example",
+                Schema = "dbo",
+                Table = "ExampleRecord",
+                Column = "OccurredAt",
+                Value = value
+            }
+        ]);
+        var contract = new ExplicitOperationsMigration(contractId,
+        [
+            new AlterColumnOperation
+            {
+                Name = "OccurredAt",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(DateTime),
+                ColumnType = "datetime2(7)",
+                IsNullable = false,
+                OldColumn = new AddColumnOperation
+                {
+                    Name = "OccurredAt",
+                    Table = "ExampleRecord",
+                    Schema = "dbo",
+                    ClrType = typeof(DateTime),
+                    ColumnType = "datetime2(7)",
+                    IsNullable = true
+                }
+            }
+        ]);
+        var stream = new ModuleMigrationStream(
+            "Example",
+            PersistenceProvider.SqlServer,
+            "unused.dll",
+            "unused.json",
+            new string('a', 64),
+            new string('b', 64),
+            contractId,
+            IsPlatformStream: false,
+            [backfillStep, contractStep]);
+        var result = new ProviderMigrationOperationValidator(Plan(target), target).Validate(
+            stream,
+            [
+                new ProviderMigrationCandidate(backfillStep, backfill),
+                new ProviderMigrationCandidate(contractStep, contract)
+            ]);
+        return result[0].Transition;
+    }
+
+    private static RequiredFieldBackfillValidationCase BuildRequiredFieldBackfillValidationCase(string violation)
+    {
+        const string addId = "20260828000100_Example_000003_RecordSourceNullable";
+        const string backfillId = "20260828000200_Example_000004_RecordSourceBackfill";
+        const string contractId = "20260828000300_Example_000005_RecordSourceRequired";
+        var finalColumn = TargetColumn("RecordSource") with
+        {
+            IsNullable = string.Equals(violation, "phase", StringComparison.Ordinal)
+        };
+        var exampleTable = Target("Example", "ExampleRecord") with
+        {
+            Columns = [TargetColumn("Id"), finalColumn]
+        };
+        var tables = string.Equals(violation, "cross-owner-table", StringComparison.Ordinal)
+            ? new[] { exampleTable, Target("Other", "OtherRecord") with { Columns = [TargetColumn("Id"), TargetColumn("RecordSource")] } }
+            : [exampleTable];
+        var target = new ProviderTargetSnapshot(
+            ProviderTargetSchemaVersions.TargetV1,
+            PersistenceProvider.SqlServer,
+            tables);
+        var addStep = new CompiledMigrationStep(
+            "000003",
+            addId,
+            null,
+            new string('1', 64),
+            new string('2', 64),
+            new string('3', 64),
+            "safe-expand");
+        var backfillStep = new CompiledMigrationStep(
+            "000004",
+            backfillId,
+            new string('1', 64),
+            new string('4', 64),
+            new string('3', 64),
+            new string('3', 64),
+            string.Equals(violation, "compatibility", StringComparison.Ordinal)
+                ? "safe-expand"
+                : "data-backfill");
+        var contractStep = new CompiledMigrationStep(
+            "000005",
+            contractId,
+            new string('4', 64),
+            new string('5', 64),
+            new string('3', 64),
+            new string('6', 64),
+            "contract");
+        var add = new ExplicitOperationsMigration(addId,
+        [
+            new AddColumnOperation
+            {
+                Name = "RecordSource",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(string),
+                ColumnType = "nvarchar(128)",
+                IsNullable = true,
+                MaxLength = 128
+            }
+        ]);
+        var backfill = new ExplicitOperationsMigration(backfillId,
+        [
+            new RequiredFieldBackfillOperation
+            {
+                OwnerModuleId = string.Equals(violation, "owner", StringComparison.Ordinal) ? "Other" : "Example",
+                Schema = string.Equals(violation, "schema", StringComparison.Ordinal) ? "other" : "dbo",
+                Table = violation switch
+                {
+                    "cross-owner-table" => "OtherRecord",
+                    "table" => "MissingRecord",
+                    _ => "ExampleRecord"
+                },
+                Column = string.Equals(violation, "column", StringComparison.Ordinal) ? "MissingSource" : "RecordSource",
+                Value = string.Equals(violation, "type", StringComparison.Ordinal) ? 42 : "Legacy"
+            }
+        ]);
+        var contract = new ExplicitOperationsMigration(contractId,
+        [
+            new AlterColumnOperation
+            {
+                Name = "RecordSource",
+                Table = "ExampleRecord",
+                Schema = "dbo",
+                ClrType = typeof(string),
+                ColumnType = "nvarchar(128)",
+                IsNullable = false,
+                MaxLength = 128,
+                OldColumn = new AddColumnOperation
+                {
+                    Name = "RecordSource",
+                    Table = "ExampleRecord",
+                    Schema = "dbo",
+                    ClrType = typeof(string),
+                    ColumnType = "nvarchar(128)",
+                    IsNullable = true,
+                    MaxLength = 128
+                }
+            }
+        ]);
+        var steps = string.Equals(violation, "phase", StringComparison.Ordinal)
+            ? new[] { addStep, backfillStep }
+            : string.Equals(violation, "order", StringComparison.Ordinal)
+                ? [addStep, contractStep, backfillStep]
+                : [addStep, backfillStep, contractStep];
+        var candidates = string.Equals(violation, "phase", StringComparison.Ordinal)
+            ? new[]
+            {
+                new ProviderMigrationCandidate(addStep, add),
+                new ProviderMigrationCandidate(backfillStep, backfill)
+            }
+            : string.Equals(violation, "order", StringComparison.Ordinal)
+                ?
+                [
+                    new ProviderMigrationCandidate(addStep, add),
+                    new ProviderMigrationCandidate(contractStep, contract),
+                    new ProviderMigrationCandidate(backfillStep, backfill)
+                ]
+                :
+                [
+                    new ProviderMigrationCandidate(addStep, add),
+                    new ProviderMigrationCandidate(backfillStep, backfill),
+                    new ProviderMigrationCandidate(contractStep, contract)
+                ];
+        var stream = new ModuleMigrationStream(
+            "Example",
+            PersistenceProvider.SqlServer,
+            "unused.dll",
+            "unused.json",
+            new string('a', 64),
+            new string('b', 64),
+            steps[^1].MigrationId,
+            IsPlatformStream: false,
+            steps);
+        return new RequiredFieldBackfillValidationCase(
+            Plan(target),
+            target,
+            stream,
+            candidates,
+            backfillId);
+    }
+
+    private sealed record RequiredFieldBackfillValidationCase(
+        CompiledPersistencePlan Plan,
+        ProviderTargetSnapshot Target,
+        ModuleMigrationStream Stream,
+        IReadOnlyList<ProviderMigrationCandidate> Candidates,
+        string BackfillMigrationId);
 
     private sealed class ExactTransitionMigration : Migration
     {

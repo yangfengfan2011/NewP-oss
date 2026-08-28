@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Persistence.ProviderTargets;
 using ICP.Platform.Persistence.EfCore.Migrations;
@@ -44,6 +45,7 @@ internal sealed class ProviderMigrationOperationValidator(
     CompiledPersistencePlan plan,
     ProviderTargetSnapshot providerTarget)
 {
+    // 从最终 target 逆推完整 stream，并在形成任何 transition 事实前关闭非法 operation 形状。
     internal IReadOnlyList<ValidatedProviderMigration> Validate(
         ModuleMigrationStream stream,
         IReadOnlyList<ProviderMigrationCandidate> candidates)
@@ -59,6 +61,7 @@ internal sealed class ProviderMigrationOperationValidator(
         for (var migrationIndex = candidates.Count - 1; migrationIndex >= 0; migrationIndex--)
         {
             var candidate = candidates[migrationIndex];
+            ValidateRequiredFieldBackfillStepShape(candidate);
             var to = current;
             var preconditions = new List<ProviderMigrationDataPrecondition>();
             for (var operationIndex = candidate.Migration.UpOperations.Count - 1; operationIndex >= 0; operationIndex--)
@@ -82,7 +85,13 @@ internal sealed class ProviderMigrationOperationValidator(
                 stream.ModuleId,
                 candidate.Step.MigrationId,
                 current,
-                to);
+                to)
+            {
+                RequiredFieldBackfills = candidate.Migration.UpOperations
+                    .OfType<RequiredFieldBackfillOperation>()
+                    .Select(ProjectRequiredFieldBackfillFact)
+                    .ToArray()
+            };
             results[migrationIndex] = new ValidatedProviderMigration(
                 candidate.Step,
                 candidate.Step.MigrationId,
@@ -94,6 +103,42 @@ internal sealed class ProviderMigrationOperationValidator(
 
         return results;
     }
+
+    // 回填必须独占 data-backfill step，避免把结构收紧或其他命令藏进同一历史事务。
+    private static void ValidateRequiredFieldBackfillStepShape(ProviderMigrationCandidate candidate)
+    {
+        var backfillCount = candidate.Migration.UpOperations
+            .Count(static operation => operation is RequiredFieldBackfillOperation);
+        var isBackfillStep = string.Equals(
+            candidate.Step.Compatibility,
+            "data-backfill",
+            StringComparison.Ordinal);
+        if (backfillCount == 0 && !isBackfillStep)
+        {
+            return;
+        }
+
+        if (!isBackfillStep
+            || backfillCount == 0
+            || backfillCount != candidate.Migration.UpOperations.Count)
+        {
+            throw new ProviderOperationValidationException(
+                candidate.Step.MigrationId,
+                nameof(RequiredFieldBackfillOperation),
+                "required-field backfill must be the only operation kind in a data-backfill step");
+        }
+    }
+
+    // 将已经通过 owner、目标和类型校验的 operation 固化为 Provider Transition 内容事实。
+    private static ProviderRequiredFieldBackfillFact ProjectRequiredFieldBackfillFact(
+        RequiredFieldBackfillOperation operation) =>
+        new(
+            operation.OwnerModuleId,
+            operation.Schema,
+            operation.Table,
+            operation.Column,
+            operation.Value.GetType().FullName!,
+            JsonSerializer.Serialize(operation.Value, operation.Value.GetType()));
 
     private ProviderTargetSnapshot Reverse(
         ModuleMigrationStream stream,

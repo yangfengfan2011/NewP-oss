@@ -117,7 +117,24 @@ public sealed record ProviderTransitionSnapshot(
     string ModuleId,
     string MigrationId,
     ProviderTargetSnapshot From,
-    ProviderTargetSnapshot To);
+    ProviderTargetSnapshot To)
+{
+    /// <summary>
+    /// 按 migration operation 顺序保存不改变结构的 Required 字段回填事实。
+    /// </summary>
+    public IReadOnlyList<ProviderRequiredFieldBackfillFact> RequiredFieldBackfills { get; init; } = [];
+}
+
+/// <summary>
+/// Provider Transition 中不可变的 Required 字段回填归属、目标与有类型字面量事实。
+/// </summary>
+public sealed record ProviderRequiredFieldBackfillFact(
+    string OwnerModuleId,
+    string Schema,
+    string Table,
+    string Column,
+    string ClrType,
+    string Literal);
 
 /// <summary>
 /// Drop 操作缺少旧 facet 时携带的版本化旧对象描述；仅与 <see cref="ProviderTransitionDescriptorCodec"/> 配套生成。
@@ -372,12 +389,36 @@ public static class ProviderTargetDigest
             throw new InvalidOperationException("Provider Transition from/to providers differ.");
         }
 
+        if (transition.RequiredFieldBackfills is null
+            || transition.RequiredFieldBackfills.Any(static fact =>
+                string.IsNullOrWhiteSpace(fact.OwnerModuleId)
+                || string.IsNullOrWhiteSpace(fact.Schema)
+                || string.IsNullOrWhiteSpace(fact.Table)
+                || string.IsNullOrWhiteSpace(fact.Column)
+                || string.IsNullOrWhiteSpace(fact.ClrType)
+                || fact.Literal is null))
+        {
+            throw new InvalidOperationException("Provider Transition contains an invalid required-field backfill fact.");
+        }
+
         var canonical = transition with
         {
             From = Normalize(transition.From),
-            To = Normalize(transition.To)
+            To = Normalize(transition.To),
+            RequiredFieldBackfills = transition.RequiredFieldBackfills.ToArray()
         };
-        return Hash(JsonSerializer.SerializeToUtf8Bytes(canonical, JsonOptions));
+        // 无回填的既有 Transition v1 保持原 canonical 字节，新增事实不能重写冻结历史前缀。
+        var canonicalBytes = canonical.RequiredFieldBackfills.Count == 0
+            ? JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                canonical.SchemaVersion,
+                canonical.ModuleId,
+                canonical.MigrationId,
+                canonical.From,
+                canonical.To
+            }, JsonOptions)
+            : JsonSerializer.SerializeToUtf8Bytes(canonical, JsonOptions);
+        return Hash(canonicalBytes);
     }
 
     private static ProviderTargetSnapshot Normalize(ProviderTargetSnapshot target) => target with

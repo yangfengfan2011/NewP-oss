@@ -333,6 +333,23 @@ public sealed class BackfillAssetCodeMigration : Migration
 
 [DbContext(typeof(EfPlatformDbContext))]
 [Migration(MigrationId)]
+public sealed class CrossOwnerBackfillAssetCodeMigration : Migration
+{
+    public const string MigrationId = "20260828002100_CrossOwnerBackfillAssetCode";
+
+    protected override void Up(MigrationBuilder migrationBuilder) =>
+        migrationBuilder.BackfillRequiredField(
+            "Other.AssetCatalog",
+            "Asset",
+            "Code",
+            "Legacy's asset",
+            "np_partner_assetcatalog");
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(EfPlatformDbContext))]
+[Migration(MigrationId)]
 public sealed class RequireAssetCodeMigration : Migration
 {
     public const string MigrationId = "20260828003000_RequireAssetCode";

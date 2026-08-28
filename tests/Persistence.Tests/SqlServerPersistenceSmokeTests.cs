@@ -25,6 +25,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ICP.Platform.Persistence.Tests;
 
@@ -45,6 +46,12 @@ public sealed class SqlServerPersistenceSmokeTests
     private const string ExampleRecordSourceNullableMigration = "20260828082341_Example_000003_RecordSourceNullable";
     private const string ExampleRecordSourceBackfillMigration = "20260828082358_Example_000004_RecordSourceBackfill";
     private const string ExampleRecordSourceRequiredMigration = "20260828082459_Example_000005_RecordSourceRequired";
+    private readonly ITestOutputHelper testOutput;
+
+    public SqlServerPersistenceSmokeTests(ITestOutputHelper testOutput)
+    {
+        this.testOutput = testOutput;
+    }
 
     [Fact]
     [Trait("Category", "SqlServerSmoke")]
@@ -106,7 +113,7 @@ public sealed class SqlServerPersistenceSmokeTests
     public Task SqlServerCompiledHostFullUp_DestructiveCompatibilityRunsWithoutRiskLabelCutoff() =>
         RunCatalogScenarioAsync("compiledfullup", VerifyCompiledHostFullUpAsync);
 
-    private static async Task RunCatalogScenarioAsync(
+    private async Task RunCatalogScenarioAsync(
         string purpose,
         Func<string, string, WorktreeDatabaseIdentity, Task> scenario)
     {
@@ -123,7 +130,15 @@ public sealed class SqlServerPersistenceSmokeTests
         try
         {
             catalog = await CreateCatalogAsync(adminConnectionString, identity, purpose);
+            testOutput.WriteLine(
+                "NEWP_SQLSERVER_SMOKE purpose={0} catalog={1} checkpoint=catalog-created",
+                purpose,
+                catalog);
             await scenario(adminConnectionString, catalog, identity);
+            testOutput.WriteLine(
+                "NEWP_SQLSERVER_SMOKE purpose={0} catalog={1} checkpoint=scenario-passed",
+                purpose,
+                catalog);
         }
         finally
         {
@@ -131,6 +146,10 @@ public sealed class SqlServerPersistenceSmokeTests
             if (catalog is not null)
             {
                 await DropCreatedCatalogAsync(adminConnectionString, identity, catalog);
+                testOutput.WriteLine(
+                    "NEWP_SQLSERVER_SMOKE purpose={0} catalog={1} cleanup=catalog-dropped",
+                    purpose,
+                    catalog);
             }
         }
     }

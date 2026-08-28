@@ -1658,6 +1658,7 @@ describe('StandardCrudListPageHost', () => {
       { key: 'code', field: 'ECODE', title: '示例编码' },
       { key: 'name', field: 'ENAME', title: '示例名称' },
       { key: 'reviewerUserEid', field: 'ReviewerUserEID', title: '复核账号' },
+      { key: 'recordSource', field: 'RecordSource', title: '记录来源' },
     ]);
     expect(JSON.stringify(body.columns)).not.toContain('ReviewerUserEID_DisplayValue');
   });

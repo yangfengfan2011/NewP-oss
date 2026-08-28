@@ -15,6 +15,17 @@ public class AcceptanceReducerTests
     }
 
     [Fact]
+    public void ExampleRequiredFieldSelection_RequestsOnlyTheExampleRequiredFieldGate()
+    {
+        Assert.Equal(
+            [AcceptanceGateKind.ExampleRequiredField],
+            AcceptanceReducer.GetRequestedGates(AcceptanceGateSelection.ExampleRequiredField));
+        Assert.Equal(
+            "example-required-field",
+            AcceptanceReducer.ToGateName(AcceptanceGateKind.ExampleRequiredField));
+    }
+
+    [Fact]
     public void Reduce_WhenRequestedGateIsNotImplemented_CannotBecomePass()
     {
         var definition = new AcceptanceGateDefinition(

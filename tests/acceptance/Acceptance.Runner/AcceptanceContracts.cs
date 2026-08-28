@@ -7,6 +7,7 @@ public enum AcceptanceGateKind
 {
     IdentityFoundation,
     Personnel,
+    ExampleRequiredField,
     Plugin
 }
 
@@ -14,6 +15,7 @@ public enum AcceptanceGateSelection
 {
     IdentityFoundation,
     Personnel,
+    ExampleRequiredField,
     Plugin,
     All
 }
@@ -65,6 +67,13 @@ public static class AcceptanceFailureCodes
     public const string IdentityFoundationRestartFailed = "ACC_IDENTITY_FOUNDATION_RESTART_FAILED";
     public const string IdentityFoundationSecurityFailed = "ACC_IDENTITY_FOUNDATION_SECURITY_FAILED";
     public const string IdentityFoundationPersistenceFailed = "ACC_IDENTITY_FOUNDATION_PERSISTENCE_FAILED";
+    public const string ExampleRequiredFieldPreflightFailed = "ACC_EXAMPLE_REQUIRED_FIELD_PREFLIGHT_FAILED";
+    public const string ExampleRequiredFieldMigrationFailed = "ACC_EXAMPLE_REQUIRED_FIELD_MIGRATION_FAILED";
+    public const string ExampleRequiredFieldBackfillRecoveryFailed = "ACC_EXAMPLE_REQUIRED_FIELD_BACKFILL_RECOVERY_FAILED";
+    public const string ExampleRequiredFieldContractPreconditionFailed = "ACC_EXAMPLE_REQUIRED_FIELD_CONTRACT_PRECONDITION_FAILED";
+    public const string ExampleRequiredFieldApiFailed = "ACC_EXAMPLE_REQUIRED_FIELD_API_FAILED";
+    public const string ExampleRequiredFieldBrowserFailed = "ACC_EXAMPLE_REQUIRED_FIELD_BROWSER_FAILED";
+    public const string ExampleRequiredFieldRestartFailed = "ACC_EXAMPLE_REQUIRED_FIELD_RESTART_FAILED";
     public const string ProductionColdStartSampleCount = "ACC_PRODUCTION_COLD_START_SAMPLE_COUNT";
     public const string ProductionColdStartScenarioSkipped = "ACC_PRODUCTION_COLD_START_SCENARIO_SKIPPED";
     public const string ProductionColdStartCacheNotCleared = "ACC_PRODUCTION_COLD_START_CACHE_NOT_CLEARED";

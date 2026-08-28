@@ -34,21 +34,35 @@ public static class AcceptanceReducer
         return new AcceptanceReductionResult(AcceptanceVerdict.Passed, null, gateResults);
     }
 
+    /// <summary>
+    /// 把 CLI 选择展开为稳定的 gate 执行顺序。
+    /// </summary>
     public static IReadOnlyList<AcceptanceGateKind> GetRequestedGates(AcceptanceGateSelection selection) =>
         selection switch
         {
             AcceptanceGateSelection.IdentityFoundation => [AcceptanceGateKind.IdentityFoundation],
             AcceptanceGateSelection.Personnel => [AcceptanceGateKind.Personnel],
+            AcceptanceGateSelection.ExampleRequiredField => [AcceptanceGateKind.ExampleRequiredField],
             AcceptanceGateSelection.Plugin => [AcceptanceGateKind.Plugin],
-            AcceptanceGateSelection.All => [AcceptanceGateKind.IdentityFoundation, AcceptanceGateKind.Personnel, AcceptanceGateKind.Plugin],
+            AcceptanceGateSelection.All =>
+            [
+                AcceptanceGateKind.IdentityFoundation,
+                AcceptanceGateKind.Personnel,
+                AcceptanceGateKind.ExampleRequiredField,
+                AcceptanceGateKind.Plugin
+            ],
             _ => throw new ArgumentOutOfRangeException(nameof(selection), selection, "未知验收闸门。")
         };
 
+    /// <summary>
+    /// 返回 evidence schema 中的稳定 gate 名称。
+    /// </summary>
     public static string ToGateName(AcceptanceGateKind gate) =>
         gate switch
         {
             AcceptanceGateKind.IdentityFoundation => "identity-foundation",
             AcceptanceGateKind.Personnel => "personnel",
+            AcceptanceGateKind.ExampleRequiredField => "example-required-field",
             AcceptanceGateKind.Plugin => "plugin",
             _ => throw new ArgumentOutOfRangeException(nameof(gate), gate, "未知验收闸门。")
         };

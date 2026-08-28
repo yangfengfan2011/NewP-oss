@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Acceptance.InteractiveTerminal\Acceptance.InteractiveTerminal.csproj"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\apps\host-api\HostApi.csproj" />
   </ItemGroup>
 
 </Project>

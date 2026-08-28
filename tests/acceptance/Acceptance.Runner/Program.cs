@@ -20,7 +20,8 @@ try
     var acceptanceOutcome = await new AcceptanceSkeletonRunner().RunAsync(
         acceptanceOptions.RepositoryRoot,
         acceptanceOptions.OutputRoot,
-        acceptanceOptions.Gate);
+        acceptanceOptions.Gate,
+        acceptanceOptions.RunId);
 
     Console.WriteLine($"ACCEPTANCE_RESULT: {acceptanceOutcome.ResultPath}");
     return acceptanceOutcome.ExitCode;
@@ -56,10 +57,11 @@ static RunnerOptions ParseAcceptanceArguments(IReadOnlyDictionary<string, string
     var gateText = values.GetValueOrDefault("--gate", "All");
     if (!Enum.TryParse<AcceptanceGateSelection>(gateText, ignoreCase: true, out var gate))
     {
-        throw new ArgumentException("--gate 只能是 IdentityFoundation、Personnel、Plugin 或 All。");
+        throw new ArgumentException("--gate 只能是 IdentityFoundation、Personnel、ExampleRequiredField、Plugin 或 All。");
     }
 
-    return new RunnerOptions(Path.GetFullPath(repositoryRoot), Path.GetFullPath(outputRoot), gate);
+    var runId = values.GetValueOrDefault("--run-id");
+    return new RunnerOptions(Path.GetFullPath(repositoryRoot), Path.GetFullPath(outputRoot), gate, runId);
 }
 
 // production cold-start 入口显式区分 baseline/candidate，并让 candidate 带入冻结 baseline result。
@@ -95,7 +97,8 @@ static (string RepositoryRoot, string OutputRoot) ReadCommonPaths(
 internal sealed record RunnerOptions(
     string RepositoryRoot,
     string OutputRoot,
-    AcceptanceGateSelection Gate);
+    AcceptanceGateSelection Gate,
+    string? RunId);
 
 internal sealed record ProductionColdStartRunnerOptions(
     string RepositoryRoot,

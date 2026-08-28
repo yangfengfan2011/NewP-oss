@@ -28,6 +28,10 @@ public sealed class AcceptanceSkeletonRunner
                 PersonnelAcceptanceRunner.BrowserScenario,
                 PersonnelAcceptanceRunner.RestartScenario
             ]),
+        new(
+            AcceptanceGateKind.ExampleRequiredField,
+            IsImplemented: true,
+            RequiredScenarios: ExampleRequiredFieldAcceptanceRunner.RequiredScenarios),
         new(AcceptanceGateKind.Plugin, IsImplemented: false, RequiredScenarios: [])
     ];
 
@@ -35,6 +39,7 @@ public sealed class AcceptanceSkeletonRunner
         string repositoryRoot,
         string outputRoot,
         AcceptanceGateSelection selection,
+        string? requestedRunId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
@@ -43,7 +48,11 @@ public sealed class AcceptanceSkeletonRunner
         repositoryRoot = Path.GetFullPath(repositoryRoot);
         outputRoot = Path.GetFullPath(outputRoot);
         var startedAtUtc = DateTimeOffset.UtcNow;
-        var runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+        var runId = requestedRunId ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+        if (runId.Length != 24 || runId.Any(static value => value is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        {
+            throw new ArgumentException("Acceptance run id 必须是 24 位小写十六进制。", nameof(requestedRunId));
+        }
         var runDirectory = Path.Combine(outputRoot, "runs", $"{startedAtUtc:yyyyMMddTHHmmssfffZ}-{runId}");
         await using var repositoryGuard = await AcceptanceRepositoryGuard.StartAsync(
             repositoryRoot,
@@ -84,6 +93,20 @@ public sealed class AcceptanceSkeletonRunner
             if (gate is AcceptanceGateKind.Personnel)
             {
                 var execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
+                    .RunAsync(cancellationToken);
+                databaseFingerprint = execution.DatabaseFingerprint;
+                processIdentities.AddRange(execution.ProcessIdentities);
+                artifactRefs.AddRange(execution.ArtifactRefs);
+                cleanup = execution.Cleanup;
+                continue;
+            }
+            if (gate is AcceptanceGateKind.ExampleRequiredField)
+            {
+                var execution = await new ExampleRequiredFieldAcceptanceRunner(
+                        repositoryRoot,
+                        runDirectory,
+                        runId,
+                        recorder)
                     .RunAsync(cancellationToken);
                 databaseFingerprint = execution.DatabaseFingerprint;
                 processIdentities.AddRange(execution.ProcessIdentities);

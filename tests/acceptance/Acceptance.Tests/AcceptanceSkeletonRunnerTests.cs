@@ -8,6 +8,20 @@ namespace ICP.Platform.Acceptance.Tests;
 public class AcceptanceSkeletonRunnerTests
 {
     [Fact]
+    public async Task RunAsync_WhenRequestedRunIdIsInvalid_RejectsBeforeCreatingAResource()
+    {
+        var runner = new AcceptanceSkeletonRunner();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => runner.RunAsync(
+            Path.GetTempPath(),
+            Path.Combine(Path.GetTempPath(), "invalid-acceptance-run"),
+            AcceptanceGateSelection.Plugin,
+            requestedRunId: "INVALID"));
+
+        Assert.Contains("24 位小写十六进制", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_WhenSelectedGateIsNotImplemented_WritesParseableNonGreenResult()
     {
         var outputRoot = Path.Combine(Path.GetTempPath(), $"newp-acceptance-run-{Guid.NewGuid():N}");

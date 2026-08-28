@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("IdentityFoundation", "Personnel", "Plugin", "All")]
+    [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField", "Plugin", "All")]
     [string]$Gate,
     [switch]$NoBuild
 )
@@ -11,7 +11,7 @@ $outputRoot = Join-Path $repoRoot ".codex-temp\acceptance"
 $runnerProject = Join-Path $repoRoot "tests\acceptance\Acceptance.Runner\Acceptance.Runner.csproj"
 
 if ([string]::IsNullOrWhiteSpace($Gate)) {
-    [Console]::Error.WriteLine("ACCEPT_GATE_REQUIRED: specify -Gate IdentityFoundation, Personnel, Plugin, or All.")
+    [Console]::Error.WriteLine("ACCEPT_GATE_REQUIRED: specify -Gate IdentityFoundation, Personnel, ExampleRequiredField, Plugin, or All.")
     exit 2
 }
 

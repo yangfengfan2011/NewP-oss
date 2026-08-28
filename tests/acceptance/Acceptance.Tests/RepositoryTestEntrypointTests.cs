@@ -106,6 +106,29 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
+    public void AcceptanceEntrypoint_AdmitsExampleRequiredFieldGate()
+    {
+        var acceptance = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "scripts", "accept.ps1"));
+
+        Assert.Contains(
+            "[ValidateSet(\"IdentityFoundation\", \"Personnel\", \"ExampleRequiredField\", \"Plugin\", \"All\")]",
+            acceptance,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FinalVerification_AdmitsAndForwardsExampleRequiredFieldGate()
+    {
+        var verification = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "scripts", "verify.ps1"));
+
+        Assert.Contains(
+            "[ValidateSet(\"IdentityFoundation\", \"Personnel\", \"ExampleRequiredField\")]",
+            verification,
+            StringComparison.Ordinal);
+        Assert.Contains("\"-Gate\", $gate, \"-NoBuild\"", verification, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AcceptanceRunner_DoesNotReferenceInternalPersistenceImplementation()
     {
         var repositoryRoot = GetRepositoryRoot();

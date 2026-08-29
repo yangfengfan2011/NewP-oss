@@ -25,6 +25,7 @@ internal static class WindowsInteractiveConsole
     public static async Task<InteractiveConsoleResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
+        string repositoryRoot,
         string workingDirectory,
         string resultDirectory,
         IReadOnlyDictionary<string, string?> environment,
@@ -38,7 +39,7 @@ internal static class WindowsInteractiveConsole
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name
             ?? throw new InvalidOperationException("无法解析 acceptance runner 构建配置。");
         var helperDll = Path.Combine(
-            workingDirectory,
+            repositoryRoot,
             "tests",
             "acceptance",
             "Acceptance.InteractiveTerminal",

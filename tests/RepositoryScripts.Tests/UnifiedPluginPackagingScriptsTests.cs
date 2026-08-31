@@ -4,7 +4,7 @@ using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using Xunit;
 
-namespace ICP.Platform.Kernel.Tests;
+namespace ICP.Platform.RepositoryScripts.Tests;
 
 public class UnifiedPluginPackagingScriptsTests : IDisposable
 {
@@ -312,7 +312,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "pwsh.exe",
+                FileName = "pwsh",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

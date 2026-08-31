@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Xunit;
 
-namespace ICP.Platform.Kernel.Tests;
+namespace ICP.Platform.RepositoryScripts.Tests;
 
 public class EnumerationToStaticResourcesScriptTests : IDisposable
 {
@@ -169,7 +169,7 @@ public class EnumerationToStaticResourcesScriptTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "pwsh.exe",
+                FileName = "pwsh",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

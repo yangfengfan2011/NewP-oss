@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Xunit;
 
-namespace ICP.Platform.Kernel.Tests;
+namespace ICP.Platform.RepositoryScripts.Tests;
 
 public sealed class DicLocalizationValidationScriptTests : IDisposable
 {
@@ -156,7 +156,7 @@ public sealed class DicLocalizationValidationScriptTests : IDisposable
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "pwsh.exe",
+                FileName = "pwsh",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

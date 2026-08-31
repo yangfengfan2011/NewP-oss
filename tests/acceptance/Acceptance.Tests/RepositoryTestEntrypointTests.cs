@@ -48,7 +48,6 @@ public class RepositoryTestEntrypointTests
 
         Assert.Contains("dotnet test ICP-Platform.sln", powerShell, StringComparison.Ordinal);
         Assert.Contains("dotnet test ICP-Platform.sln", shell, StringComparison.Ordinal);
-        Assert.Contains("--maxcpucount:1", powerShell, StringComparison.Ordinal);
         Assert.Contains("corepack pnpm --dir frontend test", powerShell, StringComparison.Ordinal);
         Assert.Contains("corepack pnpm --dir frontend test", shell, StringComparison.Ordinal);
     }

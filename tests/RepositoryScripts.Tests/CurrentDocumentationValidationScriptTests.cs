@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Xunit;
 
-namespace ICP.Platform.Kernel.Tests;
+namespace ICP.Platform.RepositoryScripts.Tests;
 
 public sealed class CurrentDocumentationValidationScriptTests
 {

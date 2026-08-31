@@ -14,8 +14,9 @@ Write-Host "=== dic localization checks ===" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== Backend tests ===" -ForegroundColor Green
-# Windows 下多个测试项目并行启动 PowerShell 子进程会争用同名 shim；保持同一 solution 入口但串行调度项目。
-dotnet test ICP-Platform.sln --configuration Release --maxcpucount:1
+# spawn pwsh 的用例已全部收进 RepositoryScripts.Tests，并在该程序集内串行；
+# 项目之间因此可以并行。
+dotnet test ICP-Platform.sln --configuration Release
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

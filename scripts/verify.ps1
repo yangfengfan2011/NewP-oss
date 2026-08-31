@@ -140,7 +140,7 @@ try {
 
     $currentStage = "dotnet-test"
     Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
-        "test", "ICP-Platform.sln", "--configuration", "Release", "--no-build", "--no-restore", "--maxcpucount:1")
+        "test", "ICP-Platform.sln", "--configuration", "Release", "--no-build", "--no-restore")
 
     $currentStage = "frontend-test"
     Invoke-VerificationStage -Name $currentStage -FilePath $corepackPath -Arguments @(

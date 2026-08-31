@@ -833,14 +833,18 @@ internal sealed class IdentityFoundationAcceptanceRunner
     private async Task RunStopDevAsync(string evidencePath, CancellationToken cancellationToken, bool allowAlreadyStopped = false)
     {
         var result = await RunDevScriptAsync("stop-dev.ps1", cancellationToken);
+        // 证据必须先于判定写出：stop 失败时才是最需要保留 stdout/stderr 的时刻。
+        await WriteEvidenceAsync(evidencePath, ProcessEvidence("scripts/stop-dev.ps1", result), cancellationToken);
         if (result.ExitCode != 0
             || (!allowAlreadyStopped
                 && !result.StandardOutput.Contains("DEV_STOPPED", StringComparison.Ordinal)
                 && !result.StandardOutput.Contains("DEV_ALREADY_STOPPED", StringComparison.Ordinal)))
         {
-            throw new InvalidOperationException($"stop-dev.ps1 failed: {Sanitize(result.StandardError)}");
+            var diagnostic = string.IsNullOrWhiteSpace(result.StandardError)
+                ? result.StandardOutput
+                : result.StandardError;
+            throw new InvalidOperationException($"stop-dev.ps1 failed: {Sanitize(diagnostic)}");
         }
-        await WriteEvidenceAsync(evidencePath, ProcessEvidence("scripts/stop-dev.ps1", result), cancellationToken);
     }
 
     private async Task<AcceptanceProcessResult> RunDevScriptAsync(string scriptName, CancellationToken cancellationToken)

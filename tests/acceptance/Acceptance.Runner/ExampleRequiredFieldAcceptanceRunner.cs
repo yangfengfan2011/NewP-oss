@@ -876,7 +876,11 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             {
                 CaptureDevRunIdentity();
             }
-            throw new InvalidOperationException($"{scriptName} failed: {Sanitize(result.StandardError)}");
+            // 脚本可能只把失败原因写到 stdout；只取 stderr 会抛出没有内容的诊断。
+            var diagnostic = string.IsNullOrWhiteSpace(result.StandardError)
+                ? result.StandardOutput
+                : result.StandardError;
+            throw new InvalidOperationException($"{scriptName} failed: {Sanitize(diagnostic)}");
         }
         if (!allowAlreadyStopped
             && !isDev

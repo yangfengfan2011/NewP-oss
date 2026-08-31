@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using ICP.Platform.Acceptance;
+using ICP.Platform.Testing;
 using Xunit;
 
 namespace ICP.Platform.Acceptance.Tests;
@@ -14,44 +15,23 @@ public sealed class AcceptanceGateTests
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
-    private static bool Enabled =>
-        string.Equals(
-            Environment.GetEnvironmentVariable(RunEnvironmentVariable),
-            "1",
-            StringComparison.Ordinal);
-
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task ExampleRequiredField_CompletesEveryScenario()
     {
-        if (!Enabled)
-        {
-            return;
-        }
-
         var (root, runId) = PrepareRun("example-required-field");
         await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task IdentityFoundation_CompletesEveryScenario()
     {
-        if (!Enabled)
-        {
-            return;
-        }
-
         var (root, runId) = PrepareRun("identity-foundation");
         await new IdentityFoundationAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task Personnel_CompletesEveryScenario()
     {
-        if (!Enabled)
-        {
-            return;
-        }
-
         var (root, runId) = PrepareRun("personnel");
         await new PersonnelAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }

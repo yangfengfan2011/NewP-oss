@@ -1,0 +1,12 @@
+<Project>
+
+  <!--
+    共享测试支撑源码。只链接进 *.Tests 项目：Persistence.MigrationFixtures 之类的
+    夹具项目不引用 xunit，链接进去会编译失败。
+  -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\*.cs"
+             Link="TestSupport\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

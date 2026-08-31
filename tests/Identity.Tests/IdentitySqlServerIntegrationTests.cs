@@ -20,6 +20,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Xunit;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.Identity.Tests;
 
@@ -28,15 +29,10 @@ public sealed class IdentitySqlServerIntegrationTests
     private const string RunEnvironmentVariable = "NEWP_RUN_IDENTITY_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_IDENTITY_SQLSERVER_ADMIN_CONNECTION";
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Identity 持久化与并发行为")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_WhenLocalAdminRoleAssignmentFails_RollsBackEveryBootstrapWrite()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var catalog = $"NewPIdentity33Rollback_{Guid.NewGuid():N}";
         var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
@@ -92,15 +88,10 @@ public sealed class IdentitySqlServerIntegrationTests
         }
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Identity 持久化与并发行为")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_ConcurrentBootstrapUsesDatabaseMutexAndCreatesExactlyOneAdministrator()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var catalog = $"NewPIdentity33_{Guid.NewGuid():N}";
         var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
@@ -150,15 +141,10 @@ public sealed class IdentitySqlServerIntegrationTests
         }
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Identity 持久化与并发行为")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_RevisionClaimAndFailureInjectionAreAtomic()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var catalog = $"NewPIdentity32_{Guid.NewGuid():N}";
         var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
@@ -256,15 +242,10 @@ public sealed class IdentitySqlServerIntegrationTests
         }
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Identity 持久化与并发行为")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_PasswordChangeRotatesSessionPagesEventsAndRollsBackFailedResign()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var catalog = $"NewPIdentity37_{Guid.NewGuid():N}";
         var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";

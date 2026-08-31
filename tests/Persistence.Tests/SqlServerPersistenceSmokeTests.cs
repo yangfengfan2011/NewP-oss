@@ -26,6 +26,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.Persistence.Tests;
 
@@ -53,62 +54,62 @@ public sealed class SqlServerPersistenceSmokeTests
         this.testOutput = testOutput;
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_EmptyCatalogCreatesCurrentFoundationAndWarmStartIsNoOp() =>
         RunCatalogScenarioAsync("forward", VerifyForwardMigrationAndWarmNoOpAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerHostBootstrap_EmptyCatalogBecomesReadyAndWarmStartIsNoOp() =>
         RunCatalogScenarioAsync("host", VerifyHostBootstrapAndWarmNoOpAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerReadOnlyConsistency_DriftFailsWithoutRepairOrHistoryWrite() =>
         RunCatalogScenarioAsync("consistency", VerifyReadOnlyConsistencyFailureAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_NonEmptyUnownedCatalogIsRejected() =>
         RunCatalogScenarioAsync("unowned", VerifyNonEmptyUnownedCatalogIsRejectedAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_CatalogFingerprintMismatchIsRejected() =>
         RunCatalogScenarioAsync("mismatch", VerifyCatalogFingerprintMismatchIsRejectedAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_PreviousMigrationHistoryRequiresDatabaseRebuild() =>
         RunCatalogScenarioAsync("oldhistory", VerifyPreviousMigrationHistoryRequiresDatabaseRebuildAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerModuleMigrations_ApplyNoOpFailureRetryAndOldPlanAhead() =>
         RunCatalogScenarioAsync("module", VerifyModuleMigrationLifecycleAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerBootstrap_PrecreatedBusinessTableRequiresDatabaseRebuild() =>
         RunCatalogScenarioAsync("prebuilt", VerifyPrecreatedBusinessTableRequiresDatabaseRebuildAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerProviderTransitions_EnforceDataPreconditionsWithoutDefaultsOrBackfill() =>
         RunCatalogScenarioAsync("target", VerifyProviderTransitionDataBoundariesAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerExampleRequiredField_BackfillsHistoricalPrefixWithoutPermanentDefaultAndRestartsReady() =>
         RunCatalogScenarioAsync("requiredfield", VerifyExampleRequiredFieldLifecycleAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerFullUp_DropRenameAlterRollbackRetryConcurrentAndNoOp() =>
         RunCatalogScenarioAsync("fullup", VerifyFullUpMigrationLifecycleAsync);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerCompiledHostFullUp_DestructiveCompatibilityRunsWithoutRiskLabelCutoff() =>
         RunCatalogScenarioAsync("compiledfullup", VerifyCompiledHostFullUpAsync);
@@ -117,11 +118,6 @@ public sealed class SqlServerPersistenceSmokeTests
         string purpose,
         Func<string, string, WorktreeDatabaseIdentity, Task> scenario)
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var repositoryRoot = FindRepositoryRoot();
         var identity = WorktreeDatabaseIdentity.Resolve(repositoryRoot);
         var adminConnectionString = ResolveAdminConnectionString();

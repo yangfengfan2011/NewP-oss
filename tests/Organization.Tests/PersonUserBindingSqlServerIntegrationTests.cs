@@ -20,6 +20,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.Modules.Organization.Tests;
 
@@ -28,11 +29,10 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION";
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Person/User 绑定生命周期")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_BindingCommitsPersonUserRevisionEventAndAuditOrRollsEverythingBack()
     {
-        if (!ShouldRun()) return;
         var fixture = await SqlFixture.CreateAsync("Transaction");
         await using (fixture)
         {
@@ -97,11 +97,10 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         }
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Person/User 绑定生命周期")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_LifecycleCommitsAtomicallyAndRestoreNeverRevivesOldSession()
     {
-        if (!ShouldRun()) return;
         var fixture = await SqlFixture.CreateAsync("Lifecycle");
         await using (fixture)
         {
@@ -206,11 +205,10 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         }
     }
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Person/User 绑定生命周期")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_ConcurrentBindingAndConditionalDeleteNeverDeletesBoundPerson()
     {
-        if (!ShouldRun()) return;
         var fixture = await SqlFixture.CreateAsync("DeleteRace");
         await using (fixture)
         {
@@ -268,9 +266,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             }
         }
     }
-
-    private static bool ShouldRun() =>
-        string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal);
 
     private static EfPlatformDbContext CreateRuntimeContext(string connectionString)
     {

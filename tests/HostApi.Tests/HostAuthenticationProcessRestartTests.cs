@@ -23,6 +23,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.HostApi.Tests;
 
@@ -32,15 +33,10 @@ public sealed class HostAuthenticationProcessRestartTests
     private static readonly ConcurrentDictionary<int, Task[]> CaptureTasks = new();
     private static readonly ConcurrentDictionary<int, string[]> LogPaths = new();
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Host 进程重启后的认证状态保持")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task RealHostProcessRestart_ReusesDatabaseSessionAndProtectedCookie()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var catalog = $"NewPAuth35_{Guid.NewGuid():N}";
         var root = Path.Combine(Path.GetTempPath(), $"newp-auth35-{Guid.NewGuid():N}");
         var keyRing = Path.Combine(root, "key-ring");

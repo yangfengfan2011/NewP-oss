@@ -12,6 +12,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.Authentication.Tests;
 
@@ -21,15 +22,10 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
     private const string AdminConnectionEnvironmentVariable = "NEWP_AUTHENTICATION_SQLSERVER_ADMIN_CONNECTION";
     private static readonly DateTime InitialTime = new(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc);
 
-    [Fact]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的会话过期与撤销")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_EnforcesDigestUniquenessAndMakesConcurrentRevocationRollbackAndPurgeAtomic()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(RunEnvironmentVariable), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var catalog = $"NewPAuthentication34_{Guid.NewGuid():N}";
         var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";

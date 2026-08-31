@@ -745,7 +745,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         var source = "log-missing";
         try
         {
-            using var state = JsonDocument.Parse(File.ReadAllText(statePath));
+            using var state = JsonDocument.Parse(ReadWhileWriterHoldsFile(statePath));
             if (!state.RootElement.TryGetProperty("logs", out var logs))
             {
                 return new OwnedHostLogProbe(false, string.Empty, "dev-state-has-no-logs");
@@ -770,7 +770,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                     continue;
                 }
 
-                var text = File.ReadAllText(path);
+                var text = ReadWhileWriterHoldsFile(path);
                 if (text.Contains(expectedDiagnostic, StringComparison.Ordinal))
                 {
                     return new OwnedHostLogProbe(true, string.Empty, property);
@@ -784,10 +784,28 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         }
         catch (Exception exception)
         {
-            return new OwnedHostLogProbe(false, exception.GetType().Name, "log-read-failed");
+            // 读不到日志是基础设施故障，不是"Host 没报出期望诊断"。
+            // 把两者混成同一个否定结论会让调用者去查错误的东西。
+            throw new InvalidOperationException(
+                $"Could not read the owned dev run log while probing for {expectedDiagnostic}.",
+                exception);
         }
 
         return new OwnedHostLogProbe(false, actual, source);
+    }
+
+    // dev supervisor 仍持有 host 日志与 state 的写句柄，默认的 FileShare.Read 会直接抛
+    // IOException，把"日志里没有期望诊断"和"日志根本读不到"混成同一个否定结论。
+    // 这些是别的进程正在追加写的文件，读它就必须允许并发写。
+    private static string ReadWhileWriterHoldsFile(string path)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     // 只提取形如 PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX 的稳定失败码；
@@ -872,7 +890,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         try
         {
             var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
-            using var state = JsonDocument.Parse(File.ReadAllText(statePath));
+            using var state = JsonDocument.Parse(ReadWhileWriterHoldsFile(statePath));
             var root = state.RootElement;
             return string.Equals(ReadString(root, "status"), "failed", StringComparison.Ordinal)
                 && root.TryGetProperty("processes", out var processes)
@@ -901,7 +919,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         try
         {
             var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
-            using var state = JsonDocument.Parse(File.ReadAllText(statePath));
+            using var state = JsonDocument.Parse(ReadWhileWriterHoldsFile(statePath));
             CaptureDevRunIdentity(state.RootElement);
         }
         catch

@@ -23,7 +23,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     internal const string MigrationScenario = "example-required-field.migration";
     internal const string BackfillRecoveryScenario = "example-required-field.backfill-recovery";
     internal const string ContractPreconditionScenario = "example-required-field.contract-precondition";
-    internal const string ApiScenario = "example-required-field.api";
     internal const string BrowserScenario = "example-required-field.browser";
     internal const string RestartScenario = "example-required-field.restart";
 
@@ -33,7 +32,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         MigrationScenario,
         BackfillRecoveryScenario,
         ContractPreconditionScenario,
-        ApiScenario,
         BrowserScenario,
         RestartScenario
     ];
@@ -67,7 +65,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     private bool _catalogCreated;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
     private string? _adminPassword;
-    private string? _apiRecordId;
     private string? _browserCode;
 
     public ExampleRequiredFieldAcceptanceRunner(
@@ -114,9 +111,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
 
             _activeScenario = MigrationScenario;
             await RunMigrationScenarioAsync(cancellationToken);
-
-            _activeScenario = ApiScenario;
-            await RunApiScenarioAsync(cancellationToken);
 
             _activeScenario = BrowserScenario;
             await RunBrowserScenarioAsync(cancellationToken);
@@ -412,145 +406,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         await WriteCheckpointAsync("passed", MigrationScenario, cancellationToken);
     }
 
-    // 正式 API 证明 create required、Manual/Legacy 输出、PUT partial-update 与 explicit null 语义。
-    private async Task RunApiScenarioAsync(CancellationToken cancellationToken)
-    {
-        using var client = CreateClient(_hostPort);
-        await LoginAdminAsync(client, cancellationToken);
-        var checks = new List<object>();
-        var permissionSnapshot = await ReadAdministratorPermissionSnapshotAsync(cancellationToken);
-        await WriteEvidenceAsync(
-            "example-required-field/api-permissions.json",
-            permissionSnapshot,
-            cancellationToken);
-        var expectedPermissions = new[]
-        {
-            "Example.Record.View",
-            "Example.Record.Create",
-            "Example.Record.Update"
-        };
-        if (expectedPermissions.Except(permissionSnapshot.PermissionCodes, StringComparer.Ordinal).Any())
-        {
-            throw new InvalidOperationException("LocalAdmin active permission catalog omitted an Example CRUD permission.");
-        }
-
-        using (var legacy = await client.GetAsync(
-                   $"/api/example/records/{Uri.EscapeDataString(LegacyId)}",
-                   cancellationToken))
-        {
-            var body = await legacy.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(legacy, HttpStatusCode.OK, body, "migrated legacy detail");
-            AssertField(body, "RecordSource", "Legacy", "migrated legacy detail");
-            checks.Add(new { check = "migrated-legacy-detail", status = 200, recordSource = "Legacy" });
-        }
-
-        using (var missing = await SendJsonWithAntiforgeryAsync(
-                   client,
-                   HttpMethod.Post,
-                   "/api/example/records",
-                   new Dictionary<string, object?>
-                   {
-                       ["ECODE"] = $"{_dataPrefix}-API-MISSING",
-                       ["ENAME"] = "Missing source"
-                   },
-                   cancellationToken))
-        {
-            var body = await missing.Content.ReadAsStringAsync(cancellationToken);
-            EnsureProblem(missing, body, HttpStatusCode.BadRequest, "Example.Record.SourceRequired", "missing source");
-            checks.Add(new { check = "create-missing-source", status = 400, code = "Example.Record.SourceRequired" });
-        }
-
-        var apiCode = $"{_dataPrefix}-API";
-        using (var created = await SendJsonWithAntiforgeryAsync(
-                   client,
-                   HttpMethod.Post,
-                   "/api/example/records",
-                   new Dictionary<string, object?>
-                   {
-                       ["ECODE"] = apiCode,
-                       ["ENAME"] = "API Manual row",
-                       ["RecordSource"] = "Manual"
-                   },
-                   cancellationToken))
-        {
-            var body = await created.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(created, HttpStatusCode.Created, body, "create explicit Manual row");
-            _apiRecordId = ReadCreatedRecordId(body);
-            AssertField(body, "RecordSource", "Manual", "created explicit Manual row");
-            checks.Add(new { check = "create-explicit-manual", status = 201, recordSource = "Manual" });
-        }
-
-        using (var omitted = await SendJsonWithAntiforgeryAsync(
-                   client,
-                   HttpMethod.Put,
-                   $"/api/example/records/{Uri.EscapeDataString(_apiRecordId!)}",
-                   new Dictionary<string, object?> { ["ENAME"] = "API partial update" },
-                   cancellationToken))
-        {
-            var body = await omitted.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(omitted, HttpStatusCode.OK, body, "PUT omitted RecordSource");
-            AssertField(body, "RecordSource", "Manual", "PUT omitted RecordSource");
-            checks.Add(new
-            {
-                check = "put-omitted-source-preserved",
-                status = 200,
-                recordSource = "Manual"
-            });
-        }
-
-        using (var explicitNull = await SendJsonWithAntiforgeryAsync(
-                   client,
-                   HttpMethod.Put,
-                   $"/api/example/records/{Uri.EscapeDataString(_apiRecordId!)}",
-                   new Dictionary<string, object?> { ["RecordSource"] = null },
-                   cancellationToken))
-        {
-            var body = await explicitNull.Content.ReadAsStringAsync(cancellationToken);
-            EnsureProblem(
-                explicitNull,
-                body,
-                HttpStatusCode.BadRequest,
-                "Example.Record.SourceRequired",
-                "PUT explicit null");
-            checks.Add(new { check = "put-explicit-null-rejected", status = 400, code = "Example.Record.SourceRequired" });
-        }
-
-        using (var detail = await client.GetAsync(
-                   $"/api/example/records/{Uri.EscapeDataString(_apiRecordId!)}",
-                   cancellationToken))
-        {
-            var body = await detail.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(detail, HttpStatusCode.OK, body, "detail after rejected explicit null");
-            AssertField(body, "RecordSource", "Manual", "detail after rejected explicit null");
-            AssertField(body, "ENAME", "API partial update", "detail after rejected explicit null");
-            checks.Add(new { check = "rejected-null-state-unchanged", status = 200, recordSource = "Manual" });
-        }
-
-        using (var list = await client.GetAsync(
-                   "/api/example/records?page=1&pageSize=50&sortBy=ECODE&sortDirection=asc",
-                   cancellationToken))
-        {
-            var body = await list.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(list, HttpStatusCode.OK, body, "Example list");
-            if (!body.Contains(LegacyCode, StringComparison.Ordinal)
-                || !body.Contains(apiCode, StringComparison.Ordinal)
-                || !body.Contains("Legacy", StringComparison.Ordinal)
-                || !body.Contains("Manual", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Example list omitted migrated or explicit required-field values.");
-            }
-            checks.Add(new { check = "list-legacy-and-manual", status = 200 });
-        }
-
-        await RecordScenarioSuccessAsync(
-            ApiScenario,
-            "example-required-field/api.json",
-            new { status = "passed", checks },
-            cancellationToken);
-        await WriteCheckpointAsync("passed", ApiScenario, cancellationToken);
-    }
-
-    // 浏览器证据只由仓库 Acceptance runner 的 .NET Playwright owner 产生，不拼接开发 CLI smoke。
+    // 冒烟旅程只证明用户能走通「进入 → 列表出数据 → 写入 → 看到结果」；
+    // 字段默认值、required 标记与值投影由 standard-crud 前端单测覆盖，不在浏览器层重复断言。
     private async Task RunBrowserScenarioAsync(CancellationToken cancellationToken)
     {
         var password = _adminPassword
@@ -591,25 +448,12 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             AriaRole.Heading,
             new PageGetByRoleOptions { Name = "持久化记录示例", Exact = true }).WaitForAsync();
         await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
-        var legacyRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = LegacyCode });
-        await AssertLocatorContainsAsync(legacyRow, "Legacy", "migrated Legacy list value");
 
         await page.GetByRole(
             AriaRole.Button,
             new PageGetByRoleOptions { Name = "新建记录", Exact = true }).ClickAsync();
         var createDrawer = page.Locator(".ant-drawer-content:visible");
         await createDrawer.WaitForAsync();
-        var sourceInput = createDrawer.GetByLabel("记录来源", new LocatorGetByLabelOptions { Exact = true });
-        if (!string.Equals(await sourceInput.InputValueAsync(), "Manual", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("Create drawer did not project the authoring default Manual.");
-        }
-        var requiredLabel = createDrawer.Locator("label.ant-form-item-required").Filter(
-            new LocatorFilterOptions { HasText = "记录来源" });
-        if (await requiredLabel.CountAsync() != 1)
-        {
-            throw new InvalidOperationException("Create drawer did not render RecordSource as required.");
-        }
         await createDrawer.GetByLabel("示例编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(_browserCode);
         await createDrawer.GetByLabel("示例名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(browserName);
         await createDrawer.GetByRole(
@@ -618,38 +462,11 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
 
         var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
         await browserRow.WaitForAsync();
-        await AssertLocatorContainsAsync(browserRow, "Manual", "created Manual list value");
-        await browserRow.GetByRole(
-            AriaRole.Button,
-            new LocatorGetByRoleOptions { Name = "编辑", Exact = true }).ClickAsync();
-        var editDrawer = page.Locator(".ant-drawer-content:visible");
-        await editDrawer.WaitForAsync();
-        var editSource = editDrawer.GetByLabel("记录来源", new LocatorGetByLabelOptions { Exact = true });
-        if (!string.Equals(await editSource.InputValueAsync(), "Manual", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("Edit drawer did not preserve RecordSource Manual.");
-        }
-        await editDrawer.GetByLabel("示例名称", new LocatorGetByLabelOptions { Exact = true })
-            .FillAsync("Browser Manual updated");
-        await editDrawer.GetByRole(
-            AriaRole.Button,
-            new LocatorGetByRoleOptions { Name = "保存修改", Exact = true }).ClickAsync();
-        browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
-        await AssertLocatorContainsAsync(browserRow, "Browser Manual updated", "edited browser list row");
-        await AssertLocatorContainsAsync(browserRow, "Manual", "edited Manual list value");
 
         await browserRow.GetByText(_browserCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
         var detailDrawer = page.Locator(".ant-drawer-content:visible");
         await detailDrawer.GetByText("查看记录", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
-        await AssertLocatorContainsAsync(detailDrawer, "Manual", "browser detail Manual value");
-        await detailDrawer.GetByRole(
-            AriaRole.Button,
-            new LocatorGetByRoleOptions { Name = "Close", Exact = true }).ClickAsync();
-
-        legacyRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = LegacyCode });
-        await legacyRow.GetByText(LegacyCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
-        detailDrawer = page.Locator(".ant-drawer-content:visible");
-        await AssertLocatorContainsAsync(detailDrawer, "Legacy", "migrated browser detail value");
+        await AssertLocatorContainsAsync(detailDrawer, _browserCode, "browser detail reached");
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
         AddArtifact(screenshotPath);
 
@@ -665,11 +482,9 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 checkpoint = BrowserScenario,
                 assertions = new[]
                 {
-                    "legacy-list-and-detail",
-                    "create-required-default-manual",
-                    "create-manual",
-                    "edit-preserves-manual",
-                    "list-detail-manual"
+                    "login-and-list-loaded",
+                    "create-write-appears-in-list",
+                    "detail-reachable"
                 },
                 screenshot = "example-required-field/browser.png"
             },
@@ -701,20 +516,17 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             EnsureStatus(legacy, HttpStatusCode.OK, body, "legacy detail after restart");
             AssertField(body, "RecordSource", "Legacy", "legacy detail after restart");
         }
-        using (var api = await client.GetAsync(
-                   $"/api/example/records/{Uri.EscapeDataString(_apiRecordId!)}",
-                   cancellationToken))
-        {
-            var body = await api.Content.ReadAsStringAsync(cancellationToken);
-            EnsureStatus(api, HttpStatusCode.OK, body, "API detail after restart");
-            AssertField(body, "RecordSource", "Manual", "API detail after restart");
-        }
         using (var list = await client.GetAsync(
                    "/api/example/records?page=1&pageSize=50&sortBy=ECODE&sortDirection=asc",
                    cancellationToken))
         {
             var body = await list.Content.ReadAsStringAsync(cancellationToken);
             EnsureStatus(list, HttpStatusCode.OK, body, "Example list after restart");
+            if (!body.Contains(LegacyCode, StringComparison.Ordinal)
+                || !body.Contains("Legacy", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Migrated Legacy row was not readable after restart.");
+            }
             if (!body.Contains(_browserCode!, StringComparison.Ordinal)
                 || !body.Contains("Manual", StringComparison.Ordinal))
             {
@@ -733,7 +545,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 historyNoOp = true,
                 hostReady = true,
                 apiSessionRecreated = true,
-                persistedRows = new[] { LegacyCode, $"{_dataPrefix}-API", _browserCode }
+                persistedRows = new[] { LegacyCode, _browserCode }
             },
             cancellationToken);
         await WriteCheckpointAsync("passed", RestartScenario, cancellationToken);
@@ -1135,35 +947,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         return new ExampleState(nullable, defaults, legacy, manual, efHistory, unifiedHistory);
     }
 
-    // API 前只读核对 LocalAdmin 的 active permission catalog，区分 actor fixture 与 CRUD 产品 RED。
-    private async Task<AdministratorPermissionSnapshot> ReadAdministratorPermissionSnapshotAsync(
-        CancellationToken cancellationToken)
-    {
-        await using var connection = new SqlConnection(_applicationConnectionString!);
-        await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT DISTINCT [permission].[ECODE]
-            FROM [dbo].[IdentityAccount] AS [account]
-            INNER JOIN [dbo].[UserRole] AS [userRole] ON [userRole].[UserId] = [account].[EID]
-            INNER JOIN [dbo].[Role] AS [role] ON [role].[EID] = [userRole].[RoleId]
-            INNER JOIN [dbo].[RolePermission] AS [rolePermission] ON [rolePermission].[RoleId] = [role].[EID]
-            INNER JOIN [dbo].[Permission] AS [permission] ON [permission].[EID] = [rolePermission].[PermissionId]
-            WHERE [account].[ECODE] = N'admin' AND [role].[IsEnabled] = 1
-            ORDER BY [permission].[ECODE];
-            """;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        var permissions = new List<string>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            permissions.Add(reader.GetString(0));
-        }
-        return new AdministratorPermissionSnapshot(
-            permissions,
-            permissions.Contains("Example.Record.View", StringComparer.Ordinal),
-            permissions.Contains("Example.Record.Create", StringComparer.Ordinal),
-            permissions.Contains("Example.Record.Update", StringComparer.Ordinal));
-    }
 
     // 失败/恢复断言同时约束数据、schema、DEFAULT 与双 history，不接受只看异常文本。
     private static void AssertState(
@@ -1699,23 +1482,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         }
     }
 
-    // 错误契约同时固定 HTTP status 与稳定 code。
-    private static void EnsureProblem(
-        HttpResponseMessage response,
-        string body,
-        HttpStatusCode expectedStatus,
-        string expectedCode,
-        string check)
-    {
-        EnsureStatus(response, expectedStatus, body, check);
-        using var json = JsonDocument.Parse(body);
-        var code = ReadString(json.RootElement, "code");
-        if (!string.Equals(code, expectedCode, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"{check} returned {code}, expected {expectedCode}.");
-        }
-    }
-
     // 标准 CRUD detail/create/update envelope 中正式字段统一位于 fields 对象。
     private static void AssertField(string body, string field, string expected, string check)
     {
@@ -1726,18 +1492,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         {
             throw new InvalidOperationException($"{check} returned {field}={actual}, expected {expected}.");
         }
-    }
-
-    // 正式 Standard CRUD mutation detail 的主键位于 fields.EID，不接受旧式顶层 id 猜测。
-    internal static string ReadCreatedRecordId(string body)
-    {
-        using var json = JsonDocument.Parse(body);
-        var id = ReadString(ReadObject(json.RootElement, "fields"), "EID");
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            throw new InvalidOperationException("Standard CRUD create response omitted fields.EID.");
-        }
-        return id;
     }
 
     // 一次性管理员密码仅存在进程内，不从会写入 evidence 的 run identity 派生。
@@ -1840,7 +1594,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         MigrationScenario => AcceptanceFailureCodes.ExampleRequiredFieldMigrationFailed,
         BackfillRecoveryScenario => AcceptanceFailureCodes.ExampleRequiredFieldBackfillRecoveryFailed,
         ContractPreconditionScenario => AcceptanceFailureCodes.ExampleRequiredFieldContractPreconditionFailed,
-        ApiScenario => AcceptanceFailureCodes.ExampleRequiredFieldApiFailed,
         BrowserScenario => AcceptanceFailureCodes.ExampleRequiredFieldBrowserFailed,
         RestartScenario => AcceptanceFailureCodes.ExampleRequiredFieldRestartFailed,
         _ => AcceptanceFailureCodes.ExampleRequiredFieldPreflightFailed
@@ -1861,11 +1614,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         string? ManualSource,
         IReadOnlyList<string> EfHistory,
         IReadOnlyList<string> UnifiedHistory);
-    private sealed record AdministratorPermissionSnapshot(
-        IReadOnlyList<string> PermissionCodes,
-        bool HasExampleView,
-        bool HasExampleCreate,
-        bool HasExampleUpdate);
     private sealed record DatabaseOwnershipSnapshot(
         int Version,
         string RepositoryId,

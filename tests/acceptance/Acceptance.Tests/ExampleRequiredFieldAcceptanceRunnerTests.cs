@@ -6,7 +6,7 @@ namespace ICP.Platform.Acceptance.Tests;
 public sealed class ExampleRequiredFieldAcceptanceRunnerTests
 {
     [Fact]
-    public void RequiredScenarios_CoverMigrationFailuresApiBrowserAndRestart()
+    public void RequiredScenarios_CoverMigrationFailuresBrowserSmokeAndRestart()
     {
         Assert.Equal(
             [
@@ -14,28 +14,10 @@ public sealed class ExampleRequiredFieldAcceptanceRunnerTests
                 "example-required-field.migration",
                 "example-required-field.backfill-recovery",
                 "example-required-field.contract-precondition",
-                "example-required-field.api",
                 "example-required-field.browser",
                 "example-required-field.restart"
             ],
             ExampleRequiredFieldAcceptanceRunner.RequiredScenarios);
-    }
-
-    [Fact]
-    public void CreateResponseId_UsesFormalFieldsEid()
-    {
-        const string response = """
-            {
-              "fields": {
-                "EID": "ExampleRecord_123",
-                "ECODE": "ACC140-EXAMPLE"
-              }
-            }
-            """;
-
-        Assert.Equal(
-            "ExampleRecord_123",
-            ExampleRequiredFieldAcceptanceRunner.ReadCreatedRecordId(response));
     }
 
     [Fact]

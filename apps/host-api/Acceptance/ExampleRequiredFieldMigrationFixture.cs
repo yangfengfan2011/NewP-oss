@@ -101,9 +101,6 @@ internal static class ExampleRequiredFieldMigrationFixture
             throw new InvalidOperationException("Example historical model no longer matches the accepted migration prefix.");
         }
 
-        var models = current.Models
-            .Select(model => ReferenceEquals(model, currentModel) ? stageModel : model)
-            .ToArray();
         var currentStream = current.Streams.Single(static stream =>
             string.Equals(stream.ModuleId, "Example", StringComparison.Ordinal));
         var migrations = currentStream.Migrations.Take(stage).ToArray();
@@ -113,8 +110,45 @@ internal static class ExampleRequiredFieldMigrationFixture
             ExpectedFrontier = migrations[^1].MigrationId,
             Migrations = migrations
         };
-        var streams = current.Streams
-            .Select(stream => ReferenceEquals(stream, currentStream) ? stageStream : stream)
+
+        // 已应用 migration 必须是全局有序 migration 列表的位置前缀，否则 Host 接管时会以
+        // PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX 拒绝。只截断 Example 流不足以保证这一点：
+        // 任何整体排序在 cutoff 之后的模块 baseline 会插到未应用的 Example migration 之后，
+        // 使前缀断裂。这类模块在该历史时点尚不存在，连同其模型一起排除。
+        var cutoff = stageStream.ExpectedFrontier;
+        var droppedModules = new HashSet<string>(StringComparer.Ordinal);
+        var streams = new List<ModuleMigrationStream>(current.Streams.Count);
+        foreach (var stream in current.Streams)
+        {
+            if (ReferenceEquals(stream, currentStream))
+            {
+                streams.Add(stageStream);
+                continue;
+            }
+
+            var withinCutoff = stream.Migrations.Count(step =>
+                string.CompareOrdinal(step.MigrationId, cutoff) <= 0);
+            if (withinCutoff == stream.Migrations.Count)
+            {
+                streams.Add(stream);
+            }
+            else if (withinCutoff == 0)
+            {
+                droppedModules.Add(stream.ModuleId);
+            }
+            else
+            {
+                // 部分跨越 cutoff 的非 Example 流需要该模块的历史 model digest，本 fixture 不持有；
+                // 静默截断会产出与 ModelDigest 不一致的计划，因此显式失败。
+                throw new InvalidOperationException(
+                    $"Module {stream.ModuleId} straddles the Example stage-{stage} cutoff {cutoff}; "
+                    + "historical stage plans cannot express a partially applied non-Example stream.");
+            }
+        }
+
+        var models = current.Models
+            .Select(model => ReferenceEquals(model, currentModel) ? stageModel : model)
+            .Where(model => !droppedModules.Contains(model.OwnerModuleId))
             .ToArray();
         var planDigest = PersistenceModelDigest.Compute(models);
         return current with
@@ -123,7 +157,7 @@ internal static class ExampleRequiredFieldMigrationFixture
             PlanDigest = planDigest,
             CanonicalBytes = [],
             Models = models,
-            Streams = streams
+            Streams = streams.ToArray()
         };
     }
 

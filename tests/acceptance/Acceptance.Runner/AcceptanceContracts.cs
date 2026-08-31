@@ -3,76 +3,23 @@ using System.Text.Json.Serialization;
 
 namespace ICP.Platform.Acceptance;
 
-public enum AcceptanceGateKind
-{
-    IdentityFoundation,
-    Personnel,
-    ExampleRequiredField,
-    Plugin
-}
-
-public enum AcceptanceGateSelection
-{
-    IdentityFoundation,
-    Personnel,
-    ExampleRequiredField,
-    Plugin,
-    All
-}
-
-public enum AcceptanceEventType
-{
-    RunStarted,
-    ScenarioCompleted,
-    EvidenceRecorded,
-    TreeVerified,
-    SecretScanCompleted,
-    OwnershipVerified,
-    CleanupCompleted,
-    GateNotImplemented
-}
-
-public enum AcceptanceObservationOutcome
-{
-    Succeeded,
-    Failed
-}
-
+/// <summary>
+/// 三个模块闸门现在是普通 xUnit 测试，失败就是异常；这里只保留
+/// production cold-start 仍在使用的裁决与清理契约。
+/// </summary>
 public enum AcceptanceVerdict
 {
-    Incomplete,
     Failed,
     Passed
 }
 
 public static class AcceptanceFailureCodes
 {
-    public const string GateNotImplemented = "ACC_GATE_NOT_IMPLEMENTED";
-    public const string RequiredEventMissing = "ACC_REQUIRED_EVENT_MISSING";
-    public const string EvidenceIncomplete = "ACC_EVIDENCE_INCOMPLETE";
     public const string CleanupIncomplete = "ACC_CLEANUP_INCOMPLETE";
-    public const string ObserverFailed = "ACC_OBSERVER_FAILED";
+    public const string CleanupFailed = "ACC_CLEANUP_FAILED";
     public const string OwnershipMismatch = "ACC_OWNERSHIP_MISMATCH";
     public const string TreeChanged = "ACC_TREE_CHANGED";
     public const string SecretDetected = "ACC_SECRET_DETECTED";
-    public const string CleanupFailed = "ACC_CLEANUP_FAILED";
-    public const string EvidenceUnreadable = "ACC_EVIDENCE_UNREADABLE";
-    public const string PersonnelPreflightFailed = "ACC_PERSONNEL_PREFLIGHT_FAILED";
-    public const string PersonnelApiFailed = "ACC_PERSONNEL_API_FAILED";
-    public const string PersonnelBrowserFailed = "ACC_PERSONNEL_BROWSER_FAILED";
-    public const string PersonnelRestartFailed = "ACC_PERSONNEL_RESTART_FAILED";
-    public const string IdentityFoundationPreflightFailed = "ACC_IDENTITY_FOUNDATION_PREFLIGHT_FAILED";
-    public const string IdentityFoundationApiFailed = "ACC_IDENTITY_FOUNDATION_API_FAILED";
-    public const string IdentityFoundationBrowserFailed = "ACC_IDENTITY_FOUNDATION_BROWSER_FAILED";
-    public const string IdentityFoundationRestartFailed = "ACC_IDENTITY_FOUNDATION_RESTART_FAILED";
-    public const string IdentityFoundationSecurityFailed = "ACC_IDENTITY_FOUNDATION_SECURITY_FAILED";
-    public const string IdentityFoundationPersistenceFailed = "ACC_IDENTITY_FOUNDATION_PERSISTENCE_FAILED";
-    public const string ExampleRequiredFieldPreflightFailed = "ACC_EXAMPLE_REQUIRED_FIELD_PREFLIGHT_FAILED";
-    public const string ExampleRequiredFieldMigrationFailed = "ACC_EXAMPLE_REQUIRED_FIELD_MIGRATION_FAILED";
-    public const string ExampleRequiredFieldBackfillRecoveryFailed = "ACC_EXAMPLE_REQUIRED_FIELD_BACKFILL_RECOVERY_FAILED";
-    public const string ExampleRequiredFieldContractPreconditionFailed = "ACC_EXAMPLE_REQUIRED_FIELD_CONTRACT_PRECONDITION_FAILED";
-    public const string ExampleRequiredFieldBrowserFailed = "ACC_EXAMPLE_REQUIRED_FIELD_BROWSER_FAILED";
-    public const string ExampleRequiredFieldRestartFailed = "ACC_EXAMPLE_REQUIRED_FIELD_RESTART_FAILED";
     public const string ProductionColdStartSampleCount = "ACC_PRODUCTION_COLD_START_SAMPLE_COUNT";
     public const string ProductionColdStartScenarioSkipped = "ACC_PRODUCTION_COLD_START_SCENARIO_SKIPPED";
     public const string ProductionColdStartCacheNotCleared = "ACC_PRODUCTION_COLD_START_CACHE_NOT_CLEARED";
@@ -89,60 +36,11 @@ public static class AcceptanceFailureCodes
     public const string ProductionColdStartBrowserFailed = "ACC_PRODUCTION_COLD_START_BROWSER_FAILED";
 }
 
-public sealed record AcceptanceGateDefinition(
-    AcceptanceGateKind Gate,
-    bool IsImplemented,
-    IReadOnlyList<string> RequiredScenarios);
-
-public sealed record AcceptanceObservation(
-    string SchemaVersion,
-    long Sequence,
-    DateTimeOffset OccurredAtUtc,
-    AcceptanceGateKind Gate,
-    AcceptanceEventType Type,
-    AcceptanceObservationOutcome Outcome,
-    string? Scenario,
-    string? EvidenceRef,
-    string? FailureCode);
-
-public sealed record AcceptanceScenarioResult(
-    string Status,
-    string? FailureCode,
-    string? EvidenceRef);
-
-public sealed record AcceptanceGateResult(
-    AcceptanceVerdict Verdict,
-    string? FailureCode,
-    IReadOnlyDictionary<string, AcceptanceScenarioResult> Scenarios,
-    string CleanupStatus);
-
-public sealed record AcceptanceReductionResult(
-    AcceptanceVerdict Verdict,
-    string? FailureCode,
-    IReadOnlyDictionary<string, AcceptanceGateResult> Gates);
-
-public sealed record AcceptanceCleanupResult(string Status, string? FailureCode);
-
-public sealed record AcceptanceRunResult(
-    string SchemaVersion,
-    string RunId,
-    IReadOnlyList<string> RequestedGates,
-    string Commit,
-    string TreeHash,
-    string? PlatformApiRelease,
-    string? PlatformApiDigest,
-    IReadOnlyDictionary<string, string> ToolVersions,
-    string? DatabaseFingerprint,
-    IReadOnlyList<string> ProcessIdentities,
-    DateTimeOffset StartedAtUtc,
-    DateTimeOffset CompletedAtUtc,
-    AcceptanceVerdict Verdict,
-    string? FailureCode,
-    IReadOnlyDictionary<string, AcceptanceGateResult> Gates,
-    IReadOnlyList<string> ArtifactRefs,
-    AcceptanceCleanupResult Cleanup);
-
-public sealed record AcceptanceRunOutcome(int ExitCode, string ResultPath);
+/// <summary>
+/// 清理结论。<paramref name="Diagnostic"/> 携带脱敏后的失败原因，
+/// 让调用方可以直接把它抛出去，而不必再去翻证据文件。
+/// </summary>
+public sealed record AcceptanceCleanupResult(string Status, string? FailureCode, string? Diagnostic = null);
 
 public static class AcceptanceJson
 {

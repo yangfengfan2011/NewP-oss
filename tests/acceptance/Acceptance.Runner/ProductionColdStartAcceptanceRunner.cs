@@ -140,9 +140,7 @@ public sealed class ProductionColdStartAcceptanceRunner
                         .Where(static item => !string.IsNullOrWhiteSpace(item))
                         .Select(static item => item!)
                         .ToArray();
-                    var eventLogPath = Path.Combine(runDirectory, "events.jsonl");
-                    var recorder = new AcceptanceObservationRecorder(new AcceptanceEventLog(eventLogPath));
-                    execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId, recorder)
+                    execution = await new PersonnelAcceptanceRunner(repositoryRoot, runDirectory, runId)
                         .RunProductionColdStartAsync(
                             Path.Combine(repositoryRoot, "frontend", "packages", "shell", "dist"),
                             samplesPerScenario,
@@ -156,7 +154,6 @@ public sealed class ProductionColdStartAcceptanceRunner
                     chromiumVersion = execution.ChromiumVersion;
                     processIdentities.AddRange(execution.ProcessIdentities);
                     artifacts.AddRange(execution.ArtifactRefs);
-                    artifacts.Add("events.jsonl");
                     await AcceptanceInfrastructure.WriteJsonAtomicallyAsync(
                         rawSamplesPath,
                         new { schemaVersion = "1.0", containsSecrets = false, samples },

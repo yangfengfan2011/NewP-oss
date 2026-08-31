@@ -5,10 +5,9 @@ using Xunit;
 namespace ICP.Platform.Acceptance.Tests;
 
 /// <summary>
-/// 把验收闸门作为普通集成测试运行：失败直接是断言失败与异常栈，
-/// 不再经过 event/verdict/failureCode 这层无人消费的举证协议。
-/// 与仓库既有的 SQL Server 集成测试一致，通过环境变量显式启用，未启用时跳过，
-/// 因此 <c>dotnet test</c> 与 CI 可以安全包含它们。
+/// 模块闸门就是普通集成测试：失败直接是异常与栈，不再经过 event/verdict/failureCode
+/// 那层无人消费的举证协议。与仓库既有的 SQL Server 集成测试一致，通过环境变量显式
+/// 启用，未启用时跳过，因此 <c>dotnet test</c> 与 CI 可以安全包含它们。
 /// </summary>
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests
@@ -29,7 +28,8 @@ public sealed class AcceptanceGateTests
             return;
         }
 
-        await RunGateAsync(AcceptanceGateSelection.ExampleRequiredField);
+        var (root, runId) = PrepareRun("example-required-field");
+        await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -40,7 +40,8 @@ public sealed class AcceptanceGateTests
             return;
         }
 
-        await RunGateAsync(AcceptanceGateSelection.IdentityFoundation);
+        var (root, runId) = PrepareRun("identity-foundation");
+        await new IdentityFoundationAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -51,29 +52,22 @@ public sealed class AcceptanceGateTests
             return;
         }
 
-        await RunGateAsync(AcceptanceGateSelection.Personnel);
+        var (root, runId) = PrepareRun("personnel");
+        await new PersonnelAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
-    // 闸门共享 bin/Release 输出、.codex-temp/dev/state.json 与一次性 catalog，
-    // 因此必须串行；并发运行会互相锁死构建产物并覆盖 supervisor 状态。
-    private static async Task RunGateAsync(AcceptanceGateSelection gate)
+    // run id 参与一次性 catalog 名与资源根命名，必须是固定长度的十六进制。
+    private static (string RunDirectory, string RunId) PrepareRun(string gate)
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var outputRoot = Path.Combine(repositoryRoot, ".codex-temp", "acceptance");
         var runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
-
-        var outcome = await new AcceptanceSkeletonRunner().RunAsync(
-            repositoryRoot,
-            outputRoot,
-            gate,
-            runId);
-
-        Assert.True(
-            outcome.ExitCode == 0,
-            $"{gate} 验收未通过，详见 {outcome.ResultPath}");
+        var runDirectory = Path.Combine(RepositoryRoot, ".codex-temp", "acceptance", gate, runId);
+        Directory.CreateDirectory(runDirectory);
+        return (runDirectory, runId);
     }
 
-    private static string GetRepositoryRoot()
+    private static string RepositoryRoot { get; } = LocateRepositoryRoot();
+
+    private static string LocateRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
@@ -90,6 +84,7 @@ public sealed class AcceptanceGateTests
     }
 }
 
+// 闸门共享 bin/Release 输出、.codex-temp/dev/state.json 与本机端口，因此必须串行。
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class AcceptanceGateCollection
 {

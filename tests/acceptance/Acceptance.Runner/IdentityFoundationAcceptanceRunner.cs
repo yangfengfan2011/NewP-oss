@@ -11,12 +11,6 @@ using Microsoft.Playwright;
 
 namespace ICP.Platform.Acceptance;
 
-internal sealed record IdentityFoundationAcceptanceExecution(
-    string? DatabaseFingerprint,
-    IReadOnlyList<string> ProcessIdentities,
-    IReadOnlyList<string> ArtifactRefs,
-    AcceptanceCleanupResult Cleanup);
-
 internal sealed class IdentityFoundationAcceptanceRunner
 {
     internal const string PreflightScenario = "identity-foundation.preflight";
@@ -30,7 +24,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
     private readonly string _repositoryRoot;
     private readonly string _runDirectory;
     private readonly string _runId;
-    private readonly AcceptanceObservationRecorder _recorder;
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
     private readonly List<string> _secretTokens = [];
@@ -54,18 +47,16 @@ internal sealed class IdentityFoundationAcceptanceRunner
     public IdentityFoundationAcceptanceRunner(
         string repositoryRoot,
         string runDirectory,
-        string runId,
-        AcceptanceObservationRecorder recorder)
+        string runId)
     {
         _repositoryRoot = Path.GetFullPath(repositoryRoot);
         _runDirectory = Path.GetFullPath(runDirectory);
         _runId = runId;
-        _recorder = recorder;
     }
 
-    public async Task<IdentityFoundationAcceptanceExecution> RunAsync(CancellationToken cancellationToken)
+    public async Task RunAsync(CancellationToken cancellationToken)
     {
-        AcceptanceCleanupResult cleanup = new("not-started", AcceptanceFailureCodes.CleanupIncomplete);
+        Exception? failure = null;
         try
         {
             await RunPreflightAsync(cancellationToken);
@@ -82,32 +73,27 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }
         catch (Exception exception)
         {
-            var failureCode = FailureCodeFor(_activeScenario);
-            var evidenceRef = await WriteEvidenceAsync(
-                $"identity-foundation/{_activeScenario.Replace('.', '-')}-failure.json",
-                new { status = "failed", failureCode, diagnostic = Sanitize(exception.Message) },
-                cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.IdentityFoundation,
-                AcceptanceEventType.ScenarioCompleted,
-                AcceptanceObservationOutcome.Failed,
-                _activeScenario,
-                evidenceRef,
-                failureCode,
-                cancellationToken);
-        }
-        finally
-        {
-            cleanup = await TeardownAsync(cancellationToken);
-            await ValidateEvidenceAsync(cancellationToken);
-            await ScanEvidenceForSecretsAsync(cancellationToken);
+            // 脱敏后重建异常：原始文本可能带连接串口令，不能直接进测试输出。
+            failure = new InvalidOperationException(
+                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}");
         }
 
-        return new IdentityFoundationAcceptanceExecution(
-            _catalog is null ? null : AcceptanceInfrastructure.Sha256(_catalog),
-            _processIdentities,
-            _artifactRefs,
-            cleanup);
+        // 无论场景成败都要归还资源，但清理失败不能顶掉场景失败。
+        var cleanup = await TeardownAsync(cancellationToken);
+        var leaked = await ScanEvidenceForSecretsAsync(cancellationToken);
+
+        if (failure is not null)
+        {
+            throw failure;
+        }
+        if (leaked)
+        {
+            throw new InvalidOperationException("验收产物中出现了登记过的凭据片段。");
+        }
+        if (!string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"验收清理未完成：{cleanup.Diagnostic ?? cleanup.Status}");
+        }
     }
 
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
@@ -706,24 +692,14 @@ internal sealed class IdentityFoundationAcceptanceRunner
             {
                 await VerifyOwnershipAsync(cancellationToken);
             }
-            await _recorder.RecordAsync(AcceptanceGateKind.IdentityFoundation, AcceptanceEventType.OwnershipVerified, cancellationToken: cancellationToken);
         }
         catch (Exception exception)
         {
-            await WriteEvidenceAsync("identity-foundation/ownership-failure.json", new
-            {
-                status = "failed",
-                failureCode = AcceptanceFailureCodes.OwnershipMismatch,
-                diagnostic = Sanitize(exception.Message),
-                resourcesPreserved = true
-            }, cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.IdentityFoundation,
-                AcceptanceEventType.OwnershipVerified,
-                AcceptanceObservationOutcome.Failed,
-                failureCode: AcceptanceFailureCodes.OwnershipMismatch,
-                cancellationToken: cancellationToken);
-            return new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.OwnershipMismatch);
+            // 归属校验失败时保留资源，交由人工确认这套库/目录到底属于谁。
+            return new AcceptanceCleanupResult(
+                "failed",
+                AcceptanceFailureCodes.OwnershipMismatch,
+                $"一次性资源归属校验失败，资源已保留：{Sanitize(exception.Message)}");
         }
 
         try
@@ -742,24 +718,14 @@ internal sealed class IdentityFoundationAcceptanceRunner
                     Directory.Delete(root, recursive: true);
                 }
             }
-            await _recorder.RecordAsync(AcceptanceGateKind.IdentityFoundation, AcceptanceEventType.CleanupCompleted, cancellationToken: cancellationToken);
             return new AcceptanceCleanupResult("completed", null);
         }
         catch (Exception exception)
         {
-            await WriteEvidenceAsync("identity-foundation/cleanup-failure.json", new
-            {
-                status = "failed",
-                failureCode = AcceptanceFailureCodes.CleanupFailed,
-                diagnostic = Sanitize(exception.Message)
-            }, cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.IdentityFoundation,
-                AcceptanceEventType.CleanupCompleted,
-                AcceptanceObservationOutcome.Failed,
-                failureCode: AcceptanceFailureCodes.CleanupFailed,
-                cancellationToken: cancellationToken);
-            return new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.CleanupFailed);
+            return new AcceptanceCleanupResult(
+                "failed",
+                AcceptanceFailureCodes.CleanupFailed,
+                Sanitize(exception.Message));
         }
     }
 
@@ -1241,11 +1207,11 @@ internal sealed class IdentityFoundationAcceptanceRunner
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task RecordScenarioSuccessAsync(string scenario, string evidencePath, object evidence, CancellationToken cancellationToken)
+    // 场景通过时留一份可读的现场快照；它是排错用的转储，不再是裁决输入。
+    private Task RecordScenarioSuccessAsync(string scenario, string evidencePath, object evidence, CancellationToken cancellationToken)
     {
-        var evidenceRef = await WriteEvidenceAsync(evidencePath, evidence, cancellationToken);
-        await _recorder.RecordAsync(AcceptanceGateKind.IdentityFoundation, AcceptanceEventType.ScenarioCompleted, scenario: scenario, cancellationToken: cancellationToken);
-        await _recorder.RecordAsync(AcceptanceGateKind.IdentityFoundation, AcceptanceEventType.EvidenceRecorded, scenario: scenario, evidenceRef: evidenceRef, cancellationToken: cancellationToken);
+        _ = scenario;
+        return WriteEvidenceAsync(evidencePath, evidence, cancellationToken);
     }
 
     private async Task<string> WriteEvidenceAsync(string relativePath, object value, CancellationToken cancellationToken)
@@ -1261,50 +1227,8 @@ internal sealed class IdentityFoundationAcceptanceRunner
         return artifact;
     }
 
-    private async Task ValidateEvidenceAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            foreach (var artifact in _artifactRefs.Distinct(StringComparer.Ordinal))
-            {
-                var path = Path.GetFullPath(Path.Combine(_runDirectory, artifact.Replace('/', Path.DirectorySeparatorChar)));
-                if (!path.StartsWith(_runDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                    || !File.Exists(path)
-                    || new FileInfo(path).Length == 0)
-                {
-                    throw new InvalidOperationException($"Evidence artifact is missing or empty: {artifact}");
-                }
-                if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                {
-                    using var _ = JsonDocument.Parse(await File.ReadAllTextAsync(path, cancellationToken));
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.IdentityFoundation,
-                AcceptanceEventType.EvidenceRecorded,
-                AcceptanceObservationOutcome.Failed,
-                failureCode: AcceptanceFailureCodes.EvidenceUnreadable,
-                cancellationToken: cancellationToken);
-            await WriteEvidenceAsync("identity-foundation/evidence-validation-failure.json", new { diagnostic = Sanitize(exception.Message) }, cancellationToken);
-        }
-    }
-
-    private async Task ScanEvidenceForSecretsAsync(CancellationToken cancellationToken)
-    {
-        var leaked = await AcceptanceInfrastructure.ScanForSecretsAsync(
-            _runDirectory,
-            _secretTokens,
-            cancellationToken);
-        await _recorder.RecordAsync(
-            AcceptanceGateKind.IdentityFoundation,
-            AcceptanceEventType.SecretScanCompleted,
-            leaked ? AcceptanceObservationOutcome.Failed : AcceptanceObservationOutcome.Succeeded,
-            failureCode: leaked ? AcceptanceFailureCodes.SecretDetected : null,
-            cancellationToken: cancellationToken);
-    }
+    private Task<bool> ScanEvidenceForSecretsAsync(CancellationToken cancellationToken) =>
+        AcceptanceInfrastructure.ScanForSecretsAsync(_runDirectory, _secretTokens, cancellationToken);
 
     private async Task LoginBrowserAsync(IPage page, string ecode, string password)
     {
@@ -1481,17 +1405,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
 
         throw new InvalidOperationException("corepack.cmd was not found on PATH.");
     }
-
-    private static string FailureCodeFor(string scenario) => scenario switch
-    {
-        PreflightScenario => AcceptanceFailureCodes.IdentityFoundationPreflightFailed,
-        ApiScenario => AcceptanceFailureCodes.IdentityFoundationApiFailed,
-        BrowserScenario => AcceptanceFailureCodes.IdentityFoundationBrowserFailed,
-        RestartScenario => AcceptanceFailureCodes.IdentityFoundationRestartFailed,
-        SecurityScenario => AcceptanceFailureCodes.IdentityFoundationSecurityFailed,
-        PersistenceScenario => AcceptanceFailureCodes.IdentityFoundationPersistenceFailed,
-        _ => AcceptanceFailureCodes.ObserverFailed
-    };
 
     private sealed record HttpSession(HttpClient Client, CookieContainer Cookies) : IDisposable
     {

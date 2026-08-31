@@ -28,4 +28,4 @@ corepack pnpm --dir frontend test -- <测试过滤条件>
 .\scripts\accept.ps1 -Gate IdentityFoundation
 ```
 
-Acceptance 使用唯一临时 SQL Server catalog，并从本地配置解析管理连接。终局结论必须来自完整 evidence set，不以单个单元测试、手工数据库修改或旧验证记录代替。
+Acceptance 使用唯一临时 SQL Server catalog，并从本地配置解析管理连接。闸门本身是 `Acceptance.Tests` 中的 xUnit 测试，默认跳过，设置 `NEWP_RUN_ACCEPTANCE=1` 后启用；`accept.ps1` 只是 `dotnet test --filter` 的薄封装。

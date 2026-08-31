@@ -12,7 +12,7 @@ pwsh.exe -NoLogo -NoProfile -File scripts/accept.ps1 -Gate IdentityFoundation
 
 需要临时覆盖时只在当前进程设置 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`，无需修改受跟踪配置。Runner 始终切换到 `master` 并创建本轮唯一的 disposable catalog，不会把配置中的应用 catalog 作为验收数据库。
 
-成功时进程退出码为 `0`，并输出 `ACCEPTANCE_RESULT`。产物位于 `.codex-temp/acceptance/runs/<timestamp>-<run-id>/`；`result.json` 是汇总事实，`events.jsonl` 和 `evidence-index.json` 提供事件与文件索引。
+闸门是 `Acceptance.Tests` 里的 xUnit 测试，脚本只负责设置 `NEWP_RUN_ACCEPTANCE=1` 并拼好 `--filter`；直接跑 `dotnet test` 等价。失败即测试失败，异常消息与栈就是诊断，不需要另找结论文件。排错用的现场快照写在 `.codex-temp/acceptance/identity-foundation/<run-id>/`。
 
 ## 六类证据
 
@@ -25,7 +25,7 @@ pwsh.exe -NoLogo -NoProfile -File scripts/accept.ps1 -Gate IdentityFoundation
 | `identity-foundation.security` | `identity-foundation/security.json` | 防伪稳定失败、单次安全重试、未知结果不重试、Cookie/outage/key ring、限流/可信代理、required built-ins、旧链不可达 |
 | `identity-foundation.persistence` | `identity-foundation/persistence.json` | Identity、Authentication、Organization 的 SQL Server smoke、并发/冲突/过期/purge、阶段故障注入与事务回滚 |
 
-每轮只允许清理由本轮 ownership 文件确认的进程、key ring 和 catalog。最终 `cleanup.status`、gate `cleanupStatus` 必须均为 `completed`，`remainingDisposableCatalogs` 必须为 `0`；任一场景失败使用对应的 `ACC_IDENTITY_FOUNDATION_*_FAILED` 稳定失败码并保持 gate 失败。
+每轮只允许清理由本轮 ownership 文件确认的进程、key ring 和 catalog，`remainingDisposableCatalogs` 必须为 `0`。归属校验失败时资源会被保留并让测试失败，交由人工确认这套库/目录到底属于谁。
 
 ## 已验证基准
 

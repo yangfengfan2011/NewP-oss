@@ -11,12 +11,6 @@ using Microsoft.Playwright;
 
 namespace ICP.Platform.Acceptance;
 
-internal sealed record ExampleRequiredFieldAcceptanceExecution(
-    string? DatabaseFingerprint,
-    IReadOnlyList<string> ProcessIdentities,
-    IReadOnlyList<string> ArtifactRefs,
-    AcceptanceCleanupResult Cleanup);
-
 internal sealed class ExampleRequiredFieldAcceptanceRunner
 {
     internal const string PreflightScenario = "example-required-field.preflight";
@@ -50,7 +44,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     private readonly string _repositoryRoot;
     private readonly string _runDirectory;
     private readonly string _runId;
-    private readonly AcceptanceObservationRecorder _recorder;
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
     private readonly List<string> _secretTokens = [];
@@ -74,22 +67,19 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     public ExampleRequiredFieldAcceptanceRunner(
         string repositoryRoot,
         string runDirectory,
-        string runId,
-        AcceptanceObservationRecorder recorder)
+        string runId)
     {
         _repositoryRoot = Path.GetFullPath(repositoryRoot);
         _runDirectory = Path.GetFullPath(runDirectory);
         _runId = runId;
-        _recorder = recorder;
     }
 
     /// <summary>
-    /// 执行 Example required-field 正式验收旅程，并返回 runner 归属资源的证据索引。
+    /// 执行 Example required-field 正式验收旅程。
     /// </summary>
-    public async Task<ExampleRequiredFieldAcceptanceExecution> RunAsync(CancellationToken cancellationToken)
+    public async Task RunAsync(CancellationToken cancellationToken)
     {
-        AcceptanceCleanupResult cleanup = new("not-started", AcceptanceFailureCodes.CleanupIncomplete);
-
+        Exception? failure = null;
         try
         {
             await RunPreflightAsync(cancellationToken);
@@ -102,8 +92,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                     connectionSource = _connectionSource,
                     runId = _runId,
                     catalog = _catalog,
-                    dataPrefix = _dataPrefix,
-                    checkpoint = "example-required-field/checkpoint.json"
+                    dataPrefix = _dataPrefix
                 },
                 cancellationToken);
 
@@ -124,31 +113,27 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         }
         catch (Exception exception)
         {
-            var failureCode = FailureCodeFor(_activeScenario);
-            var evidenceRef = await WriteEvidenceAsync(
-                $"example-required-field/{_activeScenario.Replace('.', '-')}-failure.json",
-                new { status = "failed", failureCode, diagnostic = Sanitize(exception.Message) },
-                cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.ExampleRequiredField,
-                AcceptanceEventType.ScenarioCompleted,
-                AcceptanceObservationOutcome.Failed,
-                _activeScenario,
-                evidenceRef,
-                failureCode,
-                cancellationToken);
-        }
-        finally
-        {
-            cleanup = await TeardownAsync(CancellationToken.None);
-            await ScanEvidenceForSecretsAsync(CancellationToken.None);
+            // 脱敏后重建异常：原始文本可能带连接串口令，不能直接进测试输出。
+            failure = new InvalidOperationException(
+                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}");
         }
 
-        return new ExampleRequiredFieldAcceptanceExecution(
-            _catalog is null ? null : AcceptanceInfrastructure.Sha256(_catalog),
-            _processIdentities,
-            _artifactRefs,
-            cleanup);
+        // 无论场景成败都要归还资源，但清理失败不能顶掉场景失败。
+        var cleanup = await TeardownAsync(CancellationToken.None);
+        var leaked = await ScanEvidenceForSecretsAsync(CancellationToken.None);
+
+        if (failure is not null)
+        {
+            throw failure;
+        }
+        if (leaked)
+        {
+            throw new InvalidOperationException("验收产物中出现了登记过的凭据片段。");
+        }
+        if (!string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"验收清理未完成：{cleanup.Diagnostic ?? cleanup.Status}");
+        }
     }
 
     // Preflight 固定唯一 catalog、数据前缀、Host/Shell 资源根和受支持的 managed dev 入口。
@@ -213,7 +198,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             throw new InvalidOperationException($"HostApi release build failed: {Sanitize(build.StandardError)}");
         }
 
-        await WriteCheckpointAsync("ready", PreflightScenario, cancellationToken);
     }
 
     // Backfill 故障由 runner-owned trigger 注入；移除故障后必须从未记录的 backfill 继续并到达 Ready。
@@ -222,7 +206,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         await ResetCatalogToHistoricalStageAsync(stage: 3, cancellationToken);
         await SeedStageThreeRowsAsync(cancellationToken);
         await CreateBackfillFailureTriggerAsync(cancellationToken);
-        await WriteCheckpointAsync("running", "backfill-failure-injected", cancellationToken);
 
         var failure = await RunDevExpectFailureAsync(
             "example-required-field/backfill-failure-dev.json",
@@ -247,7 +230,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             cancellationToken,
             allowAlreadyStopped: true);
         await DropTriggerAsync(BackfillFailureTriggerName, cancellationToken);
-        await WriteCheckpointAsync("resuming", "backfill-failure-removed", cancellationToken);
 
         var bootstrapRequired = await RunDevExpectFailureAsync(
             "example-required-field/backfill-resume-dev.json",
@@ -298,7 +280,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 shellPort = _shellPort
             },
             cancellationToken);
-        await WriteCheckpointAsync("passed", BackfillRecoveryScenario, cancellationToken);
     }
 
     // Contract precondition 通过 no-op UPDATE 保留 NULL，使 required migration 在收窄 schema 前失败。
@@ -307,7 +288,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         await ResetCatalogToHistoricalStageAsync(stage: 3, cancellationToken);
         await SeedStageThreeRowsAsync(cancellationToken);
         await CreateContractPreconditionTriggerAsync(cancellationToken);
-        await WriteCheckpointAsync("running", "contract-precondition-injected", cancellationToken);
 
         var failure = await RunDevExpectFailureAsync(
             "example-required-field/contract-precondition-dev.json",
@@ -340,7 +320,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 state
             },
             cancellationToken);
-        await WriteCheckpointAsync("passed", ContractPreconditionScenario, cancellationToken);
     }
 
     // 成功旅程从 stage 2 旧行开始，经 nullable 插入 Manual，再由真实 managed Host 完成 backfill/contract。
@@ -358,7 +337,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             expectedManualSource: "Manual",
             expectedMigrations: [NullableMigration],
             unexpectedMigrations: [BackfillMigration, RequiredMigration]);
-        await WriteCheckpointAsync("running", "three-step-current-host", cancellationToken);
 
         var bootstrapRequired = await RunDevExpectFailureAsync(
             "example-required-field/migration-dev.json",
@@ -407,7 +385,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 restartNoOp = true
             },
             cancellationToken);
-        await WriteCheckpointAsync("passed", MigrationScenario, cancellationToken);
     }
 
     // 冒烟旅程只证明用户能走通「进入 → 列表出数据 → 写入 → 看到结果」；
@@ -493,7 +470,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 screenshot = "example-required-field/browser.png"
             },
             cancellationToken);
-        await WriteCheckpointAsync("passed", BrowserScenario, cancellationToken);
     }
 
     // Restart 使用新的 Host/Shell 与 API session，证明已完成 history 不重放且正式数据仍可读。
@@ -552,7 +528,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 persistedRows = new[] { LegacyCode, _browserCode }
             },
             cancellationToken);
-        await WriteCheckpointAsync("passed", RestartScenario, cancellationToken);
     }
 
     // 历史计划由 HostApi Acceptance fixture 经正式 persistence seam 应用，runner 不跨越实现边界。
@@ -1159,30 +1134,14 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             {
                 await VerifyCatalogOwnershipAsync(cancellationToken);
             }
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.ExampleRequiredField,
-                AcceptanceEventType.OwnershipVerified,
-                cancellationToken: cancellationToken);
         }
         catch (Exception exception)
         {
-            await WriteEvidenceAsync(
-                "example-required-field/ownership-failure.json",
-                new
-                {
-                    status = "failed",
-                    failureCode = AcceptanceFailureCodes.OwnershipMismatch,
-                    diagnostic = Sanitize(exception.Message),
-                    resourcesPreserved = true
-                },
-                cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.ExampleRequiredField,
-                AcceptanceEventType.OwnershipVerified,
-                AcceptanceObservationOutcome.Failed,
-                failureCode: AcceptanceFailureCodes.OwnershipMismatch,
-                cancellationToken: cancellationToken);
-            return new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.OwnershipMismatch);
+            // 归属校验失败时保留资源，交由人工确认这套库/目录到底属于谁。
+            return new AcceptanceCleanupResult(
+                "failed",
+                AcceptanceFailureCodes.OwnershipMismatch,
+                $"一次性资源归属校验失败，资源已保留：{Sanitize(exception.Message)}");
         }
 
         try
@@ -1204,82 +1163,26 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                     Directory.Delete(root, recursive: true);
                 }
             }
-            await WriteCheckpointAsync("cleaned", "teardown", cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.ExampleRequiredField,
-                AcceptanceEventType.CleanupCompleted,
-                cancellationToken: cancellationToken);
             return new AcceptanceCleanupResult("completed", null);
         }
         catch (Exception exception)
         {
-            await WriteEvidenceAsync(
-                "example-required-field/cleanup-failure.json",
-                new
-                {
-                    status = "failed",
-                    failureCode = AcceptanceFailureCodes.CleanupFailed,
-                    diagnostic = Sanitize(exception.Message)
-                },
-                cancellationToken);
-            await _recorder.RecordAsync(
-                AcceptanceGateKind.ExampleRequiredField,
-                AcceptanceEventType.CleanupCompleted,
-                AcceptanceObservationOutcome.Failed,
-                failureCode: AcceptanceFailureCodes.CleanupFailed,
-                cancellationToken: cancellationToken);
-            return new AcceptanceCleanupResult("failed", AcceptanceFailureCodes.CleanupFailed);
+            return new AcceptanceCleanupResult(
+                "failed",
+                AcceptanceFailureCodes.CleanupFailed,
+                Sanitize(exception.Message));
         }
     }
 
-    // Checkpoint 是同一 child 续接的最小状态，包含 run/catalog/data/process owner 与当前阶段。
-    private async Task WriteCheckpointAsync(
-        string status,
-        string stage,
-        CancellationToken cancellationToken)
-    {
-        var path = Path.Combine(_runDirectory, "example-required-field", "checkpoint.json");
-        await AcceptanceInfrastructure.WriteJsonAtomicallyAsync(
-            path,
-            new
-            {
-                schemaVersion = "1.0",
-                runId = _runId,
-                status,
-                stage,
-                catalog = _catalog,
-                dataPrefix = _dataPrefix,
-                supervisorRunId = _lastDevRunId,
-                hostPort = _hostPort == 0 ? (int?)null : _hostPort,
-                shellPort = _shellPort == 0 ? (int?)null : _shellPort,
-                processIdentities = _processIdentities,
-                result = "result.json",
-                log = "events.jsonl",
-                lastProgressAtUtc = DateTimeOffset.UtcNow
-            },
-            cancellationToken);
-        AddArtifact(path);
-    }
-
-    // 场景成功事件与 evidence 事件必须共同出现，reducer 才能形成正式通过结论。
-    private async Task RecordScenarioSuccessAsync(
+    // 场景通过时留一份可读的现场快照；它是排错用的转储，不再是裁决输入。
+    private Task RecordScenarioSuccessAsync(
         string scenario,
         string evidencePath,
         object evidence,
         CancellationToken cancellationToken)
     {
-        var evidenceRef = await WriteEvidenceAsync(evidencePath, evidence, cancellationToken);
-        await _recorder.RecordAsync(
-            AcceptanceGateKind.ExampleRequiredField,
-            AcceptanceEventType.ScenarioCompleted,
-            scenario: scenario,
-            cancellationToken: cancellationToken);
-        await _recorder.RecordAsync(
-            AcceptanceGateKind.ExampleRequiredField,
-            AcceptanceEventType.EvidenceRecorded,
-            scenario: scenario,
-            evidenceRef: evidenceRef,
-            cancellationToken: cancellationToken);
+        _ = scenario;
+        return WriteEvidenceAsync(evidencePath, evidence, cancellationToken);
     }
 
     // JSON 证据只能写入本 run 目录，路径越界直接失败。
@@ -1311,19 +1214,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     }
 
     // 证据扫描覆盖 run directory 全部文件，不允许连接密码或临时身份凭据残留。
-    private async Task ScanEvidenceForSecretsAsync(CancellationToken cancellationToken)
-    {
-        var leaked = await AcceptanceInfrastructure.ScanForSecretsAsync(
-            _runDirectory,
-            _secretTokens,
-            cancellationToken);
-        await _recorder.RecordAsync(
-            AcceptanceGateKind.ExampleRequiredField,
-            AcceptanceEventType.SecretScanCompleted,
-            leaked ? AcceptanceObservationOutcome.Failed : AcceptanceObservationOutcome.Succeeded,
-            failureCode: leaked ? AcceptanceFailureCodes.SecretDetected : null,
-            cancellationToken: cancellationToken);
-    }
+    private Task<bool> ScanEvidenceForSecretsAsync(CancellationToken cancellationToken) =>
+        AcceptanceInfrastructure.ScanForSecretsAsync(_runDirectory, _secretTokens, cancellationToken);
 
     // 连接串相关 token 只用于证据反向扫描，不进入日志。
     private void AddConnectionSecrets(string configuredConnectionString, string password) =>
@@ -1623,18 +1515,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     // Revision 必须保持整数契约。
     private static long ReadLong(JsonElement element, string property) =>
         AcceptanceInfrastructure.ReadRequiredInt64(element, property);
-
-    // 场景到稳定 failure code 的映射保持单一，避免实现细节泄漏给 reducer。
-    private static string FailureCodeFor(string scenario) => scenario switch
-    {
-        PreflightScenario => AcceptanceFailureCodes.ExampleRequiredFieldPreflightFailed,
-        MigrationScenario => AcceptanceFailureCodes.ExampleRequiredFieldMigrationFailed,
-        BackfillRecoveryScenario => AcceptanceFailureCodes.ExampleRequiredFieldBackfillRecoveryFailed,
-        ContractPreconditionScenario => AcceptanceFailureCodes.ExampleRequiredFieldContractPreconditionFailed,
-        BrowserScenario => AcceptanceFailureCodes.ExampleRequiredFieldBrowserFailed,
-        RestartScenario => AcceptanceFailureCodes.ExampleRequiredFieldRestartFailed,
-        _ => AcceptanceFailureCodes.ExampleRequiredFieldPreflightFailed
-    };
 
     private string LegacyId => $"{_dataPrefix}-legacy";
     private string LegacyCode => $"{_dataPrefix}-LEGACY";

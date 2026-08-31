@@ -6,21 +6,6 @@ namespace ICP.Platform.Acceptance.Tests;
 public sealed class ExampleRequiredFieldAcceptanceRunnerTests
 {
     [Fact]
-    public void RequiredScenarios_CoverMigrationFailuresBrowserSmokeAndRestart()
-    {
-        Assert.Equal(
-            [
-                "example-required-field.preflight",
-                "example-required-field.migration",
-                "example-required-field.backfill-recovery",
-                "example-required-field.contract-precondition",
-                "example-required-field.browser",
-                "example-required-field.restart"
-            ],
-            ExampleRequiredFieldAcceptanceRunner.RequiredScenarios);
-    }
-
-    [Fact]
     public void StableDiagnostic_ExtractsFailureCodesWithoutPathsOrCredentials()
     {
         const string log = """

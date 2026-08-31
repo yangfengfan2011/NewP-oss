@@ -6,7 +6,7 @@
 
 - Issue、规格和分流：[issue-tracker.md](agents/issue-tracker.md)、[triage-labels.md](agents/triage-labels.md)
 - 领域术语与 Context：[domain.md](agents/domain.md)、[../CONTEXT-MAP.md](../CONTEXT-MAP.md)
-- 交付和验收：[delivery-gates.md](agents/delivery-gates.md)、[quick-verification.md](verification/quick-verification.md)
+- 交付和验收：[quick-verification.md](verification/quick-verification.md)
 - Host、Shell、Contracts、SDK 或模块接入：[componentization-guardrails.md](architecture/componentization-guardrails.md)
 - 架构导航：[architecture.md](architecture/architecture.md)
 - 本地初始化、连接和启动：[local-environment.md](guides/local-environment.md)
@@ -21,7 +21,6 @@
 - 模型 DTO 同步：[model-dto-sync-usage-guide.md](developer/model-dto-sync-usage-guide.md)
 - AI 代码生成：[code-quality-standard.md](developer/code-quality-standard.md)
 - 代码注释：[code-commenting-guidelines.md](developer/code-commenting-guidelines.md)
-- 审查清单：[codex-review-checklist.md](collaboration/codex-review-checklist.md)
 
 ## 稳定架构契约
 

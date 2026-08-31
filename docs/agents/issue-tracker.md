@@ -19,7 +19,7 @@
 
 1. 新功能、公共 seam、跨模块能力或其他非局部设计经确认后，实施前使用 `$to-spec` 综合当前对话和源码事实，发布一个带 `ready-for-agent` 的唯一 Spec Issue。局部缺陷和纯文档修正可以直接使用有界 Issue；已经开始实施的 Issue 不重复发布 Spec。
 2. Spec 发布后选择最小交付形态：一个 owner、一个回滚边界且可在一个执行上下文完成时，保留单 Issue 并按纵向检查点实施；只有存在多个可独立验收的增量、真实 blocker 或不同 owner 时，才使用 `$to-tickets` 创建纵向 child，每张票都必须独立可验证，不能按前端、后端或测试水平拆分。
-3. 新公共 seam 的真实采用者可行性是 Spec 内的 Go/No-Go 检查点；证据形成前不创建完整 child 图。详细预算、停止条件和拆票时机遵循 `delivery-gates.md`，不为满足流程单独创建可行性 child。
+3. 新公共 seam 在扩大实施前需要一次真实纵向验证，规则见 `AGENTS.md` 的「设计与交付」。验证必须使用真实业务模块，不新建样例模块，也不为满足流程单独创建可行性 child。
 
 ## 是否将 Pull Request 作为分流入口
 
@@ -54,9 +54,6 @@ GitHub Issues 与 Pull Requests 共用编号空间。遇到裸编号 `#42` 时�
 - 认领：`gh issue edit <n> --add-assignee @me`。这是执行会话的第一次写操作。
 - 完成：向 child 写入结论、关闭 child，并在 map 的 Decisions-so-far 中追加上下文链接。
 
-## Issue 模板
+## 依赖关系
 
-- `.github/ISSUE_TEMPLATE/delivery-child.yml` 与 `final-gate-child.yml` 是创建期规划表单，也是 CLI 正文的字段词汇表；它们只记录范围、owner、命令、成功信号和执行约束，不提前填写 commit/tree、Gate 结果或关闭证据。
-- 代理通过 `--body-file` 创建 issue 时，正文使用对应表单的同名规划字段；创建命令同时使用 `--parent` 与适用的 `--blocked-by`，随后读取回 issue 并核对原生关系。
-- 普通交付 child 在关闭评论中回写实际 RED/GREEN、runner/journey、commit/tree、限制、回滚和 cleanup；终局 child 在关闭评论中回写资格运行次数、Gate-only、verify、双轴审查及同一冻结 commit/tree。
-- GitHub 原生 sub-issue 与 blocked-by 是依赖事实源，模板正文不替代原生关系。
+GitHub 原生 sub-issue（`--parent`）与 blocked-by（`--blocked-by`）是依赖事实源，issue 正文不替代原生关系。创建后读取回 issue 核对关系是否建立。

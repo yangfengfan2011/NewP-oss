@@ -27,7 +27,7 @@ Host 与 Shell 默认地址分别为 `http://127.0.0.1:5000` 和 `http://127.0.0
 
 Host 不会因为 Development 环境或 `PERSISTENCE_DATABASE_REBUILD_REQUIRED` 自动删库。需要重建时，先运行 `.\scripts\stop-dev.ps1`，再核对连接指向的精确 catalog、NewP ownership marker、repository/worktree identity、数据可丢弃性和保护状态；只有全部一致且未受保护时，才通过受信任的数据库管理入口显式删除并新建空 catalog，随后重新启动 Host 让正式 migration 链创建 schema。不得重建 Acceptance、验收证据、显式保护或来源不明的数据库。
 
-空库启动、迁移或回滚、建库或删库、破坏性 DDL、并发或故障隔离，以及正式 Acceptance，按[连续交付门禁](../agents/delivery-gates.md)使用一次性 catalog。
+空库启动、迁移或回滚、建库或删库、破坏性 DDL、并发或故障隔离，以及正式 Acceptance，使用带 NewP ownership marker 的一次性 catalog，并在运行结束后清理。
 
 仓库根目录的 `.env` 被 Git 忽略，但 `scripts/dev.ps1` 当前不会自动解析它。`NEWP_DEV_ADMIN_ECODE` 与 `NEWP_DEV_ADMIN_PASSWORD` 是可选的应用管理员登录凭据，只用于认证 smoke，不是 SQL Server 用户名和密码；使用前必须由受信任的本地入口注入当前进程环境。数据库连接仍由上述连接字符串来源提供。
 
@@ -61,5 +61,4 @@ Acceptance 只复用服务器与登录身份，将 catalog 强制切换到 `mast
 ## 推荐阅读
 
 - 仓库规则：[../../AGENTS.md](../../AGENTS.md)
-- 连续交付门禁：[../agents/delivery-gates.md](../agents/delivery-gates.md)
 - 架构总览：[../architecture/architecture.md](../architecture/architecture.md)

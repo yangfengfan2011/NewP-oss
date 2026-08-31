@@ -76,19 +76,6 @@ public class RepositoryTestEntrypointTests
     }
 
     [Fact]
-    public void ContinuousIntegration_RunsFrontendTestsSeparatelyFromBuild()
-    {
-        var repositoryRoot = GetRepositoryRoot();
-        var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "ci.yml"));
-
-        Assert.Contains("pnpm test", workflow, StringComparison.Ordinal);
-        Assert.Contains("pnpm build", workflow, StringComparison.Ordinal);
-        Assert.Contains("validate-dic-localization.ps1", workflow, StringComparison.Ordinal);
-        Assert.Contains("model-dto-sync/ModelDtoSync.csproj", workflow, StringComparison.Ordinal);
-        Assert.Contains("--check .", workflow, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void AcceptanceRunner_DoesNotReferenceInternalPersistenceImplementation()
     {
         var repositoryRoot = GetRepositoryRoot();

@@ -2,6 +2,9 @@
 
 本页区分开发循环、冻结候选和运行时 smoke，避免每张票重复执行全部门禁。
 
+仓库没有 CI，**本机是唯一的验证位置**。没有第二次机会在别处发现问题，所以合并前
+至少要在本机跑一次 `verify.ps1`。
+
 ## 开发循环
 
 运行当前变更涉及的项目或过滤测试；模型元数据变化时先生成 DTO，再用 `--check` 确认无漂移：
@@ -14,7 +17,7 @@ dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 
 ## 冻结候选
 
-标准入口按 CI 顺序执行静态门禁、一次 Release 构建、`--no-build` 测试、前端测试与构建：
+标准入口依次执行静态门禁、一次 Release 构建、`--no-build` 测试、前端测试与构建：
 
 ```powershell
 .\scripts\verify.ps1

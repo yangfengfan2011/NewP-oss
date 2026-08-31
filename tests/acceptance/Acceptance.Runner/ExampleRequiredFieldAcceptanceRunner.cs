@@ -1094,6 +1094,24 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     // Catalog ownership marker 必须与本 run 捕获值完全一致才允许重置或 teardown。
     private async Task VerifyCatalogOwnershipAsync(CancellationToken cancellationToken)
     {
+        // dev state.json 是跨会话共享的：teardown 会据它 stop 进程，
+        // 因此必须先确认 supervisor 仍属于本 run，避免停掉其他 dev 会话或并行 worktree 的进程。
+        // 续跑路径在任何 dev run 之前就会校验 ownership，此时尚无 runId 可比。
+        if (_lastDevRunId is not null)
+        {
+            var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+            using var state = JsonDocument.Parse(
+                await File.ReadAllTextAsync(statePath, cancellationToken));
+            if (!string.Equals(
+                    ReadString(state.RootElement, "runId"),
+                    _lastDevRunId,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Development supervisor state no longer belongs to this acceptance run.");
+            }
+        }
+
         var expected = _ownershipSnapshot
             ?? throw new InvalidOperationException("Acceptance catalog ownership was not captured.");
         var current = await ReadOwnershipSnapshotAsync(cancellationToken);

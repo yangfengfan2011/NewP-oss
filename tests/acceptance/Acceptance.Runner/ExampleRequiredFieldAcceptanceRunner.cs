@@ -43,6 +43,10 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     private static readonly Regex CatalogPattern = new(
         "^NewP_acceptance_example_[0-9a-f]{24}$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    // 平台稳定失败码统一为全大写下划线形式；只提取它们即可定位失败层且不带出路径或凭据。
+    private static readonly Regex StableDiagnosticPattern = new(
+        @"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private readonly string _repositoryRoot;
     private readonly string _runDirectory;
     private readonly string _runId;
@@ -716,9 +720,10 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         var status = ReadString(currentResult.RootElement, "status");
         var failureCode = ReadString(currentResult.RootElement, "failureCode");
         var diagnostic = ReadString(currentResult.RootElement, "diagnostic");
+        var probe = expectedDiagnostic is null ? null : ProbeOwnedHostLog(expectedDiagnostic);
         var expectedObserved = expectedDiagnostic is null
             || diagnostic.Contains(expectedDiagnostic, StringComparison.Ordinal)
-            || OwnedHostLogContains(expectedDiagnostic);
+            || probe!.ExpectedObserved;
         await WriteEvidenceAsync(
             evidencePath,
             new
@@ -730,6 +735,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
                 diagnostic = Sanitize(diagnostic),
                 expectedDiagnostic,
                 expectedObserved,
+                actualHostDiagnostic = Sanitize(probe?.ActualDiagnostic),
+                hostLogSource = probe?.Source,
                 ownerRunId = _lastDevRunId
             },
             cancellationToken);
@@ -739,37 +746,85 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         }
         if (!expectedObserved)
         {
+            var actual = Sanitize(probe!.ActualDiagnostic);
             throw new InvalidOperationException(
-                $"Managed Host failure did not retain the expected diagnostic {expectedDiagnostic}.");
+                $"Managed Host failure did not retain the expected diagnostic {expectedDiagnostic}. "
+                + $"Host log ({probe.Source}) reported: "
+                + (actual.Length == 0 ? "no stable failure code" : actual));
         }
         return new DevFailure(failureCode, expectedDiagnostic ?? diagnostic);
     }
 
     // 只在 owned dev run 的 Host 日志内查找稳定诊断，不把完整日志或潜在配置写入证据。
-    private bool OwnedHostLogContains(string expectedDiagnostic)
+    // 期望诊断未命中时同时提取 Host 实际报出的稳定失败码，否则调用者只剩一个无法二分的否定信号。
+    private OwnedHostLogProbe ProbeOwnedHostLog(string expectedDiagnostic)
     {
+        var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
+        if (!File.Exists(statePath))
+        {
+            return new OwnedHostLogProbe(false, string.Empty, "dev-state-missing");
+        }
+
+        var devRoot = Path.GetFullPath(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "runs"));
+        var actual = string.Empty;
+        var source = "log-missing";
         try
         {
-            var statePath = Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json");
             using var state = JsonDocument.Parse(File.ReadAllText(statePath));
-            var logs = state.RootElement.GetProperty("logs");
-            foreach (var property in new[] { "hostStdout", "hostStderr" })
+            if (!state.RootElement.TryGetProperty("logs", out var logs))
             {
-                var path = Path.GetFullPath(ReadString(logs, property));
-                var devRoot = Path.GetFullPath(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "runs"));
-                if (path.StartsWith(devRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                    && File.Exists(path)
-                    && File.ReadAllText(path).Contains(expectedDiagnostic, StringComparison.Ordinal))
+                return new OwnedHostLogProbe(false, string.Empty, "dev-state-has-no-logs");
+            }
+
+            foreach (var property in new[] { "hostStderr", "hostStdout" })
+            {
+                var declared = ReadString(logs, property);
+                if (string.IsNullOrWhiteSpace(declared))
                 {
-                    return true;
+                    continue;
+                }
+
+                var path = Path.GetFullPath(declared);
+                if (!path.StartsWith(devRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    source = "log-outside-dev-root";
+                    continue;
+                }
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var text = File.ReadAllText(path);
+                if (text.Contains(expectedDiagnostic, StringComparison.Ordinal))
+                {
+                    return new OwnedHostLogProbe(true, string.Empty, property);
+                }
+                if (actual.Length == 0)
+                {
+                    actual = ExtractStableDiagnostic(text);
+                    source = actual.Length == 0 ? $"{property}-no-stable-code" : property;
                 }
             }
         }
-        catch
+        catch (Exception exception)
         {
-            // 缺失或越界日志都按未观察到处理，由调用者形成稳定失败证据。
+            return new OwnedHostLogProbe(false, exception.GetType().Name, "log-read-failed");
         }
-        return false;
+
+        return new OwnedHostLogProbe(false, actual, source);
+    }
+
+    // 只提取形如 PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX 的稳定失败码；
+    // 它们足以二分失败层，且不会带出连接串、路径或凭据。
+    internal static string ExtractStableDiagnostic(string logText)
+    {
+        var codes = StableDiagnosticPattern.Matches(logText)
+            .Select(match => match.Value)
+            .Distinct(StringComparer.Ordinal)
+            .Take(4)
+            .ToArray();
+        return codes.Length == 0 ? string.Empty : string.Join(" / ", codes);
     }
 
     // Host/Shell Ready 必须来自 managed dev supervisor 的 ready state 与正式 readiness endpoint。
@@ -1607,6 +1662,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     private string ContractPreconditionTriggerName => $"trg_ACC140_Contract_{_runId[..8]}";
 
     private sealed record DevFailure(string FailureCode, string Diagnostic);
+    internal sealed record OwnedHostLogProbe(bool ExpectedObserved, string ActualDiagnostic, string Source);
     private sealed record ExampleState(
         bool Nullable,
         int DefaultConstraints,

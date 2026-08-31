@@ -1613,16 +1613,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             ?? throw new InvalidOperationException("No Chromium executable was found for the Example browser observer.");
     }
 
-    // 任意 evidence diagnostic 都先替换 runner 知道的凭据 token。
-    private string Sanitize(string? value)
-    {
-        var sanitized = value ?? string.Empty;
-        foreach (var token in _secretTokens.Where(static token => !string.IsNullOrWhiteSpace(token)))
-        {
-            sanitized = sanitized.Replace(token, "[REDACTED]", StringComparison.Ordinal);
-        }
-        return sanitized;
-    }
+    // 任意 evidence diagnostic 都先替换 runner 知道的凭据 token；替换顺序由共享实现保证。
+    private string Sanitize(string? value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
     // JSON helper 只读取字符串型稳定字段，缺失时返回空串供调用者明确失败。
     private static string ReadString(JsonElement element, string property) =>

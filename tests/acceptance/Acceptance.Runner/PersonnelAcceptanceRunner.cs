@@ -2736,15 +2736,7 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
-    private string Sanitize(string value)
-    {
-        var sanitized = value;
-        foreach (var secret in _secretTokens.Where(static item => !string.IsNullOrEmpty(item)).OrderByDescending(static item => item.Length))
-        {
-            sanitized = sanitized.Replace(secret, "[REDACTED]", StringComparison.Ordinal);
-        }
-        return sanitized;
-    }
+    private string Sanitize(string value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
     private void ValidateCatalogName(string catalog)
     {

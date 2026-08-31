@@ -1361,15 +1361,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }
     }
 
-    private string Sanitize(string value)
-    {
-        var sanitized = value;
-        foreach (var secret in _secretTokens.Where(value => !string.IsNullOrEmpty(value)).OrderByDescending(value => value.Length))
-        {
-            sanitized = sanitized.Replace(secret, "[REDACTED]", StringComparison.Ordinal);
-        }
-        return sanitized;
-    }
+    private string Sanitize(string value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
     private static object ProcessEvidence(string command, AcceptanceProcessResult result) => new
     {

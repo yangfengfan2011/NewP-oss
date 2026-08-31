@@ -104,4 +104,23 @@ internal static class AcceptanceInfrastructure
 
     public static string RelativeArtifact(string runDirectory, string path) =>
         Path.GetRelativePath(runDirectory, path).Replace('\\', '/');
+
+    /// <summary>
+    /// 把已知凭据 token 从任何进入 evidence 的文本中移除。
+    /// 必须按长度降序替换：短 token 若先命中，会在更长的 token（例如包含该密码的完整连接串）
+    /// 内部留下未被整体替换的残片。空白 token 一律跳过，否则会把正常文本替换成 [REDACTED]。
+    /// </summary>
+    public static string Sanitize(IEnumerable<string> secretTokens, string? value)
+    {
+        ArgumentNullException.ThrowIfNull(secretTokens);
+
+        var sanitized = value ?? string.Empty;
+        foreach (var token in secretTokens
+                     .Where(static token => !string.IsNullOrWhiteSpace(token))
+                     .OrderByDescending(static token => token.Length))
+        {
+            sanitized = sanitized.Replace(token, "[REDACTED]", StringComparison.Ordinal);
+        }
+        return sanitized;
+    }
 }

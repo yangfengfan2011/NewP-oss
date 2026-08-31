@@ -183,6 +183,30 @@ internal static class AcceptanceInfrastructure
         return false;
     }
 
+    /// <summary>
+    /// 递归删除前确认目标仍在本轮 run 的 resources 边界内，且目录树中没有 reparse point。
+    /// .NET 的递归删除不跟随 reparse point，因此这里是纵深防御而非唯一屏障：
+    /// 目录树里出现链接说明现场已偏离预期，此时保留证据比继续删除更重要。
+    /// </summary>
+    public static void EnsureOwnedResourceRoot(string runDirectory, string path)
+    {
+        var resources = Path.GetFullPath(Path.Combine(runDirectory, "resources"))
+            + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(path);
+        if (!fullPath.StartsWith(resources, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Acceptance resource root escaped the owned run directory.");
+        }
+
+        if ((File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0
+            || Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.AllDirectories)
+                .Any(item => (File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0))
+        {
+            throw new InvalidOperationException(
+                "Acceptance resource root contains a reparse point and will be preserved.");
+        }
+    }
+
     private static IEnumerable<string> SignificantSecretTokens(IEnumerable<string> secretTokens) =>
         secretTokens
             .Where(static token =>

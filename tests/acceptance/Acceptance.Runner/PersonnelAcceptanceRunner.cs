@@ -2738,16 +2738,13 @@ internal sealed class PersonnelAcceptanceRunner
             Path.GetFullPath(Path.Combine(_runDirectory, "resources", "plugins")),
             Path.GetFullPath(Path.Combine(_runDirectory, "resources", "key-ring"))
         };
+        // Personnel 只删这两个预声明的根，比共享的前缀边界更严，该额外强度保留在本地。
         if (!allowed.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Acceptance resource root escaped its owned run directory.");
         }
-        if ((File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0
-            || Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.AllDirectories)
-                .Any(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0))
-        {
-            throw new InvalidOperationException("Acceptance resource root contains a reparse point and will be preserved.");
-        }
+
+        AcceptanceInfrastructure.EnsureOwnedResourceRoot(_runDirectory, resourceRoot);
     }
 
     private static string ResolveChromePath()

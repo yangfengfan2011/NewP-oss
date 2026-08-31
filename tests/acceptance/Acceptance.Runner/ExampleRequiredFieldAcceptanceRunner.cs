@@ -1308,15 +1308,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, configuredConnectionString, password);
 
     // runner resource root 只能是当前 run/resources 的直接子路径。
-    private void EnsureSafeResourceRoot(string root)
-    {
-        var resourceRoot = Path.GetFullPath(Path.Combine(_runDirectory, "resources"));
-        var full = Path.GetFullPath(root);
-        if (!full.StartsWith(resourceRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("Acceptance resource root escaped the owned run directory.");
-        }
-    }
+    private void EnsureSafeResourceRoot(string root) =>
+        AcceptanceInfrastructure.EnsureOwnedResourceRoot(_runDirectory, root);
 
     // Catalog 格式包含 gate owner 与完整随机 runId，拒绝宽泛 DROP 目标。
     private static void ValidateCatalogName(string catalog)

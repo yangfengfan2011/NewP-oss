@@ -1438,18 +1438,8 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }
     }
 
-    private void EnsureOwnedResourceRoot(string path)
-    {
-        var resources = Path.GetFullPath(Path.Combine(_runDirectory, "resources")) + Path.DirectorySeparatorChar;
-        var fullPath = Path.GetFullPath(path);
-        if (!fullPath.StartsWith(resources, StringComparison.OrdinalIgnoreCase)
-            || (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0
-            || Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.AllDirectories)
-                .Any(item => (File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0))
-        {
-            throw new InvalidOperationException("Acceptance resource escaped its ownership boundary or contains a reparse point.");
-        }
-    }
+    private void EnsureOwnedResourceRoot(string path) =>
+        AcceptanceInfrastructure.EnsureOwnedResourceRoot(_runDirectory, path);
 
     private static void EnsureEmptyDirectory(string path)
     {

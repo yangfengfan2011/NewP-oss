@@ -48,7 +48,7 @@ tests/<ModuleName>.Tests/
 
 ```powershell
 # 运行全部测试与仓库静态门禁
-pwsh ./scripts/test.ps1
+pwsh ./scripts/verify.ps1 -Quick
 
 # 运行单个模块测试
 dotnet test tests/<ModuleName>.Tests/<ModuleName>.Tests.csproj

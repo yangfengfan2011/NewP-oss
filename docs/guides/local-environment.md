@@ -52,7 +52,7 @@ Acceptance 只复用服务器与登录身份，将 catalog 强制切换到 `mast
 ## 验证入口
 
 - 开发循环：运行当前票据涉及的项目或过滤测试。
-- 仓库测试：`.\scripts\test.ps1`。
+- 仓库测试：`.\scripts\verify.ps1 -Quick`。
 - 冻结候选：`.\scripts\verify.ps1`。
 - 纵向验收：`.\scripts\accept.ps1 -Gate <Gate>`，等价于设置 `NEWP_RUN_ACCEPTANCE=1` 后 `dotnet test tests/acceptance/Acceptance.Tests`。闸门默认跳过，不会拖慢日常 `dotnet test`。
 

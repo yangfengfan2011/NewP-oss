@@ -1,5 +1,11 @@
+# 仓库唯一的验证入口。没有 CI，本机就是唯一的验证位置。
+#
+# -Quick 供开发循环使用：跳过只有冻结候选才需要的三步（diff-check、
+# dotnet restore、前端 build），其余门禁与完整跑法完全一致——不允许出现
+# 「快跑绿了、慢跑才发现」的两套判据。
 [CmdletBinding()]
 param(
+    [switch]$Quick,
     [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField")]
     [string[]]$AcceptanceGate = @(),
     [ValidateSet("Baseline", "Candidate")]
@@ -42,6 +48,7 @@ function Save-VerificationResult {
         schemaVersion = "1.0"
         runId = $runId
         status = $Status
+        quick = $Quick.IsPresent
         repositoryRoot = $repoRoot
         startedAtUtc = $startedAtUtc.ToString("O")
         completedAtUtc = $completedAtUtc
@@ -112,8 +119,11 @@ function Invoke-VerificationStage {
 Save-VerificationResult -Status "running"
 $currentStage = $null
 try {
-    $currentStage = "diff-check"
-    Invoke-VerificationStage -Name $currentStage -FilePath "git" -Arguments @("diff", "--check")
+    if (-not $Quick)
+    {
+        $currentStage = "diff-check"
+        Invoke-VerificationStage -Name $currentStage -FilePath "git" -Arguments @("diff", "--check")
+    }
 
     $currentStage = "current-docs"
     Invoke-VerificationStage -Name $currentStage -FilePath $pwshPath -Arguments @(
@@ -125,13 +135,23 @@ try {
         "-NoLogo", "-NoProfile", "-File", (Join-Path $PSScriptRoot "validate-dic-localization.ps1"),
         "-Root", $repoRoot)
 
-    $currentStage = "dotnet-restore"
-    Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
-        "restore", "ICP-Platform.sln")
+    if ($Quick)
+    {
+        # 开发循环里包引用很少变；让 build 自己按需 restore。
+        $currentStage = "dotnet-build"
+        Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
+            "build", "ICP-Platform.sln", "--configuration", "Release")
+    }
+    else
+    {
+        $currentStage = "dotnet-restore"
+        Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
+            "restore", "ICP-Platform.sln")
 
-    $currentStage = "dotnet-build"
-    Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
-        "build", "ICP-Platform.sln", "--configuration", "Release", "--no-restore")
+        $currentStage = "dotnet-build"
+        Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
+            "build", "ICP-Platform.sln", "--configuration", "Release", "--no-restore")
+    }
 
     $currentStage = "model-dto-sync-check"
     Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
@@ -146,9 +166,12 @@ try {
     Invoke-VerificationStage -Name $currentStage -FilePath $corepackPath -Arguments @(
         "pnpm", "--dir", "frontend", "test")
 
-    $currentStage = "frontend-build"
-    Invoke-VerificationStage -Name $currentStage -FilePath $corepackPath -Arguments @(
-        "pnpm", "--dir", "frontend", "build")
+    if (-not $Quick)
+    {
+        $currentStage = "frontend-build"
+        Invoke-VerificationStage -Name $currentStage -FilePath $corepackPath -Arguments @(
+            "pnpm", "--dir", "frontend", "build")
+    }
 
     foreach ($gate in $AcceptanceGate)
     {
@@ -173,6 +196,10 @@ try {
 
     Save-VerificationResult -Status "passed"
     Write-Host ""
+    if ($Quick)
+    {
+        Write-Host "已跳过 diff-check、dotnet restore 与前端 build；合并前请跑一次完整 verify.ps1。" -ForegroundColor Yellow
+    }
     Write-Host "VERIFY_RESULT: $resultPath" -ForegroundColor Green
     exit 0
 }

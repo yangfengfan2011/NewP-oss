@@ -41,8 +41,8 @@ dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-
 ## 验证
 
 ```powershell
-# 当前任务的定向测试优先；仓库级测试使用：
-.\scripts\test.ps1
+# 当前任务的定向测试优先；开发循环使用：
+.\scripts\verify.ps1 -Quick
 
 # 冻结候选的完整验证：
 .\scripts\verify.ps1

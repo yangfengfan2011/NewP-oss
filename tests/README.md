@@ -14,11 +14,11 @@ corepack pnpm --dir frontend test -- <测试过滤条件>
 ## 仓库级入口
 
 ```powershell
-.\scripts\test.ps1
+.\scripts\verify.ps1 -Quick
 .\scripts\verify.ps1
 ```
 
-`test.ps1` 运行当前文档门禁、后端测试、模型 DTO 同步检查和前端测试。`verify.ps1` 额外执行冻结候选所需的 restore、Release build 和前端 build，并把每个阶段的结果写入 `.codex-temp/verify/`。
+`verify.ps1` 是唯一的验证入口，没有 CI 兜底。`-Quick` 供开发循环使用，跳过只有冻结候选才需要的 diff-check、`dotnet restore` 和前端 build；其余门禁两种模式完全一致。每个阶段的结果与日志写入 `.codex-temp/verify/`。
 
 ## Acceptance
 

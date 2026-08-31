@@ -39,17 +39,36 @@ public class RepositoryTestEntrypointTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    // verify.ps1 是仓库唯一的验证入口，没有 CI 兜底。它至少要覆盖整个 solution
+    // 和前端测试；-Quick 只允许省掉冻结候选专用的步骤，不能省掉门禁本身。
     [Fact]
-    public void RepositoryTestScripts_InvokeTheSameSolutionAndFrontendEntrypoints()
+    public void VerificationEntrypoint_CoversTheSolutionAndFrontendInBothModes()
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var powerShell = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "test.ps1"));
-        var shell = File.ReadAllText(Path.Combine(repositoryRoot, "scripts", "test.sh"));
+        var verification = File.ReadAllText(
+            Path.Combine(GetRepositoryRoot(), "scripts", "verify.ps1"));
 
-        Assert.Contains("dotnet test ICP-Platform.sln", powerShell, StringComparison.Ordinal);
-        Assert.Contains("dotnet test ICP-Platform.sln", shell, StringComparison.Ordinal);
-        Assert.Contains("corepack pnpm --dir frontend test", powerShell, StringComparison.Ordinal);
-        Assert.Contains("corepack pnpm --dir frontend test", shell, StringComparison.Ordinal);
+        Assert.Contains("\"test\", \"ICP-Platform.sln\"", verification, StringComparison.Ordinal);
+        Assert.Contains("\"pnpm\", \"--dir\", \"frontend\", \"test\"", verification, StringComparison.Ordinal);
+
+        // -Quick 只包裹这三步；其余阶段必须无条件执行。
+        foreach (var quickOnlySkip in new[] { "diff-check", "dotnet-restore", "frontend-build" })
+        {
+            Assert.Contains(quickOnlySkip, verification, StringComparison.Ordinal);
+        }
+        Assert.Equal(2, CountOccurrences(verification, "if (-not $Quick)"));
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        for (var index = text.IndexOf(value, StringComparison.Ordinal);
+             index >= 0;
+             index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     [Fact]

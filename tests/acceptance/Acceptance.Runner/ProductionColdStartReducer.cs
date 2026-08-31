@@ -265,11 +265,15 @@ public static class ProductionColdStartReducer
                 var p95Improvement = summary.InteractiveP95ImprovementRatio!.Value;
                 if (p50Improvement < minimumImprovement)
                 {
+                    // 诊断文本必须与机器区域无关：":P0" 走 CurrentCulture 的
+                    // PercentPositivePattern，invariant 下是 "30 %"（带空格），
+                    // en-US 下是 "30%"。失败信号不能随装机语言变形。
                     violations.Add(new ProductionColdStartViolation(
                         AcceptanceFailureCodes.ProductionColdStartBudgetExceeded,
                         scenario,
                         null,
-                        $"p50 improvement must reach {minimumImprovement:P0}; observed p50 {p50Improvement:P1}; p95 {p95Improvement:P1} is report-only."));
+                        FormattableString.Invariant(
+                            $"p50 improvement must reach {minimumImprovement * 100m:0.#}%; observed p50 {p50Improvement * 100m:0.0}%; p95 {p95Improvement * 100m:0.0}% is report-only.")));
                 }
             }
         }

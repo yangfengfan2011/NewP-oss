@@ -106,21 +106,86 @@ internal static class AcceptanceInfrastructure
         Path.GetRelativePath(runDirectory, path).Replace('\\', '/');
 
     /// <summary>
+    /// 参与脱敏与证据扫描的最小 token 长度。两端使用同一下限：
+    /// 更短的值（例如 <c>sa</c> 这样的登录名）不是凭据，却会把证据里任何含该子串的正常词
+    /// 替换成 <c>[REDACTED]</c> 或误报泄漏。凭据本身（生成密码、连接串）远长于该下限。
+    /// </summary>
+    public const int MinimumSecretTokenLength = 6;
+
+    /// <summary>
     /// 把已知凭据 token 从任何进入 evidence 的文本中移除。
     /// 必须按长度降序替换：短 token 若先命中，会在更长的 token（例如包含该密码的完整连接串）
-    /// 内部留下未被整体替换的残片。空白 token 一律跳过，否则会把正常文本替换成 [REDACTED]。
+    /// 内部留下未被整体替换的残片。
     /// </summary>
     public static string Sanitize(IEnumerable<string> secretTokens, string? value)
     {
         ArgumentNullException.ThrowIfNull(secretTokens);
 
         var sanitized = value ?? string.Empty;
-        foreach (var token in secretTokens
-                     .Where(static token => !string.IsNullOrWhiteSpace(token))
+        foreach (var token in SignificantSecretTokens(secretTokens)
                      .OrderByDescending(static token => token.Length))
         {
             sanitized = sanitized.Replace(token, "[REDACTED]", StringComparison.Ordinal);
         }
         return sanitized;
     }
+
+    /// <summary>
+    /// 登记一条连接的相关凭据形态。除裸密码外同时登记 <c>Password=</c> 与 <c>Pwd=</c> 形式，
+    /// 使连接串片段在只出现前缀形态时也能被整体替换。
+    /// </summary>
+    public static void AddConnectionSecrets(
+        ICollection<string> secretTokens,
+        string connectionString,
+        string? password)
+    {
+        ArgumentNullException.ThrowIfNull(secretTokens);
+
+        secretTokens.Add(connectionString);
+        if (string.IsNullOrEmpty(password))
+        {
+            return;
+        }
+
+        secretTokens.Add(password);
+        secretTokens.Add($"Password={password}");
+        secretTokens.Add($"Pwd={password}");
+    }
+
+    /// <summary>
+    /// 反向扫描本轮全部证据文件，确认没有已知凭据以字节形式落盘。
+    /// 与 <see cref="Sanitize"/> 使用同一组有效 token，避免"脱敏跳过但扫描报警"的不一致。
+    /// </summary>
+    public static async Task<bool> ScanForSecretsAsync(
+        string runDirectory,
+        IEnumerable<string> secretTokens,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(secretTokens);
+
+        var patterns = SignificantSecretTokens(secretTokens)
+            .Select(Encoding.UTF8.GetBytes)
+            .ToArray();
+        if (patterns.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(runDirectory, "*", SearchOption.AllDirectories))
+        {
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+            if (patterns.Any(pattern => bytes.AsSpan().IndexOf(pattern) >= 0))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> SignificantSecretTokens(IEnumerable<string> secretTokens) =>
+        secretTokens
+            .Where(static token =>
+                !string.IsNullOrWhiteSpace(token) && token.Length >= MinimumSecretTokenLength)
+            .Distinct(StringComparer.Ordinal);
 }

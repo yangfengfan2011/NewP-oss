@@ -43,4 +43,85 @@ public sealed class AcceptanceSanitizeTests
 
         Assert.Equal(diagnostic, AcceptanceInfrastructure.Sanitize(["secret"], diagnostic));
     }
+
+    [Fact]
+    public void Sanitize_IgnoresTokensBelowMinimumLengthSoOrdinaryWordsSurvive()
+    {
+        // 登录名之类的短值不是凭据，却会把含该子串的正常词打成 [REDACTED]。
+        var actual = AcceptanceInfrastructure.Sanitize(["sa"], "sanitized evidence");
+
+        Assert.Equal("sanitized evidence", actual);
+    }
+
+    [Fact]
+    public void AddConnectionSecrets_RegistersBarePasswordAndBothPrefixedForms()
+    {
+        var tokens = new List<string>();
+
+        AcceptanceInfrastructure.AddConnectionSecrets(tokens, "Server=localhost", "P@ssw0rd");
+
+        Assert.Contains("Server=localhost", tokens);
+        Assert.Contains("P@ssw0rd", tokens);
+        Assert.Contains("Password=P@ssw0rd", tokens);
+        Assert.Contains("Pwd=P@ssw0rd", tokens);
+    }
+
+    [Fact]
+    public void AddConnectionSecrets_WithoutPasswordRegistersOnlyTheConnectionString()
+    {
+        var tokens = new List<string>();
+
+        AcceptanceInfrastructure.AddConnectionSecrets(tokens, "Server=localhost", null);
+
+        Assert.Equal(["Server=localhost"], tokens);
+    }
+
+    [Fact]
+    public async Task ScanForSecrets_DetectsTokenWrittenIntoEvidenceAndIgnoresCleanRun()
+    {
+        var runDirectory = Directory.CreateTempSubdirectory("newp-scan-").FullName;
+        try
+        {
+            var evidencePath = Path.Combine(runDirectory, "evidence.json");
+            await File.WriteAllTextAsync(evidencePath, """{"diagnostic":"host reported P@ssw0rd"}""");
+
+            Assert.True(await AcceptanceInfrastructure.ScanForSecretsAsync(
+                runDirectory,
+                ["P@ssw0rd"],
+                CancellationToken.None));
+
+            await File.WriteAllTextAsync(evidencePath, """{"diagnostic":"host reported [REDACTED]"}""");
+
+            Assert.False(await AcceptanceInfrastructure.ScanForSecretsAsync(
+                runDirectory,
+                ["P@ssw0rd"],
+                CancellationToken.None));
+        }
+        finally
+        {
+            Directory.Delete(runDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScanForSecrets_UsesTheSameMinimumLengthAsSanitize()
+    {
+        var runDirectory = Directory.CreateTempSubdirectory("newp-scan-floor-").FullName;
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(runDirectory, "evidence.json"),
+                """{"diagnostic":"sanitized evidence"}""");
+
+            // "sa" 低于下限：脱敏跳过它，扫描也不得因此报泄漏，否则两端判据不一致。
+            Assert.False(await AcceptanceInfrastructure.ScanForSecretsAsync(
+                runDirectory,
+                ["sa"],
+                CancellationToken.None));
+        }
+        finally
+        {
+            Directory.Delete(runDirectory, recursive: true);
+        }
+    }
 }

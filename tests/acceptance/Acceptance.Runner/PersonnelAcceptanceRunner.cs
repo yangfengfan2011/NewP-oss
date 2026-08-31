@@ -1963,21 +1963,10 @@ internal sealed class PersonnelAcceptanceRunner
 
     private async Task ScanEvidenceForSecretsAsync(CancellationToken cancellationToken)
     {
-        var patterns = _secretTokens
-            .Where(static value => !string.IsNullOrWhiteSpace(value) && value.Length >= 8)
-            .Distinct(StringComparer.Ordinal)
-            .Select(Encoding.UTF8.GetBytes)
-            .ToArray();
-        var leaked = false;
-        foreach (var path in Directory.EnumerateFiles(_runDirectory, "*", SearchOption.AllDirectories))
-        {
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
-            if (patterns.Any(pattern => bytes.AsSpan().IndexOf(pattern) >= 0))
-            {
-                leaked = true;
-                break;
-            }
-        }
+        var leaked = await AcceptanceInfrastructure.ScanForSecretsAsync(
+            _runDirectory,
+            _secretTokens,
+            cancellationToken);
 
         _secretLeakDetected = leaked;
 
@@ -2726,15 +2715,8 @@ internal sealed class PersonnelAcceptanceRunner
         throw new InvalidOperationException($"JSON property {parent}.{property} was missing.");
     }
 
-    private void AddConnectionSecrets(string rawConnectionString, string password)
-    {
-        _secretTokens.Add(rawConnectionString);
-        if (!string.IsNullOrEmpty(password))
-        {
-            _secretTokens.Add($"Password={password}");
-            _secretTokens.Add($"Pwd={password}");
-        }
-    }
+    private void AddConnectionSecrets(string rawConnectionString, string password) =>
+        AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, rawConnectionString, password);
 
     private string Sanitize(string value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 

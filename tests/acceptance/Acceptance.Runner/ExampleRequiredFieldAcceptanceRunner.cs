@@ -1291,21 +1291,10 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     // 证据扫描覆盖 run directory 全部文件，不允许连接密码或临时身份凭据残留。
     private async Task ScanEvidenceForSecretsAsync(CancellationToken cancellationToken)
     {
-        var patterns = _secretTokens
-            .Where(static value => !string.IsNullOrWhiteSpace(value) && value.Length >= 8)
-            .Distinct(StringComparer.Ordinal)
-            .Select(Encoding.UTF8.GetBytes)
-            .ToArray();
-        var leaked = false;
-        foreach (var path in Directory.EnumerateFiles(_runDirectory, "*", SearchOption.AllDirectories))
-        {
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
-            if (patterns.Any(pattern => bytes.AsSpan().IndexOf(pattern) >= 0))
-            {
-                leaked = true;
-                break;
-            }
-        }
+        var leaked = await AcceptanceInfrastructure.ScanForSecretsAsync(
+            _runDirectory,
+            _secretTokens,
+            cancellationToken);
         await _recorder.RecordAsync(
             AcceptanceGateKind.ExampleRequiredField,
             AcceptanceEventType.SecretScanCompleted,
@@ -1315,20 +1304,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     }
 
     // 连接串相关 token 只用于证据反向扫描，不进入日志。
-    private void AddConnectionSecrets(string configuredConnectionString, string password)
-    {
-        _secretTokens.Add(configuredConnectionString);
-        _secretTokens.Add(password);
-        try
-        {
-            var builder = new SqlConnectionStringBuilder(configuredConnectionString);
-            _secretTokens.Add(builder.UserID);
-        }
-        catch
-        {
-            // Resolver 已负责连接串合法性；这里只跳过无法拆分的额外 token。
-        }
-    }
+    private void AddConnectionSecrets(string configuredConnectionString, string password) =>
+        AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, configuredConnectionString, password);
 
     // runner resource root 只能是当前 run/resources 的直接子路径。
     private void EnsureSafeResourceRoot(string root)

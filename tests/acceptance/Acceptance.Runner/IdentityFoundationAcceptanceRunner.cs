@@ -1380,29 +1380,16 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }
     }
 
-    private static JsonElement Property(JsonElement element, string name)
-    {
-        foreach (var property in element.EnumerateObject())
-        {
-            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) return property.Value;
-        }
-        throw new InvalidOperationException($"JSON property {name} was missing.");
-    }
+    private static JsonElement Property(JsonElement element, string name) =>
+        AcceptanceInfrastructure.RequireProperty(element, name);
 
     private static JsonElement ReadObject(JsonElement element, string name) => Property(element, name);
     private static JsonElement ReadArray(JsonElement element, string name) => Property(element, name);
-    private static string ReadString(JsonElement element, string name) => Property(element, name).GetString()
-        ?? throw new InvalidOperationException($"JSON property {name} was null.");
-    private static long ReadLong(JsonElement element, string name)
-    {
-        var property = Property(element, name);
-        return property.ValueKind switch
-        {
-            JsonValueKind.Number => property.GetInt64(),
-            JsonValueKind.String when long.TryParse(property.GetString(), out var value) => value,
-            _ => throw new InvalidOperationException($"JSON property {name} was not an integer.")
-        };
-    }
+    private static string ReadString(JsonElement element, string name) =>
+        AcceptanceInfrastructure.ReadRequiredString(element, name);
+
+    private static long ReadLong(JsonElement element, string name) =>
+        AcceptanceInfrastructure.ReadRequiredInt64(element, name);
     private static int ReadInt(JsonElement element, string name) => Property(element, name).GetInt32();
     private static DateTime ReadDateTime(JsonElement element, string name) => Property(element, name).GetDateTime();
     private static string ReadNestedString(JsonElement element, string parent, string name) => ReadString(ReadObject(element, parent), name);

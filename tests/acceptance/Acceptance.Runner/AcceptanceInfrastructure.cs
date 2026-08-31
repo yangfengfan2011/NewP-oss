@@ -184,6 +184,66 @@ internal static class AcceptanceInfrastructure
     }
 
     /// <summary>
+    /// 按名称取属性，大小写不敏感；缺失时抛出指名属性的异常。
+    /// 契约断言必须区分"字段可缺失"与"字段必需"：两者混用同一个返回空串的 helper 时，
+    /// 缺失字段会退化成值不匹配（例如 <c>returned (, , )</c>），失败信号无法定位到实际原因。
+    /// </summary>
+    public static JsonElement RequireProperty(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        throw new InvalidOperationException($"JSON property {name} was missing.");
+    }
+
+    /// <summary>值用于断言或所有权判定时使用：缺失或为 null 都立即失败。</summary>
+    public static string ReadRequiredString(JsonElement element, string name) =>
+        RequireProperty(element, name).GetString()
+            ?? throw new InvalidOperationException($"JSON property {name} was null.");
+
+    /// <summary>缺失是合法运行态时使用（例如成功时为空的 failureCode）：缺失返回空串。</summary>
+    public static string ReadOptionalString(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value.ValueKind is JsonValueKind.String
+                    ? property.Value.GetString() ?? string.Empty
+                    : string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>取必需的对象属性；类型不符与缺失都指名失败。</summary>
+    public static JsonElement ReadRequiredObject(JsonElement element, string name)
+    {
+        var property = RequireProperty(element, name);
+        return property.ValueKind is JsonValueKind.Object
+            ? property
+            : throw new InvalidOperationException($"JSON property {name} was not an object.");
+    }
+
+    /// <summary>取必需的整数属性；同时接受 JSON number 与可解析的数字字符串。</summary>
+    public static long ReadRequiredInt64(JsonElement element, string name)
+    {
+        var property = RequireProperty(element, name);
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number => property.GetInt64(),
+            JsonValueKind.String when long.TryParse(property.GetString(), out var value) => value,
+            _ => throw new InvalidOperationException($"JSON property {name} was not an integer.")
+        };
+    }
+
+    /// <summary>
     /// 递归删除前确认目标仍在本轮 run 的 resources 边界内，且目录树中没有 reparse point。
     /// .NET 的递归删除不跟随 reparse point，因此这里是纵深防御而非唯一屏障：
     /// 目录树里出现链接说明现场已偏离预期，此时保留证据比继续删除更重要。

@@ -2612,44 +2612,14 @@ internal sealed class PersonnelAcceptanceRunner
         }
     }
 
-    private static string ReadString(JsonElement element, string property)
-    {
-        foreach (var item in element.EnumerateObject())
-        {
-            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase))
-            {
-                return item.Value.GetString()
-                    ?? throw new InvalidOperationException($"JSON property {property} was null.");
-            }
-        }
-        throw new InvalidOperationException($"JSON property {property} was missing.");
-    }
+    private static string ReadString(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadRequiredString(element, property);
 
-    private static JsonElement ReadObject(JsonElement element, string property)
-    {
-        foreach (var item in element.EnumerateObject())
-        {
-            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
-                && item.Value.ValueKind == JsonValueKind.Object)
-            {
-                return item.Value;
-            }
-        }
-        throw new InvalidOperationException($"JSON object {property} was missing.");
-    }
+    private static JsonElement ReadObject(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadRequiredObject(element, property);
 
-    private static long ReadLong(JsonElement element, string property)
-    {
-        foreach (var item in element.EnumerateObject())
-        {
-            if (string.Equals(item.Name, property, StringComparison.OrdinalIgnoreCase)
-                && item.Value.TryGetInt64(out var value))
-            {
-                return value;
-            }
-        }
-        throw new InvalidOperationException($"JSON integer {property} was missing.");
-    }
+    private static long ReadLong(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadRequiredInt64(element, property);
 
     // 只接受明确 JSON boolean，避免验收把字符串或缺失字段误判为业务状态。
     private static bool ReadBoolean(JsonElement element, string property)

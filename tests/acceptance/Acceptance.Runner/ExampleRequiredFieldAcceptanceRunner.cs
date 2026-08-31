@@ -718,8 +718,8 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
 
         using var currentResult = JsonDocument.Parse(await File.ReadAllTextAsync(currentResultPath, cancellationToken));
         var status = ReadString(currentResult.RootElement, "status");
-        var failureCode = ReadString(currentResult.RootElement, "failureCode");
-        var diagnostic = ReadString(currentResult.RootElement, "diagnostic");
+        var failureCode = ReadOptionalString(currentResult.RootElement, "failureCode");
+        var diagnostic = ReadOptionalString(currentResult.RootElement, "diagnostic");
         var probe = expectedDiagnostic is null ? null : ProbeOwnedHostLog(expectedDiagnostic);
         var expectedObserved = expectedDiagnostic is null
             || diagnostic.Contains(expectedDiagnostic, StringComparison.Ordinal)
@@ -778,7 +778,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
 
             foreach (var property in new[] { "hostStderr", "hostStdout" })
             {
-                var declared = ReadString(logs, property);
+                var declared = ReadOptionalString(logs, property);
                 if (string.IsNullOrWhiteSpace(declared))
                 {
                     continue;
@@ -1586,23 +1586,21 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     // 任意 evidence diagnostic 都先替换 runner 知道的凭据 token；替换顺序由共享实现保证。
     private string Sanitize(string? value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
-    // JSON helper 只读取字符串型稳定字段，缺失时返回空串供调用者明确失败。
+    // 值用于断言或所有权判定时必须指名失败，否则缺失字段会退化成值不匹配。
     private static string ReadString(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String
-            ? value.GetString() ?? string.Empty
-            : string.Empty;
+        AcceptanceInfrastructure.ReadRequiredString(element, property);
+
+    // 缺失是合法运行态的字段（成功时为空的 failureCode、未产生的日志路径）走可选读取。
+    private static string ReadOptionalString(JsonElement element, string property) =>
+        AcceptanceInfrastructure.ReadOptionalString(element, property);
 
     // JSON object 缺失时立即失败，避免把响应 envelope 漂移误判为空值。
     private static JsonElement ReadObject(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.Object
-            ? value
-            : throw new InvalidOperationException($"JSON response omitted object {property}.");
+        AcceptanceInfrastructure.ReadRequiredObject(element, property);
 
     // Revision 必须保持整数契约。
     private static long ReadLong(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.TryGetInt64(out var result)
-            ? result
-            : throw new InvalidOperationException($"JSON response omitted integer {property}.");
+        AcceptanceInfrastructure.ReadRequiredInt64(element, property);
 
     // 场景到稳定 failure code 的映射保持单一，避免实现细节泄漏给 reducer。
     private static string FailureCodeFor(string scenario) => scenario switch

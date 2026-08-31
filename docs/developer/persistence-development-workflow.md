@@ -61,6 +61,7 @@
 - 所有模块迁移流与 Platform Foundation Stream 共用统一 EF Migration History；模块不得维护私有 history 或从 Host 外回写迁移事实。
 - 每个 migration 会在同一事务内同时写入 `dbo.__EFMigrationsHistory` 与 `dbo.__NewPMigrationHistory`。后者保存 `unified-history/v1` 的 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 事实；任何未知版本、缺失事实、非有效前缀或事实不匹配都会在新增 DDL 前阻断 Host readiness。SQL Server 不兼容旧 history，也不执行 fact backfill。
 - manifest 的 `bundleChecksum` 是当前整份 assembly 的完整性校验，会在追加 migration 或实验基线整体替换后变化；history 的 `BundleDigest` 是从候选内不可变 migration step 链输入计算的稳定成员事实。兼容基线冻结后不得复用、删除或改写旧 step；实验基线替换后的旧 history 不做摘要兼容，必须要求重建 catalog。
+- 全局唯一 Migration ID 同时决定跨模块的应用顺序：统一 history 按 ID 字典序排列，前缀校验是逐位置比对。实验基线整体替换时，如果新 Migration ID 的时间戳前缀晚于其他模块已有 migration，该模块在全局序列中的位置会后移，插到那些 migration 之后。任何部分应用的数据库或按历史前缀构造的验收 fixture 都会因此不再是有效前缀，Host 以 `PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX` 拒绝接管。替换基线时要么保持新 ID 的原有排序位置，要么同步更新依赖历史前缀的 fixture，并用对应 Acceptance Gate 取证。
 - history 中的 Provider Target/Transition fact 使用 #43 v1 canonical 算法的 owner-scoped 投影：保留 owner 表完整结构及 FK principal 物理引用，排除其他 owner 的表。它只服务历史前缀稳定性；执行端仍必须用 full Provider Target/Transition 对当前候选逐 operation 精确校验。
 - 每个 migration 的 DDL 与 history 写入共用事务；不能参与事务或无法证明模块归属的操作必须在执行前失败。
 - `form.create.defaultValue`、服务端赋值、一次性 migration backfill 与数据库永久 `DEFAULT` 是四个不同概念。当前不支持数据库永久 `DEFAULT`；前三者不得投影或遗留为数据库默认约束。

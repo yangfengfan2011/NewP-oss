@@ -67,6 +67,10 @@
 
 新增任何验收旅程前先回答：这条断言能不能在更低层验证？能，就下沉。一次浏览器验收约 106 秒且失败信号无法二分，反复试错的成本远高于把断言写在下层。
 
+验收闸门是 `tests/acceptance/Acceptance.Tests` 里的普通 xUnit 测试，未设 `NEWP_RUN_ACCEPTANCE=1` 时跳过，因此日常 `dotnet test` 可以放心包含它们。启用后用 `.\scripts\accept.ps1 -Gate <Gate>`（`dotnet test --filter` 的薄封装）。**失败就是异常与栈**，不要再引入失败码、事件流或裁决文件那类中间层——没有消费者的举证只会把失败信号变模糊。场景里写的 JSON 快照是排错转储，不是通过依据。
+
+闸门共享 `bin/Release`、`.codex-temp/dev/state.json` 与本机端口，必须串行；一轮在跑时不要编辑文件或起第二轮。
+
 前端定向测试由拥有该测试的 workspace 包脚本执行，并使用包内相对路径；从 Vitest 输出核对运行根目录与目标文件数是否符合预期，确保加载了该包的配置和 `setupFiles`。workspace 根只运行递归聚合脚本。
 
 ## 变更规则

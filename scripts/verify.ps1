@@ -1,8 +1,13 @@
 # 仓库唯一的验证入口。没有 CI，本机就是唯一的验证位置。
 #
-# -Quick 供开发循环使用：跳过只有冻结候选才需要的三步（diff-check、
+# -Quick 供开发循环使用：跳过只有全量验证才需要的三步（diff-check、
 # dotnet restore、前端 build），其余门禁与完整跑法完全一致——不允许出现
 # 「快跑绿了、慢跑才发现」的两套判据。
+#
+# 本脚本**不要求也不检查干净工作树**。本机是唯一的验证位置，脏树跑验证是常态，
+# 拦住它等于把 verify 变成只有提交前才能用的东西。但结果必须能事后归属，
+# 所以 result.json 记录 HEAD、起跑时的脏状态，以及工作树在跑的过程中是否变过。
+# 归属靠记录，不靠设卡。
 [CmdletBinding()]
 param(
     [switch]$Quick,
@@ -33,6 +38,21 @@ New-Item -ItemType Directory -Path $runDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $msBuildDiagnosticDirectory -Force | Out-Null
 $env:MSBUILDDEBUGPATH = $msBuildDiagnosticDirectory
 
+# 工作树快照只用于归属，不用于判定。取 porcelain 原文而不是布尔值，
+# 是为了能分辨「一直脏」和「跑的过程中又变了」——后者才意味着结论无法归属。
+function Get-WorkingTreeSnapshot {
+    $entries = @(& git -C $repoRoot status --porcelain)
+    return [ordered]@{
+        Dirty = $entries.Count -gt 0
+        EntryCount = $entries.Count
+        Digest = ($entries -join "`n")
+    }
+}
+
+$headCommit = (& git -C $repoRoot rev-parse HEAD)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($headCommit)) { $headCommit = "unknown" }
+$startSnapshot = Get-WorkingTreeSnapshot
+
 function Save-VerificationResult {
     param(
         [Parameter(Mandatory = $true)]
@@ -44,12 +64,33 @@ function Save-VerificationResult {
 
     $capturedAtUtc = [DateTimeOffset]::UtcNow
     $completedAtUtc = if ($Status -eq "running") { $null } else { $capturedAtUtc.ToString("O") }
+    # 只在收尾时再取一次快照：每个阶段都跑 git status 没有意义，
+    # 而「跑的过程中变过没有」只在有结论时才需要回答。
+    #
+    # HEAD 单独比一次：跑到一半提交时，已跟踪改动会同时从工作树消失，
+    # porcelain 前后可以完全一样，只看工作树察觉不到候选已经换了。
+    $treeChangedDuringRun = $null
+    $headChangedDuringRun = $null
+    if ($Status -ne "running") {
+        $treeChangedDuringRun = -not [string]::Equals(
+            (Get-WorkingTreeSnapshot).Digest, $startSnapshot.Digest, [StringComparison]::Ordinal)
+        $endHeadCommit = (& git -C $repoRoot rev-parse HEAD)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($endHeadCommit)) { $endHeadCommit = "unknown" }
+        $headChangedDuringRun = -not [string]::Equals($endHeadCommit, $headCommit, [StringComparison]::Ordinal)
+    }
     $result = [ordered]@{
-        schemaVersion = "1.0"
+        schemaVersion = "1.1"
         runId = $runId
         status = $Status
         quick = $Quick.IsPresent
         repositoryRoot = $repoRoot
+        candidate = [ordered]@{
+            headCommit = $headCommit
+            dirty = $startSnapshot.Dirty
+            dirtyEntryCount = $startSnapshot.EntryCount
+            treeChangedDuringRun = $treeChangedDuringRun
+            headChangedDuringRun = $headChangedDuringRun
+        }
         startedAtUtc = $startedAtUtc.ToString("O")
         completedAtUtc = $completedAtUtc
         elapsedMs = [long]($capturedAtUtc - $startedAtUtc).TotalMilliseconds

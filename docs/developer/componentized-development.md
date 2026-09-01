@@ -54,7 +54,7 @@ frontend/modules/example-module/        前端 binding 与实现
 
 插件变更只允许在 Host 停止期间通过离线部署工具完成，然后重启 Host / Shell。运行中的安装、升级、启用、停用、卸载和回滚不是开发或验收入口；只读 inventory 也不代表这些写能力可用。详见 ADR-0032。
 
-仓库级验证使用 `scripts/verify.ps1 -Quick`；冻结候选去掉 `-Quick`。
+仓库级验证使用 `scripts/verify.ps1 -Quick`；全量验证去掉 `-Quick`。
 
 ## 兼容代码边界
 

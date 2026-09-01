@@ -42,7 +42,7 @@ dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-
 # 当前任务的定向测试优先；开发循环使用：
 .\scripts\verify.ps1 -Quick
 
-# 冻结候选的完整验证：
+# 合并前的全量验证：
 .\scripts\verify.ps1
 
 # 需要终局验收时显式选择 Gate：

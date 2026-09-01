@@ -40,7 +40,7 @@ public class RepositoryTestEntrypointTests
     }
 
     // verify.ps1 是仓库唯一的验证入口，没有 CI 兜底。它至少要覆盖整个 solution
-    // 和前端测试；-Quick 只允许省掉冻结候选专用的步骤，不能省掉门禁本身。
+    // 和前端测试；-Quick 只允许省掉全量验证专用的步骤，不能省掉门禁本身。
     [Fact]
     public void VerificationEntrypoint_CoversTheSolutionAndFrontendInBothModes()
     {

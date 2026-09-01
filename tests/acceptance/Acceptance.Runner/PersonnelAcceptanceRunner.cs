@@ -216,7 +216,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
         var fixtureSecret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
             .ToLowerInvariant();
-        _secretTokens.Add(fixtureSecret);
+        RegisterSecret(fixtureSecret);
         _devEnvironment["NEWP_DEV_SQLSERVER_CONNECTION_STRING"] = _applicationConnectionString;
         _devEnvironment["ConnectionStrings__SqlServer"] = _applicationConnectionString;
         _devEnvironment["Platform__PluginInstallRoot"] = _pluginRoot;
@@ -252,7 +252,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             Path.Combine(_runDirectory, "resources"),
             _devEnvironment,
             cancellationToken);
-        _secretTokens.Add(bootstrap.TemporaryCredential);
+        RegisterSecret(bootstrap.TemporaryCredential);
         await StartDevAsync("personnel/preflight-dev-start.json", cancellationToken);
         _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
 
@@ -265,7 +265,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             var revision = ReadLong(restrictedLogin.RootElement, "revision");
             _adminPassword = $"Adm-{_runId}-Pass";
-            _secretTokens.Add(_adminPassword);
+            RegisterSecret(_adminPassword);
             _ = await ChangePasswordAsync(
                 administrator,
                 bootstrap.TemporaryCredential,
@@ -288,7 +288,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             var account = ReadObject(createdJson.RootElement, "account");
             var readOnlyAccountEid = ReadString(account, "eid");
             var temporaryCredential = ReadString(createdJson.RootElement, "temporaryCredential");
-            _secretTokens.Add(temporaryCredential);
+            RegisterSecret(temporaryCredential);
             using var readOnly = CreateClient(_hostPort);
             using var restrictedReadOnlyLogin = await LoginAsync(
                 readOnly,
@@ -296,7 +296,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 temporaryCredential,
                 cancellationToken);
             _readOnlyPassword = $"Read-{_runId}-Pass";
-            _secretTokens.Add(_readOnlyPassword);
+            RegisterSecret(_readOnlyPassword);
             _readOnlyRevision = await ChangePasswordAsync(
                 readOnly,
                 temporaryCredential,
@@ -352,8 +352,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         EnsureStatus(created, HttpStatusCode.Created, createdBody, "create unauthorized acceptance account");
         using var createdJson = JsonDocument.Parse(createdBody);
         var temporaryCredential = ReadString(createdJson.RootElement, "temporaryCredential");
-        _secretTokens.Add(temporaryCredential);
-        _secretTokens.Add(password);
+        RegisterSecret(temporaryCredential);
+        RegisterSecret(password);
 
         using var unauthorized = CreateClient(_hostPort);
         using var restrictedLogin = await LoginAsync(

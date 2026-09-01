@@ -131,7 +131,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         _devEnvironment["Acceptance__Enabled"] = "true";
         _devEnvironment["Acceptance__RunId"] = _runId;
         var fixtureSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-        _secretTokens.Add(fixtureSecret);
+        RegisterSecret(fixtureSecret);
         _devEnvironment["Acceptance__Secret"] = fixtureSecret;
         _devEnvironment["Logging__LogLevel__Default"] = "Information";
 
@@ -219,7 +219,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             Path.Combine(_runDirectory, "resources"),
             _devEnvironment,
             cancellationToken);
-        _secretTokens.Add(bootstrap.TemporaryCredential);
+        RegisterSecret(bootstrap.TemporaryCredential);
         _processIdentities.Add($"identity-bootstrap:{bootstrap.ProcessId}:{_runId}");
         await StartDevAsync("example-required-field/backfill-ready-dev.json", cancellationToken);
         await AssertReadyAsync(cancellationToken);
@@ -322,7 +322,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             Path.Combine(_runDirectory, "resources"),
             _devEnvironment,
             cancellationToken);
-        _secretTokens.Add(bootstrap.TemporaryCredential);
+        RegisterSecret(bootstrap.TemporaryCredential);
         _processIdentities.Add($"identity-bootstrap:{bootstrap.ProcessId}:{_runId}");
         await StartDevAsync("example-required-field/migration-ready-dev.json", cancellationToken);
         await AssertReadyAsync(cancellationToken);
@@ -1283,7 +1283,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         using var client = CreateClient(_hostPort);
         using var login = await LoginAsync(client, "admin", temporaryCredential, cancellationToken);
         _adminPassword = CreateAdministratorPassword();
-        _secretTokens.Add(_adminPassword);
+        RegisterSecret(_adminPassword);
         _ = await ChangePasswordAsync(
             client,
             temporaryCredential,

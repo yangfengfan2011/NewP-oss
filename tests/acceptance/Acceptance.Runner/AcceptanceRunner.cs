@@ -4,7 +4,7 @@ namespace ICP.Platform.Acceptance;
 
 /// <summary>
 /// 三个验收闸门共同拥有的「一次运行」：场景归属、凭据登记与失败脱敏，
-/// 以及「无论场景成败都归还资源、但清理失败不顶掉场景失败」的收尾顺序。
+/// 以及「无论场景成败都归还资源、但收尾不许顶掉更具体的失败」的报告顺序。
 /// 子类只提供两件属于自己的事：跑哪些场景，以及怎么归还自己申请的资源。
 /// </summary>
 internal abstract class AcceptanceRunner
@@ -14,7 +14,10 @@ internal abstract class AcceptanceRunner
     protected readonly string _repositoryRoot;
     protected readonly string _runDirectory;
     protected readonly string _runId;
-    protected readonly List<string> _secretTokens = [];
+
+    // 凭据表保持私有：它同时喂给脱敏与证据扫描，一旦子类能直接改集合，
+    // 「哪些值算凭据」就又散回三个 runner 里，共享 owner 也就不成其为 owner。
+    private readonly List<string> _secretTokens = [];
 
     // 只由 RunScenarioAsync 写入：场景归属必须是「进入场景」的副产物，
     // 而不是要求每个调用点记得先赋值——漏一次就会把失败记到上一个场景头上。
@@ -53,18 +56,53 @@ internal abstract class AcceptanceRunner
 
         // 收尾一律用 None：取消恰恰是最需要归还一次性 catalog 与 dev supervisor 的时刻，
         // 传一个已取消的 token 会让清理自己先被取消，把一次取消变成一地残留资源。
-        var cleanup = await TeardownAsync(CancellationToken.None);
-        var leaked = await ScanEvidenceForSecretsAsync(CancellationToken.None);
+        //
+        // 两步各自兜住异常，而不是顺序裸 await：扫描要遍历并读取本轮全部产物，撞上
+        // 被占用或已消失的文件就会抛。裸 await 时这种基础设施异常会顶掉更具体的场景
+        // 失败，还会让后一步根本不执行——正是这套收尾本身要防的「失败信号被换掉」。
+        AcceptanceCleanupResult? cleanup = null;
+        Exception? cleanupError = null;
+        try
+        {
+            cleanup = await TeardownAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            cleanupError = exception;
+        }
 
-        // 三种失败都要报，但顺序固定：场景失败最具体，清理未完成最泛。
+        var leaked = false;
+        Exception? scanError = null;
+        try
+        {
+            leaked = await ScanEvidenceForSecretsAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            scanError = exception;
+        }
+
+        // 报告顺序从具体到泛，第一条命中即抛：场景失败最能定位；已查到的泄漏是确凿结论；
+        // 扫描抛异常意味着「无法断言没泄漏」，比资源没归还更值得先看；清理自己抛异常
+        // 又比它主动报出来的未完成状态更意外。
         failure?.Throw();
         if (leaked)
         {
             throw new InvalidOperationException("验收产物中出现了登记过的凭据片段。");
         }
-        if (!string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
+        if (scanError is not null)
         {
-            throw new InvalidOperationException($"验收清理未完成：{cleanup.Diagnostic ?? cleanup.Status}");
+            throw new InvalidOperationException(
+                $"验收产物扫描失败，无法确认凭据是否残留。{Environment.NewLine}{Sanitize(scanError.ToString())}");
+        }
+        if (cleanupError is not null)
+        {
+            throw new InvalidOperationException(
+                $"验收清理抛出异常。{Environment.NewLine}{Sanitize(cleanupError.ToString())}");
+        }
+        if (cleanup is null || !string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"验收清理未完成：{cleanup?.Diagnostic ?? cleanup?.Status}");
         }
     }
 
@@ -84,7 +122,16 @@ internal abstract class AcceptanceRunner
         return body(cancellationToken);
     }
 
-    // 登记一条连接的凭据形态；此后所有脱敏与证据扫描都认这组 token。
+    // 登记一个凭据值；此后所有脱敏与证据扫描都认这组 token。
+    protected void RegisterSecret(string? secret)
+    {
+        if (!string.IsNullOrWhiteSpace(secret))
+        {
+            _secretTokens.Add(secret);
+        }
+    }
+
+    // 登记一条连接的全部凭据形态（裸密码、Password=、Pwd= 与整串）。
     protected void AddConnectionSecrets(string connectionString, string? password) =>
         AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, connectionString, password);
 

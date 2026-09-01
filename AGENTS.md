@@ -70,7 +70,7 @@
 
 验收闸门是 `tests/acceptance/Acceptance.Tests` 里的普通 xUnit 测试，未设 `NEWP_RUN_ACCEPTANCE=1` 时跳过，因此日常 `dotnet test` 可以放心包含它们。启用后用 `.\scripts\accept.ps1 -Gate <Gate>`（`dotnet test --filter` 的薄封装）。**失败就是异常与栈**，不要再引入失败码、事件流或裁决文件那类中间层——没有消费者的举证只会把失败信号变模糊。场景里写的 JSON 快照是排错转储，不是通过依据。
 
-闸门 runner 一律继承 `AcceptanceRunner`。收尾顺序由它统一持有：无论场景成败都先归还一次性资源（用 `CancellationToken.None`，取消时更需要归还）、再反向扫描产物里的凭据，最后按「场景失败 → 凭据泄漏 → 清理未完成」由具体到泛报出去。子类只写两件事：场景序列和自己的资源归还方式。每个场景都经 `RunScenarioAsync` 进入，场景归属才不会漏记到上一个场景头上。
+闸门 runner 一律继承 `AcceptanceRunner`。收尾由它统一持有：无论场景成败都先归还一次性资源（用 `CancellationToken.None`，取消时更需要归还）、再反向扫描产物里的凭据。**这两步各自兜住异常**——扫描要读遍本轮全部产物，撞上被占用或已消失的文件就会抛，裸 `await` 会让这种基础设施异常顶掉更具体的场景失败。最后按「场景失败 → 查到凭据泄漏 → 扫描失败 → 清理抛异常 → 清理报未完成」由具体到泛报出去。子类只写两件事：场景序列和自己的资源归还方式；凭据一律经 `RegisterSecret` / `AddConnectionSecrets` 登记，`RunScenarioAsync` 负责场景归属，两者都不留绕过的口子。
 
 闸门共享 `bin/Release`、`.codex-temp/dev/state.json` 与本机端口，必须串行；一轮在跑时不要编辑文件或起第二轮。
 

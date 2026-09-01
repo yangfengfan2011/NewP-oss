@@ -114,7 +114,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             _hostEnvironment,
             cancellationToken);
         _adminTemporaryPassword = bootstrap.TemporaryCredential;
-        _secretTokens.Add(_adminTemporaryPassword);
+        RegisterSecret(_adminTemporaryPassword);
 
         await StartDevAsync("identity-foundation/preflight-dev-start.json", cancellationToken);
         _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
@@ -123,7 +123,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         EnsureBoolean(login.Body.RootElement, "mustChangePassword", true, "bootstrap administrator restricted session");
         var revision = ReadLong(login.Body.RootElement, "revision");
         _adminPassword = $"Adm-{_runId}-Pass";
-        _secretTokens.Add(_adminPassword);
+        RegisterSecret(_adminPassword);
         await ChangePasswordAsync(admin, _adminTemporaryPassword, _adminPassword, revision, cancellationToken);
 
         await RecordScenarioSuccessAsync(PreflightScenario, "identity-foundation/preflight.json", new
@@ -156,7 +156,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var initialDetail = await GetJsonAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=20", cancellationToken);
         var initialCreatedAt = ReadDateTime(ReadObject(initialDetail.RootElement, "account"), "createdAt");
         var temporaryPassword = account.TemporaryCredential;
-        _secretTokens.Add(temporaryPassword);
+        RegisterSecret(temporaryPassword);
 
         using var restricted = CreateSession(_hostPort);
         var restrictedLogin = await LoginAsync(restricted, accountCode, temporaryPassword, cancellationToken);
@@ -166,7 +166,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             await EnsureProblemAsync(denied, HttpStatusCode.Forbidden, "AUTH_PASSWORD_CHANGE_REQUIRED", "restricted management access", cancellationToken);
         }
         var accountPassword = $"User-{_runId}-Pass";
-        _secretTokens.Add(accountPassword);
+        RegisterSecret(accountPassword);
         var changed = await ChangePasswordAsync(
             restricted,
             temporaryPassword,
@@ -198,13 +198,13 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         using var resetVictim = CreateSession(_hostPort);
         await LoginAsync(resetVictim, accountCode, accountPassword, cancellationToken);
         var reset = await ResetCredentialAsync(admin, account.AccountEid, enabled.Revision, cancellationToken);
-        _secretTokens.Add(reset.TemporaryCredential);
+        RegisterSecret(reset.TemporaryCredential);
         await EnsureSessionInvalidAsync(resetVictim, cancellationToken);
 
         using var rotated = CreateSession(_hostPort);
         var rotatedLogin = await LoginAsync(rotated, accountCode, reset.TemporaryCredential, cancellationToken);
         var rotatedPassword = $"Rot-{_runId}-Pass";
-        _secretTokens.Add(rotatedPassword);
+        RegisterSecret(rotatedPassword);
         var rotatedAccount = await ChangePasswordAsync(
             rotated,
             reset.TemporaryCredential,
@@ -230,7 +230,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
 
         var deleteCode = $"delete.{_runId[..8]}";
         var deleted = await CreateUserAsync(admin, deleteCode, "Delete Tombstone", cancellationToken);
-        _secretTokens.Add(deleted.TemporaryCredential);
+        RegisterSecret(deleted.TemporaryCredential);
         var tombstone = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Post,
@@ -246,11 +246,11 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
 
         var boundCode = $"bound.{_runId[..8]}";
         var bound = await CreateUserAsync(admin, boundCode, "Bound Account", cancellationToken);
-        _secretTokens.Add(bound.TemporaryCredential);
+        RegisterSecret(bound.TemporaryCredential);
         using var boundSessionOne = CreateSession(_hostPort);
         var boundRestricted = await LoginAsync(boundSessionOne, boundCode, bound.TemporaryCredential, cancellationToken);
         var boundPassword = $"Bound-{_runId}-Pass";
-        _secretTokens.Add(boundPassword);
+        RegisterSecret(boundPassword);
         var boundRegular = await ChangePasswordAsync(
             boundSessionOne,
             bound.TemporaryCredential,
@@ -290,7 +290,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             cancellationToken);
         var boundAfterBindingRevision = ReadNestedLong(binding.RootElement, "account", "revision");
         var competing = await CreateUserAsync(admin, $"other.{_runId[..8]}", "Other Account", cancellationToken);
-        _secretTokens.Add(competing.TemporaryCredential);
+        RegisterSecret(competing.TemporaryCredential);
         using (var conflict = await SendJsonAsync(
                    admin,
                    HttpMethod.Put,
@@ -379,7 +379,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
         var browserCode = $"ui.{_runId[..8]}";
         var browserPassword = $"Browser-{_runId}-Pass";
-        _secretTokens.Add(browserPassword);
+        RegisterSecret(browserPassword);
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
@@ -405,7 +405,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var secret = page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true });
         await secret.WaitForAsync();
         var browserTemporaryPassword = await secret.InnerTextAsync();
-        _secretTokens.Add(browserTemporaryPassword);
+        RegisterSecret(browserTemporaryPassword);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "我已安全保存，关闭", Exact = true }).ClickAsync();
         if (await page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true }).CountAsync() != 0)
         {
@@ -453,7 +453,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         await LoginAsync(session, "admin", adminPassword, cancellationToken);
         var cookieBefore = session.Cookies.GetCookies(new Uri($"http://127.0.0.1:{_hostPort}"))["ICP.Platform.Auth"]?.Value
             ?? throw new InvalidOperationException("Authentication cookie was missing before restart.");
-        _secretTokens.Add(cookieBefore);
+        RegisterSecret(cookieBefore);
         var keyFilesBefore = Directory.GetFiles(_keyRingRoot!, "key-*.xml").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
         if (keyFilesBefore.Length == 0)
         {

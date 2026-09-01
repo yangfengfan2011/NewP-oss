@@ -225,6 +225,7 @@ public class LocalizationRuntimeManifestBuilder
         return $"{themeName}.{entryName}";
     }
 
+    // 规范并校验 code 到 canonical locale 的一对一 authoring 映射。
     private static IReadOnlyDictionary<string, LocalizationLanguage> NormalizeSupportedLanguages(
         LanguagesManifest languagesManifest,
         string languagesManifestPath)
@@ -283,6 +284,7 @@ public class LocalizationRuntimeManifestBuilder
         return supportedLanguages;
     }
 
+    // 以稳定顺序序列化 Shell 与 Host 共同消费的 localization runtime manifest。
     private static string SerializeManifest(
         string defaultLanguage,
         IEnumerable<LocalizationLanguage> supportedLanguages,

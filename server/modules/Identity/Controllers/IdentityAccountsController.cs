@@ -328,6 +328,7 @@ public sealed record IdentitySecurityEventResponse(
     string UpdatedBy,
     DateTime UpdatedAt)
 {
+    /// <summary>将应用层安全事件视图投影为稳定 API response。</summary>
     internal static IdentitySecurityEventResponse From(IdentityManagementSecurityEventView view) => new(
         view.EventEid,
         view.EventType,

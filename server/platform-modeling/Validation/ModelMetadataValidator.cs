@@ -208,6 +208,7 @@ public sealed class ModelMetadataValidator
         return string.Equals(field.Contract?.ValueType, "user", StringComparison.OrdinalIgnoreCase);
     }
 
+    // instant 只声明格式策略，不允许复用 reference 的 target 模型字段。
     private static void ValidateInstantDisplayRule(string fieldName, ModelMetadataDisplayRule display)
     {
         if ((string.Equals(display.Format, "dateTime", StringComparison.Ordinal)

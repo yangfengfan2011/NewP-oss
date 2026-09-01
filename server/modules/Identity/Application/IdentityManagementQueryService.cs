@@ -332,6 +332,7 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         DefaultSortDirection = "asc"
     };
 
+    // 保留安全事件 UTC raw，并由共享 temporal formatter 生成请求级展示伴随值。
     private IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent) => new(
         securityEvent.EID,
         securityEvent.EventType,

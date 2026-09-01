@@ -78,6 +78,7 @@ public sealed class EfModelProjector
         }
     }
 
+    // 将规范值类型映射到 EF shared-type property 的 CLR 类型，并保留可空性。
     private static Type MapClrType(FieldDefinition field)
     {
         var clrType = field.ValueType switch

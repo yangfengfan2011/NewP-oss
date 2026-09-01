@@ -110,6 +110,7 @@ public sealed class ModelDtoGenerator
         return ResolvePropertyName(field) + "_DisplayValue";
     }
 
+    // 将规范字段类型映射为受管 DTO 的稳定 CLR 类型名。
     private static string ResolvePropertyType(
         FieldDefinition field,
         IReadOnlyDictionary<string, string>? enumClrTypeMap)

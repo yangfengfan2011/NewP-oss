@@ -8,7 +8,7 @@ namespace ICP.Platform.Acceptance.Tests;
 /// <summary>
 /// 模块闸门就是普通集成测试：失败直接是异常与栈，不再经过 event/verdict/failureCode
 /// 那层无人消费的举证协议。与仓库既有的 SQL Server 集成测试一致，通过环境变量显式
-/// 启用，未启用时跳过，因此 <c>dotnet test</c> 与 CI 可以安全包含它们。
+/// 启用，未启用时报为跳过，因此日常 <c>dotnet test</c> 可以安全包含它们。
 /// </summary>
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests

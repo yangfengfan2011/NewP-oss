@@ -246,6 +246,31 @@ public sealed class AcceptanceRunnerLifecycleTests : IDisposable
         Assert.Contains("teardown could not reach the catalog", failure.Message, StringComparison.Ordinal);
     }
 
+    // 收尾两步同时出错时报扫描：清理抛异常说明资源可能没归还，扫描抛异常说明
+    // 「无法断言没泄漏」——后者是更强的一个未知，先看它。
+    [Fact]
+    public async Task RunAsync_WhenBothTeardownAndScanThrow_ReportsTheScanFailure()
+    {
+        var runner = new FakeRunner(
+            _runDirectory,
+            (self, _) =>
+            {
+                self.Register(Secret);
+                return Task.CompletedTask;
+            },
+            () =>
+            {
+                Directory.Delete(_runDirectory, recursive: true);
+                throw new IOException("teardown could not reach the catalog");
+            });
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => runner.RunAsync(CancellationToken.None));
+
+        Assert.Contains("无法确认凭据是否残留", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("teardown could not reach the catalog", failure.Message, StringComparison.Ordinal);
+    }
+
     // 扫描会遍历并读取本轮全部产物，撞上被占用或已消失的文件就抛——这是实测过的
     // 失败形态。它不能顶掉场景失败，否则最能定位的那条信息就换成了一个文件错误。
     [Fact]

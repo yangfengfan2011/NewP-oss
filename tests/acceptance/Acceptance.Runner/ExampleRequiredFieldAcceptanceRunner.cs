@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -12,7 +11,7 @@ using Microsoft.Playwright;
 
 namespace ICP.Platform.Acceptance;
 
-internal sealed class ExampleRequiredFieldAcceptanceRunner
+internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
 {
     internal const string PreflightScenario = "example-required-field.preflight";
     internal const string MigrationScenario = "example-required-field.migration";
@@ -42,14 +41,9 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     private static readonly Regex StableDiagnosticPattern = new(
         @"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private readonly string _repositoryRoot;
-    private readonly string _runDirectory;
-    private readonly string _runId;
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
-    private readonly List<string> _secretTokens = [];
     private readonly Dictionary<string, string?> _devEnvironment = new(StringComparer.OrdinalIgnoreCase);
-    private string _activeScenario = PreflightScenario;
     private string? _adminConnectionString;
     private string? _applicationConnectionString;
     private string? _connectionSource;
@@ -69,79 +63,38 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         string repositoryRoot,
         string runDirectory,
         string runId)
+        : base(repositoryRoot, runDirectory, runId)
     {
-        _repositoryRoot = Path.GetFullPath(repositoryRoot);
-        _runDirectory = Path.GetFullPath(runDirectory);
-        _runId = runId;
     }
 
-    /// <summary>
-    /// 执行 Example required-field 正式验收旅程。
-    /// </summary>
-    public async Task RunAsync(CancellationToken cancellationToken)
+    /// <inheritdoc/>
+    protected override async Task RunScenariosAsync(CancellationToken cancellationToken)
     {
-        ExceptionDispatchInfo? failure = null;
-        try
-        {
-            await RunPreflightAsync(cancellationToken);
-            await RecordScenarioSuccessAsync(
-                PreflightScenario,
-                "example-required-field/preflight.json",
-                new
-                {
-                    status = "passed",
-                    connectionSource = _connectionSource,
-                    runId = _runId,
-                    catalog = _catalog,
-                    dataPrefix = _dataPrefix
-                },
-                cancellationToken);
+        await RunScenarioAsync(PreflightScenario, RunPreflightScenarioAsync, cancellationToken);
+        await RunScenarioAsync(BackfillRecoveryScenario, RunBackfillRecoveryScenarioAsync, cancellationToken);
+        await RunScenarioAsync(ContractPreconditionScenario, RunContractPreconditionScenarioAsync, cancellationToken);
+        await RunScenarioAsync(MigrationScenario, RunMigrationScenarioAsync, cancellationToken);
+        await RunScenarioAsync(BrowserScenario, RunBrowserScenarioAsync, cancellationToken);
+        await RunScenarioAsync(RestartScenario, RunRestartScenarioAsync, cancellationToken);
+    }
 
-            _activeScenario = BackfillRecoveryScenario;
-            await RunBackfillRecoveryScenarioAsync(cancellationToken);
-
-            _activeScenario = ContractPreconditionScenario;
-            await RunContractPreconditionScenarioAsync(cancellationToken);
-
-            _activeScenario = MigrationScenario;
-            await RunMigrationScenarioAsync(cancellationToken);
-
-            _activeScenario = BrowserScenario;
-            await RunBrowserScenarioAsync(cancellationToken);
-
-            _activeScenario = RestartScenario;
-            await RunRestartScenarioAsync(cancellationToken);
-        }
-        catch (OperationCanceledException exception)
-        {
-            // 取消不是场景失败：原样保留，让上层按取消处理而不是按断言失败处理。
-            // 仍然先归还资源，所以这里只记录，不当场抛。
-            failure = ExceptionDispatchInfo.Capture(exception);
-        }
-        catch (Exception exception)
-        {
-            // 脱敏后重建异常：原始文本可能带连接串口令，不能直接进测试输出。
-            // 不挂 inner exception 是同一个原因；完整类型、消息与栈已在脱敏文本里。
-            failure = ExceptionDispatchInfo.Capture(new InvalidOperationException(
-                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}"));
-        }
-
-        // 无论场景成败都要归还资源，但清理失败不能顶掉场景失败。
-        var cleanup = await TeardownAsync(CancellationToken.None);
-        var leaked = await ScanEvidenceForSecretsAsync(CancellationToken.None);
-
-        if (failure is not null)
-        {
-            failure.Throw();
-        }
-        if (leaked)
-        {
-            throw new InvalidOperationException("验收产物中出现了登记过的凭据片段。");
-        }
-        if (!string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"验收清理未完成：{cleanup.Diagnostic ?? cleanup.Status}");
-        }
+    // 现场快照与 preflight 同属一个场景：写快照失败也该记到 preflight 头上，
+    // 所以它跟着 preflight 一起进 RunScenarioAsync，而不是裸挂在场景序列里。
+    private async Task RunPreflightScenarioAsync(CancellationToken cancellationToken)
+    {
+        await RunPreflightAsync(cancellationToken);
+        await RecordScenarioSuccessAsync(
+            PreflightScenario,
+            "example-required-field/preflight.json",
+            new
+            {
+                status = "passed",
+                connectionSource = _connectionSource,
+                runId = _runId,
+                catalog = _catalog,
+                dataPrefix = _dataPrefix
+            },
+            cancellationToken);
     }
 
     // Preflight 固定唯一 catalog、数据前缀、Host/Shell 资源根和受支持的 managed dev 入口。
@@ -1152,7 +1105,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     }
 
     // Teardown 先重验数据库 ownership，再 stop owned supervisor，最后清理 catalog 与资源根。
-    private async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
+    protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -1238,14 +1191,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         }
         return artifact;
     }
-
-    // 证据扫描覆盖 run directory 全部文件，不允许连接密码或临时身份凭据残留。
-    private Task<bool> ScanEvidenceForSecretsAsync(CancellationToken cancellationToken) =>
-        AcceptanceInfrastructure.ScanForSecretsAsync(_runDirectory, _secretTokens, cancellationToken);
-
-    // 连接串相关 token 只用于证据反向扫描，不进入日志。
-    private void AddConnectionSecrets(string configuredConnectionString, string password) =>
-        AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, configuredConnectionString, password);
 
     // runner resource root 只能是当前 run/resources 的直接子路径。
     private void EnsureSafeResourceRoot(string root) =>
@@ -1522,9 +1467,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
         return candidates.FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             ?? throw new InvalidOperationException("No Chromium executable was found for the Example browser observer.");
     }
-
-    // 任意 evidence diagnostic 都先替换 runner 知道的凭据 token；替换顺序由共享实现保证。
-    private string Sanitize(string? value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
     // 值用于断言或所有权判定时必须指名失败，否则缺失字段会退化成值不匹配。
     private static string ReadString(JsonElement element, string property) =>

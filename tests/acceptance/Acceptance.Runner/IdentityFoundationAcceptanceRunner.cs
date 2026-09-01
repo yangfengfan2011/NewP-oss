@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
@@ -12,7 +11,7 @@ using Microsoft.Playwright;
 
 namespace ICP.Platform.Acceptance;
 
-internal sealed class IdentityFoundationAcceptanceRunner
+internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
 {
     internal const string PreflightScenario = "identity-foundation.preflight";
     internal const string ApiScenario = "identity-foundation.api";
@@ -22,12 +21,8 @@ internal sealed class IdentityFoundationAcceptanceRunner
     internal const string PersistenceScenario = "identity-foundation.persistence";
 
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly string _repositoryRoot;
-    private readonly string _runDirectory;
-    private readonly string _runId;
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
-    private readonly List<string> _secretTokens = [];
     private readonly Dictionary<string, string?> _hostEnvironment = new(StringComparer.OrdinalIgnoreCase);
     private string? _adminConnectionString;
     private string? _adminConnectionSource;
@@ -38,7 +33,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
     private string? _lastDevRunId;
     private string? _adminTemporaryPassword;
     private string? _adminPassword;
-    private string _activeScenario = PreflightScenario;
     private int _hostPort;
     private int _shellPort;
     private bool _catalogCreated;
@@ -49,59 +43,18 @@ internal sealed class IdentityFoundationAcceptanceRunner
         string repositoryRoot,
         string runDirectory,
         string runId)
+        : base(repositoryRoot, runDirectory, runId)
     {
-        _repositoryRoot = Path.GetFullPath(repositoryRoot);
-        _runDirectory = Path.GetFullPath(runDirectory);
-        _runId = runId;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    protected override async Task RunScenariosAsync(CancellationToken cancellationToken)
     {
-        ExceptionDispatchInfo? failure = null;
-        try
-        {
-            await RunPreflightAsync(cancellationToken);
-            _activeScenario = ApiScenario;
-            await RunApiScenarioAsync(cancellationToken);
-            _activeScenario = BrowserScenario;
-            await RunBrowserScenarioAsync(cancellationToken);
-            _activeScenario = RestartScenario;
-            await RunRestartScenarioAsync(cancellationToken);
-            _activeScenario = SecurityScenario;
-            await RunSecurityScenarioAsync(cancellationToken);
-            _activeScenario = PersistenceScenario;
-            await RunPersistenceScenarioAsync(cancellationToken);
-        }
-        catch (OperationCanceledException exception)
-        {
-            // 取消不是场景失败：原样保留，让上层按取消处理而不是按断言失败处理。
-            // 仍然先归还资源，所以这里只记录，不当场抛。
-            failure = ExceptionDispatchInfo.Capture(exception);
-        }
-        catch (Exception exception)
-        {
-            // 脱敏后重建异常：原始文本可能带连接串口令，不能直接进测试输出。
-            // 不挂 inner exception 是同一个原因；完整类型、消息与栈已在脱敏文本里。
-            failure = ExceptionDispatchInfo.Capture(new InvalidOperationException(
-                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}"));
-        }
-
-        // 无论场景成败都要归还资源，但清理失败不能顶掉场景失败。
-        var cleanup = await TeardownAsync(cancellationToken);
-        var leaked = await ScanEvidenceForSecretsAsync(cancellationToken);
-
-        if (failure is not null)
-        {
-            failure.Throw();
-        }
-        if (leaked)
-        {
-            throw new InvalidOperationException("验收产物中出现了登记过的凭据片段。");
-        }
-        if (!string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"验收清理未完成：{cleanup.Diagnostic ?? cleanup.Status}");
-        }
+        await RunScenarioAsync(PreflightScenario, RunPreflightAsync, cancellationToken);
+        await RunScenarioAsync(ApiScenario, RunApiScenarioAsync, cancellationToken);
+        await RunScenarioAsync(BrowserScenario, RunBrowserScenarioAsync, cancellationToken);
+        await RunScenarioAsync(RestartScenario, RunRestartScenarioAsync, cancellationToken);
+        await RunScenarioAsync(SecurityScenario, RunSecurityScenarioAsync, cancellationToken);
+        await RunScenarioAsync(PersistenceScenario, RunPersistenceScenarioAsync, cancellationToken);
     }
 
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
@@ -692,7 +645,7 @@ internal sealed class IdentityFoundationAcceptanceRunner
         }, cancellationToken);
     }
 
-    private async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
+    protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -1235,9 +1188,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
         return artifact;
     }
 
-    private Task<bool> ScanEvidenceForSecretsAsync(CancellationToken cancellationToken) =>
-        AcceptanceInfrastructure.ScanForSecretsAsync(_runDirectory, _secretTokens, cancellationToken);
-
     private async Task LoginBrowserAsync(IPage page, string ecode, string password)
     {
         if (!new Uri(page.Url).AbsolutePath.Equals("/login", StringComparison.Ordinal))
@@ -1274,11 +1224,6 @@ internal sealed class IdentityFoundationAcceptanceRunner
             ["EmploymentStatus"] = "FullTime",
             ["IsEnabled"] = enabled
         };
-
-    private void AddConnectionSecrets(string raw, string password) =>
-        AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, raw, password);
-
-    private string Sanitize(string value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
     private static object ProcessEvidence(string command, AcceptanceProcessResult result) => new
     {

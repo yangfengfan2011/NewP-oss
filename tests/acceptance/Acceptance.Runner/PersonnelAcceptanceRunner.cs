@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
@@ -21,7 +20,7 @@ internal sealed record PersonnelProductionColdStartExecution(
     AcceptanceCleanupResult Cleanup,
     string? FailureDiagnostic);
 
-internal sealed class PersonnelAcceptanceRunner
+internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 {
     internal const string PreflightScenario = "personnel.preflight";
     internal const string ApiScenario = "personnel.api";
@@ -32,12 +31,8 @@ internal sealed class PersonnelAcceptanceRunner
     private const string TabletScreenshotName = "browser-tablet.png";
     private const string NarrowScreenshotName = "browser-narrow.png";
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly string _repositoryRoot;
-    private readonly string _runDirectory;
-    private readonly string _runId;
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
-    private readonly List<string> _secretTokens = [];
     private readonly List<string> _apiAssertions = [];
     private readonly Dictionary<string, string?> _devEnvironment = new(StringComparer.OrdinalIgnoreCase);
     private string? _adminConnectionString;
@@ -50,7 +45,6 @@ internal sealed class PersonnelAcceptanceRunner
     private int _hostPort;
     private int _shellPort;
     private bool _catalogCreated;
-    private string _activeScenario = PreflightScenario;
     private FixtureData? _fixture;
     private PersonData? _person;
     private string? _adminPassword;
@@ -66,67 +60,35 @@ internal sealed class PersonnelAcceptanceRunner
         string repositoryRoot,
         string runDirectory,
         string runId)
+        : base(repositoryRoot, runDirectory, runId)
     {
-        _repositoryRoot = Path.GetFullPath(repositoryRoot);
-        _runDirectory = Path.GetFullPath(runDirectory);
-        _runId = runId;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    protected override async Task RunScenariosAsync(CancellationToken cancellationToken)
     {
-        ExceptionDispatchInfo? failure = null;
-        try
-        {
-            await RunPreflightAsync(cancellationToken);
-            await RecordScenarioSuccessAsync(PreflightScenario, "personnel/preflight.json", new
-            {
-                status = "passed",
-                connectionSource = _adminConnectionSource,
-                databaseFingerprint = AcceptanceInfrastructure.Sha256(_catalog!),
-                pluginRootFingerprint = AcceptanceInfrastructure.Sha256(_pluginRoot!),
-                hostPort = _hostPort,
-                shellPort = _shellPort
-            }, cancellationToken);
+        await RunScenarioAsync(PreflightScenario, RunPreflightScenarioAsync, cancellationToken);
+        await RunScenarioAsync(ApiScenario, RunApiScenarioAsync, cancellationToken);
+        await RunScenarioAsync(
+            BrowserScenario,
+            token => RunBrowserScenarioAsync("initial", token),
+            cancellationToken);
+        await RunScenarioAsync(RestartScenario, RunRestartScenarioAsync, cancellationToken);
+    }
 
-            _activeScenario = ApiScenario;
-            await RunApiScenarioAsync(cancellationToken);
-
-            _activeScenario = BrowserScenario;
-            await RunBrowserScenarioAsync("initial", cancellationToken);
-
-            _activeScenario = RestartScenario;
-            await RunRestartScenarioAsync(cancellationToken);
-        }
-        catch (OperationCanceledException exception)
+    // 现场快照与 preflight 同属一个场景：写快照失败也该记到 preflight 头上，
+    // 所以它跟着 preflight 一起进 RunScenarioAsync，而不是裸挂在场景序列里。
+    private async Task RunPreflightScenarioAsync(CancellationToken cancellationToken)
+    {
+        await RunPreflightAsync(cancellationToken);
+        await RecordScenarioSuccessAsync(PreflightScenario, "personnel/preflight.json", new
         {
-            // 取消不是场景失败：原样保留，让上层按取消处理而不是按断言失败处理。
-            // 仍然先归还资源，所以这里只记录，不当场抛。
-            failure = ExceptionDispatchInfo.Capture(exception);
-        }
-        catch (Exception exception)
-        {
-            // 脱敏后重建异常：原始文本可能带连接串口令，不能直接进测试输出。
-            // 不挂 inner exception 是同一个原因；完整类型、消息与栈已在脱敏文本里。
-            failure = ExceptionDispatchInfo.Capture(new InvalidOperationException(
-                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}"));
-        }
-
-        // 无论场景成败都要归还资源，但清理失败不能顶掉场景失败。
-        var cleanup = await TeardownAsync(cancellationToken);
-        var leaked = await ScanEvidenceForSecretsAsync(cancellationToken);
-
-        if (failure is not null)
-        {
-            failure.Throw();
-        }
-        if (leaked)
-        {
-            throw new InvalidOperationException("验收产物中出现了登记过的凭据片段。");
-        }
-        if (!string.Equals(cleanup.Status, "completed", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"验收清理未完成：{cleanup.Diagnostic ?? cleanup.Status}");
-        }
+            status = "passed",
+            connectionSource = _adminConnectionSource,
+            databaseFingerprint = AcceptanceInfrastructure.Sha256(_catalog!),
+            pluginRootFingerprint = AcceptanceInfrastructure.Sha256(_pluginRoot!),
+            hostPort = _hostPort,
+            shellPort = _shellPort
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -1769,7 +1731,7 @@ internal sealed class PersonnelAcceptanceRunner
         await RunBrowserScenarioAsync("restart", cancellationToken);
     }
 
-    private async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
+    protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -1889,9 +1851,6 @@ internal sealed class PersonnelAcceptanceRunner
 
         return snapshot;
     }
-
-    private Task<bool> ScanEvidenceForSecretsAsync(CancellationToken cancellationToken) =>
-        AcceptanceInfrastructure.ScanForSecretsAsync(_runDirectory, _secretTokens, cancellationToken);
 
     // 场景通过时留一份可读的现场快照；它是排错用的转储，不再是裁决输入。
     private Task RecordScenarioSuccessAsync(
@@ -2599,11 +2558,6 @@ internal sealed class PersonnelAcceptanceRunner
         }
         throw new InvalidOperationException($"JSON property {parent}.{property} was missing.");
     }
-
-    private void AddConnectionSecrets(string rawConnectionString, string password) =>
-        AcceptanceInfrastructure.AddConnectionSecrets(_secretTokens, rawConnectionString, password);
-
-    private string Sanitize(string value) => AcceptanceInfrastructure.Sanitize(_secretTokens, value);
 
     private void ValidateCatalogName(string catalog)
     {

@@ -9,7 +9,6 @@ $PSNativeCommandUseErrorActionPreference = $false
 $repoRoot = (Resolve-Path -LiteralPath $Root).Path
 $repoPrefix = $repoRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
 $pathComparison = if ($IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
-$retiredPrefix = 'docs/_retired/'
 $errors = [System.Collections.Generic.List[string]]::new()
 
 $documentPaths = @(
@@ -21,7 +20,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $currentDocuments = $documentPaths |
     ForEach-Object { $_.Replace('\', '/') } |
-    Where-Object { $_ -and -not $_.StartsWith($retiredPrefix, $pathComparison) } |
+    Where-Object { $_ } |
     Sort-Object -Unique
 
 $retiredReferencePattern = '(?i)(docs/(superpowers|designs|phases|prompts|bootstrap|migration|modules)/|docs/current-status\.md|check-ai-first-design-targets|new-design-doc)'
@@ -89,11 +88,6 @@ foreach ($relativePath in $currentDocuments) {
             }
 
             $resolvedRelativeTarget = [System.IO.Path]::GetRelativePath($repoRoot, $resolvedTarget).Replace('\', '/')
-
-            if ($resolvedRelativeTarget.StartsWith($retiredPrefix, $pathComparison)) {
-                $errors.Add("LINK_TO_RETIRED $relativePath`:$lineNumber：当前文档链接到退役目录：$target")
-                continue
-            }
 
             if (-not (Test-Path -LiteralPath $resolvedTarget)) {
                 $errors.Add("BROKEN_LINK $relativePath`:$lineNumber：失效链接：$target")

@@ -9,22 +9,17 @@ public sealed class CurrentDocumentationValidationScriptTests
     private readonly string _repositoryRoot = FindRepositoryRoot();
 
     [Fact]
-    public async Task CheckCurrentDocs_PassesForValidDocumentsAndIgnoresRetiredTree()
+    public async Task CheckCurrentDocs_PassesForValidDocuments()
     {
         var root = await CreateTemporaryRepositoryAsync();
         try
         {
             Directory.CreateDirectory(Path.Combine(root, "docs"));
-            Directory.CreateDirectory(Path.Combine(root, "docs", "_retired"));
             await File.WriteAllTextAsync(
                 Path.Combine(root, "README.md"),
                 "# Current\n\n[Guide](docs/guide.md)\n",
                 Encoding.UTF8);
             await File.WriteAllTextAsync(Path.Combine(root, "docs", "guide.md"), "# Guide\n", Encoding.UTF8);
-            await File.WriteAllTextAsync(
-                Path.Combine(root, "docs", "_retired", "stale.md"),
-                "[Broken](missing.md)\nD:\\Github\\Old\\Repo\n瀹¤\n",
-                Encoding.UTF8);
 
             var result = await RunCurrentDocsCheckAsync(root);
 

@@ -87,6 +87,32 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
     }
 
     [Fact]
+    public void Build_WhenLanguageCodeIsDuplicated_ThrowsClearError()
+    {
+        var runtimeRoot = CreateRuntimeRoot();
+        WriteLanguages(runtimeRoot, englishCode: "ZHS");
+
+        var exception = Assert.Throws<JsonException>(() =>
+            new LocalizationRuntimeManifestBuilder().Build(runtimeRoot));
+
+        Assert.Contains("duplicate language code", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ZHS", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_WhenCanonicalLocaleIsDuplicated_ThrowsClearError()
+    {
+        var runtimeRoot = CreateRuntimeRoot();
+        WriteLanguages(runtimeRoot, englishLocale: "zh-CN");
+
+        var exception = Assert.Throws<JsonException>(() =>
+            new LocalizationRuntimeManifestBuilder().Build(runtimeRoot));
+
+        Assert.Contains("duplicate canonical locale", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("zh-CN", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_WhenDicEntryKeyContainsDot_ThrowsClearError()
     {
         var runtimeRoot = CreateRuntimeRoot();
@@ -137,7 +163,9 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
     private static void WriteLanguages(
         string runtimeRoot,
         string zhsLocale = "zh-CN",
-        string defaultLanguage = "zhs")
+        string defaultLanguage = "zhs",
+        string englishCode = "en",
+        string englishLocale = "en-US")
     {
         var platformMetadataRoot = Path.Combine(runtimeRoot, "modules", "Platform", "metadata");
         Directory.CreateDirectory(platformMetadataRoot);
@@ -153,15 +181,17 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
                   "locale": "__ZHS_LOCALE__"
                 },
                 {
-                  "code": "en",
+                  "code": "__ENGLISH_CODE__",
                   "displayName": "English",
-                  "locale": "en-US"
+                  "locale": "__ENGLISH_LOCALE__"
                 }
               ]
             }
             """
                 .Replace("__ZHS_LOCALE__", zhsLocale, StringComparison.Ordinal)
-                .Replace("__DEFAULT_LANGUAGE__", defaultLanguage, StringComparison.Ordinal));
+                .Replace("__DEFAULT_LANGUAGE__", defaultLanguage, StringComparison.Ordinal)
+                .Replace("__ENGLISH_CODE__", englishCode, StringComparison.Ordinal)
+                .Replace("__ENGLISH_LOCALE__", englishLocale, StringComparison.Ordinal));
     }
 
     private static void WriteMetadataFile(string runtimeRoot, string moduleId, string relativePath, string content)

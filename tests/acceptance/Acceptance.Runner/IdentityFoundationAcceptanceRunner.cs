@@ -425,8 +425,15 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             $"http://127.0.0.1:{_shellPort}/identity/accounts/{Uri.EscapeDataString(browserAccountEid)}",
             new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.GetByText("安全事件", new PageGetByTextOptions { Exact = true }).WaitForAsync();
-        await page.Locator(".ant-card").Filter(new LocatorFilterOptions { HasText = "安全事件" })
-            .Locator("tbody tr td").First.WaitForAsync();
+        var securityEventTimeCell = page.Locator(".ant-card")
+            .Filter(new LocatorFilterOptions { HasText = "安全事件" })
+            .Locator("tbody tr td")
+            .First;
+        await securityEventTimeCell.WaitForAsync();
+        if (string.IsNullOrWhiteSpace(await securityEventTimeCell.InnerTextAsync()))
+        {
+            throw new InvalidOperationException("Identity security event time cell was empty.");
+        }
         await using var restrictedContext = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             Locale = "zh-CN",

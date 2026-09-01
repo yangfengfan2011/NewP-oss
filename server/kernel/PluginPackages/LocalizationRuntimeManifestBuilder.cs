@@ -230,6 +230,7 @@ public class LocalizationRuntimeManifestBuilder
         string languagesManifestPath)
     {
         var supportedLanguages = new Dictionary<string, LocalizationLanguage>(StringComparer.OrdinalIgnoreCase);
+        var canonicalLocales = new HashSet<string>(StringComparer.Ordinal);
         foreach (var language in languagesManifest.SupportedLanguages ?? Array.Empty<LocalizationLanguage>())
         {
             if (string.IsNullOrWhiteSpace(language.Code))
@@ -259,12 +260,24 @@ public class LocalizationRuntimeManifestBuilder
                     $"Localization manifest '{languagesManifestPath}' language '{language.Code}' has non-canonical locale '{language.Locale}'; use '{canonicalLocale}'.");
             }
 
-            supportedLanguages[language.Code] = new LocalizationLanguage
+            if (supportedLanguages.ContainsKey(language.Code))
+            {
+                throw new JsonException(
+                    $"Localization manifest '{languagesManifestPath}' contains duplicate language code '{language.Code}'.");
+            }
+
+            if (!canonicalLocales.Add(language.Locale))
+            {
+                throw new JsonException(
+                    $"Localization manifest '{languagesManifestPath}' contains duplicate canonical locale '{language.Locale}'.");
+            }
+
+            supportedLanguages.Add(language.Code, new LocalizationLanguage
             {
                 Code = language.Code,
                 DisplayName = language.DisplayName ?? string.Empty,
                 Locale = language.Locale
-            };
+            });
         }
 
         return supportedLanguages;

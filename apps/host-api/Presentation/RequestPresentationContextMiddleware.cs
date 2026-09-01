@@ -3,11 +3,18 @@ using ICP.Platform.Presentation;
 
 namespace ICP.Platform.HostApi.Presentation;
 
+/// <summary>
+/// 用受控请求 locale 与已验证会话时区建立请求级展示上下文。
+/// </summary>
 public sealed class RequestPresentationContextMiddleware(RequestDelegate next)
 {
+    /// <summary>Shell 发送规范 locale 的受控请求头。</summary>
     public const string LocaleHeaderName = "X-ICP-Locale";
+
+    /// <summary>请求 locale 不属于活动 manifest 时返回的稳定错误码。</summary>
     public const string InvalidLocaleCode = "REQUEST_LOCALE_INVALID";
 
+    /// <summary>校验 locale 与可信会话时区，并在调用后续中间件前投影展示上下文。</summary>
     public async Task InvokeAsync(HttpContext context, ActiveLocalizationManifest manifest)
     {
         var requestedLocale = context.Request.Headers[LocaleHeaderName].ToString();

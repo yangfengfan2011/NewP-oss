@@ -24,9 +24,10 @@ public sealed class EfModelProjector
                 var property = entity.IndexerProperty(MapClrType(field), field.Name)
                     .HasColumnName(field.StoreName);
 
-                if (field.IsAuditField && field.ValueType == FieldValueType.DateTime)
+                if ((field.IsAuditField && field.ValueType == FieldValueType.DateTime)
+                    || field.ValueType == FieldValueType.Instant)
                 {
-                    property.HasConversion(CreateAuditDateTimeConverter());
+                    property.HasConversion(CreateUtcDateTimeConverter());
                 }
 
                 if (ShouldApplyMaxLength(field))
@@ -93,8 +94,8 @@ public sealed class EfModelProjector
             : typeof(Nullable<>).MakeGenericType(clrType);
     }
 
-    // EF 对 nullable value type 会直通 null；这里只把 provider 返回的 audit DateTime Kind 规范回 UTC。
-    private static ValueConverter<DateTime, DateTime> CreateAuditDateTimeConverter() =>
+    // EF 对 nullable value type 会直通 null；这里只把 provider 返回的 UTC-owned DateTime Kind 规范回 UTC。
+    private static ValueConverter<DateTime, DateTime> CreateUtcDateTimeConverter() =>
         new(
             static value => value,
             static value => DateTime.SpecifyKind(value, DateTimeKind.Utc));

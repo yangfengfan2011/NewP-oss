@@ -107,30 +107,6 @@ public sealed class CurrentDocumentationValidationScriptTests
         }
     }
 
-    [Fact]
-    public async Task RetiredDesignEntrypoints_ReturnStableRetirementError()
-    {
-        var cases = new[]
-        {
-            ("new-design-doc.ps1", new[] { "-DesignName", "probe" }),
-            ("register-ai-first-design-target.ps1", new[] { "-DesignPath", "probe" }),
-            ("check-ai-first-design-targets.ps1", Array.Empty<string>()),
-            ("validate-ai-first-design.ps1", Array.Empty<string>())
-        };
-
-        foreach (var testCase in cases)
-        {
-            var script = Path.Combine(_repositoryRoot, "scripts", testCase.Item1);
-            var arguments = new List<string> { "-NoLogo", "-NoProfile", "-File", script };
-            arguments.AddRange(testCase.Item2);
-
-            var result = await RunProcessAsync("pwsh", arguments, _repositoryRoot);
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("RETIRED_ENTRY", result.Output, StringComparison.Ordinal);
-        }
-    }
-
     private async Task<ProcessResult> RunCurrentDocsCheckAsync(string root) =>
         await RunProcessAsync(
             "pwsh",

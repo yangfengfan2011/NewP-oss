@@ -28,11 +28,23 @@ public sealed class ModelMetadataProjector
         "LSequence"
     };
 
+    /// <summary>
+    /// 将 Model authoring 投影为不含 provider store type 的规范 definition。
+    /// </summary>
+    /// <param name="document">Model authoring 文档。</param>
+    /// <returns>保留字段语义与 display 声明的规范 definition。</returns>
     public ModelDefinition Project(ModelMetadataDocument document)
     {
         return Project(document, null, null);
     }
 
+    /// <summary>
+    /// 将 Model authoring 投影为指定 provider 的规范 definition。
+    /// </summary>
+    /// <param name="document">Model authoring 文档。</param>
+    /// <param name="typeMap">可选的 provider storage type 映射。</param>
+    /// <param name="provider">需要解析 store type 的 provider；为空时保留 authoring storage type。</param>
+    /// <returns>保留字段语义与 display 声明的规范 definition。</returns>
     public ModelDefinition Project(
         ModelMetadataDocument document,
         StorageTypeMapDocument? typeMap,
@@ -57,7 +69,17 @@ public sealed class ModelMetadataProjector
             {
                 if (IsProjectedByKernel(document.Model.Kind, field.Name))
                 {
-                    // 固定字段允许只在 authoring 中补 UI/schema 信息，不要求重复声明 storage。
+                    // 固定字段的 storage 由内核拥有，但 authoring display 仍必须进入同一规范 definition。
+                    var projectedIndex = fields.FindIndex(candidate =>
+                        string.Equals(candidate.Name, field.Name, StringComparison.OrdinalIgnoreCase));
+                    if (projectedIndex >= 0)
+                    {
+                        fields[projectedIndex] = fields[projectedIndex] with
+                        {
+                            DisplayRule = ProjectDisplayRule(field.Display)
+                        };
+                    }
+
                     continue;
                 }
 

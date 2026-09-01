@@ -272,6 +272,45 @@ public class ModelMetadataProjectorTests
     }
 
     [Fact]
+    public void Project_CarriesKernelFieldDisplayRuleIntoFieldDefinition()
+    {
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Example",
+            Model = new ModelMetadataModel
+            {
+                Name = "ExampleRecord",
+                Kind = "Entity",
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = "CreatedBy",
+                        Contract = new ModelMetadataContractSection { ValueType = "user" },
+                        Display = new ModelMetadataDisplayRule
+                        {
+                            Type = "user",
+                            TargetModel = "IdentityAccount",
+                            TargetIdField = "EID",
+                            TargetDisplayField = "ENAME"
+                        }
+                    }
+                ]
+            }
+        };
+
+        var definition = new ModelMetadataProjector().Project(document);
+
+        var display = Assert.Single(definition.Fields, field => field.Name == "CreatedBy").DisplayRule;
+        Assert.NotNull(display);
+        Assert.Equal("user", display!.Type);
+        Assert.Equal("IdentityAccount", display.TargetModel);
+        Assert.Equal("EID", display.TargetIdField);
+        Assert.Equal("ENAME", display.TargetDisplayField);
+    }
+
+    [Fact]
     public void Project_TreatsProviderLookupDataSourceFieldsAsReferencesWithoutChangingStorageType()
     {
         var document = new ModelMetadataDocument

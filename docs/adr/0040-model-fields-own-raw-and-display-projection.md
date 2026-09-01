@@ -14,6 +14,10 @@ Model 至少区分日历日期、时间点和本地日期时间。字段显示�
 
 展示投影按字段收集并去重原始值，再通过批量策略解析为原始值到显示值的受控映射；不继续使用逐行 fallback 或依赖返回数组顺序。协议的结构化策略包括 reference、user、group、enum 和 instant；具体交付只采用已冻结真实 owner 与正式 consumer 的策略，未冻结的策略候选不构成交付门禁。复杂业务文本使用模块拥有的计算字段，不开放任意 formatter key。Runtime Column 只能继承所引用 Model 字段的显示规则，或声明由计算型行数据提供的伴随显示字段，不能返回前端 formatter 或 UI 节点。
 
+display projection-planning module 是已采用策略的唯一判定 owner：它从规范 Model definition 编译 typed lookup 或 temporal plan，同时拥有支持集合、source 语义、策略参数、canonical companion 资格与稳定诊断。`ModelMetadataProjector` 只负责把 authoring 形状转换为保留 display 声明的 definition；validator、DTO generator、Standard CRUD descriptor adapter 和模块读取只能消费编译结果，不能再次按字段类型或 display.type 推导策略。Standard CRUD 继续只由共享服务合并 resolver 输出；Identity 只提供自己拥有的 UTC raw 并通过 temporal plan executor 取得 canonical companion，前端只消费 companion。新增策略不以外部 strategy registry、模块 formatter 或 UI fallback 扩展本边界。
+
+该 planning 边界的回滚单位是 planner、typed plan consumer 与真实 adopter 的同一组变更；回滚不得恢复类型推断 companion、未知策略默认分支、第二 merge owner、模块直连 formatter 或 raw UI fallback。raw/display 输出协议、reference/user 批量 resolver、数据库 schema 与历史 raw 不属于该回滚单位，若必须改变这些事实应重新形成独立决策。
+
 伴随显示字段使用保留后缀 `_DisplayValue`，类型固定为字符串或空值且只允许出现在输出中；客户端在创建、更新或导入请求中提交该字段必须稳定拒绝。现有 `CompanyName` 一类资源别名一次性迁移为规范伴随字段，候选编译必须拒绝命名冲突，不保留双字段、deprecated alias 或运行时兼容 fallback。展示结果按认证会话、有效时区和 locale 隔离，语言变化必须重新读取；第一阶段只做请求内批量去重，不建立跨请求显示值缓存。
 
 认证会话持久化登录时确定的有效 IANA 时区；登录未提交时使用平台配置的合法默认时区，显式提交非法时区时稳定拒绝，登录响应返回最终有效值。实验基线期把该字段直接纳入 Authentication 当前 SQL Server 基线，使用旧基线的开发 catalog 按 [ADR-0042](0042-development-uses-a-resettable-migration-baseline.md) 显式重建并使既有会话失效；本字段明确选择放弃实验会话，而不采用 [ADR-0043](0043-required-fields-use-explicit-write-and-migration-lifecycles.md) 的旧行回填，也不使用数据库永久 `DEFAULT` 或同名表替换。兼容基线冻结后的存量会话演进必须另行设计。会话轮换继承该值，locale 继续由当前请求提供。服务器保存 zone ID 而非固定 offset 或时区规则快照，并使用当前部署环境的时区数据库解释历史时间。

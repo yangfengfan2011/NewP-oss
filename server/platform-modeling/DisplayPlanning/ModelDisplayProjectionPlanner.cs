@@ -15,7 +15,7 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
         IReadOnlyCollection<ModelDefinition>? modelCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(sourceDocument);
-        return Compile(ProjectAuthoringDefinition(sourceDocument), modelCatalog);
+        return Compile(new ModelMetadataProjector().Project(sourceDocument), modelCatalog);
     }
 
     /// <inheritdoc />
@@ -54,44 +54,6 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
                 Array.AsReadOnly(plans.ToArray())),
             Array.Empty<ModelDisplayProjectionDiagnostic>());
     }
-
-    // authoring 中内核固定字段不重复声明 storage；这里把其 display 规则覆到规范 definition 后再统一编译。
-    private static ModelDefinition ProjectAuthoringDefinition(ModelMetadataDocument sourceDocument)
-    {
-        var projectionDocument = new ModelMetadataDocument
-        {
-            SchemaVersion = sourceDocument.SchemaVersion,
-            ModuleId = sourceDocument.ModuleId,
-            Model = new ModelMetadataModel
-            {
-                Name = sourceDocument.Model.Name,
-                Kind = sourceDocument.Model.Kind,
-                BuiltinFields = sourceDocument.Model.BuiltinFields,
-                Fields = sourceDocument.Model.Fields
-            }
-        };
-        var definition = new ModelMetadataProjector().Project(projectionDocument);
-        var fields = definition.Fields
-            .Select(field =>
-            {
-                var authoredField = sourceDocument.Model.Fields.FirstOrDefault(candidate =>
-                    string.Equals(candidate.Name, field.Name, StringComparison.OrdinalIgnoreCase));
-                return authoredField?.Display is null
-                    ? field
-                    : field with { DisplayRule = ProjectDisplayRule(authoredField.Display) };
-            })
-            .ToArray();
-        return definition with { Fields = fields };
-    }
-
-    // metadata 形状只在 authoring adapter 转换一次，后续策略统一消费 definition rule。
-    private static FieldDisplayRuleDefinition ProjectDisplayRule(ModelMetadataDisplayRule display) =>
-        new(
-            display.Type,
-            display.TargetModel,
-            display.TargetIdField,
-            display.TargetDisplayField,
-            display.Format);
 
     // 每个字段只进入一个已知策略；未知 type 不得落入任何兼容分支。
     private static FieldCompilationResult CompileField(

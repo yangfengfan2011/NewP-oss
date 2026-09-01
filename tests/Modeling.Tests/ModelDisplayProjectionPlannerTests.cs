@@ -59,6 +59,18 @@ public sealed class ModelDisplayProjectionPlannerTests
                 [
                     new ModelMetadataField
                     {
+                        Name = "CreatedBy",
+                        Contract = new ModelMetadataContractSection { ValueType = "user" },
+                        Display = new ModelMetadataDisplayRule
+                        {
+                            Type = "user",
+                            TargetModel = "IdentityAccount",
+                            TargetIdField = "EID",
+                            TargetDisplayField = "ENAME"
+                        }
+                    },
+                    new ModelMetadataField
+                    {
                         Name = "OccurredAt",
                         Storage = new ModelMetadataStorageSection { Type = "datetime" },
                         Contract = new ModelMetadataContractSection { ValueType = "instant" },
@@ -71,9 +83,14 @@ public sealed class ModelDisplayProjectionPlannerTests
         var result = _planner.Compile(document, []);
 
         Assert.True(result.IsSuccess);
-        var plan = Assert.IsType<TemporalFieldDisplayProjectionPlan>(Assert.Single(result.Plan!.Fields));
-        Assert.Equal("OccurredAt_DisplayValue", plan.CompanionField);
-        Assert.Equal(TemporalDisplayFormat.DateTime, plan.Format);
+        var userPlan = Assert.IsType<LookupFieldDisplayProjectionPlan>(
+            Assert.Single(result.Plan!.Fields, plan => plan.SourceField == "CreatedBy"));
+        Assert.Equal("CreatedBy_DisplayValue", userPlan.CompanionField);
+        Assert.Equal(LookupDisplayProjectionKind.User, userPlan.Kind);
+        var temporalPlan = Assert.IsType<TemporalFieldDisplayProjectionPlan>(
+            Assert.Single(result.Plan.Fields, plan => plan.SourceField == "OccurredAt"));
+        Assert.Equal("OccurredAt_DisplayValue", temporalPlan.CompanionField);
+        Assert.Equal(TemporalDisplayFormat.DateTime, temporalPlan.Format);
     }
 
     [Fact]

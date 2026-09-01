@@ -204,7 +204,7 @@ public class ModelMetadataValidatorTests
     }
 
     [Fact]
-    public void Validate_ThrowsWhenDisplayRuleTypeIsUnsupported()
+    public void Validate_RejectsDisplayPlanningFailure()
     {
         var field = ReferenceFieldWithDisplay("computed");
         var document = DocumentWithFields(field);
@@ -213,99 +213,6 @@ public class ModelMetadataValidatorTests
 
         Assert.Contains("CompanyId", ex.Message, StringComparison.Ordinal);
         Assert.Contains("display.type", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Validate_ThrowsWhenReferenceDisplayRuleIsDeclaredOnScalarField()
-    {
-        var document = DocumentWithFields(
-            new ModelMetadataField
-            {
-                Name = "CompanyId",
-                Storage = new ModelMetadataStorageSection
-                {
-                    Type = "guid",
-                    Nullable = true
-                },
-                Display = ReferenceDisplayRule()
-            });
-
-        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
-
-        Assert.Contains("CompanyId", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("reference", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Validate_AllowsUserDisplayRuleOnUserField()
-    {
-        var document = DocumentWithFields(
-            UserFieldWithDisplay());
-
-        new ModelMetadataValidator().Validate(document);
-    }
-
-    [Theory]
-    [InlineData("UserAccount", "EID", "ENAME")]
-    [InlineData("IdentityAccount", "Id", "ENAME")]
-    [InlineData("IdentityAccount", "EID", "DisplayName")]
-    public void Validate_ThrowsWhenUserDisplayTargetDoesNotUseIdentityAccountCanonicalFields(
-        string targetModel,
-        string targetIdField,
-        string targetDisplayField)
-    {
-        var document = DocumentWithFields(
-            UserFieldWithDisplay(targetModel, targetIdField, targetDisplayField));
-
-        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
-
-        Assert.Equal(
-            "Field 'ReviewerUserEID' user display must target IdentityAccount/EID/ENAME.",
-            ex.Message);
-    }
-
-    [Fact]
-    public void Validate_ThrowsWhenReferenceDisplayCompanionConflictsWithAuthoredField()
-    {
-        var document = DocumentWithFields(
-            ReferenceFieldWithDisplay("reference"),
-            new ModelMetadataField
-            {
-                Name = "CompanyId_DisplayValue",
-                Storage = new ModelMetadataStorageSection
-                {
-                    Type = "string",
-                    Nullable = true
-                }
-            });
-
-        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
-
-        Assert.Contains("CompanyId_DisplayValue", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("display", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Theory]
-    [InlineData(" ", "EID", "ENAME")]
-    [InlineData("Company", " ", "ENAME")]
-    [InlineData("Company", "EID", " ")]
-    public void Validate_ThrowsWhenReferenceDisplayTargetIsBlank(
-        string targetModel,
-        string targetIdField,
-        string targetDisplayField)
-    {
-        var document = DocumentWithFields(
-            ReferenceFieldWithDisplay(
-                "reference",
-                targetModel,
-                targetIdField,
-                targetDisplayField));
-
-        var ex = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
-
-        Assert.Equal(
-            "Field 'CompanyId' reference display must define non-empty targetModel, targetIdField, and targetDisplayField.",
-            ex.Message);
     }
 
     private static ModelMetadataDocument DocumentWithFields(params ModelMetadataField[] fields) => new()
@@ -339,24 +246,6 @@ public class ModelMetadataValidatorTests
             Key = "organization.companies"
         },
         Display = ReferenceDisplayRule(displayType, targetModel, targetIdField, targetDisplayField)
-    };
-
-    private static ModelMetadataField UserFieldWithDisplay(
-        string targetModel = "IdentityAccount",
-        string targetIdField = "EID",
-        string targetDisplayField = "ENAME") => new()
-    {
-        Name = "ReviewerUserEID",
-        Storage = new ModelMetadataStorageSection
-        {
-            Type = "string",
-            Nullable = true
-        },
-        Contract = new ModelMetadataContractSection
-        {
-            ValueType = "user"
-        },
-        Display = ReferenceDisplayRule("user", targetModel, targetIdField, targetDisplayField)
     };
 
     private static ModelMetadataDisplayRule ReferenceDisplayRule(

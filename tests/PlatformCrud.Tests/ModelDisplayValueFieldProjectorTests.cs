@@ -25,20 +25,6 @@ public sealed class ModelDisplayValueFieldProjectorTests
     }
 
     [Fact]
-    public void Project_DerivesUserDisplayCompanionFromModelArtifactWithoutTargetCatalogEntry()
-    {
-        var source = ExampleRecordWithReviewerDisplayRule();
-
-        var display = Assert.Single(Project(source, [source]));
-
-        Assert.Equal("ReviewerUserEID_DisplayValue", display.Field);
-        Assert.Equal("ReviewerUserEID", display.SourceField);
-        Assert.Equal("IdentityAccount", display.TargetModelName);
-        Assert.Equal("EID", display.TargetIdField);
-        Assert.Equal("ENAME", display.TargetDisplayField);
-    }
-
-    [Fact]
     public void Project_DoesNotRouteInstantDisplayThroughLookupPlanning()
     {
         var source = new ModelDefinition(
@@ -94,25 +80,6 @@ public sealed class ModelDisplayValueFieldProjectorTests
                 false,
                 false,
                 new FieldDisplayRuleDefinition("reference", "Company", "EID", "ENAME"))
-        ],
-        Indexes: []);
-
-    private static ModelDefinition ExampleRecordWithReviewerDisplayRule() => new(
-        Name: "ExampleRecord",
-        TableName: "ExampleRecord",
-        Kind: ModelKind.Entity,
-        Fields:
-        [
-            new FieldDefinition(
-                "ReviewerUserEID",
-                "ReviewerUserEID",
-                FieldKind.Scalar,
-                FieldValueType.User,
-                "string",
-                false,
-                false,
-                false,
-                new FieldDisplayRuleDefinition("user", "IdentityAccount", "EID", "ENAME"))
         ],
         Indexes: []);
 

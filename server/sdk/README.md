@@ -36,7 +36,7 @@ SDK 不得引用 Host 内部实现，也不得包含具体模块 ID 分支。
 
 ## 推荐入口
 
-- 内建模块：`scripts/new-module.ps1` 或 `scripts/new-module.sh`；
+- 内建模块：`scripts/new-module.ps1`；
 - 后端模板：`server/templates/backend-module-template`；
 - 外部插件：`docs/developer/external-plugin-development.md`；
 - 外仓可执行基线：`tests/integration/plugin-api/baseline/1.0.0`。

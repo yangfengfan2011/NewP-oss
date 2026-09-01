@@ -176,12 +176,9 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         Assert.Contains(@"<Link>modules\CanonicalSample\plugin.json</Link>", hostProject, StringComparison.Ordinal);
 
         var script = File.ReadAllText(scriptPath);
-        var shellWrapper = File.ReadAllText(Path.Combine(repoRoot, "scripts", "new-module.sh"));
         Assert.DoesNotContain("builtin-runtime-plugins.ts", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("builtin-runtime-plugins.ts", shellWrapper, StringComparison.Ordinal);
         Assert.DoesNotContain("apps\\host-api\\modules", script, StringComparison.Ordinal);
         Assert.DoesNotContain("legacy-module", script, StringComparison.Ordinal);
-        Assert.Contains("modules/<ModuleName>/newp.plugin.json", shellWrapper, StringComparison.Ordinal);
     }
 
     [Fact]

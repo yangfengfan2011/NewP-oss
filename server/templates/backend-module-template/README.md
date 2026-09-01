@@ -19,10 +19,6 @@
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-```bash
-./scripts/new-module.sh --module-name ExampleModule --display-name "示例模块"
-```
-
 ## 边界
 
 - `*Module.cs` 不声明 module id、显示名、版本、路由、菜单或权限；

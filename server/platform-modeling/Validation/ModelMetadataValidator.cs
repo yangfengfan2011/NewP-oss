@@ -1,4 +1,5 @@
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modeling.Metadata;
 
 namespace ICP.Platform.Modeling.Validation;
@@ -129,113 +130,17 @@ public sealed class ModelMetadataValidator
             }
         }
 
-        ValidateDisplayRules(document, seenFieldNames);
+        ValidateDisplayRules(document);
     }
 
-    // 展示规则必须在 authoring 阶段闭合字段语义和保留伴随字段命名，避免进入 runtime 后再猜测。
-    private static void ValidateDisplayRules(
-        ModelMetadataDocument document,
-        HashSet<string> authoredFieldNames)
+    // authoring validator 只消费统一 planning module 的结果，不再维护平行策略判据。
+    private static void ValidateDisplayRules(ModelMetadataDocument document)
     {
-        foreach (var field in document.Model.Fields.Where(static field => field.Display is not null))
+        var result = new ModelDisplayProjectionPlanner().Compile(document);
+        if (!result.IsSuccess)
         {
-            var display = field.Display!;
-            if (!IsSupportedDisplayType(display.Type))
-            {
-                throw new InvalidOperationException(
-                    $"Field '{field.Name}' has unsupported display.type '{display.Type}'.");
-            }
-
-            if (!IsDisplaySourceField(field, display.Type))
-            {
-                throw new InvalidOperationException(
-                    $"Field '{field.Name}' must match display.type '{display.Type}' source semantics.");
-            }
-
-            if (string.Equals(display.Type, "instant", StringComparison.OrdinalIgnoreCase))
-            {
-                ValidateInstantDisplayRule(field.Name, display);
-            }
-            else if (string.Equals(display.Type, "user", StringComparison.OrdinalIgnoreCase))
-            {
-                ValidateUserDisplayTarget(field.Name, display);
-            }
-            else if (string.IsNullOrWhiteSpace(display.TargetModel)
-                || string.IsNullOrWhiteSpace(display.TargetIdField)
-                || string.IsNullOrWhiteSpace(display.TargetDisplayField))
-            {
-                throw new InvalidOperationException(
-                    $"Field '{field.Name}' reference display must define non-empty targetModel, targetIdField, and targetDisplayField.");
-            }
-
-            var companionField = $"{field.Name}_DisplayValue";
-            if (authoredFieldNames.Contains(companionField))
-            {
-                throw new InvalidOperationException(
-                    $"Field '{companionField}' conflicts with the generated display companion for '{field.Name}'.");
-            }
+            throw new InvalidOperationException(result.Diagnostics[0].Message);
         }
-    }
-
-    // model 数据源与 provider-backed lookup 都是当前 Model 协议认可的引用字段。
-    private static bool IsReferenceField(ModelMetadataField field)
-    {
-        return string.Equals(field.DataSource?.Type, "model", StringComparison.OrdinalIgnoreCase)
-            || (string.Equals(field.DataSource?.Type, "provider", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(field.UiType, "lookup", StringComparison.OrdinalIgnoreCase));
-    }
-
-    // display.type 只接受已闭合 source 语义与 runtime consumer 的共享策略。
-    private static bool IsSupportedDisplayType(string displayType) =>
-        string.Equals(displayType, "reference", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(displayType, "user", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(displayType, "instant", StringComparison.OrdinalIgnoreCase);
-
-    // reference 只能来自真实引用字段；user 只能来自 contract.valueType=user 的 raw 字段，避免 authoring 随意声明 companion。
-    private static bool IsDisplaySourceField(ModelMetadataField field, string displayType)
-    {
-        if (string.Equals(displayType, "reference", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsReferenceField(field);
-        }
-
-        if (string.Equals(displayType, "instant", StringComparison.OrdinalIgnoreCase))
-        {
-            return string.Equals(field.Storage?.Type, "datetime", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(field.Contract?.ValueType, "instant", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return string.Equals(field.Contract?.ValueType, "user", StringComparison.OrdinalIgnoreCase);
-    }
-
-    // instant 只声明格式策略，不允许复用 reference 的 target 模型字段。
-    private static void ValidateInstantDisplayRule(string fieldName, ModelMetadataDisplayRule display)
-    {
-        if ((string.Equals(display.Format, "dateTime", StringComparison.Ordinal)
-                || string.Equals(display.Format, "date", StringComparison.Ordinal))
-            && string.IsNullOrWhiteSpace(display.TargetModel)
-            && string.IsNullOrWhiteSpace(display.TargetIdField)
-            && string.IsNullOrWhiteSpace(display.TargetDisplayField))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"Field '{fieldName}' instant display must use format 'dateTime' or 'date' without a target model.");
-    }
-
-    // user display 的公共 seam 固定到 IdentityAccount/EID/ENAME，避免各模块各自声明 user target 破坏解析 owner 唯一性。
-    private static void ValidateUserDisplayTarget(string fieldName, ModelMetadataDisplayRule display)
-    {
-        if (string.Equals(display.TargetModel, "IdentityAccount", StringComparison.Ordinal)
-            && string.Equals(display.TargetIdField, "EID", StringComparison.Ordinal)
-            && string.Equals(display.TargetDisplayField, "ENAME", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"Field '{fieldName}' user display must target IdentityAccount/EID/ENAME.");
     }
 
     private static void ValidateIndexContracts(ModelMetadataDocument document)

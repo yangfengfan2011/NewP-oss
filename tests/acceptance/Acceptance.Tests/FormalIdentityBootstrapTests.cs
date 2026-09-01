@@ -31,6 +31,24 @@ public sealed class FormalIdentityBootstrapTests
         Assert.True(message.Length < 8_500, $"Diagnostic length was {message.Length}.");
     }
 
+    // 连接串的值允许带引号，未加引号时也允许含空格；遮蔽必须一直吃到 `;` 或行尾。
+    [Theory]
+    [InlineData("Password=plain-secret;Server=x", "plain-secret")]
+    [InlineData("Password=secret with spaces;Server=x", "secret with spaces")]
+    [InlineData("Password=\"quoted;secret\";Server=x", "quoted;secret")]
+    [InlineData("Password='single;quoted secret';Server=x", "single;quoted secret")]
+    [InlineData("Pwd = spaced-assignment ;Server=x", "spaced-assignment")]
+    public void CreateFailureMessage_RedactsEveryConnectionStringPasswordShape(
+        string output,
+        string secret)
+    {
+        var message = FormalIdentityBootstrap.CreateFailureMessage(1, 0, output);
+
+        Assert.DoesNotContain(secret, message, StringComparison.Ordinal);
+        Assert.Contains("[REDACTED]", message, StringComparison.Ordinal);
+        Assert.Contains("Server=x", message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void CreateFailureMessage_WithoutConsoleOutput_ReturnsStableSummary()
     {

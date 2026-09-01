@@ -611,8 +611,13 @@ public class HostApiPluginManifestRouteTests : IDisposable
         }
 
         public string BaseAddress { get; }
-        public string StdOut => _stdout.ToString();
-        public string StdErr => _stderr.ToString();
+
+        // StringBuilder 不是线程安全的：AppendLine 来自 Process 的输出读取线程，
+        // ToString 来自测试线程——而每条 Assert.True 的消息都是插值字符串，
+        // 无论断言成败都会求值，所以读取远比失败频繁。测试项目之间并行后
+        // CPU 压力上来，这个竞争会真的炸。读写共用一把锁。
+        public string StdOut { get { lock (_stdout) { return _stdout.ToString(); } } }
+        public string StdErr { get { lock (_stderr) { return _stderr.ToString(); } } }
 
         public static async Task<HostApiProcess> StartAsync(
             string installRoot,
@@ -672,7 +677,10 @@ public class HostApiPluginManifestRouteTests : IDisposable
             {
                 if (args.Data is not null)
                 {
-                    stdout.AppendLine(args.Data);
+                    lock (stdout)
+                    {
+                        stdout.AppendLine(args.Data);
+                    }
                 }
             };
 
@@ -680,7 +688,10 @@ public class HostApiPluginManifestRouteTests : IDisposable
             {
                 if (args.Data is not null)
                 {
-                    stderr.AppendLine(args.Data);
+                    lock (stderr)
+                    {
+                        stderr.AppendLine(args.Data);
+                    }
                 }
             };
 

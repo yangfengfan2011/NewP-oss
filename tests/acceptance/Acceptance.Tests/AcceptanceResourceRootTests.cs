@@ -1,4 +1,5 @@
 using ICP.Platform.Acceptance;
+using ICP.Platform.Testing;
 using Xunit;
 
 namespace ICP.Platform.Acceptance.Tests;
@@ -61,24 +62,13 @@ public sealed class AcceptanceResourceRootTests : IDisposable
             () => AcceptanceInfrastructure.EnsureOwnedResourceRoot(_runDirectory, traversal));
     }
 
-    [Fact]
+    [RequiresSymbolicLinkFact]
     public void EnsureOwnedResourceRoot_RejectsRootContainingASymbolicLink()
     {
         var plugins = CreateResource("plugins");
         var target = CreateResource("link-target");
         var link = Path.Combine(plugins, "linked");
-        try
-        {
-            Directory.CreateSymbolicLink(link, target);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return; // 未授予创建符号链接权限时跳过；边界本身由上面的用例覆盖。
-        }
-        catch (IOException)
-        {
-            return;
-        }
+        Directory.CreateSymbolicLink(link, target);
 
         var exception = Assert.Throws<InvalidOperationException>(
             () => AcceptanceInfrastructure.EnsureOwnedResourceRoot(_runDirectory, plugins));

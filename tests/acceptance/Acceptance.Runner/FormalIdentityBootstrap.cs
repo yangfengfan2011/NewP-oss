@@ -65,9 +65,11 @@ internal static class FormalIdentityBootstrap
             "Temporary credential:\\s*[^\\s]+",
             "Temporary credential: [REDACTED]",
             RegexOptions.CultureInvariant);
+        // 连接串的值可以带引号，未加引号时也可以含空格，只在 `;` 或行尾结束。
+        // 旧写法 [^;\s]+ 在第一个空格处停下，会把 Password='a b' 的后半截留在诊断里。
         sanitized = Regex.Replace(
             sanitized,
-            "(?<name>Password|Pwd)\\s*=\\s*[^;\\s]+",
+            "(?<name>Password|Pwd)\\s*=\\s*(?:\"[^\"\\r\\n]*\"|'[^'\\r\\n]*'|[^;\\r\\n]*)",
             "${name}=[REDACTED]",
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         sanitized = sanitized.Trim();

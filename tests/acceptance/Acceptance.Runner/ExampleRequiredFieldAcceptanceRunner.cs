@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -79,7 +80,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
     /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        Exception? failure = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             await RunPreflightAsync(cancellationToken);
@@ -111,11 +112,18 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
             _activeScenario = RestartScenario;
             await RunRestartScenarioAsync(cancellationToken);
         }
+        catch (OperationCanceledException exception)
+        {
+            // 取消不是场景失败：原样保留，让上层按取消处理而不是按断言失败处理。
+            // 仍然先归还资源，所以这里只记录，不当场抛。
+            failure = ExceptionDispatchInfo.Capture(exception);
+        }
         catch (Exception exception)
         {
             // 脱敏后重建异常：原始文本可能带连接串口令，不能直接进测试输出。
-            failure = new InvalidOperationException(
-                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}");
+            // 不挂 inner exception 是同一个原因；完整类型、消息与栈已在脱敏文本里。
+            failure = ExceptionDispatchInfo.Capture(new InvalidOperationException(
+                $"验收场景 {_activeScenario} 失败。{Environment.NewLine}{Sanitize(exception.ToString())}"));
         }
 
         // 无论场景成败都要归还资源，但清理失败不能顶掉场景失败。
@@ -124,7 +132,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner
 
         if (failure is not null)
         {
-            throw failure;
+            failure.Throw();
         }
         if (leaked)
         {

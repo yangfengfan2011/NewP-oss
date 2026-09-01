@@ -8,8 +8,6 @@ NewP 是独立演进的平台基础能力与扩展内核仓库，采用模块化
 2. 已确认的 GitHub issue/spec 与 ADR 描述目标和决策。
 3. [AGENTS.md](AGENTS.md) 描述仓库工作边界；[docs/README.md](docs/README.md) 只负责把任务路由到仍有效的文档。
 
-`docs/_retired/` 是待删除的退役资料区，不参与设计、实现、验证或下一步判断。
-
 ## 快速开始
 
 首次拉取或 lockfile 变化后初始化：

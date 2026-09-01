@@ -1,6 +1,8 @@
 using ICP.Platform.Crud.Planning;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Query.Descriptors;
 using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
@@ -13,7 +15,7 @@ public sealed class ModelDisplayValueFieldProjectorTests
         var source = PersonWithCompanyDisplayRule();
         var company = Company();
 
-        var display = Assert.Single(new ModelDisplayValueFieldProjector().Project(source, [company]));
+        var display = Assert.Single(Project(source, [company]));
 
         Assert.Equal("CompanyId_DisplayValue", display.Field);
         Assert.Equal("CompanyId", display.SourceField);
@@ -27,7 +29,7 @@ public sealed class ModelDisplayValueFieldProjectorTests
     {
         var source = ExampleRecordWithReviewerDisplayRule();
 
-        var display = Assert.Single(new ModelDisplayValueFieldProjector().Project(source, [source]));
+        var display = Assert.Single(Project(source, [source]));
 
         Assert.Equal("ReviewerUserEID_DisplayValue", display.Field);
         Assert.Equal("ReviewerUserEID", display.SourceField);
@@ -37,41 +39,43 @@ public sealed class ModelDisplayValueFieldProjectorTests
     }
 
     [Fact]
-    public void Project_ThrowsWhenTargetModelIsMissing()
+    public void Project_DoesNotRouteInstantDisplayThroughLookupPlanning()
     {
-        var source = PersonWithCompanyDisplayRule();
+        var source = new ModelDefinition(
+            Name: "SecurityEvent",
+            TableName: "SecurityEvent",
+            Kind: ModelKind.Entity,
+            Fields:
+            [
+                new FieldDefinition(
+                    "OccurredAt",
+                    "OccurredAt",
+                    FieldKind.Scalar,
+                    FieldValueType.Instant,
+                    "datetime",
+                    false,
+                    false,
+                    false,
+                    new FieldDisplayRuleDefinition("instant", "", "", "", "dateTime"))
+            ],
+            Indexes: []);
 
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            new ModelDisplayValueFieldProjector().Project(source, [source]));
+        var display = Project(source, [source]);
 
-        Assert.Contains("Company", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("target model", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(display);
     }
 
     [Fact]
-    public void Project_ThrowsWhenTargetIdFieldIsMissing()
+    public void Project_RejectsFailedCompilationInsteadOfFallingBackToAProjectionStrategy()
     {
-        var source = PersonWithCompanyDisplayRule();
-        var company = Company(includeId: false);
+        var compilation = new ModelDisplayProjectionPlanner().Compile(
+            PersonWithCompanyDisplayRule(),
+            []);
 
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            new ModelDisplayValueFieldProjector().Project(source, [company]));
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new ModelDisplayValueFieldProjector().Project(compilation));
 
-        Assert.Contains("Company", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("EID", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Project_ThrowsWhenTargetDisplayFieldIsMissing()
-    {
-        var source = PersonWithCompanyDisplayRule();
-        var company = Company(includeDisplay: false);
-
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            new ModelDisplayValueFieldProjector().Project(source, [company]));
-
-        Assert.Contains("Company", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("ENAME", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(ModelDisplayProjectionDiagnosticCodes.TargetModelMissing, exception.Message, StringComparison.Ordinal);
     }
 
     private static ModelDefinition PersonWithCompanyDisplayRule() => new(
@@ -131,5 +135,14 @@ public sealed class ModelDisplayValueFieldProjectorTests
             Kind: ModelKind.Entity,
             Fields: fields,
             Indexes: []);
+    }
+
+    private static IReadOnlyList<PlatformDisplayValueField> Project(
+        ModelDefinition source,
+        IReadOnlyCollection<ModelDefinition> catalog)
+    {
+        var compilation = new ModelDisplayProjectionPlanner().Compile(source, catalog);
+        Assert.True(compilation.IsSuccess, string.Join(Environment.NewLine, compilation.Diagnostics.Select(static item => item.Message)));
+        return new ModelDisplayValueFieldProjector().Project(compilation.Plan!);
     }
 }

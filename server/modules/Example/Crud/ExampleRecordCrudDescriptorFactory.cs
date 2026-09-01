@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Example.Persistence.Descriptors;
 using ICP.Platform.Query.Descriptors;
 
@@ -84,11 +85,12 @@ public static class ExampleRecordCrudDescriptorFactory
         return new ModelStandardCrudFieldPolicyProjector().Project(document, model, fieldSet);
     }
 
-    // Example 的 display companion 只从 owner metadata 投影；user target 由 modeling validator 固定，不再引入跨模块 metadata 依赖。
+    // Example 的 lookup descriptor 只消费统一编译计划；user target 不引入跨模块 metadata 依赖。
     private static IReadOnlyList<PlatformDisplayValueField> BuildDisplayValueFields()
     {
         var models = ExampleModelDefinitions.All;
         var exampleRecord = models.Single(model => string.Equals(model.Name, "ExampleRecord", StringComparison.Ordinal));
-        return new ModelDisplayValueFieldProjector().Project(exampleRecord, models);
+        IModelDisplayProjectionPlanner planner = new ModelDisplayProjectionPlanner();
+        return new ModelDisplayValueFieldProjector().Project(planner.Compile(exampleRecord, models));
     }
 }

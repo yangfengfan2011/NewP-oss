@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Query.Descriptors;
 
@@ -81,12 +82,13 @@ public static class PersonCrudDescriptorFactory
         ]
     };
 
-    // Company 规则由 Model artifact 投影，Department 与 Position 暂时保留既有手写计划。
+    // Company lookup 只消费统一编译计划，Department 与 Position 暂时保留既有非 canonical 手写计划。
     private static IReadOnlyList<PlatformDisplayValueField> BuildDisplayValueFields()
     {
         var models = OrganizationModelDefinitions.All;
         var person = models.Single(model => string.Equals(model.Name, "Person", StringComparison.Ordinal));
-        var modelDisplayValueFields = new ModelDisplayValueFieldProjector().Project(person, models);
+        IModelDisplayProjectionPlanner planner = new ModelDisplayProjectionPlanner();
+        var modelDisplayValueFields = new ModelDisplayValueFieldProjector().Project(planner.Compile(person, models));
 
         return
         [

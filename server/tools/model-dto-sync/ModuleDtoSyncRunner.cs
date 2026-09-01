@@ -1,4 +1,6 @@
 using ICP.Platform.Modeling.Dto;
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modeling.Validation;
@@ -62,10 +64,11 @@ public static class ModuleDtoSyncRunner
         }
     }
 
+    // 每个模块先形成完整 model catalog，再让 DTO 只消费统一 planner 的成功编译结果。
     private static IReadOnlyList<string> Generate(string outputRepositoryRoot, string metadataRepositoryRoot)
     {
-
         var generator = new ModelDtoGenerator();
+        IModelDisplayProjectionPlanner displayPlanner = new ModelDisplayProjectionPlanner();
         var codeWriter = new GeneratedCodeWriter();
         var signatureWriter = new DtoSignatureWriter();
         var writtenFiles = new List<string>();
@@ -92,17 +95,33 @@ public static class ModuleDtoSyncRunner
                 continue;
             }
 
+            var modelCandidates = new List<ModelDefinition>();
             foreach (var modelPath in Directory.EnumerateFiles(modelDirectory, "*.model.json")
                          .OrderBy(static path => path, StringComparer.Ordinal))
             {
                 var document = modelLoader.LoadFromFile(modelPath);
                 validator.Validate(document, typeMap);
                 var definition = projector.Project(document, typeMap, "SqlServer");
+                modelCandidates.Add(definition);
+            }
+
+            var modelCatalog = modelCandidates.ToArray();
+            foreach (var definition in modelCatalog)
+            {
+                var displayCompilation = displayPlanner.Compile(definition, modelCatalog);
+                if (!displayCompilation.IsSuccess)
+                {
+                    throw new InvalidOperationException(string.Join(
+                        Environment.NewLine,
+                        displayCompilation.Diagnostics.Select(static diagnostic =>
+                            $"{diagnostic.Code}: {diagnostic.ModelName}.{diagnostic.FieldName}: {diagnostic.Message}")));
+                }
+
                 var outputDirectory = Path.Combine(outputRepositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
                 var outputPath = Path.Combine(outputDirectory, definition.Name + "Dto.g.cs");
                 var enumClrTypeMap = LoadEnumClrTypeMap(metadataRepositoryRoot, moduleId, definition.Name);
                 var sourceCode = GeneratedCodeWriter.WrapInNamespace(
-                    generator.Generate(definition, enumClrTypeMap),
+                    generator.Generate(definition, displayCompilation.Plan!, enumClrTypeMap),
                     $"ICP.Platform.Modules.{moduleId}.DTOs",
                     ResolveUsingNamespaces(moduleId, enumClrTypeMap));
 

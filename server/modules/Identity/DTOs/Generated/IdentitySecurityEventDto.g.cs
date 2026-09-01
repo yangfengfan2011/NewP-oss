@@ -18,6 +18,5 @@ public sealed class IdentitySecurityEventDto
     public string? OccurredAt_DisplayValue { get; init; }
     public string TraceId { get; init; }
     public IdentitySecurityActorKind ActorKind { get; init; }
-    public string? ActorKind_DisplayValue { get; init; }
     public string? ActorAccountEID { get; init; }
 }

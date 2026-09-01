@@ -1,26 +1,48 @@
 using System.Text;
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.DisplayPlanning;
 
 namespace ICP.Platform.Modeling.Dto;
 
 public sealed class ModelDtoGenerator
 {
     /// <summary>
-    /// 将模型定义转换为单个 DTO 描述；需要 canonical display companion 的字段会追加展示值属性。
+    /// 将模型定义和已编译 display plan 转换为单个 DTO 描述。
     /// </summary>
-    public ModelDtoDescriptor Describe(ModelDefinition definition)
+    /// <param name="definition">DTO 原始字段与类型的规范 Model definition。</param>
+    /// <param name="displayProjectionPlan">同一 Model 通过统一 planner 成功编译的 display plan。</param>
+    /// <returns>包含 raw 属性与计划内 output-only companion 的 DTO 描述。</returns>
+    public ModelDtoDescriptor Describe(
+        ModelDefinition definition,
+        ModelDisplayProjectionPlan displayProjectionPlan)
     {
-        return Describe(definition, null);
+        return Describe(definition, displayProjectionPlan, null);
     }
 
     /// <summary>
-    /// 将模型定义转换为单个 DTO 描述；枚举字段可通过外部映射改用强类型 CLR 名称。
+    /// 将模型定义和已编译 display plan 转换为单个 DTO 描述；枚举字段可通过外部映射改用强类型 CLR 名称。
     /// </summary>
+    /// <param name="definition">DTO 原始字段与类型的规范 Model definition。</param>
+    /// <param name="displayProjectionPlan">同一 Model 通过统一 planner 成功编译的 display plan。</param>
+    /// <param name="enumClrTypeMap">可选的 enum 字段到 CLR 类型名映射。</param>
+    /// <returns>包含 raw 属性与计划内 output-only companion 的 DTO 描述。</returns>
     public ModelDtoDescriptor Describe(
         ModelDefinition definition,
+        ModelDisplayProjectionPlan displayProjectionPlan,
         IReadOnlyDictionary<string, string>? enumClrTypeMap)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(displayProjectionPlan);
+        if (!string.Equals(definition.Name, displayProjectionPlan.ModelName, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"DTO model '{definition.Name}' cannot consume display projection plan for '{displayProjectionPlan.ModelName}'.",
+                nameof(displayProjectionPlan));
+        }
+
+        var displayPlansBySourceField = displayProjectionPlan.Fields.ToDictionary(
+            static plan => plan.SourceField,
+            StringComparer.Ordinal);
 
         var properties = new List<ModelDtoProperty>();
         foreach (var field in definition.Fields)
@@ -32,10 +54,10 @@ public sealed class ModelDtoGenerator
                 !field.Required,
                 ResolvePropertyInitializer(field, typeName)));
 
-            // 只为已声明 display 语义的字段保留 companion，避免把所有 audit user 扩成公共协议。
-            if (RequiresDisplayValueCompanion(field))
+            // companion 资格和规范名称只来自 planner，生成器不再按字段类型推导第二套协议。
+            if (displayPlansBySourceField.TryGetValue(field.Name, out var displayPlan))
             {
-                properties.Add(new ModelDtoProperty(ResolveDisplayValuePropertyName(field), "string", true));
+                properties.Add(new ModelDtoProperty(displayPlan.CompanionField, "string", true));
             }
         }
 
@@ -43,21 +65,31 @@ public sealed class ModelDtoGenerator
     }
 
     /// <summary>
-    /// 渲染 DTO 源码，当前只生成单个类，不拆分输入/输出模型。
+    /// 渲染 DTO 源码，display companion 仅来自已编译计划。
     /// </summary>
-    public string Generate(ModelDefinition definition)
+    /// <param name="definition">DTO 原始字段与类型的规范 Model definition。</param>
+    /// <param name="displayProjectionPlan">同一 Model 通过统一 planner 成功编译的 display plan。</param>
+    /// <returns>单个 DTO 类的稳定 C# 源码。</returns>
+    public string Generate(
+        ModelDefinition definition,
+        ModelDisplayProjectionPlan displayProjectionPlan)
     {
-        return Generate(definition, null);
+        return Generate(definition, displayProjectionPlan, null);
     }
 
     /// <summary>
     /// 渲染 DTO 源码，枚举字段可按外部 CLR 类型映射输出强类型属性。
     /// </summary>
+    /// <param name="definition">DTO 原始字段与类型的规范 Model definition。</param>
+    /// <param name="displayProjectionPlan">同一 Model 通过统一 planner 成功编译的 display plan。</param>
+    /// <param name="enumClrTypeMap">可选的 enum 字段到 CLR 类型名映射。</param>
+    /// <returns>单个 DTO 类的稳定 C# 源码。</returns>
     public string Generate(
         ModelDefinition definition,
+        ModelDisplayProjectionPlan displayProjectionPlan,
         IReadOnlyDictionary<string, string>? enumClrTypeMap)
     {
-        var descriptor = Describe(definition, enumClrTypeMap);
+        var descriptor = Describe(definition, displayProjectionPlan, enumClrTypeMap);
         var builder = new StringBuilder();
 
         builder.AppendLine("public sealed class " + descriptor.Name + "Dto");
@@ -81,19 +113,6 @@ public sealed class ModelDtoGenerator
         return builder.ToString();
     }
 
-    /// <summary>
-    /// 判断字段是否需要生成规范 display companion；User 仅在显式 display rule 下生成。
-    /// </summary>
-    private static bool RequiresDisplayValueCompanion(FieldDefinition field)
-    {
-        return field.Kind == FieldKind.Reference
-            || field.ValueType == FieldValueType.Enum
-            || (field.ValueType == FieldValueType.Instant
-                && string.Equals(field.DisplayRule?.Type, "instant", StringComparison.OrdinalIgnoreCase))
-            || (field.ValueType == FieldValueType.User
-                && string.Equals(field.DisplayRule?.Type, "user", StringComparison.OrdinalIgnoreCase));
-    }
-
     private static string ResolvePropertyName(FieldDefinition field)
     {
         return field.Name switch
@@ -103,11 +122,6 @@ public sealed class ModelDtoGenerator
             "ECODE" => "Code",
             _ => field.Name
         };
-    }
-
-    private static string ResolveDisplayValuePropertyName(FieldDefinition field)
-    {
-        return ResolvePropertyName(field) + "_DisplayValue";
     }
 
     // 将规范字段类型映射为受管 DTO 的稳定 CLR 类型名。

@@ -16,7 +16,6 @@ public sealed class IdentityAccountDto
     public string Code { get; init; }
     public string NormalizedECODE { get; init; }
     public ICP.Platform.Identity.Contracts.IdentityAccountStatus Status { get; init; }
-    public string? Status_DisplayValue { get; init; }
     public bool IsLocalAdministrator { get; init; }
     public bool IsPersonnelBound { get; init; }
     public bool PersonnelDisableHold { get; init; }

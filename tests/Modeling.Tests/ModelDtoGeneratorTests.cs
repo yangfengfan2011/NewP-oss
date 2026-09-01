@@ -1,5 +1,6 @@
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.DisplayPlanning;
 using Xunit;
 
 namespace ICP.Platform.Modeling.Tests;
@@ -7,7 +8,7 @@ namespace ICP.Platform.Modeling.Tests;
 public class ModelDtoGeneratorTests
 {
     [Fact]
-    public void Generate_ForReferenceAndEnumFields_AddsDisplayValueCompanions()
+    public void Generate_OnlyAddsDisplayValueCompanionsForFieldsWithCompiledDisplayPlans()
     {
         var definition = new ModelDefinition(
             "Person",
@@ -16,6 +17,16 @@ public class ModelDtoGeneratorTests
             new[]
             {
                 new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+                new FieldDefinition(
+                    "CompanyId",
+                    "CompanyId",
+                    FieldKind.Reference,
+                    FieldValueType.ObjectId,
+                    "string",
+                    true,
+                    false,
+                    false,
+                    new FieldDisplayRuleDefinition("reference", "Company", "EID", "ENAME")),
                 new FieldDefinition("DepartmentId", "DepartmentId", FieldKind.Reference, FieldValueType.ObjectId, "string", true, false, false),
                 new FieldDefinition("EmploymentStatus", "EmploymentStatus", FieldKind.Scalar, FieldValueType.Enum, "string", true, false, false),
                 new FieldDefinition("Name", "Name", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false)
@@ -25,10 +36,12 @@ public class ModelDtoGeneratorTests
         var code = GenerateCode(definition);
 
         Assert.Contains("public sealed class PersonDto", code);
+        Assert.Contains("public string CompanyId { get; init; }", code);
+        Assert.Contains("public string? CompanyId_DisplayValue { get; init; }", code);
         Assert.Contains("public string DepartmentId { get; init; }", code);
-        Assert.Contains("public string? DepartmentId_DisplayValue { get; init; }", code);
+        Assert.DoesNotContain("DepartmentId_DisplayValue", code);
         Assert.Contains("public string EmploymentStatus { get; init; }", code);
-        Assert.Contains("public string? EmploymentStatus_DisplayValue { get; init; }", code);
+        Assert.DoesNotContain("EmploymentStatus_DisplayValue", code);
         Assert.DoesNotContain("Name_DisplayValue", code);
     }
 
@@ -89,7 +102,7 @@ public class ModelDtoGeneratorTests
     }
 
     [Fact]
-    public void Generate_UsesExternalClrTypeMappingForEnumFields()
+    public void Generate_UsesExternalClrTypeMappingWithoutInventingEnumDisplayCompanion()
     {
         var definition = new ModelDefinition(
             "Person",
@@ -107,7 +120,7 @@ public class ModelDtoGeneratorTests
         });
 
         Assert.Contains("public OrderStatus Status { get; init; }", code);
-        Assert.Contains("public string? Status_DisplayValue { get; init; }", code);
+        Assert.DoesNotContain("Status_DisplayValue", code);
     }
 
     [Fact]
@@ -172,7 +185,8 @@ public class ModelDtoGeneratorTests
     private static string GenerateCode(ModelDefinition definition)
     {
         var generator = new ICP.Platform.Modeling.Dto.ModelDtoGenerator();
-        return generator.Generate(definition);
+        var displayPlan = new ModelDisplayProjectionPlanner().Compile(definition).Plan!;
+        return generator.Generate(definition, displayPlan);
     }
 
     private static string GenerateCode(
@@ -180,6 +194,7 @@ public class ModelDtoGeneratorTests
         IReadOnlyDictionary<string, string>? enumClrTypeMap)
     {
         var generator = new ICP.Platform.Modeling.Dto.ModelDtoGenerator();
-        return generator.Generate(definition, enumClrTypeMap);
+        var displayPlan = new ModelDisplayProjectionPlanner().Compile(definition).Plan!;
+        return generator.Generate(definition, displayPlan, enumClrTypeMap);
     }
 }

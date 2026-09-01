@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Planning;
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Modules.Example.Persistence.Descriptors;
 using Microsoft.Extensions.DependencyInjection;
@@ -182,8 +183,9 @@ public sealed class ExampleStandardCrudResourceTests
     {
         var exampleModels = new ExampleModelMetadataProvider().GetDefinitions();
         var exampleRecord = Assert.Single(exampleModels, model => model.Name == "ExampleRecord");
+        var displayPlan = new ModelDisplayProjectionPlanner().Compile(exampleRecord, exampleModels).Plan!;
         var projected = Assert.Single(
-            new ModelDisplayValueFieldProjector().Project(exampleRecord, exampleModels),
+            new ModelDisplayValueFieldProjector().Project(displayPlan),
             field => field.SourceField == "ReviewerUserEID");
 
         var descriptor = ExampleRecordCrudDescriptorFactory.Create();

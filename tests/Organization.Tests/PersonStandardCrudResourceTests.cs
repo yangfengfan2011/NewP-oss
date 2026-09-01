@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
@@ -107,8 +108,9 @@ public sealed class PersonStandardCrudResourceTests
     {
         var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
         var person = Assert.Single(definitions, definition => definition.Name == "Person");
+        var displayPlan = new ModelDisplayProjectionPlanner().Compile(person, definitions).Plan!;
         var projected = Assert.Single(
-            new ModelDisplayValueFieldProjector().Project(person, definitions),
+            new ModelDisplayValueFieldProjector().Project(displayPlan),
             field => field.SourceField == "CompanyId");
 
         var descriptor = PersonCrudDescriptorFactory.Create();

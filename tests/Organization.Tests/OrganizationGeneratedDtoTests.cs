@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class OrganizationGeneratedDtoTests
 {
     [Fact]
-    public void PersonDto_UsesEnumClrTypeAndDisplayValueCompanion()
+    public void PersonDto_OnlyExposesDisplayCompanionOwnedByCompiledPlan()
     {
         var dtoType = typeof(OrganizationModule).Assembly.GetType("ICP.Platform.Modules.Organization.DTOs.PersonDto");
 
@@ -17,9 +17,9 @@ public class OrganizationGeneratedDtoTests
         var employmentStatusType = dtoType!.GetProperty("EmploymentStatus")!.PropertyType;
         Assert.Equal("EmploymentStatus", Nullable.GetUnderlyingType(employmentStatusType)!.Name);
         Assert.Equal(typeof(string), dtoType.GetProperty("CompanyId_DisplayValue")!.PropertyType);
-        Assert.Equal(typeof(string), dtoType.GetProperty("DepartmentId_DisplayValue")!.PropertyType);
-        Assert.Equal(typeof(string), dtoType.GetProperty("PositionId_DisplayValue")!.PropertyType);
-        Assert.Equal(typeof(string), dtoType.GetProperty("EmploymentStatus_DisplayValue")!.PropertyType);
+        Assert.Null(dtoType.GetProperty("DepartmentId_DisplayValue"));
+        Assert.Null(dtoType.GetProperty("PositionId_DisplayValue"));
+        Assert.Null(dtoType.GetProperty("EmploymentStatus_DisplayValue"));
         Assert.NotNull(dtoType.GetProperty("Id"));
     }
 

@@ -1,75 +1,55 @@
-using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Crud.Planning;
 
 /// <summary>
-/// 把 Model artifact 中已校验的 canonical display 规则投影为现有查询运行时计划。
+/// 把统一 planner 编译的 lookup display 计划投影为现有查询运行时 descriptor。
 /// </summary>
 public sealed class ModelDisplayValueFieldProjector
 {
     /// <summary>
-    /// 为源模型的 display 规则生成规范伴随字段；reference 校验目标模型，user 沿用 validator 固定的 IdentityAccount 目标。
+    /// 拒绝失败或部分编译结果，只把成功计划交给 runtime descriptor 适配。
     /// </summary>
+    /// <param name="compilationResult">统一 planner 返回的完整编译结果。</param>
+    /// <returns>成功计划中的 lookup runtime descriptors。</returns>
     public IReadOnlyList<PlatformDisplayValueField> Project(
-        ModelDefinition sourceModel,
-        IReadOnlyCollection<ModelDefinition> modelCatalog)
+        ModelDisplayProjectionCompilationResult compilationResult)
     {
-        ArgumentNullException.ThrowIfNull(sourceModel);
-        ArgumentNullException.ThrowIfNull(modelCatalog);
+        ArgumentNullException.ThrowIfNull(compilationResult);
+        if (!compilationResult.IsSuccess)
+        {
+            throw new InvalidOperationException(string.Join(
+                Environment.NewLine,
+                compilationResult.Diagnostics.Select(static diagnostic =>
+                    $"{diagnostic.Code}: {diagnostic.ModelName}.{diagnostic.FieldName}: {diagnostic.Message}")));
+        }
 
-        return sourceModel.Fields
-            .Where(static field => field.DisplayRule is not null)
-            .Select(field => ProjectField(field, modelCatalog))
+        return Project(compilationResult.Plan!);
+    }
+
+    /// <summary>
+    /// 只消费 typed lookup plan；temporal 等其他策略由各自 runtime consumer 持有。
+    /// </summary>
+    /// <param name="projectionPlan">统一 planner 成功编译的 typed display plan。</param>
+    /// <returns>仅包含 reference/user lookup 的 runtime descriptors。</returns>
+    public IReadOnlyList<PlatformDisplayValueField> Project(
+        ModelDisplayProjectionPlan projectionPlan)
+    {
+        ArgumentNullException.ThrowIfNull(projectionPlan);
+
+        return projectionPlan.Fields
+            .OfType<LookupFieldDisplayProjectionPlan>()
+            .Select(ProjectLookupField)
             .ToArray();
     }
 
-    // 每条规则只解析一次目标模型和字段；user display 已在 validator 固定目标，不再要求调用方携带跨模块 metadata。
-    private static PlatformDisplayValueField ProjectField(
-        FieldDefinition sourceField,
-        IReadOnlyCollection<ModelDefinition> modelCatalog)
-    {
-        var display = sourceField.DisplayRule!;
-        if (string.Equals(display.Type, "user", StringComparison.OrdinalIgnoreCase))
-        {
-            return new PlatformDisplayValueField(
-                $"{sourceField.Name}_DisplayValue",
-                sourceField.Name,
-                display.TargetModel,
-                display.TargetIdField,
-                display.TargetDisplayField);
-        }
-
-        var targetModel = modelCatalog.SingleOrDefault(model =>
-            string.Equals(model.Name, display.TargetModel, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException(
-                $"Reference display for field '{sourceField.Name}' targets missing target model '{display.TargetModel}'.");
-
-        RequireTargetField(sourceField, targetModel, display.TargetIdField, "id");
-        RequireTargetField(sourceField, targetModel, display.TargetDisplayField, "display");
-
-        return new PlatformDisplayValueField(
-            $"{sourceField.Name}_DisplayValue",
-            sourceField.Name,
-            targetModel.Name,
-            display.TargetIdField,
-            display.TargetDisplayField);
-    }
-
-    // 目标字段缺失必须在 descriptor 生成前稳定失败，不能推迟到逐行解析。
-    private static void RequireTargetField(
-        FieldDefinition sourceField,
-        ModelDefinition targetModel,
-        string targetFieldName,
-        string targetFieldRole)
-    {
-        if (targetModel.Fields.Any(field =>
-                string.Equals(field.Name, targetFieldName, StringComparison.Ordinal)))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"Reference display for field '{sourceField.Name}' targets model '{targetModel.Name}' without {targetFieldRole} field '{targetFieldName}'.");
-    }
+    // target 与 companion 已由 planner 闭合，这里只完成 runtime descriptor 形状适配。
+    private static PlatformDisplayValueField ProjectLookupField(LookupFieldDisplayProjectionPlan plan) =>
+        new(
+            plan.CompanionField,
+            plan.SourceField,
+            plan.TargetModel,
+            plan.TargetIdField,
+            plan.TargetDisplayField);
 }

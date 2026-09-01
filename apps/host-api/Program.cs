@@ -14,6 +14,7 @@ using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.IdentityMaintenance;
 using ICP.Platform.HostApi.PluginActivation;
 using ICP.Platform.HostApi.PluginOperations;
+using ICP.Platform.HostApi.Presentation;
 using ICP.Platform.HostApi.Readiness;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
@@ -24,6 +25,7 @@ using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.StandardData;
+using ICP.Platform.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
@@ -194,6 +196,11 @@ var mvcBuilder = builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.AddHostAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(_ => ActiveLocalizationManifest.Load(
+    Path.Combine(pluginInstallRoot, "runtime", "localization-manifest.json")));
+builder.Services.AddScoped<IRequestPresentationContextAccessor, HttpRequestPresentationContextAccessor>();
+builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
 builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
 builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 var activeControllerAssemblies = new[]
@@ -300,6 +307,7 @@ if (Directory.Exists(publicAssetsPath))
 app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<RequestPresentationContextMiddleware>();
 app.UseHostAntiforgery();
 app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();
 app.UseAuditMiddlewareIfRegistered();

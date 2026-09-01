@@ -23,6 +23,7 @@ export interface IdentitySecurityEvent {
   eventType: string;
   reason: string;
   occurredAt: string;
+  occurredAt_DisplayValue: string | null;
   traceId: string;
   actorKind: string;
   actorAccountEID?: string;

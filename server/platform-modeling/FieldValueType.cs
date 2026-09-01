@@ -6,6 +6,7 @@ public enum FieldValueType
     Description,
     Boolean,
     DateTime,
+    Instant,
     Integer,
     ObjectId,
     Enum,

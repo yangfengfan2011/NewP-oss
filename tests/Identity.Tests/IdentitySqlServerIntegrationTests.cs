@@ -318,7 +318,10 @@ public sealed class IdentitySqlServerIntegrationTests
                 Assert.Equal(2, account.Revision);
                 Assert.False(credential.IsTemporary);
                 Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(account, credential.PasswordHash, "replacement-secret"));
-                var detail = await new IdentityManagementQueryService(repository, new EfPlatformQueryExecutor(verification))
+                var detail = await new IdentityManagementQueryService(
+                        repository,
+                        new EfPlatformQueryExecutor(verification),
+                        new TestTemporalDisplayFormatter())
                     .FindAsync("User_1", 1, 1);
                 Assert.Equal(2, detail?.Events.TotalCount);
                 Assert.Equal(IdentitySecurityEventTypes.PasswordChanged, Assert.Single(detail!.Events.Items).EventType);

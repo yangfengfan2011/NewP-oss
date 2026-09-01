@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
     <ProjectReference Include="..\..\platform-query\PlatformQuery.csproj" />
+    <ProjectReference Include="..\..\platform-presentation\PlatformPresentation.csproj" />
   </ItemGroup>
 
   <ItemGroup>

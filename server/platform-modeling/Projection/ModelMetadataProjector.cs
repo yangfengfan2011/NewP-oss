@@ -119,7 +119,8 @@ public sealed class ModelMetadataProjector
                 display.Type,
                 display.TargetModel,
                 display.TargetIdField,
-                display.TargetDisplayField);
+                display.TargetDisplayField,
+                display.Format);
 
     private static FieldKind ResolveFieldKind(ModelMetadataField field)
     {
@@ -189,6 +190,7 @@ public sealed class ModelMetadataProjector
                 "user" => FieldValueType.User,
                 "bool" => FieldValueType.Boolean,
                 "datetime" => FieldValueType.DateTime,
+                "instant" => FieldValueType.Instant,
                 "description" => FieldValueType.Description,
                 "text" => FieldValueType.Text,
                 _ => FieldValueType.Text

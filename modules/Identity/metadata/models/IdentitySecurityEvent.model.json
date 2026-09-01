@@ -18,7 +18,9 @@
       },
       {
         "name": "OccurredAt",
-        "storage": { "type": "datetime" }
+        "storage": { "type": "datetime" },
+        "contract": { "valueType": "instant" },
+        "display": { "type": "instant", "format": "dateTime" }
       },
       {
         "name": "TraceId",

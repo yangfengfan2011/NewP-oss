@@ -110,6 +110,24 @@ describe('Identity account security-event summary renderer', () => {
     expect(container.querySelector('.ant-alert-error')).not.toBeNull();
   });
 
+  it('renders the server display companion without formatting the UTC raw in the browser', async () => {
+    listAccountSecurityEventsMock.mockResolvedValue({
+      items: [{
+        eid: 'event-1', eventType: 'AccountCreated', reason: 'created',
+        occurredAt: '2030-01-02T00:04:05Z', occurredAt_DisplayValue: '2030/1/2 08:04:05',
+        traceId: 'trace-1', actorKind: 'System',
+      }],
+      page: 1,
+      pageSize: 20,
+      totalCount: 1,
+    });
+
+    await renderSummary();
+    await vi.waitFor(() => expect(container.textContent).toContain('2030/1/2 08:04:05'));
+
+    expect(container.textContent).not.toContain('2030-01-02T00:04:05Z');
+  });
+
   it('loads the requested event page independently', async () => {
     listAccountSecurityEventsMock
       .mockResolvedValueOnce({
@@ -183,6 +201,7 @@ describe('Identity account security-event summary renderer', () => {
     await act(async () => pendingByAccount.get('User_B')!({
       items: [{
         eid: 'event-b', eventType: 'AccountBChanged', reason: 'B', occurredAt: '2030-01-02T00:00:00Z',
+        occurredAt_DisplayValue: null,
         traceId: 'trace-b', actorKind: 'IdentityAccount',
       }],
       page: 1,
@@ -194,6 +213,7 @@ describe('Identity account security-event summary renderer', () => {
     await act(async () => pendingByAccount.get('User_A')!({
       items: [{
         eid: 'event-a', eventType: 'AccountAChanged', reason: 'A', occurredAt: '2030-01-01T00:00:00Z',
+        occurredAt_DisplayValue: null,
         traceId: 'trace-a', actorKind: 'IdentityAccount',
       }],
       page: 1,
@@ -233,6 +253,7 @@ describe('Identity account security-event summary renderer', () => {
       items: [{
         eid: 'event-before-refresh', eventType: 'AccountDisabled', reason: 'review',
         occurredAt: '2030-01-02T00:00:00Z', traceId: 'trace-before', actorKind: 'IdentityAccount',
+        occurredAt_DisplayValue: null,
       }],
       page: 1,
       pageSize: 20,
@@ -253,6 +274,7 @@ describe('Identity account security-event summary renderer', () => {
       items: [{
         eid: 'event-after-refresh', eventType: 'AccountEnabled', reason: 'approved',
         occurredAt: '2030-01-03T00:00:00Z', traceId: 'trace-after', actorKind: 'IdentityAccount',
+        occurredAt_DisplayValue: null,
       }],
       page: 1,
       pageSize: 20,

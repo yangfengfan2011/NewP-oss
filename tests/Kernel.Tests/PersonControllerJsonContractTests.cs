@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Abstractions;
+using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -126,7 +127,10 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
             var identity = new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, "person-json-contract-subject")],
+                [
+                    new Claim(ClaimTypes.NameIdentifier, "person-json-contract-subject"),
+                    new Claim(AuthenticationSessionClaimTypes.TimeZoneId, "Etc/UTC")
+                ],
                 SchemeName);
             var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
             return Task.FromResult(AuthenticateResult.Success(ticket));

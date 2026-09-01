@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  installPlatformRequestLocaleProvider,
   invalidatePlatformAntiforgeryToken,
   platformFetch,
 } from './platformFetch';
@@ -36,6 +37,21 @@ describe('platformFetch', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/test?value=1', {
       credentials: 'include',
     });
+  });
+
+  it('attaches the controlled request locale to ordinary reads', async () => {
+    const response = new Response(JSON.stringify({ value: 1 }), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal('fetch', fetchMock);
+    const uninstall = installPlatformRequestLocaleProvider(() => 'en-US');
+
+    await platformFetch('/api/test', {
+      headers: { 'X-ICP-Locale': 'fr-FR' },
+    });
+
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.headers.get('X-ICP-Locale')).toBe('en-US');
+    uninstall();
   });
 
   it('obtains and attaches the Host antiforgery token to cookie writes', async () => {

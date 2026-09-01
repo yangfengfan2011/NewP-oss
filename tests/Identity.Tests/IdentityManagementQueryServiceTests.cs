@@ -1,5 +1,7 @@
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
+using ICP.Platform.Modules.Identity.Models;
+using ICP.Platform.Presentation;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
@@ -38,7 +40,10 @@ public sealed class IdentityManagementQueryServiceTests
             SortDirection: "desc",
             ResponseFields: [],
             RequestedDisplayFields: []));
-        var service = new IdentityManagementQueryService(new InMemoryIdentityRepository(), executor);
+        var service = new IdentityManagementQueryService(
+            new InMemoryIdentityRepository(),
+            executor,
+            new TestTemporalDisplayFormatter());
 
         var result = await service.SearchAsync(new IdentityManagementAccountSearch(
             Query: "ali",
@@ -91,7 +96,10 @@ public sealed class IdentityManagementQueryServiceTests
             "asc",
             [],
             []));
-        var service = new IdentityManagementQueryService(new InMemoryIdentityRepository(), executor);
+        var service = new IdentityManagementQueryService(
+            new InMemoryIdentityRepository(),
+            executor,
+            new TestTemporalDisplayFormatter());
 
         await service.SearchAsync(new IdentityManagementAccountSearch(null, null, null, null, 1, 20));
 
@@ -130,12 +138,52 @@ public sealed class IdentityManagementQueryServiceTests
             UpdatedBy = "User_1",
             UpdatedAt = DateTime.UtcNow
         });
-        var service = new IdentityManagementQueryService(repository, new UnusedPlatformQueryExecutor());
+        var service = new IdentityManagementQueryService(
+            repository,
+            new UnusedPlatformQueryExecutor(),
+            new TestTemporalDisplayFormatter());
 
         var account = await service.FindAccountAsync("User_2");
 
         Assert.Equal(IdentityAccountStatus.Deleted, account?.Status);
         Assert.Equal(0, repository.SecurityEventSearchCount);
+    }
+
+    [Fact]
+    public async Task SearchSecurityEventsAsync_PreservesUtcRawAndAddsPlatformDisplayCompanion()
+    {
+        var occurredAt = new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc);
+        var repository = new InMemoryIdentityRepository();
+        repository.Accounts.Add(new IdentityAccount
+        {
+            EID = "User_2",
+            ECODE = "alice",
+            NormalizedECODE = "ALICE",
+            ENAME = "Alice",
+            Status = IdentityAccountStatus.Enabled
+        });
+        repository.SecurityEvents.Add(new IdentitySecurityEvent
+        {
+            EID = "Event_1",
+            TargetAccountEID = "User_2",
+            EventType = "AccountCreated",
+            Reason = "created",
+            OccurredAt = occurredAt,
+            TraceId = "trace-1",
+            ActorKind = IdentitySecurityActorKind.System
+        });
+        var formatter = new RecordingTemporalDisplayFormatter("2030/1/2 08:04:05");
+        var service = new IdentityManagementQueryService(
+            repository,
+            new UnusedPlatformQueryExecutor(),
+            formatter);
+
+        var result = await service.SearchSecurityEventsAsync("User_2", 1, 20);
+
+        var item = Assert.Single(result!.Items);
+        Assert.Equal(occurredAt, item.OccurredAt);
+        Assert.Equal("2030/1/2 08:04:05", item.OccurredAtDisplayValue);
+        Assert.Equal(occurredAt, formatter.LastInstantUtc);
     }
 
     private sealed class RecordingPlatformQueryExecutor(PlatformQueryResult result) : IPlatformQueryExecutor
@@ -152,6 +200,17 @@ public sealed class IdentityManagementQueryServiceTests
             Descriptor = descriptor;
             Request = request;
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class RecordingTemporalDisplayFormatter(string displayValue) : ITemporalDisplayFormatter
+    {
+        public DateTime? LastInstantUtc { get; private set; }
+
+        public string FormatInstant(DateTime instantUtc)
+        {
+            LastInstantUtc = instantUtc;
+            return displayValue;
         }
     }
 }

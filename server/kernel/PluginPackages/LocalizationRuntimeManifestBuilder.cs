@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace ICP.Platform.Kernel.PluginPackages;
@@ -41,6 +42,13 @@ public class LocalizationRuntimeManifestBuilder
             ?? throw new JsonException($"Localization manifest '{languagesManifestPath}' deserialized to null.");
 
         var supportedLanguages = NormalizeSupportedLanguages(languagesManifest, languagesManifestPath);
+        if (string.IsNullOrWhiteSpace(languagesManifest.DefaultLanguage)
+            || !supportedLanguages.ContainsKey(languagesManifest.DefaultLanguage))
+        {
+            throw new JsonException(
+                $"Localization manifest '{languagesManifestPath}' default language '{languagesManifest.DefaultLanguage}' must exist in supportedLanguages.");
+        }
+
         var catalogs = supportedLanguages.Values.ToDictionary(
             language => language.Code,
             _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
@@ -229,10 +237,33 @@ public class LocalizationRuntimeManifestBuilder
                 throw new JsonException($"Localization manifest '{languagesManifestPath}' contains a supported language with an empty code.");
             }
 
+            if (string.IsNullOrWhiteSpace(language.Locale))
+            {
+                throw new JsonException($"Localization manifest '{languagesManifestPath}' language '{language.Code}' has an empty canonical locale.");
+            }
+
+            string canonicalLocale;
+            try
+            {
+                canonicalLocale = CultureInfo.GetCultureInfo(language.Locale).Name;
+            }
+            catch (CultureNotFoundException)
+            {
+                throw new JsonException(
+                    $"Localization manifest '{languagesManifestPath}' language '{language.Code}' has unsupported canonical locale '{language.Locale}'.");
+            }
+
+            if (!string.Equals(language.Locale, canonicalLocale, StringComparison.Ordinal))
+            {
+                throw new JsonException(
+                    $"Localization manifest '{languagesManifestPath}' language '{language.Code}' has non-canonical locale '{language.Locale}'; use '{canonicalLocale}'.");
+            }
+
             supportedLanguages[language.Code] = new LocalizationLanguage
             {
                 Code = language.Code,
-                DisplayName = language.DisplayName ?? string.Empty
+                DisplayName = language.DisplayName ?? string.Empty,
+                Locale = language.Locale
             };
         }
 
@@ -252,7 +283,8 @@ public class LocalizationRuntimeManifestBuilder
                 .Select(language => new
                 {
                     code = language.Code,
-                    displayName = language.DisplayName
+                    displayName = language.DisplayName,
+                    locale = language.Locale
                 })
                 .ToArray(),
             catalogs = catalogs
@@ -295,5 +327,7 @@ public class LocalizationRuntimeManifestBuilder
         public string Code { get; set; } = string.Empty;
 
         public string DisplayName { get; set; } = string.Empty;
+
+        public string Locale { get; set; } = string.Empty;
     }
 }

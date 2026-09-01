@@ -288,7 +288,10 @@ public class UnifiedPluginPackageTestData : IDisposable
                                 code = platformDefaultLanguage,
                                 displayName = platformDefaultLanguage.Equals("en", StringComparison.OrdinalIgnoreCase)
                                     ? "English"
-                                    : "简体中文"
+                                    : "简体中文",
+                                locale = platformDefaultLanguage.Equals("en", StringComparison.OrdinalIgnoreCase)
+                                    ? "en-US"
+                                    : "zh-CN"
                             }
                         }
                     },

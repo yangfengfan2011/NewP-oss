@@ -3,6 +3,7 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 export interface LocalizationLanguage {
   code: string;
   displayName: string;
+  locale?: string;
 }
 
 export type LocalizationCatalog = Record<string, string>;

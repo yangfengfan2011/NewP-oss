@@ -10,4 +10,6 @@ public sealed class ModelMetadataDisplayRule
     public string TargetIdField { get; init; } = string.Empty;
 
     public string TargetDisplayField { get; init; } = string.Empty;
+
+    public string Format { get; init; } = string.Empty;
 }

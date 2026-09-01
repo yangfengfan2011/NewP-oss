@@ -5,4 +5,5 @@ public sealed record FieldDisplayRuleDefinition(
     string Type,
     string TargetModel,
     string TargetIdField,
-    string TargetDisplayField);
+    string TargetDisplayField,
+    string Format = "");

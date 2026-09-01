@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 
 namespace ICP.Platform.Persistence.Planning;
@@ -38,7 +39,9 @@ public static class PersistenceModelDigest
                         field.Name,
                         field.StoreName,
                         kind = field.Kind.ToString(),
-                        valueType = field.ValueType.ToString(),
+                        valueType = (field.ValueType == FieldValueType.Instant
+                            ? FieldValueType.DateTime
+                            : field.ValueType).ToString(),
                         field.StoreType,
                         field.Required,
                         field.IsPrimaryKey,

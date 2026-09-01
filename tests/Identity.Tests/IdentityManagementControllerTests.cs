@@ -110,7 +110,22 @@ public sealed class IdentityManagementControllerTests
     {
         var queries = new RecordingManagementQueryService
         {
-            SecurityEventResult = new IdentityManagementSecurityEventPage([], 2, 10, 23)
+            SecurityEventResult = new IdentityManagementSecurityEventPage(
+            [
+                new IdentityManagementSecurityEventView(
+                    "event-1",
+                    "AccountCreated",
+                    "created",
+                    new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc),
+                    "2030/1/2 08:04:05",
+                    "trace-1",
+                    IdentitySecurityActorKind.System,
+                    null,
+                    "system",
+                    new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc),
+                    "system",
+                    new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc))
+            ], 2, 10, 23)
         };
         var controller = new IdentityAccountsController(queries, new UnusedAccountApplicationService());
 
@@ -119,6 +134,9 @@ public sealed class IdentityManagementControllerTests
         var response = Assert.IsType<OkObjectResult>(result.Result);
         var events = Assert.IsType<IdentitySecurityEventPageResponse>(response.Value);
         Assert.Equal(23, events.TotalCount);
+        var item = Assert.Single(events.Items);
+        Assert.Equal(new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc), item.OccurredAt);
+        Assert.Equal("2030/1/2 08:04:05", item.OccurredAt_DisplayValue);
         Assert.Equal("account-1", queries.LastEventAccountEid);
         Assert.Equal(2, queries.LastEventPage);
         Assert.Equal(10, queries.LastEventPageSize);
@@ -300,7 +318,10 @@ public sealed class IdentityManagementControllerTests
             });
         }
 
-        var detail = await new IdentityManagementQueryService(repository, new UnusedPlatformQueryExecutor())
+        var detail = await new IdentityManagementQueryService(
+                repository,
+                new UnusedPlatformQueryExecutor(),
+                new TestTemporalDisplayFormatter())
             .FindAsync("deleted-1", eventPage: 2, eventPageSize: 2);
 
         Assert.Equal(IdentityAccountStatus.Deleted, detail?.Account.Status);

@@ -2,10 +2,25 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const ANTIFORGERY_ENDPOINT = '/api/auth/antiforgery-token';
 const ANTIFORGERY_HEADER = 'X-CSRF-TOKEN';
 const ANTIFORGERY_FAILURE_CODE = 'ANTIFORGERY_TOKEN_INVALID';
+const REQUEST_LOCALE_HEADER = 'X-ICP-Locale';
 
 let cachedRequestToken: string | undefined;
 let tokenGeneration = 0;
 let requestTokenPromise: { generation: number; promise: Promise<string> } | undefined;
+
+type PlatformRequestLocaleState = {
+  provider?: () => string;
+};
+
+type PlatformGlobal = typeof globalThis & {
+  __icpPlatformRequestLocaleState__?: PlatformRequestLocaleState;
+};
+
+function requestLocaleState(): PlatformRequestLocaleState {
+  const platformGlobal = globalThis as PlatformGlobal;
+  platformGlobal.__icpPlatformRequestLocaleState__ ??= {};
+  return platformGlobal.__icpPlatformRequestLocaleState__;
+}
 
 interface AntiforgeryTokenResponse {
   requestToken: string;
@@ -13,6 +28,16 @@ interface AntiforgeryTokenResponse {
 
 interface PlatformProblemDetails {
   code?: string;
+}
+
+export function installPlatformRequestLocaleProvider(provider: () => string): () => void {
+  requestLocaleState().provider = provider;
+  return () => {
+    const state = requestLocaleState();
+    if (state.provider === provider) {
+      state.provider = undefined;
+    }
+  };
 }
 
 export function invalidatePlatformAntiforgeryToken(): void {
@@ -87,10 +112,20 @@ export async function platformFetch(
   const requestInput = typeof input === 'string'
     ? new URL(input, typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
     : input;
-  const source = new Request(requestInput, init);
+  let source = new Request(requestInput, init);
+  const requestLocale = requestLocaleState().provider?.();
+  if (requestLocale) {
+    const headers = new Headers(source.headers);
+    headers.set(REQUEST_LOCALE_HEADER, requestLocale);
+    source = new Request(source, { headers });
+  }
   const isWrite = WRITE_METHODS.has(source.method.toUpperCase());
 
   if (!isWrite) {
+    if (requestLocale) {
+      return fetch(new Request(source, { credentials: 'include' }));
+    }
+
     return fetch(input, {
       ...init,
       credentials: 'include',

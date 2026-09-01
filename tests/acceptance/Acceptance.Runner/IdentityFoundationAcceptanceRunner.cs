@@ -411,6 +411,22 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         {
             throw new InvalidOperationException("One-time secret remained in the browser after closing the result.");
         }
+        var browserAccountEid = await page.EvaluateAsync<string>(
+            """
+            async (accountCode) => {
+              const response = await fetch(`/api/identity/accounts?query=${encodeURIComponent(accountCode)}&page=1&pageSize=20`);
+              if (!response.ok) throw new Error(`Identity account lookup failed (${response.status}).`);
+              const payload = await response.json();
+              return payload.items[0].eid;
+            }
+            """,
+            browserCode);
+        await page.GotoAsync(
+            $"http://127.0.0.1:{_shellPort}/identity/accounts/{Uri.EscapeDataString(browserAccountEid)}",
+            new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await page.GetByText("安全事件", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+        await page.Locator(".ant-card").Filter(new LocatorFilterOptions { HasText = "安全事件" })
+            .Locator("tbody tr td").First.WaitForAsync();
         await using var restrictedContext = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             Locale = "zh-CN",
@@ -437,6 +453,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             assertions = new[]
             {
                 "identity-management-route-visible-to-local-administrator",
+                "account-security-event-time-visible",
                 "one-time-secret-destroyed-after-close",
                 "temporary-session-route-guard",
                 "browser-password-change-establishes-regular-session"

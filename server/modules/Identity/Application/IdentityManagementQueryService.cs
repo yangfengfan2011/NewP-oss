@@ -4,6 +4,7 @@ using ICP.Platform.Modules.Identity.Repositories;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
+using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Identity.Application;
 
@@ -36,6 +37,7 @@ public sealed record IdentityManagementSecurityEventView(
     string EventType,
     string Reason,
     DateTime OccurredAt,
+    string? OccurredAtDisplayValue,
     string TraceId,
     IdentitySecurityActorKind ActorKind,
     string? ActorAccountEid,
@@ -100,16 +102,19 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
     private static readonly PlatformQueryDescriptor AccountListDescriptor = CreateAccountListDescriptor();
     private readonly IIdentityRepository _repository;
     private readonly IPlatformQueryExecutor _queryExecutor;
+    private readonly ITemporalDisplayFormatter _temporalDisplayFormatter;
 
     /// <summary>
     /// 创建 Identity 管理查询服务；账号列表由平台查询内核执行，详情及安全事件仍由 Identity 仓储拥有。
     /// </summary>
     public IdentityManagementQueryService(
         IIdentityRepository repository,
-        IPlatformQueryExecutor queryExecutor)
+        IPlatformQueryExecutor queryExecutor,
+        ITemporalDisplayFormatter temporalDisplayFormatter)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
+        _temporalDisplayFormatter = temporalDisplayFormatter;
     }
 
     /// <summary>
@@ -327,11 +332,12 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         DefaultSortDirection = "asc"
     };
 
-    private static IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent) => new(
+    private IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent) => new(
         securityEvent.EID,
         securityEvent.EventType,
         securityEvent.Reason,
         securityEvent.OccurredAt,
+        _temporalDisplayFormatter.FormatInstant(securityEvent.OccurredAt),
         securityEvent.TraceId,
         securityEvent.ActorKind,
         securityEvent.ActorAccountEID,

@@ -3,6 +3,7 @@ export type RuntimeLocalizationManifest = {
   supportedLanguages: Array<{
     code: string;
     displayName: string;
+    locale: string;
   }>;
   catalogs: Record<string, Record<string, string>>;
 };
@@ -16,6 +17,7 @@ export function getFallbackRuntimeLocalizationManifest(): RuntimeLocalizationMan
       {
         code: 'zhs',
         displayName: '简体中文',
+        locale: 'zh-CN',
       },
     ],
     catalogs: {

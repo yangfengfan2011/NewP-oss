@@ -37,7 +37,10 @@ public sealed class EfIdentityRepositoryTests
         await context.SaveChangesAsync();
         sql.Clear();
 
-        var result = await new IdentityManagementQueryService(repository, new EfPlatformQueryExecutor(context))
+        var result = await new IdentityManagementQueryService(
+                repository,
+                new EfPlatformQueryExecutor(context),
+                new TestTemporalDisplayFormatter())
             .SearchAsync(new IdentityManagementAccountSearch(
                 Query: "A",
                 Status: null,

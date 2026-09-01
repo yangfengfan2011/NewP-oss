@@ -44,6 +44,40 @@ public sealed class PersistenceModelDigestTests
             PersistenceModelDigest.Compute([withDisplayRule]));
     }
 
+    [Fact]
+    public void Compute_InstantAndDateTimeWithSameStorage_DigestDoNotChange()
+    {
+        var dateTimeModel = BuildModel(["Code", "Name"]);
+        var instantModel = dateTimeModel with
+        {
+            Fields = dateTimeModel.Fields
+                .Select(field => field.Name == "Code"
+                    ? field with
+                    {
+                        ValueType = FieldValueType.Instant,
+                        StoreType = "datetime"
+                    }
+                    : field)
+                .ToArray()
+        };
+        dateTimeModel = dateTimeModel with
+        {
+            Fields = dateTimeModel.Fields
+                .Select(field => field.Name == "Code"
+                    ? field with
+                    {
+                        ValueType = FieldValueType.DateTime,
+                        StoreType = "datetime"
+                    }
+                    : field)
+                .ToArray()
+        };
+
+        Assert.Equal(
+            PersistenceModelDigest.Compute([dateTimeModel]),
+            PersistenceModelDigest.Compute([instantModel]));
+    }
+
     private static ModelDefinition BuildModel(IReadOnlyList<string> indexFields) =>
         new(
             "Asset",

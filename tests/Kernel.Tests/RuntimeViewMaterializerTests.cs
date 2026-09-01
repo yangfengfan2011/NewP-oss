@@ -629,8 +629,8 @@ public class RuntimeViewMaterializerTests : IDisposable
                     defaultLanguage = "zhs",
                     supportedLanguages = new[]
                     {
-                        new { code = "zhs", displayName = "简体中文" },
-                        new { code = "en", displayName = "English" }
+                        new { code = "zhs", displayName = "简体中文", locale = "zh-CN" },
+                        new { code = "en", displayName = "English", locale = "en-US" }
                     }
                 },
                 new JsonSerializerOptions { WriteIndented = true }));

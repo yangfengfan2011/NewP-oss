@@ -10,7 +10,7 @@ import UiShowcase from '../pages/UiShowcase';
 
 const runtimeLocalizationManifest = {
   defaultLanguage: 'zhs',
-  supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
+  supportedLanguages: [{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }],
   catalogs: {
     zhs: {},
   },
@@ -18,7 +18,7 @@ const runtimeLocalizationManifest = {
 
 const localizationProps = {
   defaultLanguage: 'zhs',
-  supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
+  supportedLanguages: [{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }],
   catalogs: {
     zhs: {},
   },

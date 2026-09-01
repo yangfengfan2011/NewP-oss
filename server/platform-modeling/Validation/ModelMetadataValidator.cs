@@ -152,7 +152,11 @@ public sealed class ModelMetadataValidator
                     $"Field '{field.Name}' must match display.type '{display.Type}' source semantics.");
             }
 
-            if (string.Equals(display.Type, "user", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(display.Type, "instant", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateInstantDisplayRule(field.Name, display);
+            }
+            else if (string.Equals(display.Type, "user", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateUserDisplayTarget(field.Name, display);
             }
@@ -181,10 +185,11 @@ public sealed class ModelMetadataValidator
                 && string.Equals(field.UiType, "lookup", StringComparison.OrdinalIgnoreCase));
     }
 
-    // display.type 目前只允许 reference 与 user；新增类型前必须先闭合 source 语义、target 约束与 runtime consumer。
+    // display.type 只接受已闭合 source 语义与 runtime consumer 的共享策略。
     private static bool IsSupportedDisplayType(string displayType) =>
         string.Equals(displayType, "reference", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(displayType, "user", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(displayType, "user", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(displayType, "instant", StringComparison.OrdinalIgnoreCase);
 
     // reference 只能来自真实引用字段；user 只能来自 contract.valueType=user 的 raw 字段，避免 authoring 随意声明 companion。
     private static bool IsDisplaySourceField(ModelMetadataField field, string displayType)
@@ -194,7 +199,28 @@ public sealed class ModelMetadataValidator
             return IsReferenceField(field);
         }
 
+        if (string.Equals(displayType, "instant", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(field.Storage?.Type, "datetime", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(field.Contract?.ValueType, "instant", StringComparison.OrdinalIgnoreCase);
+        }
+
         return string.Equals(field.Contract?.ValueType, "user", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ValidateInstantDisplayRule(string fieldName, ModelMetadataDisplayRule display)
+    {
+        if ((string.Equals(display.Format, "dateTime", StringComparison.Ordinal)
+                || string.Equals(display.Format, "date", StringComparison.Ordinal))
+            && string.IsNullOrWhiteSpace(display.TargetModel)
+            && string.IsNullOrWhiteSpace(display.TargetIdField)
+            && string.IsNullOrWhiteSpace(display.TargetDisplayField))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Field '{fieldName}' instant display must use format 'dateTime' or 'date' without a target model.");
     }
 
     // user display 的公共 seam 固定到 IdentityAccount/EID/ENAME，避免各模块各自声明 user target 破坏解析 owner 唯一性。

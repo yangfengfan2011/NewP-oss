@@ -83,6 +83,7 @@ public sealed class EfModelProjector
         {
             FieldValueType.Boolean => typeof(bool),
             FieldValueType.DateTime => typeof(DateTime),
+            FieldValueType.Instant => typeof(DateTime),
             FieldValueType.Integer => typeof(long),
             _ => typeof(string)
         };

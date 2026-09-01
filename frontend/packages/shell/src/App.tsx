@@ -6,6 +6,7 @@ import {
   LocalizationProvider,
   PlatformQueryProvider,
   resolveAuthenticationDestination,
+  useLocalization,
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
@@ -22,6 +23,7 @@ import {
   loadRuntimeLocalizationManifest,
   type RuntimeLocalizationManifest,
 } from './localization/runtimeLocalizationManifest';
+import { PlatformRequestLocaleBridge } from './localization/PlatformRequestLocaleBridge';
 import { RuntimeMetadataProvider } from './metadata/runtimeMetadataContext';
 import {
   getPreloadedRuntimeMetadata,
@@ -106,8 +108,9 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
 
 function AuthScopedPlatformQueryProvider({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const { currentLanguage } = useLocalization();
   return (
-    <PlatformQueryProvider scopeKey={auth.user?.id ?? 'anonymous'}>
+    <PlatformQueryProvider scopeKey={`${auth.user?.id ?? 'anonymous'}:${currentLanguage}`}>
       {children}
     </PlatformQueryProvider>
   );
@@ -324,22 +327,24 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
           supportedLanguages={localizationManifest.supportedLanguages}
           catalogs={localizationManifest.catalogs}
         >
-          <AuthProvider initialUser={initialUser}>
-            <AuthScopedPlatformQueryProvider>
-              <PlatformProvider
-                uiConfig={shellUiConfig}
-                shellView={shellView}
-                setShellView={setShellView}
-                canSwitchShellView={canSwitchShellView}
-              >
-                <RuntimeMetadataProvider value={runtimeMetadata}>
-                  <AuthorizationGate>
-                    <AppRoutes />
-                  </AuthorizationGate>
-                </RuntimeMetadataProvider>
-              </PlatformProvider>
-            </AuthScopedPlatformQueryProvider>
-          </AuthProvider>
+          <PlatformRequestLocaleBridge>
+            <AuthProvider initialUser={initialUser}>
+              <AuthScopedPlatformQueryProvider>
+                <PlatformProvider
+                  uiConfig={shellUiConfig}
+                  shellView={shellView}
+                  setShellView={setShellView}
+                  canSwitchShellView={canSwitchShellView}
+                >
+                  <RuntimeMetadataProvider value={runtimeMetadata}>
+                    <AuthorizationGate>
+                      <AppRoutes />
+                    </AuthorizationGate>
+                  </RuntimeMetadataProvider>
+                </PlatformProvider>
+              </AuthScopedPlatformQueryProvider>
+            </AuthProvider>
+          </PlatformRequestLocaleBridge>
         </LocalizationProvider>
       </BrowserRouter>
     </ShellThemeProvider>

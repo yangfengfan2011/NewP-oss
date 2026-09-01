@@ -88,6 +88,8 @@ public sealed class ModelDtoGenerator
     {
         return field.Kind == FieldKind.Reference
             || field.ValueType == FieldValueType.Enum
+            || (field.ValueType == FieldValueType.Instant
+                && string.Equals(field.DisplayRule?.Type, "instant", StringComparison.OrdinalIgnoreCase))
             || (field.ValueType == FieldValueType.User
                 && string.Equals(field.DisplayRule?.Type, "user", StringComparison.OrdinalIgnoreCase));
     }
@@ -116,6 +118,7 @@ public sealed class ModelDtoGenerator
         {
             FieldValueType.Boolean => "bool",
             FieldValueType.DateTime => "DateTime",
+            FieldValueType.Instant => "DateTime",
             FieldValueType.Integer => ResolveIntegerType(field.StoreType),
             FieldValueType.ObjectId => ResolveObjectIdType(field.StoreType),
             FieldValueType.Enum => ResolveEnumType(field, enumClrTypeMap),

@@ -84,6 +84,10 @@ public sealed class IdentityFoundationModelTests
 
         var securityEvent = Assert.Single(definitions, static model => model.Name == "IdentitySecurityEvent");
         AssertAuditFields(securityEvent);
+        var occurredAt = Assert.Single(securityEvent.Fields, static field => field.Name == "OccurredAt");
+        Assert.Equal(FieldValueType.Instant, occurredAt.ValueType);
+        Assert.Equal("instant", occurredAt.DisplayRule?.Type);
+        Assert.Equal("dateTime", occurredAt.DisplayRule?.Format);
         Assert.Contains(securityEvent.ForeignKeys, static foreignKey =>
             foreignKey is { Name: "FK_IdentitySecurityEvent_TargetIdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
     }

@@ -38,20 +38,103 @@ New-Item -ItemType Directory -Path $runDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $msBuildDiagnosticDirectory -Force | Out-Null
 $env:MSBUILDDEBUGPATH = $msBuildDiagnosticDirectory
 
-# 工作树快照只用于归属，不用于判定。取 porcelain 原文而不是布尔值，
-# 是为了能分辨「一直脏」和「跑的过程中又变了」——后者才意味着结论无法归属。
+# 工作树快照只用于归属，不用于判定。porcelain 只负责计数；Digest 使用临时 index
+# 生成真实 tree hash，避免同一个已脏路径内容改变后仍被误判为没有变化。
+# 临时 index 从 HEAD 开始吸收当前工作树，不读取或修改用户的真实暂存区。
 function Get-WorkingTreeSnapshot {
     $entries = @(& git -C $repoRoot status --porcelain)
-    return [ordered]@{
-        Dirty = $entries.Count -gt 0
-        EntryCount = $entries.Count
-        Digest = ($entries -join "`n")
+    $temporaryIndexPath = Join-Path $runDirectory ("candidate-{0}.index" -f ([guid]::NewGuid().ToString("N")))
+    $temporaryObjectDirectory = $temporaryIndexPath + "-objects"
+    $objectDirectory = (& git -C $repoRoot rev-parse --git-path objects)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($objectDirectory)) {
+        throw "VERIFY_CANDIDATE_SNAPSHOT_FAILED: git object directory is unavailable"
+    }
+    if (-not [System.IO.Path]::IsPathRooted($objectDirectory)) {
+        $objectDirectory = Join-Path $repoRoot $objectDirectory
+    }
+    $objectDirectory = [System.IO.Path]::GetFullPath($objectDirectory)
+
+    $previousGitIndexFile = $env:GIT_INDEX_FILE
+    $previousGitObjectDirectory = $env:GIT_OBJECT_DIRECTORY
+    $previousGitAlternateObjectDirectories = $env:GIT_ALTERNATE_OBJECT_DIRECTORIES
+    try {
+        New-Item -ItemType Directory -Path $temporaryObjectDirectory -Force | Out-Null
+        $env:GIT_INDEX_FILE = $temporaryIndexPath
+        $env:GIT_OBJECT_DIRECTORY = $temporaryObjectDirectory
+        $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = if ([string]::IsNullOrWhiteSpace($previousGitAlternateObjectDirectories)) {
+            $objectDirectory
+        }
+        else {
+            $objectDirectory + [System.IO.Path]::PathSeparator + $previousGitAlternateObjectDirectories
+        }
+
+        $readTreeOutput = @(& git -C $repoRoot read-tree HEAD 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "VERIFY_CANDIDATE_SNAPSHOT_FAILED: git read-tree exited with code $LASTEXITCODE - $($readTreeOutput -join ' ')"
+        }
+
+        $addOutput = @(& git -C $repoRoot add -A -- . 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "VERIFY_CANDIDATE_SNAPSHOT_FAILED: git add exited with code $LASTEXITCODE - $($addOutput -join ' ')"
+        }
+
+        $writeTreeOutput = @(& git -C $repoRoot write-tree 2>&1)
+        $treeHash = $writeTreeOutput | Select-Object -Last 1
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($treeHash)) {
+            throw "VERIFY_CANDIDATE_SNAPSHOT_FAILED: git write-tree exited with code $LASTEXITCODE - $($writeTreeOutput -join ' ')"
+        }
+
+        return [ordered]@{
+            Dirty = $entries.Count -gt 0
+            EntryCount = $entries.Count
+            Digest = $treeHash.Trim()
+        }
+    }
+    finally {
+        if ($null -eq $previousGitIndexFile) {
+            Remove-Item Env:\GIT_INDEX_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GIT_INDEX_FILE = $previousGitIndexFile
+        }
+        if ($null -eq $previousGitObjectDirectory) {
+            Remove-Item Env:\GIT_OBJECT_DIRECTORY -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GIT_OBJECT_DIRECTORY = $previousGitObjectDirectory
+        }
+        if ($null -eq $previousGitAlternateObjectDirectories) {
+            Remove-Item Env:\GIT_ALTERNATE_OBJECT_DIRECTORIES -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = $previousGitAlternateObjectDirectories
+        }
+        Remove-Item -LiteralPath $temporaryIndexPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath ($temporaryIndexPath + ".lock") -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $temporaryObjectDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 快照失败不许拦住验证。这一段只负责让结论可追溯，它自己出问题时应当留下
+# 「这次无法归属」的记录，而不是把整轮验证一起带走——尤其是它跑在写出第一份
+# result.json 之前，抛出去会连失败记录都没有。归属靠记录，不靠设卡。
+function Get-WorkingTreeSnapshotOrUnavailable {
+    try {
+        return Get-WorkingTreeSnapshot
+    }
+    catch {
+        return [ordered]@{
+            Dirty = $null
+            EntryCount = $null
+            Digest = $null
+            Diagnostic = $_.Exception.Message
+        }
     }
 }
 
 $headCommit = (& git -C $repoRoot rev-parse HEAD)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($headCommit)) { $headCommit = "unknown" }
-$startSnapshot = Get-WorkingTreeSnapshot
+$startSnapshot = Get-WorkingTreeSnapshotOrUnavailable
 
 function Save-VerificationResult {
     param(
@@ -71,9 +154,16 @@ function Save-VerificationResult {
     # porcelain 前后可以完全一样，只看工作树察觉不到候选已经换了。
     $treeChangedDuringRun = $null
     $headChangedDuringRun = $null
+    $snapshotDiagnostic = $startSnapshot.Diagnostic
     if ($Status -ne "running") {
-        $treeChangedDuringRun = -not [string]::Equals(
-            (Get-WorkingTreeSnapshot).Digest, $startSnapshot.Digest, [StringComparison]::Ordinal)
+        $endSnapshot = Get-WorkingTreeSnapshotOrUnavailable
+        if ($null -eq $snapshotDiagnostic) { $snapshotDiagnostic = $endSnapshot.Diagnostic }
+        # 任一端取不到就留 null：拿不到 digest 时说「没变过」是编造，
+        # 而 snapshotDiagnostic 会说明为什么答不上来。
+        if ($null -ne $startSnapshot.Digest -and $null -ne $endSnapshot.Digest) {
+            $treeChangedDuringRun = -not [string]::Equals(
+                $endSnapshot.Digest, $startSnapshot.Digest, [StringComparison]::Ordinal)
+        }
         $endHeadCommit = (& git -C $repoRoot rev-parse HEAD)
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($endHeadCommit)) { $endHeadCommit = "unknown" }
         $headChangedDuringRun = -not [string]::Equals($endHeadCommit, $headCommit, [StringComparison]::Ordinal)
@@ -90,6 +180,7 @@ function Save-VerificationResult {
             dirtyEntryCount = $startSnapshot.EntryCount
             treeChangedDuringRun = $treeChangedDuringRun
             headChangedDuringRun = $headChangedDuringRun
+            snapshotDiagnostic = $snapshotDiagnostic
         }
         startedAtUtc = $startedAtUtc.ToString("O")
         completedAtUtc = $completedAtUtc

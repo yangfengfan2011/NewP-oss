@@ -40,7 +40,7 @@ public sealed class EfIdentityRepositoryTests
         var result = await new IdentityManagementQueryService(
                 repository,
                 new EfPlatformQueryExecutor(context),
-                new TestTemporalDisplayFormatter())
+                new TestTemporalDisplayProjectionExecutor())
             .SearchAsync(new IdentityManagementAccountSearch(
                 Query: "A",
                 Status: null,

@@ -321,7 +321,7 @@ public sealed class IdentitySqlServerIntegrationTests
                 var detail = await new IdentityManagementQueryService(
                         repository,
                         new EfPlatformQueryExecutor(verification),
-                        new TestTemporalDisplayFormatter())
+                        new TestTemporalDisplayProjectionExecutor())
                     .FindAsync("User_1", 1, 1);
                 Assert.Equal(2, detail?.Events.TotalCount);
                 Assert.Equal(IdentitySecurityEventTypes.PasswordChanged, Assert.Single(detail!.Events.Items).EventType);

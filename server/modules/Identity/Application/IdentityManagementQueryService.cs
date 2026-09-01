@@ -1,5 +1,7 @@
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Identity.Models;
+using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Repositories;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
@@ -100,9 +102,11 @@ public interface IIdentityManagementQueryService
 public sealed class IdentityManagementQueryService : IIdentityManagementQueryService
 {
     private static readonly PlatformQueryDescriptor AccountListDescriptor = CreateAccountListDescriptor();
+    private static readonly TemporalFieldDisplayProjectionPlan OccurredAtDisplayPlan =
+        CompileOccurredAtDisplayPlan();
     private readonly IIdentityRepository _repository;
     private readonly IPlatformQueryExecutor _queryExecutor;
-    private readonly ITemporalDisplayFormatter _temporalDisplayFormatter;
+    private readonly ITemporalDisplayProjectionExecutor _temporalDisplayProjectionExecutor;
 
     /// <summary>
     /// 创建 Identity 管理查询服务；账号列表由平台查询内核执行，详情及安全事件仍由 Identity 仓储拥有。
@@ -110,11 +114,11 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
     public IdentityManagementQueryService(
         IIdentityRepository repository,
         IPlatformQueryExecutor queryExecutor,
-        ITemporalDisplayFormatter temporalDisplayFormatter)
+        ITemporalDisplayProjectionExecutor temporalDisplayProjectionExecutor)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
-        _temporalDisplayFormatter = temporalDisplayFormatter;
+        _temporalDisplayProjectionExecutor = temporalDisplayProjectionExecutor;
     }
 
     /// <summary>
@@ -332,18 +336,41 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         DefaultSortDirection = "asc"
     };
 
-    // 保留安全事件 UTC raw，并由共享 temporal formatter 生成请求级展示伴随值。
-    private IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent) => new(
-        securityEvent.EID,
-        securityEvent.EventType,
-        securityEvent.Reason,
-        securityEvent.OccurredAt,
-        _temporalDisplayFormatter.FormatInstant(securityEvent.OccurredAt),
-        securityEvent.TraceId,
-        securityEvent.ActorKind,
-        securityEvent.ActorAccountEID,
-        securityEvent.CreatedBy,
-        securityEvent.CreatedAt,
-        securityEvent.UpdatedBy,
-        securityEvent.UpdatedAt);
+    // Identity 只提交业务 raw 并消费公共 projection 结果，不自行解释 display.type 或 format。
+    private IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent)
+    {
+        var occurredAt = _temporalDisplayProjectionExecutor.Project(
+            OccurredAtDisplayPlan,
+            securityEvent.OccurredAt);
+        return new IdentityManagementSecurityEventView(
+            securityEvent.EID,
+            securityEvent.EventType,
+            securityEvent.Reason,
+            occurredAt.RawValue,
+            occurredAt.DisplayValue,
+            securityEvent.TraceId,
+            securityEvent.ActorKind,
+            securityEvent.ActorAccountEID,
+            securityEvent.CreatedBy,
+            securityEvent.CreatedAt,
+            securityEvent.UpdatedBy,
+            securityEvent.UpdatedAt);
+    }
+
+    // Identity 只按字段名选择统一 planner 的 typed 结果；策略与格式均由 Model authoring 编译决定。
+    private static TemporalFieldDisplayProjectionPlan CompileOccurredAtDisplayPlan()
+    {
+        var securityEventModel = IdentityModelDefinitions.All.Single(model =>
+            string.Equals(model.Name, nameof(IdentitySecurityEvent), StringComparison.Ordinal));
+        var compilation = new ModelDisplayProjectionPlanner().Compile(
+            securityEventModel,
+            IdentityModelDefinitions.All);
+        var plan = compilation.Plan?.Fields.SingleOrDefault(field =>
+            string.Equals(
+                field.SourceField,
+                nameof(IdentitySecurityEvent.OccurredAt),
+                StringComparison.Ordinal));
+        return plan as TemporalFieldDisplayProjectionPlan
+            ?? throw new InvalidOperationException("IDENTITY_SECURITY_EVENT_TEMPORAL_DISPLAY_PLAN_REQUIRED");
+    }
 }

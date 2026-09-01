@@ -1,4 +1,5 @@
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Models;
 using ICP.Platform.Presentation;
@@ -43,7 +44,7 @@ public sealed class IdentityManagementQueryServiceTests
         var service = new IdentityManagementQueryService(
             new InMemoryIdentityRepository(),
             executor,
-            new TestTemporalDisplayFormatter());
+            new TestTemporalDisplayProjectionExecutor());
 
         var result = await service.SearchAsync(new IdentityManagementAccountSearch(
             Query: "ali",
@@ -99,7 +100,7 @@ public sealed class IdentityManagementQueryServiceTests
         var service = new IdentityManagementQueryService(
             new InMemoryIdentityRepository(),
             executor,
-            new TestTemporalDisplayFormatter());
+            new TestTemporalDisplayProjectionExecutor());
 
         await service.SearchAsync(new IdentityManagementAccountSearch(null, null, null, null, 1, 20));
 
@@ -141,7 +142,7 @@ public sealed class IdentityManagementQueryServiceTests
         var service = new IdentityManagementQueryService(
             repository,
             new UnusedPlatformQueryExecutor(),
-            new TestTemporalDisplayFormatter());
+            new TestTemporalDisplayProjectionExecutor());
 
         var account = await service.FindAccountAsync("User_2");
 
@@ -149,8 +150,10 @@ public sealed class IdentityManagementQueryServiceTests
         Assert.Equal(0, repository.SecurityEventSearchCount);
     }
 
-    [Fact]
-    public async Task SearchSecurityEventsAsync_PreservesUtcRawAndAddsPlatformDisplayCompanion()
+    [Theory]
+    [InlineData("2030/1/2 08:04:05")]
+    [InlineData(null)]
+    public async Task SearchSecurityEventsAsync_ConsumesTypedPlanAndKeepsRawDisplayPair(string? displayValue)
     {
         var occurredAt = new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc);
         var repository = new InMemoryIdentityRepository();
@@ -172,18 +175,21 @@ public sealed class IdentityManagementQueryServiceTests
             TraceId = "trace-1",
             ActorKind = IdentitySecurityActorKind.System
         });
-        var formatter = new RecordingTemporalDisplayFormatter("2030/1/2 08:04:05");
+        var executor = new RecordingTemporalDisplayProjectionExecutor(displayValue);
         var service = new IdentityManagementQueryService(
             repository,
             new UnusedPlatformQueryExecutor(),
-            formatter);
+            executor);
 
         var result = await service.SearchSecurityEventsAsync("User_2", 1, 20);
 
         var item = Assert.Single(result!.Items);
         Assert.Equal(occurredAt, item.OccurredAt);
-        Assert.Equal("2030/1/2 08:04:05", item.OccurredAtDisplayValue);
-        Assert.Equal(occurredAt, formatter.LastInstantUtc);
+        Assert.Equal(displayValue, item.OccurredAtDisplayValue);
+        Assert.Equal(occurredAt, executor.LastRawValue);
+        Assert.Equal("OccurredAt", executor.LastPlan?.SourceField);
+        Assert.Equal("OccurredAt_DisplayValue", executor.LastPlan?.CompanionField);
+        Assert.Equal(TemporalDisplayFormat.DateTime, executor.LastPlan?.Format);
     }
 
     private sealed class RecordingPlatformQueryExecutor(PlatformQueryResult result) : IPlatformQueryExecutor
@@ -203,14 +209,20 @@ public sealed class IdentityManagementQueryServiceTests
         }
     }
 
-    private sealed class RecordingTemporalDisplayFormatter(string displayValue) : ITemporalDisplayFormatter
+    private sealed class RecordingTemporalDisplayProjectionExecutor(string? displayValue)
+        : ITemporalDisplayProjectionExecutor
     {
-        public DateTime? LastInstantUtc { get; private set; }
+        public TemporalFieldDisplayProjectionPlan? LastPlan { get; private set; }
 
-        public string FormatInstant(DateTime instantUtc)
+        public DateTime? LastRawValue { get; private set; }
+
+        public TemporalDisplayProjectionResult Project(
+            TemporalFieldDisplayProjectionPlan plan,
+            DateTime rawValue)
         {
-            LastInstantUtc = instantUtc;
-            return displayValue;
+            LastPlan = plan;
+            LastRawValue = rawValue;
+            return new TemporalDisplayProjectionResult(rawValue, displayValue);
         }
     }
 }

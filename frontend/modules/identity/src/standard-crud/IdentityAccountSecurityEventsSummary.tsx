@@ -21,7 +21,6 @@ const eventColumns: ColumnsType<IdentitySecurityEvent> = [
     key: 'occurredAt',
     title: '时间',
     dataIndex: 'occurredAt_DisplayValue',
-    render: (displayValue: string | null, event) => displayValue ?? event.occurredAt,
   },
   { key: 'eventType', title: '类型', dataIndex: 'eventType' },
   { key: 'reason', title: '原因', dataIndex: 'reason' },

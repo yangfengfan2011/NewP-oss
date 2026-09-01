@@ -12,7 +12,6 @@ public sealed class HttpRequestPresentationContextAccessor(IHttpContextAccessor 
     public static object ItemKey { get; } = new();
 
     /// <inheritdoc />
-    public RequestPresentationContext Current =>
-        httpContextAccessor.HttpContext?.Items[ItemKey] as RequestPresentationContext
-        ?? throw new InvalidOperationException("REQUEST_PRESENTATION_CONTEXT_UNAVAILABLE");
+    public RequestPresentationContext? Current =>
+        httpContextAccessor.HttpContext?.Items[ItemKey] as RequestPresentationContext;
 }

@@ -321,7 +321,7 @@ public sealed class IdentityManagementControllerTests
         var detail = await new IdentityManagementQueryService(
                 repository,
                 new UnusedPlatformQueryExecutor(),
-                new TestTemporalDisplayFormatter())
+                new TestTemporalDisplayProjectionExecutor())
             .FindAsync("deleted-1", eventPage: 2, eventPageSize: 2);
 
         Assert.Equal(IdentityAccountStatus.Deleted, detail?.Account.Status);

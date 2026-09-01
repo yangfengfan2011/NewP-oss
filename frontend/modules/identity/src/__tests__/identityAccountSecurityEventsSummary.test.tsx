@@ -128,6 +128,68 @@ describe('Identity account security-event summary renderer', () => {
     expect(container.textContent).not.toContain('2030-01-02T00:04:05Z');
   });
 
+  it('leaves the time unavailable when the display companion is null', async () => {
+    listAccountSecurityEventsMock.mockResolvedValue({
+      items: [{
+        eid: 'event-1', eventType: 'AccountCreated', reason: 'created',
+        occurredAt: '2030-01-02T00:04:05Z', occurredAt_DisplayValue: null,
+        traceId: 'trace-1', actorKind: 'System',
+      }],
+      page: 1,
+      pageSize: 20,
+      totalCount: 1,
+    });
+
+    await renderSummary();
+    await vi.waitFor(() => expect(container.textContent).toContain('AccountCreated'));
+
+    expect(container.textContent).not.toContain('2030-01-02T00:04:05Z');
+  });
+
+  it('reads the security events again when the presentation context changes', async () => {
+    listAccountSecurityEventsMock
+      .mockResolvedValueOnce({
+        items: [{
+          eid: 'event-1', eventType: 'AccountCreated', reason: 'created',
+          occurredAt: '2030-01-02T00:04:05Z', occurredAt_DisplayValue: '2030/1/2 08:04:05',
+          traceId: 'trace-1', actorKind: 'System',
+        }],
+        page: 1,
+        pageSize: 20,
+        totalCount: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [{
+          eid: 'event-1', eventType: 'AccountCreated', reason: 'created',
+          occurredAt: '2030-01-02T00:04:05Z', occurredAt_DisplayValue: '1/2/2030 8:04:05 AM',
+          traceId: 'trace-1', actorKind: 'System',
+        }],
+        page: 1,
+        pageSize: 20,
+        totalCount: 1,
+      });
+
+    await act(async () => {
+      root.render(
+        <PlatformQueryProvider scopeKey="user-1:zhs">
+          <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件" />
+        </PlatformQueryProvider>,
+      );
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain('2030/1/2 08:04:05'));
+
+    await act(async () => {
+      root.render(
+        <PlatformQueryProvider scopeKey="user-1:en">
+          <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件" />
+        </PlatformQueryProvider>,
+      );
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain('1/2/2030 8:04:05 AM'));
+
+    expect(listAccountSecurityEventsMock).toHaveBeenCalledTimes(2);
+  });
+
   it('loads the requested event page independently', async () => {
     listAccountSecurityEventsMock
       .mockResolvedValueOnce({

@@ -201,6 +201,7 @@ builder.Services.AddSingleton(_ => ActiveLocalizationManifest.Load(
     Path.Combine(pluginInstallRoot, "runtime", "localization-manifest.json")));
 builder.Services.AddScoped<IRequestPresentationContextAccessor, HttpRequestPresentationContextAccessor>();
 builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
+builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
 builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
 builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 var activeControllerAssemblies = new[]

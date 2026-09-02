@@ -1476,7 +1476,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 StringComparison.Ordinal));
         await drawer.GetByRole(
                 AriaRole.Button,
-                new LocatorGetByRoleOptions { Name = "保存", Exact = true })
+                new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true })
             .ClickAsync();
         var response = await responseTask;
         if (response.Status != (int)HttpStatusCode.Created)
@@ -1546,7 +1546,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             && new Uri(response.Url).AbsolutePath.Equals(personApiPath, StringComparison.Ordinal));
         await drawer.GetByRole(
                 AriaRole.Button,
-                new LocatorGetByRoleOptions { Name = "保存", Exact = true })
+                new LocatorGetByRoleOptions { Name = "保存修改", Exact = true })
             .ClickAsync();
         var updateResponse = await updateResponseTask;
         var updateBody = await updateResponse.TextAsync();

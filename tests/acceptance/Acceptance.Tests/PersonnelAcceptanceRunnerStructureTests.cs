@@ -25,6 +25,18 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             StringComparison.Ordinal);
         Assert.Contains("/organization/positions", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/positions", runner, StringComparison.Ordinal);
+        Assert.Contains(
+            "new LocatorGetByRoleOptions { Name = \"保存并关闭\", Exact = true }",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "new LocatorGetByRoleOptions { Name = \"保存修改\", Exact = true }",
+            runner,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "new LocatorGetByRoleOptions { Name = \"保存\", Exact = true }",
+            runner,
+            StringComparison.Ordinal);
     }
 
     private static string GetRepositoryRoot()

@@ -26,7 +26,8 @@
             "required": true
           },
           "edit": {
-            "mode": "hidden"
+            "mode": "editable",
+            "required": true
           }
         }
       },
@@ -42,7 +43,7 @@
             "mode": "editable"
           },
           "edit": {
-            "mode": "hidden"
+            "mode": "editable"
           }
         }
       },
@@ -50,6 +51,15 @@
         "name": "IsEnabled",
         "storage": {
           "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "editable"
+          }
         }
       }
     ],

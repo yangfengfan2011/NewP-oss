@@ -13,7 +13,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class PositionStandardCrudResourceTests
 {
     [Fact]
-    public void Descriptor_ExposesOnlyListAndCreateCapabilities()
+    public void Descriptor_ExposesListCreateAndUpdateWithoutRevisionOrDelete()
     {
         var descriptor = PositionCrudDescriptorFactory.Create();
 
@@ -21,11 +21,22 @@ public sealed class PositionStandardCrudResourceTests
         Assert.Equal("api/organization/positions", descriptor.Route);
         Assert.Equal(["EID", "ENAME", "Description", "IsEnabled"], descriptor.FieldSet.ListFields);
         Assert.Equal(["ENAME", "Description"], descriptor.FieldSet.CreateFields);
-        Assert.Empty(descriptor.FieldSet.UpdateFields);
+        Assert.Equal(["ENAME", "Description", "IsEnabled"], descriptor.FieldSet.UpdateFields);
+        Assert.Null(descriptor.ConcurrencyRevisionField);
         Assert.Equal(StandardCrudDeletePolicy.None, descriptor.DeletePolicy);
         Assert.Equal("ENAME", descriptor.DefaultSortField);
+        var nameRequired = Assert.Single(descriptor.RequiredFields);
+        Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, nameRequired.Scope);
+        var name = Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "ENAME");
+        Assert.True(name.Trim);
+        Assert.Equal(256, name.MaxLength);
+        Assert.True(name.UpdateNonEmpty);
+        var description = Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "Description");
+        Assert.True(description.Trim);
+        Assert.True(description.EmptyAsNull);
+        Assert.Equal(256, description.MaxLength);
         var enabled = Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "IsEnabled");
-        Assert.Equal(StandardCrudFieldValueOwner.Server, enabled.ValueOwner);
+        Assert.Equal(StandardCrudFieldValueOwner.ServerOnCreate, enabled.ValueOwner);
         Assert.Equal(true, enabled.CreateDefaultValue);
     }
 

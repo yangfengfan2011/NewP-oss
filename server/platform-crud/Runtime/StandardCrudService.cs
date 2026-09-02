@@ -189,7 +189,7 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values);
+        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values, isCreate: true);
         if (serverOwnedFieldError is not null)
         {
             return StandardCrudMutationResult.Failure(serverOwnedFieldError);
@@ -281,7 +281,7 @@ public sealed class StandardCrudService : IStandardCrudService
             expectedRevision = submittedRevision;
         }
 
-        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values);
+        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values, isCreate: false);
         if (serverOwnedFieldError is not null)
         {
             return StandardCrudMutationResult.Failure(serverOwnedFieldError);
@@ -673,13 +673,15 @@ public sealed class StandardCrudService : IStandardCrudService
         FieldErrors = [new StandardCrudFieldError(field, code, message)]
     };
 
-    // 规范字段策略是值所有权的唯一来源；任何服务端拥有字段出现在请求中都稳定拒绝而非静默过滤。
+    // 规范字段策略是值所有权的唯一来源；ServerOnCreate 只阻止调用方伪造创建初始值，普通更新仍可维护该字段。
     private static StandardCrudError? FindReadOnlyServerOwnedFieldError(
         StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values)
+        IReadOnlyDictionary<string, object?> values,
+        bool isCreate)
     {
         var submitted = descriptor.FieldPolicies.FirstOrDefault(policy =>
-            policy.ValueOwner == StandardCrudFieldValueOwner.Server
+            (policy.ValueOwner == StandardCrudFieldValueOwner.Server
+                || isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate)
             && values.ContainsKey(policy.Field));
         return submitted is null
             ? null
@@ -858,7 +860,7 @@ public sealed class StandardCrudService : IStandardCrudService
     {
         var invalid = descriptor.FieldPolicies.FirstOrDefault(policy =>
             policy.StorageRequired
-            && policy.ValueOwner == StandardCrudFieldValueOwner.Caller
+            && policy.ValueOwner != StandardCrudFieldValueOwner.Server
             && (!candidate.TryGetValue(policy.Field, out var value) || IsMissingRequiredValue(value)));
         return invalid is null
             ? null

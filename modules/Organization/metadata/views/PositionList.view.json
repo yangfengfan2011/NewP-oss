@@ -71,6 +71,15 @@
         "permissions": ["Organization.Position.Create"]
       }
     ],
-    "rowActions": []
+    "rowActions": [
+      {
+        "key": "edit",
+        "labelKey": "Action_Edit",
+        "standardAction": "edit",
+        "permissions": [
+          "Organization.Position.Update"
+        ]
+      }
+    ]
   }
 }

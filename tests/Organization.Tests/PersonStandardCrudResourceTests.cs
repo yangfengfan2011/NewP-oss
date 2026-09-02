@@ -234,7 +234,8 @@ public sealed class PersonStandardCrudResourceTests
         ]);
         var positionRepository = new FakePositionRepository(
         [
-            new Position { Id = "Position_1", Name = "工程师" }
+            new Position { Id = "Position_1", Name = "工程师", IsEnabled = true },
+            new Position { Id = "Position_2", Name = "旧岗位", IsEnabled = false }
         ]);
         var resolver = new PersonCrudDisplayValueResolver(
             companyRepository,
@@ -245,7 +246,7 @@ public sealed class PersonStandardCrudResourceTests
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = "Position_1" },
-            new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = null }
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = "Position_2" }
         ];
 
         var resolved = await resolver.ResolveListAsync(
@@ -257,7 +258,8 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("总公司", resolved[0]["CompanyId_DisplayValue"]);
         Assert.DoesNotContain("CompanyName", resolved[0].Keys);
         Assert.Equal("研发部", resolved[1]["DepartmentName"]);
-        Assert.Equal(string.Empty, resolved[1]["PositionName"]);
+        Assert.Equal("工程师", resolved[0]["PositionName"]);
+        Assert.Equal("旧岗位（已停用）", resolved[1]["PositionName"]);
         Assert.Equal(1, companyRepository.BatchCallCount);
         Assert.Equal(1, departmentRepository.BatchCallCount);
         Assert.Equal(1, positionRepository.BatchCallCount);

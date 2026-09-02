@@ -64,10 +64,7 @@
               "labelKey": "Query_Position",
               "source": "model",
               "field": "PositionId",
-              "operator": "=",
-              "dependsOn": [
-                "departmentId"
-              ]
+              "operator": "="
             },
             {
               "key": "isEnabled",

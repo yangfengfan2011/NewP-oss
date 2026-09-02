@@ -82,4 +82,20 @@ public class OrganizationModelMetadataProviderTests
         Assert.Equal("EID", display.TargetIdField);
         Assert.Equal("ENAME", display.TargetDisplayField);
     }
+
+    [Fact]
+    public void Position_FormAllowsStandardCreateAndEditLifecycle()
+    {
+        var document = new OrganizationModelMetadataProvider().GetDocument("Position");
+        var fields = document.Model.Fields.ToDictionary(static field => field.Name, StringComparer.Ordinal);
+
+        Assert.Equal("editable", fields["ENAME"].Form!.Create!.Mode);
+        Assert.True(fields["ENAME"].Form!.Create!.Required);
+        Assert.Equal("editable", fields["ENAME"].Form!.Edit!.Mode);
+        Assert.True(fields["ENAME"].Form!.Edit!.Required);
+        Assert.Equal("editable", fields["Description"].Form!.Create!.Mode);
+        Assert.Equal("editable", fields["Description"].Form!.Edit!.Mode);
+        Assert.Equal("hidden", fields["IsEnabled"].Form!.Create!.Mode);
+        Assert.Equal("editable", fields["IsEnabled"].Form!.Edit!.Mode);
+    }
 }

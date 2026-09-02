@@ -5,10 +5,12 @@ import {
 } from '../standard-crud/positionStandardCrudResource';
 
 describe('position standard CRUD resource', () => {
-  it('binds the metadata list view without lifecycle handlers', () => {
+  it('binds the metadata list view to the standard mutation lifecycle without handlers or revision', () => {
     expect(positionStandardCrudResource.resourceKey).toBe('organization.position');
     expect(positionStandardCrudResource.listViewKey).toBe('organization.position.list');
     expect(positionStandardCrudResource.actionHandlers).toBeUndefined();
+    expect(positionStandardCrudResource.buildMutationValues).toBeUndefined();
+    expect(positionStandardCrudResource.concurrencyRevisionField).toBeUndefined();
   });
 
   it('maps the standard REST row shape', () => {
@@ -45,5 +47,37 @@ describe('position standard CRUD resource', () => {
 
     expect(result.items[0]).toMatchObject({ id: 'Position_1', ENAME: '平台主管' });
     expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/api/organization/positions?');
+  });
+
+  it('uses the standard REST update endpoint without a revision field', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ requestToken: 'csrf-token' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        fields: {
+          EID: 'Position_1',
+          ENAME: '平台主管',
+          Description: null,
+          IsEnabled: false,
+        },
+        summaries: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await positionStandardCrudResource.dataAdapter.update?.('Position_1', {
+      ENAME: '平台主管',
+      Description: null,
+      IsEnabled: false,
+    });
+
+    const request = fetchSpy.mock.calls[1]?.[0] as Request;
+    expect(request.url).toContain('/api/organization/positions/Position_1');
+    expect(request.method).toBe('PUT');
+    await expect(request.clone().json()).resolves.toEqual({
+      ENAME: '平台主管',
+      Description: null,
+      IsEnabled: false,
+    });
   });
 });

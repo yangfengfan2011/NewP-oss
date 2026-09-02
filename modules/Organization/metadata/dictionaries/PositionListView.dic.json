@@ -58,9 +58,17 @@
       "zhs": "新建岗位",
       "en": "Create Position"
     },
+    "Action_Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
     "Drawer_Create": {
       "zhs": "新建岗位",
       "en": "Create Position"
+    },
+    "Drawer_Edit": {
+      "zhs": "编辑岗位",
+      "en": "Edit Position"
     },
     "Pagination_Prev": {
       "zhs": "上一页",

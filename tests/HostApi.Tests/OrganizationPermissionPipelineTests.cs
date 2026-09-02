@@ -128,7 +128,8 @@ public sealed class OrganizationPermissionPipelineTests
     [InlineData("GET", "/api/organization/positions", "Organization.Position.View")]
     [InlineData("GET", "/api/organization/positions/options", "Organization.Position.View")]
     [InlineData("POST", "/api/organization/positions", "Organization.Position.Create")]
-    public async Task PositionStandardCrud_ListLookupAndCreateUseFixedPermission(
+    [InlineData("PUT", "/api/organization/positions/Position_1", "Organization.Position.Update")]
+    public async Task PositionStandardCrud_ListLookupCreateAndUpdateUseFixedPermission(
         string method,
         string path,
         string expectedPermission)

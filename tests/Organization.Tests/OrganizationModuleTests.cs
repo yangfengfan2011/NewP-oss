@@ -29,7 +29,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void GetPermissions_DeclaresPersonViewAndCreatePermissions()
+    public void GetPermissions_DeclaresPersonAndPositionLifecyclePermissions()
     {
         var module = new OrganizationModule();
         var permissions = module.GetPermissions();
@@ -38,6 +38,7 @@ public class OrganizationModuleTests
         Assert.Contains(permissions, permission => permission.Code == "Organization.Person.Create");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.View");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Create");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Update");
     }
 
     [Fact]
@@ -91,6 +92,39 @@ public class OrganizationModuleTests
         Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "edit"));
         Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "disable"));
         Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "enable"));
+
+        var advancedFields = listView.RootElement.GetProperty("view")
+            .GetProperty("advancedFilter")
+            .GetProperty("sections")[0]
+            .GetProperty("fields")
+            .EnumerateArray()
+            .ToArray();
+        var positionFilter = advancedFields.Single(field => field.GetProperty("key").GetString() == "positionId");
+        Assert.False(positionFilter.TryGetProperty("dependsOn", out _));
+    }
+
+    [Fact]
+    public void PositionMetadata_UsesStandardEditDrawerWithUpdatePermission()
+    {
+        var root = FindRepositoryRoot();
+        using var model = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Organization\metadata\models\Position.model.json"),
+            Encoding.UTF8));
+        var fields = model.RootElement.GetProperty("Position").GetProperty("fields").EnumerateArray().ToArray();
+
+        Assert.Equal("editable", FormMode(fields, "ENAME", "edit"));
+        Assert.True(IsEditRequired(fields, "ENAME"));
+        Assert.Equal("editable", FormMode(fields, "Description", "edit"));
+        Assert.Equal("hidden", FormMode(fields, "IsEnabled", "create"));
+        Assert.Equal("editable", FormMode(fields, "IsEnabled", "edit"));
+
+        using var listView = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Organization\metadata\views\PositionList.view.json"),
+            Encoding.UTF8));
+        var actions = listView.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray().ToArray();
+        var edit = Assert.Single(actions);
+        Assert.Equal("edit", edit.GetProperty("standardAction").GetString());
+        Assert.Equal("Organization.Position.Update", RequiredPermission(actions, "edit"));
     }
 
     private static void AssertFileContains(string root, string relativePath, string expected)
@@ -114,6 +148,13 @@ public class OrganizationModuleTests
             .GetProperty("edit")
             .TryGetProperty("required", out var required)
         && required.GetBoolean();
+
+    private static string? FormMode(JsonElement[] fields, string fieldName, string mode) =>
+        fields.Single(field => field.GetProperty("name").GetString() == fieldName)
+            .GetProperty("form")
+            .GetProperty(mode)
+            .GetProperty("mode")
+            .GetString();
 
     private static string? RequiredPermission(JsonElement[] actions, string actionKey) =>
         actions.Single(action => action.GetProperty("key").GetString() == actionKey)

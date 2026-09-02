@@ -210,8 +210,10 @@ public static class StandardCrudDescriptorValidator
                     $"标准 CRUD 资源 {descriptor.ResourceKey} 的规范字段策略 {policy.Field} 必须包含在 DetailFields 中。");
             }
 
-            if (policy.ValueOwner == StandardCrudFieldValueOwner.Server
-                && (policy.CreateInputRequired || policy.UpdateNonEmpty))
+            if ((policy.ValueOwner == StandardCrudFieldValueOwner.Server
+                    && (policy.CreateInputRequired || policy.UpdateNonEmpty))
+                || policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate
+                    && policy.CreateInputRequired)
             {
                 throw new InvalidOperationException(
                     $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端字段 {policy.Field} 不能声明调用方必填。");

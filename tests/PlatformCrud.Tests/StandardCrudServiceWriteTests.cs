@@ -597,6 +597,94 @@ public sealed class StandardCrudServiceWriteTests
         Assert.Equal(true, repository.LastCreatedValues!["IsEnabled"]);
     }
 
+    [Fact]
+    public async Task CreateAsync_WhenServerOnCreateFieldIsSubmitted_ReturnsStableFieldError()
+    {
+        var service = Service();
+
+        var result = await service.CreateAsync(
+            ShortTextDescriptor(),
+            new Dictionary<string, object?> { ["ENAME"] = "平台主管", ["IsEnabled"] = false });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", result.Error!.Code);
+        Assert.Equal("IsEnabled", Assert.Single(result.Error.FieldErrors).Field);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenFieldIsServerOwnedOnlyOnCreate_UsesLastWriteWinsWithoutRevision()
+    {
+        var descriptor = ShortTextDescriptor();
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "position-1", ["ENAME"] = "初始岗位", ["IsEnabled"] = true }
+        ]);
+        var service = Service(repository);
+
+        var first = await service.UpdateAsync(
+            descriptor,
+            "position-1",
+            new Dictionary<string, object?> { ["ENAME"] = "第一次更新", ["IsEnabled"] = false });
+        var second = await service.UpdateAsync(
+            descriptor,
+            "position-1",
+            new Dictionary<string, object?> { ["ENAME"] = "第二次更新", ["IsEnabled"] = true });
+
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        Assert.Null(descriptor.ConcurrencyRevisionField);
+        Assert.Equal("第二次更新", second.Detail!.Fields["ENAME"]);
+        Assert.Equal(true, second.Detail.Fields["IsEnabled"]);
+    }
+
+    [Theory]
+    [InlineData("ENAME", " 带空格", "StandardCrud.ShortTextNotNormalized")]
+    [InlineData("Description", "", "StandardCrud.ShortTextNotNormalized")]
+    [InlineData("Description", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "StandardCrud.ShortTextTooLong")]
+    public async Task UpdateAsync_WhenPositionShortTextIsNotCanonical_ReturnsStableFieldError(
+        string field,
+        string value,
+        string expectedCode)
+    {
+        var descriptor = ShortTextDescriptor();
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "position-1", ["ENAME"] = "初始岗位", ["Description"] = null, ["IsEnabled"] = true }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "position-1",
+            new Dictionary<string, object?> { [field] = value });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedCode, result.Error!.Code);
+        var fieldError = Assert.Single(result.Error.FieldErrors);
+        Assert.Equal(field, fieldError.Field);
+        Assert.Equal(expectedCode, fieldError.Code);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenPositionNameIsNull_ReturnsStableRequiredFieldError()
+    {
+        var descriptor = ShortTextDescriptor();
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "position-1", ["ENAME"] = "初始岗位", ["Description"] = null, ["IsEnabled"] = true }
+        ]);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            descriptor,
+            "position-1",
+            new Dictionary<string, object?> { ["ENAME"] = null });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("Organization.Position.NameRequired", result.Error!.Code);
+        Assert.Equal("ENAME", Assert.Single(result.Error.FieldErrors).Field);
+    }
+
     [Theory]
     [InlineData(" 带空格", "StandardCrud.ShortTextNotNormalized")]
     [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "StandardCrud.ShortTextTooLong")]
@@ -1097,25 +1185,46 @@ public sealed class StandardCrudServiceWriteTests
         DisplayField = "ENAME",
         EnabledField = "IsEnabled",
         FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "ENAME", "IsEnabled"],
-            DetailFields: ["EID", "ENAME", "IsEnabled"],
-            CreateFields: ["ENAME"],
-            UpdateFields: []),
+            ListFields: ["EID", "ENAME", "Description", "IsEnabled"],
+            DetailFields: ["EID", "ENAME", "Description", "IsEnabled"],
+            CreateFields: ["ENAME", "Description"],
+            UpdateFields: ["ENAME", "Description", "IsEnabled"]),
+        RequiredFields =
+        [
+            new StandardCrudRequiredField
+            {
+                Field = "ENAME",
+                Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
+                ErrorCode = "Organization.Position.NameRequired",
+                Message = "岗位名称不能为空。",
+                ReasonKey = "organization.position.nameRequired"
+            }
+        ],
         FieldPolicies =
         [
             new StandardCrudFieldPolicy
             {
                 Field = "ENAME",
                 StorageRequired = true,
+                CreateInputRequired = true,
+                UpdateNonEmpty = true,
                 ValueOwner = StandardCrudFieldValueOwner.Caller,
                 Trim = true,
                 MaxLength = 256
             },
             new StandardCrudFieldPolicy
             {
+                Field = "Description",
+                ValueOwner = StandardCrudFieldValueOwner.Caller,
+                Trim = true,
+                EmptyAsNull = true,
+                MaxLength = 256
+            },
+            new StandardCrudFieldPolicy
+            {
                 Field = "IsEnabled",
                 StorageRequired = true,
-                ValueOwner = StandardCrudFieldValueOwner.Server,
+                ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
                 CreateDefaultValue = true
             }
         ]

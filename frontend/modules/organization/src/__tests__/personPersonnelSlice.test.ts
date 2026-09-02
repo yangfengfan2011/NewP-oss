@@ -103,6 +103,35 @@ describe('personnel center first vertical slice', () => {
     expect(String(fetchSpy.mock.calls[2]?.[0])).toContain('/api/organization/positions/options?page=1&pageSize=20');
   });
 
+  it('offers only enabled positions while preserving and marking the current disabled value', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [{ value: 'Position_Enabled', label: '平台主管', disabled: false }],
+      currentItems: [{ value: 'Position_Disabled', label: '旧岗位（已停用）', disabled: true }],
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const provider = personStandardCrudResource.lookupProviders?.find(
+      item => item.key === 'organization.positions',
+    );
+
+    const result = await provider?.load({
+      ...lookupRequest('PositionId'),
+      currentValueIds: ['Position_Disabled'],
+    });
+
+    expect(result).toEqual({
+      options: [{ value: 'Position_Enabled', label: '平台主管', disabled: false }],
+      currentOptions: [{ value: 'Position_Disabled', label: '旧岗位（已停用）', disabled: true }],
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
+    });
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('currentValueIds=Position_Disabled');
+    expect(String(fetchSpy.mock.calls[0]?.[0])).not.toContain('CompanyId');
+    expect(String(fetchSpy.mock.calls[0]?.[0])).not.toContain('DepartmentId');
+  });
+
   it('preserves the canonical CompanyId raw/display pair without a CompanyName alias', () => {
     const row = mapPersonListItem({
       EID: 'person-1',

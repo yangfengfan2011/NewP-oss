@@ -7,7 +7,7 @@ namespace ICP.Platform.Modules.Organization.Crud;
 public static class PositionCrudDescriptorFactory
 {
     /// <summary>
-    /// 创建全局岗位的列表与创建描述符；编辑、启停和条件删除由后续生命周期切片扩展。
+    /// 创建全局岗位的列表、创建与普通编辑描述符；创建启用默认值由服务端拥有，编辑走共享更新生命周期。
     /// </summary>
     public static StandardCrudDescriptor Create()
     {
@@ -15,7 +15,7 @@ public static class PositionCrudDescriptorFactory
             ListFields: ["EID", "ENAME", "Description", "IsEnabled"],
             DetailFields: ["EID", "ENAME", "Description", "IsEnabled", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
             CreateFields: ["ENAME", "Description"],
-            UpdateFields: []);
+            UpdateFields: ["ENAME", "Description", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
             ResourceKey = "organization.position",
@@ -38,7 +38,7 @@ public static class PositionCrudDescriptorFactory
                 new StandardCrudRequiredField
                 {
                     Field = "ENAME",
-                    Scope = StandardCrudRequiredFieldScope.CreateOnly,
+                    Scope = StandardCrudRequiredFieldScope.CreateAndUpdate,
                     ErrorCode = "Organization.Position.NameRequired",
                     Message = "岗位名称不能为空。",
                     ReasonKey = "organization.position.nameRequired"
@@ -71,7 +71,7 @@ public static class PositionCrudDescriptorFactory
                 {
                     Field = policy.Field,
                     StorageRequired = true,
-                    ValueOwner = StandardCrudFieldValueOwner.Server,
+                    ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
                     CreateDefaultValue = true
                 }
                 : policy)

@@ -35,7 +35,7 @@ const positionStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
   getRowId: (row: PositionListRow) => row.id,
 });
 
-// 岗位只使用标准 REST adapter；本切片不注册编辑、启停或删除 handler。
+// 岗位创建和编辑只使用标准 REST adapter；启停作为 IsEnabled 普通字段写入，不注册岗位专用 handler。
 export const positionStandardCrudResource: StandardCrudResourceRegistration<Record<string, unknown>, PositionListRow> = {
   resourceKey: 'organization.position',
   dataAdapter: positionStandardCrudDataAdapter,

@@ -311,6 +311,77 @@ public sealed class PersonCrudValidatorTests
         Assert.Null(error);
     }
 
+    [Fact]
+    public async Task ValidateUpdateAsync_CanClearCurrentDisabledPosition()
+    {
+        var existing = Values(null, null);
+        existing["EID"] = "Person_1";
+        existing["PositionId"] = "Position_Disabled";
+        var validator = CreateValidator(
+            [],
+            [],
+            existing,
+            positions: [Position("Position_Disabled", enabled: false)]);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?> { ["PositionId"] = null },
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_CanReplaceCurrentDisabledPositionWithEnabledPosition()
+    {
+        var existing = Values(null, null);
+        existing["EID"] = "Person_1";
+        existing["PositionId"] = "Position_Disabled";
+        var validator = CreateValidator(
+            [],
+            [],
+            existing,
+            positions:
+            [
+                Position("Position_Disabled", enabled: false),
+                Position("Position_Enabled", enabled: true)
+            ]);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?> { ["PositionId"] = "Position_Enabled" },
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_CannotReplaceCurrentDisabledPositionWithAnotherDisabledPosition()
+    {
+        var existing = Values(null, null);
+        existing["EID"] = "Person_1";
+        existing["PositionId"] = "Position_Disabled_1";
+        var validator = CreateValidator(
+            [],
+            [],
+            existing,
+            positions:
+            [
+                Position("Position_Disabled_1", enabled: false),
+                Position("Position_Disabled_2", enabled: false)
+            ]);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?> { ["PositionId"] = "Position_Disabled_2" },
+            CancellationToken.None);
+
+        AssertError(error, "Organization.Person.PositionDisabled", "PositionId");
+    }
+
     private static PersonCrudValidator CreateValidator(
         IEnumerable<Company> companies,
         IEnumerable<Department> departments,

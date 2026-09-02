@@ -96,12 +96,13 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
             ? department.Name
             : string.Empty;
 
+    // 人员读取始终消费岗位目录当前名称，并在停用后保留可见的生命周期标记。
     private static string ReadDisplayName(
         IReadOnlyDictionary<string, object?> row,
         string sourceField,
         IReadOnlyDictionary<string, Position> positions) =>
         ReadStringOrNull(row, sourceField) is { } id && positions.TryGetValue(id, out var position)
-            ? position.Name
+            ? position.IsEnabled ? position.Name : $"{position.Name}（已停用）"
             : string.Empty;
 
     private static string? ReadStringOrNull(IReadOnlyDictionary<string, object?> row, string field) =>

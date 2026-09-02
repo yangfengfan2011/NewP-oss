@@ -149,7 +149,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "identity.account.detail",
             "identity.account.list",
             "organization.person.detail",
-            "organization.person.list"
+            "organization.person.list",
+            "organization.position.list"
         };
         Assert.True(
             expectedBindings.SequenceEqual(projectedBindings, StringComparer.Ordinal),

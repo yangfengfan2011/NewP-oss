@@ -8,6 +8,7 @@ const COMMAND_NAME_PATTERN = /^(create|update|delete|remove|action|enable|disabl
 const READ_NAME_PATTERN = /^(get|list|load|read|fetch|query|search|find|lookup|request|export)/i;
 const SHARED_LOADER_NAMES = new Set([
   'loadStandardCrudLookupOptions',
+  'loadStandardCrudLookupPage',
   'loadRuntimeLocalizationManifest',
   'loadRuntimeMetadata',
 ]);

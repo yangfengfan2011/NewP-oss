@@ -22,11 +22,11 @@ export const effectNetworkLifecycleAllowlist = [
     exitCondition: '通过独立的 versioned public-contract 决策删除 deprecated uncontrolled props。',
   },
   {
-    id: 'packages/sdk/src/standardCrud.ts::useStandardCrudLookupRuntime::useEffect::loadLookups>loadStandardCrudLookupOptions>provider.load',
+    id: 'packages/sdk/src/standardCrud.ts::useStandardCrudLookupRuntime::useEffect::loadLookups>loadStandardCrudLookupOptions>loadStandardCrudLookupPage>provider.load',
     file: 'packages/sdk/src/standardCrud.ts',
     enclosingFunction: 'useStandardCrudLookupRuntime',
     hook: 'useEffect',
-    triggerChain: 'loadLookups>loadStandardCrudLookupOptions>provider.load',
+    triggerChain: 'loadLookups>loadStandardCrudLookupOptions>loadStandardCrudLookupPage>provider.load',
     classification: 'read-query',
     owner: 'SDK Standard CRUD',
     reason: '仓库内正式采用者已迁移到 Platform Query Runtime；旧 SDK Hook 仅保留 public compatibility。',

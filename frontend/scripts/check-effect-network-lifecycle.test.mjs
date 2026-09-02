@@ -361,6 +361,30 @@ test('recognizes the SDK lookup option loader as a read-only platform query load
   ]);
 });
 
+test('recognizes the SDK paged lookup loader as a read-only platform query load', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'packages/shell/src/standard-crud/PagedLookupRuntimeProbe.tsx',
+    source: `import { usePlatformQuery } from '@icp-platform/core';
+      import { loadStandardCrudLookupPage } from '@icp-platform/sdk';
+
+      export function PagedLookupRuntimeProbe(input) {
+        return usePlatformQuery({
+          key: ['standard-crud.lookup-page', input.resourceKey],
+          load: ({ signal }) => loadStandardCrudLookupPage(input, { signal }),
+        });
+      }
+    `,
+  });
+
+  assert.deepEqual(findings.map(({ hook, triggerChain, classification }) => ({ hook, triggerChain, classification })), [
+    {
+      hook: 'usePlatformQuery.load',
+      triggerChain: 'loadStandardCrudLookupPage',
+      classification: 'read-query',
+    },
+  ]);
+});
+
 test('rejects dataAdapter.create reached through a referenced platform query load', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
     file: 'modules/example/src/AdapterWriteProbe.tsx',
@@ -916,7 +940,7 @@ test('matches the reviewed current-tree baseline with no effect write commands',
       classification: 'read-query',
     },
     {
-      id: 'packages/shell/src/standard-crud/standardCrudLookupRuntime.ts::query::usePlatformQuery.load::loadLookupQuery>loadStandardCrudLookupOptions',
+      id: 'packages/shell/src/standard-crud/standardCrudLookupRuntime.ts::query::usePlatformQuery.load::loadLookupQuery>loadStandardCrudLookupPage',
       classification: 'read-query',
     },
   ]);

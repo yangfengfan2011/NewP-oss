@@ -17,6 +17,23 @@ public class HostApiPluginManifestRouteTests : IDisposable
     private readonly SqlServerTestCatalog _database = SqlServerTestCatalog.Create();
 
     [Fact]
+    public void HostApiBuildOutputPath_UsesCurrentKernelTestOutputDirectory()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var releaseTestOutputDirectory = Path.Combine(
+            repositoryRoot,
+            "tests",
+            "Kernel.Tests",
+            "bin",
+            "Release",
+            "net10.0");
+
+        Assert.Equal(
+            Path.Combine(releaseTestOutputDirectory, "HostApi.dll"),
+            ResolveHostApiDllPath(releaseTestOutputDirectory));
+    }
+
+    [Fact]
     public async Task HostApiStarts_WhenInstalledPluginStateIsMissing_UsingBuiltInModuleFallback()
     {
         var installRoot = CreateTempRoot();
@@ -597,6 +614,9 @@ public class HostApiPluginManifestRouteTests : IDisposable
         throw new DirectoryNotFoundException("Repository root not found.");
     }
 
+    private static string ResolveHostApiDllPath(string testOutputDirectory)
+        => Path.Combine(testOutputDirectory, "HostApi.dll");
+
     private sealed class HostApiProcess : IAsyncDisposable
     {
         private readonly Process _process;
@@ -627,7 +647,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             bool? externalPluginsEnabled = true)
         {
             var repoRoot = FindRepositoryRoot();
-            var hostApiDllPath = Path.Combine(repoRoot, "apps", "host-api", "bin", "Debug", "net10.0", "HostApi.dll");
+            var hostApiDllPath = ResolveHostApiDllPath(AppContext.BaseDirectory);
             if (!File.Exists(hostApiDllPath))
             {
                 throw new FileNotFoundException($"HostApi build output not found: {hostApiDllPath}");

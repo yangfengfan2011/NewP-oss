@@ -36,6 +36,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private const string PersonnelStartedAtDisplay = "2030/1/2 08:04:05";
     private const string PersonnelEndedAtUtc = "2030-06-30T09:30:00Z";
     private const string PersonnelEndedAtDisplay = "2030/6/30 17:30:00";
+    internal static IReadOnlyList<(string Label, string Value)> PersonnelTemporalFormInputs { get; } =
+    [
+        ("出生日期", PersonnelBirthDate),
+        ("任职开始时间", "2030-01-02 08:04:05"),
+        ("任职结束时间", "2030-06-30 17:30:00")
+    ];
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
@@ -1627,12 +1633,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        foreach (var (label, value) in new[]
-                 {
-                     ("出生日期", PersonnelBirthDate),
-                     ("入职时间", "2030-01-02 08:04:05"),
-                     ("离职时间", "2030-06-30 17:30:00")
-                 })
+        foreach (var (label, value) in PersonnelTemporalFormInputs)
         {
             var input = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
             await input.FillAsync(value);

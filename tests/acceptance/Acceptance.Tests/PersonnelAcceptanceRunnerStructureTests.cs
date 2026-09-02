@@ -1,9 +1,32 @@
+using System.Text.Json;
 using Xunit;
 
 namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class PersonnelAcceptanceRunnerStructureTests
 {
+    [Fact]
+    public void TemporalBrowserInputs_UseTheLocalizedPersonFormLabels()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        using var dictionary = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "modules",
+            "Organization",
+            "metadata",
+            "dictionaries",
+            "PersonListView.dic.json")));
+        var personDictionary = dictionary.RootElement.GetProperty("PersonListView");
+        var expected = new[]
+        {
+            ReadSimplifiedChineseLabel(personDictionary, "Field_BirthDate"),
+            ReadSimplifiedChineseLabel(personDictionary, "Field_EmploymentStartedAt"),
+            ReadSimplifiedChineseLabel(personDictionary, "Field_EmploymentEndedAt")
+        };
+
+        Assert.Equal(expected, PersonnelAcceptanceRunner.PersonnelTemporalFormInputs.Select(input => input.Label));
+    }
+
     [Fact]
     public void BrowserScenario_CoversPositionCreationAndPersonLookupAssignmentInThePersonnelGate()
     {
@@ -55,4 +78,8 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
 
         throw new InvalidOperationException("无法定位仓库根目录。");
     }
+
+    private static string ReadSimplifiedChineseLabel(JsonElement dictionary, string key) =>
+        dictionary.GetProperty(key).GetProperty("zhs").GetString()
+        ?? throw new InvalidOperationException($"人员表单字典缺少 {key}.zhs。");
 }

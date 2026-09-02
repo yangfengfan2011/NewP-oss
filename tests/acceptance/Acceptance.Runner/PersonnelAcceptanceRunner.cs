@@ -42,6 +42,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         ("任职开始时间", "2030-01-02 08:04:05"),
         ("任职结束时间", "2030-06-30 17:30:00")
     ];
+    internal const string PersonnelTemporalInputExitKey = "Tab";
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
@@ -1637,7 +1638,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             var input = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
             await input.FillAsync(value);
-            await input.PressAsync("Enter");
+            await input.PressAsync(PersonnelTemporalInputExitKey);
         }
 
         var personApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";

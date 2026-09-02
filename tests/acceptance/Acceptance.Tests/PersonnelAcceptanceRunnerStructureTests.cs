@@ -28,6 +28,12 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     }
 
     [Fact]
+    public void TemporalBrowserInputs_BlurWithoutSubmittingTheEditForm()
+    {
+        Assert.Equal("Tab", PersonnelAcceptanceRunner.PersonnelTemporalInputExitKey);
+    }
+
+    [Fact]
     public void BrowserScenario_CoversPositionCreationAndPersonLookupAssignmentInThePersonnelGate()
     {
         var repositoryRoot = GetRepositoryRoot();

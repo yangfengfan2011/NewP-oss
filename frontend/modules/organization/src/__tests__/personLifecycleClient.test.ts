@@ -9,7 +9,7 @@ import { setPersonLifecycleStatus } from '../services/organizationService';
 describe('person lifecycle client', () => {
   beforeEach(() => platformFetchMock.mockReset());
 
-  it('uses the dedicated revision-checked lifecycle command', async () => {
+  it('uses the dedicated lifecycle command without a person revision', async () => {
     platformFetchMock.mockResolvedValue(new Response('{}', {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -17,7 +17,6 @@ describe('person lifecycle client', () => {
 
     await setPersonLifecycleStatus('Person/1', {
       isEnabled: false,
-      expectedRevision: 4,
       reason: '人员中心停用人员',
     });
 
@@ -27,7 +26,6 @@ describe('person lifecycle client', () => {
         method: 'PUT',
         body: JSON.stringify({
           isEnabled: false,
-          expectedRevision: 4,
           reason: '人员中心停用人员',
         }),
       }),
@@ -50,7 +48,6 @@ describe('person lifecycle client', () => {
 
     await setPersonLifecycleStatus('Person/1', {
       isEnabled: false,
-      expectedRevision: 4,
       reason: '人员中心停用人员',
     }).then(
       () => expect.fail('请求应失败'),

@@ -114,7 +114,6 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
   dataAdapter: personStandardCrudDataAdapter,
   listViewKey: 'organization.person.list',
   detailViewKey: 'organization.person.detail',
-  concurrencyRevisionField: 'Revision',
   lookupProviders: organizationLookupProviders,
   enumOptions: {
     EmploymentStatus: employmentStatusOptions,
@@ -138,7 +137,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
 
       await deletePerson(id);
     },
-    disable: async ({ id, detail, row, input }) => {
+    disable: async ({ id, input }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法停用。');
       }
@@ -150,18 +149,16 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
 
       await setPersonLifecycleStatus(id, {
         isEnabled: false,
-        expectedRevision: detail?.revision ?? row?.revision ?? 0,
         reason,
       });
     },
-    enable: async ({ id, detail, row }) => {
+    enable: async ({ id }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法启用。');
       }
 
       await setPersonLifecycleStatus(id, {
         isEnabled: true,
-        expectedRevision: detail?.revision ?? row?.revision ?? 0,
         reason: '人员中心恢复人员',
       });
     },

@@ -7,6 +7,9 @@ namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 
 public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext) : IPersonUserBindingRepository
 {
+    /// <summary>
+    /// 读取人员绑定与生命周期状态。
+    /// </summary>
     public async ValueTask<PersonUserBindingState?> FindAsync(
         string personEid,
         CancellationToken cancellationToken = default)
@@ -19,6 +22,9 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
         return entity is null ? null : Map(entity);
     }
 
+    /// <summary>
+    /// 在人员可绑定时登记账号绑定事实，提交仍由外层事务统一负责。
+    /// </summary>
     public async ValueTask<bool> TryBindAsync(
         string personEid,
         string accountEid,
@@ -42,17 +48,18 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
                     .SetProperty(row => EF.Property<DateTime?>(row, "AccountBoundAt"), boundAt)
                     .SetProperty(row => EF.Property<string?>(row, "AccountBoundBy"), actorId)
                     .SetProperty(row => EF.Property<string?>(row, "AccountBindingReason"), reason)
-                    .SetProperty(row => EF.Property<long>(row, "Revision"), row => EF.Property<long>(row, "Revision") + 1)
                     .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), boundAt),
                 cancellationToken);
         return affected == 1;
     }
 
-    public async ValueTask<bool> TrySetEnablementAsync(
+    /// <summary>
+    /// 登记人员启停状态，提交仍由外层事务统一负责。
+    /// </summary>
+    public async ValueTask SetEnablementAsync(
         string personEid,
         bool isEnabled,
-        long expectedRevision,
         string actorId,
         DateTime changedAt,
         CancellationToken cancellationToken = default)
@@ -62,18 +69,14 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
             throw new InvalidOperationException("Person lifecycle writes require IPlatformTransactionExecutor.");
         }
 
-        var affected = await Persons
-            .Where(row => EF.Property<string>(row, "EID") == personEid
-                && EF.Property<long>(row, "Revision") == expectedRevision
-                && EF.Property<bool>(row, "IsEnabled") != isEnabled)
+        await Persons
+            .Where(row => EF.Property<string>(row, "EID") == personEid)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(row => EF.Property<bool>(row, "IsEnabled"), isEnabled)
-                    .SetProperty(row => EF.Property<long>(row, "Revision"), row => EF.Property<long>(row, "Revision") + 1)
                     .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), changedAt),
                 cancellationToken);
-        return affected == 1;
     }
 
     private DbSet<Dictionary<string, object?>> Persons =>
@@ -84,7 +87,6 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
         PersonEid = GetString(entity, "EID") ?? string.Empty,
         PersonName = GetString(entity, "ENAME") ?? string.Empty,
         IsEnabled = GetBool(entity, "IsEnabled"),
-        Revision = GetLong(entity, "Revision"),
         AccountEid = GetString(entity, "AccountEID"),
         BoundAt = GetDateTime(entity, "AccountBoundAt"),
         BoundBy = GetString(entity, "AccountBoundBy"),
@@ -98,9 +100,6 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
 
     private static bool GetBool(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is bool boolean && boolean;
-
-    private static long GetLong(IReadOnlyDictionary<string, object?> entity, string key) =>
-        entity.TryGetValue(key, out var value) && value is long number ? number : 0;
 
     private static DateTime? GetDateTime(IReadOnlyDictionary<string, object?> entity, string key) =>
         entity.TryGetValue(key, out var value) && value is DateTime dateTime ? dateTime : null;

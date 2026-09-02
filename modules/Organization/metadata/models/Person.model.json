@@ -249,15 +249,6 @@
         }
       },
       {
-        "name": "Revision",
-        "storage": {
-          "type": "long"
-        },
-        "contract": {
-          "valueType": "integer"
-        }
-      },
-      {
         "name": "AccountEID",
         "storage": {
           "type": "string",

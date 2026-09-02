@@ -61,11 +61,9 @@ describe('organization person standard CRUD phase 2 registration', () => {
     expect(view.pageActions.map((action) => action.standardAction)).toEqual(['create']);
     expect(view.rowActions.find((action) => action.standardAction === 'disable')).toMatchObject({
       inputKey: 'disableReason',
-      dataDependency: { fields: ['Revision'] },
     });
-    expect(view.rowActions.find((action) => action.standardAction === 'enable')).toMatchObject({
-      dataDependency: { fields: ['Revision'] },
-    });
+    expect(view.rowActions.find((action) => action.standardAction === 'disable')).not.toHaveProperty('dataDependency');
+    expect(view.rowActions.find((action) => action.standardAction === 'enable')).not.toHaveProperty('dataDependency');
     expect(detailView.pageActions.find((action) => action.standardAction === 'disable')).toMatchObject({
       inputKey: 'disableReason',
     });

@@ -14,8 +14,8 @@ public static class PersonCrudDescriptorFactory
     public static StandardCrudDescriptor Create()
     {
         var fieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled", "Revision", "AccountEID"],
-            DetailFields: ["EID", "PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled", "Revision", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "AccountEID", "AccountBoundAt", "AccountBoundBy", "AccountBindingReason"],
+            ListFields: ["EID", "PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled", "AccountEID"],
+            DetailFields: ["EID", "PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "AccountEID", "AccountBoundAt", "AccountBoundBy", "AccountBindingReason"],
             CreateFields: ["PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled"],
             UpdateFields: ["ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "UpdatedAt"]);
         var models = OrganizationModelDefinitions.All;
@@ -36,7 +36,6 @@ public static class PersonCrudDescriptorFactory
             DefaultSortDirection = "asc",
             Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PersonStem),
             EnabledField = "IsEnabled",
-            ConcurrencyRevisionField = "Revision",
             FieldSet = fieldSet,
             OptionLabelFields = ["PersonNo", "ENAME"],
             SummaryBlockKeys = ["userBinding", "authorizationSummary"],
@@ -106,7 +105,7 @@ public static class PersonCrudDescriptorFactory
         ];
     }
 
-    // Person 的标准写入策略来自真实 Model；IsEnabled 保持创建必填契约，Revision 由服务端初始化后供更新并发校验。
+    // Person 的标准写入策略来自真实 Model；IsEnabled 保持创建必填契约。
     private static IReadOnlyList<StandardCrudFieldPolicy> BuildFieldPolicies(StandardCrudFieldSet fieldSet)
     {
         var provider = new OrganizationModelMetadataProvider();
@@ -126,14 +125,6 @@ public static class PersonCrudDescriptorFactory
                     CreateInputRequired = true,
                     ValueOwner = StandardCrudFieldValueOwner.Caller,
                     CreateDefaultValue = policy.CreateDefaultValue
-                },
-                "Revision" => new StandardCrudFieldPolicy
-                {
-                    Field = policy.Field,
-                    ValueType = policy.ValueType,
-                    StorageRequired = true,
-                    ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
-                    CreateDefaultValue = 0L
                 },
                 _ => policy
             })

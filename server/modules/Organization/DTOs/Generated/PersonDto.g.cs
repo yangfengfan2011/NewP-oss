@@ -26,7 +26,6 @@ public sealed class PersonDto
     public DateTime? EmploymentEndedAt { get; init; }
     public string? EmploymentEndedAt_DisplayValue { get; init; }
     public bool IsEnabled { get; init; } = true;
-    public long Revision { get; init; }
     public string? AccountEID { get; init; }
     public DateTime? AccountBoundAt { get; init; }
     public string? AccountBoundBy { get; init; }

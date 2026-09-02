@@ -17,6 +17,9 @@ public sealed class PersonLifecycleService(
     IPlatformTransactionExecutor transactionExecutor,
     TimeProvider timeProvider) : IPersonLifecycleService
 {
+    /// <summary>
+    /// 在共享事务中同步人员状态及其已绑定账号的生命周期事实。
+    /// </summary>
     public async ValueTask<PersonLifecycleDto> SetStatusAsync(
         string personEid,
         SetPersonLifecycleStatusRequest request,
@@ -25,7 +28,7 @@ public sealed class PersonLifecycleService(
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateActor(actor);
-        if (string.IsNullOrWhiteSpace(personEid) || request.ExpectedRevision < 0)
+        if (string.IsNullOrWhiteSpace(personEid))
         {
             throw new PersonLifecycleException(PersonLifecycleFailureCodes.InvalidRequest);
         }
@@ -36,11 +39,6 @@ public sealed class PersonLifecycleService(
         if (IsConverged(initialPerson, initialAccount, request.IsEnabled))
         {
             return ToDto(initialPerson, initialAccount);
-        }
-
-        if (initialPerson.Revision != request.ExpectedRevision)
-        {
-            throw new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, ToDto(initialPerson, initialAccount));
         }
 
         var changedAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -57,23 +55,12 @@ public sealed class PersonLifecycleService(
                         return ToDto(person, account);
                     }
 
-                    if (person.Revision != request.ExpectedRevision)
-                    {
-                        throw new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, ToDto(person, account));
-                    }
-
-                    var personChanged = await repository.TrySetEnablementAsync(
+                    await repository.SetEnablementAsync(
                         personEid,
                         request.IsEnabled,
-                        request.ExpectedRevision,
                         actor.ActorId,
                         changedAt,
                         transactionCancellationToken);
-                    if (!personChanged)
-                    {
-                        var latest = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-                        throw new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, ToDto(latest, account));
-                    }
 
                     IdentityAccountSnapshot? changedAccount = account;
                     if (person.AccountEid is not null)
@@ -120,7 +107,6 @@ public sealed class PersonLifecycleService(
                     return new PersonLifecycleDto(
                         person.PersonEid,
                         request.IsEnabled,
-                        person.Revision + 1,
                         person.AccountEid,
                         ToAccount(changedAccount));
                 },
@@ -212,7 +198,7 @@ public sealed class PersonLifecycleService(
     }
 
     private static PersonLifecycleDto ToDto(PersonUserBindingState person, IdentityAccountSnapshot? account) =>
-        new(person.PersonEid, person.IsEnabled, person.Revision, person.AccountEid, ToAccount(account));
+        new(person.PersonEid, person.IsEnabled, person.AccountEid, ToAccount(account));
 
     private static PersonLifecycleAccountDto? ToAccount(IdentityAccountSnapshot? account) => account is null
         ? null

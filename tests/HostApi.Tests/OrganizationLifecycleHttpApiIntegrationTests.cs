@@ -44,13 +44,13 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
 
         var anonymous = await client.PutAsJsonAsync(
             "/api/organization/persons/Person_1/status",
-            new SetPersonLifecycleStatusRequest(false, 4, "停用"));
+            new SetPersonLifecycleStatusRequest(false, "停用"));
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
         Assert.Equal(0, service.CallCount);
 
         using var request = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_1/status")
         {
-            Content = JsonContent.Create(new SetPersonLifecycleStatusRequest(false, 4, "停用"))
+            Content = JsonContent.Create(new SetPersonLifecycleStatusRequest(false, "停用"))
         };
         request.Headers.Add("X-Test-User", "User_Admin");
         var authenticated = await client.SendAsync(request);
@@ -58,12 +58,13 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
         Assert.Equal(HttpStatusCode.OK, authenticated.StatusCode);
         Assert.Equal("User_Admin", service.Actor?.ActorId);
         Assert.False(string.IsNullOrWhiteSpace(service.Actor?.TraceId));
+        using var response = JsonDocument.Parse(await authenticated.Content.ReadAsStringAsync());
+        Assert.False(response.RootElement.TryGetProperty("revision", out _));
     }
 
     [Theory]
     [InlineData("{", "$")]
-    [InlineData("{\"isEnabled\":\"not-a-boolean\",\"expectedRevision\":4,\"reason\":\"停用\"}", "$.isEnabled")]
-    [InlineData("{\"isEnabled\":false,\"expectedRevision\":-1,\"reason\":\"停用\"}", "ExpectedRevision")]
+    [InlineData("{\"isEnabled\":\"not-a-boolean\",\"reason\":\"停用\"}", "$.isEnabled")]
     public async Task FormalStatusRoute_InvalidPayloadUsesPlatformValidationProblem(
         string payload,
         string expectedErrorField)
@@ -120,7 +121,7 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
         {
             CallCount++;
             Actor = actor;
-            return ValueTask.FromResult(new PersonLifecycleDto(personEid, request.IsEnabled, request.ExpectedRevision + 1, "User_1", null));
+            return ValueTask.FromResult(new PersonLifecycleDto(personEid, request.IsEnabled, "User_1", null));
         }
     }
 

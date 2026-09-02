@@ -370,7 +370,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
-      'fields=EID,PersonNo,ENAME,BirthDate,CompanyId,DepartmentName,PositionName,EmploymentStatus,EmploymentStartedAt,EmploymentEndedAt,IsEnabled,AccountEID,Revision',
+      'fields=EID,PersonNo,ENAME,BirthDate,CompanyId,DepartmentName,PositionName,EmploymentStatus,EmploymentStartedAt,EmploymentEndedAt,IsEnabled,AccountEID',
     );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));

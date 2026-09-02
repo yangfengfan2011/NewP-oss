@@ -34,7 +34,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Person/User 绑定生命周期")]
     [Trait("Category", "SqlServerSmoke")]
-    public async Task SqlServer_BindingCommitsPersonUserRevisionEventAndAuditOrRollsEverythingBack()
+    public async Task SqlServer_BindingCommitsAccountRevisionEventAndAuditOrRollsEverythingBack()
     {
         var fixture = await SqlFixture.CreateAsync("Transaction");
         await using (fixture)
@@ -111,8 +111,8 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             await using (var setup = CreateRuntimeContext(fixture.ConnectionString))
             {
                 await setup.Database.EnsureCreatedAsync();
-                AddPerson(setup, "Person_1", "User_1", revision: 4);
-                AddPerson(setup, "Person_2", "User_2", revision: 4);
+                AddPerson(setup, "Person_1", "User_1");
+                AddPerson(setup, "Person_2", "User_2");
                 AddAccount(setup, "User_1", 7, isPersonnelBound: true);
                 AddAccount(setup, "User_2", 7, isPersonnelBound: true);
                 AddAccount(setup, "User_Admin", 1);
@@ -142,14 +142,13 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
                 var disabled = await service.SetStatusAsync(
                     "Person_1",
-                    new SetPersonLifecycleStatusRequest(false, 4, "SQL Server 人员停用"),
+                    new SetPersonLifecycleStatusRequest(false, "SQL Server 人员停用"),
                     new PersonLifecycleActor("User_Admin", "trace-sql-disable"));
-                Assert.Equal(5, disabled.Revision);
+                Assert.False(disabled.IsEnabled);
                 Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await sessions.ValidateAsync(credential)).Status);
             }
 
             Assert.False(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [IsEnabled] FROM [Person] WHERE [EID] = N'Person_1'"));
-            Assert.Equal(5L, await ScalarAsync<long>(fixture.ConnectionString, "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_1'"));
             Assert.Equal("Disabled", await ScalarAsync<string>(fixture.ConnectionString, "SELECT [Status] FROM [IdentityAccount] WHERE [EID] = N'User_1'"));
             Assert.True(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [PersonnelDisableHold] FROM [IdentityAccount] WHERE [EID] = N'User_1'"));
             Assert.Equal(1, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM [AuthenticationSession] WHERE [AccountEID] = N'User_1' AND [RevokedAt] IS NOT NULL"));
@@ -169,7 +168,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
                 var restored = await service.SetStatusAsync(
                     "Person_1",
-                    new SetPersonLifecycleStatusRequest(true, 5, "SQL Server 人员恢复"),
+                    new SetPersonLifecycleStatusRequest(true, "SQL Server 人员恢复"),
                     new PersonLifecycleActor("User_Admin", "trace-sql-restore"));
                 Assert.Equal("Disabled", restored.Account?.Status);
                 Assert.False(restored.Account?.PersonnelDisableHold);
@@ -195,13 +194,12 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 var failure = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
                     await service.SetStatusAsync(
                         "Person_2",
-                        new SetPersonLifecycleStatusRequest(false, 4, "SQL Server 故障回滚"),
+                        new SetPersonLifecycleStatusRequest(false, "SQL Server 故障回滚"),
                         new PersonLifecycleActor("User_Admin", "trace-sql-rollback")));
                 Assert.Equal(PersonLifecycleFailureCodes.DependencyUnavailable, failure.FailureCode);
             }
 
             Assert.True(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [IsEnabled] FROM [Person] WHERE [EID] = N'Person_2'"));
-            Assert.Equal(4L, await ScalarAsync<long>(fixture.ConnectionString, "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_2'"));
             Assert.Equal("Enabled", await ScalarAsync<string>(fixture.ConnectionString, "SELECT [Status] FROM [IdentityAccount] WHERE [EID] = N'User_2'"));
             Assert.False(await ScalarAsync<bool>(fixture.ConnectionString, "SELECT [PersonnelDisableHold] FROM [IdentityAccount] WHERE [EID] = N'User_2'"));
             Assert.Equal(0, await ScalarAsync<int>(fixture.ConnectionString, "SELECT COUNT(*) FROM [IdentitySecurityEvent] WHERE [TargetAccountEID] = N'User_2'"));
@@ -449,7 +447,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         EfPlatformDbContext context,
         string eid,
         string? accountEid = null,
-        long revision = 0,
         bool isEnabled = true,
         string? positionId = null) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Person")).Add(new Dictionary<string, object?>
@@ -462,7 +459,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             ["PositionId"] = positionId,
             ["EmploymentStatus"] = "FullTime",
             ["IsEnabled"] = isEnabled,
-            ["Revision"] = revision,
             ["AccountEID"] = accountEid,
             ["AccountBoundAt"] = accountEid is null ? null : DateTime.UtcNow,
             ["AccountBoundBy"] = accountEid is null ? null : "User_Admin",
@@ -513,7 +509,6 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
     private static async Task AssertCommittedAsync(string connectionString)
     {
         Assert.Equal("User_1", await ScalarAsync<string>(connectionString, "SELECT [AccountEID] FROM [Person] WHERE [EID] = N'Person_1'"));
-        Assert.Equal(1L, await ScalarAsync<long>(connectionString, "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_1'"));
         Assert.Equal("User_Admin", await ScalarAsync<string>(connectionString, "SELECT [AccountBoundBy] FROM [Person] WHERE [EID] = N'Person_1'"));
         Assert.Equal(8L, await ScalarAsync<long>(connectionString, "SELECT [Revision] FROM [IdentityAccount] WHERE [EID] = N'User_1'"));
         Assert.True(await ScalarAsync<bool>(connectionString, "SELECT [IsPersonnelBound] FROM [IdentityAccount] WHERE [EID] = N'User_1'"));

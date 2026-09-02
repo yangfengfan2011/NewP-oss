@@ -290,10 +290,9 @@ public sealed class PersonUserBindingServiceTests
             return ValueTask.FromResult(true);
         }
 
-        public ValueTask<bool> TrySetEnablementAsync(
+        public ValueTask SetEnablementAsync(
             string personEid,
             bool isEnabled,
-            long expectedRevision,
             string actorId,
             DateTime changedAt,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

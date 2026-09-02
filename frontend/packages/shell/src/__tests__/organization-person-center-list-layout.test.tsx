@@ -228,7 +228,6 @@ describe('organization person center list layout', () => {
             EmploymentEndedAt: null,
             EmploymentEndedAt_DisplayValue: null,
             IsEnabled: true,
-            Revision: 4,
           }, {
             EID: 'person-2',
             PersonNo: 'P0002',
@@ -263,7 +262,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CBirthDate%2CCompanyId%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CEmploymentStartedAt%2CEmploymentEndedAt%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CBirthDate%2CCompanyId%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CEmploymentStartedAt%2CEmploymentEndedAt%2CIsEnabled%2CAccountEID&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
@@ -528,7 +527,7 @@ describe('organization person center list layout', () => {
       }
       if (url.startsWith('/api/organization/persons?')) {
         return new Response(JSON.stringify({
-          items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
+          items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
           total: 1,
           page: 1,
           pageSize: 20,
@@ -548,7 +547,6 @@ describe('organization person center list layout', () => {
             PositionName: '经理',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
-            Revision: 4,
             CreatedBy: 'creator-1',
             CreatedAt: '2026-04-21T00:00:00Z',
             UpdatedBy: 'editor-2',
@@ -598,7 +596,7 @@ describe('organization person center list layout', () => {
     expect(document.body.textContent).not.toContain('account-1');
   });
 
-  it('keeps the drawer edit action disabled when its detail dependency is unavailable', async () => {
+  it('keeps the drawer edit action available without a person version dependency', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -609,7 +607,7 @@ describe('organization person center list layout', () => {
       }
       if (url.startsWith('/api/organization/persons?')) {
         return new Response(JSON.stringify({
-          items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
+          items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
           total: 1,
           page: 1,
           pageSize: 20,
@@ -649,11 +647,11 @@ describe('organization person center list layout', () => {
     await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
       String(input) === '/api/organization/persons/person-1'
     ))).toBe(true));
-    await vi.waitFor(() => expect(document.body.textContent).toContain('动作所需数据不可用'));
     const editButton = Array.from(document.body.querySelectorAll('.ant-drawer-footer button')).find(
       (button) => button.textContent?.replace(/\s+/g, '') === '编辑',
     );
-    expect(editButton?.disabled).toBe(true);
+    expect(document.body.textContent).not.toContain('动作所需数据不可用');
+    expect(editButton?.disabled).toBe(false);
   });
 
   it('disables deletion for a permanently bound person and explains the guard', async () => {
@@ -663,7 +661,6 @@ describe('organization person center list layout', () => {
         PersonNo: 'P0001',
         ENAME: '张三',
         IsEnabled: true,
-        Revision: 4,
         AccountEID: 'account-1',
       }],
       total: 1,
@@ -704,7 +701,6 @@ describe('organization person center list layout', () => {
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',
             IsEnabled: true,
-            Revision: 4,
           }],
           total: 1,
           page: 1,
@@ -754,7 +750,6 @@ describe('organization person center list layout', () => {
 
     expect(serviceMocks.setPersonLifecycleStatus).toHaveBeenCalledWith('person-1', {
       isEnabled: false,
-      expectedRevision: 4,
       reason: '人员中心停用人员',
     });
     expect(container.textContent).toContain('停用人员失败');

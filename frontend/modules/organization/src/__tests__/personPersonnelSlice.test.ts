@@ -207,7 +207,6 @@ describe('personnel center first vertical slice', () => {
         CompanyId_DisplayValue: '总部',
         EmploymentStatus: 'FullTime',
         IsEnabled: true,
-        Revision: 7,
         CreatedBy: 'creator-1',
         CreatedAt: '2026-08-14T01:02:03Z',
         UpdatedBy: 'editor-2',
@@ -242,7 +241,7 @@ describe('personnel center first vertical slice', () => {
 
     await expect(handler?.({
       id: 'person-1',
-      row: { id: 'person-1', revision: 4 } as never,
+      row: { id: 'person-1' } as never,
       input: '   ',
     })).rejects.toThrow('请填写停用原因');
   });

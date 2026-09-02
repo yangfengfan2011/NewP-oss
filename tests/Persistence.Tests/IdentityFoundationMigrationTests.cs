@@ -75,7 +75,7 @@ public sealed class IdentityFoundationMigrationTests
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
             .ToArray();
         var finalDigest = PersistenceModelDigest.Compute(definitions);
-        Assert.Equal("b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59", finalDigest);
+        Assert.Equal("579c6974b008e4695332d34269f1fc5f4d0ed386257015096079776c0d0f4973", finalDigest);
     }
 
     [Fact]
@@ -393,17 +393,41 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Contains(".HasConstraintName(\"FK_Person_Position\")", snapshot, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OrganizationPersonRevisionRemovalMigration_DropsOwnedColumnAndRequiresBackupRestoreForDown()
+    {
+        var migration = new Organization_000005_RemovePersonRevision();
+        var drop = Assert.IsType<DropColumnOperation>(Assert.Single(migration.UpOperations));
+
+        Assert.Equal("dbo", drop.Schema);
+        Assert.Equal("Person", drop.Table);
+        Assert.Equal("Revision", drop.Name);
+        var descriptor = ReadFromDescriptor(drop);
+        Assert.Equal("Organization", descriptor.OwnerModuleId);
+        Assert.Equal(17, descriptor.Ordinal);
+        Assert.NotNull(descriptor.Column);
+        Assert.Equal("Revision", descriptor.Column.Name);
+        Assert.Equal("bigint", descriptor.Column.StoreType);
+        Assert.Equal(typeof(long).FullName, descriptor.Column.ClrType);
+        Assert.False(descriptor.Column.IsNullable);
+
+        var exception = Assert.Throws<NotSupportedException>(() => _ = migration.DownOperations);
+        Assert.Contains("backup-restore-only", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("verified database backup", exception.Message, StringComparison.Ordinal);
+    }
+
     private static void AssertOrganizationManifest(string repositoryRoot)
     {
         var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(4, migrations.Length);
+        Assert.Equal(5, migrations.Length);
         var foundation = migrations[0];
         var positionDirectory = migrations[1];
         var positionReference = migrations[2];
         var personnelTemporalFields = migrations[3];
+        var personRevisionRemoval = migrations[4];
         Assert.False(root.TryGetProperty("legacyCutover", out _));
         Assert.Equal("20260812144235_Organization_000001_Foundation", foundation.GetProperty("migrationId").GetString());
         Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
@@ -423,8 +447,13 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal("20260902110155_Organization_000004_PersonnelTemporalFields", personnelTemporalFields.GetProperty("migrationId").GetString());
         Assert.Equal(positionReference.GetProperty("contentDigest").GetString(), personnelTemporalFields.GetProperty("previousContentDigest").GetString());
         Assert.Equal(positionReference.GetProperty("toModelDigest").GetString(), personnelTemporalFields.GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), personnelTemporalFields.GetProperty("toModelDigest").GetString());
+        Assert.Equal("b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59", personnelTemporalFields.GetProperty("toModelDigest").GetString());
         Assert.Equal("safe-expand", personnelTemporalFields.GetProperty("compatibility").GetString());
+        Assert.Equal("20260902135016_Organization_000005_RemovePersonRevision", personRevisionRemoval.GetProperty("migrationId").GetString());
+        Assert.Equal(personnelTemporalFields.GetProperty("contentDigest").GetString(), personRevisionRemoval.GetProperty("previousContentDigest").GetString());
+        Assert.Equal(personnelTemporalFields.GetProperty("toModelDigest").GetString(), personRevisionRemoval.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), personRevisionRemoval.GetProperty("toModelDigest").GetString());
+        Assert.Equal("backup-restore-only", personRevisionRemoval.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location))));
@@ -458,6 +487,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             personnelTemporalFields.GetProperty("contentDigest").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(personnelTemporalSourcePath))));
+        var personRevisionRemovalSourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260902135016_Organization_000005_RemovePersonRevision.cs");
+        Assert.Equal(
+            personRevisionRemoval.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(personRevisionRemovalSourcePath))));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)

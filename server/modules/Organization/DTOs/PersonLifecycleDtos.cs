@@ -9,6 +9,5 @@ public sealed record PersonLifecycleAccountDto(
 public sealed record PersonLifecycleDto(
     string PersonEid,
     bool IsEnabled,
-    long Revision,
     string? AccountEid,
     PersonLifecycleAccountDto? Account);

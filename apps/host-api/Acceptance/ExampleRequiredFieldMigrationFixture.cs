@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
@@ -208,7 +209,8 @@ internal static class ExampleRequiredFieldMigrationFixture
         }
     }
 
-    // 该快照来自 000001 固定点：Position 使用当时的 authoring，Person 排除后续追加的 temporal 字段。
+    // 该快照来自 000001 固定点：Position 使用当时的 authoring，Person 排除后续追加的 temporal 字段，
+    // 并临时补回 000005 才删除的历史 Revision 列。
     // 快照仍经当前正式 loader、storage map 和 projector 生成，并由 manifest 摘要守卫阻止漂移。
     private static ModelDefinition[] BuildOrganizationFoundationModels(
         string repositoryRoot,
@@ -240,12 +242,27 @@ internal static class ExampleRequiredFieldMigrationFixture
             OwnerModuleId = "Organization",
             SchemaName = "dbo"
         };
-        var foundationPerson = person with
-        {
-            Fields = person.Fields.Where(static field =>
+        var foundationPersonFields = person.Fields
+            .Where(static field =>
                 field.Name is not "BirthDate"
                     and not "EmploymentStartedAt"
-                    and not "EmploymentEndedAt").ToArray()
+                    and not "EmploymentEndedAt")
+            .ToList();
+        var isEnabledIndex = foundationPersonFields.FindIndex(static field => field.Name == "IsEnabled");
+        foundationPersonFields.Insert(
+            isEnabledIndex + 1,
+            new FieldDefinition(
+                "Revision",
+                "Revision",
+                FieldKind.Scalar,
+                FieldValueType.Integer,
+                "bigint",
+                Required: true,
+                IsPrimaryKey: false,
+                IsAuditField: false));
+        var foundationPerson = person with
+        {
+            Fields = foundationPersonFields
         };
 
         return organizationModels

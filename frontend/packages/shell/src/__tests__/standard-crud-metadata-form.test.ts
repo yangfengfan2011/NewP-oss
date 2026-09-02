@@ -51,6 +51,11 @@ describe('standard CRUD metadata form schema', () => {
       enumOptions: { EmploymentStatus: [] },
       timeZoneId: 'Asia/Taipei',
     });
+    const createSchema = buildStandardCrudFormSchemaFromModel(personModelDocument.Person, {
+      mode: 'create',
+      enumOptions: { EmploymentStatus: [] },
+      timeZoneId: 'Asia/Taipei',
+    });
 
     expect(schema.sections.map((section) => section.key)).toEqual(['basic', 'organization', 'employment']);
     expect(schema.fields.find((field) => field.key === 'BirthDate')).toMatchObject({ kind: 'date' });
@@ -59,6 +64,9 @@ describe('standard CRUD metadata form schema', () => {
       timeZoneId: 'Asia/Taipei',
     });
     expect(schema.fields.find((field) => field.key === 'EmploymentEndedAt')).toMatchObject({ kind: 'dateTime' });
+    expect(personModelDocument.Person.fields.some((field) => field.name === 'Revision')).toBe(false);
+    expect(createSchema.fields.some((field) => field.key === 'Revision')).toBe(false);
+    expect(schema.fields.some((field) => field.key === 'Revision')).toBe(false);
   });
 
   it('normalizes platform field keys and form sections without metadata aliases', () => {

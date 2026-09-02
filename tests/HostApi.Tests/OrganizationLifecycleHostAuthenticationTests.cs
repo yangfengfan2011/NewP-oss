@@ -59,7 +59,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
 
         await lifecycle.SetStatusAsync(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(false, 4, "人员离职"),
+            new SetPersonLifecycleStatusRequest(false, "人员离职"),
             new PersonLifecycleActor("User_Admin", "trace-disable"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await SendProtectedAsync(client, cookieHeader)).StatusCode);
@@ -77,7 +77,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
 
         await lifecycle.SetStatusAsync(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(true, 5, "人员返岗"),
+            new SetPersonLifecycleStatusRequest(true, "人员返岗"),
             new PersonLifecycleActor("User_Admin", "trace-restore"));
 
         Assert.False(identity.Current.PersonnelDisableHold);
@@ -161,7 +161,6 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         PersonEid = "Person_1",
         PersonName = "张三",
         IsEnabled = true,
-        Revision = 4,
         AccountEid = "User_1",
         BoundAt = now.AddDays(-1),
         BoundBy = "User_Admin",
@@ -180,21 +179,15 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         public ValueTask<bool> TryBindAsync(string personEid, string accountEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<bool> TrySetEnablementAsync(string personEid, bool isEnabled, long expectedRevision, string actorId, DateTime changedAt, CancellationToken cancellationToken = default)
+        public ValueTask SetEnablementAsync(string personEid, bool isEnabled, string actorId, DateTime changedAt, CancellationToken cancellationToken = default)
         {
-            if (Current.PersonEid != personEid || Current.Revision != expectedRevision || Current.IsEnabled == isEnabled)
-            {
-                return ValueTask.FromResult(false);
-            }
-
             Current = Current with
             {
                 IsEnabled = isEnabled,
-                Revision = Current.Revision + 1,
                 UpdatedBy = actorId,
                 UpdatedAt = changedAt
             };
-            return ValueTask.FromResult(true);
+            return ValueTask.CompletedTask;
         }
     }
 

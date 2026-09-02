@@ -269,9 +269,8 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             HttpStatusCode.Created,
             cancellationToken);
         var personEid = ReadNestedString(person.RootElement, "fields", "EID");
-        var personRevision = ReadNestedLong(person.RootElement, "fields", "Revision");
+        EnsurePropertyAbsent(ReadObject(person.RootElement, "fields"), "Revision", "created Person fields");
         var personUpdatePayload = PersonPayload(personNo, "Identity Acceptance Person Updated", true);
-        personUpdatePayload["Revision"] = personRevision;
         var updatedPerson = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
@@ -279,16 +278,15 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             personUpdatePayload,
             HttpStatusCode.OK,
             cancellationToken);
-        var updatedPersonRevision = ReadNestedLong(updatedPerson.RootElement, "fields", "Revision");
+        EnsurePropertyAbsent(ReadObject(updatedPerson.RootElement, "fields"), "Revision", "updated Person fields");
 
-        var binding = await SendJsonAndReadAsync(
+        await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}/user-binding",
             new { accountEid = bound.AccountEid, expectedRevision = boundRegular.Revision, reason = "纵向验收永久绑定" },
             HttpStatusCode.OK,
             cancellationToken);
-        var boundAfterBindingRevision = ReadNestedLong(binding.RootElement, "account", "revision");
         var competing = await CreateUserAsync(admin, $"other.{_runId[..8]}", "Other Account", cancellationToken);
         RegisterSecret(competing.TemporaryCredential);
         using (var conflict = await SendJsonAsync(
@@ -301,20 +299,14 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             await EnsureProblemAsync(conflict, HttpStatusCode.Conflict, "ORGANIZATION_PERSON_ALREADY_BOUND", "permanent binding conflict", cancellationToken);
         }
 
-        var currentPerson = await GetJsonAsync(admin, $"/api/organization/persons/{personEid}", cancellationToken);
-        var currentPersonRevision = ReadNestedLong(currentPerson.RootElement, "fields", "Revision");
-        if (currentPersonRevision < updatedPersonRevision)
-        {
-            throw new InvalidOperationException("Person revision moved backwards after permanent binding.");
-        }
-
         var disabledPerson = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}/status",
-            new { isEnabled = false, expectedRevision = currentPersonRevision, reason = "纵向验收人员停用" },
+            new { isEnabled = false, reason = "纵向验收人员停用" },
             HttpStatusCode.OK,
             cancellationToken);
+        EnsurePropertyAbsent(disabledPerson.RootElement, "revision", "Person disable response");
         EnsureBoolean(ReadObject(disabledPerson.RootElement, "account"), "personnelDisableHold", true, "personnel disable hold");
         await EnsureSessionInvalidAsync(boundSessionOne, cancellationToken);
         await EnsureSessionInvalidAsync(boundSessionTwo, cancellationToken);
@@ -322,9 +314,10 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}/status",
-            new { isEnabled = true, expectedRevision = ReadLong(disabledPerson.RootElement, "revision"), reason = "纵向验收人员恢复" },
+            new { isEnabled = true, reason = "纵向验收人员恢复" },
             HttpStatusCode.OK,
             cancellationToken);
+        EnsurePropertyAbsent(recoveredPerson.RootElement, "revision", "Person recovery response");
         EnsureString(ReadObject(recoveredPerson.RootElement, "account"), "status", "Disabled", "person recovery keeps account disabled");
         var recoveredAccount = ReadObject(recoveredPerson.RootElement, "account");
         await SetUserStatusAsync(
@@ -1298,7 +1291,14 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
     private static int ReadInt(JsonElement element, string name) => Property(element, name).GetInt32();
     private static DateTime ReadDateTime(JsonElement element, string name) => Property(element, name).GetDateTime();
     private static string ReadNestedString(JsonElement element, string parent, string name) => ReadString(ReadObject(element, parent), name);
-    private static long ReadNestedLong(JsonElement element, string parent, string name) => ReadLong(ReadObject(element, parent), name);
+
+    private static void EnsurePropertyAbsent(JsonElement element, string name, string operation)
+    {
+        if (element.TryGetProperty(name, out _))
+        {
+            throw new InvalidOperationException($"{operation} unexpectedly exposed {name}.");
+        }
+    }
 
     private static void EnsureString(JsonElement element, string name, string expected, string operation)
     {

@@ -24,11 +24,11 @@ public sealed class PersonLifecycleControllerTests
     public async Task SetStatus_WhenLifecycleConflicts_ReturnsStableProblemDetails()
     {
         var controller = Controller(new FailingService(
-            new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, new { revision = 5 })));
+            new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, new { status = "latest" })));
 
         var response = await controller.SetStatus(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(false, 4, "并发停用"));
+            new SetPersonLifecycleStatusRequest(false, "账号状态冲突"));
 
         var conflict = Assert.IsType<ObjectResult>(response.Result);
         Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);

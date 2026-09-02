@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Select, Switch, Typography } from 'antd';
+import zhCN from 'antd/es/date-picker/locale/zh_CN';
 import type { StandardCrudFieldDefinition, StandardCrudFormMode, StandardCrudOption } from '@icp-platform/sdk';
 
 export interface StandardCrudFieldProps {
@@ -223,6 +224,7 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker.RangePicker
           id={field.key}
+          locale={zhCN}
           allowEmpty={[true, true]}
           value={[toDayjs(range[0]), toDayjs(range[1])]}
           onChange={(dates) => onChange(field.key, dates
@@ -238,6 +240,7 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker
           id={field.key}
+          locale={zhCN}
           value={toDayjs(value)}
           onChange={(date) => onChange(field.key, date?.format('YYYY-MM-DD') ?? '')}
         />
@@ -250,6 +253,7 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker
           id={field.key}
+          locale={zhCN}
           showTime={{ format: 'HH:mm:ss' }}
           format="YYYY-MM-DD HH:mm:ss"
           value={toSessionLocalDateTime(value, field.timeZoneId)}

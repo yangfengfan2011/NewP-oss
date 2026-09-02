@@ -79,24 +79,14 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
-    public void PersonCrudDescriptor_DeclaresRevisionConcurrency()
+    public void PersonCrudDescriptor_DoesNotDeclareRevisionConcurrency()
     {
         var descriptor = PersonCrudDescriptorFactory.Create();
 
-        Assert.Equal("Revision", descriptor.ConcurrencyRevisionField);
-        Assert.Contains(descriptor.ConcurrencyRevisionField, descriptor.FieldSet.DetailFields);
-    }
-
-    [Fact]
-    public void PersonCrudDescriptor_OwnsRevisionOnServerDuringCreate()
-    {
-        var descriptor = PersonCrudDescriptorFactory.Create();
-
-        var revision = Assert.Single(descriptor.FieldPolicies, policy => policy.Field == "Revision");
-        Assert.True(revision.StorageRequired);
-        Assert.False(revision.CreateInputRequired);
-        Assert.Equal(StandardCrudFieldValueOwner.ServerOnCreate, revision.ValueOwner);
-        Assert.Equal(0L, revision.CreateDefaultValue);
+        Assert.Null(descriptor.ConcurrencyRevisionField);
+        Assert.DoesNotContain("Revision", descriptor.FieldSet.ListFields);
+        Assert.DoesNotContain("Revision", descriptor.FieldSet.DetailFields);
+        Assert.DoesNotContain(descriptor.FieldPolicies, policy => policy.Field == "Revision");
     }
 
     [Fact]

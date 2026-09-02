@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -152,6 +154,38 @@ describe('StandardCrudField and StandardCrudForm', () => {
 
     expect(container.querySelector('.np-standard-crud-select[data-value="FullTime"]')).not.toBeNull();
     expect(container.textContent).toContain('正式');
+  });
+
+  it('uses Chinese locale text for date and date-time pickers', async () => {
+    await render(
+      <>
+        <StandardCrudField
+          field={{ key: 'birthDate', labelKey: '出生日期', modelField: 'BirthDate', kind: 'date' }}
+          value=""
+          mode="create"
+          onChange={vi.fn()}
+        />
+        <StandardCrudField
+          field={{ key: 'startedAt', labelKey: '任职开始时间', modelField: 'StartedAt', kind: 'dateTime' }}
+          value=""
+          mode="create"
+          onChange={vi.fn()}
+        />
+      </>,
+    );
+
+    expect(Array.from(container.querySelectorAll<HTMLInputElement>('.ant-picker input'))
+      .map((input) => input.placeholder)).toEqual(['请选择日期', '请选择日期']);
+  });
+
+  it('keeps the searchable select input within the selection line', () => {
+    const shellCss = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const searchInputRule = shellCss.match(
+      /\.np-standard-crud-select\.ant-select-single \.ant-select-selection-search-input\s*\{([^}]*)\}/,
+    )?.[1] ?? '';
+
+    expect(searchInputRule).toContain('height: 100%;');
+    expect(searchInputRule).toContain('min-height: 0;');
   });
 
   it('forwards remote lookup search, scroll continuation and retry interactions', async () => {

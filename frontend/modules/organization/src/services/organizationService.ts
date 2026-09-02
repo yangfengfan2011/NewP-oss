@@ -80,7 +80,6 @@ export interface PersonListRow {
   EmploymentEndedAt: string | null;
   EmploymentEndedAt_DisplayValue: string | null;
   IsEnabled: boolean;
-  Revision: number;
   AccountEID?: string | null;
   CompanyId: string | null;
   CompanyId_DisplayValue: string | null;
@@ -96,7 +95,6 @@ export interface PersonListRow {
   employmentStatus: string;
   employmentStatusLabel: string;
   isEnabled: boolean;
-  revision: number;
   accountEid?: string | null;
 }
 
@@ -119,7 +117,6 @@ export interface PersonDetailView {
   employmentStatus: string;
   employmentStatusLabel: string;
   isEnabled: boolean;
-  revision: number;
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -220,8 +217,6 @@ export function mapPersonListItem(value: unknown): PersonListRow {
   const rawCompanyId = readStandardCrudNullableString(row, ['CompanyId']);
   const departmentName = readStandardCrudString(row, ['DepartmentName']);
   const positionName = readStandardCrudNullableString(row, ['PositionName']);
-  const revision = Number(row.Revision ?? row.revision ?? 0);
-
   return {
     id: readStandardCrudString(row, ['EID']),
     // 列表 Host 按 metadata 字段读取，模块 mapper 明确补齐协议字段，避免 Shell 引入隐式字段别名。
@@ -235,7 +230,6 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     EmploymentEndedAt: readStandardCrudNullableString(row, ['EmploymentEndedAt']),
     EmploymentEndedAt_DisplayValue: readStandardCrudNullableString(row, ['EmploymentEndedAt_DisplayValue']),
     IsEnabled: isEnabled,
-    Revision: revision,
     AccountEID: readStandardCrudNullableString(row, ['AccountEID']),
     CompanyId: rawCompanyId,
     CompanyId_DisplayValue: readStandardCrudNullableString(row, ['CompanyId_DisplayValue']),
@@ -251,7 +245,6 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled,
-    revision,
     accountEid: readStandardCrudNullableString(row, ['AccountEID']),
   };
 }
@@ -281,7 +274,6 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
     employmentStatus,
     employmentStatusLabel: getEmploymentStatusLabel(employmentStatus),
     isEnabled: readStandardCrudBoolean(fields, ['IsEnabled'], true),
-    revision: Number(fields.Revision ?? fields.revision ?? 0),
     createdBy: readStandardCrudString(fields, ['CreatedBy']),
     createdAt: readDateString(fields, ['CreatedAt']),
     updatedBy: readStandardCrudString(fields, ['UpdatedBy']),
@@ -408,7 +400,7 @@ export async function deletePerson(personId: string): Promise<void> {
 
 export async function setPersonLifecycleStatus(
   personId: string,
-  input: { isEnabled: boolean; expectedRevision: number; reason: string },
+  input: { isEnabled: boolean; reason: string },
 ): Promise<void> {
   await requestJson<unknown>(
     `/api/organization/persons/${encodeURIComponent(personId)}/status`,

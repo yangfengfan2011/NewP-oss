@@ -14,7 +14,7 @@ Detail View 使用 metadata 协议字段名，并只能引用解析后字段目�
 
 查看 Drawer 与完整详情页消费同一份 Resolved Detail Schema，并展示完全相同的普通字段、顺序、分区和 renderer。容器可以调整宽度、响应式列数、标题、关闭或返回交互；完整详情页还可以呈现同一 Detail View 显式声明的 `summaryBlocks` 和 `pageActions`，但这些扩展不能重新定义普通字段结构。View 可见性只控制呈现，不改变详情 API 数据契约，也不构成授权；服务端 endpoint 和业务权限判定仍是安全事实源。
 
-人员中心的 `PersonDetail` 采用三个共享分区：`basic` 依次包含 `PersonNo`、`ENAME`；`organization` 依次包含 `CompanyId`、`DepartmentId`、`PositionId`、`EmploymentStatus`、`IsEnabled`；`audit` 依次包含 `CreatedBy`、`CreatedAt`、`UpdatedBy`、`UpdatedAt`。四个审计字段同时显示在 Drawer 与完整详情页，不另建完整页专属审计 summary。`EID`、`Revision` 和 `AccountEID`、`AccountBoundAt`、`AccountBoundBy`、`AccountBindingReason` 不进入普通字段结构；完整详情页继续通过 `userBinding`、`authorizationSummary` 展示业务摘要，并保留 `edit`、`disable` page action，其中停用必须拥有完整的原因输入契约。
+人员中心的 `PersonDetail` 采用三个共享分区：`basic` 依次包含 `PersonNo`、`ENAME`；`organization` 依次包含 `CompanyId`、`DepartmentId`、`PositionId`、`EmploymentStatus`、`IsEnabled`；`audit` 依次包含 `CreatedBy`、`CreatedAt`、`UpdatedBy`、`UpdatedAt`。四个审计字段同时显示在 Drawer 与完整详情页，不另建完整页专属审计 summary。`EID` 和 `AccountEID`、`AccountBoundAt`、`AccountBoundBy`、`AccountBindingReason` 不进入普通字段结构；完整详情页继续通过 `userBinding`、`authorizationSummary` 展示业务摘要，并保留 `edit`、`disable` page action，其中停用必须拥有完整的原因输入契约。
 
 `form.view`、`view.visible`、整体 `renderDetail`、`renderDetailHeaderActions` 和未被运行时消费的 `detailActions` 一次性退役，不保留兼容桥。字段级 renderer、summary renderer 和 metadata action handler 是标准 CRUD 允许的扩展点；需要完全自定义结构的业务详情必须使用自定义页面 capability。
 
@@ -31,7 +31,7 @@ Detail View 使用 metadata 协议字段名，并只能引用解析后字段目�
 
 缺失或空的 Detail View、字符串 section、重复字段、未知字段、未知 renderer binding，以及详情 capability 缺失 View 引用，都必须在候选编译或前端注册阶段拒绝整份候选。标准详情至少包含一个对象 section 和一个字段；纯 summary 页面应使用自定义页面 capability。普通响应字段缺失不再属于候选失败，而按 ADR-0033 在响应到达后局部降级；关键标识失败与动作依赖不可用也由同一运行时 module 统一裁决和诊断。
 
-迁移验收必须证明创建和编辑行为保持不变，人员 Drawer 与完整详情页解析出相同的三个普通字段分区，并且四个 Entity 审计字段可由详情 API 和运行时 mapper 完整提供。完整详情页还须验证账号绑定、授权摘要以及 edit/disable 的权限、输入、成功、失败和并发冲突。真实浏览器 Gate 必须覆盖从 Drawer 进入完整详情、详情 URL 直达、刷新、前进后退和权限拒绝；standard-data 契约测试必须证明显式 View 可以装载，而缺失引用不会产生 Model fallback。
+迁移验收必须证明创建和编辑行为保持不变，人员 Drawer 与完整详情页解析出相同的三个普通字段分区，并且四个 Entity 审计字段可由详情 API 和运行时 mapper 完整提供。完整详情页还须验证账号绑定、授权摘要以及 edit/disable 的权限、输入、成功和失败。真实浏览器 Gate 必须覆盖从 Drawer 进入完整详情、详情 URL 直达、刷新、前进后退和权限拒绝；standard-data 契约测试必须证明显式 View 可以装载，而缺失引用不会产生 Model fallback。
 
 ## 回滚
 

@@ -494,7 +494,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             $"{personName} Rejected Update",
             fixture.CompanyId,
             fixture.DepartmentId);
-        updateDisplayCompanionPayload["Revision"] = createdPerson.Revision;
         updateDisplayCompanionPayload["CompanyId_DisplayValue"] = fixture.CompanyName;
         await AssertCanonicalDisplayCompanionWriteRejectedAsync(
             admin,
@@ -510,10 +509,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             personName,
             fixture.CompanyId,
             fixture.CompanyName,
-            createdPerson.Revision,
             cancellationToken);
         var updatePayload = PersonPayload(personNo, updatedName, fixture.CompanyId, fixture.DepartmentId);
-        updatePayload["Revision"] = createdPerson.Revision;
         using (var updated = await SendJsonWithAntiforgeryAsync(
                    admin,
                    HttpMethod.Put,
@@ -556,7 +553,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 "anonymous detail");
             using var deniedStatus = await anonymous.PutAsJsonAsync(
                 $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
-                new { isEnabled = false, expectedRevision = person.Revision, reason = "Anonymous disable" },
+                new { isEnabled = false, reason = "Anonymous disable" },
                 cancellationToken);
             EnsureStatus(
                 deniedStatus,
@@ -586,7 +583,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 readOnly,
                 HttpMethod.Put,
                 $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
-                new { isEnabled = false, expectedRevision = person.Revision, reason = "Read-only disable" },
+                new { isEnabled = false, reason = "Read-only disable" },
                 cancellationToken);
             EnsureStatus(
                 deniedStatus,
@@ -602,7 +599,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                    admin,
                    HttpMethod.Put,
                    $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
-                   new { isEnabled = false, expectedRevision = person.Revision, reason = "" },
+                   new { isEnabled = false, reason = "" },
                    cancellationToken))
         {
             var invalidReasonBody = await invalidReason.Content.ReadAsStringAsync(cancellationToken);
@@ -717,35 +714,35 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
-            new { isEnabled = false, expectedRevision = person.Revision, reason = "Personnel acceptance disable" },
+            new { isEnabled = false, reason = "Personnel acceptance disable" },
             cancellationToken);
         var disabledBody = await disabled.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(disabled, HttpStatusCode.OK, disabledBody, "disable person");
         using var disabledJson = JsonDocument.Parse(disabledBody);
-        var disabledRevision = ReadLong(disabledJson.RootElement, "revision");
-
-        using (var conflict = await SendJsonWithAntiforgeryAsync(
-                   admin,
-                   HttpMethod.Put,
-                   $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
-                   new { isEnabled = true, expectedRevision = person.Revision, reason = "Stale personnel acceptance enable" },
-                   cancellationToken))
+        if (disabledJson.RootElement.TryGetProperty("revision", out _))
         {
-            EnsureStatus(conflict, HttpStatusCode.Conflict, await conflict.Content.ReadAsStringAsync(cancellationToken), "stale lifecycle update");
-            checks.Add(new { check = "detail-disable-conflict", status = 409 });
+            throw new InvalidOperationException("Personnel lifecycle response unexpectedly exposed Revision.");
         }
 
         using var enabled = await SendJsonWithAntiforgeryAsync(
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}/status",
-            new { isEnabled = true, expectedRevision = disabledRevision, reason = "Personnel acceptance enable" },
+            new { isEnabled = true, reason = "Personnel acceptance enable" },
             cancellationToken);
         var enabledBody = await enabled.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(enabled, HttpStatusCode.OK, enabledBody, "enable person");
         using var enabledJson = JsonDocument.Parse(enabledBody);
-        var enabledRevision = ReadLong(enabledJson.RootElement, "revision");
-        _person = person with { Revision = enabledRevision };
+        if (enabledJson.RootElement.TryGetProperty("revision", out _))
+        {
+            throw new InvalidOperationException("Personnel lifecycle response unexpectedly exposed Revision.");
+        }
+        using var enabledDetail = await admin.GetAsync(
+            $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
+            cancellationToken);
+        var enabledDetailBody = await enabledDetail.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(enabledDetail, HttpStatusCode.OK, enabledDetailBody, "detail after person enable");
+        _person = ReadPerson(enabledDetailBody, person.PersonNo, person.Name, "detail after person enable");
         checks.Add(new { check = "detail-disable-success", status = 200 });
 
         using (var bound = await SendJsonWithAntiforgeryAsync(
@@ -967,11 +964,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 "detail-summary-ready",
                 "detail-edit-permission",
                 "detail-disable-required-reason",
-                "detail-disable-success",
-                "detail-disable-conflict",
-                "detail-disable-conflict-dialog-auto-closed",
-                "detail-disable-conflict-detail-refreshed",
-                "detail-disable-conflict-command-not-replayed"
+                "detail-disable-success"
             ]);
             interceptedResponseAssertions = await CaptureDetailContractDriftBrowserEvidenceAsync(
                 browser,
@@ -1082,8 +1075,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             "null",
             "field-missing",
             "section-unavailable",
-            "critical-id",
-            "action-dependency"
+            "critical-id"
         }.ToDictionary(
             static key => key,
             static _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
@@ -1129,9 +1121,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                         break;
                     case "critical-id":
                         fields.Remove("EID");
-                        break;
-                    case "action-dependency":
-                        fields.Remove("Revision");
                         break;
                     default:
                         throw new InvalidOperationException($"Unsupported detail contract drift mode '{interceptedMode}'.");
@@ -1201,26 +1190,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 throw new InvalidOperationException("Critical Personnel detail identity failure left actions visible.");
             }
             checks.Add("detail-critical-id-fails-whole-detail");
-
-            mode = "action-dependency";
-            await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-            await WaitForInterceptedModeAsync(
-                interceptedModeSignals["action-dependency"].Task,
-                "action-dependency",
-                cancellationToken);
-            var edit = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true });
-            var disable = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "停用", Exact = true });
-            await edit.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            if (!await edit.IsDisabledAsync() || !await disable.IsDisabledAsync())
-            {
-                throw new InvalidOperationException("Missing Personnel Revision did not disable all dependency-bound actions.");
-            }
-            await page.GetByText(
-                    "动作所需数据不可用，请刷新详情后重试。",
-                    new PageGetByTextOptions { Exact = true })
-                .First
-                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            checks.Add("detail-action-dependency-disables-action");
 
             var screenshotPath = Path.Combine(_runDirectory, "personnel", "browser-intercepted-response.png");
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
@@ -1900,56 +1869,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await inputModal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
 
         _person = await EnablePersonAfterBrowserDisableAsync(person, cancellationToken);
-        reasonInput = await OpenDisableReasonDialogAsync(page);
-        inputModal = page.Locator(".ant-modal-content:visible").Last;
-        await reasonInput.FillAsync("Personnel detail stale disable");
-        var personDetailApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
-        var conflictActionGuard = new BrowserRequestDuplicateGuard(
-            "PUT",
-            $"{personDetailApiPath}/status",
-            []);
-        EventHandler<IRequest> conflictActionObserver = (_, request) =>
-            conflictActionGuard.Observe(request.Method, request.Url, request.PostData);
-        page.Request += conflictActionObserver;
-        try
-        {
-            var conflictResponseTask = page.WaitForResponseAsync(static response =>
-                response.Request.Method == "PUT"
-                && response.Url.EndsWith("/status", StringComparison.Ordinal));
-            var refreshedDetailResponseTask = page.WaitForResponseAsync(response =>
-                response.Request.Method == "GET"
-                && response.Url.EndsWith(personDetailApiPath, StringComparison.Ordinal));
-            await inputModal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex("^确\\s*认$") })
-                .ClickAsync();
-            var conflictResponse = await conflictResponseTask;
-            if (conflictResponse.Status != (int)HttpStatusCode.Conflict)
-            {
-                throw new InvalidOperationException($"Browser stale disable returned {conflictResponse.Status}, expected 409.");
-            }
-            await inputModal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
-            await page.GetByText("LIFECYCLE_CONFLICT", new PageGetByTextOptions { Exact = true })
-                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            var refreshedDetailResponse = await refreshedDetailResponseTask;
-            if (refreshedDetailResponse.Status != (int)HttpStatusCode.OK)
-            {
-                throw new InvalidOperationException(
-                    $"Browser conflict refresh returned {refreshedDetailResponse.Status}, expected 200.");
-            }
-
-            var conflictActionReport = await conflictActionGuard.WaitForQuietPeriodAsync(
-                TimeSpan.FromMilliseconds(250),
-                TimeSpan.FromSeconds(5),
-                cancellationToken);
-            conflictActionReport.EnsurePassed();
-            if (conflictActionReport.Fingerprints.Sum(static fingerprint => fingerprint.PhysicalCount) != 1)
-            {
-                throw new InvalidOperationException("Browser stale disable command was replayed after the 409 response.");
-            }
-        }
-        finally
-        {
-            page.Request -= conflictActionObserver;
-        }
     }
 
     // 完整详情两容器共享字段结构；完整页额外必须展示两个真实 ready 摘要块和权限动作。
@@ -2008,7 +1927,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return reasonInput;
     }
 
-    // 浏览器成功停用后由正式 API 恢复人员，使同一页面保留旧 Revision 并产生可观测 409。
+    // 浏览器成功停用后由正式 API 恢复人员，并重新读取审计状态供后续场景使用。
     private async Task<PersonData> EnablePersonAfterBrowserDisableAsync(
         PersonData person,
         CancellationToken cancellationToken)
@@ -2034,26 +1953,30 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             new
             {
                 isEnabled = true,
-                expectedRevision = ReadLong(fields, "Revision"),
-                reason = "Prepare browser lifecycle conflict"
+                reason = "Restore after browser lifecycle check"
             },
             cancellationToken);
         var enabledBody = await enabled.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(enabled, HttpStatusCode.OK, enabledBody, "enable after browser disable");
         using var enabledJson = JsonDocument.Parse(enabledBody);
-        var enabledRevision = ReadLong(enabledJson.RootElement, "revision");
+        if (enabledJson.RootElement.TryGetProperty("revision", out _))
+        {
+            throw new InvalidOperationException("Personnel lifecycle response unexpectedly exposed Revision.");
+        }
 
         using var restoredDetail = await admin.GetAsync(
             $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}",
             cancellationToken);
         var restoredBody = await restoredDetail.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(restoredDetail, HttpStatusCode.OK, restoredBody, "detail after browser lifecycle restore");
+        using var restoredJson = JsonDocument.Parse(restoredBody);
+        var restoredFields = ReadObject(restoredJson.RootElement, "fields");
         var restoredPerson = ReadPerson(
             restoredBody,
             person.PersonNo,
             person.Name,
             "detail after browser lifecycle restore");
-        if (restoredPerson.Revision != enabledRevision
+        if (!ReadBoolean(restoredFields, "IsEnabled")
             || !string.Equals(restoredPerson.CreatedAt, person.CreatedAt, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Browser lifecycle restore returned inconsistent Personnel audit state.");
@@ -2606,14 +2529,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         checks.Add(new { check, status = 400, code, reasonKey, field = expectedField });
     }
 
-    // 被拒绝的 PUT 必须保持此前详情不变，随后才能用同一 revision 证明合法 raw PUT 仍可成功。
+    // 被拒绝的 PUT 必须保持此前详情不变，随后合法 raw PUT 仍可成功。
     private static async Task AssertPersonMutationStateAsync(
         HttpClient client,
         string personId,
         string expectedName,
         string expectedCompanyId,
         string expectedCompanyDisplayValue,
-        long expectedRevision,
         CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
@@ -2628,8 +2550,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             || !string.Equals(
                 ReadString(fields, "CompanyId_DisplayValue"),
                 expectedCompanyDisplayValue,
-                StringComparison.Ordinal)
-            || ReadLong(fields, "Revision") != expectedRevision)
+                StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Rejected canonical display companion update changed the Personnel detail state.");
         }
@@ -2774,12 +2695,15 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     {
         using var json = JsonDocument.Parse(body);
         var fields = ReadObject(json.RootElement, "fields");
+        if (fields.TryGetProperty("Revision", out _))
+        {
+            throw new InvalidOperationException($"{operation} unexpectedly exposed Personnel Revision.");
+        }
         var auditTimestamps = ReadPersonAuditTimestamps(fields, operation);
         return new PersonData(
             ReadString(fields, "EID"),
             personNo,
             name,
-            ReadLong(fields, "Revision"),
             auditTimestamps.CreatedAt,
             auditTimestamps.UpdatedAt);
     }
@@ -3026,7 +2950,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         string Id,
         string PersonNo,
         string Name,
-        long Revision,
         string CreatedAt,
         string UpdatedAt);
     private sealed record PositionData(string Name);

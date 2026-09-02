@@ -188,7 +188,7 @@ public class EfOrganizationRepositoryTests
         var sqlServerPerson = ExtractPersonSection(sqlServerSnapshot);
         Assert.DoesNotContain("PersonUserLink", sqlServerSnapshot, StringComparison.Ordinal);
         Assert.Contains("b.Property<string>(\"AccountEID\")", sqlServerPerson, StringComparison.Ordinal);
-        Assert.Contains("b.Property<long>(\"Revision\")", sqlServerPerson, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.Property<long>(\"Revision\")", sqlServerPerson, StringComparison.Ordinal);
     }
 
     [Fact]

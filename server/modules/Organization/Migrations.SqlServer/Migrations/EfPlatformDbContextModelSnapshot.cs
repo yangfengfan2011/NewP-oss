@@ -245,10 +245,6 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("PositionId");
 
-                    b.Property<long>("Revision")
-                        .HasColumnType("bigint")
-                        .HasColumnName("Revision");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("UpdatedAt");

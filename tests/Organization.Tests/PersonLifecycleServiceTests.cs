@@ -14,22 +14,20 @@ public sealed class PersonLifecycleServiceTests
     private static readonly DateTime ChangedAt = new(2026, 8, 10, 14, 30, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task DisableAsync_CommitsPersonAccountHoldSessionsEventAuditAndRevisionsOnce()
+    public async Task DisableAsync_CommitsPersonAccountHoldSessionsEventAndAuditOnce()
     {
         var fixture = Fixture();
 
         var result = await fixture.Service.SetStatusAsync(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(false, 4, "  人员离职  "),
+            new SetPersonLifecycleStatusRequest(false, "  人员离职  "),
             new PersonLifecycleActor("User_Admin", "trace-40"));
 
         Assert.False(result.IsEnabled);
-        Assert.Equal(5, result.Revision);
         Assert.Equal(8, result.Account?.Revision);
         Assert.Equal(1, fixture.Transaction.ExecutionCount);
         Assert.Equal(1, fixture.Transaction.SaveCount);
         Assert.False(fixture.Repository.Current.IsEnabled);
-        Assert.Equal(5, fixture.Repository.Current.Revision);
         Assert.Equal("User_Admin", fixture.Repository.Current.UpdatedBy);
         Assert.Equal(ChangedAt, fixture.Repository.Current.UpdatedAt);
         Assert.Equal(IdentityAccountStatus.Disabled, fixture.Identity.Account.Status);
@@ -43,7 +41,7 @@ public sealed class PersonLifecycleServiceTests
     public async Task RestoreAsync_ClearsHoldButKeepsAccountDisabledAndSessionsRevoked()
     {
         var fixture = Fixture(
-            person: Person() with { IsEnabled = false, Revision = 5 },
+            person: Person() with { IsEnabled = false },
             account: Account() with
             {
                 Status = IdentityAccountStatus.Disabled,
@@ -54,11 +52,10 @@ public sealed class PersonLifecycleServiceTests
 
         var result = await fixture.Service.SetStatusAsync(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(true, 5, "人员返岗"),
+            new SetPersonLifecycleStatusRequest(true, "人员返岗"),
             new PersonLifecycleActor("User_Admin", "trace-restore"));
 
         Assert.True(result.IsEnabled);
-        Assert.Equal(6, result.Revision);
         Assert.Equal("Disabled", result.Account?.Status);
         Assert.False(result.Account?.PersonnelDisableHold);
         Assert.Equal(2, fixture.Identity.SessionRevocations);
@@ -73,7 +70,7 @@ public sealed class PersonLifecycleServiceTests
 
         var result = await fixture.Service.SetStatusAsync(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(false, 4, "人员停用"),
+            new SetPersonLifecycleStatusRequest(false, "人员停用"),
             new PersonLifecycleActor("User_Admin", "trace-unbound"));
 
         Assert.False(result.IsEnabled);
@@ -83,10 +80,10 @@ public sealed class PersonLifecycleServiceTests
     }
 
     [Fact]
-    public async Task SetStatusAsync_RetryOfFullyConvergedTargetDoesNotDriftRevisionOrDuplicateEvent()
+    public async Task SetStatusAsync_RetryOfFullyConvergedTargetDoesNotDuplicateEvent()
     {
         var fixture = Fixture(
-            person: Person() with { IsEnabled = false, Revision = 5 },
+            person: Person() with { IsEnabled = false },
             account: Account() with
             {
                 Status = IdentityAccountStatus.Disabled,
@@ -98,31 +95,13 @@ public sealed class PersonLifecycleServiceTests
 
         var result = await fixture.Service.SetStatusAsync(
             "Person_1",
-            new SetPersonLifecycleStatusRequest(false, 4, "重复停用"),
+            new SetPersonLifecycleStatusRequest(false, "重复停用"),
             new PersonLifecycleActor("User_Admin", "trace-retry"));
 
-        Assert.Equal(5, result.Revision);
         Assert.Equal(8, result.Account?.Revision);
         Assert.Equal(0, fixture.Transaction.ExecutionCount);
         Assert.Equal(1, fixture.Identity.SessionRevocations);
         Assert.Single(fixture.Identity.Events, "人员离职");
-    }
-
-    [Fact]
-    public async Task SetStatusAsync_StalePersonRevisionReturnsStableConflictWithoutMutation()
-    {
-        var fixture = Fixture(person: Person() with { Revision = 5 });
-
-        var exception = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
-            await fixture.Service.SetStatusAsync(
-                "Person_1",
-                new SetPersonLifecycleStatusRequest(false, 4, "并发停用"),
-                new PersonLifecycleActor("User_Admin", "trace-person-conflict")));
-
-        Assert.Equal(PersonLifecycleFailureCodes.Conflict, exception.FailureCode);
-        Assert.True(fixture.Repository.Current.IsEnabled);
-        Assert.Equal(5, fixture.Repository.Current.Revision);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
     }
 
     [Fact]
@@ -133,12 +112,11 @@ public sealed class PersonLifecycleServiceTests
         var exception = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
             await fixture.Service.SetStatusAsync(
                 "Person_1",
-                new SetPersonLifecycleStatusRequest(false, 4, "账号并发"),
+                new SetPersonLifecycleStatusRequest(false, "账号并发"),
                 new PersonLifecycleActor("User_Admin", "trace-user-conflict")));
 
         Assert.Equal(PersonLifecycleFailureCodes.Conflict, exception.FailureCode);
         Assert.True(fixture.Repository.Current.IsEnabled);
-        Assert.Equal(4, fixture.Repository.Current.Revision);
         Assert.Equal(IdentityAccountStatus.Enabled, fixture.Identity.Account.Status);
     }
 
@@ -150,7 +128,7 @@ public sealed class PersonLifecycleServiceTests
         var exception = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
             await fixture.Service.SetStatusAsync(
                 "Person_1",
-                new SetPersonLifecycleStatusRequest(false, 4, "依赖故障"),
+                new SetPersonLifecycleStatusRequest(false, "依赖故障"),
                 new PersonLifecycleActor("User_Admin", "trace-outage")));
 
         Assert.Equal(PersonLifecycleFailureCodes.DependencyUnavailable, exception.FailureCode);
@@ -174,7 +152,7 @@ public sealed class PersonLifecycleServiceTests
         await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
             await fixture.Service.SetStatusAsync(
                 "Person_1",
-                new SetPersonLifecycleStatusRequest(false, 4, "逐阶段故障"),
+                new SetPersonLifecycleStatusRequest(false, "逐阶段故障"),
                 new PersonLifecycleActor("User_Admin", $"trace-{stage}")));
 
         Assert.Equal(personBefore, fixture.Repository.Current);
@@ -225,7 +203,6 @@ public sealed class PersonLifecycleServiceTests
         PersonEid = "Person_1",
         PersonName = "张三",
         IsEnabled = true,
-        Revision = 4,
         AccountEid = "User_1",
         BoundAt = ChangedAt.AddDays(-1),
         BoundBy = "User_Admin",
@@ -262,10 +239,9 @@ public sealed class PersonLifecycleServiceTests
         public ValueTask<bool> TryBindAsync(string personEid, string accountEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask<bool> TrySetEnablementAsync(
+        public ValueTask SetEnablementAsync(
             string personEid,
             bool isEnabled,
-            long expectedRevision,
             string actorId,
             DateTime changedAt,
             CancellationToken cancellationToken = default)
@@ -275,20 +251,14 @@ public sealed class PersonLifecycleServiceTests
                 throw new InvalidOperationException("person-stage-failed");
             }
 
-            if (Current.PersonEid != personEid || Current.Revision != expectedRevision || Current.IsEnabled == isEnabled)
-            {
-                return ValueTask.FromResult(false);
-            }
-
             Current = Current with
             {
                 IsEnabled = isEnabled,
-                Revision = Current.Revision + 1,
                 UpdatedBy = actorId,
                 UpdatedAt = changedAt
             };
             stages.Add("person");
-            return ValueTask.FromResult(true);
+            return ValueTask.CompletedTask;
         }
     }
 

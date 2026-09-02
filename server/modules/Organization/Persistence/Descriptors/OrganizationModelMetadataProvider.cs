@@ -61,6 +61,23 @@ public sealed class OrganizationModelMetadataProvider : IModelDefinitionProvider
         };
     }
 
+    /// <summary>
+    /// 读取单个 Organization Model authoring 文档，供同模块 descriptor 投影共享字段事实。
+    /// </summary>
+    public ModelMetadataDocument GetDocument(string modelName)
+    {
+        var fileName = modelName switch
+        {
+            "Company" => "Company.model.json",
+            "Department" => "Department.model.json",
+            "Position" => "Position.model.json",
+            "Person" => "Person.model.json",
+            _ => throw new ArgumentException($"未知 Organization Model：{modelName}", nameof(modelName))
+        };
+
+        return _modelLoader.LoadFromFile(Path.Combine(_modelDirectory, fileName));
+    }
+
     // 真源加载、校验和投影都收口在 provider，外部只拿到最终 definition。
     private ModelDefinition LoadModel(string fileName, StorageTypeMapDocument storageTypeMap)
     {

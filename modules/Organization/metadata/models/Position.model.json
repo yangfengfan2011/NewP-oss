@@ -4,44 +4,46 @@
   "Position": {
     "kind": "Entity",
     "builtinFields": [
-      "ENAME",
-      "ECODE"
+      "ENAME"
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ENAME",
+          "Description"
+        ]
+      }
     ],
     "fields": [
       {
-        "name": "CompanyId",
-        "storage": {
-          "type": "guid"
-        },
-        "dataSource": {
-          "type": "model",
-          "key": "Company",
-          "model": "Company"
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "hidden"
+          }
         }
       },
       {
-        "name": "DepartmentId",
+        "name": "Description",
         "storage": {
-          "type": "guid"
+          "type": "string",
+          "nullable": true
         },
-        "dataSource": {
-          "type": "model",
-          "key": "Department",
-          "model": "Department"
-        }
-      },
-      {
-        "name": "EmploymentStatus",
-        "storage": {
-          "type": "string"
-        },
-        "contract": {
-          "valueType": "enum",
-          "clrType": "EmploymentStatus"
-        },
-        "dataSource": {
-          "type": "enum",
-          "key": "EmploymentStatus"
+        "uiType": "textarea",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
         }
       },
       {
@@ -49,28 +51,15 @@
         "storage": {
           "type": "bool"
         }
-      },
-      {
-        "name": "SortOrder",
-        "storage": {
-          "type": "string"
-        }
       }
     ],
     "indexes": [
       {
-        "name": "IX_Position_Department",
+        "name": "UX_Position_ENAME",
         "fields": [
-          "DepartmentId"
+          "ENAME"
         ],
-        "unique": false
-      },
-      {
-        "name": "IX_Position_Company",
-        "fields": [
-          "CompanyId"
-        ],
-        "unique": false
+        "unique": true
       }
     ]
   }

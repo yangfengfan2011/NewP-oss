@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using Xunit;
@@ -181,10 +182,38 @@ public sealed class PersonCrudValidatorTests
         Assert.Null(error);
     }
 
+    [Fact]
+    public async Task ValidateUpdateAsync_WhenAffiliationChanges_PreservesIndependentPosition()
+    {
+        var existing = Values(CompanyId, DepartmentId);
+        existing["EID"] = "Person_1";
+        existing["PositionId"] = "Position_1";
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: true), Company(OtherCompanyId, enabled: true)],
+            [
+                Department(DepartmentId, CompanyId, enabled: true),
+                Department(OtherDepartmentId, OtherCompanyId, enabled: true)
+            ],
+            existing,
+            positions: [Position("Position_1", enabled: false)]);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?>
+            {
+                ["CompanyId"] = OtherCompanyId,
+                ["DepartmentId"] = OtherDepartmentId
+            },
+            CancellationToken.None);
+
+        Assert.Null(error);
+        Assert.Equal("Position_1", existing["PositionId"]);
+    }
+
     [Theory]
     [InlineData("position-missing", "Organization.Person.PositionNotFound")]
     [InlineData("position-disabled", "Organization.Person.PositionDisabled")]
-    [InlineData("position-mismatch", "Organization.Person.PositionDepartmentMismatch")]
     public async Task ValidateCreateAsync_WithInvalidPosition_ReturnsStableFieldError(
         string scenario,
         string expectedCode)
@@ -192,8 +221,7 @@ public sealed class PersonCrudValidatorTests
         var positions = scenario switch
         {
             "position-missing" => Array.Empty<Position>(),
-            "position-disabled" => [Position("Position_1", DepartmentId, enabled: false)],
-            _ => [Position("Position_1", OtherDepartmentId, enabled: true)]
+            _ => [Position("Position_1", enabled: false)]
         };
         var validator = CreateValidator(
             [Company(CompanyId, enabled: true)],
@@ -211,9 +239,9 @@ public sealed class PersonCrudValidatorTests
     }
 
     [Fact]
-    public async Task ValidateCreateAsync_WithPositionButNoAffiliation_RequiresCompanyAndDepartment()
+    public async Task ValidateCreateAsync_WithPositionButNoAffiliation_ReturnsNoError()
     {
-        var validator = CreateValidator([], [], positions: [Position("Position_1", DepartmentId, enabled: true)]);
+        var validator = CreateValidator([], [], positions: [Position("Position_1", enabled: true)]);
         var values = Values(null, null);
         values["PositionId"] = "Position_1";
 
@@ -222,7 +250,7 @@ public sealed class PersonCrudValidatorTests
             values,
             CancellationToken.None);
 
-        AssertError(error, "Organization.Person.CompanyRequired", "CompanyId");
+        Assert.Null(error);
     }
 
     [Fact]
@@ -231,7 +259,7 @@ public sealed class PersonCrudValidatorTests
         var validator = CreateValidator(
             [Company(CompanyId, enabled: true)],
             [Department(DepartmentId, CompanyId, enabled: true)],
-            positions: [Position("Position_1", DepartmentId, enabled: true)]);
+            positions: [Position("Position_1", enabled: true)]);
         var values = Values(CompanyId, DepartmentId);
         values["PositionId"] = "Position_1";
 
@@ -244,7 +272,7 @@ public sealed class PersonCrudValidatorTests
     }
 
     [Fact]
-    public async Task ValidateUpdateAsync_WithPositionButNoAffiliation_RequiresCompanyAndDepartment()
+    public async Task ValidateUpdateAsync_WithPositionButNoAffiliation_ReturnsNoError()
     {
         var existing = Values(null, null);
         existing["EID"] = "Person_1";
@@ -252,7 +280,7 @@ public sealed class PersonCrudValidatorTests
             [],
             [],
             existing,
-            positions: [Position("Position_1", DepartmentId, enabled: true)]);
+            positions: [Position("Position_1", enabled: true)]);
 
         var error = await validator.ValidateUpdateAsync(
             PersonCrudDescriptorFactory.Create(),
@@ -260,7 +288,7 @@ public sealed class PersonCrudValidatorTests
             new Dictionary<string, object?> { ["PositionId"] = "Position_1" },
             CancellationToken.None);
 
-        AssertError(error, "Organization.Person.CompanyRequired", "CompanyId");
+        Assert.Null(error);
     }
 
     [Fact]
@@ -272,7 +300,7 @@ public sealed class PersonCrudValidatorTests
             [Company(CompanyId, enabled: true)],
             [Department(DepartmentId, CompanyId, enabled: true)],
             existing,
-            positions: [Position("Position_1", DepartmentId, enabled: true)]);
+            positions: [Position("Position_1", enabled: true)]);
 
         var error = await validator.ValidateUpdateAsync(
             PersonCrudDescriptorFactory.Create(),
@@ -323,12 +351,9 @@ public sealed class PersonCrudValidatorTests
         IsEnabled = enabled
     };
 
-    private static Position Position(string id, string departmentId, bool enabled) => new()
+    private static Position Position(string id, bool enabled) => new()
     {
         Id = id,
-        CompanyId = CompanyId,
-        DepartmentId = departmentId,
-        Code = id,
         Name = id,
         IsEnabled = enabled
     };
@@ -390,7 +415,7 @@ public sealed class PersonCrudValidatorTests
         public Task<bool> DeleteAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class FakePositionRepository(IEnumerable<Position> positions) : IPositionRepository
+    private sealed class FakePositionRepository(IEnumerable<Position> positions) : IPositionDirectory
     {
         private readonly IReadOnlyDictionary<string, Position> _positions =
             positions.ToDictionary(position => position.Id, StringComparer.Ordinal);
@@ -398,9 +423,6 @@ public sealed class PersonCrudValidatorTests
         public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_positions.GetValueOrDefault(positionId));
 
-        public Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(IReadOnlyCollection<string> positionIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task CreateAsync(Position position, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task UpdateAsync(Position position, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

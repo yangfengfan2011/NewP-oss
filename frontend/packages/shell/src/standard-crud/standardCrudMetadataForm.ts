@@ -126,6 +126,7 @@ function buildField(
   const storage = readRecord(field.storage);
   const dataSource = readRecord(field.dataSource);
   const key = normalizeStandardCrudFieldKey(modelField);
+  const shortText = kind === 'text' || kind === 'textarea';
   const result: StandardCrudFieldDefinition = {
     key,
     labelKey: `Field_${modelField}`,
@@ -134,8 +135,9 @@ function buildField(
     required: modeConfig.required === true,
     readOnly: modeConfig.mode === 'readonly' || kind === 'readonly',
     defaultValue: Object.prototype.hasOwnProperty.call(modeConfig, 'defaultValue') ? modeConfig.defaultValue : undefined,
-    trim: storage.type === 'string',
+    trim: shortText,
     emptyAsNull: storage.nullable === true,
+    maxLength: shortText ? 256 : undefined,
   };
 
   if (kind === 'enum') {

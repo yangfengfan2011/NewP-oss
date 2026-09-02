@@ -64,6 +64,8 @@ describe('standard CRUD metadata form schema', () => {
       ['IsEnabled', 'IsEnabled', 'boolean'],
     ]);
     expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ required: true, readOnly: false });
+    expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ trim: true, maxLength: 256 });
+    expect(schema.fields.find((field) => field.key === 'ENAME')).toMatchObject({ trim: true, maxLength: 256 });
     expect(schema.fields.find((field) => field.key === 'EmploymentStatus')).toMatchObject({ defaultValue: 'FullTime' });
     expect(schema.fields.find((field) => field.key === 'PositionId')?.lookup?.dependsOn).toEqual(['DepartmentId']);
   });

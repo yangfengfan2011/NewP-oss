@@ -36,6 +36,8 @@ public class OrganizationModuleTests
 
         Assert.Contains(permissions, permission => permission.Code == "Organization.Person.View");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Person.Create");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.View");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Create");
     }
 
     [Fact]
@@ -59,9 +61,11 @@ public class OrganizationModuleTests
         AssertFileContains(root, @"modules\Organization\metadata\navigation\Organization.nav.json", "\"type\": \"nav\"");
         AssertFileContains(root, @"modules\Organization\metadata\views\PersonList.view.json", "\"type\": \"view\"");
         AssertFileContains(root, @"modules\Organization\metadata\views\PersonDetail.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"modules\Organization\metadata\views\PositionList.view.json", "\"type\": \"view\"");
         AssertFileContains(root, @"modules\Organization\metadata\models\Person.model.json", "\"type\": \"model\"");
         AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PersonListView.dic.json", "\"type\": \"dic\"");
         AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PersonDetailView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PositionListView.dic.json", "\"type\": \"dic\"");
     }
 
     [Fact]

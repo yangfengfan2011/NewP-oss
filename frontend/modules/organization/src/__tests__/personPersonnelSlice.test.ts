@@ -2,6 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mapPersonDetailView, mapPersonListItem } from '../services/organizationService';
 import { personStandardCrudResource } from '../standard-crud/personStandardCrudResource';
 
+const lookupRequest = (
+  fieldKey: string,
+  values: Record<string, unknown> = {},
+  dependencyValues: Record<string, unknown> = {},
+) => ({ fieldKey, keyword: '', page: 1, pageSize: 20, currentValueIds: [], values, dependencyValues });
+
 describe('personnel center first vertical slice', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -35,30 +41,35 @@ describe('personnel center first vertical slice', () => {
       provider => provider.key === 'organization.departments',
     );
 
-    await expect(companyProvider?.load({ fieldKey: 'companyId', values: {}, dependencyValues: {} })).resolves.toEqual([
+    await expect(companyProvider?.load(lookupRequest('companyId'))).resolves.toEqual([
       { value: 'company-1', label: '总部' },
       { value: 'company-2', label: '停用公司（已停用）' },
     ]);
-    await expect(departmentProvider?.load({
-      fieldKey: 'departmentId',
-      values: { companyId: 'company-1' },
-      dependencyValues: { companyId: 'company-1' },
-    })).resolves.toEqual([
+    await expect(departmentProvider?.load(lookupRequest(
+      'departmentId',
+      { companyId: 'company-1' },
+      { companyId: 'company-1' },
+    ))).resolves.toEqual([
       { value: 'department-1', label: '研发部' },
       { value: 'department-2', label: '停用部门（已停用）' },
     ]);
 
-    await expect(companyProvider?.load({ fieldKey: 'CompanyId', values: {}, dependencyValues: {} })).resolves.toEqual([
+    await expect(companyProvider?.load(lookupRequest('CompanyId'))).resolves.toEqual([
       { value: 'company-1', label: '总部' },
     ]);
   });
 
   it('forwards the lookup execution signal through every organization GET', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockImplementation(async () => new Response('[]', {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }));
+      .mockImplementation(async (input) => new Response(
+        String(input).includes('/api/organization/positions/options')
+          ? JSON.stringify({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false })
+          : '[]',
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ));
     const controller = new AbortController();
     const providers = personStandardCrudResource.lookupProviders ?? [];
     const companyProvider = providers.find(provider => provider.key === 'organization.companies');
@@ -66,33 +77,30 @@ describe('personnel center first vertical slice', () => {
     const positionProvider = providers.find(provider => provider.key === 'organization.positions');
 
     await companyProvider?.load(
-      { fieldKey: 'companyId', values: {}, dependencyValues: {} },
+      lookupRequest('companyId'),
       { signal: controller.signal },
     );
     await departmentProvider?.load(
-      {
-        fieldKey: 'departmentId',
-        values: { companyId: 'company-1' },
-        dependencyValues: { companyId: 'company-1' },
-      },
+      lookupRequest(
+        'departmentId',
+        { companyId: 'company-1' },
+        { companyId: 'company-1' },
+      ),
       { signal: controller.signal },
     );
     await positionProvider?.load(
-      {
-        fieldKey: 'positionId',
-        values: { departmentId: 'department-1' },
-        dependencyValues: { departmentId: 'department-1' },
-      },
+      lookupRequest('positionId'),
       { signal: controller.signal },
     );
 
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     fetchSpy.mock.calls.forEach(([, init]) => {
       expect(init).toEqual(expect.objectContaining({
-        method: 'GET',
         signal: controller.signal,
       }));
+      expect(init?.method ?? 'GET').toBe('GET');
     });
+    expect(String(fetchSpy.mock.calls[2]?.[0])).toContain('/api/organization/positions/options?page=1&pageSize=20');
   });
 
   it('preserves the canonical CompanyId raw/display pair without a CompanyName alias', () => {

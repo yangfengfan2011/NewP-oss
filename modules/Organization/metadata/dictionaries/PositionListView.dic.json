@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "PositionListView": {
+    "Title": {
+      "zhs": "岗位管理",
+      "en": "Position Management"
+    },
+    "Description": {
+      "zhs": "维护 Organization 范围内共享的全局岗位目录。",
+      "en": "Manage the global position directory shared by Organization."
+    },
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic Information"
+    },
+    "Field_ENAME": {
+      "zhs": "岗位名称",
+      "en": "Position Name"
+    },
+    "Field_ENAME_Placeholder": {
+      "zhs": "请输入岗位名称",
+      "en": "Enter position name"
+    },
+    "Field_Description": {
+      "zhs": "岗位描述",
+      "en": "Description"
+    },
+    "Field_Description_Placeholder": {
+      "zhs": "请输入岗位职责或适用范围",
+      "en": "Enter responsibilities or scope"
+    },
+    "Query_Keyword": {
+      "zhs": "关键字",
+      "en": "Keyword"
+    },
+    "Query_Keyword_Placeholder": {
+      "zhs": "按名称或描述搜索",
+      "en": "Search by name or description"
+    },
+    "Query_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Column_Name": {
+      "zhs": "岗位名称",
+      "en": "Position Name"
+    },
+    "Column_Description": {
+      "zhs": "岗位描述",
+      "en": "Description"
+    },
+    "Column_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "Enabled"
+    },
+    "Action_Create": {
+      "zhs": "新建岗位",
+      "en": "Create Position"
+    },
+    "Drawer_Create": {
+      "zhs": "新建岗位",
+      "en": "Create Position"
+    },
+    "Pagination_Prev": {
+      "zhs": "上一页",
+      "en": "Previous"
+    },
+    "Pagination_Next": {
+      "zhs": "下一页",
+      "en": "Next"
+    }
+  }
+}

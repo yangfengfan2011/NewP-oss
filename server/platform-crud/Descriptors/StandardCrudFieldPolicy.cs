@@ -16,4 +16,19 @@ public sealed class StandardCrudFieldPolicy
     public StandardCrudFieldValueOwner ValueOwner { get; init; }
 
     public object? CreateDefaultValue { get; init; }
+
+    /// <summary>
+    /// 获取字段是否要求调用方提交已去除首尾空白的规范短文本。
+    /// </summary>
+    public bool Trim { get; init; }
+
+    /// <summary>
+    /// 获取字段在进入持久化前允许的最大字符数；当前短文本固定投影为 256。
+    /// </summary>
+    public int? MaxLength { get; init; }
+
+    /// <summary>
+    /// 获取可空短文本是否只接受 null 表达空值。
+    /// </summary>
+    public bool EmptyAsNull { get; init; }
 }

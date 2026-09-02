@@ -124,10 +124,7 @@
         },
         "dataSource": {
           "type": "provider",
-          "key": "organization.positions",
-          "dependsOn": [
-            "DepartmentId"
-          ]
+          "key": "organization.positions"
         }
       },
       {

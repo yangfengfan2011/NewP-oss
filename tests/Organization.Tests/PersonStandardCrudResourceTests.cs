@@ -7,6 +7,7 @@ using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Query.Descriptors;
@@ -346,7 +347,7 @@ public sealed class PersonStandardCrudResourceTests
             throw new NotSupportedException();
     }
 
-    private sealed class FakePositionRepository : IPositionRepository
+    private sealed class FakePositionRepository : IPositionDirectory
     {
         private readonly IReadOnlyDictionary<string, Position> _positions;
 
@@ -356,9 +357,6 @@ public sealed class PersonStandardCrudResourceTests
         }
 
         public int BatchCallCount { get; private set; }
-
-        public Task<List<Position>> GetByDepartmentIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_positions.Values.Where(position => position.DepartmentId == departmentId).ToList());
 
         public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_positions.TryGetValue(positionId, out var position) ? position : null);
@@ -374,10 +372,5 @@ public sealed class PersonStandardCrudResourceTests
                     .ToDictionary(position => position.Id, StringComparer.Ordinal));
         }
 
-        public Task CreateAsync(Position position, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task UpdateAsync(Position position, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 }

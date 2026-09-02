@@ -35,7 +35,7 @@ public sealed class StandardCrudEfRepositoryTests
             Row("person-3", "P003", "Alpha Three", true),
             Row("person-1", "P001", "Alpha One", true),
             Row("person-2", "P002", "Alpha Two", true),
-            Row("person-4", "P004", "Other", false));
+            Row("person-4", "P004", "Alpha Disabled", false));
         await dbContext.SaveChangesAsync();
 
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
@@ -50,7 +50,7 @@ public sealed class StandardCrudEfRepositoryTests
 
         Assert.Equal(["person-3"], result.Items.Select(item => item.Value));
         Assert.Equal(["person-4"], result.CurrentItems.Select(item => item.Value));
-        Assert.Equal("P004 Other（已停用）", Assert.Single(result.CurrentItems).Label);
+        Assert.Equal("P004 Alpha Disabled（已停用）", Assert.Single(result.CurrentItems).Label);
         Assert.True(Assert.Single(result.CurrentItems).Disabled);
         Assert.Equal(2, result.Page);
         Assert.Equal(2, result.PageSize);

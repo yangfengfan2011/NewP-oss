@@ -13,8 +13,22 @@ public class OrganizationModelDefinitionTests
 
         AssertProtocolFields(definitions, "Company", expectsCode: true);
         AssertProtocolFields(definitions, "Department", expectsCode: true);
-        AssertProtocolFields(definitions, "Position", expectsCode: true);
+        AssertProtocolFields(definitions, "Position", expectsCode: false);
         AssertProtocolFields(definitions, "Person", expectsCode: false);
+    }
+
+    [Fact]
+    public void Position_IsGlobalShortTextDirectory()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var position = Assert.Single(definitions, definition => definition.Name == "Position");
+
+        Assert.Equal(
+            ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "ENAME", "Description", "IsEnabled"],
+            position.Fields.Select(field => field.Name));
+        Assert.Contains(position.Fields, field => field.Name == "Description" && !field.Required);
+        Assert.Contains(position.Indexes, index =>
+            index.Name == "UX_Position_ENAME" && index.IsUnique && index.Fields.SequenceEqual(["ENAME"]));
     }
 
     [Fact]

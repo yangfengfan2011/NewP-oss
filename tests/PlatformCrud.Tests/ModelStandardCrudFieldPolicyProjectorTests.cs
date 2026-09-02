@@ -63,6 +63,8 @@ public sealed class ModelStandardCrudFieldPolicyProjectorTests
         Assert.True(source.UpdateNonEmpty);
         Assert.Equal(StandardCrudFieldValueOwner.Caller, source.ValueOwner);
         Assert.Equal("Manual", source.CreateDefaultValue);
+        Assert.True(source.Trim);
+        Assert.Equal(256, source.MaxLength);
 
         var createdBy = Assert.Single(policies, static policy => policy.Field == "CreatedBy");
         Assert.True(createdBy.StorageRequired);

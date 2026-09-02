@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.position.list",
+    "dicKey": "PositionListView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "list",
+    "model": "Position",
+    "editorMode": "drawer",
+    "query": {
+      "fields": [
+        {
+          "key": "keyword",
+          "labelKey": "Query_Keyword",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        },
+        {
+          "key": "isEnabled",
+          "labelKey": "Query_IsEnabled",
+          "source": "model",
+          "field": "IsEnabled",
+          "operator": "="
+        }
+      ],
+      "defaultSort": {
+        "field": "ENAME",
+        "direction": "asc"
+      },
+      "defaultPageSize": 20
+    },
+    "advancedFilter": {
+      "enabled": false,
+      "sections": []
+    },
+    "columns": [
+      {
+        "key": "name",
+        "labelKey": "Column_Name",
+        "source": "model",
+        "field": "ENAME",
+        "sortable": true,
+        "hideable": false,
+        "responsivePriority": "high"
+      },
+      {
+        "key": "description",
+        "labelKey": "Column_Description",
+        "source": "model",
+        "field": "Description",
+        "responsivePriority": "medium"
+      },
+      {
+        "key": "isEnabled",
+        "labelKey": "Column_IsEnabled",
+        "source": "model",
+        "field": "IsEnabled",
+        "sortable": true,
+        "responsivePriority": "high"
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "create",
+        "labelKey": "Action_Create",
+        "standardAction": "create",
+        "variant": "primary",
+        "permissions": ["Organization.Position.Create"]
+      }
+    ],
+    "rowActions": []
+  }
+}

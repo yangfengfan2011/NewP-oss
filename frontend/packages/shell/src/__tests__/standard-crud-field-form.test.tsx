@@ -238,6 +238,28 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('2026-01-01');
   });
 
+  it('projects the shared short-text limit to text and textarea controls', async () => {
+    await render(
+      <StandardCrudForm
+        formId="short-text-form"
+        mode="create"
+        fields={[
+          { key: 'name', labelKey: '名称', modelField: 'ENAME', kind: 'text', maxLength: 256 },
+          { key: 'description', labelKey: '描述', modelField: 'Description', kind: 'textarea', maxLength: 256 },
+        ]}
+        sections={[]}
+        values={{ name: '', description: '' }}
+        onChange={vi.fn()}
+        onSubmit={() => undefined}
+        saving={false}
+        titleForSection={(titleKey) => titleKey}
+      />,
+    );
+
+    expect(container.querySelector<HTMLInputElement>('input#name')?.maxLength).toBe(256);
+    expect(container.querySelector<HTMLTextAreaElement>('textarea#description')?.maxLength).toBe(256);
+  });
+
   it('keeps empty number fields empty instead of coercing them to zero', async () => {
     const onChange = vi.fn();
     const field: StandardCrudFieldDefinition = {

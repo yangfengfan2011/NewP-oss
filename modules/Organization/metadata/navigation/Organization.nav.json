@@ -19,6 +19,17 @@
         "entryType": "standard-list",
         "targetKey": "organization.person.list",
         "permissions": ["Organization.Person.View"]
+      },
+      {
+        "key": "organization.positionManagement",
+        "titleKey": "Navigation.PositionManagement",
+        "icon": "positions",
+        "parentKey": "organization",
+        "path": "/organization/positions",
+        "order": 120,
+        "entryType": "standard-list",
+        "targetKey": "organization.position.list",
+        "permissions": ["Organization.Position.View"]
       }
     ]
   }

@@ -1,7 +1,5 @@
 #nullable enable annotations
 
-using ICP.Platform.Modules.Organization.Models;
-
 namespace ICP.Platform.Modules.Organization.DTOs;
 
 public sealed class PositionDto
@@ -13,10 +11,6 @@ public sealed class PositionDto
     public DateTime UpdatedAt { get; init; }
     public string DisplayName { get; init; }
     public string Name { get => DisplayName; init => DisplayName = value; }
-    public string Code { get; init; }
-    public string CompanyId { get; init; }
-    public string DepartmentId { get; init; }
-    public EmploymentStatus EmploymentStatus { get; init; } = (EmploymentStatus)1;
+    public string? Description { get; init; }
     public bool IsEnabled { get; init; } = true;
-    public string SortOrder { get; init; }
 }

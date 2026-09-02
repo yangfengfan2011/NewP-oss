@@ -169,6 +169,24 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
+                    b.Property<string>("AccountBindingReason")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("AccountBindingReason");
+
+                    b.Property<DateTime?>("AccountBoundAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("AccountBoundAt");
+
+                    b.Property<string>("AccountBoundBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("AccountBoundBy");
+
+                    b.Property<string>("AccountEID")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("AccountEID");
+
                     b.Property<string>("CompanyId")
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
@@ -229,34 +247,16 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("UpdatedBy");
 
-                    b.Property<string>("AccountBindingReason")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("AccountBindingReason");
-
-                    b.Property<DateTime?>("AccountBoundAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("AccountBoundAt");
-
-                    b.Property<string>("AccountBoundBy")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("AccountBoundBy");
-
-                    b.Property<string>("AccountEID")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("AccountEID");
-
                     b.HasKey("EID");
-
-                    b.HasIndex("EID")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Person_EID");
 
                     b.HasIndex("AccountEID")
                         .IsUnique()
                         .HasDatabaseName("UX_Person_AccountEID")
                         .HasFilter("[AccountEID] IS NOT NULL");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Person_EID");
 
                     b.ToTable("Person", "dbo");
                 });
@@ -268,12 +268,6 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("EID");
 
-                    b.Property<string>("CompanyId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("CompanyId");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("CreatedAt");
@@ -284,17 +278,10 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
 
-                    b.Property<string>("DepartmentId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("DepartmentId");
-
-                    b.Property<string>("ECODE")
-                        .IsRequired()
+                    b.Property<string>("Description")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
-                        .HasColumnName("ECODE");
+                        .HasColumnName("Description");
 
                     b.Property<string>("ENAME")
                         .IsRequired()
@@ -302,21 +289,9 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("ENAME");
 
-                    b.Property<string>("EmploymentStatus")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("EmploymentStatus");
-
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit")
                         .HasColumnName("IsEnabled");
-
-                    b.Property<string>("SortOrder")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("SortOrder");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -330,15 +305,13 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
 
                     b.HasKey("EID");
 
-                    b.HasIndex("CompanyId")
-                        .HasDatabaseName("IX_Position_Company");
-
-                    b.HasIndex("DepartmentId")
-                        .HasDatabaseName("IX_Position_Department");
-
                     b.HasIndex("EID")
                         .IsUnique()
                         .HasDatabaseName("UX_Position_EID");
+
+                    b.HasIndex("ENAME")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Position_ENAME");
 
                     b.ToTable("Position", "dbo");
                 });

@@ -1,6 +1,7 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
@@ -13,21 +14,23 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
 {
     public override string BehaviorKey => "organization.backend";
 
+    /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
+        services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
         services.AddScoped<ICompanyRepository, EfCompanyRepository>();
         services.AddScoped<IDepartmentRepository, EfDepartmentRepository>();
-        services.AddScoped<IPositionRepository, EfPositionRepository>();
+        services.AddScoped<IPositionDirectory, PlatformQueryPositionDirectory>();
         services.AddScoped<IPersonUserBindingRepository, EfPersonUserBindingRepository>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<IDepartmentService, DepartmentService>();
-        services.AddScoped<IPositionService, PositionService>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
         services.AddScoped<IPersonUserBindingService, PersonUserBindingService>();
         services.AddScoped<IPersonLifecycleService, PersonLifecycleService>();
         services.AddScoped<IStandardCrudQueryCustomizer, PersonCrudQueryCustomizer>();
+        services.AddScoped<IStandardCrudQueryCustomizer, PositionCrudQueryCustomizer>();
         services.AddScoped<IStandardCrudDisplayValueResolver, PersonCrudDisplayValueResolver>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonUserBindingSummaryProvider>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();

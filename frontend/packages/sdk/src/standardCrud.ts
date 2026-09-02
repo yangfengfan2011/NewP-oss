@@ -183,6 +183,7 @@ export interface StandardCrudFieldDefinition {
   readOnly?: boolean;
   trim?: boolean;
   emptyAsNull?: boolean;
+  maxLength?: number;
   defaultValue?: unknown;
   options?: StandardCrudOption[];
   lookup?: StandardCrudLookupConfig;

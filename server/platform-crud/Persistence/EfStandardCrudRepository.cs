@@ -67,6 +67,10 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         var rows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(descriptor.EnabledField))
+        {
+            rows = rows.Where(row => EF.Property<bool>(row, descriptor.EnabledField) == true);
+        }
         var keyword = request.Keyword?.Trim();
         if (!string.IsNullOrEmpty(keyword))
         {

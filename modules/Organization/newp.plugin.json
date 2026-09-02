@@ -22,7 +22,8 @@
     "bindingMode": "behavior-bindings",
     "bindings": [
       "organization.person.list",
-      "organization.person.detail"
+      "organization.person.detail",
+      "organization.position.list"
     ]
   },
   "security": {

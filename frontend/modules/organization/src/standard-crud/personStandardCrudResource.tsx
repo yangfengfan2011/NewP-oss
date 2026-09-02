@@ -1,6 +1,7 @@
 import { platformFetch } from '@icp-platform/core';
 import {
   createStandardCrudRestDataAdapter,
+  createStandardCrudRestLookupProvider,
   type StandardCrudDetailFieldRendererContext,
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
@@ -12,7 +13,6 @@ import {
   employmentStatusOptions,
   getCompanies,
   getDepartments,
-  getPositions,
   mapPersonDetailView,
   mapPersonListItem,
   setPersonLifecycleStatus,
@@ -60,22 +60,11 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
         }));
     },
   },
-  {
+  createStandardCrudRestLookupProvider({
     key: 'organization.positions',
-    load: async ({ fieldKey, dependencyValues }, context) => {
-      const departmentId = dependencyValues.DepartmentId ?? dependencyValues.departmentId;
-      if (typeof departmentId !== 'string' || departmentId.length === 0) {
-        return [];
-      }
-
-      return (await getPositions(departmentId, context?.signal))
-        .filter((position) => fieldKey === 'positionId' || position.isEnabled)
-        .map((position) => ({
-          value: position.id,
-          label: position.isEnabled ? position.name : `${position.name}（已停用）`,
-        }));
-    },
-  },
+    apiRoute: '/api/organization/positions',
+    fetcher: (input, init) => platformFetch(input, init),
+  }),
 ];
 
 const personSummaryRenderers = {

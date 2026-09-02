@@ -584,6 +584,42 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenServerFieldIsOmitted_AppliesServerDefault()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+
+        var result = await service.CreateAsync(
+            ShortTextDescriptor(),
+            new Dictionary<string, object?> { ["ENAME"] = "平台主管" });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(true, repository.LastCreatedValues!["IsEnabled"]);
+    }
+
+    [Theory]
+    [InlineData(" 带空格", "StandardCrud.ShortTextNotNormalized")]
+    [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "StandardCrud.ShortTextTooLong")]
+    public async Task CreateAsync_WhenShortTextViolatesSharedPolicy_ReturnsStableFieldError(
+        string name,
+        string expectedCode)
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+
+        var result = await service.CreateAsync(
+            ShortTextDescriptor(),
+            new Dictionary<string, object?> { ["ENAME"] = name });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedCode, result.Error!.Code);
+        var fieldError = Assert.Single(result.Error.FieldErrors);
+        Assert.Equal("ENAME", fieldError.Field);
+        Assert.Equal(expectedCode, fieldError.Code);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenFinalCandidateMissesCallerOwnedStorageRequiredValue_ReturnsConflictWithoutWriting()
     {
         var repository = new RecordingMutationStandardCrudRepository([]);
@@ -1049,6 +1085,40 @@ public sealed class StandardCrudServiceWriteTests
                 : includeEnabledInUpdateFields ? ["ENAME", "IsEnabled"] : ["ENAME"]),
         DeletePolicy = policy,
         ConcurrencyRevisionField = concurrencyRevisionField
+    };
+
+    private static StandardCrudDescriptor ShortTextDescriptor() => new()
+    {
+        ResourceKey = "organization.position",
+        ModuleId = "Organization",
+        ModelName = "Position",
+        Route = "api/organization/positions",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        EnabledField = "IsEnabled",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "ENAME", "IsEnabled"],
+            DetailFields: ["EID", "ENAME", "IsEnabled"],
+            CreateFields: ["ENAME"],
+            UpdateFields: []),
+        FieldPolicies =
+        [
+            new StandardCrudFieldPolicy
+            {
+                Field = "ENAME",
+                StorageRequired = true,
+                ValueOwner = StandardCrudFieldValueOwner.Caller,
+                Trim = true,
+                MaxLength = 256
+            },
+            new StandardCrudFieldPolicy
+            {
+                Field = "IsEnabled",
+                StorageRequired = true,
+                ValueOwner = StandardCrudFieldValueOwner.Server,
+                CreateDefaultValue = true
+            }
+        ]
     };
 
     private static StandardCrudDescriptor DescriptorWithMutationDisplayValueFields() => new()

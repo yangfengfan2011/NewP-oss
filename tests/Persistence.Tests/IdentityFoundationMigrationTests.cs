@@ -73,13 +73,7 @@ public sealed class IdentityFoundationMigrationTests
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
             .ToArray();
         var finalDigest = PersistenceModelDigest.Compute(definitions);
-        var intermediateDigest = PersistenceModelDigest.Compute(definitions.Select(static definition =>
-            definition.Name == "Person"
-                ? definition with { Fields = definition.Fields.Where(static field => field.Name != "Revision").ToArray() }
-                : definition));
-
-        Assert.Equal("24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f", finalDigest);
-        Assert.Equal("734d79d78bc146534d6b7199e775540998b5356b69f780ebf0749b38d0e4c3dc", intermediateDigest);
+        Assert.Equal("56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621", finalDigest);
     }
 
     [Fact]
@@ -238,23 +232,62 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(4, Count(source, "migrationBuilder.CreateTable"));
     }
 
+    [Fact]
+    public void OrganizationPositionDirectoryMigration_ChangesOnlyTheOwnedPositionShape()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
+            "Migrations",
+            "20260902052903_Organization_000002_GlobalPositionDirectory.cs");
+        var source = File.ReadAllText(sourcePath);
+        var up = source[..source.IndexOf("protected override void Down", StringComparison.Ordinal)];
+
+        foreach (var column in new[] { "CompanyId", "DepartmentId", "ECODE", "EmploymentStatus", "SortOrder" })
+        {
+            Assert.Contains($"name: \"{column}\"", up, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("name: \"Description\"", up, StringComparison.Ordinal);
+        Assert.Contains("type: \"nvarchar(256)\"", up, StringComparison.Ordinal);
+        Assert.Contains("nullable: true", up, StringComparison.Ordinal);
+        Assert.Contains("name: \"UX_Position_ENAME\"", up, StringComparison.Ordinal);
+        Assert.Contains("unique: true", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("Person", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddForeignKey", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", up, StringComparison.Ordinal);
+    }
+
     private static void AssertOrganizationManifest(string repositoryRoot)
     {
         var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
-        var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
+        var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
+        Assert.Equal(2, migrations.Length);
+        var foundation = migrations[0];
+        var positionDirectory = migrations[1];
         Assert.False(root.TryGetProperty("legacyCutover", out _));
-        Assert.Equal("20260812144235_Organization_000001_Foundation", migration.GetProperty("migrationId").GetString());
-        Assert.Equal(new string('0', 64), migration.GetProperty("fromModelDigest").GetString());
-        Assert.Equal("safe-expand", migration.GetProperty("compatibility").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), migration.GetProperty("toModelDigest").GetString());
-        Assert.Equal(JsonValueKind.Null, migration.GetProperty("previousContentDigest").ValueKind);
+        Assert.Equal("20260812144235_Organization_000001_Foundation", foundation.GetProperty("migrationId").GetString());
+        Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
+        Assert.Equal("safe-expand", foundation.GetProperty("compatibility").GetString());
+        Assert.Equal("24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f", foundation.GetProperty("toModelDigest").GetString());
+        Assert.Equal(JsonValueKind.Null, foundation.GetProperty("previousContentDigest").ValueKind);
+        Assert.Equal("20260902052903_Organization_000002_GlobalPositionDirectory", positionDirectory.GetProperty("migrationId").GetString());
+        Assert.Equal(foundation.GetProperty("contentDigest").GetString(), positionDirectory.GetProperty("previousContentDigest").GetString());
+        Assert.Equal(foundation.GetProperty("toModelDigest").GetString(), positionDirectory.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), positionDirectory.GetProperty("toModelDigest").GetString());
+        Assert.Equal("backup-restore-only", positionDirectory.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location))));
 
-        var sourcePath = Path.Combine(
+        var foundationSourcePath = Path.Combine(
             repositoryRoot,
             "server",
             "modules",
@@ -263,8 +296,14 @@ public sealed class IdentityFoundationMigrationTests
             "Migrations",
             "20260812144235_Organization_000001_Foundation.cs");
         Assert.Equal(
-            migration.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+            foundation.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(foundationSourcePath))));
+        var positionSourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260902052903_Organization_000002_GlobalPositionDirectory.cs");
+        Assert.Equal(
+            positionDirectory.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionSourcePath))));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)

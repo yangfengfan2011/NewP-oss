@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Query.Descriptors;
@@ -10,16 +11,19 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
 {
     private readonly ICompanyRepository _companyRepository;
     private readonly IDepartmentRepository _departmentRepository;
-    private readonly IPositionRepository _positionRepository;
+    private readonly IPositionDirectory _positionDirectory;
 
+    /// <summary>
+    /// 绑定组织归属仓储与独立岗位目录，供一页人员显示值批量投影。
+    /// </summary>
     public PersonCrudDisplayValueResolver(
         ICompanyRepository companyRepository,
         IDepartmentRepository departmentRepository,
-        IPositionRepository positionRepository)
+        IPositionDirectory positionDirectory)
     {
         _companyRepository = companyRepository;
         _departmentRepository = departmentRepository;
-        _positionRepository = positionRepository;
+        _positionDirectory = positionDirectory;
     }
 
     public string ResourceKey => "organization.person";
@@ -42,7 +46,7 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
             ? await _departmentRepository.GetByIdsAsync(CollectIds(rows, "DepartmentId"), cancellationToken)
             : new Dictionary<string, Department>(StringComparer.Ordinal);
         IReadOnlyDictionary<string, Position> positions = requested.Contains("PositionName")
-            ? await _positionRepository.GetByIdsAsync(CollectIds(rows, "PositionId"), cancellationToken)
+            ? await _positionDirectory.GetByIdsAsync(CollectIds(rows, "PositionId"), cancellationToken)
             : new Dictionary<string, Position>(StringComparer.Ordinal);
 
         return rows.Select(row =>

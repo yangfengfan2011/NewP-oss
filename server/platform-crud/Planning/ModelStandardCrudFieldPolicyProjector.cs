@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
 
@@ -42,6 +43,7 @@ public sealed class ModelStandardCrudFieldPolicyProjector
         ModelMetadataField? metadata)
     {
         var serverOwned = field.IsAuditField || field.IsPrimaryKey && metadata is null;
+        var isShortText = field.ValueType == FieldValueType.Text;
         return new StandardCrudFieldPolicy
         {
             Field = field.Name,
@@ -49,7 +51,10 @@ public sealed class ModelStandardCrudFieldPolicyProjector
             CreateInputRequired = !serverOwned && metadata?.Form?.Create?.Required == true,
             UpdateNonEmpty = !serverOwned && metadata?.Form?.Edit?.Required == true,
             ValueOwner = serverOwned ? StandardCrudFieldValueOwner.Server : StandardCrudFieldValueOwner.Caller,
-            CreateDefaultValue = serverOwned ? null : ReadDefaultValue(metadata?.Form?.Create?.DefaultValue)
+            CreateDefaultValue = serverOwned ? null : ReadDefaultValue(metadata?.Form?.Create?.DefaultValue),
+            Trim = !serverOwned && isShortText,
+            MaxLength = !serverOwned && isShortText ? 256 : null,
+            EmptyAsNull = !serverOwned && isShortText && metadata?.Storage?.Nullable == true
         };
     }
 

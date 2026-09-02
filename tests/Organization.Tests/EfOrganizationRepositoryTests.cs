@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.Organization;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -77,41 +78,11 @@ public class EfOrganizationRepositoryTests
     }
 
     [Fact]
-    public async Task EfPositionRepository_CanCreateAndLoadPosition()
-    {
-        using var dbContext = CreateDbContext();
-        var repository = new EfPositionRepository(dbContext);
-        var departmentId = "Department_22222222222222222222222222222222";
-
-        var position = new Position
-        {
-            Id = "Position_33333333333333333333333333333333",
-            CompanyId = "Company_11111111111111111111111111111111",
-            DepartmentId = departmentId,
-            Code = "LEAD",
-            Name = "组长",
-            EmploymentStatus = EmploymentStatus.FullTime,
-            SortOrder = 5
-        };
-
-        await repository.CreateAsync(position);
-
-        var saved = await repository.GetByIdAsync(position.Id);
-        var positions = await repository.GetByDepartmentIdAsync(departmentId);
-
-        Assert.NotNull(saved);
-        Assert.Equal("LEAD", saved!.Code);
-        Assert.Single(positions);
-        Assert.Equal(position.Id, positions[0].Id);
-    }
-
-    [Fact]
     public async Task EfOrganizationRepositories_GetByIdsAsync_ReturnsIndexedEntities()
     {
         using var dbContext = CreateDbContext();
         var companyRepository = new EfCompanyRepository(dbContext);
         var departmentRepository = new EfDepartmentRepository(dbContext);
-        var positionRepository = new EfPositionRepository(dbContext);
 
         var company = new Company
         {
@@ -126,26 +97,14 @@ public class EfOrganizationRepositoryTests
             Code = "RD",
             Name = "研发部"
         };
-        var position = new Position
-        {
-            Id = "Position_66666666666666666666666666666666",
-            CompanyId = company.Id,
-            DepartmentId = department.Id,
-            Code = "DEV",
-            Name = "工程师"
-        };
-
         await companyRepository.CreateAsync(company);
         await departmentRepository.CreateAsync(department);
-        await positionRepository.CreateAsync(position);
 
         var companies = await companyRepository.GetByIdsAsync([company.Id, "Company_missing"]);
         var departments = await departmentRepository.GetByIdsAsync([department.Id, "Department_missing"]);
-        var positions = await positionRepository.GetByIdsAsync([position.Id, "Position_missing"]);
 
         Assert.Equal("总公司", companies[company.Id].Name);
         Assert.Equal("研发部", departments[department.Id].Name);
-        Assert.Equal("工程师", positions[position.Id].Name);
     }
 
     [Fact]
@@ -163,17 +122,14 @@ public class EfOrganizationRepositoryTests
             descriptor.ServiceType == typeof(IDepartmentRepository) &&
             descriptor.ImplementationType == typeof(EfDepartmentRepository));
         Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(IPositionRepository) &&
-            descriptor.ImplementationType == typeof(EfPositionRepository));
+            descriptor.ServiceType == typeof(IPositionDirectory) &&
+            descriptor.ImplementationType == typeof(PlatformQueryPositionDirectory));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(ICompanyService) &&
             descriptor.ImplementationType == typeof(CompanyService));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IDepartmentService) &&
             descriptor.ImplementationType == typeof(DepartmentService));
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(IPositionService) &&
-            descriptor.ImplementationType == typeof(PositionService));
     }
 
     [Fact]

@@ -170,6 +170,7 @@ export function StandardCrudField({
         <Input.TextArea
           id={field.key}
           value={value == null ? '' : String(value)}
+          maxLength={field.maxLength}
           placeholder={field.placeholder}
           onChange={(event) => onChange(field.key, event.target.value)}
         />
@@ -222,6 +223,7 @@ export function StandardCrudField({
       <Input
         id={field.key}
         value={value == null ? '' : String(value)}
+        maxLength={field.maxLength}
         placeholder={field.placeholder}
         onChange={(event) => onChange(field.key, event.target.value)}
       />

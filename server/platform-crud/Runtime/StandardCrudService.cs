@@ -204,6 +204,12 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.CreateFields),
             StringComparer.Ordinal);
+        ApplyCreateDefaults(descriptor, allowed);
+        var fieldPolicyError = ValidateFieldPolicies(descriptor, allowed);
+        if (fieldPolicyError is not null)
+        {
+            return StandardCrudMutationResult.Failure(fieldPolicyError);
+        }
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: true);
         if (requiredError is not null)
         {
@@ -290,6 +296,11 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.UpdateFields),
             StringComparer.Ordinal);
+        var fieldPolicyError = ValidateFieldPolicies(descriptor, allowed);
+        if (fieldPolicyError is not null)
+        {
+            return StandardCrudMutationResult.Failure(fieldPolicyError);
+        }
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: false);
         if (requiredError is not null)
         {
@@ -599,6 +610,69 @@ public sealed class StandardCrudService : IStandardCrudService
         return filtered;
     }
 
+    // 创建默认值只补齐调用方未提交的字段；服务端拥有字段仍在更早的请求边界拒绝伪造输入。
+    private static void ApplyCreateDefaults(
+        StandardCrudDescriptor descriptor,
+        IDictionary<string, object?> values)
+    {
+        foreach (var policy in descriptor.FieldPolicies)
+        {
+            if (!values.ContainsKey(policy.Field) && policy.CreateDefaultValue is not null)
+            {
+                values[policy.Field] = policy.CreateDefaultValue;
+            }
+        }
+    }
+
+    // 短文本存储事实在公共写入边界失败，避免各模块等待数据库截断异常或复制长度协议。
+    private static StandardCrudError? ValidateFieldPolicies(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values)
+    {
+        foreach (var policy in descriptor.FieldPolicies)
+        {
+            if (!values.TryGetValue(policy.Field, out var value) || value is not string text)
+            {
+                continue;
+            }
+
+            if (policy.Trim && !string.Equals(text, text.Trim(), StringComparison.Ordinal)
+                || policy.EmptyAsNull && text.Length == 0)
+            {
+                return FieldPolicyError(
+                    policy.Field,
+                    "StandardCrud.ShortTextNotNormalized",
+                    $"字段 {policy.Field} 必须使用去除首尾空白后的规范短文本，空值请提交 null。",
+                    "standardCrud.shortTextNotNormalized");
+            }
+
+            if (policy.MaxLength is { } maxLength && text.Length > maxLength)
+            {
+                return FieldPolicyError(
+                    policy.Field,
+                    "StandardCrud.ShortTextTooLong",
+                    $"字段 {policy.Field} 不能超过 {maxLength} 个字符。",
+                    "standardCrud.shortTextTooLong");
+            }
+        }
+
+        return null;
+    }
+
+    // 字段策略错误统一带稳定顶层码与单字段错误，供标准表单精确定位。
+    private static StandardCrudError FieldPolicyError(
+        string field,
+        string code,
+        string message,
+        string reasonKey) => new()
+    {
+        StatusCode = 400,
+        Code = code,
+        Message = message,
+        ReasonKey = reasonKey,
+        FieldErrors = [new StandardCrudFieldError(field, code, message)]
+    };
+
     // 规范字段策略是值所有权的唯一来源；任何服务端拥有字段出现在请求中都稳定拒绝而非静默过滤。
     private static StandardCrudError? FindReadOnlyServerOwnedFieldError(
         StandardCrudDescriptor descriptor,
@@ -773,7 +847,8 @@ public sealed class StandardCrudService : IStandardCrudService
         StatusCode = 400,
         Code = requiredField.ErrorCode,
         Message = requiredField.Message,
-        ReasonKey = requiredField.ReasonKey
+        ReasonKey = requiredField.ReasonKey,
+        FieldErrors = [new StandardCrudFieldError(requiredField.Field, requiredField.ErrorCode, requiredField.Message)]
     };
 
     // 合并后的完整候选必须满足由调用方拥有的存储非空不变量；服务端拥有值由其可信持久化 owner 在写入边界补齐。
@@ -818,7 +893,10 @@ public sealed class StandardCrudService : IStandardCrudService
                     StatusCode = 409,
                     Code = constraint.ErrorCode,
                     Message = constraint.Message,
-                    ReasonKey = constraint.ReasonKey
+                    ReasonKey = constraint.ReasonKey,
+                    FieldErrors = constraint.Fields.Count == 0
+                        ? []
+                        : [new StandardCrudFieldError(constraint.Fields[0], constraint.ErrorCode, constraint.Message)]
                 };
             }
         }

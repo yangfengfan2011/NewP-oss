@@ -211,10 +211,10 @@ public static class StandardCrudDescriptorValidator
             }
 
             if (policy.ValueOwner == StandardCrudFieldValueOwner.Server
-                && (policy.CreateInputRequired || policy.UpdateNonEmpty || policy.CreateDefaultValue is not null))
+                && (policy.CreateInputRequired || policy.UpdateNonEmpty))
             {
                 throw new InvalidOperationException(
-                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端字段 {policy.Field} 不能声明调用方必填或创建默认值。");
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端字段 {policy.Field} 不能声明调用方必填。");
             }
 
             var expectedScope = ResolveRequiredScope(policy);

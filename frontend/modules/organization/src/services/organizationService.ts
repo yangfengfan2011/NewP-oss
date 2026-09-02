@@ -34,18 +34,6 @@ export interface DepartmentDto {
   createdAt: string;
 }
 
-export interface PositionDto {
-  id: string;
-  companyId: string;
-  departmentId: string;
-  code: string;
-  name: string;
-  employmentStatus: string;
-  isEnabled: boolean;
-  sortOrder: number;
-  createdAt: string;
-}
-
 export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
 
 export interface PersonUserBindingAccountDto {
@@ -311,14 +299,6 @@ export async function getDepartments(companyId: string, signal?: AbortSignal): P
   return fetchJson<DepartmentDto[]>(
     `/api/organization/departments?companyId=${encodeURIComponent(companyId)}`,
     '加载部门列表失败',
-    signal,
-  );
-}
-
-export async function getPositions(departmentId: string, signal?: AbortSignal): Promise<PositionDto[]> {
-  return fetchJson<PositionDto[]>(
-    `/api/organization/positions?departmentId=${encodeURIComponent(departmentId)}`,
-    '加载岗位列表失败',
     signal,
   );
 }

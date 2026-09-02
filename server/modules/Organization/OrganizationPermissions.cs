@@ -20,7 +20,8 @@ public static class OrganizationPermissions
     public const string DepartmentCreate = "Organization.Department.Create";
     public const string DepartmentUpdate = "Organization.Department.Update";
 
-    public const string PositionView = "Organization.Position.View";
-    public const string PositionCreate = "Organization.Position.Create";
-    public const string PositionUpdate = "Organization.Position.Update";
+    public const string PositionStem = "Organization.Position";
+    public const string PositionView = PositionStem + ".View";
+    public const string PositionCreate = PositionStem + ".Create";
+    public const string PositionUpdate = PositionStem + ".Update";
 }

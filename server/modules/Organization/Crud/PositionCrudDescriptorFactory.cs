@@ -1,0 +1,80 @@
+using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modules.Organization.Persistence.Descriptors;
+
+namespace ICP.Platform.Modules.Organization.Crud;
+
+public static class PositionCrudDescriptorFactory
+{
+    /// <summary>
+    /// 创建全局岗位的列表与创建描述符；编辑、启停和条件删除由后续生命周期切片扩展。
+    /// </summary>
+    public static StandardCrudDescriptor Create()
+    {
+        var fieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "ENAME", "Description", "IsEnabled"],
+            DetailFields: ["EID", "ENAME", "Description", "IsEnabled", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+            CreateFields: ["ENAME", "Description"],
+            UpdateFields: []);
+        return new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.position",
+            ModuleId = "Organization",
+            ModelName = "Position",
+            Route = "api/organization/positions",
+            IdField = "EID",
+            DisplayField = "ENAME",
+            EnabledField = "IsEnabled",
+            SortableFields = ["ENAME", "IsEnabled"],
+            DefaultSortField = "ENAME",
+            DefaultSortDirection = "asc",
+            Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PositionStem),
+            FieldSet = fieldSet,
+            OptionLabelFields = ["ENAME"],
+            DeletePolicy = StandardCrudDeletePolicy.None,
+            FieldPolicies = BuildFieldPolicies(fieldSet),
+            RequiredFields =
+            [
+                new StandardCrudRequiredField
+                {
+                    Field = "ENAME",
+                    Scope = StandardCrudRequiredFieldScope.CreateOnly,
+                    ErrorCode = "Organization.Position.NameRequired",
+                    Message = "岗位名称不能为空。",
+                    ReasonKey = "organization.position.nameRequired"
+                }
+            ],
+            UniqueConstraints =
+            [
+                new StandardCrudUniqueConstraint
+                {
+                    Key = "name",
+                    Fields = ["ENAME"],
+                    ErrorCode = "Organization.Position.NameDuplicated",
+                    Message = "岗位名称必须全局唯一。",
+                    ReasonKey = "organization.position.nameDuplicated"
+                }
+            ]
+        };
+    }
+
+    // Model authoring 投影共享短文本与审计字段策略；IsEnabled 由服务端在创建时固定补 true。
+    private static IReadOnlyList<StandardCrudFieldPolicy> BuildFieldPolicies(StandardCrudFieldSet fieldSet)
+    {
+        var provider = new OrganizationModelMetadataProvider();
+        var document = provider.GetDocument("Position");
+        var model = provider.GetDefinitions().Single(definition => definition.Name == "Position");
+        return new ModelStandardCrudFieldPolicyProjector()
+            .Project(document, model, fieldSet)
+            .Select(policy => policy.Field == "IsEnabled"
+                ? new StandardCrudFieldPolicy
+                {
+                    Field = policy.Field,
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.Server,
+                    CreateDefaultValue = true
+                }
+                : policy)
+            .ToArray();
+    }
+}

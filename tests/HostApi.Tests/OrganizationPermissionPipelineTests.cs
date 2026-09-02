@@ -124,6 +124,26 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.Equal(0, scenario.CompanyService.CallCount);
     }
 
+    [Theory]
+    [InlineData("GET", "/api/organization/positions", "Organization.Position.View")]
+    [InlineData("GET", "/api/organization/positions/options", "Organization.Position.View")]
+    [InlineData("POST", "/api/organization/positions", "Organization.Position.Create")]
+    public async Task PositionStandardCrud_ListLookupAndCreateUseFixedPermission(
+        string method,
+        string path,
+        string expectedPermission)
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+
+        using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
+        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(1, scenario.CrudService.CallCount);
+    }
+
     [Fact]
     public async Task PersonStandardCrud_RevokedPermissionTakesEffectOnNextRequest()
     {
@@ -220,6 +240,7 @@ public sealed class OrganizationPermissionPipelineTests
             builder.Services.AddScoped<StandardCrudEndpoint>();
             builder.Services.AddScoped<StandardCrudExportService>();
             builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
+            builder.Services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
 
             var application = builder.Build();
             application.UseAuthentication();

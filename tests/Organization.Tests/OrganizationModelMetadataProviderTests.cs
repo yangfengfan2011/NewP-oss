@@ -27,20 +27,14 @@ public class OrganizationModelMetadataProviderTests
     }
 
     [Fact]
-    public void PersonAndPosition_EmploymentStatus_AreProjectedAsEnum()
+    public void Person_EmploymentStatus_IsProjectedAsEnum()
     {
         var provider = new OrganizationModelMetadataProvider();
 
         var definitions = provider.GetDefinitions();
 
         var person = Assert.Single(definitions, definition => definition.Name == "Person");
-        var position = Assert.Single(definitions, definition => definition.Name == "Position");
-
         Assert.Contains(person.Fields, static field =>
-            field.Name == "EmploymentStatus"
-            && field.ValueType == FieldValueType.Enum);
-
-        Assert.Contains(position.Fields, static field =>
             field.Name == "EmploymentStatus"
             && field.ValueType == FieldValueType.Enum);
     }

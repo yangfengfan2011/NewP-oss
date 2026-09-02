@@ -41,18 +41,21 @@ describe('organization person standard CRUD phase 2 registration', () => {
     });
   });
 
-  it('declares the six filters, personnel columns, sort whitelist and guarded actions in metadata', () => {
+  it('declares personnel filters, columns, sort whitelist and guarded actions in metadata', () => {
     const view = personListViewDocument.view;
     const detailView = personDetailViewDocument.view;
     const advancedFields = view.advancedFilter.sections.flatMap((section) => section.fields);
 
     expect(view.query.fields.map((field) => field.key)).toEqual(['keyword', 'employmentStatus']);
-    expect(advancedFields.map((field) => field.key)).toEqual(['companyId', 'departmentId', 'positionId', 'isEnabled']);
+    expect(advancedFields.map((field) => field.key)).toEqual([
+      'birthDateRange', 'companyId', 'departmentId', 'positionId', 'isEnabled',
+    ]);
     expect(view.columns.map((column) => column.key)).toEqual([
-      'personNo', 'name', 'companyId', 'departmentName', 'positionName', 'employmentStatus', 'isEnabled',
+      'personNo', 'name', 'birthDate', 'companyId', 'departmentName', 'positionName', 'employmentStatus',
+      'employmentStartedAt', 'employmentEndedAt', 'isEnabled',
     ]);
     expect(view.columns.filter((column) => column.sortable).map((column) => column.field)).toEqual([
-      'PersonNo', 'ENAME', 'EmploymentStatus', 'IsEnabled',
+      'PersonNo', 'ENAME', 'BirthDate', 'EmploymentStatus', 'EmploymentStartedAt', 'EmploymentEndedAt', 'IsEnabled',
     ]);
     expect(view.columns.find((column) => column.key === 'name')).toMatchObject({ standardAction: 'view' });
     expect(view.pageActions.map((action) => action.standardAction)).toEqual(['create']);

@@ -370,7 +370,7 @@ describe('人员中心 CRUD Pro 样板', () => {
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
-      'fields=EID,PersonNo,ENAME,CompanyId,DepartmentName,PositionName,EmploymentStatus,IsEnabled,AccountEID,Revision',
+      'fields=EID,PersonNo,ENAME,BirthDate,CompanyId,DepartmentName,PositionName,EmploymentStatus,EmploymentStartedAt,EmploymentEndedAt,IsEnabled,AccountEID,Revision',
     );
 
     const filterLabels = Array.from(container.querySelectorAll('.np-crud-workspace-filter label'));
@@ -462,10 +462,15 @@ describe('人员中心 CRUD Pro 样板', () => {
     await act(async () => viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await flushAsync();
 
+    await vi.waitFor(() => {
+      const descriptionsText = Array.from(document.body.querySelectorAll('.ant-descriptions'))
+        .map((section) => section.textContent ?? '')
+        .join('');
+      expect(descriptionsText).toContain('示例公司');
+    });
     const descriptionsText = Array.from(document.body.querySelectorAll('.ant-descriptions'))
       .map((section) => section.textContent ?? '')
       .join('');
-    expect(descriptionsText).toContain('示例公司');
     expect(descriptionsText).not.toContain('Company_1');
     expect(descriptionsText).toContain('研发部');
     expect(descriptionsText).not.toContain('Department_1');

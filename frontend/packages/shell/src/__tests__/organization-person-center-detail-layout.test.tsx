@@ -133,7 +133,7 @@ describe('organization person center detail layout', () => {
 
   it('declares the complete person detail schema without model view fallbacks', () => {
     expect(personDetailViewDocument.view.sections).toEqual([
-      { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME'] },
+      { key: 'basic', titleKey: 'Section_Basic', fields: ['PersonNo', 'ENAME', 'BirthDate'] },
       {
         key: 'organization',
         titleKey: 'Section_Organization',
@@ -141,7 +141,15 @@ describe('organization person center detail layout', () => {
           'CompanyId',
           { field: 'DepartmentId', rendererKey: 'organization.person.reference' },
           { field: 'PositionId', rendererKey: 'organization.person.reference' },
+        ],
+      },
+      {
+        key: 'employment',
+        titleKey: 'Section_Employment',
+        fields: [
           'EmploymentStatus',
+          'EmploymentStartedAt',
+          'EmploymentEndedAt',
           'IsEnabled',
         ],
       },

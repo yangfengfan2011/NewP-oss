@@ -3,7 +3,7 @@
   "provider": "SqlServer",
   "moduleId": "Organization",
   "modelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
-  "bundleChecksum": "b7fe35e9eb0a9b377a565e09423eb2f7af8590385db7dfea6a7269d9c5b6fe1c",
+  "bundleChecksum": "e8fdfbd39025d6dcad0dcd7036918ad81e56158b43356da7fd2ffa9ed324f0bd",
   "migrations": [
     {
       "sequence": "000001",

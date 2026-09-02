@@ -552,7 +552,7 @@ export function normalizeStandardCrudSubmitValues(
     if (field.trim && typeof nextValue === 'string') {
       nextValue = nextValue.trim();
     }
-    if (field.emptyAsNull && nextValue === '') {
+    if (field.emptyAsNull && (nextValue === '' || nextValue === undefined)) {
       nextValue = null;
     }
 

@@ -118,6 +118,20 @@ public class OrganizationModuleTests
         Assert.Equal("editable", FormMode(fields, "Description", "edit"));
         Assert.Equal("hidden", FormMode(fields, "IsEnabled", "create"));
         Assert.Equal("editable", FormMode(fields, "IsEnabled", "edit"));
+        Assert.Equal(
+            ["ENAME", "Description", "IsEnabled"],
+            model.RootElement.GetProperty("Position")
+                .GetProperty("sections")[0]
+                .GetProperty("fields")
+                .EnumerateArray()
+                .Select(field => field.GetString()));
+
+        using var dictionary = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Organization\metadata\dictionaries\PositionListView.dic.json"),
+            Encoding.UTF8));
+        Assert.Equal(
+            "启用状态",
+            dictionary.RootElement.GetProperty("PositionListView").GetProperty("Field_IsEnabled").GetProperty("zhs").GetString());
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(root, @"modules\Organization\metadata\views\PositionList.view.json"),

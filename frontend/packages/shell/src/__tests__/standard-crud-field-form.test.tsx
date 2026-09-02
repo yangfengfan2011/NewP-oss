@@ -201,6 +201,50 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('岗位加载失败');
   });
 
+  it('allows optional lookups to clear to null but keeps required lookups non-clearable', async () => {
+    const onChange = vi.fn();
+    const optionalField: StandardCrudFieldDefinition = {
+      key: 'positionId',
+      labelKey: '岗位',
+      modelField: 'PositionId',
+      kind: 'lookup',
+      emptyAsNull: true,
+      lookup: { providerKey: 'organization.positions' },
+    };
+
+    await render(
+      <StandardCrudField
+        field={optionalField}
+        value="position-disabled"
+        mode="edit"
+        options={[{ value: 'position-disabled', label: '停用岗位', disabled: true }]}
+        onChange={onChange}
+      />,
+    );
+
+    const clear = container.querySelector('.ant-select-clear');
+    expect(clear).not.toBeNull();
+    await act(async () => {
+      clear?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      clear?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith('positionId', null);
+
+    await act(async () => {
+      root.render(
+        <StandardCrudField
+          field={{ ...optionalField, required: true }}
+          value="position-current"
+          mode="edit"
+          options={[{ value: 'position-current', label: '当前岗位' }]}
+          onChange={vi.fn()}
+        />,
+      );
+    });
+    expect(container.querySelector('.ant-select-clear')).toBeNull();
+  });
+
   it('renders textarea number checkbox dateRange and readonly field kinds', async () => {
     const fields: StandardCrudFieldDefinition[] = [
       { key: 'remark', labelKey: '备注', modelField: 'Remark', kind: 'textarea' },

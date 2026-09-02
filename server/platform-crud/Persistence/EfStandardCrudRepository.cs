@@ -203,7 +203,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
         }
 
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName)).Add(row);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveMutationChangesAsync(cancellationToken);
 
         // shared-type 字典只包含调用方显式写入的键；由模型默认值初始化的受管字段
         // （例如 Revision）不会自动回填到原字典。创建后从正式持久化视图重读，
@@ -238,7 +238,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
             row[pair.Key] = NormalizeMappedValue(modelKey, pair.Key, pair.Value);
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveMutationChangesAsync(cancellationToken);
         return Project(row, descriptor.FieldSet.DetailFields);
     }
 
@@ -273,7 +273,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
 
             ApplyUpdateValues(modelKey, inMemoryRow, values, revisionField);
             inMemoryRow[revisionField] = expectedRevision + 1;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await SaveMutationChangesAsync(cancellationToken);
             return Project(inMemoryRow, descriptor.FieldSet.DetailFields);
         }
 
@@ -298,7 +298,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
             item => EF.Property<string>(item, descriptor.IdField) == id,
             cancellationToken);
         ApplyUpdateValues(modelKey, row, values, revisionField);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveMutationChangesAsync(cancellationToken);
         if (ownedTransaction is not null)
         {
             await ownedTransaction.CommitAsync(cancellationToken);
@@ -320,6 +320,21 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
             {
                 row[pair.Key] = NormalizeMappedValue(modelKey, pair.Key, pair.Value);
             }
+        }
+    }
+
+    // 只有当前 provider 明确报告唯一键或外键约束竞争时才提升为可恢复冲突，其他 EF 写入故障保留原异常。
+    private async Task SaveMutationChangesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (EfPersistenceConstraintClassifier.IsKnownConstraintConflict(
+            _dbContext.Database.ProviderName,
+            exception))
+        {
+            throw new StandardCrudPersistenceConflictException("A known database constraint rejected the mutation.", exception);
         }
     }
 

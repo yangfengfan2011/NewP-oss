@@ -62,6 +62,10 @@ describe('standard CRUD phase 2 SDK helpers', () => {
       DISPLAY_NAME: null,
       STATUS: null,
     });
+
+    expect(normalizeStandardCrudSubmitValues(fields, { displayName: undefined })).toMatchObject({
+      DISPLAY_NAME: null,
+    });
   });
 
   it('preserves the current option before provider results when missing', () => {

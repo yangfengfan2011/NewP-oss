@@ -4,7 +4,6 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
-using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -251,7 +250,7 @@ public sealed class StandardCrudService : IStandardCrudService
         {
             created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (StandardCrudPersistenceConflictException)
         {
             return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
         }
@@ -359,7 +358,7 @@ public sealed class StandardCrudService : IStandardCrudService
                 ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
                 : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (StandardCrudPersistenceConflictException)
         {
             return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
         }

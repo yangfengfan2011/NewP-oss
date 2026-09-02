@@ -144,6 +144,7 @@ export function StandardCrudField({
           placeholder={placeholder}
           loading={loading}
           disabled={field.kind !== 'lookup' && loading}
+          allowClear={field.kind === 'lookup' && field.required !== true}
           showSearch={field.kind === 'lookup'}
           filterOption={field.kind === 'lookup' ? false : undefined}
           options={options}
@@ -158,7 +159,10 @@ export function StandardCrudField({
               }
             }
             : undefined}
-          onChange={(nextValue) => onChange(field.key, nextValue)}
+          onChange={(nextValue) => onChange(
+            field.key,
+            field.kind === 'lookup' && nextValue === undefined ? null : nextValue,
+          )}
         />
       </Form.Item>
     );

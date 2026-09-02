@@ -12,7 +12,8 @@
         "titleKey": "Section_Basic",
         "fields": [
           "ENAME",
-          "Description"
+          "Description",
+          "IsEnabled"
         ]
       }
     ],

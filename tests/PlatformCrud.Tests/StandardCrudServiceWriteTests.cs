@@ -17,7 +17,7 @@ public sealed class StandardCrudServiceWriteTests
     [Fact]
     public async Task CreateAsync_WhenDatabaseConstraintWinsRace_ReturnsStablePersistenceConflict()
     {
-        var service = Service(new RecordingMutationStandardCrudRepository([], failCreate: true));
+        var service = Service(new RecordingMutationStandardCrudRepository([], failCreateWithKnownConstraintConflict: true));
 
         var result = await service.CreateAsync(Descriptor(), new Dictionary<string, object?>
         {
@@ -33,7 +33,7 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenDatabaseConstraintWinsRace_ReturnsStablePersistenceConflict()
+    public async Task UpdateAsync_WhenForeignKeyConstraintWinsDeleteFirstRace_ReturnsStablePersistenceConflict()
     {
         var repository = new RecordingMutationStandardCrudRepository(
             [new Dictionary<string, object?>
@@ -41,20 +41,58 @@ public sealed class StandardCrudServiceWriteTests
                 ["EID"] = "person-1",
                 ["PersonNo"] = "P001",
                 ["ENAME"] = "张三",
-                ["IsEnabled"] = true
+                ["IsEnabled"] = true,
+                ["Revision"] = 1L
             }],
-            failUpdate: true);
+            failUpdateWithKnownConstraintConflict: true);
         var service = Service(repository);
 
         var result = await service.UpdateAsync(
-            Descriptor(),
+            Descriptor(concurrencyRevisionField: "Revision"),
             "person-1",
-            new Dictionary<string, object?> { ["ENAME"] = "李四" });
+            new Dictionary<string, object?> { ["ENAME"] = "李四", ["Revision"] = 1L });
 
         Assert.False(result.Succeeded);
         Assert.Equal(409, result.Error?.StatusCode);
         Assert.Equal("StandardCrud.PersistenceConflict", result.Error?.Code);
         Assert.DoesNotContain("provider-detail", result.Error?.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenPersistenceFailureIsUnknown_PropagatesFailure()
+    {
+        var service = Service(new RecordingMutationStandardCrudRepository([], failCreate: true));
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateAsync(
+            Descriptor(),
+            new Dictionary<string, object?>
+            {
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三"
+            }));
+
+        Assert.Equal("provider-detail", exception.Message);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenPersistenceFailureIsUnknown_PropagatesFailure()
+    {
+        var service = Service(new RecordingMutationStandardCrudRepository(
+            [new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["IsEnabled"] = true
+            }],
+            failUpdate: true));
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => service.UpdateAsync(
+            Descriptor(),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "李四" }));
+
+        Assert.Equal("provider-detail", exception.Message);
     }
 
     [Fact]
@@ -1520,15 +1558,21 @@ public sealed class StandardCrudServiceWriteTests
         private readonly InMemoryStandardCrudRepository _inner;
         private readonly bool _failCreate;
         private readonly bool _failUpdate;
+        private readonly bool _failCreateWithKnownConstraintConflict;
+        private readonly bool _failUpdateWithKnownConstraintConflict;
 
         public RecordingMutationStandardCrudRepository(
             IEnumerable<Dictionary<string, object?>> rows,
             bool failCreate = false,
-            bool failUpdate = false)
+            bool failUpdate = false,
+            bool failCreateWithKnownConstraintConflict = false,
+            bool failUpdateWithKnownConstraintConflict = false)
         {
             _inner = new InMemoryStandardCrudRepository(rows);
             _failCreate = failCreate;
             _failUpdate = failUpdate;
+            _failCreateWithKnownConstraintConflict = failCreateWithKnownConstraintConflict;
+            _failUpdateWithKnownConstraintConflict = failUpdateWithKnownConstraintConflict;
         }
 
         public int CreateCallCount { get; private set; }
@@ -1567,6 +1611,10 @@ public sealed class StandardCrudServiceWriteTests
             {
                 throw new DbUpdateException("provider-detail");
             }
+            if (_failCreateWithKnownConstraintConflict)
+            {
+                throw new StandardCrudPersistenceConflictException("provider-detail");
+            }
             return _inner.CreateAsync(descriptor, values, cancellationToken);
         }
 
@@ -1581,6 +1629,10 @@ public sealed class StandardCrudServiceWriteTests
             if (_failUpdate)
             {
                 throw new DbUpdateException("provider-detail");
+            }
+            if (_failUpdateWithKnownConstraintConflict)
+            {
+                throw new StandardCrudPersistenceConflictException("provider-detail");
             }
             return _inner.UpdateAsync(descriptor, id, values, cancellationToken);
         }
@@ -1597,6 +1649,10 @@ public sealed class StandardCrudServiceWriteTests
             if (_failUpdate)
             {
                 throw new DbUpdateException("provider-detail");
+            }
+            if (_failUpdateWithKnownConstraintConflict)
+            {
+                throw new StandardCrudPersistenceConflictException("provider-detail");
             }
             return _inner.UpdateAsync(descriptor, id, values, expectedRevision, cancellationToken);
         }

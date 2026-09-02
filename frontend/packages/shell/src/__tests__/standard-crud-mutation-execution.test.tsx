@@ -163,6 +163,40 @@ describe('standard CRUD mutation execution', () => {
     expect(execution().error).toBe('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
   });
 
+  it('sends an explicitly cleared optional lookup as null during update', async () => {
+    const update = vi.fn().mockResolvedValue({ operation: 'update' });
+    const registration: StandardCrudResourceRegistration = {
+      resourceKey: 'organization.person',
+      listViewKey: 'organization.person.list',
+      dataAdapter: {
+        list: vi.fn(),
+        get: vi.fn(),
+        getRowId: () => 'person-1',
+        update,
+      },
+    };
+    const execution = await renderExecution(registration, vi.fn(), vi.fn());
+
+    await act(async () => {
+      await execution().execute({
+        mode: 'edit',
+        id: 'person-1',
+        fields: [{
+          key: 'positionId',
+          labelKey: '岗位',
+          modelField: 'PositionId',
+          kind: 'lookup',
+          emptyAsNull: true,
+          lookup: { providerKey: 'organization.positions' },
+        }],
+        values: { positionId: undefined },
+        detailFields: { PositionId: 'position-disabled' },
+      });
+    });
+
+    expect(update).toHaveBeenCalledWith('person-1', { PositionId: null }, { PositionId: 'position-disabled' });
+  });
+
   it('suppresses a second synchronous submit while the first mutation is still pending', async () => {
     let resolveCreate: (() => void) | undefined;
     const create = vi.fn(() => new Promise<StandardCrudOperationResult>((resolve) => {

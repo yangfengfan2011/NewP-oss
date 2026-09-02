@@ -64,72 +64,9 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "UX_Position_ENAME",
-                schema: "dbo",
-                table: "Position");
-
-            migrationBuilder.DropColumn(
-                name: "Description",
-                schema: "dbo",
-                table: "Position");
-
-            migrationBuilder.AddColumn<string>(
-                name: "CompanyId",
-                schema: "dbo",
-                table: "Position",
-                type: "nvarchar(128)",
-                maxLength: 128,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "DepartmentId",
-                schema: "dbo",
-                table: "Position",
-                type: "nvarchar(128)",
-                maxLength: 128,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "ECODE",
-                schema: "dbo",
-                table: "Position",
-                type: "nvarchar(256)",
-                maxLength: 256,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "EmploymentStatus",
-                schema: "dbo",
-                table: "Position",
-                type: "nvarchar(256)",
-                maxLength: 256,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "SortOrder",
-                schema: "dbo",
-                table: "Position",
-                type: "nvarchar(256)",
-                maxLength: 256,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Position_Company",
-                schema: "dbo",
-                table: "Position",
-                column: "CompanyId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Position_Department",
-                schema: "dbo",
-                table: "Position",
-                column: "DepartmentId");
+            // 该步骤已声明 backup-restore-only；被删除旧列的业务值无法由 migration 安全重建。
+            throw new NotSupportedException(
+                "Migration 20260902052903_Organization_000002_GlobalPositionDirectory is backup-restore-only; restore a verified database backup instead of running Down.");
         }
     }
 }

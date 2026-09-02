@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
+import positionModelDocument from '../../../../../modules/Organization/metadata/models/Position.model.json';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 
 describe('standard CRUD metadata form schema', () => {
@@ -73,6 +74,26 @@ describe('standard CRUD metadata form schema', () => {
   it('applies edit mode readonly rules from model metadata', () => {
     const schema = buildStandardCrudFormSchemaFromModel(personModel, { mode: 'edit', enumOptions: {} });
     expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ readOnly: true });
+  });
+
+  it('keeps position enablement hidden on create and renders it in the edit section', () => {
+    const create = buildStandardCrudFormSchemaFromModel(positionModelDocument.Position, {
+      mode: 'create',
+      enumOptions: {},
+    });
+    const edit = buildStandardCrudFormSchemaFromModel(positionModelDocument.Position, {
+      mode: 'edit',
+      enumOptions: {},
+    });
+
+    expect(create.fields.some((field) => field.key === 'IsEnabled')).toBe(false);
+    expect(create.sections[0]?.fields).toEqual(['ENAME', 'Description']);
+    expect(edit.fields.find((field) => field.key === 'IsEnabled')).toMatchObject({
+      kind: 'boolean',
+      required: false,
+      readOnly: false,
+    });
+    expect(edit.sections[0]?.fields).toEqual(['ENAME', 'Description', 'IsEnabled']);
   });
 
   it('projects the formal Example RecordSource create default separately from create and edit requiredness', () => {

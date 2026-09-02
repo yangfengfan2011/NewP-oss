@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Organization",
-  "modelDigest": "ea142b6c8f762f0b0840d2a6ecc31f70c556a463edf7f237b10728df714199c8",
+  "modelDigest": "b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59",
   "bundleChecksum": "db6bdb19a416efd79eb2470bc8ca62e6fb9c5ad65789d849456dcdced1e9cd6d",
   "migrations": [
     {
@@ -38,7 +38,7 @@
       "previousContentDigest": "702141d62bb2000525881eed5f7922e4a6db3df9c849f36e73296d42694575bd",
       "contentDigest": "f4f665bf9a88f2e72a0b5d1fc989dc4c15603b741f5b10cb014ed62d06589e42",
       "fromModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
-      "toModelDigest": "ea142b6c8f762f0b0840d2a6ecc31f70c556a463edf7f237b10728df714199c8",
+      "toModelDigest": "b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59",
       "compatibility": "safe-expand"
     }
   ]

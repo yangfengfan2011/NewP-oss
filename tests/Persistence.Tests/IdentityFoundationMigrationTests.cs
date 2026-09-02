@@ -75,7 +75,28 @@ public sealed class IdentityFoundationMigrationTests
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
             .ToArray();
         var finalDigest = PersistenceModelDigest.Compute(definitions);
-        Assert.Equal("56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621", finalDigest);
+        Assert.Equal("b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59", finalDigest);
+    }
+
+    [Fact]
+    public void OrganizationMigrationManifestModelDigest_MatchesCurrentCompiledModel()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions()
+            .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
+            .ToArray();
+        var actualDigest = PersistenceModelDigest.Compute(definitions);
+        var manifestPath = Path.Combine(
+            FindRepositoryRoot(),
+            "modules",
+            "Organization",
+            "migrations",
+            "Organization.SqlServerMigrations.json");
+        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var expectedDigest = manifest.RootElement.GetProperty("modelDigest").GetString();
+
+        Assert.True(
+            string.Equals(expectedDigest, actualDigest, StringComparison.Ordinal),
+            $"Organization manifest digest {expectedDigest} does not match compiled model digest {actualDigest}.");
     }
 
     [Fact]

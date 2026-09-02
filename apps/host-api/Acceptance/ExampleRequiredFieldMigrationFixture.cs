@@ -208,8 +208,8 @@ internal static class ExampleRequiredFieldMigrationFixture
         }
     }
 
-    // 该快照来自 000001 固定点的 Position authoring；仍经当前正式 loader、storage map 和
-    // projector 生成历史定义，并由 manifest 摘要守卫阻止 fixture 与冻结前缀发生漂移。
+    // 该快照来自 000001 固定点：Position 使用当时的 authoring，Person 排除后续追加的 temporal 字段。
+    // 快照仍经当前正式 loader、storage map 和 projector 生成，并由 manifest 摘要守卫阻止漂移。
     private static ModelDefinition[] BuildOrganizationFoundationModels(
         string repositoryRoot,
         IReadOnlyList<ModelDefinition> currentModels)
@@ -218,6 +218,7 @@ internal static class ExampleRequiredFieldMigrationFixture
             .Where(static model => string.Equals(model.OwnerModuleId, "Organization", StringComparison.Ordinal))
             .ToArray();
         var position = organizationModels.Single(static model => model.Name == "Position");
+        var person = organizationModels.Single(static model => model.Name == "Person");
         var sourcePath = Path.Combine(
             repositoryRoot,
             "modules",
@@ -239,9 +240,18 @@ internal static class ExampleRequiredFieldMigrationFixture
             OwnerModuleId = "Organization",
             SchemaName = "dbo"
         };
+        var foundationPerson = person with
+        {
+            Fields = person.Fields.Where(static field =>
+                field.Name is not "BirthDate"
+                    and not "EmploymentStartedAt"
+                    and not "EmploymentEndedAt").ToArray()
+        };
 
         return organizationModels
-            .Select(model => ReferenceEquals(model, position) ? foundationPosition : model)
+            .Select(model => ReferenceEquals(model, position)
+                ? foundationPosition
+                : ReferenceEquals(model, person) ? foundationPerson : model)
             .OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
             .ToArray();
     }

@@ -33,7 +33,7 @@ interface LazyStandardCrudDescriptor {
 }
 
 describe('organization frontend bindings', () => {
-  it('registers only lightweight Personnel descriptors and defers implementation evaluation', async () => {
+  it('registers only lightweight Organization descriptors and defers implementation evaluation', async () => {
     const bindings = organizationBindings as typeof organizationBindings & {
       standardCrudCapabilities?: LazyStandardCrudDescriptor[];
     };
@@ -44,6 +44,7 @@ describe('organization frontend bindings', () => {
     expect(bindings.standardCrudCapabilities?.map(({ kind, targetKey }) => ({ kind, targetKey }))).toEqual([
       { kind: 'standard-list', targetKey: 'organization.person.list' },
       { kind: 'standard-crud-detail', targetKey: 'organization.person.detail' },
+      { kind: 'standard-list', targetKey: 'organization.position.list' },
     ]);
 
     const loaded = await bindings.standardCrudCapabilities?.[0]?.load();

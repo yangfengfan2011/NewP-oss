@@ -423,51 +423,67 @@ describe('organization person center list layout', () => {
   });
 
   it('opens the basic drawer from the name and exposes the full detail boundary', async () => {
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        fields: {
-          EID: 'person-1',
-          PersonNo: 'P0001',
-          ENAME: '张三',
-          CompanyId: 'company-1',
-          CompanyId_DisplayValue: '总部',
-          DepartmentId: 'department-1',
-          DepartmentName: '人力资源部',
-          PositionId: 'position-1',
-          PositionName: '经理',
-          EmploymentStatus: 'FullTime',
-          IsEnabled: true,
-          Revision: 4,
-          CreatedBy: 'creator-1',
-          CreatedAt: '2026-04-21T00:00:00Z',
-          UpdatedBy: 'editor-2',
-          UpdatedAt: '2026-04-23T00:00:00Z',
-          AccountEID: 'account-1',
-        },
-        summaries: {
-          userBinding: { status: 'ready', data: { AccountEid: 'account-1' } },
-          authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
-        },
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/organization/positions/options?')) {
+        return new Response(JSON.stringify({
+          items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.startsWith('/api/organization/persons?')) {
+        return new Response(JSON.stringify({
+          items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url === '/api/organization/persons/person-1') {
+        return new Response(JSON.stringify({
+          fields: {
+            EID: 'person-1',
+            PersonNo: 'P0001',
+            ENAME: '张三',
+            CompanyId: 'company-1',
+            CompanyId_DisplayValue: '总部',
+            DepartmentId: 'department-1',
+            DepartmentName: '人力资源部',
+            PositionId: 'position-1',
+            PositionName: '经理',
+            EmploymentStatus: 'FullTime',
+            IsEnabled: true,
+            Revision: 4,
+            CreatedBy: 'creator-1',
+            CreatedAt: '2026-04-21T00:00:00Z',
+            UpdatedBy: 'editor-2',
+            UpdatedAt: '2026-04-23T00:00:00Z',
+            AccountEID: 'account-1',
+          },
+          summaries: {
+            userBinding: { status: 'ready', data: { AccountEid: 'account-1' } },
+            authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      throw new Error(`unexpected request: ${url}`);
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => renderStandardCrudListHost());
     await flushProTableRequest();
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      String(input).startsWith('/api/organization/persons?')
+    ))).toBe(true));
     await vi.waitFor(() => expect(container.querySelector('.np-standard-crud-cell-action')).not.toBeNull());
     await act(async () => {
       container.querySelector('.np-standard-crud-cell-action')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushProTableRequest();
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    expect(String(vi.mocked(fetch).mock.calls[1]?.[0])).toContain('/api/organization/persons/person-1');
+    await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      String(input) === '/api/organization/persons/person-1'
+    ))).toBe(true));
 
     await vi.waitFor(() => {
       expect(document.body.textContent).toContain('查看人员');
@@ -488,38 +504,55 @@ describe('organization person center list layout', () => {
 
   it('keeps the drawer edit action disabled when its detail dependency is unavailable', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        fields: {
-          EID: 'person-1',
-          PersonNo: 'P0001',
-          ENAME: '张三',
-          CompanyId: null,
-          DepartmentId: null,
-          PositionId: null,
-          EmploymentStatus: 'FullTime',
-          IsEnabled: true,
-        },
-        summaries: {},
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/organization/positions/options?')) {
+        return new Response(JSON.stringify({
+          items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.startsWith('/api/organization/persons?')) {
+        return new Response(JSON.stringify({
+          items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true, Revision: 4 }],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url === '/api/organization/persons/person-1') {
+        return new Response(JSON.stringify({
+          fields: {
+            EID: 'person-1',
+            PersonNo: 'P0001',
+            ENAME: '张三',
+            CompanyId: null,
+            DepartmentId: null,
+            PositionId: null,
+            EmploymentStatus: 'FullTime',
+            IsEnabled: true,
+          },
+          summaries: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      throw new Error(`unexpected request: ${url}`);
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => renderStandardCrudListHost());
     await flushProTableRequest();
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      String(input).startsWith('/api/organization/persons?')
+    ))).toBe(true));
     await vi.waitFor(() => expect(container.querySelector('.np-standard-crud-cell-action')).not.toBeNull());
     await act(async () => {
       container.querySelector('.np-standard-crud-cell-action')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => (
+      String(input) === '/api/organization/persons/person-1'
+    ))).toBe(true));
     await vi.waitFor(() => expect(document.body.textContent).toContain('动作所需数据不可用'));
     const editButton = Array.from(document.body.querySelectorAll('.ant-drawer-footer button')).find(
       (button) => button.textContent?.replace(/\s+/g, '') === '编辑',

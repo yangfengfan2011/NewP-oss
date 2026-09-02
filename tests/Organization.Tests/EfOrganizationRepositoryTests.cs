@@ -274,8 +274,15 @@ public class EfOrganizationRepositoryTests
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
+        var definitions = OrganizationModelDefinitions.All
+            .Select(static definition => definition with
+            {
+                OwnerModuleId = "Organization",
+                SchemaName = "dbo"
+            })
+            .ToArray();
 
-        return new EfPlatformDbContext(options, OrganizationModelDefinitions.All);
+        return new EfPlatformDbContext(options, definitions);
     }
 
     private static string GetRepositoryRoot()

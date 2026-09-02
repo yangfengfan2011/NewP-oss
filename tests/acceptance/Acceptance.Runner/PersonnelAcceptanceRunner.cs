@@ -47,6 +47,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private bool _catalogCreated;
     private FixtureData? _fixture;
     private PersonData? _person;
+    private PositionData? _position;
     private string? _adminPassword;
     private string? _readOnlyECode;
     private string? _readOnlyPassword;
@@ -803,6 +804,16 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.Locator("#password").FillAsync(adminPassword);
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await WaitForPostLoginNavigationAsync(page);
+        if (phase == "initial")
+        {
+            var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
+            person = await AssignPositionToPersonFromBrowserAsync(page, person, position, cancellationToken);
+            _position = position;
+            _person = person;
+            // 回到岗位列表后再从导航进入人员中心，让原有首屏请求守卫仍观察一个干净的列表进入动作。
+            await OpenPositionManagementFromShellAsync(page);
+        }
+
         BrowserRequestDuplicateGuard? initialRequestGuard = null;
         BrowserRequestDuplicateGuardReport? initialRequestReport = null;
         EventHandler<IRequest>? initialRequestObserver = null;
@@ -821,7 +832,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         try
         {
             await OpenPersonnelFromShellAsync(page);
-            await AssertPersonListAndDrawerAsync(page, person, fixture);
+            await AssertPersonListAndDrawerAsync(page, person, fixture, _position?.Name);
             if (initialRequestGuard is not null)
             {
                 initialRequestReport = await initialRequestGuard.WaitForQuietPeriodAsync(
@@ -865,7 +876,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         if (phase == "initial")
         {
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-            await AssertPersonListAndDrawerAsync(page, person, fixture);
+            await AssertPersonListAndDrawerAsync(page, person, fixture, _position?.Name);
             await AssertSubmittedQueryAndKeyboardAsync(page, person);
             browserAssertions.AddRange([
                 "hard-refresh-canonical-list-and-drawer",
@@ -895,7 +906,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             browserAssertions.Add("narrow-table-with-horizontal-scroll");
             await CaptureRestrictedBrowserEvidenceAsync(browser, person, cancellationToken);
             browserAssertions.Add("restricted-view-only-actions-hidden");
-            await AssertPersonListAndDrawerAsync(page, person, fixture);
+            await AssertPersonListAndDrawerAsync(page, person, fixture, _position?.Name);
             await AssertFullDetailJourneyAsync(page, person, fixture, exerciseActions: true, cancellationToken);
             browserAssertions.AddRange([
                 "drawer-to-full-detail",
@@ -919,6 +930,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 static check => $"browser-intercepted-response:{check}"));
             await CaptureUnauthorizedDetailEvidenceAsync(browser, person, cancellationToken);
             browserAssertions.Add("detail-capability-denied-before-download");
+            browserAssertions.AddRange([
+                "position-management-navigation-visible",
+                "position-standard-create-drawer-saved",
+                "person-position-remote-search-requested",
+                "person-position-reference-saved"
+            ]);
         }
         else
         {
@@ -1421,24 +1438,180 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
-    // 列表姓名入口必须打开共享 Detail View Drawer，并同时呈现三分区与四个审计字段。
+    // 岗位管理只通过 Shell 导航进入现有标准列表，不用直达 URL 绕过候选导航与权限装配。
+    private async Task OpenPositionManagementFromShellAsync(IPage page)
+    {
+        var positionEntry = page.GetByRole(
+            AriaRole.Link,
+            new PageGetByRoleOptions { Name = "岗位管理", Exact = true }).First;
+        await positionEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await positionEntry.ClickAsync();
+        await page.WaitForURLAsync(
+            $"http://127.0.0.1:{_shellPort}/organization/positions",
+            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    }
+
+    // 同一 Personnel 浏览器场景通过标准 Drawer 创建岗位，不把字段边界语义提升到浏览器层。
+    private async Task<PositionData> CreatePositionFromBrowserAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await OpenPositionManagementFromShellAsync(page);
+        var name = $"Personnel Gate Position {_runId[..8]}";
+        var description = "Personnel Gate browser journey";
+        await page.GetByRole(
+                AriaRole.Button,
+                new PageGetByRoleOptions { Name = "新建岗位", Exact = true })
+            .ClickAsync();
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await drawer.GetByLabel("岗位名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(name);
+        await drawer.GetByLabel("岗位描述", new LocatorGetByLabelOptions { Exact = true }).FillAsync(description);
+
+        var responseTask = page.WaitForResponseAsync(static response =>
+            response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath.Equals(
+                "/api/organization/positions",
+                StringComparison.Ordinal));
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "保存", Exact = true })
+            .ClickAsync();
+        var response = await responseTask;
+        if (response.Status != (int)HttpStatusCode.Created)
+        {
+            throw new InvalidOperationException($"Browser position create returned {response.Status}, expected 201.");
+        }
+
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = name })
+            .Filter(new LocatorFilterOptions { HasTextString = description })
+            .Last;
+        await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        return new PositionData(name);
+    }
+
+    // 人员编辑 Drawer 必须把搜索文本送到远程岗位 Lookup，并通过标准 mutation 保存所选引用。
+    private async Task<PersonData> AssignPositionToPersonFromBrowserAsync(
+        IPage page,
+        PersonData person,
+        PositionData position,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await OpenPersonnelFromShellAsync(page);
+        await SubmitPersonnelKeywordAsync(page, person.PersonNo);
+        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
+            .Filter(new LocatorFilterOptions { HasTextString = person.Name })
+            .Last;
+        await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await row.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "编辑", Exact = true })
+            .ClickAsync();
+
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var positionLookup = drawer.GetByLabel(
+            "岗位",
+            new LocatorGetByLabelOptions { Exact = true });
+        await positionLookup.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await positionLookup.ClickAsync();
+        var lookupResponseTask = page.WaitForResponseAsync(response =>
+        {
+            if (response.Request.Method != "GET")
+            {
+                return false;
+            }
+
+            var uri = new Uri(response.Url);
+            return uri.AbsolutePath.Equals("/api/organization/positions/options", StringComparison.Ordinal)
+                   && HasQueryValue(uri, "keyword", position.Name);
+        });
+        await positionLookup.FillAsync(position.Name);
+        var lookupResponse = await lookupResponseTask;
+        if (lookupResponse.Status != (int)HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException(
+                $"Browser position lookup returned {lookupResponse.Status}, expected 200.");
+        }
+
+        var dropdown = page.Locator(".ant-select-dropdown:visible").Last;
+        await dropdown.GetByText(position.Name, new LocatorGetByTextOptions { Exact = true })
+            .ClickAsync();
+        var personApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
+        var updateResponseTask = page.WaitForResponseAsync(response =>
+            response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath.Equals(personApiPath, StringComparison.Ordinal));
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "保存", Exact = true })
+            .ClickAsync();
+        var updateResponse = await updateResponseTask;
+        var updateBody = await updateResponse.TextAsync();
+        if (updateResponse.Status != (int)HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException(
+                $"Browser person position update returned {updateResponse.Status}, expected 200: {updateBody}");
+        }
+
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        var updated = ReadPerson(updateBody, person.PersonNo, person.Name, "browser assign person position");
+        var updatedRow = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
+            .Filter(new LocatorFilterOptions { HasTextString = position.Name })
+            .Last;
+        await updatedRow.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        return updated;
+    }
+
+    // 浏览器请求查询值按 application/x-www-form-urlencoded 解码后做精确比较，避免空格编码差异伪造搜索证据。
+    private static bool HasQueryValue(Uri uri, string key, string expectedValue)
+    {
+        foreach (var segment in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = segment.Split('=', 2);
+            if (pair.Length == 2
+                && string.Equals(Uri.UnescapeDataString(pair[0]), key, StringComparison.Ordinal)
+                && string.Equals(
+                    Uri.UnescapeDataString(pair[1].Replace('+', ' ')),
+                    expectedValue,
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 列表姓名入口必须打开共享 Detail View Drawer，并呈现组织展示值、可选岗位与审计字段。
     private static async Task AssertPersonListAndDrawerAsync(
         IPage page,
         PersonData person,
-        FixtureData fixture)
+        FixtureData fixture,
+        string? positionName)
     {
         await SubmitPersonnelKeywordAsync(page, person.PersonNo);
         var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
             .Filter(new LocatorFilterOptions { HasTextString = person.Name })
             .Filter(new LocatorFilterOptions { HasTextString = fixture.CompanyName })
-            .Filter(new LocatorFilterOptions { HasTextString = fixture.DepartmentName })
-            .Last;
+            .Filter(new LocatorFilterOptions { HasTextString = fixture.DepartmentName });
+        if (!string.IsNullOrWhiteSpace(positionName))
+        {
+            row = row.Filter(new LocatorFilterOptions { HasTextString = positionName });
+        }
+        row = row.Last;
         await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         var rowText = await row.InnerTextAsync();
         AssertContains(rowText, person.PersonNo, "person number in list row");
         AssertContains(rowText, person.Name, "person name in list row");
         AssertContains(rowText, fixture.CompanyName, "company display name in list row");
         AssertContains(rowText, fixture.DepartmentName, "department display name in list row");
+        if (!string.IsNullOrWhiteSpace(positionName))
+        {
+            AssertContains(rowText, positionName, "position display name in list row");
+        }
 
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         // 硬刷新会按 URL 恢复已打开的查看抽屉；此时遮罩仍在，不能再次点击行内入口。
@@ -1449,9 +1622,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 new LocatorGetByRoleOptions { Name = person.Name, Exact = true }).ClickAsync();
         }
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        foreach (var expected in new[] { person.PersonNo, person.Name, fixture.CompanyName, fixture.DepartmentName })
+        foreach (var expected in new[] { person.PersonNo, person.Name, fixture.CompanyName, fixture.DepartmentName, positionName }
+                     .Where(static value => !string.IsNullOrWhiteSpace(value)))
         {
-            await drawer.GetByText(expected, new LocatorGetByTextOptions { Exact = true }).First
+            await drawer.GetByText(expected!, new LocatorGetByTextOptions { Exact = true }).First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         }
         var drawerText = await drawer.InnerTextAsync();
@@ -1459,6 +1633,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         AssertContains(drawerText, person.Name, "person name in view drawer");
         AssertContains(drawerText, fixture.CompanyName, "company display name in view drawer");
         AssertContains(drawerText, fixture.DepartmentName, "department display name in view drawer");
+        if (!string.IsNullOrWhiteSpace(positionName))
+        {
+            AssertContains(drawerText, positionName, "position display name in view drawer");
+        }
         foreach (var expected in new[]
                  {
                      "基础信息", "组织信息", "审计信息", "创建人", "创建时间", "更新人", "更新时间"
@@ -2646,6 +2824,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         long Revision,
         string CreatedAt,
         string UpdatedAt);
+    private sealed record PositionData(string Name);
     private sealed record PersonAuditTimestamps(string CreatedAt, string UpdatedAt);
     private sealed record EntityId(string Id);
     private sealed record DatabaseOwnershipSnapshot(

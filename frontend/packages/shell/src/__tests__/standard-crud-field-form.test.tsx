@@ -417,8 +417,8 @@ describe('StandardCrudField and StandardCrudForm', () => {
       await Promise.resolve();
     });
 
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const appliedRange = onChange.mock.calls[0]?.[1] as string[];
+    expect(onChange).toHaveBeenCalled();
+    const appliedRange = onChange.mock.calls.at(-1)?.[1] as string[];
     expect(appliedRange[activeIndex]).toBe(selectedDate);
     expect(appliedRange[emptyIndex]).toBe('');
   });

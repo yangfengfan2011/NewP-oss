@@ -169,6 +169,18 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     /// <summary>
+    /// lookup 读取先校验 descriptor，再由仓储在数据源完成筛选、排序、分页和当前值解析。
+    /// </summary>
+    public Task<StandardCrudLookupResult> LookupAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        StandardCrudDescriptorValidator.Validate(descriptor);
+        return _repository.LookupAsync(descriptor, request, cancellationToken);
+    }
+
+    /// <summary>
     /// 按 descriptor 校验并创建资源；canonical display companion 只允许输出，写入前过滤业务白名单字段并返回带详情的创建结果。
     /// </summary>
     public async Task<StandardCrudMutationResult> CreateAsync(

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
-import { Checkbox, DatePicker, Form, Input, InputNumber, Select, Switch, Typography } from 'antd';
+import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Select, Switch, Typography } from 'antd';
 import type { StandardCrudFieldDefinition, StandardCrudFormMode, StandardCrudOption } from '@icp-platform/sdk';
 
 export interface StandardCrudFieldProps {
@@ -10,6 +10,11 @@ export interface StandardCrudFieldProps {
   options?: StandardCrudOption[];
   loading?: boolean;
   error?: string | null;
+  retryableError?: boolean;
+  hasMore?: boolean;
+  onSearch?: (key: string, keyword: string) => void;
+  onLoadMore?: (key: string) => void;
+  onRetry?: (key: string) => void;
   onChange: (key: string, value: unknown) => void;
 }
 
@@ -55,12 +60,26 @@ function toDayjs(value: unknown): Dayjs | null {
   return typeof value === 'string' && value.length > 0 ? dayjs(value) : null;
 }
 
+/** 判断 lookup 下拉是否已滚动到追加阈值。 */
+export function isStandardCrudLookupScrollEnd({
+  scrollTop,
+  clientHeight,
+  scrollHeight,
+}: Pick<HTMLElement, 'scrollTop' | 'clientHeight' | 'scrollHeight'>): boolean {
+  return scrollTop + clientHeight >= scrollHeight - 8;
+}
+
 export function StandardCrudField({
   field,
   value,
   options = field.options ?? [],
   loading = false,
   error = null,
+  retryableError = false,
+  hasMore = false,
+  onSearch,
+  onLoadMore,
+  onRetry,
   onChange,
 }: StandardCrudFieldProps): ReactElement {
   const readOnly = field.readOnly === true || field.kind === 'readonly';
@@ -73,7 +92,16 @@ export function StandardCrudField({
     htmlFor: field.key,
     required: field.required,
     validateStatus: error ? 'error' as const : undefined,
-    help: error ?? undefined,
+    help: error
+      ? (
+        <span>
+          {error}
+          {retryableError && onRetry ? (
+            <Button type="link" size="small" onClick={() => onRetry(field.key)}>重试</Button>
+          ) : null}
+        </span>
+      )
+      : undefined,
     className: 'np-standard-crud-field',
   };
 
@@ -115,8 +143,21 @@ export function StandardCrudField({
           aria-required={field.required ? 'true' : undefined}
           placeholder={placeholder}
           loading={loading}
-          disabled={loading}
+          disabled={field.kind !== 'lookup' && loading}
+          showSearch={field.kind === 'lookup'}
+          filterOption={field.kind === 'lookup' ? false : undefined}
           options={options}
+          onSearch={field.kind === 'lookup' && onSearch
+            ? (keyword) => onSearch(field.key, keyword)
+            : undefined}
+          onPopupScroll={field.kind === 'lookup' && hasMore && onLoadMore
+            ? (event) => {
+              const target = event.currentTarget;
+              if (isStandardCrudLookupScrollEnd(target)) {
+                onLoadMore(field.key);
+              }
+            }
+            : undefined}
           onChange={(nextValue) => onChange(field.key, nextValue)}
         />
       </Form.Item>

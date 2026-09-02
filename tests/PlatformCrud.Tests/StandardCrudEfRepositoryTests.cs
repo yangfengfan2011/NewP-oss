@@ -28,6 +28,58 @@ public sealed class StandardCrudEfRepositoryTests
     }
 
     [Fact]
+    public async Task LookupAsync_AppliesKeywordStablePagingAndResolvesCurrentValues()
+    {
+        await using var dbContext = BuildDbContext();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("person-3", "P003", "Alpha Three", true),
+            Row("person-1", "P001", "Alpha One", true),
+            Row("person-2", "P002", "Alpha Two", true),
+            Row("person-4", "P004", "Other", false));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+
+        var result = await repository.LookupAsync(
+            Descriptor(),
+            new StandardCrudLookupRequest(
+                Keyword: "alpha",
+                Page: 2,
+                PageSize: 2,
+                CurrentValueIds: ["person-4"]));
+
+        Assert.Equal(["person-3"], result.Items.Select(item => item.Value));
+        Assert.Equal(["person-4"], result.CurrentItems.Select(item => item.Value));
+        Assert.Equal("P004 Other（已停用）", Assert.Single(result.CurrentItems).Label);
+        Assert.True(Assert.Single(result.CurrentItems).Disabled);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(2, result.PageSize);
+        Assert.False(result.HasMore);
+    }
+
+    [Fact]
+    public async Task LookupAsync_ExecutesKeywordAndPagingOnRelationalProvider()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildSqliteDbContext(connection);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("person-2", "P002", "Alpha Two", true),
+            Row("person-1", "P001", "Alpha One", true),
+            Row("person-3", "P003", "Other", true));
+        await dbContext.SaveChangesAsync();
+
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+        var result = await repository.LookupAsync(
+            Descriptor(),
+            new StandardCrudLookupRequest(Keyword: "alpha", Page: 1, PageSize: 1));
+
+        Assert.Equal(["person-1"], result.Items.Select(item => item.Value));
+        Assert.True(result.HasMore);
+    }
+
+    [Fact]
     public async Task ExistsAsync_WhenMatchingRowExists_ReturnsTrue()
     {
         await using var dbContext = BuildDbContext();

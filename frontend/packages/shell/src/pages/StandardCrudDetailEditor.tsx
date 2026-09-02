@@ -45,7 +45,7 @@ export default function StandardCrudDetailEditor({
   const [formValues, setFormValues] = useState<Record<string, unknown>>(
     () => buildStandardCrudDetailFormValues(detail.fields, fields),
   );
-  const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+  const lookupRuntime = useStandardCrudLookupRuntime({
     resourceKey,
     fields,
     providers: registration.lookupProviders ?? [],
@@ -102,9 +102,13 @@ export default function StandardCrudDetailEditor({
         fields={fields}
         sections={sections}
         values={formValues}
-        lookupOptions={lookupOptions}
-        lookupLoading={lookupLoading}
-        lookupErrors={lookupErrors}
+        lookupOptions={lookupRuntime.lookupOptions}
+        lookupLoading={lookupRuntime.lookupLoading}
+        lookupErrors={lookupRuntime.lookupErrors}
+        lookupHasMore={lookupRuntime.lookupHasMore}
+        onLookupSearch={lookupRuntime.search}
+        onLookupLoadMore={lookupRuntime.loadMore}
+        onLookupRetry={lookupRuntime.retry}
         fieldErrors={mutationExecution.fieldErrors}
         onChange={(fieldKey, value) => {
           setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));

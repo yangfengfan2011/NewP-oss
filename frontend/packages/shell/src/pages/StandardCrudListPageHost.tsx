@@ -1175,7 +1175,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     : drawerState.mode === 'edit'
       ? editFields
       : [];
-  const { lookupOptions, lookupLoading, lookupErrors } = useStandardCrudLookupRuntime({
+  const formLookupRuntime = useStandardCrudLookupRuntime({
     resourceKey: registration.resourceKey,
     fields: activeFormFields,
     providers: registration.lookupProviders ?? [],
@@ -1994,9 +1994,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             detailPresentation={drawerDetailPresentation}
             registration={registration}
             values={formValues}
-            lookupOptions={lookupOptions}
-            lookupLoading={lookupLoading}
-            lookupErrors={lookupErrors}
+            lookupOptions={formLookupRuntime.lookupOptions}
+            lookupLoading={formLookupRuntime.lookupLoading}
+            lookupErrors={formLookupRuntime.lookupErrors}
+            lookupHasMore={formLookupRuntime.lookupHasMore}
+            onLookupSearch={formLookupRuntime.search}
+            onLookupLoadMore={formLookupRuntime.loadMore}
+            onLookupRetry={formLookupRuntime.retry}
             canEdit={canEdit}
             viewSecondaryAction={drawerState.id && detailRoutePath ? (
               <AntdButton

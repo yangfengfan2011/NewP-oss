@@ -113,6 +113,10 @@ describe('standard CRUD phase 2 SDK helpers', () => {
     });
     expect(load).toHaveBeenCalledWith({
       fieldKey: 'departmentId',
+      keyword: '',
+      page: 1,
+      pageSize: 20,
+      currentValueIds: ['Dept_1'],
       values: { companyId: 'Company_1', departmentId: 'Dept_1' },
       dependencyValues: { companyId: 'Company_1' },
     });

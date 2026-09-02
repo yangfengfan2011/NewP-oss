@@ -93,13 +93,16 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         var client = app.GetTestClient();
 
         var detailResponse = await client.GetAsync("/api/organization/persons/Person_00000000000000000000000000000001");
-        var optionsResponse = await client.GetAsync("/api/organization/persons/options?pageSize=7&keyword=张");
+        var optionsResponse = await client.GetAsync(
+            "/api/organization/persons/options?page=2&pageSize=7&keyword=张&currentValueIds=person-9,person-8");
 
         detailResponse.EnsureSuccessStatusCode();
         optionsResponse.EnsureSuccessStatusCode();
         Assert.Equal("Person_00000000000000000000000000000001", recording.LastDetailId);
-        Assert.Equal(7, recording.LastOptionsQuery!.PageSize);
-        Assert.Equal("张", recording.LastOptionsQuery.Filters!["keyword"]);
+        Assert.Equal(2, recording.LastLookupRequest!.Page);
+        Assert.Equal(7, recording.LastLookupRequest.PageSize);
+        Assert.Equal("张", recording.LastLookupRequest.Keyword);
+        Assert.Equal(["person-9", "person-8"], recording.LastLookupRequest.CurrentValueIds);
     }
 
     [Fact]
@@ -464,6 +467,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
     {
         public StandardCrudListQuery? LastListQuery { get; private set; }
         public StandardCrudListQuery? LastOptionsQuery { get; private set; }
+        public StandardCrudLookupRequest? LastLookupRequest { get; private set; }
         public string? LastDetailId { get; private set; }
         public string? LastMutation { get; private set; }
         public IReadOnlyDictionary<string, object?>? LastMutationValues { get; private set; }
@@ -486,6 +490,12 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         {
             LastOptionsQuery = query;
             return Task.FromResult<IReadOnlyList<StandardCrudOptionItem>>([]);
+        }
+
+        public Task<StandardCrudLookupResult> LookupAsync(StandardCrudDescriptor descriptor, StandardCrudLookupRequest request, CancellationToken cancellationToken = default)
+        {
+            LastLookupRequest = request;
+            return Task.FromResult(new StandardCrudLookupResult([], [], request.Page, request.PageSize, false));
         }
 
         public Task<StandardCrudMutationResult> CreateAsync(StandardCrudDescriptor descriptor, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)

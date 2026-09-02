@@ -11,6 +11,7 @@ export interface StandardCrudLookupQueryKeyInput {
   providers: StandardCrudLookupProvider[];
   values: Record<string, unknown>;
   detailFields?: Record<string, unknown>;
+  requests?: Record<string, { keyword: string; page: number; pageSize: number }>;
 }
 
 export interface StandardCrudRuntimeColumnsQueryKeyInput {
@@ -95,6 +96,7 @@ export function createStandardCrudLookupQueryKey(
         fieldKey: field.key,
         providerAvailable: input.providers.some((provider) => provider.key === providerKey),
         providerKey,
+        request: input.requests?.[field.key] ?? { keyword: '', page: 1, pageSize: 20 },
       };
     });
 

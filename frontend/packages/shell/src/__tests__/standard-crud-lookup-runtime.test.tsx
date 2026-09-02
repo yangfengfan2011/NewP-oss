@@ -5,6 +5,8 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { PlatformQueryProvider } from '@icp-platform/core';
 import {
+  createStandardCrudRestLookupProvider,
+  loadStandardCrudLookupPage,
   type StandardCrudFieldDefinition,
   type StandardCrudLookupProvider,
   type StandardCrudOption,
@@ -164,6 +166,10 @@ describe('standard CRUD lookup runtime', () => {
       expect(departments.load).toHaveBeenLastCalledWith(
         {
           fieldKey: 'departmentId',
+          keyword: '',
+          page: 1,
+          pageSize: 20,
+          currentValueIds: [],
           values: retryValues,
           dependencyValues: { tenantId: 'tenant-a' },
         },
@@ -232,6 +238,10 @@ describe('standard CRUD lookup runtime', () => {
       expect(departments.load).toHaveBeenLastCalledWith(
         {
           fieldKey: 'departmentId',
+          keyword: '',
+          page: 1,
+          pageSize: 20,
+          currentValueIds: [],
           values: tenantBValues,
           dependencyValues: { tenantId: 'tenant-b' },
         },
@@ -390,6 +400,153 @@ describe('standard CRUD lookup runtime', () => {
     }
   });
 
+  it('searches remotely, appends pages and deduplicates options in the shared runtime', async () => {
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn(async (request) => {
+        if (request.keyword === 'remote') {
+          return {
+            options: [{ value: 'remote', label: '远程结果' }],
+            currentOptions: [],
+            page: request.page,
+            pageSize: request.pageSize,
+            hasMore: false,
+          };
+        }
+
+        return {
+          options: request.page === 1
+            ? [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]
+            : [{ value: 'b', label: 'B' }, { value: 'c', label: 'C' }],
+          currentOptions: [],
+          page: request.page,
+          pageSize: request.pageSize,
+          hasMore: request.page === 1,
+        };
+      }),
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    let loadMore = () => undefined;
+    let search = (_fieldKey: string, _keyword: string) => undefined;
+
+    function LookupRuntimeProbe() {
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields: [lookupField()],
+        providers: [departments],
+        values: { tenantId: 'tenant-a' },
+      });
+      loadMore = () => state.loadMore('departmentId');
+      search = state.search;
+      return <span>{(state.lookupOptions.departmentId ?? []).map((item) => item.label).join(',')}</span>;
+    }
+
+    try {
+      await act(async () => {
+        root.render(
+          <PlatformQueryProvider scopeKey="user-1">
+            <LookupRuntimeProbe />
+          </PlatformQueryProvider>,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('A,B');
+
+      await act(async () => {
+        loadMore();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('A,B,C');
+
+      await act(async () => {
+        search('departmentId', 'remote');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('远程结果');
+      expect(departments.load).toHaveBeenLastCalledWith(
+        expect.objectContaining({ keyword: 'remote', page: 1, pageSize: 20, currentValueIds: [] }),
+        { signal: expect.any(AbortSignal) },
+      );
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not let an older remote search overwrite a newer keyword', async () => {
+    let resolveOld!: (value: StandardCrudOption[]) => void;
+    let resolveNew!: (value: StandardCrudOption[]) => void;
+    const oldResult = new Promise<StandardCrudOption[]>((resolve) => { resolveOld = resolve; });
+    const newResult = new Promise<StandardCrudOption[]>((resolve) => { resolveNew = resolve; });
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn((request) => {
+        if (request.keyword === 'old') return oldResult;
+        if (request.keyword === 'new') return newResult;
+        return Promise.resolve([]);
+      }),
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    let search = (_fieldKey: string, _keyword: string) => undefined;
+
+    function LookupRuntimeProbe() {
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields: [lookupField()],
+        providers: [departments],
+        values: { tenantId: 'tenant-a' },
+      });
+      search = state.search;
+      return <span>{state.lookupOptions.departmentId?.[0]?.label ?? ''}</span>;
+    }
+
+    try {
+      await act(async () => {
+        root.render(
+          <PlatformQueryProvider scopeKey="user-1">
+            <LookupRuntimeProbe />
+          </PlatformQueryProvider>,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        search('departmentId', 'old');
+        await Promise.resolve();
+      });
+      await act(async () => {
+        search('departmentId', 'new');
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        resolveNew([{ value: 'new', label: '新结果' }]);
+        await newResult;
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('新结果');
+
+      await act(async () => {
+        resolveOld([{ value: 'old', label: '旧结果' }]);
+        await oldResult;
+        await Promise.resolve();
+      });
+      expect(container.textContent).toBe('新结果');
+    } finally {
+      resolveOld([]);
+      resolveNew([]);
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   it('loads lookup options from the matching provider', async () => {
     const options: StandardCrudOption[] = [{ value: 'finance', label: '财务部' }];
     const departments = provider(options);
@@ -405,6 +562,10 @@ describe('standard CRUD lookup runtime', () => {
     expect(result).toEqual({ options, error: null });
     expect(departments.load).toHaveBeenCalledWith({
       fieldKey: 'departmentId',
+      keyword: '',
+      page: 1,
+      pageSize: 20,
+      currentValueIds: [],
       values,
       dependencyValues: { tenantId: 'tenant-a' },
     });
@@ -425,10 +586,52 @@ describe('standard CRUD lookup runtime', () => {
     expect(departments.load).toHaveBeenCalledWith(
       {
         fieldKey: 'departmentId',
+        keyword: '',
+        page: 1,
+        pageSize: 20,
+        currentValueIds: [],
         values: { tenantId: 'tenant-a' },
         dependencyValues: { tenantId: 'tenant-a' },
       },
       { signal: controller.signal },
+    );
+  });
+
+  it('serializes paged lookup requests through the standard REST provider', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      items: [{ value: 'position-2', label: '架构师' }],
+      currentItems: [{ value: 'position-old', label: '旧岗位（已停用）', disabled: true }],
+      page: 2,
+      pageSize: 20,
+      hasMore: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const provider = createStandardCrudRestLookupProvider({
+      key: 'organization.positions',
+      apiRoute: '/api/organization/positions',
+      fetcher,
+    });
+    const controller = new AbortController();
+
+    const result = await provider.load({
+      fieldKey: 'positionId',
+      keyword: '架构',
+      page: 2,
+      pageSize: 20,
+      currentValueIds: ['position-old'],
+      values: {},
+      dependencyValues: {},
+    }, { signal: controller.signal });
+
+    expect(result).toEqual({
+      options: [{ value: 'position-2', label: '架构师' }],
+      currentOptions: [{ value: 'position-old', label: '旧岗位（已停用）', disabled: true }],
+      page: 2,
+      pageSize: 20,
+      hasMore: true,
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/organization/positions/options?keyword=%E6%9E%B6%E6%9E%84&page=2&pageSize=20&currentValueIds=position-old',
+      { headers: { Accept: 'application/json' }, signal: controller.signal },
     );
   });
 
@@ -452,6 +655,31 @@ describe('standard CRUD lookup runtime', () => {
       ],
       error: null,
     });
+  });
+
+  it('prefers the provider-resolved current value over the local identifier fallback', async () => {
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn(async (request) => ({
+        options: [],
+        currentOptions: [{ value: request.currentValueIds[0] ?? '', label: '已停用部门', disabled: true }],
+        page: request.page,
+        pageSize: request.pageSize,
+        hasMore: false,
+      })),
+    };
+
+    const result = await loadStandardCrudLookupPage({
+      field: lookupField(),
+      providers: [departments],
+      values: { tenantId: 'tenant-a', departmentId: 'department-old' },
+      detailFields: {},
+    });
+
+    expect(result.options).toEqual([
+      { value: 'department-old', label: '已停用部门', disabled: true },
+    ]);
+    expect(result.currentOptions).toEqual(result.options);
   });
 
   it('skips provider loading when any dependency value is empty', async () => {

@@ -27,11 +27,15 @@ export interface StandardCrudListDrawerRuntimeProps {
   lookupOptions: Record<string, StandardCrudOption[]>;
   lookupLoading: Record<string, boolean>;
   lookupErrors: Record<string, string | null>;
+  lookupHasMore: Record<string, boolean>;
   canEdit: boolean;
   viewSecondaryAction?: ReactNode;
   detailErrorActions?: ReactNode;
   saveErrorActions?: ReactNode;
   onChange: (fieldKey: string, value: unknown) => void;
+  onLookupSearch: (fieldKey: string, keyword: string) => void;
+  onLookupLoadMore: (fieldKey: string) => void;
+  onLookupRetry: (fieldKey?: string) => void;
   onEdit: () => void;
   onSubmit: () => void;
   onClose: () => void;
@@ -58,11 +62,15 @@ export default function StandardCrudListDrawerRuntime({
   lookupOptions,
   lookupLoading,
   lookupErrors,
+  lookupHasMore,
   canEdit,
   viewSecondaryAction,
   detailErrorActions,
   saveErrorActions,
   onChange,
+  onLookupSearch,
+  onLookupLoadMore,
+  onLookupRetry,
   onEdit,
   onSubmit,
   onClose,
@@ -129,8 +137,12 @@ export default function StandardCrudListDrawerRuntime({
         lookupOptions={lookupOptions}
         lookupLoading={lookupLoading}
         lookupErrors={lookupErrors}
+        lookupHasMore={lookupHasMore}
         fieldErrors={saveFieldErrors}
         onChange={onChange}
+        onLookupSearch={onLookupSearch}
+        onLookupLoadMore={onLookupLoadMore}
+        onLookupRetry={onLookupRetry}
         onSubmit={onSubmit}
         saving={saving}
         error={null}

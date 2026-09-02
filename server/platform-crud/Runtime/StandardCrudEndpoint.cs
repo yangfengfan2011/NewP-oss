@@ -34,11 +34,11 @@ public sealed class StandardCrudEndpoint
     /// <summary>
     /// 将 options 请求转交给标准 CRUD 服务，避免 Controller 直接依赖仓储。
     /// </summary>
-    public Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
+    public Task<StandardCrudLookupResult> OptionsAsync(
         StandardCrudDescriptor descriptor,
-        StandardCrudListQuery query,
+        StandardCrudLookupRequest request,
         CancellationToken cancellationToken = default) =>
-        _service.OptionsAsync(descriptor, query, cancellationToken);
+        _service.LookupAsync(descriptor, request, cancellationToken);
 
     /// <summary>
     /// 将创建请求转交给标准 CRUD 服务，写入能力由服务阶段性开关控制。

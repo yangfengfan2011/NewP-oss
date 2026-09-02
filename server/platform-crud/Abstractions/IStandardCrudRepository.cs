@@ -22,6 +22,26 @@ public interface IStandardCrudRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 按关键词和稳定顺序读取一页 lookup 候选，并独立解析当前值。
+    /// </summary>
+    async Task<StandardCrudLookupResult> LookupAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await OptionsAsync(
+            descriptor,
+            new StandardCrudListQuery(
+                Page: request.Page,
+                PageSize: request.PageSize,
+                Filters: string.IsNullOrWhiteSpace(request.Keyword)
+                    ? null
+                    : new Dictionary<string, string?> { ["keyword"] = request.Keyword }),
+            cancellationToken);
+        return new StandardCrudLookupResult(items, [], request.Page, request.PageSize, false);
+    }
+
+    /// <summary>
     /// 按等值字段检查资源行是否存在；excludedId 用于 update 时排除当前对象。
     /// </summary>
     Task<bool> ExistsAsync(

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -37,27 +38,130 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
     }
 
     /// <summary>
-    /// 生成 options 轻量列表；label 只来自 descriptor 显式声明的字段，避免隐式拼接约定扩散。
+    /// 通过分页 lookup 内核生成兼容 options 轻量列表；关键词从标准 query filter 读取。
     /// </summary>
     public async Task<IReadOnlyList<StandardCrudOptionItem>> OptionsAsync(
         StandardCrudDescriptor descriptor,
         StandardCrudListQuery query,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
-            .AsNoTracking()
-            .Take(query.PageSize <= 0 ? 50 : query.PageSize)
-            .ToListAsync(cancellationToken);
+        string? keyword = null;
+        query.Filters?.TryGetValue("keyword", out keyword);
+        var result = await LookupAsync(
+            descriptor,
+            new StandardCrudLookupRequest(keyword, query.Page, query.PageSize),
+            cancellationToken);
+        return result.Items;
+    }
 
-        return rows.Select(row => new StandardCrudOptionItem
+    /// <summary>
+    /// 在数据源执行关键词过滤、稳定排序和分页，并以独立查询补齐候选页外的当前值。
+    /// </summary>
+    public async Task<StandardCrudLookupResult> LookupAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var page = Math.Clamp(request.Page, 1, int.MaxValue / pageSize);
+        var rows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
+            .AsNoTracking()
+            .AsQueryable();
+        var keyword = request.Keyword?.Trim();
+        if (!string.IsNullOrEmpty(keyword))
+        {
+            rows = rows.Where(BuildKeywordPredicate(descriptor.OptionLabelFields, keyword));
+        }
+
+        var orderedRows = ApplyOptionOrder(rows, descriptor);
+        var pageRows = await orderedRows
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize + 1)
+            .ToListAsync(cancellationToken);
+        var hasMore = pageRows.Count > pageSize;
+        var items = pageRows.Take(pageSize).Select(row => ToOption(descriptor, row)).ToList();
+
+        var currentValueIds = (request.CurrentValueIds ?? [])
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .Take(100)
+            .ToList();
+        var currentItems = currentValueIds.Count == 0
+            ? []
+            : (await ApplyOptionOrder(
+                    _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
+                        .AsNoTracking()
+                        .Where(row => currentValueIds.Contains(EF.Property<string>(row, descriptor.IdField))),
+                    descriptor)
+                .ToListAsync(cancellationToken))
+                .Select(row => ToOption(descriptor, row))
+                .ToList();
+
+        return new StandardCrudLookupResult(items, currentItems, page, pageSize, hasMore);
+    }
+
+    // lookup 的名称搜索在所有显式 label 字段间执行 OR，避免模块复制筛选规则。
+    private static Expression<Func<Dictionary<string, object?>, bool>> BuildKeywordPredicate(
+        IReadOnlyList<string> labelFields,
+        string keyword)
+    {
+        var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
+        var loweredKeyword = Expression.Constant(keyword.ToLowerInvariant());
+        Expression body = Expression.Constant(false);
+        foreach (var field in labelFields)
+        {
+            var value = Expression.Call(
+                typeof(EF),
+                nameof(EF.Property),
+                [typeof(string)],
+                row,
+                Expression.Constant(field));
+            var safeValue = Expression.Coalesce(value, Expression.Constant(string.Empty));
+            var loweredValue = Expression.Call(safeValue, nameof(string.ToLower), Type.EmptyTypes);
+            var contains = Expression.Call(loweredValue, nameof(string.Contains), Type.EmptyTypes, loweredKeyword);
+            body = Expression.OrElse(body, contains);
+        }
+
+        return Expression.Lambda<Func<Dictionary<string, object?>, bool>>(body, row);
+    }
+
+    // label 字段和主键共同形成确定性顺序，分页期间同名记录不会跨页漂移。
+    private static IOrderedQueryable<Dictionary<string, object?>> ApplyOptionOrder(
+        IQueryable<Dictionary<string, object?>> rows,
+        StandardCrudDescriptor descriptor)
+    {
+        IOrderedQueryable<Dictionary<string, object?>>? ordered = null;
+        foreach (var field in descriptor.OptionLabelFields.Append(descriptor.IdField).Distinct(StringComparer.Ordinal))
+        {
+            ordered = ordered is null
+                ? rows.OrderBy(row => EF.Property<string>(row, field))
+                : ordered.ThenBy(row => EF.Property<string>(row, field));
+        }
+
+        return ordered ?? rows.OrderBy(row => EF.Property<string>(row, descriptor.IdField));
+    }
+
+    // 选项投影只消费 descriptor 显式声明的主键和 label 字段。
+    private static StandardCrudOptionItem ToOption(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> row)
+    {
+        var disabled = !string.IsNullOrWhiteSpace(descriptor.EnabledField)
+            && row.TryGetValue(descriptor.EnabledField, out var enabledValue)
+            && enabledValue is bool enabled
+            && !enabled;
+        var label = string.Join(
+            " ",
+            descriptor.OptionLabelFields
+                .Select(field => ReadString(row, field))
+                .Where(value => value.Length > 0));
+
+        return new StandardCrudOptionItem
         {
             Value = ReadString(row, descriptor.IdField),
-            Label = string.Join(
-                " ",
-                descriptor.OptionLabelFields
-                    .Select(field => ReadString(row, field))
-                    .Where(value => value.Length > 0))
-        }).ToList();
+            Label = disabled ? $"{label}（已停用）" : label,
+            Disabled = disabled
+        };
     }
 
     /// <summary>

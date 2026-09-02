@@ -1,4 +1,4 @@
-export { StandardCrudField } from './patterns/StandardCrudField';
+export { isStandardCrudLookupScrollEnd, StandardCrudField } from './patterns/StandardCrudField';
 export type { StandardCrudFieldProps } from './patterns/StandardCrudField';
 
 export { StandardCrudForm } from './patterns/StandardCrudForm';

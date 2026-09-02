@@ -80,7 +80,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             StandardCrudEndpoint endpoint,
             CancellationToken cancellationToken) =>
         {
-            var result = await endpoint.OptionsAsync(descriptor, BuildListQuery(context.Request.Query), cancellationToken);
+            var result = await endpoint.OptionsAsync(descriptor, BuildLookupRequest(context.Request.Query), cancellationToken);
             return Results.Ok(result);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
             .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Options));
@@ -248,6 +248,23 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             Filters: filters,
             Fields: ParseFields(ReadString(query, "fields")));
     }
+
+    // lookup 使用独立稳定契约，避免把列表排序、字段投影和任意过滤器泄漏给 provider。
+    private static StandardCrudLookupRequest BuildLookupRequest(IQueryCollection query) => new(
+        Keyword: ReadString(query, "keyword"),
+        Page: ReadInt(query, "pageIndex", ReadInt(query, "page", 1)),
+        PageSize: ReadInt(query, "pageSize", 20),
+        CurrentValueIds: ParseCurrentValueIds(query));
+
+    // 当前值标识既支持逗号分隔也支持重复 query key，并在边界去空白和去重。
+    private static IReadOnlyList<string> ParseCurrentValueIds(IQueryCollection query) =>
+        query.TryGetValue("currentValueIds", out var values)
+            ? values
+                .SelectMany(value => value?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [])
+                .Where(static value => value.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+            : [];
 
     private static IReadOnlyList<string>? ParseFields(string? value)
     {

@@ -30,6 +30,26 @@ public interface IStandardCrudService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 读取可搜索、可分页的标准 CRUD lookup，并解析候选页外的当前值。
+    /// </summary>
+    async Task<StandardCrudLookupResult> LookupAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await OptionsAsync(
+            descriptor,
+            new StandardCrudListQuery(
+                Page: request.Page,
+                PageSize: request.PageSize,
+                Filters: string.IsNullOrWhiteSpace(request.Keyword)
+                    ? null
+                    : new Dictionary<string, string?> { ["keyword"] = request.Keyword }),
+            cancellationToken);
+        return new StandardCrudLookupResult(items, [], request.Page, request.PageSize, false);
+    }
+
+    /// <summary>
     /// 创建标准 CRUD 资源；字段白名单和模块校验在后续写入阶段启用。
     /// </summary>
     Task<StandardCrudMutationResult> CreateAsync(

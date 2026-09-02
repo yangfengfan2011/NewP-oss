@@ -19,8 +19,12 @@ export interface StandardCrudFormProps {
   lookupOptions?: Record<string, StandardCrudOption[]>;
   lookupLoading?: Record<string, boolean>;
   lookupErrors?: Record<string, string | null>;
+  lookupHasMore?: Record<string, boolean>;
   fieldErrors?: Record<string, string>;
   onChange: (fieldKey: string, value: unknown) => void;
+  onLookupSearch?: (fieldKey: string, keyword: string) => void;
+  onLookupLoadMore?: (fieldKey: string) => void;
+  onLookupRetry?: (fieldKey: string) => void;
   onSubmit: () => void | Promise<void>;
   saving: boolean;
   error?: string | null;
@@ -63,8 +67,12 @@ export function StandardCrudForm({
   lookupOptions = {},
   lookupLoading = {},
   lookupErrors = {},
+  lookupHasMore = {},
   fieldErrors = {},
   onChange,
+  onLookupSearch,
+  onLookupLoadMore,
+  onLookupRetry,
   onSubmit,
   saving,
   error = null,
@@ -121,6 +129,11 @@ export function StandardCrudForm({
                   options={lookupOptions[field.key]}
                   loading={lookupLoading[field.key]}
                   error={validationErrors[field.key] ?? fieldErrors[field.key] ?? lookupErrors[field.key]}
+                  retryableError={Boolean(lookupErrors[field.key])}
+                  hasMore={lookupHasMore[field.key]}
+                  onSearch={onLookupSearch}
+                  onLoadMore={onLookupLoadMore}
+                  onRetry={onLookupRetry}
                   onChange={handleFieldChange}
                 />
               ))}

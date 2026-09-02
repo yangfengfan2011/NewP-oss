@@ -88,9 +88,21 @@ export interface StandardCrudOption {
 /** lookup 请求上下文；依赖字段值由 Shell 收集，Provider 只接收可序列化输入。 */
 export interface StandardCrudLookupRequest {
   fieldKey: string;
-  keyword?: string;
+  keyword: string;
+  page: number;
+  pageSize: number;
+  currentValueIds: string[];
   values: Record<string, unknown>;
   dependencyValues: Record<string, unknown>;
+}
+
+/** lookup Provider 的稳定分页结果；当前值与候选页分离，避免搜索和翻页丢失既有选择。 */
+export interface StandardCrudLookupPage {
+  options: StandardCrudOption[];
+  currentOptions: StandardCrudOption[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
 /** lookup 单次执行上下文；只承载不可序列化的生命周期信号。 */
@@ -104,7 +116,14 @@ export interface StandardCrudLookupProvider {
   load: (
     request: StandardCrudLookupRequest,
     context?: StandardCrudLookupExecutionContext,
-  ) => Promise<StandardCrudOption[]>;
+  ) => Promise<StandardCrudLookupPage | StandardCrudOption[]>;
+}
+
+/** 标准 REST lookup Provider 配置；模块只声明 provider key、资源路由和宿主传输。 */
+export interface StandardCrudRestLookupProviderOptions {
+  key: string;
+  apiRoute: string;
+  fetcher: typeof fetch;
 }
 
 export interface LoadStandardCrudLookupOptionsInput {
@@ -116,6 +135,16 @@ export interface LoadStandardCrudLookupOptionsInput {
 
 export interface LoadStandardCrudLookupOptionsResult {
   options: StandardCrudOption[];
+  error: string | null;
+}
+
+export interface LoadStandardCrudLookupPageInput extends LoadStandardCrudLookupOptionsInput {
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface LoadStandardCrudLookupPageResult extends StandardCrudLookupPage {
   error: string | null;
 }
 
@@ -579,10 +608,28 @@ export async function loadStandardCrudLookupOptions(
   input: LoadStandardCrudLookupOptionsInput,
   context?: StandardCrudLookupExecutionContext,
 ): Promise<LoadStandardCrudLookupOptionsResult> {
+  const result = await loadStandardCrudLookupPage(input, context);
+  return { options: result.options, error: result.error };
+}
+
+/** 加载一页 lookup 候选，并将 legacy 数组 Provider 规范化为无后续页的分页结果。 */
+export async function loadStandardCrudLookupPage(
+  input: LoadStandardCrudLookupPageInput,
+  context?: StandardCrudLookupExecutionContext,
+): Promise<LoadStandardCrudLookupPageResult> {
   const { field, providers, values, detailFields = {} } = input;
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.max(1, input.pageSize ?? 20);
 
   if (field.kind !== 'lookup') {
-    return { options: field.options ?? [], error: null };
+    return {
+      options: field.options ?? [],
+      currentOptions: [],
+      page,
+      pageSize,
+      hasMore: false,
+      error: null,
+    };
   }
 
   const current = readStandardCrudCurrentLookupOption(field, values, detailFields);
@@ -591,6 +638,10 @@ export async function loadStandardCrudLookupOptions(
   if (!provider) {
     return {
       options: preserveStandardCrudCurrentOption([], current),
+      currentOptions: current ? [current] : [],
+      page,
+      pageSize,
+      hasMore: false,
       error: `未找到 lookup provider：${providerKey}`,
     };
   }
@@ -599,7 +650,7 @@ export async function loadStandardCrudLookupOptions(
   for (const dependency of field.lookup?.dependsOn ?? []) {
     const dependencyValue = values[dependency];
     if (isEmptyStandardCrudLookupDependency(dependencyValue)) {
-      return { options: [], error: null };
+      return { options: [], currentOptions: [], page, pageSize, hasMore: false, error: null };
     }
 
     dependencyValues[dependency] = dependencyValue;
@@ -608,22 +659,53 @@ export async function loadStandardCrudLookupOptions(
   try {
     const request: StandardCrudLookupRequest = {
       fieldKey: field.key,
+      keyword: input.keyword?.trim() ?? '',
+      page,
+      pageSize,
+      currentValueIds: current ? [current.value] : [],
       values,
       dependencyValues,
     };
     const executionContext = context ? [context] as const : [];
-    const options = await provider.load(request, ...executionContext);
+    const loaded = await provider.load(request, ...executionContext);
+    const loadedPage: StandardCrudLookupPage = Array.isArray(loaded)
+      ? { options: loaded, currentOptions: [], page, pageSize, hasMore: false }
+      : loaded;
+    const currentOptions = mergeStandardCrudLookupOptions(
+      loadedPage.currentOptions,
+      current ? [current] : [],
+    );
 
     return {
-      options: preserveStandardCrudCurrentOption(options, current),
+      options: mergeStandardCrudLookupOptions(currentOptions, loadedPage.options),
+      currentOptions,
+      page: loadedPage.page,
+      pageSize: loadedPage.pageSize,
+      hasMore: loadedPage.hasMore,
       error: null,
     };
   } catch (error) {
     return {
       options: preserveStandardCrudCurrentOption([], current),
+      currentOptions: current ? [current] : [],
+      page,
+      pageSize,
+      hasMore: false,
       error: error instanceof Error && error.message.length > 0 ? error.message : '加载选项失败',
     };
   }
+}
+
+/** 按 value 合并 lookup 选项；前序项优先，保证当前值与已加载页不会被后续重复项覆盖。 */
+function mergeStandardCrudLookupOptions(
+  first: StandardCrudOption[],
+  second: StandardCrudOption[],
+): StandardCrudOption[] {
+  const merged = new Map<string, StandardCrudOption>();
+  [...first, ...second].forEach((option) => {
+    if (!merged.has(option.value)) merged.set(option.value, option);
+  });
+  return Array.from(merged.values());
 }
 
 /**
@@ -1053,5 +1135,70 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
     remove: (id) => client.delete(id),
     exportList: (request) => client.exportList(request),
     getRowId: options.getRowId,
+  };
+}
+
+/** 创建消费标准 `/options` 分页契约的 lookup Provider。 */
+export function createStandardCrudRestLookupProvider(
+  options: StandardCrudRestLookupProviderOptions,
+): StandardCrudLookupProvider {
+  return {
+    key: options.key,
+    load: async (request, context) => {
+      const search = new URLSearchParams();
+      if (request.keyword.length > 0) search.set('keyword', request.keyword);
+      search.set('page', String(request.page));
+      search.set('pageSize', String(request.pageSize));
+      if (request.currentValueIds.length > 0) {
+        search.set('currentValueIds', request.currentValueIds.join(','));
+      }
+
+      const payload = await requestJson<unknown>(
+        options.fetcher,
+        `${options.apiRoute.replace(/\/$/, '')}/options?${search.toString()}`,
+        {
+          headers: { Accept: 'application/json' },
+          ...(context?.signal ? { signal: context.signal } : {}),
+        },
+        '加载标准 CRUD lookup 失败',
+      );
+      return normalizeStandardCrudLookupPage(payload);
+    },
+  };
+}
+
+/** 把后端 lookup 响应收敛为 SDK 稳定分页外形，并拒绝部分或模糊响应。 */
+function normalizeStandardCrudLookupPage(value: unknown): StandardCrudLookupPage {
+  if (!isStandardCrudRecord(value)
+      || !Array.isArray(value.items)
+      || !Array.isArray(value.currentItems)
+      || typeof value.page !== 'number'
+      || typeof value.pageSize !== 'number'
+      || typeof value.hasMore !== 'boolean') {
+    throw new Error('标准 CRUD lookup 响应不符合分页契约');
+  }
+
+  return {
+    options: value.items.map(normalizeStandardCrudOption),
+    currentOptions: value.currentItems.map(normalizeStandardCrudOption),
+    page: value.page,
+    pageSize: value.pageSize,
+    hasMore: value.hasMore,
+  };
+}
+
+/** 校验单个 lookup option，防止无标识或无标签项进入共享运行时。 */
+function normalizeStandardCrudOption(value: unknown): StandardCrudOption {
+  if (!isStandardCrudRecord(value)
+      || typeof value.value !== 'string'
+      || typeof value.label !== 'string'
+      || (value.disabled !== undefined && typeof value.disabled !== 'boolean')) {
+    throw new Error('标准 CRUD lookup 选项不符合契约');
+  }
+
+  return {
+    value: value.value,
+    label: value.label,
+    ...(value.disabled === undefined ? {} : { disabled: value.disabled }),
   };
 }

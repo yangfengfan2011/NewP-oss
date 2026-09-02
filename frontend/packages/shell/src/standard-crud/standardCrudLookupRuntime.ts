@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { usePlatformQuery } from '@icp-platform/core';
 import {
-  loadStandardCrudLookupOptions,
+  loadStandardCrudLookupPage,
   type StandardCrudFieldDefinition,
+  type StandardCrudLookupPage,
   type StandardCrudLookupRuntimeState as SdkStandardCrudLookupRuntimeState,
   type StandardCrudOption,
   type UseStandardCrudLookupRuntimeInput as SdkUseStandardCrudLookupRuntimeInput,
@@ -24,12 +26,24 @@ export interface UseStandardCrudLookupRuntimeInput extends SdkUseStandardCrudLoo
 }
 
 export interface StandardCrudLookupRuntimeState extends SdkStandardCrudLookupRuntimeState {
-  retry(): void;
+  lookupHasMore: Record<string, boolean>;
+  search(fieldKey: string, keyword: string): void;
+  loadMore(fieldKey: string): void;
+  retry(fieldKey?: string): void;
+}
+
+interface StandardCrudLookupRequestState {
+  keyword: string;
+  page: number;
+  pageSize: number;
+}
+
+interface StandardCrudLookupQueryPage extends StandardCrudLookupPage {
+  error: string | null;
 }
 
 interface StandardCrudLookupQueryData {
-  lookupOptions: Record<string, StandardCrudOption[]>;
-  lookupErrors: Record<string, string | null>;
+  lookupPages: Record<string, StandardCrudLookupQueryPage>;
 }
 
 class StandardCrudLookupQueryError extends Error {
@@ -47,6 +61,10 @@ export function useStandardCrudLookupRuntime({
   detailFields,
 }: UseStandardCrudLookupRuntimeInput): StandardCrudLookupRuntimeState {
   const lookupFields = fields.filter((field) => field.kind === 'lookup');
+  const [requests, setRequests] = useState<Record<string, StandardCrudLookupRequestState>>({});
+  const [lookupOptions, setLookupOptions] = useState<Record<string, StandardCrudOption[]>>({});
+  const [lookupErrors, setLookupErrors] = useState<Record<string, string | null>>({});
+  const [lookupHasMore, setLookupHasMore] = useState<Record<string, boolean>>({});
   const query = usePlatformQuery<StandardCrudLookupQueryData>({
     key: createStandardCrudLookupQueryKey({
       resourceKey,
@@ -54,6 +72,7 @@ export function useStandardCrudLookupRuntime({
       providers,
       values,
       detailFields,
+      requests,
     }),
     enabled: lookupFields.length > 0,
     load: async ({ signal }) => loadLookupQuery({
@@ -61,21 +80,64 @@ export function useStandardCrudLookupRuntime({
       providers,
       values,
       detailFields,
+      requests,
       signal,
     }),
   });
   const queryData = query.error instanceof StandardCrudLookupQueryError
     ? query.error.data
     : query.data;
-  const lookupLoading = Object.fromEntries(
+  const lookupLoading: Record<string, boolean> = Object.fromEntries(
     lookupFields.map((field) => [field.key, query.isFetching]),
   );
 
+  useEffect(() => {
+    if (!queryData) return;
+
+    setLookupOptions((current) => {
+      const next = { ...current };
+      Object.entries(queryData.lookupPages).forEach(([fieldKey, page]) => {
+        next[fieldKey] = page.page > 1
+          ? mergeLookupOptions(current[fieldKey] ?? [], page.options)
+          : page.options;
+      });
+      return next;
+    });
+    setLookupErrors((current) => {
+      const next = { ...current };
+      Object.entries(queryData.lookupPages).forEach(([fieldKey, page]) => {
+        next[fieldKey] = page.error;
+      });
+      return next;
+    });
+    setLookupHasMore((current) => {
+      const next = { ...current };
+      Object.entries(queryData.lookupPages).forEach(([fieldKey, page]) => {
+        if (!page.error) next[fieldKey] = page.hasMore;
+      });
+      return next;
+    });
+  }, [queryData]);
+
   return {
-    lookupOptions: queryData?.lookupOptions ?? {},
+    lookupOptions,
     lookupLoading,
-    lookupErrors: queryData?.lookupErrors ?? {},
-    retry: query.retry,
+    lookupErrors,
+    lookupHasMore,
+    search: (fieldKey, keyword) => {
+      setRequests((current) => ({
+        ...current,
+        [fieldKey]: { keyword: keyword.trim(), page: 1, pageSize: current[fieldKey]?.pageSize ?? 20 },
+      }));
+    },
+    loadMore: (fieldKey) => {
+      if (lookupLoading[fieldKey] || !lookupHasMore[fieldKey]) return;
+      setRequests((current) => {
+        const request = current[fieldKey] ?? { keyword: '', page: 1, pageSize: 20 };
+        return { ...current, [fieldKey]: { ...request, page: request.page + 1 } };
+      });
+    },
+    retry: () => query.retry(),
   };
 }
 
@@ -84,29 +146,31 @@ async function loadLookupQuery({
   providers,
   values,
   detailFields,
+  requests,
   signal,
 }: {
   lookupFields: StandardCrudFieldDefinition[];
   providers: NonNullable<SdkUseStandardCrudLookupRuntimeInput['providers']>;
   values: Record<string, unknown>;
   detailFields: Record<string, unknown> | undefined;
+  requests: Record<string, StandardCrudLookupRequestState>;
   signal: AbortSignal;
 }): Promise<StandardCrudLookupQueryData> {
   const data: StandardCrudLookupQueryData = {
-    lookupOptions: {},
-    lookupErrors: {},
+    lookupPages: {},
   };
   let providerFailed = false;
 
   for (const field of lookupFields) {
-    const result = await loadStandardCrudLookupOptions({
+    const request = requests[field.key] ?? { keyword: '', page: 1, pageSize: 20 };
+    const result = await loadStandardCrudLookupPage({
       field,
       providers,
       values,
       detailFields,
+      ...request,
     }, { signal });
-    data.lookupOptions[field.key] = result.options;
-    data.lookupErrors[field.key] = result.error;
+    data.lookupPages[field.key] = result;
     if (result.error && isProviderExecutionFailure(field, providers, values)) {
       providerFailed = true;
     }
@@ -114,6 +178,17 @@ async function loadLookupQuery({
 
   if (providerFailed) throw new StandardCrudLookupQueryError(data);
   return data;
+}
+
+function mergeLookupOptions(
+  current: StandardCrudOption[],
+  appended: StandardCrudOption[],
+): StandardCrudOption[] {
+  const merged = new Map(current.map((option) => [option.value, option]));
+  appended.forEach((option) => {
+    if (!merged.has(option.value)) merged.set(option.value, option);
+  });
+  return Array.from(merged.values());
 }
 
 function isProviderExecutionFailure(

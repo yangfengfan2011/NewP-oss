@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { StandardCrudField, StandardCrudForm } from '@icp-platform/ui';
+import { isStandardCrudLookupScrollEnd, StandardCrudField, StandardCrudForm } from '@icp-platform/ui';
 import type { StandardCrudFieldDefinition, StandardCrudFormSection } from '@icp-platform/sdk';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -152,6 +152,53 @@ describe('StandardCrudField and StandardCrudForm', () => {
 
     expect(container.querySelector('.np-standard-crud-select[data-value="FullTime"]')).not.toBeNull();
     expect(container.textContent).toContain('正式');
+  });
+
+  it('forwards remote lookup search, scroll continuation and retry interactions', async () => {
+    const onSearch = vi.fn();
+    const onLoadMore = vi.fn();
+    const onRetry = vi.fn();
+    const field: StandardCrudFieldDefinition = {
+      key: 'positionId',
+      labelKey: '岗位',
+      modelField: 'PositionId',
+      kind: 'lookup',
+      lookup: { providerKey: 'organization.positions', placeholder: '搜索岗位' },
+    };
+
+    await render(
+      <StandardCrudField
+        field={field}
+        value="position-current"
+        mode="edit"
+        options={[{ value: 'position-current', label: '当前岗位' }]}
+        loading
+        error="岗位加载失败"
+        retryableError
+        hasMore
+        onSearch={onSearch}
+        onLoadMore={onLoadMore}
+        onRetry={onRetry}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const input = container.querySelector('input[role="combobox"]') as HTMLInputElement;
+    await act(async () => {
+      input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, '架构');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onSearch).toHaveBeenCalledWith('positionId', '架构');
+
+    expect(isStandardCrudLookupScrollEnd({ scrollTop: 80, clientHeight: 20, scrollHeight: 100 })).toBe(true);
+
+    const retryButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '重试');
+    await act(async () => retryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onRetry).toHaveBeenCalledWith('positionId');
+    expect(container.textContent).toContain('岗位加载失败');
   });
 
   it('renders textarea number checkbox dateRange and readonly field kinds', async () => {

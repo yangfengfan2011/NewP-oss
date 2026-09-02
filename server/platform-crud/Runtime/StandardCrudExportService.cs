@@ -75,18 +75,7 @@ public sealed class StandardCrudExportService
         var allowedFields = descriptor.FieldSet.ListFields
             .Concat(descriptor.DisplayValueFields.Select(static field => field.Field))
             .ToHashSet(StringComparer.Ordinal);
-        var canonicalDisplayFields = descriptor.DisplayValueFields
-            .GroupBy(static field => field.SourceField, StringComparer.Ordinal)
-            .Select(static group => new
-            {
-                SourceField = group.Key,
-                DisplayField = ResolveCanonicalDisplayField(group.Key, group)
-            })
-            .Where(static entry => entry.DisplayField is not null)
-            .ToDictionary(
-                static entry => entry.SourceField,
-                static entry => entry.DisplayField!,
-                StringComparer.Ordinal);
+        var canonicalDisplayFields = BuildCanonicalDisplayFields(descriptor);
         var normalized = columns
             .Where(column =>
                 !string.IsNullOrWhiteSpace(column.Field)
@@ -106,6 +95,42 @@ public sealed class StandardCrudExportService
         }
 
         return normalized;
+    }
+
+    // lookup descriptor 与 typed display plan 共同提供 canonical companion；导出只消费唯一的 output-only 展示字段。
+    private static IReadOnlyDictionary<string, string> BuildCanonicalDisplayFields(StandardCrudDescriptor descriptor)
+    {
+        var resolved = descriptor.DisplayValueFields
+            .GroupBy(static field => field.SourceField, StringComparer.Ordinal)
+            .Select(static group => new
+            {
+                SourceField = group.Key,
+                DisplayField = ResolveCanonicalDisplayField(group.Key, group)
+            })
+            .Where(static entry => entry.DisplayField is not null)
+            .ToDictionary(
+                static entry => entry.SourceField,
+                static entry => entry.DisplayField!,
+                StringComparer.Ordinal);
+
+        foreach (var plan in descriptor.DisplayProjectionPlan?.Fields ?? [])
+        {
+            var canonicalField = $"{plan.SourceField}_DisplayValue";
+            if (!string.Equals(plan.CompanionField, canonicalField, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (resolved.TryGetValue(plan.SourceField, out var existing)
+                && !string.Equals(existing, plan.CompanionField, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"标准 CRUD 导出检测到字段 {plan.SourceField} 的冲突 canonical display 声明。");
+            }
+
+            resolved[plan.SourceField] = plan.CompanionField;
+        }
+
+        return resolved;
     }
 
     // current 继承当前分页；all 从第一页读取上限加一行，以便可靠判定超限。

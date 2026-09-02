@@ -146,6 +146,14 @@
       "zhs": "全部启用状态",
       "en": "All enabled states"
     },
+    "Query_BirthDateRange": {
+      "zhs": "出生日期范围",
+      "en": "Birth Date Range"
+    },
+    "Query_BirthDateRange_Placeholder": {
+      "zhs": "请选择出生日期范围",
+      "en": "Select birth date range"
+    },
     "AdvancedFilter_Title": {
       "zhs": "高级筛选",
       "en": "Advanced Filter"
@@ -153,6 +161,10 @@
     "AdvancedFilter_Organization": {
       "zhs": "组织信息",
       "en": "Organization"
+    },
+    "AdvancedFilter_Person": {
+      "zhs": "人员信息",
+      "en": "Person Information"
     },
     "AdvancedFilter_Status": {
       "zhs": "状态条件",
@@ -165,6 +177,10 @@
     "Column_Name": {
       "zhs": "姓名",
       "en": "Name"
+    },
+    "Column_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Birth Date"
     },
     "Column_CompanyName": {
       "zhs": "公司",
@@ -181,6 +197,14 @@
     "Column_EmploymentStatus": {
       "zhs": "任职状态",
       "en": "Employment Status"
+    },
+    "Column_EmploymentStartedAt": {
+      "zhs": "入职时间",
+      "en": "Employment Start Time"
+    },
+    "Column_EmploymentEndedAt": {
+      "zhs": "离职时间",
+      "en": "Employment End Time"
     },
     "Column_IsEnabled": {
       "zhs": "启用状态",

@@ -30,6 +30,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private const string AuthenticationCookieName = "ICP.Platform.PersonnelAcceptance";
     private const string TabletScreenshotName = "browser-tablet.png";
     private const string NarrowScreenshotName = "browser-narrow.png";
+    private const string PersonnelBirthDate = "2000-02-29";
+    private const string PersonnelBirthDateDisplay = "2000/2/29";
+    private const string PersonnelStartedAtUtc = "2030-01-02T00:04:05Z";
+    private const string PersonnelStartedAtDisplay = "2030/1/2 08:04:05";
+    private const string PersonnelEndedAtUtc = "2030-06-30T09:30:00Z";
+    private const string PersonnelEndedAtDisplay = "2030/6/30 17:30:00";
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly List<string> _artifactRefs = [];
     private readonly List<string> _processIdentities = [];
@@ -470,7 +476,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             fixture.CompanyId,
             fixture.DepartmentId,
             cancellationToken,
-            fixture.CompanyName);
+            fixture.CompanyName,
+            PersonnelBirthDate,
+            PersonnelStartedAtUtc,
+            PersonnelEndedAtUtc);
         checks.Add(new { check = "create-with-company-display-envelope", status = 201 });
         var updatedName = $"{personName} Updated";
         var updateDisplayCompanionPayload = PersonPayload(
@@ -604,6 +613,23 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             throw new InvalidOperationException("Personnel list did not contain the created person.");
         }
 
+        using (var rangedList = await admin.GetAsync(
+                   $"/api/organization/persons?birthDateFrom={PersonnelBirthDate}&birthDateTo={PersonnelBirthDate}&pageIndex=1&pageSize=20&sortBy=BirthDate&sortDirection=asc",
+                   cancellationToken))
+        {
+            var rangedListBody = await rangedList.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(rangedList, HttpStatusCode.OK, rangedListBody, "inclusive birth date range list");
+            using var rangedJson = JsonDocument.Parse(rangedListBody);
+            var rangedItems = ReadArray(rangedJson.RootElement, "items");
+            if (ReadInt(rangedJson.RootElement, "total") != 1
+                || rangedItems.GetArrayLength() != 1
+                || !string.Equals(ReadString(rangedItems[0], "EID"), person.Id, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Personnel inclusive birth date range did not return the one matching person.");
+            }
+            checks.Add(new { check = "calendar-date-range-list-count-sort", status = 200 });
+        }
+
         for (var index = 0; index < 19; index++)
         {
             await CreatePersonAsync(
@@ -633,7 +659,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             new { key = "PersonNo", field = "PersonNo", title = "人员编号" },
             new { key = "ENAME", field = "ENAME", title = "姓名" },
-            new { key = "CompanyId", field = "CompanyId", title = "公司" }
+            new { key = "BirthDate", field = "BirthDate", title = "出生日期" },
+            new { key = "CompanyId", field = "CompanyId", title = "公司" },
+            new { key = "EmploymentStartedAt", field = "EmploymentStartedAt", title = "入职时间" },
+            new { key = "EmploymentEndedAt", field = "EmploymentEndedAt", title = "离职时间" }
         };
         foreach (var mode in new[] { "current", "all" })
         {
@@ -645,7 +674,14 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 {
                     mode,
                     columns = exportColumns,
-                    query = new { pageIndex = 1, pageSize = 20, sortBy = "PersonNo", sortDirection = "asc" }
+                    query = new
+                    {
+                        pageIndex = 1,
+                        pageSize = 20,
+                        sortBy = "BirthDate",
+                        sortDirection = "asc",
+                        filters = new { birthDateFrom = PersonnelBirthDate, birthDateTo = PersonnelBirthDate }
+                    }
                 },
                 cancellationToken);
             var bytes = await exported.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -660,7 +696,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             }
             var sheetXml = ReadXlsxSheetXml(bytes, mode);
             AssertContains(sheetXml, fixture.CompanyName, $"company display name in {mode} export");
+            AssertContains(sheetXml, PersonnelBirthDateDisplay, $"birth date display value in {mode} export");
+            AssertContains(sheetXml, PersonnelStartedAtDisplay, $"employment start display value in {mode} export");
+            AssertContains(sheetXml, PersonnelEndedAtDisplay, $"employment end display value in {mode} export");
             AssertDoesNotContain(sheetXml, fixture.CompanyId, $"company raw id in {mode} export");
+            AssertDoesNotContain(sheetXml, PersonnelStartedAtUtc, $"employment start raw value in {mode} export");
+            AssertDoesNotContain(sheetXml, PersonnelEndedAtUtc, $"employment end raw value in {mode} export");
             AssertDoesNotContain(sheetXml, "CompanyName", $"legacy company alias in {mode} export");
             checks.Add(new { check = $"export-{mode}-with-filter-sort-column-order", status = 200, bytes = bytes.Length });
         }
@@ -808,6 +849,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
             person = await AssignPositionToPersonFromBrowserAsync(page, person, position, cancellationToken);
+            person = await MaintainPersonnelTemporalFieldsFromBrowserAsync(page, person, cancellationToken);
             _position = position;
             _person = person;
             // 回到岗位列表后再从导航进入人员中心，让原有首屏请求守卫仍观察一个干净的列表进入动作。
@@ -871,19 +913,22 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             "canonical-list-row-visible",
             "canonical-view-drawer-visible",
             "company-display-name-readable",
-            "department-display-name-readable"
+            "department-display-name-readable",
+            "personnel-temporal-display-values-readable"
         };
         if (phase == "initial")
         {
             await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await AssertPersonListAndDrawerAsync(page, person, fixture, _position?.Name);
             await AssertSubmittedQueryAndKeyboardAsync(page, person);
+            await AssertPersonBirthDateRangeAsync(page, person);
             browserAssertions.AddRange([
                 "hard-refresh-canonical-list-and-drawer",
                 "enter-submits-query-and-updates-url",
                 "reset-restores-default-query",
                 "single-refresh-entry",
-                "named-keyboard-query-control"
+                "named-keyboard-query-control",
+                "calendar-date-range-restored-and-applied"
             ]);
 
             await CaptureResponsiveBrowserEvidenceAsync(
@@ -1565,6 +1610,126 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return updated;
     }
 
+    // Personnel smoke 通过共享标准字段维护三个时间值；输入 hydration 与提交均不绕过正式 Drawer/API。
+    private static async Task<PersonData> MaintainPersonnelTemporalFieldsFromBrowserAsync(
+        IPage page,
+        PersonData person,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
+            .Filter(new LocatorFilterOptions { HasTextString = person.Name })
+            .Last;
+        await row.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "编辑", Exact = true })
+            .ClickAsync();
+
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        foreach (var (label, value) in new[]
+                 {
+                     ("出生日期", PersonnelBirthDate),
+                     ("入职时间", "2030-01-02 08:04:05"),
+                     ("离职时间", "2030-06-30 17:30:00")
+                 })
+        {
+            var input = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
+            await input.FillAsync(value);
+            await input.PressAsync("Enter");
+        }
+
+        var personApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";
+        var updateResponseTask = page.WaitForResponseAsync(response =>
+            response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath.Equals(personApiPath, StringComparison.Ordinal));
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "保存修改", Exact = true })
+            .ClickAsync();
+        var response = await updateResponseTask;
+        var body = await response.TextAsync();
+        if (response.Status != (int)HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException(
+                $"Browser person temporal update returned {response.Status}, expected 200: {body}");
+        }
+
+        using var json = JsonDocument.Parse(body);
+        var fields = ReadObject(json.RootElement, "fields");
+        foreach (var (field, expected) in new[]
+                 {
+                     ("BirthDate", PersonnelBirthDate),
+                     ("BirthDate_DisplayValue", PersonnelBirthDateDisplay),
+                     ("EmploymentStartedAt", PersonnelStartedAtUtc),
+                     ("EmploymentStartedAt_DisplayValue", PersonnelStartedAtDisplay),
+                     ("EmploymentEndedAt", PersonnelEndedAtUtc),
+                     ("EmploymentEndedAt_DisplayValue", PersonnelEndedAtDisplay)
+                 })
+        {
+            if (!string.Equals(ReadString(fields, field), expected, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Browser person temporal update returned an unexpected {field} value.");
+            }
+        }
+
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        return ReadPerson(body, person.PersonNo, person.Name, "browser maintain personnel temporal fields");
+    }
+
+    // 高级筛选只观察用户旅程：应用显式两端后 URL 与数据库列表共同定位目标人员。
+    private static async Task AssertPersonBirthDateRangeAsync(IPage page, PersonData person)
+    {
+        await page.GetByRole(
+                AriaRole.Button,
+                new PageGetByRoleOptions { Name = "高级筛选", Exact = true })
+            .ClickAsync();
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var rangeInputs = drawer.Locator(".ant-picker-range input");
+        if (await rangeInputs.CountAsync() != 2)
+        {
+            throw new InvalidOperationException("Personnel advanced filter did not expose one CalendarDate range control.");
+        }
+
+        await rangeInputs.Nth(0).FillAsync(PersonnelBirthDate);
+        await rangeInputs.Nth(0).PressAsync("Enter");
+        await rangeInputs.Nth(1).FillAsync(PersonnelBirthDate);
+        await rangeInputs.Nth(1).PressAsync("Enter");
+        var responseTask = page.WaitForResponseAsync(response =>
+        {
+            if (response.Request.Method != "GET")
+            {
+                return false;
+            }
+
+            var uri = new Uri(response.Url);
+            return uri.AbsolutePath.Equals("/api/organization/persons", StringComparison.Ordinal)
+                   && HasQueryValue(uri, "birthDateFrom", PersonnelBirthDate)
+                   && HasQueryValue(uri, "birthDateTo", PersonnelBirthDate);
+        });
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "应用筛选", Exact = true })
+            .ClickAsync();
+        var response = await responseTask;
+        if (response.Status != (int)HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException($"Browser person birth date range returned {response.Status}, expected 200.");
+        }
+
+        await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
+            .Filter(new LocatorFilterOptions { HasTextString = person.Name })
+            .Last
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var currentUri = new Uri(page.Url);
+        if (!HasQueryValue(currentUri, "birthDateFrom", PersonnelBirthDate)
+            || !HasQueryValue(currentUri, "birthDateTo", PersonnelBirthDate))
+        {
+            throw new InvalidOperationException("Personnel applied birth date range was not preserved in the browser URL.");
+        }
+    }
+
     // 浏览器请求查询值按 application/x-www-form-urlencoded 解码后做精确比较，避免空格编码差异伪造搜索证据。
     private static bool HasQueryValue(Uri uri, string key, string expectedValue)
     {
@@ -1606,8 +1771,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var rowText = await row.InnerTextAsync();
         AssertContains(rowText, person.PersonNo, "person number in list row");
         AssertContains(rowText, person.Name, "person name in list row");
+        AssertContains(rowText, PersonnelBirthDateDisplay, "birth date display value in list row");
         AssertContains(rowText, fixture.CompanyName, "company display name in list row");
         AssertContains(rowText, fixture.DepartmentName, "department display name in list row");
+        AssertContains(rowText, PersonnelStartedAtDisplay, "employment start display value in list row");
+        AssertContains(rowText, PersonnelEndedAtDisplay, "employment end display value in list row");
         if (!string.IsNullOrWhiteSpace(positionName))
         {
             AssertContains(rowText, positionName, "position display name in list row");
@@ -1622,7 +1790,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 new LocatorGetByRoleOptions { Name = person.Name, Exact = true }).ClickAsync();
         }
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        foreach (var expected in new[] { person.PersonNo, person.Name, fixture.CompanyName, fixture.DepartmentName, positionName }
+        foreach (var expected in new[]
+                 {
+                     person.PersonNo,
+                     person.Name,
+                     PersonnelBirthDateDisplay,
+                     fixture.CompanyName,
+                     fixture.DepartmentName,
+                     positionName,
+                     PersonnelStartedAtDisplay,
+                     PersonnelEndedAtDisplay
+                 }
                      .Where(static value => !string.IsNullOrWhiteSpace(value)))
         {
             await drawer.GetByText(expected!, new LocatorGetByTextOptions { Exact = true }).First
@@ -1631,15 +1809,18 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var drawerText = await drawer.InnerTextAsync();
         AssertContains(drawerText, person.PersonNo, "person number in view drawer");
         AssertContains(drawerText, person.Name, "person name in view drawer");
+        AssertContains(drawerText, PersonnelBirthDateDisplay, "birth date display value in view drawer");
         AssertContains(drawerText, fixture.CompanyName, "company display name in view drawer");
         AssertContains(drawerText, fixture.DepartmentName, "department display name in view drawer");
+        AssertContains(drawerText, PersonnelStartedAtDisplay, "employment start display value in view drawer");
+        AssertContains(drawerText, PersonnelEndedAtDisplay, "employment end display value in view drawer");
         if (!string.IsNullOrWhiteSpace(positionName))
         {
             AssertContains(drawerText, positionName, "position display name in view drawer");
         }
         foreach (var expected in new[]
                  {
-                     "基础信息", "组织信息", "审计信息", "创建人", "创建时间", "更新人", "更新时间"
+                     "基础信息", "组织信息", "任职信息", "审计信息", "创建人", "创建时间", "更新人", "更新时间"
                  })
         {
             AssertContains(drawerText, expected, $"drawer detail field {expected}");
@@ -2541,13 +2722,20 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         string? companyId,
         string? departmentId,
         CancellationToken cancellationToken,
-        string? expectedCompanyDisplayValue = null)
+        string? expectedCompanyDisplayValue = null,
+        string? birthDate = null,
+        string? employmentStartedAt = null,
+        string? employmentEndedAt = null)
     {
+        var payload = PersonPayload(personNo, name, companyId, departmentId);
+        payload["BirthDate"] = birthDate;
+        payload["EmploymentStartedAt"] = employmentStartedAt;
+        payload["EmploymentEndedAt"] = employmentEndedAt;
         using var response = await SendJsonWithAntiforgeryAsync(
             client,
             HttpMethod.Post,
             "/api/organization/persons",
-            PersonPayload(personNo, name, companyId, departmentId),
+            payload,
             cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.Created, body, $"create person {personNo}");
@@ -2620,6 +2808,21 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         using var json = JsonDocument.Parse(body);
         var fields = ReadObject(json.RootElement, "fields");
         AssertPersonAuditTimestamps(fields, person, operation);
+        foreach (var (field, expected) in new[]
+                 {
+                     ("BirthDate", PersonnelBirthDate),
+                     ("BirthDate_DisplayValue", PersonnelBirthDateDisplay),
+                     ("EmploymentStartedAt", PersonnelStartedAtUtc),
+                     ("EmploymentStartedAt_DisplayValue", PersonnelStartedAtDisplay),
+                     ("EmploymentEndedAt", PersonnelEndedAtUtc),
+                     ("EmploymentEndedAt_DisplayValue", PersonnelEndedAtDisplay)
+                 })
+        {
+            if (!string.Equals(ReadString(fields, field), expected, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"{operation} returned an unexpected {field} value.");
+            }
+        }
         foreach (var expected in new[] { person.Id, person.PersonNo, person.Name, fixture.CompanyName, fixture.DepartmentName })
         {
             if (!body.Contains(expected, StringComparison.Ordinal))

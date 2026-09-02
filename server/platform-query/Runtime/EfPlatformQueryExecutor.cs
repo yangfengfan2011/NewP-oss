@@ -91,11 +91,25 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         IEntityType entityType,
         IReadOnlyList<PlatformQueryCondition> conditions)
     {
+        var unsupported = conditions.FirstOrDefault(static condition =>
+            !string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(condition.Operator, "gte", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(condition.Operator, "lte", StringComparison.OrdinalIgnoreCase));
+        if (unsupported is not null)
+        {
+            throw new PlatformQueryValidationException(
+                "PlatformQuery.UnsupportedConditionOperator",
+                $"查询资源 {descriptor.ResourceKey} 不支持条件操作符 {unsupported.Operator}。");
+        }
+
         var executableConditions = conditions
             .Where(static condition =>
                 condition.Value is not null &&
                 (string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase)))
+                    string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(condition.Operator, "gte", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(condition.Operator, "lte", StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (executableConditions.Count == 0)
         {
@@ -155,15 +169,24 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         return source.Where(lambda);
     }
 
+    // 条件操作符在查询内核统一翻译；比较条件继续使用字段的 EF CLR 类型，避免字符串比较或模块特判。
     private static Expression BuildConditionExpression(
         PlatformQueryDescriptor descriptor,
         IEntityType entityType,
         ParameterExpression row,
         PlatformQueryCondition condition)
     {
-        return string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase)
-            ? BuildContainsExpression(descriptor, entityType, row, condition)
-            : BuildEqualsExpression(descriptor, entityType, row, condition);
+        if (string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildContainsExpression(descriptor, entityType, row, condition);
+        }
+        if (string.Equals(condition.Operator, "gte", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(condition.Operator, "lte", StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildComparisonExpression(descriptor, entityType, row, condition);
+        }
+
+        return BuildEqualsExpression(descriptor, entityType, row, condition);
     }
 
     private static Expression BuildContainsExpression(
@@ -201,7 +224,39 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         var fieldType = ResolveFieldType(descriptor, entityType, condition.Field);
         var property = BuildPropertyExpression(row, condition.Field, fieldType);
         var normalizedValue = NormalizeConditionValue(descriptor, condition, fieldType);
-        return Expression.Equal(property, Expression.Constant(normalizedValue, fieldType));
+        return Expression.Equal(property, BuildConditionValueExpression(normalizedValue, fieldType));
+    }
+
+    // 范围比较先按字段类型规范化边界，再生成可由 provider 下推的闭区间谓词。
+    private static Expression BuildComparisonExpression(
+        PlatformQueryDescriptor descriptor,
+        IEntityType entityType,
+        ParameterExpression row,
+        PlatformQueryCondition condition)
+    {
+        var fieldType = ResolveFieldType(descriptor, entityType, condition.Field);
+        var valueType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+        if (valueType != typeof(DateOnly))
+        {
+            throw new PlatformQueryValidationException(
+                "PlatformQuery.IncompatibleConditionOperator",
+                $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 不支持操作符 {condition.Operator}。");
+        }
+
+        var property = BuildPropertyExpression(row, condition.Field, fieldType);
+        var normalizedValue = NormalizeConditionValue(descriptor, condition, fieldType);
+        var boundary = BuildConditionValueExpression(normalizedValue, fieldType);
+        return string.Equals(condition.Operator, "gte", StringComparison.OrdinalIgnoreCase)
+            ? Expression.GreaterThanOrEqual(property, boundary)
+            : Expression.LessThanOrEqual(property, boundary);
+    }
+
+    // 可空数据库字段使用提升后的常量表达式，确保空值自然不匹配范围且不提前物化。
+    private static Expression BuildConditionValueExpression(object value, Type fieldType)
+    {
+        var valueType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+        var constant = Expression.Constant(value, valueType);
+        return valueType == fieldType ? constant : Expression.Convert(constant, fieldType);
     }
 
     private static object NormalizeConditionValue(
@@ -209,12 +264,13 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         PlatformQueryCondition condition,
         Type fieldType)
     {
-        if (fieldType == typeof(string))
+        var valueType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+        if (valueType == typeof(string))
         {
             return ReadString(condition.Value);
         }
 
-        if (fieldType == typeof(bool))
+        if (valueType == typeof(bool))
         {
             if (condition.Value is bool boolean)
             {
@@ -231,7 +287,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
                 $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 需要布尔筛选值。");
         }
 
-        if (fieldType == typeof(DateTime))
+        if (valueType == typeof(DateTime))
         {
             if (condition.Value is DateTime dateTime)
             {
@@ -248,10 +304,32 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
                 $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 需要日期时间筛选值。");
         }
 
-        return Convert.ChangeType(condition.Value!, fieldType, CultureInfo.InvariantCulture)
+        if (valueType == typeof(DateOnly))
+        {
+            if (condition.Value is DateOnly dateOnly)
+            {
+                return dateOnly;
+            }
+
+            if (DateOnly.TryParseExact(
+                ReadString(condition.Value),
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsed))
+            {
+                return parsed;
+            }
+
+            throw new PlatformQueryValidationException(
+                "PlatformQuery.InvalidConditionValue",
+                $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 需要 YYYY-MM-DD 日历日期筛选值。");
+        }
+
+        return Convert.ChangeType(condition.Value!, valueType, CultureInfo.InvariantCulture)
             ?? throw new PlatformQueryValidationException(
                 "PlatformQuery.InvalidConditionValue",
-                $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 无法转换为 {fieldType.Name}。");
+                $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 无法转换为 {valueType.Name}。");
     }
 
     // 主排序后固定追加 EID 升序，保证重复主排序值跨页时仍有确定次序。

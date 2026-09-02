@@ -13,6 +13,7 @@ using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Query.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -208,6 +209,78 @@ public sealed class PersonStandardCrudResourceTests
             condition.Field == "PositionId" && condition.Operator == "=" && Equals(condition.Value, "Position_1"));
         Assert.Contains(conditions, condition =>
             condition.Field == "IsEnabled" && condition.Operator == "=" && Equals(condition.Value, "false"));
+    }
+
+    [Fact]
+    public void PersonCrudQueryCustomizer_MapsExplicitBirthDateBoundsToInclusiveRawFieldConditions()
+    {
+        var customizer = new PersonCrudQueryCustomizer();
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        var conditions = customizer.BuildConditions(
+            descriptor,
+            new StandardCrudListQuery(Filters: new Dictionary<string, string?>
+            {
+                ["birthDateFrom"] = "2000-02-29",
+                ["birthDateTo"] = "2010-12-31"
+            }));
+
+        Assert.Contains(conditions, condition =>
+            condition.Field == "BirthDate" && condition.Operator == "gte" && Equals(condition.Value, "2000-02-29"));
+        Assert.Contains(conditions, condition =>
+            condition.Field == "BirthDate" && condition.Operator == "lte" && Equals(condition.Value, "2010-12-31"));
+    }
+
+    [Theory]
+    [InlineData("2000-02-29", null, "gte", "2000-02-29")]
+    [InlineData(null, "2010-12-31", "lte", "2010-12-31")]
+    public void PersonCrudQueryCustomizer_SupportsEitherBirthDateBoundary(
+        string? from,
+        string? to,
+        string expectedOperator,
+        string expectedValue)
+    {
+        var conditions = new PersonCrudQueryCustomizer().BuildConditions(
+            PersonCrudDescriptorFactory.Create(),
+            new StandardCrudListQuery(Filters: new Dictionary<string, string?>
+            {
+                ["birthDateFrom"] = from,
+                ["birthDateTo"] = to
+            }));
+
+        var condition = Assert.Single(conditions);
+        Assert.Equal("BirthDate", condition.Field);
+        Assert.Equal(expectedOperator, condition.Operator);
+        Assert.Equal(expectedValue, condition.Value);
+    }
+
+    [Fact]
+    public void PersonCrudQueryCustomizer_RejectsInvalidCalendarDateBoundary()
+    {
+        var error = Assert.Throws<PlatformQueryValidationException>(() =>
+            new PersonCrudQueryCustomizer().BuildConditions(
+                PersonCrudDescriptorFactory.Create(),
+                new StandardCrudListQuery(Filters: new Dictionary<string, string?>
+                {
+                    ["birthDateFrom"] = "2001-02-29"
+                })));
+
+        Assert.Equal("PlatformQuery.InvalidConditionValue", error.Code);
+    }
+
+    [Fact]
+    public void PersonCrudQueryCustomizer_RejectsReversedBirthDateRange()
+    {
+        var error = Assert.Throws<PlatformQueryValidationException>(() =>
+            new PersonCrudQueryCustomizer().BuildConditions(
+                PersonCrudDescriptorFactory.Create(),
+                new StandardCrudListQuery(Filters: new Dictionary<string, string?>
+                {
+                    ["birthDateFrom"] = "2010-12-31",
+                    ["birthDateTo"] = "2000-02-29"
+                })));
+
+        Assert.Equal("PlatformQuery.InvalidConditionRange", error.Code);
     }
 
     [Fact]

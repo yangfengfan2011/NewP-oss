@@ -5,6 +5,8 @@ export interface StandardCrudQueryFieldSchema {
   field?: string;
   preset?: string;
   operator?: string;
+  fromKey?: string;
+  toKey?: string;
   dataSourceKey?: string;
   dependsOn?: string[];
   hidden?: boolean;
@@ -80,6 +82,10 @@ function readUrlFilterValue(value: string, defaultValue: unknown): unknown {
   return value;
 }
 
+function isDateRangeField(field: StandardCrudQueryFieldSchema): boolean {
+  return field.operator === 'dateRange' && Boolean(field.fromKey && field.toKey);
+}
+
 export function parseStandardCrudListState(
   query: StandardCrudQuerySchema,
   params: URLSearchParams,
@@ -88,6 +94,11 @@ export function parseStandardCrudListState(
 ): StandardCrudListState {
   const filters = buildStandardCrudDefaultFilters(query, advancedFilter);
   for (const field of collectStandardCrudQueryFields(query, advancedFilter)) {
+    if (isDateRangeField(field)) {
+      filters[field.key] = [params.get(field.fromKey!) ?? '', params.get(field.toKey!) ?? ''];
+      continue;
+    }
+
     const value = params.get(field.key);
     if (value !== null) {
       filters[field.key] = readUrlFilterValue(value, filters[field.key]);
@@ -168,7 +179,10 @@ export function buildStandardCrudEmptyFilters(
   query: StandardCrudQuerySchema,
   advancedFilter?: StandardCrudAdvancedFilterSchema,
 ): Record<string, unknown> {
-  return Object.fromEntries(collectStandardCrudQueryFields(query, advancedFilter).map((field) => [field.key, '']));
+  return Object.fromEntries(collectStandardCrudQueryFields(query, advancedFilter).map((field) => [
+    field.key,
+    isDateRangeField(field) ? ['', ''] : '',
+  ]));
 }
 
 export function buildStandardCrudDefaultFilters(
@@ -188,11 +202,24 @@ export function buildStandardCrudListQuery(
   filters: Record<string, unknown>,
   advancedFilter?: StandardCrudAdvancedFilterSchema,
 ): Record<string, string | number | boolean | null | undefined> {
-  const allowedKeys = new Set(collectStandardCrudQueryFields(query, advancedFilter).map((field) => field.key));
   const result: Record<string, string | number | boolean | null | undefined> = {};
 
-  for (const [key, value] of Object.entries(filters)) {
-    if (!allowedKeys.has(key) || value === '') {
+  for (const field of collectStandardCrudQueryFields(query, advancedFilter)) {
+    const value = filters[field.key];
+    if (isDateRangeField(field)) {
+      const range = Array.isArray(value) ? value : [];
+      const from = typeof range[0] === 'string' ? range[0].trim() : '';
+      const to = typeof range[1] === 'string' ? range[1].trim() : '';
+      if (from.length > 0) {
+        result[field.fromKey!] = from;
+      }
+      if (to.length > 0) {
+        result[field.toKey!] = to;
+      }
+      continue;
+    }
+
+    if (value === '') {
       continue;
     }
 
@@ -203,7 +230,7 @@ export function buildStandardCrudListQuery(
       || value === null
       || value === undefined
     ) {
-      result[key] = value;
+      result[field.key] = value;
     }
   }
 

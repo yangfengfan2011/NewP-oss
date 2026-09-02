@@ -38,6 +38,21 @@
       "titleKey": "AdvancedFilter_Title",
       "sections": [
         {
+          "key": "person",
+          "titleKey": "AdvancedFilter_Person",
+          "fields": [
+            {
+              "key": "birthDateRange",
+              "labelKey": "Query_BirthDateRange",
+              "source": "model",
+              "field": "BirthDate",
+              "operator": "dateRange",
+              "fromKey": "birthDateFrom",
+              "toKey": "birthDateTo"
+            }
+          ]
+        },
+        {
           "key": "organization",
           "titleKey": "AdvancedFilter_Organization",
           "fields": [
@@ -98,6 +113,15 @@
         "responsivePriority": "high"
       },
       {
+        "key": "birthDate",
+        "labelKey": "Column_BirthDate",
+        "source": "model",
+        "field": "BirthDate",
+        "width": 130,
+        "sortable": true,
+        "responsivePriority": "medium"
+      },
+      {
         "key": "companyId",
         "labelKey": "Column_CompanyName",
         "source": "model",
@@ -123,6 +147,24 @@
         "labelKey": "Column_EmploymentStatus",
         "source": "model",
         "field": "EmploymentStatus",
+        "sortable": true,
+        "responsivePriority": "low"
+      },
+      {
+        "key": "employmentStartedAt",
+        "labelKey": "Column_EmploymentStartedAt",
+        "source": "model",
+        "field": "EmploymentStartedAt",
+        "width": 180,
+        "sortable": true,
+        "responsivePriority": "low"
+      },
+      {
+        "key": "employmentEndedAt",
+        "labelKey": "Column_EmploymentEndedAt",
+        "source": "model",
+        "field": "EmploymentEndedAt",
+        "width": 180,
         "sortable": true,
         "responsivePriority": "low"
       },

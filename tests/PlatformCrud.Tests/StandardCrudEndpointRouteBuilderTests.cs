@@ -14,6 +14,7 @@ using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Query.Descriptors;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -69,6 +70,22 @@ public sealed class StandardCrudEndpointRouteBuilderTests
     }
 
     [Fact]
+    public async Task MapStandardCrudResources_PreservesExplicitCalendarDateRangeScalars()
+    {
+        var recording = new RecordingStandardCrudService();
+        await using var app = BuildApp(recording);
+        await app.StartAsync();
+
+        var response = await app.GetTestClient().GetAsync(
+            "/api/organization/persons?birthDateFrom=2000-02-29&birthDateTo=2010-12-31&pageIndex=1&pageSize=20");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("2000-02-29", recording.LastListQuery!.Filters!["birthDateFrom"]);
+        Assert.Equal("2010-12-31", recording.LastListQuery.Filters["birthDateTo"]);
+        Assert.DoesNotContain("pageIndex", recording.LastListQuery.Filters.Keys);
+    }
+
+    [Fact]
     public async Task MapStandardCrudResources_ParsesFieldsOutsideFilters()
     {
         var recording = new RecordingStandardCrudService();
@@ -118,7 +135,13 @@ public sealed class StandardCrudEndpointRouteBuilderTests
                     ["ENAME"] = "张三",
                     ["CompanyId"] = "Company_00000000000000000000000000000001",
                     ["CompanyId_DisplayValue"] = "示例公司",
-                    ["CompanyName"] = "遗留公司别名"
+                    ["CompanyName"] = "遗留公司别名",
+                    ["BirthDate"] = new DateOnly(2000, 2, 29),
+                    ["BirthDate_DisplayValue"] = "2000/2/29",
+                    ["EmploymentStartedAt"] = new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc),
+                    ["EmploymentStartedAt_DisplayValue"] = "2030/1/2 08:04:05",
+                    ["EmploymentEndedAt"] = null,
+                    ["EmploymentEndedAt_DisplayValue"] = null
                 }],
                 1,
                 2,
@@ -138,13 +161,21 @@ public sealed class StandardCrudEndpointRouteBuilderTests
                 {
                     pageIndex = 2,
                     pageSize = 5,
-                    filters = new Dictionary<string, string?> { ["keyword"] = "张" }
+                    filters = new Dictionary<string, string?>
+                    {
+                        ["keyword"] = "张",
+                        ["birthDateFrom"] = "2000-02-29",
+                        ["birthDateTo"] = "2010-12-31"
+                    }
                 },
                 columns = new[]
                 {
                     new { key = "personNo", field = "PersonNo", title = "人员编号" },
                     new { key = "name", field = "ENAME", title = "姓名" },
+                    new { key = "birthDate", field = "BirthDate", title = "出生日期" },
                     new { key = "companyId", field = "CompanyId", title = "公司" },
+                    new { key = "employmentStartedAt", field = "EmploymentStartedAt", title = "入职时间" },
+                    new { key = "employmentEndedAt", field = "EmploymentEndedAt", title = "离职时间" },
                     new { key = "blocked", field = "SecretField", title = "秘密字段" }
                 }
             });
@@ -154,14 +185,24 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         Assert.Equal(2, recording.LastListQuery!.Page);
         Assert.Equal(5, recording.LastListQuery.PageSize);
         Assert.Equal("张", recording.LastListQuery.Filters!["keyword"]);
-        Assert.Equal(["PersonNo", "ENAME", "CompanyId"], recording.LastListQuery.Fields);
+        Assert.Equal("2000-02-29", recording.LastListQuery.Filters["birthDateFrom"]);
+        Assert.Equal("2010-12-31", recording.LastListQuery.Filters["birthDateTo"]);
+        Assert.Equal(
+            ["PersonNo", "ENAME", "BirthDate", "CompanyId", "EmploymentStartedAt", "EmploymentEndedAt"],
+            recording.LastListQuery.Fields);
 
         var bytes = await response.Content.ReadAsByteArrayAsync();
         Assert.True(bytes.Length > 0);
-        AssertXlsxContains(bytes, "人员编号", "姓名", "公司", "张三");
-        AssertXlsxValuesInOrder(bytes, "人员编号", "姓名", "公司");
-        AssertXlsxDoesNotContain(bytes, "秘密字段", "Company_00000000000000000000000000000001", "遗留公司别名");
-        AssertXlsxContains(bytes, "示例公司");
+        AssertXlsxContains(bytes, "人员编号", "姓名", "出生日期", "公司", "入职时间", "离职时间", "张三");
+        AssertXlsxValuesInOrder(bytes, "人员编号", "姓名", "出生日期", "公司", "入职时间", "离职时间");
+        AssertXlsxDoesNotContain(
+            bytes,
+            "秘密字段",
+            "Company_00000000000000000000000000000001",
+            "遗留公司别名",
+            "2000-02-29",
+            "2030-01-02T00:04:05.0000000Z");
+        AssertXlsxContains(bytes, "示例公司", "2000/2/29", "2030/1/2 08:04:05");
     }
 
     [Fact]
@@ -381,7 +422,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             DisplayField = "ENAME",
             EnabledField = "IsEnabled",
             FieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
+            ListFields: ["EID", "PersonNo", "ENAME", "BirthDate", "CompanyId", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled"],
             DetailFields: ["EID", "PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             CreateFields: ["PersonNo", "ENAME", "CompanyId", "IsEnabled"],
             UpdateFields: ["ENAME", "CompanyId", "IsEnabled"]),
@@ -390,6 +431,13 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         [
             new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
         ],
+            DisplayProjectionPlan = new ModelDisplayProjectionPlan(
+                "Person",
+                [
+                    new CalendarDateFieldDisplayProjectionPlan("BirthDate", "BirthDate_DisplayValue"),
+                    new TemporalFieldDisplayProjectionPlan("EmploymentStartedAt", "EmploymentStartedAt_DisplayValue", TemporalDisplayFormat.DateTime),
+                    new TemporalFieldDisplayProjectionPlan("EmploymentEndedAt", "EmploymentEndedAt_DisplayValue", TemporalDisplayFormat.DateTime)
+                ]),
             Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
             DeletePolicy = StandardCrudDeletePolicy.Conditional
         };

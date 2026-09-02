@@ -25,6 +25,7 @@ import Select from 'antd/es/select';
 import Space from 'antd/es/space';
 import Tag from 'antd/es/tag';
 import { ErrorState } from '@icp-platform/ui/core';
+import { StandardCrudField } from '@icp-platform/ui/crud';
 import {
   CrudSearchBar,
   CrudTableSection,
@@ -338,12 +339,21 @@ function readModelFieldEnumKey(modelField: MetadataRecord): string {
   return '';
 }
 
+function hasActiveFilterValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasActiveFilterValue);
+  }
+
+  return value !== undefined && value !== null && value !== '';
+}
+
 function renderMetadataFilterField(
   field: {
     key: string;
     labelKey: string;
     dataSourceKey?: string;
     field?: string;
+    operator?: string;
   },
   modelDocument: MetadataRecord,
   registration: StandardCrudResourceRegistration<Record<string, unknown>, Record<string, unknown>>,
@@ -361,6 +371,23 @@ function renderMetadataFilterField(
   const usesProvider = Boolean(field.dataSourceKey && registration.lookupProviders?.some(
     (provider) => provider.key === field.dataSourceKey,
   ));
+  if (field.operator === 'dateRange') {
+    return (
+      <StandardCrudField
+        key={field.key}
+        field={{
+          key: field.key,
+          labelKey: fieldLabel,
+          modelField: field.field ?? field.key,
+          kind: 'dateRange',
+          placeholder,
+        }}
+        value={value}
+        mode="edit"
+        onChange={onChange}
+      />
+    );
+  }
   if (enumOptions || usesProvider) {
     return (
       <label key={field.key} className="np-filter-field">
@@ -1895,7 +1922,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             saveStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, protectedState);
           }
         }}
-        filteredEmpty={Object.values(appliedFilters).some((value) => value !== undefined && value !== null && value !== '')}
+        filteredEmpty={Object.values(appliedFilters).some(hasActiveFilterValue)}
         loading={effectiveLoading}
         controlledResult={{
           data: effectiveRows,

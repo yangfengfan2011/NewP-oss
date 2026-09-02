@@ -139,10 +139,13 @@ describe('organization person center list layout', () => {
     };
   });
 
-  function renderStandardCrudListHost(strictMode = false) {
+  function renderStandardCrudListHost(
+    strictMode = false,
+    initialEntry = '/organization/persons',
+  ) {
     root = createRoot(container);
     const host = (
-      <MemoryRouter initialEntries={['/organization/persons']}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
@@ -213,22 +216,34 @@ describe('organization person center list layout', () => {
             EID: 'person-1',
             PersonNo: 'P0001',
             ENAME: '张三',
+            BirthDate: '2000-02-29',
+            BirthDate_DisplayValue: '2000/2/29',
             CompanyId: 'company-1',
             CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-1',
             DepartmentName: '人力资源部',
             EmploymentStatus: 'FullTime',
+            EmploymentStartedAt: '2030-01-02T00:04:05Z',
+            EmploymentStartedAt_DisplayValue: '2030/1/2 08:04:05',
+            EmploymentEndedAt: null,
+            EmploymentEndedAt_DisplayValue: null,
             IsEnabled: true,
             Revision: 4,
           }, {
             EID: 'person-2',
             PersonNo: 'P0002',
             ENAME: '李四',
+            BirthDate: null,
+            BirthDate_DisplayValue: null,
             CompanyId: 'company-1',
             CompanyId_DisplayValue: '总部',
             DepartmentId: 'department-2',
             DepartmentName: '研发部',
             EmploymentStatus: 'PartTime',
+            EmploymentStartedAt: null,
+            EmploymentStartedAt_DisplayValue: null,
+            EmploymentEndedAt: null,
+            EmploymentEndedAt_DisplayValue: null,
             IsEnabled: true,
           }],
           total: 2,
@@ -248,7 +263,7 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CCompanyId%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
+      '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CBirthDate%2CCompanyId%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CEmploymentStartedAt%2CEmploymentEndedAt%2CIsEnabled%2CAccountEID%2CRevision&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
@@ -288,7 +303,9 @@ describe('organization person center list layout', () => {
     const settingColumnTexts = Array.from(
       document.body.querySelectorAll('.ant-pro-table-column-setting-list .ant-tree-treenode'),
     ).map((node) => node.textContent?.replace(/\s+/g, '') ?? '');
-    expect(settingColumnTexts.filter(Boolean)).toEqual(['人员编号', '姓名', '公司', '部门', '岗位', '任职状态', '启用状态', '操作']);
+    expect(settingColumnTexts.filter(Boolean)).toEqual([
+      '人员编号', '姓名', '出生日期', '公司', '部门', '岗位', '任职状态', '入职时间', '离职时间', '启用状态', '操作',
+    ]);
     expect(container.textContent).not.toContain('人员列表维护');
     expect(container.querySelector('.np-crud-workspace-filter input.np-filter-control')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('.np-crud-workspace-filter input.np-filter-control')?.placeholder).toBe('按工号 / 姓名搜索');
@@ -307,6 +324,10 @@ describe('organization person center list layout', () => {
     expect(container.textContent).toContain('姓名');
     expect(container.textContent).toContain('张三');
     expect(container.textContent).toContain('李四');
+    expect(container.textContent).toContain('2000/2/29');
+    expect(container.textContent).toContain('2030/1/2 08:04:05');
+    expect(container.textContent).not.toContain('2000-02-29');
+    expect(container.textContent).not.toContain('2030-01-02T00:04:05Z');
     expect(container.textContent).toContain('总部');
     expect(container.textContent).not.toContain('company-1');
     expect(container.textContent).toContain('启用');
@@ -339,6 +360,81 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('a[href="/organization/persons/person-1"]')).toBeNull();
     expect(countTextOccurrences(container.textContent ?? '', '共 2 条')).toBe(1);
     expect(countTextOccurrences(container.textContent ?? '', '新建人员')).toBe(1);
+  });
+
+  it('renders the metadata-owned CalendarDate range in the person filter section', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [], total: 0, page: 1, pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => renderStandardCrudListHost());
+    await flushProTableRequest();
+    const advancedFilterButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('高级筛选'),
+    );
+    await act(async () => advancedFilterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    expect(document.body.textContent).toContain('人员信息');
+    expect(document.body.textContent).toContain('组织信息');
+    expect(document.body.textContent).toContain('出生日期范围');
+    expect(document.body.querySelector('.np-advanced-filter-section .ant-picker-range')).not.toBeNull();
+    expect(container.textContent).toContain('当前数据集为空，可使用页面主动作创建第一条记录。');
+  });
+
+  it('restores explicit birth date URL bounds and reset removes both applied parameters', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [], total: 0, page: 1, pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+
+    await act(async () => renderStandardCrudListHost(
+      false,
+      '/organization/persons?birthDateFrom=2000-02-29&birthDateTo=2010-12-31',
+    ));
+    await flushProTableRequest();
+
+    expect(fetchSpy.mock.calls.some(([input]) => {
+      const url = String(input);
+      return url.startsWith('/api/organization/persons?')
+        && url.includes('birthDateFrom=2000-02-29')
+        && url.includes('birthDateTo=2010-12-31');
+    })).toBe(true);
+
+    const advancedFilterButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('高级筛选'),
+    );
+    await act(async () => advancedFilterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+    const rangeInputs = Array.from(document.body.querySelectorAll<HTMLInputElement>('.ant-picker-range input'));
+    expect(rangeInputs.map((input) => input.value)).toEqual(['2000-02-29', '2010-12-31']);
+    const requestsBeforeDraft = fetchSpy.mock.calls.filter(
+      ([input]) => String(input).startsWith('/api/organization/persons?'),
+    ).length;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(rangeInputs[0], '2001-01-01');
+      rangeInputs[0]?.dispatchEvent(new InputEvent('input', { bubbles: true, data: '2001-01-01' }));
+    });
+    await flushProTableRequest();
+    expect(fetchSpy.mock.calls.filter(
+      ([input]) => String(input).startsWith('/api/organization/persons?'),
+    )).toHaveLength(requestsBeforeDraft);
+
+    const reset = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('重置条件'),
+    );
+    await act(async () => reset?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushProTableRequest();
+
+    const personRequests = fetchSpy.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.startsWith('/api/organization/persons?'));
+    expect(personRequests.at(-1)).not.toContain('birthDateFrom');
+    expect(personRequests.at(-1)).not.toContain('birthDateTo');
   });
 
   it('single-flights the real company lookup while the StrictMode list still loads', async () => {

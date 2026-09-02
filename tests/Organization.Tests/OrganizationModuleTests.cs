@@ -94,14 +94,37 @@ public class OrganizationModuleTests
         Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "disable"));
         Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "enable"));
 
+        var advancedSections = listView.RootElement.GetProperty("view")
+            .GetProperty("advancedFilter")
+            .GetProperty("sections")
+            .GetArrayLength();
+        Assert.Equal(2, advancedSections);
+        var personSection = listView.RootElement.GetProperty("view")
+            .GetProperty("advancedFilter")
+            .GetProperty("sections")[0];
+        Assert.Equal("person", personSection.GetProperty("key").GetString());
+        var birthDateRange = Assert.Single(personSection.GetProperty("fields").EnumerateArray());
+        Assert.Equal("BirthDate", birthDateRange.GetProperty("field").GetString());
+        Assert.Equal("dateRange", birthDateRange.GetProperty("operator").GetString());
+        Assert.Equal("birthDateFrom", birthDateRange.GetProperty("fromKey").GetString());
+        Assert.Equal("birthDateTo", birthDateRange.GetProperty("toKey").GetString());
+
         var advancedFields = listView.RootElement.GetProperty("view")
             .GetProperty("advancedFilter")
-            .GetProperty("sections")[0]
+            .GetProperty("sections")[1]
             .GetProperty("fields")
             .EnumerateArray()
             .ToArray();
         var positionFilter = advancedFields.Single(field => field.GetProperty("key").GetString() == "positionId");
         Assert.False(positionFilter.TryGetProperty("dependsOn", out _));
+        Assert.Equal(
+            ["PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentName", "PositionName", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled"],
+            listView.RootElement.GetProperty("view").GetProperty("columns").EnumerateArray()
+                .Select(column => column.GetProperty("field").GetString()));
+        Assert.All(
+            listView.RootElement.GetProperty("view").GetProperty("columns").EnumerateArray()
+                .Where(column => column.GetProperty("field").GetString() is "BirthDate" or "EmploymentStartedAt" or "EmploymentEndedAt"),
+            column => Assert.True(column.GetProperty("sortable").GetBoolean()));
     }
 
     [Fact]

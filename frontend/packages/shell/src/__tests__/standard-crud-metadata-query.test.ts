@@ -28,6 +28,25 @@ const querySchema = {
   defaultPageSize: 20,
 };
 
+const dateRangeQuerySchema = {
+  fields: [],
+  advancedFilter: {
+    enabled: true,
+    sections: [{
+      key: 'person',
+      fields: [{
+        key: 'birthDateRange',
+        labelKey: 'Query_BirthDateRange',
+        source: 'model' as const,
+        field: 'BirthDate',
+        operator: 'dateRange',
+        fromKey: 'birthDateFrom',
+        toKey: 'birthDateTo',
+      }],
+    }],
+  },
+};
+
 describe('standard CRUD metadata query helpers', () => {
   it('builds empty and default filters from declared query keys', () => {
     expect(buildStandardCrudEmptyFilters(querySchema)).toEqual({
@@ -145,5 +164,28 @@ describe('standard CRUD metadata query helpers', () => {
     expect(params.toString()).toBe(
       'drawer=view&id=Person_1&keyword=%E5%BC%A0&departmentId=Dept_1&isEnabled=true&page=2&pageSize=50&sortBy=ENAME&sortDirection=desc',
     );
+  });
+
+  it('round-trips a logical dateRange through explicit scalar URL and API bounds', () => {
+    expect(buildStandardCrudEmptyFilters(dateRangeQuerySchema)).toEqual({
+      birthDateRange: ['', ''],
+    });
+    expect(buildStandardCrudListQuery(dateRangeQuerySchema, {
+      birthDateRange: ['2000-02-29', '2010-12-31'],
+    })).toEqual({
+      birthDateFrom: '2000-02-29',
+      birthDateTo: '2010-12-31',
+    });
+
+    const restored = parseStandardCrudListState(
+      dateRangeQuerySchema,
+      new URLSearchParams('birthDateFrom=2000-02-29&page=2&pageSize=20'),
+      [],
+    );
+    expect(restored.filters).toEqual({ birthDateRange: ['2000-02-29', ''] });
+    expect(serializeStandardCrudListState(
+      dateRangeQuerySchema,
+      { ...restored, filters: { birthDateRange: ['', ''] } },
+    ).toString()).toBe('page=2&pageSize=20');
   });
 });

@@ -352,6 +352,121 @@ describe('standard CRUD schema resolver and registry', () => {
     expect(schema.exportModes).toEqual(['current']);
   });
 
+  it('resolves a CalendarDate dateRange with explicit scalar boundary keys', () => {
+    const schema = buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        model: 'Person',
+        query: { fields: [] },
+        advancedFilter: {
+          enabled: true,
+          sections: [{
+            key: 'person',
+            titleKey: 'AdvancedFilter_Person',
+            fields: [{
+              key: 'birthDateRange',
+              labelKey: 'Query_BirthDateRange',
+              source: 'model',
+              field: 'BirthDate',
+              operator: 'dateRange',
+              fromKey: 'birthDateFrom',
+              toKey: 'birthDateTo',
+            }],
+          }],
+        },
+        columns: [],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            fields: [{
+              name: 'BirthDate',
+              contract: { valueType: 'calendarDate' },
+              storage: { type: 'date', nullable: true },
+            }],
+          },
+        }],
+      },
+    );
+
+    expect(schema.advancedFilter.sections[0]?.fields).toEqual([{
+      key: 'birthDateRange',
+      labelKey: 'Query_BirthDateRange',
+      source: 'model',
+      field: 'BirthDate',
+      operator: 'dateRange',
+      fromKey: 'birthDateFrom',
+      toKey: 'birthDateTo',
+    }]);
+  });
+
+  it.each([
+    {
+      name: 'an unknown operator',
+      field: { operator: 'between', fromKey: undefined, toKey: undefined },
+      valueType: 'calendarDate',
+      message: 'uses unsupported operator "between"',
+    },
+    {
+      name: 'a non-CalendarDate field',
+      field: { operator: 'dateRange', fromKey: 'birthDateFrom', toKey: 'birthDateTo' },
+      valueType: 'instant',
+      message: 'requires a CalendarDate model field',
+    },
+    {
+      name: 'a missing upper boundary key',
+      field: { operator: 'dateRange', fromKey: 'birthDateFrom', toKey: undefined },
+      valueType: 'calendarDate',
+      message: 'must declare distinct fromKey and toKey',
+    },
+    {
+      name: 'a reserved boundary key',
+      field: { operator: 'dateRange', fromKey: 'page', toKey: 'birthDateTo' },
+      valueType: 'calendarDate',
+      message: 'boundary key "page" is reserved',
+    },
+  ])('rejects dateRange candidate with $name', ({ field, valueType, message }) => {
+    expect(() => buildStandardCrudListSchema(
+      {
+        key: 'organization.person.list',
+        dicKey: 'PersonListView',
+        model: 'Person',
+        query: { fields: [] },
+        advancedFilter: {
+          enabled: true,
+          sections: [{
+            key: 'person',
+            titleKey: 'AdvancedFilter_Person',
+            fields: [{
+              key: 'birthDateRange',
+              labelKey: 'Query_BirthDateRange',
+              source: 'model',
+              field: 'BirthDate',
+              ...field,
+            }],
+          }],
+        },
+        columns: [],
+      },
+      personRegistration,
+      {
+        modelDocuments: [{
+          type: 'model',
+          Person: {
+            fields: [{
+              name: 'BirthDate',
+              contract: { valueType },
+              storage: { type: 'date', nullable: true },
+            }],
+          },
+        }],
+      },
+    )).toThrow(message);
+  });
+
   it('builds list schema with metadata-owned columns actions defaults and localization checks', () => {
     const schema = buildStandardCrudListSchema(
       {

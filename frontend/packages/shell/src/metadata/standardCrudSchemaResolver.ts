@@ -15,6 +15,8 @@ export interface StandardCrudRuntimeFieldSchema {
   field?: string;
   preset?: string;
   operator?: string;
+  fromKey?: string;
+  toKey?: string;
   dataSourceKey?: string;
   dependsOn?: string[];
 }
@@ -260,6 +262,8 @@ function readField(value: MetadataRecord, model: MetadataRecord = {}): StandardC
   const sourceField = readString(value.field);
   const preset = readString(value.preset);
   const operator = readString(value.operator);
+  const fromKey = readString(value.fromKey);
+  const toKey = readString(value.toKey);
   const declaredDataSourceKey = readString(value.dataSourceKey);
   const dependsOn = readArray<unknown>(value.dependsOn)
     .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
@@ -272,6 +276,12 @@ function readField(value: MetadataRecord, model: MetadataRecord = {}): StandardC
   }
   if (operator.length > 0) {
     field.operator = operator;
+  }
+  if (fromKey.length > 0) {
+    field.fromKey = fromKey;
+  }
+  if (toKey.length > 0) {
+    field.toKey = toKey;
   }
   const resolvedDataSourceKey = declaredDataSourceKey || resolveFieldDataSourceKey(field, model);
   if (resolvedDataSourceKey) {
@@ -746,9 +756,14 @@ function assertActionDisabledState(action: StandardCrudRuntimeActionSchema, mode
   );
 }
 
-function assertQuery(query: StandardCrudRuntimeQuerySchema, advancedFilter?: StandardCrudAdvancedFilterSchema): void {
+function assertQuery(
+  query: StandardCrudRuntimeQuerySchema,
+  advancedFilter: StandardCrudAdvancedFilterSchema | undefined,
+  model: MetadataRecord,
+): void {
   const fields = collectStandardCrudQueryFields(query, advancedFilter);
   const declaredKeys = new Set(fields.map((field) => field.key));
+  const parameterKeys = new Set(declaredKeys);
 
   for (const field of fields) {
     if (reservedStandardCrudQueryKeys.has(field.key.toLowerCase())) {
@@ -756,6 +771,34 @@ function assertQuery(query: StandardCrudRuntimeQuerySchema, advancedFilter?: Sta
     }
     if (field.source === 'preset' && field.preset && !supportedQueryPresets.has(field.preset)) {
       throw new Error(`unsupported query preset "${field.preset}"`);
+    }
+    if (field.operator && field.operator !== '=' && field.operator !== 'like' && field.operator !== 'dateRange') {
+      throw new Error(`query field "${field.key}" uses unsupported operator "${field.operator}"`);
+    }
+    if (field.operator !== 'dateRange') {
+      if (field.fromKey || field.toKey) {
+        throw new Error(`query field "${field.key}" can only declare range boundary keys for dateRange`);
+      }
+      continue;
+    }
+    if (field.source !== 'model' || !field.field) {
+      throw new Error(`dateRange query field "${field.key}" must reference a model field`);
+    }
+    const modelField = findModelField(model, field.field);
+    if (readString(readRecord(modelField.contract).valueType) !== 'calendarDate') {
+      throw new Error(`dateRange query field "${field.key}" requires a CalendarDate model field`);
+    }
+    if (!field.fromKey || !field.toKey || field.fromKey === field.toKey) {
+      throw new Error(`dateRange query field "${field.key}" must declare distinct fromKey and toKey`);
+    }
+    for (const boundaryKey of [field.fromKey, field.toKey]) {
+      if (reservedStandardCrudQueryKeys.has(boundaryKey.toLowerCase())) {
+        throw new Error(`dateRange boundary key "${boundaryKey}" is reserved for standard CRUD requests`);
+      }
+      if (parameterKeys.has(boundaryKey)) {
+        throw new Error(`dateRange boundary key "${boundaryKey}" conflicts with another query key`);
+      }
+      parameterKeys.add(boundaryKey);
     }
   }
 
@@ -908,7 +951,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   for (const action of [...schema.pageActions, ...schema.rowActions]) {
     assertAction(action, registration);
   }
-  assertQuery(schema.query, schema.advancedFilter);
+  assertQuery(schema.query, schema.advancedFilter, model);
 
   return schema;
 }

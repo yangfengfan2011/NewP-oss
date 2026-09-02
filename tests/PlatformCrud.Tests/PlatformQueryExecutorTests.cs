@@ -54,6 +54,139 @@ public sealed class PlatformQueryExecutorTests
     }
 
     [Fact]
+    public async Task QueryAsync_AppliesInclusiveCalendarDateRangeBeforeCountAndPaging()
+    {
+        var sql = new List<string>();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, sql);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("Person_1", "P001", "甲", "FullTime", true, new DateOnly(1990, 1, 1)),
+            Row("Person_2", "P002", "乙", "FullTime", true, new DateOnly(2000, 2, 29)),
+            Row("Person_3", "P003", "丙", "FullTime", true, new DateOnly(2010, 12, 31)),
+            Row("Person_4", "P004", "丁", "FullTime", true, null));
+        await dbContext.SaveChangesAsync();
+        sql.Clear();
+
+        var result = await new EfPlatformQueryExecutor(dbContext).QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(
+                Fields: ["EID", "BirthDate"],
+                Page: 1,
+                PageSize: 1,
+                SortBy: "BirthDate",
+                SortDirection: "asc",
+                Conditions:
+                [
+                    new PlatformQueryCondition("BirthDate", "gte", "1990-01-01"),
+                    new PlatformQueryCondition("BirthDate", "lte", "2000-02-29")
+                ]));
+
+        Assert.Equal(2, result.Total);
+        var row = Assert.Single(result.Items);
+        Assert.Equal("Person_1", row["EID"]);
+        Assert.Equal(new DateOnly(1990, 1, 1), row["BirthDate"]);
+
+        var executedSql = string.Join(Environment.NewLine, sql);
+        Assert.Contains("COUNT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WHERE", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", executedSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(sql, statement =>
+            statement.Contains("COUNT", StringComparison.OrdinalIgnoreCase)
+            && statement.Contains("WHERE", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(sql, statement =>
+            statement.Contains("LIMIT", StringComparison.OrdinalIgnoreCase)
+            && statement.Contains("WHERE", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("gte", "2000-02-29", "Person_2", "Person_3")]
+    [InlineData("lte", "2000-02-29", "Person_1", "Person_2")]
+    public async Task QueryAsync_AppliesSingleCalendarDateBoundaryAndExcludesNull(
+        string comparison,
+        string boundary,
+        params string[] expectedIds)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("Person_1", "P001", "甲", "FullTime", true, new DateOnly(1990, 1, 1)),
+            Row("Person_2", "P002", "乙", "FullTime", true, new DateOnly(2000, 2, 29)),
+            Row("Person_3", "P003", "丙", "FullTime", true, new DateOnly(2010, 12, 31)),
+            Row("Person_4", "P004", "丁", "FullTime", true, null));
+        await dbContext.SaveChangesAsync();
+
+        var result = await new EfPlatformQueryExecutor(dbContext).QueryAsync(
+            Descriptor(),
+            new PlatformQueryRequest(
+                Fields: ["EID", "BirthDate"],
+                SortBy: "BirthDate",
+                SortDirection: "asc",
+                Conditions: [new PlatformQueryCondition("BirthDate", comparison, boundary)]));
+
+        Assert.Equal(expectedIds.Length, result.Total);
+        Assert.Equal(expectedIds, result.Items.Select(row => row["EID"]));
+        Assert.DoesNotContain(result.Items, row => row["BirthDate"] is null);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenConditionOperatorIsUnknown_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: null,
+                    Conditions: [new PlatformQueryCondition("BirthDate", "between", "2000-01-01")])));
+
+        Assert.Equal("PlatformQuery.UnsupportedConditionOperator", error.Code);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenCalendarDateBoundaryIsInvalid_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: null,
+                    Conditions: [new PlatformQueryCondition("BirthDate", "gte", "2001-02-29")])));
+
+        Assert.Equal("PlatformQuery.InvalidConditionValue", error.Code);
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenComparisonOperatorDoesNotMatchFieldType_ThrowsStableCode()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var error = await Assert.ThrowsAsync<PlatformQueryValidationException>(() =>
+            new EfPlatformQueryExecutor(dbContext).QueryAsync(
+                Descriptor(),
+                new PlatformQueryRequest(
+                    Fields: null,
+                    Conditions: [new PlatformQueryCondition("ENAME", "gte", "甲")])));
+
+        Assert.Equal("PlatformQuery.IncompatibleConditionOperator", error.Code);
+    }
+
+    [Fact]
     public async Task QueryAsync_WhenConditionGroupUsesOr_ReturnsRowsMatchingAnyCondition()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -136,7 +269,13 @@ public sealed class PlatformQueryExecutorTests
         return new EfPlatformDbContext(options, [PlatformCrudModelDefinitions.Person()]);
     }
 
-    private static Dictionary<string, object?> Row(string id, string personNo, string name, string status, bool isEnabled) => new(StringComparer.Ordinal)
+    private static Dictionary<string, object?> Row(
+        string id,
+        string personNo,
+        string name,
+        string status,
+        bool isEnabled,
+        DateOnly? birthDate = null) => new(StringComparer.Ordinal)
     {
         ["EID"] = id,
         ["PersonNo"] = personNo,
@@ -145,6 +284,7 @@ public sealed class PlatformQueryExecutorTests
         ["DepartmentId"] = "Department_1",
         ["PositionId"] = "Position_1",
         ["EmploymentStatus"] = status,
+        ["BirthDate"] = birthDate,
         ["IsEnabled"] = isEnabled,
         ["CreatedAt"] = DateTime.UtcNow,
         ["UpdatedAt"] = DateTime.UtcNow
@@ -155,9 +295,9 @@ public sealed class PlatformQueryExecutorTests
         ResourceKey = "organization.person",
         ModelName = "Person",
         IdField = "EID",
-        AllowedModelFields = ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "IsEnabled"],
+        AllowedModelFields = ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "BirthDate", "IsEnabled"],
         DefaultFields = ["EID", "PersonNo", "ENAME"],
-        SortableFields = ["PersonNo", "ENAME", "IsEnabled"],
+        SortableFields = ["PersonNo", "ENAME", "BirthDate", "IsEnabled"],
         DefaultSortField = "ENAME",
         DefaultSortDirection = "asc",
         DisplayValueFields =

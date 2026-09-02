@@ -13,7 +13,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class PositionStandardCrudResourceTests
 {
     [Fact]
-    public void Descriptor_ExposesListCreateAndUpdateWithoutRevisionOrDelete()
+    public void Descriptor_ExposesConditionalDeleteWithoutRevision()
     {
         var descriptor = PositionCrudDescriptorFactory.Create();
 
@@ -23,7 +23,7 @@ public sealed class PositionStandardCrudResourceTests
         Assert.Equal(["ENAME", "Description"], descriptor.FieldSet.CreateFields);
         Assert.Equal(["ENAME", "Description", "IsEnabled"], descriptor.FieldSet.UpdateFields);
         Assert.Null(descriptor.ConcurrencyRevisionField);
-        Assert.Equal(StandardCrudDeletePolicy.None, descriptor.DeletePolicy);
+        Assert.Equal(StandardCrudDeletePolicy.Conditional, descriptor.DeletePolicy);
         Assert.Equal("ENAME", descriptor.DefaultSortField);
         var nameRequired = Assert.Single(descriptor.RequiredFields);
         Assert.Equal(StandardCrudRequiredFieldScope.CreateAndUpdate, nameRequired.Scope);

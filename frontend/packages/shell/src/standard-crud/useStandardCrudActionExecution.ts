@@ -22,6 +22,7 @@ interface StandardCrudActionExecutionRequest<TDetail, TRow> {
   handler: StandardCrudActionHandler<TDetail, TRow>;
   context: StandardCrudActionContext<TDetail, TRow>;
   refreshOnSuccess?: boolean;
+  refreshOnConflict?: boolean;
   fallbackErrorMessage?: string;
 }
 
@@ -47,6 +48,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
     handler,
     context,
     refreshOnSuccess = true,
+    refreshOnConflict = true,
     fallbackErrorMessage = '执行操作失败',
   }: StandardCrudActionExecutionRequest<TDetail, TRow>): Promise<StandardCrudActionExecutionOutcome> => {
     if (pendingRef.current) {
@@ -73,7 +75,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
         message: actionError instanceof Error ? actionError.message : fallbackErrorMessage,
         conflict,
       });
-      if (conflict) {
+      if (conflict && refreshOnConflict) {
         refresh();
       }
       return { status: 'failed', conflict };

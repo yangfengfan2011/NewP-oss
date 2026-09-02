@@ -84,6 +84,22 @@ public class OrganizationModelMetadataProviderTests
     }
 
     [Fact]
+    public void Person_PositionReference_UsesNullableRestrictForeignKey()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
+
+        var positionId = Assert.Single(person.Fields, field => field.Name == "PositionId");
+        var foreignKey = Assert.Single(person.ForeignKeys, item => item.Name == "FK_Person_Position");
+
+        Assert.False(positionId.Required);
+        Assert.Equal(["PositionId"], foreignKey.Fields);
+        Assert.Equal("Organization/Position", foreignKey.PrincipalModelKey);
+        Assert.Equal(["EID"], foreignKey.PrincipalFields);
+        Assert.Equal(ForeignKeyDeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+    }
+
+    [Fact]
     public void Position_FormAllowsStandardCreateAndEditLifecycle()
     {
         var document = new OrganizationModelMetadataProvider().GetDocument("Position");

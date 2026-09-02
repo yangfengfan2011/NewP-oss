@@ -79,6 +79,16 @@
         "permissions": [
           "Organization.Position.Update"
         ]
+      },
+      {
+        "key": "delete",
+        "labelKey": "Action_Delete",
+        "standardAction": "delete",
+        "variant": "danger",
+        "confirmMessageKey": "Action_Delete_Confirm",
+        "permissions": [
+          "Organization.Position.Delete"
+        ]
       }
     ]
   }

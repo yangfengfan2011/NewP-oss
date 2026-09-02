@@ -62,6 +62,14 @@
       "zhs": "编辑",
       "en": "Edit"
     },
+    "Action_Delete": {
+      "zhs": "删除",
+      "en": "Delete"
+    },
+    "Action_Delete_Confirm": {
+      "zhs": "确认删除该岗位吗？",
+      "en": "Delete this position?"
+    },
     "Drawer_Create": {
       "zhs": "新建岗位",
       "en": "Create Position"

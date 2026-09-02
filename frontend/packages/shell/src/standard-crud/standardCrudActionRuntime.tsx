@@ -77,6 +77,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       handler,
       context: { ...context, ...(action.inputKey ? { input } : {}) },
       refreshOnSuccess: action.standardAction !== 'edit',
+      refreshOnConflict: action.standardAction !== 'delete',
     });
     if (outcome.status === 'failed' && outcome.conflict) {
       setInputAction(null);

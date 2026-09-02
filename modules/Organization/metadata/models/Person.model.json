@@ -216,6 +216,20 @@
         ],
         "unique": true
       }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_Person_Position",
+        "fields": [
+          "PositionId"
+        ],
+        "principalModuleId": "Organization",
+        "principalModel": "Position",
+        "principalFields": [
+          "EID"
+        ],
+        "onDelete": "Restrict"
+      }
     ]
   }
 }

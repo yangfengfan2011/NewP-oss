@@ -35,6 +35,11 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudSummaryProvider, PersonUserBindingSummaryProvider>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();
         services.AddScoped<IStandardCrudValidator, PersonCrudValidator>();
+        services.AddScoped<PositionCrudDeleteExecutor>();
+        services.AddScoped<IStandardCrudDeleteGuard>(serviceProvider =>
+            serviceProvider.GetRequiredService<PositionCrudDeleteExecutor>());
+        services.AddScoped<IStandardCrudConditionalDeleteExecutor>(serviceProvider =>
+            serviceProvider.GetRequiredService<PositionCrudDeleteExecutor>());
         services.AddScoped<PersonCrudDeleteGuard>();
         services.AddScoped<IStandardCrudDeleteGuard>(serviceProvider =>
             serviceProvider.GetRequiredService<PersonCrudDeleteGuard>());

@@ -7,7 +7,7 @@ namespace ICP.Platform.Modules.Organization.Crud;
 public static class PositionCrudDescriptorFactory
 {
     /// <summary>
-    /// 创建全局岗位的列表、创建与普通编辑描述符；创建启用默认值由服务端拥有，编辑走共享更新生命周期。
+    /// 创建全局岗位的列表、写入与条件删除描述符；创建启用默认值由服务端拥有，删除由模块原子执行器裁决。
     /// </summary>
     public static StandardCrudDescriptor Create()
     {
@@ -31,7 +31,7 @@ public static class PositionCrudDescriptorFactory
             Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PositionStem),
             FieldSet = fieldSet,
             OptionLabelFields = ["ENAME"],
-            DeletePolicy = StandardCrudDeletePolicy.None,
+            DeletePolicy = StandardCrudDeletePolicy.Conditional,
             FieldPolicies = BuildFieldPolicies(fieldSet),
             RequiredFields =
             [

@@ -263,15 +263,56 @@ public sealed class IdentityFoundationMigrationTests
         Assert.DoesNotContain("migrationBuilder.Sql", up, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OrganizationPositionReferenceMigration_AddsOnlyNullableRestrictForeignKey()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
+            "Migrations",
+            "20260902063356_Organization_000003_PositionReference.cs");
+        var source = File.ReadAllText(sourcePath);
+        var up = source[..source.IndexOf("protected override void Down", StringComparison.Ordinal)];
+
+        Assert.Contains("name: \"IX_Person_PositionId\"", up, StringComparison.Ordinal);
+        Assert.Contains("name: \"FK_Person_Position\"", up, StringComparison.Ordinal);
+        Assert.Contains("table: \"Person\"", up, StringComparison.Ordinal);
+        Assert.Contains("column: \"PositionId\"", up, StringComparison.Ordinal);
+        Assert.Contains("principalTable: \"Position\"", up, StringComparison.Ordinal);
+        Assert.Contains("principalColumn: \"EID\"", up, StringComparison.Ordinal);
+        Assert.Contains("onDelete: ReferentialAction.Restrict", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateData", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", up, StringComparison.Ordinal);
+
+        var snapshotPath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
+            "Migrations",
+            "EfPlatformDbContextModelSnapshot.cs");
+        var snapshot = File.ReadAllText(snapshotPath);
+        Assert.Contains(".HasForeignKey(\"PositionId\")", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".OnDelete(DeleteBehavior.Restrict)", snapshot, StringComparison.Ordinal);
+        Assert.Contains(".HasConstraintName(\"FK_Person_Position\")", snapshot, StringComparison.Ordinal);
+    }
+
     private static void AssertOrganizationManifest(string repositoryRoot)
     {
         var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(2, migrations.Length);
+        Assert.Equal(3, migrations.Length);
         var foundation = migrations[0];
         var positionDirectory = migrations[1];
+        var positionReference = migrations[2];
         Assert.False(root.TryGetProperty("legacyCutover", out _));
         Assert.Equal("20260812144235_Organization_000001_Foundation", foundation.GetProperty("migrationId").GetString());
         Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
@@ -281,8 +322,13 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal("20260902052903_Organization_000002_GlobalPositionDirectory", positionDirectory.GetProperty("migrationId").GetString());
         Assert.Equal(foundation.GetProperty("contentDigest").GetString(), positionDirectory.GetProperty("previousContentDigest").GetString());
         Assert.Equal(foundation.GetProperty("toModelDigest").GetString(), positionDirectory.GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), positionDirectory.GetProperty("toModelDigest").GetString());
+        Assert.Equal("56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621", positionDirectory.GetProperty("toModelDigest").GetString());
         Assert.Equal("backup-restore-only", positionDirectory.GetProperty("compatibility").GetString());
+        Assert.Equal("20260902063356_Organization_000003_PositionReference", positionReference.GetProperty("migrationId").GetString());
+        Assert.Equal(positionDirectory.GetProperty("contentDigest").GetString(), positionReference.GetProperty("previousContentDigest").GetString());
+        Assert.Equal(positionDirectory.GetProperty("toModelDigest").GetString(), positionReference.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), positionReference.GetProperty("toModelDigest").GetString());
+        Assert.Equal("safe-expand", positionReference.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location))));
@@ -304,6 +350,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             positionDirectory.GetProperty("contentDigest").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionSourcePath))));
+        var positionReferenceSourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260902063356_Organization_000003_PositionReference.cs");
+        Assert.Equal(
+            positionReference.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionReferenceSourcePath))));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)

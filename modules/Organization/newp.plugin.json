@@ -111,6 +111,12 @@
         "displayName": "更新岗位",
         "description": "更新岗位",
         "group": "岗位"
+      },
+      {
+        "code": "Organization.Position.Delete",
+        "displayName": "删除岗位",
+        "description": "删除未被人员引用的岗位",
+        "group": "岗位"
       }
     ]
   },

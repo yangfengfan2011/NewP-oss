@@ -4,6 +4,7 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
+using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -181,7 +182,8 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     /// <summary>
-    /// 按 descriptor 校验并创建资源；canonical display companion 只允许输出，写入前过滤业务白名单字段并返回带详情的创建结果。
+    /// 按 descriptor 校验并创建资源；canonical display companion 只允许输出，写入前过滤业务白名单字段，
+    /// 并将校验后发生的数据库约束竞争投影为稳定公共冲突后返回带详情的创建结果。
     /// </summary>
     public async Task<StandardCrudMutationResult> CreateAsync(
         StandardCrudDescriptor descriptor,
@@ -244,12 +246,21 @@ public sealed class StandardCrudService : IStandardCrudService
             }
         }
 
-        var created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
+        IReadOnlyDictionary<string, object?> created;
+        try
+        {
+            created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
+        }
         return StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, created, cancellationToken));
     }
 
     /// <summary>
-    /// 按描述符白名单更新资源；声明 revision 字段的资源必须提交详情版本并通过仓储条件更新。
+    /// 按描述符白名单更新资源；声明 revision 字段的资源必须提交详情版本并通过仓储条件更新，
+    /// 校验后发生的数据库约束竞争统一投影为稳定公共冲突。
     /// </summary>
     public async Task<StandardCrudMutationResult> UpdateAsync(
         StandardCrudDescriptor descriptor,
@@ -341,9 +352,17 @@ public sealed class StandardCrudService : IStandardCrudService
             }
         }
 
-        var updated = expectedRevision.HasValue
-            ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
-            : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
+        IReadOnlyDictionary<string, object?>? updated;
+        try
+        {
+            updated = expectedRevision.HasValue
+                ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
+                : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
+        }
         return updated is null
             ? StandardCrudMutationResult.Failure(expectedRevision.HasValue
                 ? ConcurrencyConflict(descriptor)
@@ -1066,5 +1085,14 @@ public sealed class StandardCrudService : IStandardCrudService
         Code = "StandardCrud.NotFound",
         Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的对象 {id} 不存在。",
         ReasonKey = "standardCrud.notFound"
+    };
+
+    // 数据库约束是校验后的最终并发裁决；公共边界只暴露稳定冲突，不返回 provider 细节。
+    private static StandardCrudError PersistenceConflict(StandardCrudDescriptor descriptor) => new()
+    {
+        StatusCode = 409,
+        Code = "StandardCrud.PersistenceConflict",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的关联数据已发生变化，请重新加载后重试。",
+        ReasonKey = "standardCrud.persistenceConflict"
     };
 }

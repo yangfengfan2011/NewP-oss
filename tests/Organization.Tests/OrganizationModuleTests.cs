@@ -39,6 +39,7 @@ public class OrganizationModuleTests
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.View");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Create");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Update");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Delete");
     }
 
     [Fact]
@@ -122,9 +123,16 @@ public class OrganizationModuleTests
             Path.Combine(root, @"modules\Organization\metadata\views\PositionList.view.json"),
             Encoding.UTF8));
         var actions = listView.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray().ToArray();
-        var edit = Assert.Single(actions);
+        Assert.Equal(2, actions.Length);
+        var edit = actions.Single(action => action.GetProperty("key").GetString() == "edit");
         Assert.Equal("edit", edit.GetProperty("standardAction").GetString());
         Assert.Equal("Organization.Position.Update", RequiredPermission(actions, "edit"));
+        var delete = actions.Single(action => action.GetProperty("key").GetString() == "delete");
+        Assert.Equal("delete", delete.GetProperty("standardAction").GetString());
+        Assert.Equal("Action_Delete_Confirm", delete.GetProperty("confirmMessageKey").GetString());
+        Assert.Equal("Organization.Position.Delete", RequiredPermission(actions, "delete"));
+        Assert.False(delete.TryGetProperty("visibleWhen", out _));
+        Assert.False(delete.TryGetProperty("disabledWhen", out _));
     }
 
     private static void AssertFileContains(string root, string relativePath, string expected)

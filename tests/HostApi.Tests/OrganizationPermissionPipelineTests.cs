@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -129,7 +130,8 @@ public sealed class OrganizationPermissionPipelineTests
     [InlineData("GET", "/api/organization/positions/options", "Organization.Position.View")]
     [InlineData("POST", "/api/organization/positions", "Organization.Position.Create")]
     [InlineData("PUT", "/api/organization/positions/Position_1", "Organization.Position.Update")]
-    public async Task PositionStandardCrud_ListLookupCreateAndUpdateUseFixedPermission(
+    [InlineData("DELETE", "/api/organization/positions/Position_1", "Organization.Position.Delete")]
+    public async Task PositionStandardCrud_OperationsUseFixedPermission(
         string method,
         string path,
         string expectedPermission)
@@ -143,6 +145,48 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
         Assert.Equal(expectedPermission, source.LastPermissionCode);
         Assert.Equal(1, scenario.CrudService.CallCount);
+    }
+
+    [Theory]
+    [InlineData("Position_Missing", HttpStatusCode.NotFound, "StandardCrud.NotFound")]
+    [InlineData("Position_Referenced", HttpStatusCode.Conflict, "Organization.Position.DeleteBlockedByPersonReference")]
+    [InlineData("Position_Enabled", HttpStatusCode.NoContent, null)]
+    [InlineData("Position_Disabled", HttpStatusCode.NoContent, null)]
+    public async Task PositionStandardCrud_DeleteProjectsStableHttpOutcome(
+        string id,
+        HttpStatusCode expectedStatus,
+        string? expectedCode)
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.CrudService.DeleteResultFactory = currentId => currentId switch
+        {
+            "Position_Missing" => StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 404,
+                Code = "StandardCrud.NotFound",
+                Message = "岗位不存在。",
+                ReasonKey = "standardCrud.notFound"
+            }),
+            "Position_Referenced" => StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "Organization.Position.DeleteBlockedByPersonReference",
+                Message = "岗位当前被人员引用，不能删除。",
+                ReasonKey = "organization.position.deleteBlockedByPersonReference"
+            }),
+            _ => StandardCrudMutationResult.Success()
+        };
+
+        using var request = Request(HttpMethod.Delete, $"/api/organization/positions/{id}", "subject");
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        if (expectedCode is not null)
+        {
+            var error = await response.Content.ReadFromJsonAsync<StandardCrudError>();
+            Assert.Equal(expectedCode, error?.Code);
+        }
     }
 
     [Fact]
@@ -325,6 +369,9 @@ public sealed class OrganizationPermissionPipelineTests
 
         public int CallCount => Volatile.Read(ref _callCount);
 
+        public Func<string, StandardCrudMutationResult> DeleteResultFactory { get; set; } =
+            static _ => StandardCrudMutationResult.Success();
+
         public Task<StandardCrudListResult> ListAsync(
             StandardCrudDescriptor descriptor,
             StandardCrudListQuery query,
@@ -386,7 +433,7 @@ public sealed class OrganizationPermissionPipelineTests
             CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _callCount);
-            return Task.FromResult(StandardCrudMutationResult.Success());
+            return Task.FromResult(DeleteResultFactory(id));
         }
 
         private static StandardCrudDetail Detail(string id) => new()

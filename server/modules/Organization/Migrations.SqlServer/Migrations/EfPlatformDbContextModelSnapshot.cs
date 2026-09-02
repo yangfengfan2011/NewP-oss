@@ -258,6 +258,8 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Person_EID");
 
+                    b.HasIndex("PositionId");
+
                     b.ToTable("Person", "dbo");
                 });
 
@@ -314,6 +316,15 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_Position_ENAME");
 
                     b.ToTable("Position", "dbo");
+                });
+
+            modelBuilder.Entity("Organization/Person", b =>
+                {
+                    b.HasOne("Organization/Position", null)
+                        .WithMany()
+                        .HasForeignKey("PositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Person_Position");
                 });
 #pragma warning restore 612, 618
         }

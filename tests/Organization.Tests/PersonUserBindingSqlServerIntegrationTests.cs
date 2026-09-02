@@ -10,7 +10,9 @@ using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
+using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
@@ -19,6 +21,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 using ICP.Platform.Testing;
 
@@ -267,6 +270,154 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         }
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的岗位条件删除与人员引用完整性")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task SqlServer_PositionRestrictForeignKeyAndConditionalDeleteCoverStableOutcomes()
+    {
+        var fixture = await SqlFixture.CreateAsync("PositionDelete");
+        await using (fixture)
+        {
+            await using (var setup = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddPosition(setup, "Position_Enabled", true);
+                AddPosition(setup, "Position_Disabled", false);
+                AddPosition(setup, "Position_Referenced", true);
+                AddPerson(setup, "Person_Referenced", positionId: "Position_Referenced");
+                await setup.SaveChangesAsync();
+            }
+
+            await using (var context = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                var executor = new PositionCrudDeleteExecutor(context);
+                var missing = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Missing");
+                var enabled = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Enabled");
+                var disabled = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Disabled");
+                var referenced = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Referenced");
+
+                Assert.Equal(404, missing.Error?.StatusCode);
+                Assert.True(enabled.Succeeded);
+                Assert.True(disabled.Succeeded);
+                Assert.Equal("Organization.Position.DeleteBlockedByPersonReference", referenced.Error?.Code);
+            }
+
+            var foreignKeyFailure = await Assert.ThrowsAsync<SqlException>(() => ExecuteNonQueryAsync(
+                fixture.ConnectionString,
+                "DELETE FROM [Position] WHERE [EID] = N'Position_Referenced';"));
+            Assert.Equal(547, foreignKeyFailure.Number);
+
+            await ExecuteNonQueryAsync(
+                fixture.ConnectionString,
+                "UPDATE [Person] SET [PositionId] = NULL WHERE [EID] = N'Person_Referenced';");
+            await using (var context = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                var deleted = await new PositionCrudDeleteExecutor(context)
+                    .DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Referenced");
+                Assert.True(deleted.Succeeded);
+            }
+        }
+    }
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的岗位条件删除与人员引用完整性")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task SqlServer_ConcurrentPositionAssignmentAndDeleteNeverPersistDanglingReference()
+    {
+        var fixture = await SqlFixture.CreateAsync("PositionRace");
+        await using (fixture)
+        {
+            await using (var setup = CreateRuntimeContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddPosition(setup, "Position_Race", true);
+                AddPerson(setup, "Person_Race");
+                await setup.SaveChangesAsync();
+            }
+
+            using var start = new Barrier(2);
+            var assignTask = Task.Run(async () =>
+            {
+                await using var context = CreateRuntimeContext(fixture.ConnectionString);
+                var person = await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Person"))
+                    .SingleAsync(row => EF.Property<string>(row, "EID") == "Person_Race");
+                person["PositionId"] = "Position_Race";
+                start.SignalAndWait();
+                try
+                {
+                    await context.SaveChangesAsync();
+                    return true;
+                }
+                catch (DbUpdateException)
+                {
+                    return false;
+                }
+            });
+            var deleteTask = Task.Run(async () =>
+            {
+                await using var context = CreateRuntimeContext(fixture.ConnectionString);
+                start.SignalAndWait();
+                return await new PositionCrudDeleteExecutor(context)
+                    .DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Race");
+            });
+
+            var assigned = await assignTask;
+            var deleted = await deleteTask;
+            var dangling = await ScalarAsync<int>(
+                fixture.ConnectionString,
+                "SELECT COUNT(*) FROM [Person] p LEFT JOIN [Position] r ON r.[EID] = p.[PositionId] WHERE p.[PositionId] IS NOT NULL AND r.[EID] IS NULL;");
+
+            Assert.Equal(0, dangling);
+            Assert.NotEqual(assigned, deleted.Succeeded);
+            if (assigned)
+            {
+                Assert.Equal("Organization.Position.DeleteBlockedByPersonReference", deleted.Error?.Code);
+            }
+        }
+    }
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的岗位条件删除与人员引用完整性")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task SqlServer_PositionReferenceForwardMigrationPreservesPersonValuesAndAddsRestrictForeignKey()
+    {
+        var fixture = await SqlFixture.CreateAsync("PositionMigration");
+        await using (fixture)
+        {
+            await using (var context = CreateOrganizationMigrationContext(fixture.ConnectionString))
+            {
+                var migrator = context.GetService<IMigrator>();
+                await migrator.MigrateAsync("20260902052903_Organization_000002_GlobalPositionDirectory");
+            }
+
+            await ExecuteNonQueryAsync(
+                fixture.ConnectionString,
+                """
+                INSERT INTO [Position] ([EID], [ENAME], [Description], [IsEnabled], [CreatedBy], [CreatedAt], [UpdatedBy], [UpdatedAt])
+                VALUES (N'Position_Migrate', N'迁移岗位', NULL, 1, N'User_Admin', SYSUTCDATETIME(), N'User_Admin', SYSUTCDATETIME());
+                INSERT INTO [Person] ([EID], [PersonNo], [ENAME], [CompanyId], [DepartmentId], [PositionId], [EmploymentStatus], [IsEnabled], [Revision], [AccountEID], [AccountBoundAt], [AccountBoundBy], [AccountBindingReason], [CreatedBy], [CreatedAt], [UpdatedBy], [UpdatedAt])
+                VALUES (N'Person_Migrate', N'P-Migrate', N'迁移人员', NULL, NULL, N'Position_Migrate', N'FullTime', 1, 7, NULL, NULL, NULL, NULL, N'User_Admin', SYSUTCDATETIME(), N'User_Admin', SYSUTCDATETIME());
+                """);
+
+            await using (var context = CreateOrganizationMigrationContext(fixture.ConnectionString))
+            {
+                await context.GetService<IMigrator>()
+                    .MigrateAsync("20260902063356_Organization_000003_PositionReference");
+            }
+
+            Assert.Equal("Position_Migrate", await ScalarAsync<string>(
+                fixture.ConnectionString,
+                "SELECT [PositionId] FROM [Person] WHERE [EID] = N'Person_Migrate';"));
+            Assert.Equal(7L, await ScalarAsync<long>(
+                fixture.ConnectionString,
+                "SELECT [Revision] FROM [Person] WHERE [EID] = N'Person_Migrate';"));
+            Assert.Equal(1, await ScalarAsync<int>(
+                fixture.ConnectionString,
+                "SELECT COUNT(*) FROM sys.foreign_keys WHERE [name] = N'FK_Person_Position' AND [delete_referential_action_desc] = N'NO_ACTION';"));
+            var failure = await Assert.ThrowsAsync<SqlException>(() => ExecuteNonQueryAsync(
+                fixture.ConnectionString,
+                "DELETE FROM [Position] WHERE [EID] = N'Position_Migrate';"));
+            Assert.Equal(547, failure.Number);
+        }
+    }
+
     private static EfPlatformDbContext CreateRuntimeContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -280,12 +431,27 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         return new EfPlatformDbContext(options, definitions);
     }
 
+    private static EfPlatformDbContext CreateOrganizationMigrationContext(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlServer(
+                connectionString,
+                sqlServer => sqlServer.MigrationsAssembly(typeof(Organization_000001_Foundation).Assembly.FullName))
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .Options;
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions()
+            .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
+            .ToArray();
+        return new EfPlatformDbContext(options, definitions);
+    }
+
     private static void AddPerson(
         EfPlatformDbContext context,
         string eid,
         string? accountEid = null,
         long revision = 0,
-        bool isEnabled = true) =>
+        bool isEnabled = true,
+        string? positionId = null) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Person")).Add(new Dictionary<string, object?>
         {
             ["EID"] = eid,
@@ -293,7 +459,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             ["ENAME"] = eid == "Person_1" ? "张三" : "李四",
             ["CompanyId"] = null,
             ["DepartmentId"] = null,
-            ["PositionId"] = null,
+            ["PositionId"] = positionId,
             ["EmploymentStatus"] = "FullTime",
             ["IsEnabled"] = isEnabled,
             ["Revision"] = revision,
@@ -301,6 +467,19 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             ["AccountBoundAt"] = accountEid is null ? null : DateTime.UtcNow,
             ["AccountBoundBy"] = accountEid is null ? null : "User_Admin",
             ["AccountBindingReason"] = accountEid is null ? null : "SQL Server 绑定",
+            ["CreatedBy"] = "User_Admin",
+            ["CreatedAt"] = DateTime.UtcNow,
+            ["UpdatedBy"] = "User_Admin",
+            ["UpdatedAt"] = DateTime.UtcNow
+        });
+
+    private static void AddPosition(EfPlatformDbContext context, string eid, bool isEnabled) =>
+        context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Position")).Add(new Dictionary<string, object?>
+        {
+            ["EID"] = eid,
+            ["ENAME"] = eid,
+            ["Description"] = null,
+            ["IsEnabled"] = isEnabled,
             ["CreatedBy"] = "User_Admin",
             ["CreatedAt"] = DateTime.UtcNow,
             ["UpdatedBy"] = "User_Admin",
@@ -351,6 +530,15 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         var value = await command.ExecuteScalarAsync();
         if (value is null or DBNull) return default!;
         return (T)Convert.ChangeType(value, Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task ExecuteNonQueryAsync(string connectionString, string sql)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
     }
 
     private sealed class RegisterThenFailParticipant(IIdentityLifecycleParticipant inner) : IIdentityLifecycleParticipant

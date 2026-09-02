@@ -7,12 +7,56 @@ using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudServiceWriteTests
 {
+    [Fact]
+    public async Task CreateAsync_WhenDatabaseConstraintWinsRace_ReturnsStablePersistenceConflict()
+    {
+        var service = Service(new RecordingMutationStandardCrudRepository([], failCreate: true));
+
+        var result = await service.CreateAsync(Descriptor(), new Dictionary<string, object?>
+        {
+            ["PersonNo"] = "P001",
+            ["ENAME"] = "张三"
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error?.StatusCode);
+        Assert.Equal("StandardCrud.PersistenceConflict", result.Error?.Code);
+        Assert.Equal("standardCrud.persistenceConflict", result.Error?.ReasonKey);
+        Assert.DoesNotContain("provider-detail", result.Error?.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenDatabaseConstraintWinsRace_ReturnsStablePersistenceConflict()
+    {
+        var repository = new RecordingMutationStandardCrudRepository(
+            [new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三",
+                ["IsEnabled"] = true
+            }],
+            failUpdate: true);
+        var service = Service(repository);
+
+        var result = await service.UpdateAsync(
+            Descriptor(),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "李四" });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error?.StatusCode);
+        Assert.Equal("StandardCrud.PersistenceConflict", result.Error?.Code);
+        Assert.DoesNotContain("provider-detail", result.Error?.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task CreateAsync_IgnoresUnexpectedAndLegacyDisplayFields()
     {
@@ -1474,10 +1518,17 @@ public sealed class StandardCrudServiceWriteTests
     private sealed class RecordingMutationStandardCrudRepository : IStandardCrudRepository
     {
         private readonly InMemoryStandardCrudRepository _inner;
+        private readonly bool _failCreate;
+        private readonly bool _failUpdate;
 
-        public RecordingMutationStandardCrudRepository(IEnumerable<Dictionary<string, object?>> rows)
+        public RecordingMutationStandardCrudRepository(
+            IEnumerable<Dictionary<string, object?>> rows,
+            bool failCreate = false,
+            bool failUpdate = false)
         {
             _inner = new InMemoryStandardCrudRepository(rows);
+            _failCreate = failCreate;
+            _failUpdate = failUpdate;
         }
 
         public int CreateCallCount { get; private set; }
@@ -1512,6 +1563,10 @@ public sealed class StandardCrudServiceWriteTests
         {
             CreateCallCount++;
             LastCreatedValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            if (_failCreate)
+            {
+                throw new DbUpdateException("provider-detail");
+            }
             return _inner.CreateAsync(descriptor, values, cancellationToken);
         }
 
@@ -1523,6 +1578,10 @@ public sealed class StandardCrudServiceWriteTests
         {
             UpdateCallCount++;
             LastUpdatedValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            if (_failUpdate)
+            {
+                throw new DbUpdateException("provider-detail");
+            }
             return _inner.UpdateAsync(descriptor, id, values, cancellationToken);
         }
 
@@ -1535,6 +1594,10 @@ public sealed class StandardCrudServiceWriteTests
         {
             UpdateCallCount++;
             LastUpdatedValues = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+            if (_failUpdate)
+            {
+                throw new DbUpdateException("provider-detail");
+            }
             return _inner.UpdateAsync(descriptor, id, values, expectedRevision, cancellationToken);
         }
 

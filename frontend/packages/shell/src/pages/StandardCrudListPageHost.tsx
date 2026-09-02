@@ -1615,6 +1615,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                       key: pendingKey,
                       handler: deleteHandler,
                       context: { id: rowId, row },
+                      refreshOnConflict: false,
                       fallbackErrorMessage: '删除标准资源失败',
                     });
                     if (outcome.status === 'succeeded') {

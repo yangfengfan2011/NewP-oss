@@ -3,7 +3,7 @@
   "provider": "SqlServer",
   "moduleId": "Organization",
   "modelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
-  "bundleChecksum": "1d4a70adb3e45e5485cfc6f1dc7f7d8dc2b254e7dca1b215c05ef92e242dfe49",
+  "bundleChecksum": "b7fe35e9eb0a9b377a565e09423eb2f7af8590385db7dfea6a7269d9c5b6fe1c",
   "migrations": [
     {
       "sequence": "000001",
@@ -22,6 +22,15 @@
       "fromModelDigest": "24a56838c9395ea3c1afa3dfa3cc8549afda2151e2d8515b6f08617d0679425f",
       "toModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
       "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20260902063356_Organization_000003_PositionReference",
+      "previousContentDigest": "78b4fbce8783aa58d946f741bd3f5e01fba2d063f0f3db9d27fecb1e3b841838",
+      "contentDigest": "702141d62bb2000525881eed5f7922e4a6db3df9c849f36e73296d42694575bd",
+      "fromModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "toModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "compatibility": "safe-expand"
     }
   ]
 }

@@ -152,6 +152,34 @@ describe('standard CRUD action runtime', () => {
     expect(handler.mock.calls[0]?.[0]).not.toHaveProperty('refresh');
   });
 
+  it('does not refresh a failed delete and refreshes one successful delete exactly once', async () => {
+    const refresh = vi.fn();
+    const handler = vi.fn()
+      .mockRejectedValueOnce(new StandardCrudRequestError('岗位当前被人员引用，不能删除。', 409))
+      .mockResolvedValueOnce(undefined);
+
+    await renderActions({
+      actions: [{ key: 'delete', labelKey: '删除', standardAction: 'delete', confirmMessage: '确认删除？' }],
+      handlers: { delete: handler },
+      refresh,
+    });
+
+    await clickActionButton('删除');
+    await clickPopconfirmButton('确认');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('岗位当前被人员引用，不能删除。');
+
+    await clickActionButton('删除');
+    await clickPopconfirmButton('确认');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('does not run danger handler when Popconfirm is canceled', async () => {
     const handler = vi.fn();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);

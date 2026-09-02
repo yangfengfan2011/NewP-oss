@@ -80,4 +80,19 @@ describe('position standard CRUD resource', () => {
       IsEnabled: false,
     });
   });
+
+  it('uses the standard REST delete endpoint', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ requestToken: 'csrf-token' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await positionStandardCrudResource.dataAdapter.remove?.('Position_1');
+
+    const request = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1]?.[0] as Request;
+    expect(request.url).toContain('/api/organization/positions/Position_1');
+    expect(request.method).toBe('DELETE');
+  });
 });

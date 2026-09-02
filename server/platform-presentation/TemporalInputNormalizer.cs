@@ -76,6 +76,16 @@ public sealed class TemporalInputNormalizer(
         }
 
         var text = ReadString(value);
+        if (DateTime.TryParseExact(
+                text,
+                "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var utcTime))
+        {
+            return TemporalInputNormalizationResult.Success(TruncateToSecond(utcTime));
+        }
+
         if (!DateTime.TryParseExact(
                 text,
                 "yyyy-MM-dd'T'HH:mm:ss",

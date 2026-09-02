@@ -42,6 +42,17 @@ public sealed class TemporalInputNormalizerTests
     }
 
     [Fact]
+    public void NormalizeInstant_PreservesCanonicalUtcValue()
+    {
+        var normalizer = Create("Asia/Taipei");
+
+        var result = normalizer.Normalize(FieldValueType.Instant, "2030-01-02T00:04:05Z");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc), result.Value);
+    }
+
+    [Fact]
     public void NormalizeInstant_UsesDeploymentDefaultWithoutRequestContext()
     {
         var normalizer = new TemporalInputNormalizer(

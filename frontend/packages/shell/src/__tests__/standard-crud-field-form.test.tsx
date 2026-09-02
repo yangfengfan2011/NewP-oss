@@ -381,6 +381,48 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.querySelector('.ant-form-item-explain-error')?.textContent).toBe('请填写此字段');
   });
 
+  it.each([
+    { label: 'only-from', activeIndex: 0, emptyIndex: 1 },
+    { label: 'only-to', activeIndex: 1, emptyIndex: 0 },
+  ])('applies a one-sided CalendarDate range from the $label input', async ({ activeIndex, emptyIndex }) => {
+    const onChange = vi.fn();
+
+    await render(
+      <StandardCrudField
+        field={{ key: 'birthDateRange', labelKey: '出生日期范围', modelField: 'BirthDate', kind: 'dateRange' }}
+        value={['', '']}
+        mode="edit"
+        onChange={onChange}
+      />,
+    );
+
+    const inputs = Array.from(container.querySelectorAll<HTMLInputElement>('.ant-picker-range input'));
+    await act(async () => {
+      inputs[activeIndex]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      inputs[activeIndex]?.focus();
+      inputs[activeIndex]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const dateCell = document.body.querySelector<HTMLElement>('.ant-picker-cell-today');
+    expect(dateCell).not.toBeNull();
+    const selectedDate = dateCell?.getAttribute('title') ?? '';
+
+    await act(async () => {
+      dateCell?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(inputs.map((input) => input.value)[activeIndex]).toBe(selectedDate);
+    await act(async () => {
+      inputs[emptyIndex]?.blur();
+      await Promise.resolve();
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const appliedRange = onChange.mock.calls[0]?.[1] as string[];
+    expect(appliedRange[activeIndex]).toBe(selectedDate);
+    expect(appliedRange[emptyIndex]).toBe('');
+  });
+
   it('shows field-level required validation below empty fields', async () => {
     const onSubmit = vi.fn();
     const fields: StandardCrudFieldDefinition[] = [

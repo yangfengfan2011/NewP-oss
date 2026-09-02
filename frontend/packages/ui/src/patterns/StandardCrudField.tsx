@@ -223,6 +223,7 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker.RangePicker
           id={field.key}
+          allowEmpty={[true, true]}
           value={[toDayjs(range[0]), toDayjs(range[1])]}
           onChange={(dates) => onChange(field.key, dates
             ? dates.map((date) => date?.format('YYYY-MM-DD') ?? '')

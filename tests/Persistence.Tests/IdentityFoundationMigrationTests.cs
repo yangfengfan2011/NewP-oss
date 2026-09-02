@@ -369,10 +369,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             foundation.GetProperty("contentDigest").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(foundationSourcePath))));
-        // backup-restore-only 的 Down 拒绝修复不改写已经进入线性 history 的前向 step content digest。
+        var positionSourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260902052903_Organization_000002_GlobalPositionDirectory.cs");
         Assert.Equal(
-            "78b4fbce8783aa58d946f741bd3f5e01fba2d063f0f3db9d27fecb1e3b841838",
-            positionDirectory.GetProperty("contentDigest").GetString());
+            positionDirectory.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionSourcePath))));
         var positionReferenceSourcePath = Path.Combine(
             Path.GetDirectoryName(foundationSourcePath)!,
             "20260902063356_Organization_000003_PositionReference.cs");

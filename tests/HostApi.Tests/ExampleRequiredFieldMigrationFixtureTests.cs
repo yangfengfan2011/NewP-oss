@@ -50,10 +50,23 @@ public sealed class ExampleRequiredFieldMigrationFixtureTests
         Assert.Equal(3, nullableExample.Migrations.Count);
         Assert.EndsWith("_Example_000003_RecordSourceNullable", nullableExample.ExpectedFrontier, StringComparison.Ordinal);
 
+        var beforeOrganization = Assert.Single(beforeField.Streams, stream => stream.ModuleId == "Organization");
+        var nullableOrganization = Assert.Single(nullableField.Streams, stream => stream.ModuleId == "Organization");
+        Assert.Single(beforeOrganization.Migrations);
+        Assert.Single(nullableOrganization.Migrations);
+        Assert.EndsWith("_Organization_000001_Foundation", beforeOrganization.ExpectedFrontier, StringComparison.Ordinal);
+        Assert.EndsWith("_Organization_000001_Foundation", nullableOrganization.ExpectedFrontier, StringComparison.Ordinal);
+
         var beforeModel = Assert.Single(beforeField.Models, model => model.LogicalKey == "Example/ExampleRecord");
         var nullableModel = Assert.Single(nullableField.Models, model => model.LogicalKey == "Example/ExampleRecord");
         Assert.DoesNotContain(beforeModel.Fields, field => field.Name == "RecordSource");
         Assert.False(Assert.Single(nullableModel.Fields, field => field.Name == "RecordSource").Required);
+
+        var beforePosition = Assert.Single(beforeField.Models, model => model.LogicalKey == "Organization/Position");
+        Assert.Contains(beforePosition.Fields, field => field.Name == "CompanyId" && field.Required);
+        Assert.Contains(beforePosition.Fields, field => field.Name == "DepartmentId" && field.Required);
+        Assert.Contains(beforePosition.Fields, field => field.Name == "ECODE" && field.Required);
+        Assert.DoesNotContain(beforePosition.Fields, field => field.Name == "Description");
     }
 
     private static string GetRepositoryRoot()

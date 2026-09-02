@@ -27,6 +27,7 @@ public class ModelDtoSyncRunnerTests
             var writtenFiles = ModuleDtoSyncRunner.Run(repositoryRoot);
 
             var roleDtoPath = GeneratedPath(repositoryRoot, "Authorization", "RoleDto.g.cs");
+            var personDtoPath = GeneratedPath(repositoryRoot, "Organization", "PersonDto.g.cs");
             var positionDtoPath = GeneratedPath(repositoryRoot, "Organization", "PositionDto.g.cs");
             var signaturePath = GeneratedPath(repositoryRoot, "Authorization", "AuthorizationBaseDtoSignatureProvider.g.cs");
             var authenticationSessionDtoPath = GeneratedPath(repositoryRoot, "Authentication", "AuthenticationSessionDto.g.cs");
@@ -34,17 +35,22 @@ public class ModelDtoSyncRunnerTests
             var securityEventDtoPath = GeneratedPath(repositoryRoot, "Identity", "IdentitySecurityEventDto.g.cs");
 
             Assert.Contains(roleDtoPath, writtenFiles);
+            Assert.Contains(personDtoPath, writtenFiles);
+            Assert.Contains(positionDtoPath, writtenFiles);
             Assert.Contains(signaturePath, writtenFiles);
             Assert.Contains(authenticationSessionDtoPath, writtenFiles);
             Assert.Contains(userDtoPath, writtenFiles);
             Assert.Contains(securityEventDtoPath, writtenFiles);
             Assert.True(File.Exists(roleDtoPath));
+            Assert.True(File.Exists(personDtoPath));
+            Assert.True(File.Exists(positionDtoPath));
             Assert.True(File.Exists(signaturePath));
             Assert.True(File.Exists(authenticationSessionDtoPath));
             Assert.True(File.Exists(userDtoPath));
             Assert.True(File.Exists(securityEventDtoPath));
 
             var roleDtoSource = File.ReadAllText(roleDtoPath);
+            var personDtoSource = File.ReadAllText(personDtoPath);
             var positionDtoSource = File.ReadAllText(positionDtoPath);
             var signatureProviderSource = File.ReadAllText(signaturePath);
             var securityEventDtoSource = File.ReadAllText(securityEventDtoPath);
@@ -52,18 +58,24 @@ public class ModelDtoSyncRunnerTests
 
             Assert.StartsWith("#nullable enable annotations\n\nnamespace ICP.Platform.Modules.Authorization.DTOs;\n", roleDtoSource, StringComparison.Ordinal);
             Assert.Contains("public sealed class RoleDto", roleDtoSource, StringComparison.Ordinal);
-            Assert.Contains("using ICP.Platform.Modules.Organization.Models;\n", positionDtoSource, StringComparison.Ordinal);
+            Assert.Contains("using ICP.Platform.Modules.Organization.Models;\n", personDtoSource, StringComparison.Ordinal);
             Assert.StartsWith(
                 "#nullable enable annotations\n\nusing ICP.Platform.Modules.Organization.Models;\n\nnamespace ICP.Platform.Modules.Organization.DTOs;\n",
+                personDtoSource,
+                StringComparison.Ordinal);
+            Assert.Contains("public EmploymentStatus? EmploymentStatus { get; init; }", personDtoSource, StringComparison.Ordinal);
+            Assert.StartsWith(
+                "#nullable enable annotations\n\nnamespace ICP.Platform.Modules.Organization.DTOs;\n",
                 positionDtoSource,
                 StringComparison.Ordinal);
-            Assert.Contains("public EmploymentStatus EmploymentStatus { get; init; }", positionDtoSource, StringComparison.Ordinal);
+            Assert.Contains("public bool IsEnabled { get; init; } = true;", positionDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("CompanyId_DisplayValue", positionDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("DepartmentId_DisplayValue", positionDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("EmploymentStatus_DisplayValue", positionDtoSource, StringComparison.Ordinal);
             Assert.Contains("public string? OccurredAt_DisplayValue { get; init; }", securityEventDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("ActorKind_DisplayValue", securityEventDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("\r\n", roleDtoSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("\r\n", personDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("\r\n", positionDtoSource, StringComparison.Ordinal);
             Assert.DoesNotContain("\r\n", signatureProviderSource, StringComparison.Ordinal);
             Assert.Equal(DtoSignatureWriter.ComputeSignature(roleDtoSource), roleDtoSignature);

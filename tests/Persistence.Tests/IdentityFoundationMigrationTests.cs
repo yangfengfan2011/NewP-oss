@@ -7,6 +7,8 @@ using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.Planning;
+using ICP.Platform.Persistence.ProviderTargets;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Xunit;
 
 namespace ICP.Platform.Persistence.Tests;
@@ -264,6 +266,48 @@ public sealed class IdentityFoundationMigrationTests
     }
 
     [Fact]
+    public void OrganizationPositionDirectoryMigration_PinsDroppedProviderObjects()
+    {
+        var migration = new Organization_000002_GlobalPositionDirectory();
+        var droppedColumns = migration.UpOperations
+            .OfType<DropColumnOperation>()
+            .ToDictionary(static operation => operation.Name, StringComparer.Ordinal);
+        var droppedIndexes = migration.UpOperations
+            .OfType<DropIndexOperation>()
+            .ToDictionary(static operation => operation.Name, StringComparer.Ordinal);
+
+        Assert.Equal(5, droppedColumns.Count);
+        Assert.Equal(2, droppedIndexes.Count);
+        Assert.Equal(
+            new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["CompanyId"] = 1,
+                ["DepartmentId"] = 3,
+                ["ECODE"] = 3,
+                ["EmploymentStatus"] = 4,
+                ["SortOrder"] = 5
+            },
+            droppedColumns.ToDictionary(
+                static entry => entry.Key,
+                static entry => ReadFromDescriptor(entry.Value).Ordinal!.Value,
+                StringComparer.Ordinal));
+        Assert.All(droppedColumns, static entry =>
+        {
+            var descriptor = ReadFromDescriptor(entry.Value);
+            Assert.Equal("Organization", descriptor.OwnerModuleId);
+            Assert.Equal(entry.Key, descriptor.Column!.Name);
+            Assert.False(descriptor.Column.IsNullable);
+        });
+        Assert.All(droppedIndexes, static entry =>
+        {
+            var descriptor = ReadFromDescriptor(entry.Value);
+            Assert.Equal("Organization", descriptor.OwnerModuleId);
+            Assert.Equal(entry.Key, descriptor.Index!.Name);
+            Assert.False(descriptor.Index.IsUnique);
+        });
+    }
+
+    [Fact]
     public void OrganizationPositionDirectoryMigration_DownRequiresVerifiedBackupRestore()
     {
         var migration = new Organization_000002_GlobalPositionDirectory();
@@ -477,6 +521,13 @@ public sealed class IdentityFoundationMigrationTests
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n');
         return Encoding.UTF8.GetBytes(source);
+    }
+
+    private static ProviderTransitionFromDescriptor ReadFromDescriptor(MigrationOperation operation)
+    {
+        var encoded = Assert.IsType<string>(operation[
+            ProviderTransitionAnnotationNames.FromDescriptorV1]);
+        return ProviderTransitionDescriptorCodec.Decode(encoded);
     }
 
     private static int Count(string source, string value)

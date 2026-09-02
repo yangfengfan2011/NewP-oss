@@ -205,16 +205,16 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.CreateFields),
             StringComparer.Ordinal);
+        var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: true);
+        if (requiredError is not null)
+        {
+            return StandardCrudMutationResult.Failure(requiredError);
+        }
         ApplyCreateDefaults(descriptor, allowed);
         var fieldPolicyError = ValidateFieldPolicies(descriptor, allowed);
         if (fieldPolicyError is not null)
         {
             return StandardCrudMutationResult.Failure(fieldPolicyError);
-        }
-        var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: true);
-        if (requiredError is not null)
-        {
-            return StandardCrudMutationResult.Failure(requiredError);
         }
 
         var serverOwnedValueError = TryResolveRequiredAuditStamp(descriptor, out var auditStamp);
@@ -306,15 +306,15 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.UpdateFields),
             StringComparer.Ordinal);
-        var fieldPolicyError = ValidateFieldPolicies(descriptor, allowed);
-        if (fieldPolicyError is not null)
-        {
-            return StandardCrudMutationResult.Failure(fieldPolicyError);
-        }
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: false);
         if (requiredError is not null)
         {
             return StandardCrudMutationResult.Failure(requiredError);
+        }
+        var fieldPolicyError = ValidateFieldPolicies(descriptor, allowed);
+        if (fieldPolicyError is not null)
+        {
+            return StandardCrudMutationResult.Failure(fieldPolicyError);
         }
 
         var serverOwnedValueError = TryResolveRequiredAuditStamp(descriptor, out var auditStamp);
@@ -683,13 +683,13 @@ public sealed class StandardCrudService : IStandardCrudService
         string code,
         string message,
         string reasonKey) => new()
-    {
-        StatusCode = 400,
-        Code = code,
-        Message = message,
-        ReasonKey = reasonKey,
-        FieldErrors = [new StandardCrudFieldError(field, code, message)]
-    };
+        {
+            StatusCode = 400,
+            Code = code,
+            Message = message,
+            ReasonKey = reasonKey,
+            FieldErrors = [new StandardCrudFieldError(field, code, message)]
+        };
 
     // 规范字段策略是值所有权的唯一来源；ServerOnCreate 只阻止调用方伪造创建初始值，普通更新仍可维护该字段。
     private static StandardCrudError? FindReadOnlyServerOwnedFieldError(
@@ -759,12 +759,12 @@ public sealed class StandardCrudService : IStandardCrudService
     private static StandardCrudError ServerOwnedValueUnavailable(
         StandardCrudDescriptor descriptor,
         string field) => new()
-    {
-        StatusCode = 500,
-        Code = "StandardCrud.ServerOwnedValueUnavailable",
-        ReasonKey = "standardCrud.serverOwnedValueUnavailable",
-        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端必填字段 {field} 无法取得可信值。"
-    };
+        {
+            StatusCode = 500,
+            Code = "StandardCrud.ServerOwnedValueUnavailable",
+            ReasonKey = "standardCrud.serverOwnedValueUnavailable",
+            Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端必填字段 {field} 无法取得可信值。"
+        };
 
     // 只有 canonical raw/display companion 属于 output-only；legacy 别名与未知字段继续沿既有边界处理。
     private static StandardCrudError? FindReadOnlyDisplayFieldError(

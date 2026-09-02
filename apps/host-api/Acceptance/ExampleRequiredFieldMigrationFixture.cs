@@ -1,5 +1,8 @@
+using System.Text;
 using System.Text.Json;
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modules.Authentication.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
 using ICP.Platform.Modules.Example.Migrations.SqlServer.Migrations;
@@ -25,6 +28,9 @@ internal static class ExampleRequiredFieldMigrationFixture
 {
     private const string BeforeRecordSourceModelDigest = "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c";
     private const string NullableRecordSourceModelDigest = "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf";
+    private const string OrganizationFoundationPositionMetadata = """
+        {"schemaVersion":"1.0","type":"model","Position":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"CompanyId","storage":{"type":"guid"},"dataSource":{"type":"model","key":"Company","model":"Company"}},{"name":"DepartmentId","storage":{"type":"guid"},"dataSource":{"type":"model","key":"Department","model":"Department"}},{"name":"EmploymentStatus","storage":{"type":"string"},"contract":{"valueType":"enum","clrType":"EmploymentStatus"},"dataSource":{"type":"enum","key":"EmploymentStatus"}},{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"IX_Position_Department","fields":["DepartmentId"],"unique":false},{"name":"IX_Position_Company","fields":["CompanyId"],"unique":false}]}}
+        """;
 
     /// <summary>
     /// 在 runner-owned catalog 上经 Host persistence composition 应用一个已验证历史前缀。
@@ -117,6 +123,7 @@ internal static class ExampleRequiredFieldMigrationFixture
         // 使前缀断裂。这类模块在该历史时点尚不存在，连同其模型一起排除。
         var cutoff = stageStream.ExpectedFrontier;
         var droppedModules = new HashSet<string>(StringComparer.Ordinal);
+        var historicalModels = new Dictionary<string, ModelDefinition>(StringComparer.Ordinal);
         var streams = new List<ModuleMigrationStream>(current.Streams.Count);
         foreach (var stream in current.Streams)
         {
@@ -138,17 +145,20 @@ internal static class ExampleRequiredFieldMigrationFixture
             }
             else
             {
-                // 部分跨越 cutoff 的非 Example 流需要该模块的历史 model digest，本 fixture 不持有；
-                // 静默截断会产出与 ModelDigest 不一致的计划，因此显式失败。
-                throw new InvalidOperationException(
-                    $"Module {stream.ModuleId} straddles the Example stage-{stage} cutoff {cutoff}; "
-                    + "historical stage plans cannot express a partially applied non-Example stream.");
+                AddSupportedHistoricalPrefix(
+                    repositoryRoot,
+                    current.Models,
+                    stream,
+                    withinCutoff,
+                    streams,
+                    historicalModels);
             }
         }
 
         var models = current.Models
             .Select(model => ReferenceEquals(model, currentModel) ? stageModel : model)
             .Where(model => !droppedModules.Contains(model.OwnerModuleId))
+            .Select(model => historicalModels.GetValueOrDefault(model.LogicalKey) ?? model)
             .ToArray();
         var planDigest = PersistenceModelDigest.Compute(models);
         return current with
@@ -159,6 +169,81 @@ internal static class ExampleRequiredFieldMigrationFixture
             Models = models,
             Streams = streams.ToArray()
         };
+    }
+
+    // Example stage 2/3 之后新增的 Organization migration 会跨越 cutoff；fixture 只接受
+    // 已冻结且摘要匹配的 Organization foundation 前缀，不为任意模块猜测历史模型。
+    private static void AddSupportedHistoricalPrefix(
+        string repositoryRoot,
+        IReadOnlyList<ModelDefinition> currentModels,
+        ModuleMigrationStream stream,
+        int migrationCount,
+        ICollection<ModuleMigrationStream> streams,
+        IDictionary<string, ModelDefinition> historicalModels)
+    {
+        if (!string.Equals(stream.ModuleId, "Organization", StringComparison.Ordinal) || migrationCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"Module {stream.ModuleId} has an unsupported historical prefix of {migrationCount} migrations.");
+        }
+
+        var migrations = stream.Migrations.Take(migrationCount).ToArray();
+        var organizationModels = BuildOrganizationFoundationModels(repositoryRoot, currentModels);
+        var modelDigest = PersistenceModelDigest.Compute(organizationModels);
+        if (!string.Equals(modelDigest, migrations[^1].ToModelDigest, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Organization foundation model digest {modelDigest} no longer matches accepted prefix {migrations[^1].ToModelDigest}.");
+        }
+
+        streams.Add(stream with
+        {
+            ModelDigest = modelDigest,
+            ExpectedFrontier = migrations[^1].MigrationId,
+            Migrations = migrations
+        });
+        foreach (var model in organizationModels)
+        {
+            historicalModels.Add(model.LogicalKey, model);
+        }
+    }
+
+    // 该快照来自 000001 固定点的 Position authoring；仍经当前正式 loader、storage map 和
+    // projector 生成历史定义，并由 manifest 摘要守卫阻止 fixture 与冻结前缀发生漂移。
+    private static ModelDefinition[] BuildOrganizationFoundationModels(
+        string repositoryRoot,
+        IReadOnlyList<ModelDefinition> currentModels)
+    {
+        var organizationModels = currentModels
+            .Where(static model => string.Equals(model.OwnerModuleId, "Organization", StringComparison.Ordinal))
+            .ToArray();
+        var position = organizationModels.Single(static model => model.Name == "Position");
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "modules",
+            "Organization",
+            "metadata",
+            "models",
+            "Position.model.json");
+        var document = new JsonModelMetadataDocumentLoader().Load(
+            Encoding.UTF8.GetBytes(OrganizationFoundationPositionMetadata),
+            sourcePath);
+        var storageTypeMap = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(
+            repositoryRoot,
+            "server",
+            "platform-modeling",
+            "metadata",
+            "storage-types.json"));
+        var foundationPosition = new ModelMetadataProjector().Project(document, storageTypeMap, "SqlServer") with
+        {
+            OwnerModuleId = "Organization",
+            SchemaName = "dbo"
+        };
+
+        return organizationModels
+            .Select(model => ReferenceEquals(model, position) ? foundationPosition : model)
+            .OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
+            .ToArray();
     }
 
     // 当前计划只从各 owner 的正式 Model provider、manifest 和 migration assembly 构造。

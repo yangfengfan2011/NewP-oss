@@ -88,6 +88,18 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public void PersonCrudDescriptor_OwnsRevisionOnServerDuringCreate()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+
+        var revision = Assert.Single(descriptor.FieldPolicies, policy => policy.Field == "Revision");
+        Assert.True(revision.StorageRequired);
+        Assert.False(revision.CreateInputRequired);
+        Assert.Equal(StandardCrudFieldValueOwner.ServerOnCreate, revision.ValueOwner);
+        Assert.Equal(0L, revision.CreateDefaultValue);
+    }
+
+    [Fact]
     public void PersonCrudDescriptor_ExposesAllEntityAuditFieldsToDetailResponses()
     {
         var descriptor = PersonCrudDescriptorFactory.Create();

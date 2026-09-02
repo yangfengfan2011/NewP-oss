@@ -902,6 +902,36 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task RevisionOwnedByServerOnCreate_DefaultsRejectsCreateOverrideAndSupportsConcurrencyUpdate()
+    {
+        var descriptor = Descriptor(concurrencyRevisionField: "Revision");
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+
+        var created = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["PersonNo"] = "P001", ["ENAME"] = "初始姓名" });
+        var rejected = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["PersonNo"] = "P002", ["ENAME"] = "伪造版本", ["Revision"] = 9L });
+        var updated = await service.UpdateAsync(
+            descriptor,
+            created.Detail!.Fields["EID"]!.ToString()!,
+            new Dictionary<string, object?> { ["ENAME"] = "更新姓名", ["Revision"] = 0L });
+
+        Assert.True(created.Succeeded);
+        Assert.Equal(0L, created.Detail.Fields["Revision"]);
+        Assert.Equal(0L, repository.LastCreatedValues!["Revision"]);
+        Assert.False(rejected.Succeeded);
+        Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", rejected.Error!.Code);
+        Assert.Equal("Revision", Assert.Single(rejected.Error.FieldErrors).Field);
+        Assert.Equal(1, repository.CreateCallCount);
+        Assert.True(updated.Succeeded);
+        Assert.Equal(1L, updated.Detail!.Fields["Revision"]);
+        Assert.Equal(1, repository.UpdateCallCount);
+    }
+
+    [Fact]
     public async Task UpdateAsync_WhenDeclaredRevisionIsStale_ReturnsConflictWithoutOverwriting()
     {
         var repository = new InMemoryStandardCrudRepository(
@@ -1308,7 +1338,19 @@ public sealed class StandardCrudServiceWriteTests
                 ? ["ENAME", "IsEnabled", "UpdatedAt"]
                 : includeEnabledInUpdateFields ? ["ENAME", "IsEnabled"] : ["ENAME"]),
         DeletePolicy = policy,
-        ConcurrencyRevisionField = concurrencyRevisionField
+        ConcurrencyRevisionField = concurrencyRevisionField,
+        FieldPolicies = concurrencyRevisionField is null
+            ? []
+            : [
+                new StandardCrudFieldPolicy
+                {
+                    Field = concurrencyRevisionField,
+                    ValueType = FieldValueType.Integer,
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
+                    CreateDefaultValue = 0L
+                }
+            ]
     };
 
     private static StandardCrudDescriptor ShortTextDescriptor() => new()

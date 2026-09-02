@@ -106,7 +106,7 @@ public static class PersonCrudDescriptorFactory
         ];
     }
 
-    // Person 的标准写入策略直接来自真实 Model；IsEnabled 保持既有创建必填 API 契约。
+    // Person 的标准写入策略来自真实 Model；IsEnabled 保持创建必填契约，Revision 由服务端初始化后供更新并发校验。
     private static IReadOnlyList<StandardCrudFieldPolicy> BuildFieldPolicies(StandardCrudFieldSet fieldSet)
     {
         var provider = new OrganizationModelMetadataProvider();
@@ -116,8 +116,9 @@ public static class PersonCrudDescriptorFactory
                 provider.GetDefinitions().Single(model => model.Name == "Person"),
                 fieldSet);
 
-        return policies.Select(policy => policy.Field == "IsEnabled"
-                ? new StandardCrudFieldPolicy
+        return policies.Select(policy => policy.Field switch
+            {
+                "IsEnabled" => new StandardCrudFieldPolicy
                 {
                     Field = policy.Field,
                     ValueType = policy.ValueType,
@@ -125,8 +126,17 @@ public static class PersonCrudDescriptorFactory
                     CreateInputRequired = true,
                     ValueOwner = StandardCrudFieldValueOwner.Caller,
                     CreateDefaultValue = policy.CreateDefaultValue
-                }
-                : policy)
+                },
+                "Revision" => new StandardCrudFieldPolicy
+                {
+                    Field = policy.Field,
+                    ValueType = policy.ValueType,
+                    StorageRequired = true,
+                    ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
+                    CreateDefaultValue = 0L
+                },
+                _ => policy
+            })
             .ToArray();
     }
 }

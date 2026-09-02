@@ -624,6 +624,14 @@ function useOptionalCurrentSubjectId(): string {
   }
 }
 
+function useOptionalSessionTimeZoneId(): string | undefined {
+  try {
+    return useAuth().user?.timeZoneId;
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveResponsiveBreakpoints(priority: 'high' | 'medium' | 'low' | undefined): Array<'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'> | undefined {
   if (priority === 'high') {
     return ['xs', 'sm', 'md', 'lg', 'xl', 'xxl'];
@@ -715,6 +723,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [messageApi, messageContextHolder] = useMessage();
   const { t } = useLocalization();
   const currentSubjectId = useOptionalCurrentSubjectId();
+  const sessionTimeZoneId = useOptionalSessionTimeZoneId();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
@@ -1332,11 +1341,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         mode: 'create',
         enumOptions: registration.enumOptions ?? {},
         lookupProviders: registration.lookupProviders ?? [],
+        timeZoneId: sessionTimeZoneId,
       }),
       edit: runtime.buildStandardCrudFormSchemaFromModel(modelDocument, {
         mode: 'edit',
         enumOptions: registration.enumOptions ?? {},
         lookupProviders: registration.lookupProviders ?? [],
+        timeZoneId: sessionTimeZoneId,
       }),
     };
     const prepared = {

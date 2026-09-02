@@ -6,12 +6,62 @@ using ICP.Platform.Crud.Tests.Support;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
+using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Presentation;
 using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudServiceReadTests
 {
+    [Fact]
+    public async Task GetDetailAsync_AppliesTypedTemporalCompanionsWithoutModuleFormatting()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["BirthDate"] = new DateOnly(1990, 2, 3),
+                ["EmploymentStartedAt"] = new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc)
+            }
+        ]);
+        var executor = new TemporalDisplayProjectionExecutor(
+            new FixedPresentationContextAccessor(new RequestPresentationContext("en-US", "Asia/Taipei")),
+            new TemporalDisplayFormatter());
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            [], [], [], [], [], [],
+            temporalDisplayProjectionExecutor: executor);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person",
+            ModuleId = "Organization",
+            ModelName = "Person",
+            Route = "api/organization/persons",
+            IdField = "EID",
+            DisplayField = "EID",
+            FieldSet = new StandardCrudFieldSet(
+                ["EID", "BirthDate", "EmploymentStartedAt"],
+                ["EID", "BirthDate", "EmploymentStartedAt"],
+                [],
+                []),
+            DisplayProjectionPlan = new ModelDisplayProjectionPlan(
+                "Person",
+                [
+                    new CalendarDateFieldDisplayProjectionPlan("BirthDate", "BirthDate_DisplayValue"),
+                    new TemporalFieldDisplayProjectionPlan("EmploymentStartedAt", "EmploymentStartedAt_DisplayValue", TemporalDisplayFormat.DateTime)
+                ])
+        };
+
+        var detail = await service.GetDetailAsync(descriptor, "person-1");
+
+        Assert.Equal(new DateOnly(1990, 2, 3), detail!.Fields["BirthDate"]);
+        Assert.Equal("2/3/1990", detail.Fields["BirthDate_DisplayValue"]);
+        Assert.Equal(new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc), detail.Fields["EmploymentStartedAt"]);
+        Assert.Equal("1/2/2030 8:04:05 AM", detail.Fields["EmploymentStartedAt_DisplayValue"]);
+    }
     [Fact]
     public async Task ListAsync_WhenRawFieldRequested_AddsDisplayCompanionWithoutDroppingRawField()
     {
@@ -627,5 +677,11 @@ public sealed class StandardCrudServiceReadTests
         {
             throw new InvalidOperationException("summary dependency unavailable");
         }
+    }
+
+    private sealed class FixedPresentationContextAccessor(RequestPresentationContext? context)
+        : IRequestPresentationContextAccessor
+    {
+        public RequestPresentationContext? Current => context;
     }
 }

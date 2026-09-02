@@ -1,4 +1,5 @@
 using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Modeling.DisplayPlanning;
 
 namespace ICP.Platform.Crud.Descriptors;
 
@@ -17,6 +18,9 @@ public sealed class StandardCrudDescriptor
     public IReadOnlyList<string> OptionLabelFields { get; init; } = [];
     public IReadOnlyList<string> SummaryBlockKeys { get; init; } = [];
     public IReadOnlyList<PlatformDisplayValueField> DisplayValueFields { get; init; } = [];
+
+    /// <summary>获取从统一 Model planner 编译出的完整 display plan。</summary>
+    public ModelDisplayProjectionPlan? DisplayProjectionPlan { get; init; }
 
     /// <summary>
     /// 获取或设置用于普通更新乐观并发检查的单调递增 long 字段；未声明的资源保持旧更新语义。

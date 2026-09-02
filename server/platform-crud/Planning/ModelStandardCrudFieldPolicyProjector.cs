@@ -47,6 +47,7 @@ public sealed class ModelStandardCrudFieldPolicyProjector
         return new StandardCrudFieldPolicy
         {
             Field = field.Name,
+            ValueType = field.ValueType,
             StorageRequired = field.Required,
             CreateInputRequired = !serverOwned && metadata?.Form?.Create?.Required == true,
             UpdateNonEmpty = !serverOwned && metadata?.Form?.Edit?.Required == true,

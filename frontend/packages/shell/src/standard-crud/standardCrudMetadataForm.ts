@@ -12,6 +12,7 @@ export interface BuildStandardCrudFormSchemaInput {
   mode: StandardCrudFormMode;
   enumOptions: Record<string, StandardCrudOption[]>;
   lookupProviders?: StandardCrudLookupProvider[];
+  timeZoneId?: string;
 }
 
 export interface StandardCrudMetadataFormSchema {
@@ -28,6 +29,7 @@ const supportedUiTypes = new Set([
   'select',
   'lookup',
   'date',
+  'dateTime',
   'dateRange',
   'readonly',
 ]);
@@ -77,6 +79,12 @@ function inferFieldKind(field: MetadataRecord): StandardCrudFieldDefinition['kin
 
   if (contract.valueType === 'enum' || dataSourceType === 'enum') {
     return 'enum';
+  }
+  if (contract.valueType === 'calendarDate') {
+    return 'date';
+  }
+  if (contract.valueType === 'instant') {
+    return 'dateTime';
   }
   if (dataSourceType === 'model' || dataSourceType === 'provider') {
     return 'lookup';
@@ -138,6 +146,7 @@ function buildField(
     trim: shortText,
     emptyAsNull: storage.nullable === true,
     maxLength: shortText ? 256 : undefined,
+    timeZoneId: kind === 'dateTime' ? input.timeZoneId : undefined,
   };
 
   if (kind === 'enum') {

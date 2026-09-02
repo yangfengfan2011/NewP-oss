@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
@@ -13,11 +14,13 @@ namespace ICP.Platform.Modules.Organization.Crud;
 /// <param name="departmentRepository">部门归属事实读取入口。</param>
 /// <param name="positionDirectory">与公司、部门独立的全局岗位读取目录。</param>
 /// <param name="standardCrudRepository">更新时读取当前人员候选值的标准仓储。</param>
+/// <param name="temporalInputNormalizer">平台 temporal 规范化器，用于按会话本地日期校验生日。</param>
 public sealed class PersonCrudValidator(
     ICompanyRepository companyRepository,
     IDepartmentRepository departmentRepository,
     IPositionDirectory positionDirectory,
-    IStandardCrudRepository standardCrudRepository) : IStandardCrudValidator
+    IStandardCrudRepository standardCrudRepository,
+    ITemporalInputNormalizer? temporalInputNormalizer = null) : IStandardCrudValidator
 {
     public string ResourceKey => "organization.person";
 
@@ -72,6 +75,12 @@ public sealed class PersonCrudValidator(
         bool requireEnabledPosition,
         CancellationToken cancellationToken)
     {
+        var temporalError = ValidateTemporalFields(values);
+        if (temporalError is not null)
+        {
+            return temporalError;
+        }
+
         var companyId = ReadOptionalId(values, "CompanyId");
         var departmentId = ReadOptionalId(values, "DepartmentId");
         var positionId = ReadOptionalId(values, "PositionId");
@@ -132,10 +141,41 @@ public sealed class PersonCrudValidator(
         return null;
     }
 
+    private StandardCrudError? ValidateTemporalFields(IReadOnlyDictionary<string, object?> values)
+    {
+        if (values.TryGetValue("BirthDate", out var birthValue)
+            && birthValue is DateOnly birthDate)
+        {
+            var today = temporalInputNormalizer?.GetCurrentLocalDate()
+                ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            if (birthDate > today)
+            {
+                return FieldError(
+                    "BirthDate",
+                    "Organization.Person.BirthDateInFuture",
+                    "出生日期不能晚于当前日期。",
+                    "organization.person.birthDateInFuture");
+            }
+        }
+
+        var startedAt = ReadOptionalInstant(values, "EmploymentStartedAt");
+        var endedAt = ReadOptionalInstant(values, "EmploymentEndedAt");
+        return startedAt.HasValue && endedAt.HasValue && endedAt.Value < startedAt.Value
+            ? FieldError(
+                "EmploymentEndedAt",
+                "Organization.Person.EmploymentIntervalInvalid",
+                "任职结束时间不能早于任职开始时间。",
+                "organization.person.employmentIntervalInvalid")
+            : null;
+    }
+
     private static string? ReadOptionalId(IReadOnlyDictionary<string, object?> values, string field) =>
         values.TryGetValue(field, out var value) && value is string text && !string.IsNullOrWhiteSpace(text)
             ? text
             : null;
+
+    private static DateTime? ReadOptionalInstant(IReadOnlyDictionary<string, object?> values, string field) =>
+        values.TryGetValue(field, out var value) && value is DateTime instant ? instant : null;
 
     private static StandardCrudError FieldError(string field, string code, string message, string reasonKey) => new()
     {

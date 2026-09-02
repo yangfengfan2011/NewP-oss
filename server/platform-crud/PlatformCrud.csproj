@@ -10,6 +10,7 @@
     <ProjectReference Include="..\kernel\Kernel.csproj" />
     <ProjectReference Include="..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\platform-presentation\PlatformPresentation.csproj" />
     <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
     <ProjectReference Include="..\platform-query\PlatformQuery.csproj" />

@@ -1,11 +1,16 @@
 namespace ICP.Platform.Crud.Descriptors;
 
+using ICP.Platform.Modeling;
+
 /// <summary>
 /// 表达 Standard CRUD 字段彼此独立的存储、输入、所有权和创建初始值语义。
 /// </summary>
 public sealed class StandardCrudFieldPolicy
 {
     public required string Field { get; init; }
+
+    /// <summary>获取字段对外值语义；旧描述符默认保持 Text 行为。</summary>
+    public FieldValueType ValueType { get; init; } = FieldValueType.Text;
 
     public bool StorageRequired { get; init; }
 

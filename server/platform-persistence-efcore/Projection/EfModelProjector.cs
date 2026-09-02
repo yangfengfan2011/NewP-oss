@@ -24,6 +24,11 @@ public sealed class EfModelProjector
                 var property = entity.IndexerProperty(MapClrType(field), field.Name)
                     .HasColumnName(field.StoreName);
 
+                if (field.ValueType == FieldValueType.CalendarDate)
+                {
+                    property.HasColumnType("date");
+                }
+
                 if ((field.IsAuditField && field.ValueType == FieldValueType.DateTime)
                     || field.ValueType == FieldValueType.Instant)
                 {
@@ -84,6 +89,7 @@ public sealed class EfModelProjector
         var clrType = field.ValueType switch
         {
             FieldValueType.Boolean => typeof(bool),
+            FieldValueType.CalendarDate => typeof(DateOnly),
             FieldValueType.DateTime => typeof(DateTime),
             FieldValueType.Instant => typeof(DateTime),
             FieldValueType.Integer => typeof(long),

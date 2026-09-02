@@ -132,6 +132,7 @@ public sealed class ModelDtoGenerator
         return field.ValueType switch
         {
             FieldValueType.Boolean => "bool",
+            FieldValueType.CalendarDate => "DateOnly",
             FieldValueType.DateTime => "DateTime",
             FieldValueType.Instant => "DateTime",
             FieldValueType.Integer => ResolveIntegerType(field.StoreType),

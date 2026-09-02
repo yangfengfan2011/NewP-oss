@@ -128,9 +128,29 @@ public sealed class ModelMetadataValidator
                 throw new InvalidOperationException(
                     $"Field '{field.Name}' is kernel-managed and must not redefine storage.");
             }
+
+            ValidateTemporalContract(field);
         }
 
         ValidateDisplayRules(document);
+    }
+
+    // CalendarDate 与 Instant 的 contract/storage 组合必须显式且唯一，避免 provider 从物理类型反推值语义。
+    private static void ValidateTemporalContract(ModelMetadataField field)
+    {
+        var valueType = field.Contract?.ValueType;
+        var storageType = field.Storage?.Type;
+        var matches = valueType?.Trim().ToLowerInvariant() switch
+        {
+            "calendardate" => string.Equals(storageType, "date", StringComparison.OrdinalIgnoreCase),
+            "instant" => string.Equals(storageType, "datetime", StringComparison.OrdinalIgnoreCase),
+            _ => true
+        };
+        if (!matches)
+        {
+            throw new InvalidOperationException(
+                $"Field '{field.Name}' contract.valueType '{valueType}' is incompatible with storage.type '{storageType}'.");
+        }
     }
 
     // authoring validator 只消费统一 planning module 的结果，不再维护平行策略判据。

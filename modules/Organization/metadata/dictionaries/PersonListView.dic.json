@@ -18,6 +18,10 @@
       "zhs": "组织信息",
       "en": "Organization"
     },
+    "Section_Employment": {
+      "zhs": "任职信息",
+      "en": "Employment"
+    },
     "Field_PersonNo": {
       "zhs": "人员编号",
       "en": "Person No."
@@ -33,6 +37,14 @@
     "Field_ENAME_Placeholder": {
       "zhs": "请输入姓名",
       "en": "Enter name"
+    },
+    "Field_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Birth Date"
+    },
+    "Field_BirthDate_Placeholder": {
+      "zhs": "请选择出生日期",
+      "en": "Select birth date"
     },
     "Field_CompanyId": {
       "zhs": "所属公司",
@@ -65,6 +77,22 @@
     "Field_EmploymentStatus_Placeholder": {
       "zhs": "请选择任职状态",
       "en": "Select employment status"
+    },
+    "Field_EmploymentStartedAt": {
+      "zhs": "任职开始时间",
+      "en": "Employment Started At"
+    },
+    "Field_EmploymentStartedAt_Placeholder": {
+      "zhs": "请选择任职开始时间",
+      "en": "Select employment start time"
+    },
+    "Field_EmploymentEndedAt": {
+      "zhs": "任职结束时间",
+      "en": "Employment Ended At"
+    },
+    "Field_EmploymentEndedAt_Placeholder": {
+      "zhs": "请选择任职结束时间",
+      "en": "Select employment end time"
     },
     "Field_IsEnabled": {
       "zhs": "启用状态",

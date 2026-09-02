@@ -5,6 +5,7 @@ public enum FieldValueType
     Text,
     Description,
     Boolean,
+    CalendarDate,
     DateTime,
     Instant,
     Integer,

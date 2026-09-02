@@ -132,15 +132,13 @@
       },
       "providers": {
         "SqlServer": {
-          "storeType": "bigint"
+          "storeType": "date"
         },
         "Oracle": {
-          "storeType": "number",
-          "defaultPrecision": 19,
-          "defaultScale": 0
+          "storeType": "date"
         },
         "MySql": {
-          "storeType": "bigint"
+          "storeType": "date"
         }
       }
     },

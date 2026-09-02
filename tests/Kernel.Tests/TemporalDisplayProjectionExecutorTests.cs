@@ -72,6 +72,22 @@ public sealed class TemporalDisplayProjectionExecutorTests
         Assert.Equal("TEMPORAL_INSTANT_UTC_REQUIRED", error.Message);
     }
 
+    [Fact]
+    public void ProjectCalendarDate_FormatsByLocaleWithoutTimeZoneConversion()
+    {
+        var executor = new TemporalDisplayProjectionExecutor(
+            new FixedPresentationContextAccessor(new RequestPresentationContext("en-US", "America/New_York")),
+            new TemporalDisplayFormatter());
+        var date = new DateOnly(2030, 1, 2);
+
+        var result = executor.Project(
+            new CalendarDateFieldDisplayProjectionPlan("BirthDate", "BirthDate_DisplayValue"),
+            date);
+
+        Assert.Equal(date, result.RawValue);
+        Assert.Equal("1/2/2030", result.DisplayValue);
+    }
+
     private sealed class FixedPresentationContextAccessor(RequestPresentationContext? context)
         : IRequestPresentationContextAccessor
     {

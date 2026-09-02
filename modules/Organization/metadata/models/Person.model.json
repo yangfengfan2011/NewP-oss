@@ -12,7 +12,8 @@
         "titleKey": "Section_Basic",
         "fields": [
           "PersonNo",
-          "ENAME"
+          "ENAME",
+          "BirthDate"
         ]
       },
       {
@@ -21,8 +22,16 @@
         "fields": [
           "CompanyId",
           "DepartmentId",
-          "PositionId",
+          "PositionId"
+        ]
+      },
+      {
+        "key": "employment",
+        "titleKey": "Section_Employment",
+        "fields": [
           "EmploymentStatus",
+          "EmploymentStartedAt",
+          "EmploymentEndedAt",
           "IsEnabled"
         ]
       }
@@ -56,6 +65,29 @@
             "mode": "editable",
             "required": true
           }
+        }
+      },
+      {
+        "name": "BirthDate",
+        "storage": {
+          "type": "date",
+          "nullable": true
+        },
+        "contract": {
+          "valueType": "calendarDate"
+        },
+        "uiType": "date",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        },
+        "display": {
+          "type": "calendarDate",
+          "format": "date"
         }
       },
       {
@@ -152,6 +184,52 @@
         "dataSource": {
           "type": "enum",
           "key": "EmploymentStatus"
+        }
+      },
+      {
+        "name": "EmploymentStartedAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": true
+        },
+        "contract": {
+          "valueType": "instant"
+        },
+        "uiType": "dateTime",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        },
+        "display": {
+          "type": "instant",
+          "format": "dateTime"
+        }
+      },
+      {
+        "name": "EmploymentEndedAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": true
+        },
+        "contract": {
+          "valueType": "instant"
+        },
+        "uiType": "dateTime",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        },
+        "display": {
+          "type": "instant",
+          "format": "dateTime"
         }
       },
       {

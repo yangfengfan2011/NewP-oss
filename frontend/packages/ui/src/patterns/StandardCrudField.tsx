@@ -60,6 +60,28 @@ function toDayjs(value: unknown): Dayjs | null {
   return typeof value === 'string' && value.length > 0 ? dayjs(value) : null;
 }
 
+function toSessionLocalDateTime(value: unknown, timeZoneId?: string): Dayjs | null {
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+  if (!timeZoneId || !/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) {
+    return dayjs(value);
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timeZoneId,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value));
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  return dayjs(`${read('year')}-${read('month')}-${read('day')}T${read('hour')}:${read('minute')}:${read('second')}`);
+}
+
 /** 判断 lookup 下拉是否已滚动到追加阈值。 */
 export function isStandardCrudLookupScrollEnd({
   scrollTop,
@@ -217,6 +239,20 @@ export function StandardCrudField({
           id={field.key}
           value={toDayjs(value)}
           onChange={(date) => onChange(field.key, date?.format('YYYY-MM-DD') ?? '')}
+        />
+      </Form.Item>
+    );
+  }
+
+  if (field.kind === 'dateTime') {
+    return (
+      <Form.Item {...commonItemProps}>
+        <DatePicker
+          id={field.key}
+          showTime={{ format: 'HH:mm:ss' }}
+          format="YYYY-MM-DD HH:mm:ss"
+          value={toSessionLocalDateTime(value, field.timeZoneId)}
+          onChange={(date) => onChange(field.key, date?.format('YYYY-MM-DDTHH:mm:ss') ?? null)}
         />
       </Form.Item>
     );

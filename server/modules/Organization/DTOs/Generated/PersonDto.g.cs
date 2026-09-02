@@ -14,11 +14,17 @@ public sealed class PersonDto
     public string DisplayName { get; init; }
     public string Name { get => DisplayName; init => DisplayName = value; }
     public string PersonNo { get; init; }
+    public DateOnly? BirthDate { get; init; }
+    public string? BirthDate_DisplayValue { get; init; }
     public string? CompanyId { get; init; }
     public string? CompanyId_DisplayValue { get; init; }
     public string? DepartmentId { get; init; }
     public string? PositionId { get; init; }
     public EmploymentStatus? EmploymentStatus { get; init; }
+    public DateTime? EmploymentStartedAt { get; init; }
+    public string? EmploymentStartedAt_DisplayValue { get; init; }
+    public DateTime? EmploymentEndedAt { get; init; }
+    public string? EmploymentEndedAt_DisplayValue { get; init; }
     public bool IsEnabled { get; init; } = true;
     public long Revision { get; init; }
     public string? AccountEID { get; init; }

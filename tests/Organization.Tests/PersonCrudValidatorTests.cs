@@ -382,6 +382,55 @@ public sealed class PersonCrudValidatorTests
         AssertError(error, "Organization.Person.PositionDisabled", "PositionId");
     }
 
+    [Fact]
+    public async Task ValidateCreateAsync_WhenBirthDateIsInFuture_ReturnsFieldError()
+    {
+        var validator = CreateValidator([], []);
+        var values = Values(null, null);
+        values["BirthDate"] = new DateOnly(9999, 12, 31);
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            values,
+            CancellationToken.None);
+
+        AssertError(error, "Organization.Person.BirthDateInFuture", "BirthDate");
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ValidateCreateAsync_AllowsOneSidedEmploymentInterval(bool hasStart, bool hasEnd)
+    {
+        var validator = CreateValidator([], []);
+        var values = Values(null, null);
+        values["EmploymentStartedAt"] = hasStart ? new DateTime(2030, 1, 2, 0, 0, 0, DateTimeKind.Utc) : null;
+        values["EmploymentEndedAt"] = hasEnd ? new DateTime(2030, 1, 3, 0, 0, 0, DateTimeKind.Utc) : null;
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            values,
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public async Task ValidateCreateAsync_WhenEmploymentEndPrecedesStart_ReturnsFieldError()
+    {
+        var validator = CreateValidator([], []);
+        var values = Values(null, null);
+        values["EmploymentStartedAt"] = new DateTime(2030, 1, 3, 0, 0, 0, DateTimeKind.Utc);
+        values["EmploymentEndedAt"] = new DateTime(2030, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+
+        var error = await validator.ValidateCreateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            values,
+            CancellationToken.None);
+
+        AssertError(error, "Organization.Person.EmploymentIntervalInvalid", "EmploymentEndedAt");
+    }
+
     private static PersonCrudValidator CreateValidator(
         IEnumerable<Company> companies,
         IEnumerable<Department> departments,

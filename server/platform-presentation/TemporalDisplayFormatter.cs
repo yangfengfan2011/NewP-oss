@@ -15,11 +15,21 @@ public interface ITemporalDisplayFormatter
         DateTime instantUtc,
         TemporalDisplayFormat format,
         RequestPresentationContext context);
+
+    /// <summary>按请求 locale 格式化日历日期；不进行时区转换。</summary>
+    string FormatCalendarDate(DateOnly date, RequestPresentationContext context);
 }
 
 /// <summary>共享的请求级 temporal display formatter。</summary>
 public sealed class TemporalDisplayFormatter : ITemporalDisplayFormatter
 {
+    /// <inheritdoc />
+    public string FormatCalendarDate(DateOnly date, RequestPresentationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return date.ToString("d", CultureInfo.GetCultureInfo(context.Locale));
+    }
+
     /// <inheritdoc />
     public string FormatInstant(
         DateTime instantUtc,

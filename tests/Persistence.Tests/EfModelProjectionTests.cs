@@ -45,4 +45,30 @@ public class EfModelProjectionTests
         Assert.NotNull(entityType.FindPrimaryKey());
         Assert.NotNull(entityType.GetIndexes().SingleOrDefault(index => index.GetDatabaseName() == "IX_ConfigItem_Key"));
     }
+
+    [Fact]
+    public void OnModelCreating_ProjectsCalendarDateAsNullableSqlDate()
+    {
+        var definitions = new[]
+        {
+            new ModelDefinition(
+                "Person",
+                "Person",
+                ModelKind.Entity,
+                [
+                    new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+                    new FieldDefinition("BirthDate", "BirthDate", FieldKind.Scalar, FieldValueType.CalendarDate, "date", false, false, false)
+                ],
+                [])
+        };
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=NewP_ModelProjection;Integrated Security=True")
+            .Options;
+
+        using var db = new EfPlatformDbContext(options, definitions);
+        var property = db.Model.FindEntityType("platform.core/Person")!.FindProperty("BirthDate")!;
+
+        Assert.Equal(typeof(DateOnly?), property.ClrType);
+        Assert.Equal("date", property.GetColumnType());
+    }
 }

@@ -187,6 +187,10 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("AccountEID");
 
+                    b.Property<DateOnly?>("BirthDate")
+                        .HasColumnType("date")
+                        .HasColumnName("BirthDate");
+
                     b.Property<string>("CompanyId")
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)")
@@ -212,6 +216,14 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("ENAME");
+
+                    b.Property<DateTime?>("EmploymentEndedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("EmploymentEndedAt");
+
+                    b.Property<DateTime?>("EmploymentStartedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("EmploymentStartedAt");
 
                     b.Property<string>("EmploymentStatus")
                         .HasMaxLength(256)

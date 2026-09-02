@@ -202,6 +202,10 @@ builder.Services.AddSingleton(_ => ActiveLocalizationManifest.Load(
 builder.Services.AddScoped<IRequestPresentationContextAccessor, HttpRequestPresentationContextAccessor>();
 builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
 builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
+builder.Services.AddScoped<ITemporalInputNormalizer>(serviceProvider => new TemporalInputNormalizer(
+    serviceProvider.GetRequiredService<IRequestPresentationContextAccessor>(),
+    builder.Configuration["Authentication:Sessions:DefaultTimeZoneId"] ?? "Asia/Shanghai",
+    serviceProvider.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton<IIdentityMaintenanceTerminal>(identityMaintenanceTerminal);
 builder.Services.AddScoped<IdentityMaintenanceCommandRunner>();
 var activeControllerAssemblies = new[]

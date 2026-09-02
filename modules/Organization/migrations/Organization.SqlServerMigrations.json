@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Organization",
-  "modelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
-  "bundleChecksum": "55b0ba15195058296768ef7d44626175d3568052b09f05d1bc1febe1de7a5b39",
+  "modelDigest": "ea142b6c8f762f0b0840d2a6ecc31f70c556a463edf7f237b10728df714199c8",
+  "bundleChecksum": "db6bdb19a416efd79eb2470bc8ca62e6fb9c5ad65789d849456dcdced1e9cd6d",
   "migrations": [
     {
       "sequence": "000001",
@@ -30,6 +30,15 @@
       "contentDigest": "702141d62bb2000525881eed5f7922e4a6db3df9c849f36e73296d42694575bd",
       "fromModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
       "toModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20260902110155_Organization_000004_PersonnelTemporalFields",
+      "previousContentDigest": "702141d62bb2000525881eed5f7922e4a6db3df9c849f36e73296d42694575bd",
+      "contentDigest": "f4f665bf9a88f2e72a0b5d1fc989dc4c15603b741f5b10cb014ed62d06589e42",
+      "fromModelDigest": "56c4c80c1bb8d15cba760f463ce19dacb9cacd997db6206f4fa5770306c55621",
+      "toModelDigest": "ea142b6c8f762f0b0840d2a6ecc31f70c556a463edf7f237b10728df714199c8",
       "compatibility": "safe-expand"
     }
   ]

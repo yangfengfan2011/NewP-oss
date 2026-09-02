@@ -75,6 +75,7 @@ export type StandardCrudFieldKind =
   | 'select'
   | 'lookup'
   | 'date'
+  | 'dateTime'
   | 'dateRange'
   | 'readonly';
 
@@ -185,6 +186,8 @@ export interface StandardCrudFieldDefinition {
   emptyAsNull?: boolean;
   maxLength?: number;
   defaultValue?: unknown;
+  /** Instant 表单值解释所使用的可信会话 IANA 时区。 */
+  timeZoneId?: string;
   options?: StandardCrudOption[];
   lookup?: StandardCrudLookupConfig;
 }

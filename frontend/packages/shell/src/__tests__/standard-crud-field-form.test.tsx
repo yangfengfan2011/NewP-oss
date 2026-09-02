@@ -282,6 +282,26 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('2026-01-01');
   });
 
+  it('hydrates instant fields in the authenticated session time zone with whole seconds', async () => {
+    await render(
+      <StandardCrudField
+        field={{
+          key: 'employmentStartedAt',
+          labelKey: '任职开始时间',
+          modelField: 'EmploymentStartedAt',
+          kind: 'dateTime',
+          timeZoneId: 'Asia/Taipei',
+        }}
+        value="2030-01-02T00:04:05Z"
+        mode="edit"
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector<HTMLInputElement>('#employmentStartedAt')?.value)
+      .toBe('2030-01-02 08:04:05');
+  });
+
   it('projects the shared short-text limit to text and textarea controls', async () => {
     await render(
       <StandardCrudForm

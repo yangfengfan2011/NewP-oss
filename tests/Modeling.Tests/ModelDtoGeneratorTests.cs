@@ -182,6 +182,25 @@ public class ModelDtoGeneratorTests
         Assert.Contains("public EmploymentStatus EmploymentStatus { get; init; } = (EmploymentStatus)1;", code);
     }
 
+    [Fact]
+    public void Generate_PreservesCalendarDateAndInstantClrTypes()
+    {
+        var definition = new ModelDefinition(
+            "Person",
+            "Person",
+            ModelKind.Entity,
+            [
+                new FieldDefinition("BirthDate", "BirthDate", FieldKind.Scalar, FieldValueType.CalendarDate, "date", false, false, false),
+                new FieldDefinition("EmploymentStartedAt", "EmploymentStartedAt", FieldKind.Scalar, FieldValueType.Instant, "datetime2", false, false, false)
+            ],
+            []);
+
+        var code = GenerateCode(definition);
+
+        Assert.Contains("public DateOnly? BirthDate { get; init; }", code);
+        Assert.Contains("public DateTime? EmploymentStartedAt { get; init; }", code);
+    }
+
     private static string GenerateCode(ModelDefinition definition)
     {
         var generator = new ICP.Platform.Modeling.Dto.ModelDtoGenerator();

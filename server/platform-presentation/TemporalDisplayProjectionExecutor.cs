@@ -12,6 +12,11 @@ public interface ITemporalDisplayProjectionExecutor
     TemporalDisplayProjectionResult Project(
         TemporalFieldDisplayProjectionPlan plan,
         DateTime rawValue);
+
+    /// <summary>为日历日期形成不受时区影响的 raw/display 成对投影。</summary>
+    CalendarDateDisplayProjectionResult Project(
+        CalendarDateFieldDisplayProjectionPlan plan,
+        DateOnly rawValue) => throw new NotSupportedException("TEMPORAL_CALENDAR_DATE_PROJECTION_NOT_SUPPORTED");
 }
 
 /// <summary>保留业务 raw 并携带 canonical string|null display 的 temporal 投影结果。</summary>
@@ -19,11 +24,28 @@ public sealed record TemporalDisplayProjectionResult(
     DateTime RawValue,
     string? DisplayValue);
 
+/// <summary>保留日历日期 raw 并携带 canonical string|null display。</summary>
+public sealed record CalendarDateDisplayProjectionResult(
+    DateOnly RawValue,
+    string? DisplayValue);
+
 /// <summary>在公共 presentation 边界执行 typed temporal plan。</summary>
 public sealed class TemporalDisplayProjectionExecutor(
     IRequestPresentationContextAccessor contextAccessor,
     ITemporalDisplayFormatter formatter) : ITemporalDisplayProjectionExecutor
 {
+    /// <inheritdoc />
+    public CalendarDateDisplayProjectionResult Project(
+        CalendarDateFieldDisplayProjectionPlan plan,
+        DateOnly rawValue)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var context = contextAccessor.Current;
+        return context is null
+            ? new CalendarDateDisplayProjectionResult(rawValue, null)
+            : new CalendarDateDisplayProjectionResult(rawValue, formatter.FormatCalendarDate(rawValue, context));
+    }
+
     /// <inheritdoc />
     public TemporalDisplayProjectionResult Project(
         TemporalFieldDisplayProjectionPlan plan,

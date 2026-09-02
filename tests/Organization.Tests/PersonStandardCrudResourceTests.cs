@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -6,6 +7,7 @@ using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
@@ -18,6 +20,25 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class PersonStandardCrudResourceTests
 {
+    [Fact]
+    public void PersonDto_SerializesCalendarDateAsIsoDateAndKeepsTemporalCompanions()
+    {
+        var dto = new PersonDto
+        {
+            BirthDate = new DateOnly(2000, 2, 29),
+            BirthDate_DisplayValue = "2000/2/29",
+            EmploymentStartedAt = new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc),
+            EmploymentStartedAt_DisplayValue = "2030/1/2 08:04:05"
+        };
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(dto));
+
+        Assert.Equal("2000-02-29", json.RootElement.GetProperty("BirthDate").GetString());
+        Assert.Equal("2000/2/29", json.RootElement.GetProperty("BirthDate_DisplayValue").GetString());
+        Assert.Equal("2030-01-02T00:04:05Z", json.RootElement.GetProperty("EmploymentStartedAt").GetString());
+        Assert.Equal("2030/1/2 08:04:05", json.RootElement.GetProperty("EmploymentStartedAt_DisplayValue").GetString());
+    }
+
     [Fact]
     public void OrganizationModule_RegistersPersonStandardCrudDescriptor()
     {
@@ -46,7 +67,9 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
         Assert.Contains("userBinding", descriptor.SummaryBlockKeys);
         Assert.Contains("authorizationSummary", descriptor.SummaryBlockKeys);
-        Assert.Equal(["PersonNo", "ENAME", "EmploymentStatus", "IsEnabled"], descriptor.SortableFields);
+        Assert.Equal(
+            ["PersonNo", "ENAME", "BirthDate", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled"],
+            descriptor.SortableFields);
         Assert.Equal("PersonNo", descriptor.DefaultSortField);
         Assert.Equal("asc", descriptor.DefaultSortDirection);
         var constraint = Assert.Single(descriptor.UniqueConstraints);
@@ -71,6 +94,28 @@ public sealed class PersonStandardCrudResourceTests
         Assert.All(
             new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" },
             field => Assert.Contains(field, descriptor.FieldSet.DetailFields));
+    }
+
+    [Fact]
+    public void PersonCrudDescriptor_ExposesNullablePersonnelTemporalFieldsAcrossReadWriteAndDisplayPlans()
+    {
+        var descriptor = PersonCrudDescriptorFactory.Create();
+        var temporalFields = new[] { "BirthDate", "EmploymentStartedAt", "EmploymentEndedAt" };
+
+        Assert.All(temporalFields, field =>
+        {
+            Assert.Contains(field, descriptor.FieldSet.ListFields);
+            Assert.Contains(field, descriptor.FieldSet.DetailFields);
+            Assert.Contains(field, descriptor.FieldSet.CreateFields);
+            Assert.Contains(field, descriptor.FieldSet.UpdateFields);
+            Assert.Contains(field, descriptor.SortableFields);
+        });
+        Assert.Contains(descriptor.DisplayProjectionPlan!.Fields, plan =>
+            plan is CalendarDateFieldDisplayProjectionPlan { SourceField: "BirthDate" });
+        Assert.Equal(
+            2,
+            descriptor.DisplayProjectionPlan.Fields.Count(plan => plan is TemporalFieldDisplayProjectionPlan
+                && plan.SourceField is "EmploymentStartedAt" or "EmploymentEndedAt"));
     }
 
     [Fact]

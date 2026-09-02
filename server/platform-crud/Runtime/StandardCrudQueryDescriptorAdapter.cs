@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Modeling.DisplayPlanning;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -18,8 +19,9 @@ public static class StandardCrudQueryDescriptorAdapter
     {
         ArgumentNullException.ThrowIfNull(descriptor);
 
+        var displayValueFields = GetQueryDisplayValueFields(descriptor);
         var defaultFields = descriptor.FieldSet.ListFields
-            .Concat(descriptor.DisplayValueFields.Select(static field => field.Field))
+            .Concat(displayValueFields.Select(static field => field.Field))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
@@ -35,7 +37,35 @@ public static class StandardCrudQueryDescriptorAdapter
             SortableFields = descriptor.SortableFields,
             DefaultSortField = descriptor.DefaultSortField,
             DefaultSortDirection = descriptor.DefaultSortDirection,
-            DisplayValueFields = descriptor.DisplayValueFields
+            DisplayValueFields = displayValueFields
         };
+    }
+
+    /// <summary>把 lookup 与 temporal companion 合并为查询层只读响应字段。</summary>
+    public static IReadOnlyList<PlatformDisplayValueField> GetQueryDisplayValueFields(StandardCrudDescriptor descriptor)
+    {
+        var fields = descriptor.DisplayValueFields.ToList();
+        if (descriptor.DisplayProjectionPlan is null)
+        {
+            return fields;
+        }
+
+        foreach (var plan in descriptor.DisplayProjectionPlan.Fields
+                     .Where(static plan => plan is TemporalFieldDisplayProjectionPlan or CalendarDateFieldDisplayProjectionPlan))
+        {
+            if (fields.Any(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            fields.Add(new PlatformDisplayValueField(
+                plan.CompanionField,
+                plan.SourceField,
+                "$temporal",
+                plan.SourceField,
+                plan.CompanionField));
+        }
+
+        return fields;
     }
 }

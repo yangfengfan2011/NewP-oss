@@ -14,7 +14,8 @@
         "titleKey": "Section_Basic",
         "fields": [
           "PersonNo",
-          "ENAME"
+          "ENAME",
+          "BirthDate"
         ]
       },
       {
@@ -29,8 +30,16 @@
           {
             "field": "PositionId",
             "rendererKey": "organization.person.reference"
-          },
+          }
+        ]
+      },
+      {
+        "key": "employment",
+        "titleKey": "Section_Employment",
+        "fields": [
           "EmploymentStatus",
+          "EmploymentStartedAt",
+          "EmploymentEndedAt",
           "IsEnabled"
         ]
       },

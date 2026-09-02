@@ -18,6 +18,10 @@
       "zhs": "组织信息",
       "en": "Organization"
     },
+    "Section_Employment": {
+      "zhs": "任职信息",
+      "en": "Employment"
+    },
     "Section_Audit": {
       "zhs": "审计信息",
       "en": "Audit"
@@ -29,6 +33,10 @@
     "Field_ENAME": {
       "zhs": "姓名",
       "en": "Name"
+    },
+    "Field_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Birth Date"
     },
     "Field_CompanyId": {
       "zhs": "所属公司",
@@ -45,6 +53,14 @@
     "Field_EmploymentStatus": {
       "zhs": "任职状态",
       "en": "Employment Status"
+    },
+    "Field_EmploymentStartedAt": {
+      "zhs": "任职开始时间",
+      "en": "Employment Started At"
+    },
+    "Field_EmploymentEndedAt": {
+      "zhs": "任职结束时间",
+      "en": "Employment Ended At"
     },
     "Field_IsEnabled": {
       "zhs": "启用状态",

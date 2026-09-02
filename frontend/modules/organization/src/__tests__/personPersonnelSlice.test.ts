@@ -197,6 +197,12 @@ describe('personnel center first vertical slice', () => {
         EID: 'person-1',
         PersonNo: 'P001',
         ENAME: '张三',
+        BirthDate: '1990-02-03',
+        BirthDate_DisplayValue: '1990/2/3',
+        EmploymentStartedAt: '2026-08-14T01:02:03Z',
+        EmploymentStartedAt_DisplayValue: '2026/8/14 09:02:03',
+        EmploymentEndedAt: null,
+        EmploymentEndedAt_DisplayValue: null,
         CompanyId: 'company-1',
         CompanyId_DisplayValue: '总部',
         EmploymentStatus: 'FullTime',
@@ -214,6 +220,12 @@ describe('personnel center first vertical slice', () => {
     });
 
     expect(detail).toMatchObject({
+      BirthDate: '1990-02-03',
+      BirthDate_DisplayValue: '1990/2/3',
+      EmploymentStartedAt: '2026-08-14T01:02:03Z',
+      EmploymentStartedAt_DisplayValue: '2026/8/14 09:02:03',
+      EmploymentEndedAt: null,
+      EmploymentEndedAt_DisplayValue: null,
       companyId: 'company-1',
       createdBy: 'creator-1',
       createdAt: '2026-08-14T01:02:03Z',

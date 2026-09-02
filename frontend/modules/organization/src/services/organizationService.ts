@@ -72,7 +72,13 @@ export interface PersonListRow {
   id: string;
   PersonNo: string;
   ENAME: string;
+  BirthDate: string | null;
+  BirthDate_DisplayValue: string | null;
   EmploymentStatus: string;
+  EmploymentStartedAt: string | null;
+  EmploymentStartedAt_DisplayValue: string | null;
+  EmploymentEndedAt: string | null;
+  EmploymentEndedAt_DisplayValue: string | null;
   IsEnabled: boolean;
   Revision: number;
   AccountEID?: string | null;
@@ -95,6 +101,15 @@ export interface PersonListRow {
 }
 
 export interface PersonDetailView {
+  EID: string;
+  PersonNo: string;
+  ENAME: string;
+  BirthDate: string | null;
+  BirthDate_DisplayValue: string | null;
+  EmploymentStartedAt: string | null;
+  EmploymentStartedAt_DisplayValue: string | null;
+  EmploymentEndedAt: string | null;
+  EmploymentEndedAt_DisplayValue: string | null;
   id: string;
   personNo: string;
   name: string;
@@ -212,7 +227,13 @@ export function mapPersonListItem(value: unknown): PersonListRow {
     // 列表 Host 按 metadata 字段读取，模块 mapper 明确补齐协议字段，避免 Shell 引入隐式字段别名。
     PersonNo: personNo,
     ENAME: name,
+    BirthDate: readStandardCrudNullableString(row, ['BirthDate']),
+    BirthDate_DisplayValue: readStandardCrudNullableString(row, ['BirthDate_DisplayValue']),
     EmploymentStatus: employmentStatus,
+    EmploymentStartedAt: readStandardCrudNullableString(row, ['EmploymentStartedAt']),
+    EmploymentStartedAt_DisplayValue: readStandardCrudNullableString(row, ['EmploymentStartedAt_DisplayValue']),
+    EmploymentEndedAt: readStandardCrudNullableString(row, ['EmploymentEndedAt']),
+    EmploymentEndedAt_DisplayValue: readStandardCrudNullableString(row, ['EmploymentEndedAt_DisplayValue']),
     IsEnabled: isEnabled,
     Revision: revision,
     AccountEID: readStandardCrudNullableString(row, ['AccountEID']),
@@ -242,6 +263,15 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
   const employmentStatus = readStandardCrudString(fields, ['EmploymentStatus']);
 
   return {
+    EID: readStandardCrudString(fields, ['EID']),
+    PersonNo: readStandardCrudString(fields, ['PersonNo']),
+    ENAME: readStandardCrudString(fields, ['ENAME']),
+    BirthDate: readStandardCrudNullableString(fields, ['BirthDate']),
+    BirthDate_DisplayValue: readStandardCrudNullableString(fields, ['BirthDate_DisplayValue']),
+    EmploymentStartedAt: readStandardCrudNullableString(fields, ['EmploymentStartedAt']),
+    EmploymentStartedAt_DisplayValue: readStandardCrudNullableString(fields, ['EmploymentStartedAt_DisplayValue']),
+    EmploymentEndedAt: readStandardCrudNullableString(fields, ['EmploymentEndedAt']),
+    EmploymentEndedAt_DisplayValue: readStandardCrudNullableString(fields, ['EmploymentEndedAt_DisplayValue']),
     id: readStandardCrudString(fields, ['EID']),
     personNo: readStandardCrudString(fields, ['PersonNo']),
     name: readStandardCrudString(fields, ['ENAME']),

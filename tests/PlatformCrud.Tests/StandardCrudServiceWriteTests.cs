@@ -3,7 +3,9 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
+using ICP.Platform.Modeling;
 using ICP.Platform.Persistence.Auditing;
+using ICP.Platform.Presentation;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
@@ -14,6 +16,38 @@ namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudServiceWriteTests
 {
+    [Fact]
+    public async Task CreateAsync_NormalizesTemporalInputsBeforeRepositoryCreate()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var normalizer = new TemporalInputNormalizer(
+            new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")),
+            "Asia/Shanghai",
+            TimeProvider.System);
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            temporalInputNormalizer: normalizer);
+
+        var result = await service.CreateAsync(TemporalDescriptor(), new Dictionary<string, object?>
+        {
+            ["BirthDate"] = "2000-02-29",
+            ["EmploymentStartedAt"] = "2030-01-02T08:04:05"
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2000, 2, 29), repository.LastCreatedValues!["BirthDate"]);
+        Assert.Equal(
+            new DateTime(2030, 1, 2, 0, 4, 5, DateTimeKind.Utc),
+            repository.LastCreatedValues["EmploymentStartedAt"]);
+    }
+
     [Fact]
     public async Task CreateAsync_WhenDatabaseConstraintWinsRace_ReturnsStablePersistenceConflict()
     {
@@ -1226,6 +1260,26 @@ public sealed class StandardCrudServiceWriteTests
     private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
         new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));
 
+    private static StandardCrudDescriptor TemporalDescriptor() => new()
+    {
+        ResourceKey = "organization.person",
+        ModuleId = "Organization",
+        ModelName = "Person",
+        Route = "api/organization/persons",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "BirthDate", "EmploymentStartedAt"],
+            DetailFields: ["EID", "BirthDate", "EmploymentStartedAt"],
+            CreateFields: ["BirthDate", "EmploymentStartedAt"],
+            UpdateFields: ["BirthDate", "EmploymentStartedAt"]),
+        FieldPolicies =
+        [
+            new StandardCrudFieldPolicy { Field = "BirthDate", ValueType = FieldValueType.CalendarDate },
+            new StandardCrudFieldPolicy { Field = "EmploymentStartedAt", ValueType = FieldValueType.Instant }
+        ]
+    };
+
     private static StandardCrudDescriptor Descriptor(
         StandardCrudDeletePolicy policy = StandardCrudDeletePolicy.None,
         bool includeEnabledInUpdateFields = true,
@@ -1689,6 +1743,12 @@ public sealed class StandardCrudServiceWriteTests
     private sealed class FixedAuditStampProvider(string actorId, DateTime occurredAtUtc) : IEntityAuditStampProvider
     {
         public EntityAuditStamp GetCurrent() => new(actorId, occurredAtUtc);
+    }
+
+    private sealed class FixedPresentationContextAccessor(RequestPresentationContext? context)
+        : IRequestPresentationContextAccessor
+    {
+        public RequestPresentationContext? Current { get; } = context;
     }
 
     private sealed class NullAuditStampProvider : IEntityAuditStampProvider

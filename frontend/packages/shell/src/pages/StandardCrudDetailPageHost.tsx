@@ -9,6 +9,7 @@ import {
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
@@ -147,6 +148,12 @@ function StandardCrudDetailPageContent<TDetail>({
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
+  let sessionTimeZoneId: string | undefined;
+  try {
+    sessionTimeZoneId = useAuth().user?.timeZoneId;
+  } catch {
+    sessionTimeZoneId = undefined;
+  }
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
   const titleKey = readMetadataString(view.titleKey, 'Title');
@@ -161,7 +168,8 @@ function StandardCrudDetailPageContent<TDetail>({
     mode: 'edit',
     enumOptions: registration.enumOptions ?? {},
     lookupProviders: registration.lookupProviders ?? [],
-  }), [modelDocument, registration.enumOptions, registration.lookupProviders]);
+    timeZoneId: sessionTimeZoneId,
+  }), [modelDocument, registration.enumOptions, registration.lookupProviders, sessionTimeZoneId]);
   const editFields = useMemo(
     () => localizeStandardCrudFields(formSchema.fields, dicKey, t),
     [formSchema.fields, dicKey, t],

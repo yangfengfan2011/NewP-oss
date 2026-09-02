@@ -4,6 +4,9 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -19,6 +22,8 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IReadOnlyDictionary<string, IStandardCrudDeleteGuard> _deleteGuards;
     private readonly IReadOnlyDictionary<string, IStandardCrudConditionalDeleteExecutor> _conditionalDeleteExecutors;
     private readonly IEntityAuditStampProvider? _auditStampProvider;
+    private readonly ITemporalInputNormalizer? _temporalInputNormalizer;
+    private readonly ITemporalDisplayProjectionExecutor? _temporalDisplayProjectionExecutor;
 
     /// <summary>
     /// 组合标准 CRUD 的共享读写依赖；可信审计 owner 只在资源声明服务端必填审计字段时使用。
@@ -33,7 +38,9 @@ public sealed class StandardCrudService : IStandardCrudService
         IEnumerable<IStandardCrudActionHandler> actionHandlers,
         IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
         IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null,
-        IEntityAuditStampProvider? auditStampProvider = null)
+        IEntityAuditStampProvider? auditStampProvider = null,
+        ITemporalInputNormalizer? temporalInputNormalizer = null,
+        ITemporalDisplayProjectionExecutor? temporalDisplayProjectionExecutor = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -46,6 +53,8 @@ public sealed class StandardCrudService : IStandardCrudService
         _conditionalDeleteExecutors = (conditionalDeleteExecutors ?? [])
             .ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _auditStampProvider = auditStampProvider;
+        _temporalInputNormalizer = temporalInputNormalizer;
+        _temporalDisplayProjectionExecutor = temporalDisplayProjectionExecutor;
     }
 
     /// <summary>
@@ -60,7 +69,7 @@ public sealed class StandardCrudService : IStandardCrudService
         var conditions = BuildConditions(descriptor, query);
         var queryDescriptor = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor);
         var platformRequest = new PlatformQueryRequest(
-            AddDisplayCompanionFields(query.Fields, descriptor.DisplayValueFields),
+            AddDisplayCompanionFields(query.Fields, StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor)),
             query.Page,
             query.PageSize,
             query.SortBy,
@@ -146,7 +155,11 @@ public sealed class StandardCrudService : IStandardCrudService
             return null;
         }
 
-        var fields = await ApplyDisplayValuesToSingleRowAsync(descriptor, row, descriptor.DisplayValueFields, cancellationToken);
+        var fields = await ApplyDisplayValuesToSingleRowAsync(
+            descriptor,
+            row,
+            StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor),
+            cancellationToken);
         var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
         foreach (var key in descriptor.SummaryBlockKeys)
         {
@@ -205,6 +218,11 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.CreateFields),
             StringComparer.Ordinal);
+        var temporalError = NormalizeTemporalInputs(descriptor, allowed);
+        if (temporalError is not null)
+        {
+            return StandardCrudMutationResult.Failure(temporalError);
+        }
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: true);
         if (requiredError is not null)
         {
@@ -306,6 +324,11 @@ public sealed class StandardCrudService : IStandardCrudService
         var allowed = new Dictionary<string, object?>(
             FilterFields(values, descriptor.FieldSet.UpdateFields),
             StringComparer.Ordinal);
+        var temporalError = NormalizeTemporalInputs(descriptor, allowed);
+        if (temporalError is not null)
+        {
+            return StandardCrudMutationResult.Failure(temporalError);
+        }
         var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: false);
         if (requiredError is not null)
         {
@@ -491,23 +514,41 @@ public sealed class StandardCrudService : IStandardCrudService
             return values;
         }
 
-        if (!_displayResolvers.TryGetValue(descriptor.ResourceKey, out var resolver))
+        var temporalPlans = descriptor.DisplayProjectionPlan?.Fields
+            .Where(plan => requestedDisplayFields.Any(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal)))
+            .Where(static plan => plan is TemporalFieldDisplayProjectionPlan or CalendarDateFieldDisplayProjectionPlan)
+            .ToDictionary(static plan => plan.CompanionField, StringComparer.Ordinal)
+            ?? new Dictionary<string, FieldDisplayProjectionPlan>(StringComparer.Ordinal);
+        var lookupFields = requestedDisplayFields
+            .Where(field => !temporalPlans.ContainsKey(field.Field))
+            .ToArray();
+
+        IStandardCrudDisplayValueResolver? resolver = null;
+        if (lookupFields.Length > 0 && !_displayResolvers.TryGetValue(descriptor.ResourceKey, out resolver))
         {
             throw new InvalidOperationException(
                 $"标准 CRUD 资源 {descriptor.ResourceKey} 请求了显示值字段，但未注册显示值解析器。");
         }
 
-        EnsureDisplayResolverImplementation(descriptor, resolver);
+        if (resolver is not null)
+        {
+            EnsureDisplayResolverImplementation(descriptor, resolver);
+        }
+
+        if (temporalPlans.Count > 0 && _temporalDisplayProjectionExecutor is null)
+        {
+            throw new InvalidOperationException(
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 请求了 temporal 显示值字段，但未注册平台执行器。");
+        }
+
         if (values.Count == 0)
         {
             return values;
         }
 
-        var resolvedRows = await resolver.ResolveListAsync(
-            descriptor,
-            rows,
-            requestedDisplayFields,
-            cancellationToken);
+        var resolvedRows = resolver is null
+            ? rows.Select(static _ => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>()).ToArray()
+            : await resolver.ResolveListAsync(descriptor, rows, lookupFields, cancellationToken);
         if (resolvedRows.Count != values.Count)
         {
             throw new InvalidOperationException(
@@ -540,6 +581,22 @@ public sealed class StandardCrudService : IStandardCrudService
                 }
 
                 ((Dictionary<string, object?>)values[index])[pair.Key] = pair.Value;
+            }
+
+            foreach (var (companionField, plan) in temporalPlans)
+            {
+                var rawValue = rows[index].TryGetValue(plan.SourceField, out var value) ? value : null;
+                object? displayValue = (plan, rawValue) switch
+                {
+                    (_, null) => null,
+                    (TemporalFieldDisplayProjectionPlan instantPlan, DateTime instant) =>
+                        _temporalDisplayProjectionExecutor!.Project(instantPlan, instant).DisplayValue,
+                    (CalendarDateFieldDisplayProjectionPlan datePlan, DateOnly date) =>
+                        _temporalDisplayProjectionExecutor!.Project(datePlan, date).DisplayValue,
+                    _ => throw new InvalidOperationException(
+                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的 temporal 字段 {plan.SourceField} 与计划类型不匹配。")
+                };
+                ((Dictionary<string, object?>)values[index])[companionField] = displayValue;
             }
         }
 
@@ -580,7 +637,11 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> row,
         CancellationToken cancellationToken)
     {
-        var fields = await ApplyDisplayValuesToSingleRowAsync(descriptor, row, descriptor.DisplayValueFields, cancellationToken);
+        var fields = await ApplyDisplayValuesToSingleRowAsync(
+            descriptor,
+            row,
+            StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor),
+            cancellationToken);
         var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
         foreach (var key in descriptor.SummaryBlockKeys)
         {
@@ -771,7 +832,7 @@ public sealed class StandardCrudService : IStandardCrudService
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values)
     {
-        foreach (var displayField in descriptor.DisplayValueFields)
+        foreach (var displayField in StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor))
         {
             if (!IsCanonicalDisplayCompanion(displayField)
                 || !values.ContainsKey(displayField.Field))
@@ -804,6 +865,44 @@ public sealed class StandardCrudService : IStandardCrudService
                 $"标准 CRUD 显示字段 {field} 只允许输出，不能提交写入。")
         ]
     };
+
+    // temporal 语义由字段策略触发；规范化完成后 validator 与仓储只接收 DateOnly 或 UTC DateTime。
+    private StandardCrudError? NormalizeTemporalInputs(
+        StandardCrudDescriptor descriptor,
+        IDictionary<string, object?> values)
+    {
+        foreach (var policy in descriptor.FieldPolicies.Where(static policy =>
+                     policy.ValueType is FieldValueType.CalendarDate or FieldValueType.Instant))
+        {
+            if (!values.TryGetValue(policy.Field, out var value))
+            {
+                continue;
+            }
+
+            if (_temporalInputNormalizer is null)
+            {
+                throw new InvalidOperationException(
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 声明了 temporal 输入字段，但未注册平台规范化器。");
+            }
+
+            var result = _temporalInputNormalizer.Normalize(policy.ValueType, value);
+            if (!result.IsSuccess)
+            {
+                return new StandardCrudError
+                {
+                    StatusCode = 400,
+                    Code = result.ErrorCode!,
+                    ReasonKey = "standardCrud.temporalInputInvalid",
+                    Message = result.Message!,
+                    FieldErrors = [new StandardCrudFieldError(policy.Field, result.ErrorCode!, result.Message!)]
+                };
+            }
+
+            values[policy.Field] = result.Value;
+        }
+
+        return null;
+    }
 
     private static IReadOnlyDictionary<string, object?> Project(
         IReadOnlyDictionary<string, object?> row,

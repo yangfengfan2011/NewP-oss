@@ -76,6 +76,14 @@ public sealed record TemporalFieldDisplayProjectionPlan(
     : FieldDisplayProjectionPlan(SourceField, CompanionField);
 
 /// <summary>
+/// 日历日期投影保留原始日期，不应用任何时区转换。
+/// </summary>
+public sealed record CalendarDateFieldDisplayProjectionPlan(
+    string SourceField,
+    string CompanionField)
+    : FieldDisplayProjectionPlan(SourceField, CompanionField);
+
+/// <summary>
 /// 一个 Model 的完整 display projection plan。
 /// </summary>
 public sealed record ModelDisplayProjectionPlan(

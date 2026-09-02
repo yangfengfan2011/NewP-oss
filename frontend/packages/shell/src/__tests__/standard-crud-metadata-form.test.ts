@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
 import positionModelDocument from '../../../../../modules/Organization/metadata/models/Position.model.json';
+import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 
 describe('standard CRUD metadata form schema', () => {
@@ -43,6 +44,22 @@ describe('standard CRUD metadata form schema', () => {
       },
     ],
   };
+
+  it('projects Person calendar date and instant semantics into three form sections', () => {
+    const schema = buildStandardCrudFormSchemaFromModel(personModelDocument.Person, {
+      mode: 'edit',
+      enumOptions: { EmploymentStatus: [] },
+      timeZoneId: 'Asia/Taipei',
+    });
+
+    expect(schema.sections.map((section) => section.key)).toEqual(['basic', 'organization', 'employment']);
+    expect(schema.fields.find((field) => field.key === 'BirthDate')).toMatchObject({ kind: 'date' });
+    expect(schema.fields.find((field) => field.key === 'EmploymentStartedAt')).toMatchObject({
+      kind: 'dateTime',
+      timeZoneId: 'Asia/Taipei',
+    });
+    expect(schema.fields.find((field) => field.key === 'EmploymentEndedAt')).toMatchObject({ kind: 'dateTime' });
+  });
 
   it('normalizes platform field keys and form sections without metadata aliases', () => {
     const schema = buildStandardCrudFormSchemaFromModel(personModel, {

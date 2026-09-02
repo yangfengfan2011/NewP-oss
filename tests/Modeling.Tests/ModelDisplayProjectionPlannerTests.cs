@@ -13,6 +13,7 @@ public sealed class ModelDisplayProjectionPlannerTests
     {
         { Source(Field("CompanyId", FieldKind.Reference, FieldValueType.ObjectId, Display("reference", "Company", "EID", "ENAME"))), [Target("Company")], typeof(LookupFieldDisplayProjectionPlan) },
         { Source(Field("ReviewerUserEID", FieldKind.Scalar, FieldValueType.User, Display("user", "IdentityAccount", "EID", "ENAME"))), [], typeof(LookupFieldDisplayProjectionPlan) },
+        { Source(Field("BirthDate", FieldKind.Scalar, FieldValueType.CalendarDate, Display("calendarDate", format: "date"))), [], typeof(CalendarDateFieldDisplayProjectionPlan) },
         { Source(Field("OccurredAt", FieldKind.Scalar, FieldValueType.Instant, Display("instant", format: "date"))), [], typeof(TemporalFieldDisplayProjectionPlan) },
         { Source(Field("OccurredAt", FieldKind.Scalar, FieldValueType.Instant, Display("instant", format: "dateTime"))), [], typeof(TemporalFieldDisplayProjectionPlan) }
     };
@@ -25,6 +26,7 @@ public sealed class ModelDisplayProjectionPlannerTests
         { Source(Field("ReviewerUserEID", FieldKind.Scalar, FieldValueType.User, Display("user", "IdentityAccount", "EID", ""))), [], ModelDisplayProjectionDiagnosticCodes.UserTargetInvalid },
         { Source(Field("OccurredAt", FieldKind.Scalar, FieldValueType.Instant, Display("instant"))), [], ModelDisplayProjectionDiagnosticCodes.TemporalFormatRequired },
         { Source(Field("OccurredAt", FieldKind.Scalar, FieldValueType.Instant, Display("instant", targetModel: "Company", format: "dateTime"))), [], ModelDisplayProjectionDiagnosticCodes.ParametersMutuallyExclusive },
+        { Source(Field("BirthDate", FieldKind.Scalar, FieldValueType.CalendarDate, Display("calendarDate", format: "dateTime"))), [], ModelDisplayProjectionDiagnosticCodes.TemporalFormatRequired },
         { Source(Field("CompanyId", FieldKind.Reference, FieldValueType.ObjectId, Display("reference", "Company", "EID", "ENAME")), Field("CompanyId_DisplayValue", FieldKind.Scalar, FieldValueType.Text)), [Target("Company")], ModelDisplayProjectionDiagnosticCodes.CompanionNameConflict }
     };
 

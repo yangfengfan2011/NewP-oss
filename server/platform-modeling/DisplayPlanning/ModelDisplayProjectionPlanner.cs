@@ -77,6 +77,11 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
             return CompileInstant(sourceModel, field, display);
         }
 
+        if (string.Equals(display.Type, "calendarDate", StringComparison.OrdinalIgnoreCase))
+        {
+            return CompileCalendarDate(sourceModel, field, display);
+        }
+
         return Failure(
             ModelDisplayProjectionDiagnosticCodes.TypeUnsupported,
             sourceModel,
@@ -221,6 +226,39 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
             field.Name,
             CompanionField(field),
             format.Value));
+    }
+
+    // calendarDate 只允许 date 展示格式，并且不接受任何 lookup 目标参数。
+    private static FieldCompilationResult CompileCalendarDate(
+        ModelDefinition sourceModel,
+        FieldDefinition field,
+        FieldDisplayRuleDefinition display)
+    {
+        if (field.ValueType != FieldValueType.CalendarDate)
+        {
+            return SourceMismatch(sourceModel, field, display.Type);
+        }
+
+        if (!string.IsNullOrWhiteSpace(display.TargetModel)
+            || !string.IsNullOrWhiteSpace(display.TargetIdField)
+            || !string.IsNullOrWhiteSpace(display.TargetDisplayField))
+        {
+            return MutuallyExclusive(sourceModel, field, display.Type);
+        }
+
+        if (!string.Equals(display.Format, "date", StringComparison.Ordinal))
+        {
+            return Failure(
+                ModelDisplayProjectionDiagnosticCodes.TemporalFormatRequired,
+                sourceModel,
+                field,
+                $"Field '{field.Name}' calendarDate display must use format 'date' without a target model.");
+        }
+
+        var companionConflict = ValidateCompanionName(sourceModel, field);
+        return companionConflict ?? Success(new CalendarDateFieldDisplayProjectionPlan(
+            field.Name,
+            CompanionField(field)));
     }
 
     // companion 是成功 plan 的派生协议；任何 authored 同名字段都必须拒绝。

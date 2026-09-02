@@ -378,10 +378,11 @@ public sealed class IdentityFoundationMigrationTests
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(3, migrations.Length);
+        Assert.Equal(4, migrations.Length);
         var foundation = migrations[0];
         var positionDirectory = migrations[1];
         var positionReference = migrations[2];
+        var personnelTemporalFields = migrations[3];
         Assert.False(root.TryGetProperty("legacyCutover", out _));
         Assert.Equal("20260812144235_Organization_000001_Foundation", foundation.GetProperty("migrationId").GetString());
         Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
@@ -396,8 +397,13 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal("20260902063356_Organization_000003_PositionReference", positionReference.GetProperty("migrationId").GetString());
         Assert.Equal(positionDirectory.GetProperty("contentDigest").GetString(), positionReference.GetProperty("previousContentDigest").GetString());
         Assert.Equal(positionDirectory.GetProperty("toModelDigest").GetString(), positionReference.GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), positionReference.GetProperty("toModelDigest").GetString());
+        Assert.Equal(positionDirectory.GetProperty("toModelDigest").GetString(), positionReference.GetProperty("toModelDigest").GetString());
         Assert.Equal("safe-expand", positionReference.GetProperty("compatibility").GetString());
+        Assert.Equal("20260902110155_Organization_000004_PersonnelTemporalFields", personnelTemporalFields.GetProperty("migrationId").GetString());
+        Assert.Equal(positionReference.GetProperty("contentDigest").GetString(), personnelTemporalFields.GetProperty("previousContentDigest").GetString());
+        Assert.Equal(positionReference.GetProperty("toModelDigest").GetString(), personnelTemporalFields.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), personnelTemporalFields.GetProperty("toModelDigest").GetString());
+        Assert.Equal("safe-expand", personnelTemporalFields.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location))));
@@ -425,6 +431,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             positionReference.GetProperty("contentDigest").GetString(),
             Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionReferenceSourcePath))));
+        var personnelTemporalSourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260902110155_Organization_000004_PersonnelTemporalFields.cs");
+        Assert.Equal(
+            personnelTemporalFields.GetProperty("contentDigest").GetString(),
+            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(personnelTemporalSourcePath))));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)

@@ -215,6 +215,24 @@ public class ModelMetadataValidatorTests
         Assert.Contains("display.type", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("calendarDate", "datetime")]
+    [InlineData("instant", "date")]
+    public void Validate_RejectsTemporalContractStorageMismatch(string valueType, string storageType)
+    {
+        var document = DocumentWithFields(new ModelMetadataField
+        {
+            Name = "TemporalValue",
+            Storage = new ModelMetadataStorageSection { Type = storageType, Nullable = true },
+            Contract = new ModelMetadataContractSection { ValueType = valueType }
+        });
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Contains("TemporalValue", error.Message, StringComparison.Ordinal);
+        Assert.Contains("storage.type", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ModelMetadataDocument DocumentWithFields(params ModelMetadataField[] fields) => new()
     {
         SchemaVersion = "1.0",

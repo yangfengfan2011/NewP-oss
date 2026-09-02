@@ -70,6 +70,7 @@ public static class PositionCrudDescriptorFactory
                 ? new StandardCrudFieldPolicy
                 {
                     Field = policy.Field,
+                    ValueType = policy.ValueType,
                     StorageRequired = true,
                     ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
                     CreateDefaultValue = true

@@ -196,7 +196,9 @@ describe('route capability authorization ordering', () => {
   function registerOrganization(snapshotId: string) {
     ModuleRegistry.replaceAll([{
       metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1.0.0' },
-      standardCrudCapabilities: organizationBindings.standardCrudCapabilities,
+      standardCrudCapabilities: organizationBindings.standardCrudCapabilities?.filter(
+        ({ targetKey }) => targetKey === 'organization.person.list' || targetKey === 'organization.person.detail',
+      ),
     }], snapshotId);
   }
 

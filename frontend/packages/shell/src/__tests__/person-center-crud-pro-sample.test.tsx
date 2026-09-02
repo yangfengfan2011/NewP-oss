@@ -181,6 +181,13 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+function isPersonListRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
+  const request = input instanceof Request ? input : undefined;
+  const url = new URL(request?.url ?? String(input), window.location.origin);
+  const method = request?.method ?? init?.method ?? 'GET';
+  return method.toUpperCase() === 'GET' && url.pathname === '/api/organization/persons';
+}
+
 function renderHost(
   container: HTMLElement,
   initialEntries = ['/organization/persons'],
@@ -889,8 +896,8 @@ describe('人员中心 CRUD Pro 样板', () => {
     };
     let listRequestCount = 0;
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      listRequestCount += 1;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (isPersonListRequest(input, init)) listRequestCount += 1;
       return new Response(JSON.stringify({
         items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true }],
         total: 1,
@@ -938,8 +945,8 @@ describe('人员中心 CRUD Pro 样板', () => {
     };
     let listRequestCount = 0;
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      listRequestCount += 1;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (isPersonListRequest(input, init)) listRequestCount += 1;
       return new Response(JSON.stringify({
         items: [{ EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: false }],
         total: 1,
@@ -989,7 +996,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     };
     let listRequestCount = 0;
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([sampleModule]);
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes('/person-1')) {
         return new Response(JSON.stringify({
@@ -1003,7 +1010,7 @@ describe('人员中心 CRUD Pro 样板', () => {
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
-      listRequestCount += 1;
+      if (isPersonListRequest(input, init)) listRequestCount += 1;
       return new Response(JSON.stringify({
         items: [
           { EID: 'person-1', PersonNo: 'P0001', ENAME: '张三', IsEnabled: true },

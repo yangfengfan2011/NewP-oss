@@ -101,6 +101,52 @@ public sealed class MigrationManifestIntegrityTests
         Assert.Equal("migration-two", exception.CanonicalKey);
     }
 
+    [Fact]
+    public void ValidateAuthoringPrefix_IgnoresDerivedBundleAndFrontierFacts()
+    {
+        var manifest = CreateManifest() with
+        {
+            ModelDigest = Digest('f'),
+            BundleChecksum = Digest('e')
+        };
+
+        var migrations = MigrationManifestIntegrity.ValidateAuthoringPrefix(
+            "Example",
+            PersistenceProvider.SqlServer,
+            manifest,
+            "manifest.json");
+
+        Assert.Equal("migration-one", Assert.Single(migrations).MigrationId);
+    }
+
+    [Fact]
+    public void ValidateAuthoringPrefix_BrokenHistoryStillFails()
+    {
+        var manifest = WithFirstStep(
+            CreateManifest(),
+            step => step with { PreviousContentDigest = Digest('f') });
+
+        var exception = Assert.Throws<MigrationManifestValidationException>(() =>
+            MigrationManifestIntegrity.ValidateAuthoringPrefix(
+                "Example",
+                PersistenceProvider.SqlServer,
+                manifest,
+                "manifest.json"));
+
+        Assert.Equal("PERSISTENCE_MIGRATION_CHAIN_INVALID", exception.Code);
+    }
+
+    [Fact]
+    public void SerializeCanonical_ProducesStableIndentedCrLfJson()
+    {
+        var bytes = MigrationManifestIntegrity.SerializeCanonical(CreateManifest());
+        var text = System.Text.Encoding.UTF8.GetString(bytes);
+
+        Assert.EndsWith("\r\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", text.Replace("\r\n", string.Empty, StringComparison.Ordinal));
+        Assert.Equal(bytes, MigrationManifestIntegrity.SerializeCanonical(MigrationManifestIntegrity.Parse(bytes)));
+    }
+
     private static MigrationManifest CreateManifest()
     {
         var assemblyBytes = "bundle"u8;

@@ -22,14 +22,24 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
     };
 
     private readonly StorageTypeMapDocument _typeMap;
+    private readonly string _platformFoundationRoot;
     private readonly JsonModelMetadataDocumentLoader _modelLoader = new();
     private readonly ModelMetadataProjector _projector = new();
     private readonly ModelDefinitionValidator _validator = new();
 
     public PersistencePlanCompiler(string storageTypeMapPath)
+        : this(storageTypeMapPath, AppContext.BaseDirectory)
+    {
+    }
+
+    // 只读 preflight 可把正式编译器的平台 bundle 根固定到 Host Release 输出；
+    // runtime 继续使用 AppContext.BaseDirectory，不改变既有装载语义。
+    internal PersistencePlanCompiler(string storageTypeMapPath, string platformFoundationRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageTypeMapPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(platformFoundationRoot);
         _typeMap = new JsonStorageTypeMapLoader().LoadFromFile(storageTypeMapPath);
+        _platformFoundationRoot = Path.GetFullPath(platformFoundationRoot);
     }
 
     public PersistencePlanCompilationResult Compile(
@@ -249,7 +259,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         CompileBundle(module, provider, matchingBundles[0], modelDigest, streams, diagnostics);
     }
 
-    private static void AddPlatformStream(
+    private void AddPlatformStream(
         CanonicalModulePlan modules,
         PersistenceProvider provider,
         IReadOnlyList<ModelDefinition> models,
@@ -304,17 +314,17 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
     }
 
     // 从 Host 冻结输出读取 platform foundation bundle，并按共享 manifest 规则编译平台流。
-    private static void AddSqlServerPlatformFoundation(
+    private void AddSqlServerPlatformFoundation(
         string modelDigest,
         List<ModuleMigrationStream> streams,
         List<PersistencePlanDiagnostic> diagnostics)
     {
         const string moduleId = "platform.foundation";
         var assemblyPath = Path.Combine(
-            AppContext.BaseDirectory,
+            _platformFoundationRoot,
             "PlatformPersistence.EfCore.SqlServerMigrations.dll");
         var manifestPath = Path.Combine(
-            AppContext.BaseDirectory,
+            _platformFoundationRoot,
             "PlatformFoundation.SqlServerMigrations.json");
         try
         {

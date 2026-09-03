@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
@@ -130,6 +131,7 @@ public sealed class MigrationManifestApplication
                     $"migration '{migrationId}' compatibility is already '{existingIndex.step.Compatibility}'.");
             }
 
+            ValidatePublishedPrefix(workspace, prefix, migrationId);
             ValidateComplete(workspace, manifest, availableMigrationIds);
             var canonicalBytes = MigrationManifestIntegrity.SerializeCanonical(manifest);
             if (!canonicalBytes.AsSpan().SequenceEqual(originalBytes))
@@ -159,6 +161,7 @@ public sealed class MigrationManifestApplication
                 $"expected exactly one new tail migration '{migrationId}', but bundle contains undeclared [{string.Join(", ", undeclaredMigrationIds)}].");
         }
 
+        var publishedBaseline = ValidatePublishedPrefix(workspace, prefix, migrationId);
         var sourcePath = ResolveMigrationSource(workspace, migrationId);
         var contentDigest = MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(sourcePath));
         var previous = prefix[^1];
@@ -176,6 +179,7 @@ public sealed class MigrationManifestApplication
             BundleChecksum = MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(workspace.BundlePath)),
             Migrations = [.. prefix, step]
         };
+        ValidatePublishedSteps(workspace, finalized.Migrations, publishedBaseline);
         ValidateComplete(workspace, finalized, availableMigrationIds);
         var bytes = MigrationManifestIntegrity.SerializeCanonical(finalized);
         WriteManifestAtomically(workspace.ManifestPath, bytes);
@@ -448,6 +452,218 @@ public sealed class MigrationManifestApplication
             }
         }
     }
+
+    // 普通仓库以 HEAD 中 tracked manifest 为已发布事实；隔离根使用预先冻结的 Host manifest 副本。
+    private PublishedManifestBaseline ValidatePublishedPrefix(
+        BundleWorkspace workspace,
+        IReadOnlyList<MigrationManifestStep> currentSteps,
+        string migrationId)
+    {
+        var baseline = ReadPublishedBaseline(workspace);
+        if (currentSteps.Count < baseline.Steps.Count)
+        {
+            var isSingleTailReplay = currentSteps.Count == baseline.Steps.Count - 1
+                && string.Equals(
+                    baseline.Steps[currentSteps.Count].MigrationId,
+                    migrationId,
+                    StringComparison.Ordinal);
+            if (!isSingleTailReplay)
+            {
+                throw Failure(
+                    workspace.ModuleId,
+                    workspace.Provider,
+                    workspace.ManifestPath,
+                    "/migrations",
+                    "MIGRATION_MANIFEST_HISTORY_CHANGED",
+                    $"published baseline '{baseline.Source}' contains {baseline.Steps.Count} steps, but authoring contains {currentSteps.Count}; only one matching isolated tail replay is allowed.");
+            }
+        }
+
+        ValidatePublishedSteps(workspace, currentSteps, baseline);
+        return baseline;
+    }
+
+    // baseline 覆盖到的每个字段都必须逐值相同，不能靠重新串成自洽链掩盖历史改写。
+    private static void ValidatePublishedSteps(
+        BundleWorkspace workspace,
+        IReadOnlyList<MigrationManifestStep> currentSteps,
+        PublishedManifestBaseline baseline)
+    {
+        var comparisonCount = Math.Min(currentSteps.Count, baseline.Steps.Count);
+        for (var index = 0; index < comparisonCount; index++)
+        {
+            var expected = baseline.Steps[index];
+            var actual = currentSteps[index];
+            var difference = FindHistoricalDifference(expected, actual);
+            if (difference is null)
+            {
+                continue;
+            }
+
+            throw Failure(
+                workspace.ModuleId,
+                workspace.Provider,
+                workspace.ManifestPath,
+                $"/migrations/{index}/{difference.Value.Field}",
+                "MIGRATION_MANIFEST_HISTORY_CHANGED",
+                $"published baseline '{baseline.Source}' expects '{FormatHistoricalValue(difference.Value.Expected)}', actual '{FormatHistoricalValue(difference.Value.Actual)}'.");
+        }
+    }
+
+    private PublishedManifestBaseline ReadPublishedBaseline(BundleWorkspace workspace)
+    {
+        var gitMarker = Path.Combine(_repositoryRoot, ".git");
+        var hasLocalGitBoundary = Directory.Exists(gitMarker) || File.Exists(gitMarker);
+        if (hasLocalGitBoundary)
+        {
+            var gitRoot = RunGit("rev-parse", "--show-toplevel");
+            if (gitRoot.ExitCode != 0
+                || !string.Equals(
+                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(gitRoot.Output.Trim())),
+                    Path.TrimEndingDirectorySeparator(_repositoryRoot),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw Failure(
+                    workspace.ModuleId,
+                    workspace.Provider,
+                    workspace.ManifestPath,
+                    "publishedPrefix",
+                    "MIGRATION_MANIFEST_PUBLISHED_BASELINE_MISSING",
+                    $"repository has a local Git boundary but HEAD could not be resolved for that root: {gitRoot.Error.Trim()}");
+            }
+
+            var relativeManifestPath = Path.GetRelativePath(_repositoryRoot, workspace.ManifestPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            var gitManifest = RunGit("show", $"HEAD:{relativeManifestPath}");
+            if (gitManifest.ExitCode != 0)
+            {
+                throw Failure(
+                    workspace.ModuleId,
+                    workspace.Provider,
+                    workspace.ManifestPath,
+                    "publishedPrefix",
+                    "MIGRATION_MANIFEST_PUBLISHED_BASELINE_MISSING",
+                    $"HEAD does not contain tracked manifest '{relativeManifestPath}': {gitManifest.Error.Trim()}");
+            }
+
+            return ParsePublishedBaseline(
+                workspace,
+                System.Text.Encoding.UTF8.GetBytes(gitManifest.Output),
+                $"git:HEAD:{relativeManifestPath}");
+        }
+
+        if (!File.Exists(workspace.HostManifestPath))
+        {
+            throw Failure(
+                workspace.ModuleId,
+                workspace.Provider,
+                workspace.HostManifestPath,
+                "publishedPrefix",
+                "MIGRATION_MANIFEST_PUBLISHED_BASELINE_MISSING",
+                "repository root is not a standalone Git worktree and its frozen Host Release manifest baseline is missing; copy the published Host manifest before finalize.");
+        }
+
+        return ParsePublishedBaseline(
+            workspace,
+            File.ReadAllBytes(workspace.HostManifestPath),
+            workspace.HostManifestPath);
+    }
+
+    private static PublishedManifestBaseline ParsePublishedBaseline(
+        BundleWorkspace workspace,
+        byte[] bytes,
+        string source)
+    {
+        try
+        {
+            var manifest = MigrationManifestIntegrity.Parse(bytes);
+            var steps = MigrationManifestIntegrity.ValidateAuthoringPrefix(
+                workspace.ModuleId,
+                workspace.Provider,
+                manifest,
+                source);
+            return new PublishedManifestBaseline(source, steps);
+        }
+        catch (Exception exception) when (exception is JsonException or MigrationManifestValidationException)
+        {
+            throw Failure(
+                workspace.ModuleId,
+                workspace.Provider,
+                source,
+                "publishedPrefix",
+                "MIGRATION_MANIFEST_PUBLISHED_BASELINE_INVALID",
+                exception.Message,
+                exception);
+        }
+    }
+
+    private GitCommandResult RunGit(params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = _repositoryRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start git while resolving the published manifest baseline.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return new GitCommandResult(process.ExitCode, output, error);
+    }
+
+    private static HistoricalDifference? FindHistoricalDifference(
+        MigrationManifestStep expected,
+        MigrationManifestStep actual)
+    {
+        if (!string.Equals(expected.Sequence, actual.Sequence, StringComparison.Ordinal))
+        {
+            return new HistoricalDifference("sequence", expected.Sequence, actual.Sequence);
+        }
+
+        if (!string.Equals(expected.MigrationId, actual.MigrationId, StringComparison.Ordinal))
+        {
+            return new HistoricalDifference("migrationId", expected.MigrationId, actual.MigrationId);
+        }
+
+        if (!string.Equals(expected.PreviousContentDigest, actual.PreviousContentDigest, StringComparison.Ordinal))
+        {
+            return new HistoricalDifference("previousContentDigest", expected.PreviousContentDigest, actual.PreviousContentDigest);
+        }
+
+        if (!string.Equals(expected.ContentDigest, actual.ContentDigest, StringComparison.Ordinal))
+        {
+            return new HistoricalDifference("contentDigest", expected.ContentDigest, actual.ContentDigest);
+        }
+
+        if (!string.Equals(expected.FromModelDigest, actual.FromModelDigest, StringComparison.Ordinal))
+        {
+            return new HistoricalDifference("fromModelDigest", expected.FromModelDigest, actual.FromModelDigest);
+        }
+
+        if (!string.Equals(expected.ToModelDigest, actual.ToModelDigest, StringComparison.Ordinal))
+        {
+            return new HistoricalDifference("toModelDigest", expected.ToModelDigest, actual.ToModelDigest);
+        }
+
+        return !string.Equals(expected.Compatibility, actual.Compatibility, StringComparison.Ordinal)
+            ? new HistoricalDifference("compatibility", expected.Compatibility, actual.Compatibility)
+            : null;
+    }
+
+    private static string FormatHistoricalValue(string? value) => value ?? "<null>";
 
     // Host 必须消费与源码 Release/manifest 字节完全一致的副本。
     private static void ValidateHostCopies(BundleWorkspace workspace)
@@ -742,6 +958,20 @@ public sealed class MigrationManifestApplication
         string ModelDigest,
         string HostBundlePath,
         string HostManifestPath);
+
+    private sealed record PublishedManifestBaseline(
+        string Source,
+        IReadOnlyList<MigrationManifestStep> Steps);
+
+    private readonly record struct HistoricalDifference(
+        string Field,
+        string? Expected,
+        string? Actual);
+
+    private readonly record struct GitCommandResult(
+        int ExitCode,
+        string Output,
+        string Error);
 
     private sealed class MigrationInspectionLoadContext : AssemblyLoadContext, IDisposable
     {

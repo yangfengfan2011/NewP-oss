@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using ICP.Platform.Modeling.Metadata;
@@ -84,6 +85,8 @@ public sealed class MigrationManifestApplicationTests
     [InlineData("missing-compatibility", "MIGRATION_MANIFEST_COMPATIBILITY_REQUIRED")]
     [InlineData("invalid-compatibility", "MIGRATION_MANIFEST_COMPATIBILITY_INVALID")]
     [InlineData("history-source", "MIGRATION_MANIFEST_HISTORY_CHANGED")]
+    [InlineData("history-compatibility", "MIGRATION_MANIFEST_HISTORY_CHANGED")]
+    [InlineData("history-model-transition", "MIGRATION_MANIFEST_HISTORY_CHANGED")]
     [InlineData("broken-chain", "PERSISTENCE_MIGRATION_CHAIN_INVALID")]
     [InlineData("same-name", "MIGRATION_MANIFEST_NON_TAIL")]
     [InlineData("wrong-tail", "MIGRATION_MANIFEST_NON_TAIL")]
@@ -101,6 +104,20 @@ public sealed class MigrationManifestApplicationTests
             case "missing-compatibility": compatibility = null; break;
             case "invalid-compatibility": compatibility = "unreviewed"; break;
             case "history-source": File.AppendAllText(fixture.FoundationSourcePath, "changed"); break;
+            case "history-compatibility":
+                fixture.RewriteManifest(manifest => manifest with
+                {
+                    Migrations = [manifest.Migrations[0] with { Compatibility = "contract" }, manifest.Migrations[1]]
+                }); break;
+            case "history-model-transition":
+                fixture.RewriteManifest(manifest => manifest with
+                {
+                    Migrations =
+                    [
+                        manifest.Migrations[0] with { ToModelDigest = new string('a', 64) },
+                        manifest.Migrations[1] with { FromModelDigest = new string('a', 64) }
+                    ]
+                }); break;
             case "broken-chain":
                 fixture.RewriteManifest(manifest => manifest with
                 {
@@ -117,6 +134,60 @@ public sealed class MigrationManifestApplicationTests
             application.Finalize(fixture.ModuleId, provider, migrationId, compatibility));
 
         Assert.Equal(expectedCode, exception.Code);
+        Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
+        if (mutation == "history-compatibility")
+        {
+            Assert.Contains("field='/migrations/0/compatibility'", exception.Message, StringComparison.Ordinal);
+        }
+
+        if (mutation == "history-model-transition")
+        {
+            Assert.Contains("field='/migrations/0/toModelDigest'", exception.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Finalize_TrackedRepositoryUsesHeadBaselineWhenHostCopyContainsTheSameDrift()
+    {
+        using var fixture = MigrationManifestFixture.Create();
+        fixture.CommitPublishedBaseline();
+        fixture.RewriteManifest(
+            manifest => manifest with
+            {
+                Migrations = [manifest.Migrations[0] with { Compatibility = "contract" }, manifest.Migrations[1]]
+            },
+            synchronizeHost: true);
+        var before = File.ReadAllBytes(fixture.ManifestPath);
+
+        var exception = Assert.Throws<MigrationManifestToolException>(() =>
+            new MigrationManifestApplication(fixture.Root).Finalize(
+                fixture.ModuleId,
+                "SqlServer",
+                MigrationManifestFixture.TailMigrationId,
+                "safe-expand"));
+
+        Assert.Equal("MIGRATION_MANIFEST_HISTORY_CHANGED", exception.Code);
+        Assert.Contains("git:HEAD:", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("field='/migrations/0/compatibility'", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
+    }
+
+    [Fact]
+    public void Finalize_IsolatedRootWithoutFrozenHostBaselineFailsClosed()
+    {
+        using var fixture = MigrationManifestFixture.Create();
+        File.Delete(fixture.HostManifestPath);
+        var before = File.ReadAllBytes(fixture.ManifestPath);
+
+        var exception = Assert.Throws<MigrationManifestToolException>(() =>
+            new MigrationManifestApplication(fixture.Root).Finalize(
+                fixture.ModuleId,
+                "SqlServer",
+                MigrationManifestFixture.TailMigrationId,
+                "safe-expand"));
+
+        Assert.Equal("MIGRATION_MANIFEST_PUBLISHED_BASELINE_MISSING", exception.Code);
+        Assert.Contains("field='publishedPrefix'", exception.Message, StringComparison.Ordinal);
         Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
     }
 
@@ -353,6 +424,16 @@ internal sealed class MigrationManifestFixture : IDisposable
         }, synchronizeHost: true);
     }
 
+    internal void CommitPublishedBaseline()
+    {
+        RunGit("init", "--quiet");
+        RunGit("add", "--all");
+        RunGit(
+            "-c", "user.name=Migration Manifest Tests",
+            "-c", "user.email=migration-manifest-tests@example.invalid",
+            "commit", "--quiet", "-m", "published baseline");
+    }
+
     internal void RemoveTailFromManifest() =>
         RewriteManifest(
             manifest => manifest with { Migrations = [manifest.Migrations[0], manifest.Migrations[1]] },
@@ -494,8 +575,42 @@ internal sealed class MigrationManifestFixture : IDisposable
         throw new InvalidOperationException("Repository root not found.");
     }
 
+    private void RunGit(params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = Root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start git for the manifest fixture.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(
+            process.ExitCode == 0,
+            $"git {string.Join(' ', arguments)} failed.{Environment.NewLine}{output}{Environment.NewLine}{error}");
+    }
+
     public void Dispose()
     {
+        var gitRoot = Path.Combine(Root, ".git");
+        if (Directory.Exists(gitRoot))
+        {
+            foreach (var path in Directory.GetFiles(gitRoot, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(path, FileAttributes.Normal);
+            }
+        }
+
         Directory.Delete(Root, recursive: true);
     }
 }

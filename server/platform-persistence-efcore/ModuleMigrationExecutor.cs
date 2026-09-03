@@ -786,6 +786,7 @@ internal sealed class ModuleMigrationExecutor(
         command.Parameters.Add(parameter);
     }
 
+    // 在打开数据库前验证计划边界、bundle migration 类型与 provider 操作。
     private ValidatedMigrationStream ValidateStream(
         ModuleMigrationStream stream,
         VerifiedMigrationAssemblyLoadContext assemblyContext)
@@ -844,16 +845,21 @@ internal sealed class ModuleMigrationExecutor(
                 innerException: exception);
         }
 
+        try
+        {
+            MigrationManifestIntegrity.ValidateMigrationTypes(
+                stream.Migrations.Select(static migration => migration.MigrationId),
+                migrationTypes.Keys);
+        }
+        catch (MigrationManifestValidationException exception)
+        {
+            throw Failure(exception.Code, stream, exception.CanonicalKey);
+        }
+
         var candidates = new List<ProviderMigrationCandidate>(stream.Migrations.Count);
         foreach (var step in stream.Migrations)
         {
-            if (!migrationTypes.TryGetValue(step.MigrationId, out var migrationType))
-            {
-                throw Failure(
-                    PersistenceMigrationFailureCodes.MigrationMissing,
-                    stream,
-                    step.MigrationId);
-            }
+            var migrationType = migrationTypes[step.MigrationId];
 
             Migration migration;
             try

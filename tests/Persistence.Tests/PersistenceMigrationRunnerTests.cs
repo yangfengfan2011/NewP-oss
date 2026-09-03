@@ -74,6 +74,22 @@ public sealed class PersistenceMigrationRunnerTests
     }
 
     [Fact]
+    public async Task MigrateAsync_StreamReferencesMissingMigrationType_FailsBeforeOpeningConnection()
+    {
+        const string missingMigrationId = "20990101000000_Missing";
+        var plan = BuildPlan(missingMigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.MigrationMissing, exception.FailureCode);
+        Assert.Equal("Partner.AssetCatalog", exception.ModuleId);
+        Assert.Equal(missingMigrationId, exception.MigrationId);
+    }
+
+    [Fact]
     public async Task MigrateAsync_StreamFrontierDoesNotMatchCompiledMigration_FailsBeforeOpeningConnection()
     {
         var plan = BuildPlan(ForbiddenSqlMigration.MigrationId);

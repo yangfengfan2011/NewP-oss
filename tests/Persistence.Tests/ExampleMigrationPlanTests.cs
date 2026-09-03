@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using ICP.Platform.Modules.Example.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Example.Persistence.Descriptors;
@@ -139,8 +137,8 @@ public sealed class ExampleMigrationPlanTests
         Assert.Equal(recordSourceBackfill.GetProperty("contentDigest").GetString(), recordSourceRequired.GetProperty("previousContentDigest").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(
-                typeof(Example_000005_RecordSourceRequired).Assembly.Location))));
+            MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(
+                typeof(Example_000005_RecordSourceRequired).Assembly.Location)));
 
         var foundationPath = Path.Combine(
             repositoryRoot,
@@ -153,7 +151,7 @@ public sealed class ExampleMigrationPlanTests
         var foundationSource = File.ReadAllText(foundationPath);
         Assert.Equal(
             foundation.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(foundationPath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(foundationPath)));
         Assert.Equal(1, Count(foundationSource, "migrationBuilder.CreateTable"));
         Assert.Contains("name: \"ExampleRecord\"", foundationSource, StringComparison.Ordinal);
 
@@ -168,7 +166,7 @@ public sealed class ExampleMigrationPlanTests
         var reviewerUserSource = File.ReadAllText(reviewerUserPath);
         Assert.Equal(
             reviewerUser.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(reviewerUserPath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(reviewerUserPath)));
         Assert.Equal(1, Count(reviewerUserSource, "migrationBuilder.AddColumn"));
         Assert.Contains("ReviewerUserEID", reviewerUserSource, StringComparison.Ordinal);
         Assert.DoesNotContain("defaultValue", reviewerUserSource, StringComparison.Ordinal);
@@ -187,7 +185,7 @@ public sealed class ExampleMigrationPlanTests
         var recordSourceNullableSource = File.ReadAllText(recordSourceNullablePath);
         Assert.Equal(
             recordSourceNullable.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(recordSourceNullablePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(recordSourceNullablePath)));
         Assert.Contains("migrationBuilder.AddColumn", recordSourceNullableSource, StringComparison.Ordinal);
         Assert.Contains("nullable: true", recordSourceNullableSource, StringComparison.Ordinal);
         Assert.DoesNotContain("defaultValue", recordSourceNullableSource, StringComparison.Ordinal);
@@ -203,7 +201,7 @@ public sealed class ExampleMigrationPlanTests
         var recordSourceBackfillSource = File.ReadAllText(recordSourceBackfillPath);
         Assert.Equal(
             recordSourceBackfill.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(recordSourceBackfillPath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(recordSourceBackfillPath)));
         Assert.Contains("migrationBuilder.BackfillRequiredField", recordSourceBackfillSource, StringComparison.Ordinal);
         Assert.Contains("\"Legacy\"", recordSourceBackfillSource, StringComparison.Ordinal);
         Assert.DoesNotContain("migrationBuilder.Sql", recordSourceBackfillSource, StringComparison.Ordinal);
@@ -219,7 +217,7 @@ public sealed class ExampleMigrationPlanTests
         var recordSourceRequiredSource = File.ReadAllText(recordSourceRequiredPath);
         Assert.Equal(
             recordSourceRequired.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(recordSourceRequiredPath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(recordSourceRequiredPath)));
         Assert.Contains("migrationBuilder.AlterColumn", recordSourceRequiredSource, StringComparison.Ordinal);
         Assert.Contains("nullable: false", recordSourceRequiredSource, StringComparison.Ordinal);
         Assert.DoesNotContain("defaultValue", recordSourceRequiredSource, StringComparison.Ordinal);
@@ -251,14 +249,6 @@ public sealed class ExampleMigrationPlanTests
 
         Assert.DoesNotContain("Password=", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("(localdb)", source, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static byte[] ReadCanonicalSourceBytes(string sourcePath)
-    {
-        var source = File.ReadAllText(sourcePath)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
-        return Encoding.UTF8.GetBytes(source);
     }
 
     private static int Count(string source, string value)

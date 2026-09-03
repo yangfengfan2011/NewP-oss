@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -995,7 +994,7 @@ public sealed class PersistencePlanCompilerTests
                 SchemaName = $"np_{moduleId.ToLowerInvariant().Replace('.', '_')}"
             };
             var modelDigest = PersistenceModelDigest.Compute([projected]);
-            var bundleChecksum = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(bundlePath)));
+            var bundleChecksum = MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(bundlePath));
             var migrationId = "20260809000000_partner_assetcatalog_000001_initial_11111111";
             var migrationManifest = new
             {

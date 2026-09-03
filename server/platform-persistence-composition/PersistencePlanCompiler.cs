@@ -15,11 +15,6 @@ namespace ICP.Platform.Persistence.Composition;
 /// </summary>
 public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
 {
-    private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     private static readonly JsonSerializerOptions CanonicalJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -308,6 +303,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             Array.Empty<CompiledMigrationStep>()));
     }
 
+    // 从 Host 冻结输出读取 platform foundation bundle，并按共享 manifest 规则编译平台流。
     private static void AddSqlServerPlatformFoundation(
         string modelDigest,
         List<ModuleMigrationStream> streams,
@@ -323,18 +319,15 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         try
         {
             var assemblyBytes = File.ReadAllBytes(assemblyPath);
-            var manifest = JsonSerializer.Deserialize<MigrationManifest>(
-                File.ReadAllBytes(manifestPath),
-                ManifestJsonOptions)
-                ?? throw new InvalidOperationException("Platform foundation migration manifest is empty.");
-            ValidateManifest(
+            var manifest = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+            var manifestSteps = MigrationManifestIntegrity.Validate(
                 moduleId,
                 PersistenceProvider.SqlServer,
                 manifest,
                 assemblyBytes,
                 manifestPath,
                 modelDigest);
-            var migrations = CompileManifestSteps(manifest);
+            var migrations = CompileManifestSteps(manifestSteps);
             streams.Add(new ModuleMigrationStream(
                 moduleId,
                 PersistenceProvider.SqlServer,
@@ -360,6 +353,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
     }
 
+    // 从已认证模块快照编译一个 migration bundle，失败时保持既有稳定 diagnostic。
     private void CompileBundle(
         CanonicalModulePlanModule module,
         PersistenceProvider provider,
@@ -377,18 +371,15 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
 
         try
         {
-            var manifest = JsonSerializer.Deserialize<MigrationManifest>(
-                manifestArtifact.Bytes.Span,
-                ManifestJsonOptions)
-                ?? throw new InvalidOperationException("Migration manifest is empty.");
-            ValidateManifest(
+            var manifest = MigrationManifestIntegrity.Parse(manifestArtifact.Bytes.Span);
+            var manifestSteps = MigrationManifestIntegrity.Validate(
                 module.ModuleId,
                 provider,
                 manifest,
                 assemblyArtifact.Bytes.Span,
                 manifestArtifact.DisplayPath,
                 modelDigest);
-            var migrations = CompileManifestSteps(manifest);
+            var migrations = CompileManifestSteps(manifestSteps);
             streams.Add(new ModuleMigrationStream(
                 module.ModuleId,
                 provider,
@@ -403,7 +394,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 AssemblyImage = new VerifiedArtifactImage(assemblyArtifact.Bytes.Span)
             });
         }
-        catch (PersistencePlanValidationException exception)
+        catch (MigrationManifestValidationException exception)
         {
             diagnostics.Add(new PersistencePlanDiagnostic(
                 exception.Code,
@@ -423,9 +414,9 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
     }
 
-    private static CompiledMigrationStep[] CompileManifestSteps(MigrationManifest manifest) =>
-        manifest.Migrations
-            .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
+    // 把已校验且已排序的 manifest 节点投射为运行时不可变步骤。
+    private static CompiledMigrationStep[] CompileManifestSteps(IReadOnlyList<MigrationManifestStep> migrations) =>
+        migrations
             .Select(static migration => new CompiledMigrationStep(
                 migration.Sequence,
                 migration.MigrationId,
@@ -435,110 +426,6 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 migration.ToModelDigest,
                 migration.Compatibility))
             .ToArray();
-
-    /// <summary>
-    /// 校验迁移清单的 owner、程序集摘要、线性链与平台支持的迁移阶段标签。
-    /// </summary>
-    private static void ValidateManifest(
-        string moduleId,
-        PersistenceProvider provider,
-        MigrationManifest manifest,
-        ReadOnlySpan<byte> assemblyBytes,
-        string manifestPath,
-        string modelDigest)
-    {
-        if (!string.Equals(manifest.ModuleId, moduleId, StringComparison.Ordinal)
-            || !string.Equals(manifest.Provider, provider.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            throw new PersistencePlanValidationException(
-                "PERSISTENCE_MIGRATION_OWNER_MISMATCH",
-                $"Migration manifest '{manifestPath}' does not match {moduleId}/{provider}.");
-        }
-
-        var checksum = Convert.ToHexStringLower(SHA256.HashData(assemblyBytes));
-        if (!string.Equals(checksum, manifest.BundleChecksum, StringComparison.Ordinal))
-        {
-            throw new PersistencePlanValidationException(
-                "PERSISTENCE_BUNDLE_CHECKSUM_MISMATCH",
-                $"Migration bundle checksum mismatch for '{moduleId}'.");
-        }
-
-        if (!string.Equals(manifest.ModelDigest, modelDigest, StringComparison.Ordinal))
-        {
-            throw new PersistencePlanValidationException(
-                "PERSISTENCE_MODEL_MISMATCH",
-                $"Migration manifest model digest does not match compiled model '{moduleId}'.");
-        }
-
-        var migrations = manifest.Migrations
-            .OrderBy(static migration => migration.Sequence, StringComparer.Ordinal)
-            .ToArray();
-        if (migrations.Length == 0)
-        {
-            throw new PersistencePlanValidationException(
-                "PERSISTENCE_MIGRATION_REQUIRED",
-                $"Migration stream '{moduleId}' is empty.");
-        }
-
-        var duplicateMigrationId = migrations
-            .GroupBy(static migration => migration.MigrationId, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(static group => group.Count() > 1)?.Key;
-        if (duplicateMigrationId is not null)
-        {
-            throw new PersistencePlanValidationException(
-                PersistenceMigrationFailureCodes.MigrationIdConflict,
-                $"Migration id '{duplicateMigrationId}' is repeated in module stream '{moduleId}'.",
-                duplicateMigrationId);
-        }
-
-        var firstMigration = migrations[0];
-        var startsFromZeroDigest = string.Equals(
-            firstMigration.FromModelDigest,
-            new string('0', 64),
-            StringComparison.Ordinal);
-        if (!startsFromZeroDigest)
-        {
-            throw new PersistencePlanValidationException(
-                "PERSISTENCE_MIGRATION_CHAIN_INVALID",
-                $"Migration stream '{moduleId}' must start from the zero model digest.");
-        }
-
-        string? previousDigest = null;
-        for (var index = 0; index < migrations.Length; index++)
-        {
-            var migration = migrations[index];
-            var expectedSequence = (index + 1).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
-            if (!string.Equals(migration.Sequence, expectedSequence, StringComparison.Ordinal)
-                || !string.Equals(migration.PreviousContentDigest, previousDigest, StringComparison.Ordinal)
-                || (index > 0
-                    && !string.Equals(
-                        migration.FromModelDigest,
-                        migrations[index - 1].ToModelDigest,
-                        StringComparison.Ordinal))
-                || !DigestPattern().IsMatch(migration.ContentDigest)
-                || !DigestPattern().IsMatch(migration.FromModelDigest)
-                || !DigestPattern().IsMatch(migration.ToModelDigest)
-                || migration.Compatibility is not (
-                    "safe-expand"
-                    or "data-backfill"
-                    or "contract"
-                    or "backup-restore-only"))
-            {
-                throw new PersistencePlanValidationException(
-                    "PERSISTENCE_MIGRATION_CHAIN_INVALID",
-                    $"Migration stream '{moduleId}' is not linear and immutable at sequence '{migration.Sequence}'.");
-            }
-
-            previousDigest = migration.ContentDigest;
-        }
-
-        if (!string.Equals(migrations[^1].ToModelDigest, modelDigest, StringComparison.Ordinal))
-        {
-            throw new PersistencePlanValidationException(
-                "PERSISTENCE_MODEL_MISMATCH",
-                $"Migration frontier does not target the compiled model digest for '{moduleId}'.");
-        }
-    }
 
     private static ResolvedArtifact? ResolveContainedArtifact(
         CanonicalModulePlanModule module,
@@ -718,40 +605,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
     }
 
-    [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
-    private static partial Regex DigestPattern();
-
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.CultureInvariant)]
     private static partial Regex NonSchemaCharacterPattern();
 
-    private sealed record MigrationManifest(
-        string SchemaVersion,
-        string Provider,
-        string ModuleId,
-        string ModelDigest,
-        string BundleChecksum,
-        IReadOnlyList<MigrationManifestStep> Migrations);
-
-    private sealed record MigrationManifestStep(
-        string Sequence,
-        string MigrationId,
-        string? PreviousContentDigest,
-        string ContentDigest,
-        string FromModelDigest,
-        string ToModelDigest,
-        string Compatibility);
-
-    private sealed class PersistencePlanValidationException : Exception
-    {
-        public PersistencePlanValidationException(string code, string message, string? canonicalKey = null)
-            : base(message)
-        {
-            Code = code;
-            CanonicalKey = canonicalKey;
-        }
-
-        public string Code { get; }
-
-        public string? CanonicalKey { get; }
-    }
 }

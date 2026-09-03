@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using ICP.Platform.Modules.Authentication.Migrations.SqlServer.Migrations;
 using ICP.Platform.Modules.Identity.Migrations.SqlServer.Migrations;
@@ -456,7 +454,8 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal("backup-restore-only", personRevisionRemoval.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location))));
+            MigrationManifestIntegrity.ComputeBundleChecksum(
+                File.ReadAllBytes(typeof(Organization_000001_Foundation).Assembly.Location)));
 
         var foundationSourcePath = Path.Combine(
             repositoryRoot,
@@ -468,31 +467,31 @@ public sealed class IdentityFoundationMigrationTests
             "20260812144235_Organization_000001_Foundation.cs");
         Assert.Equal(
             foundation.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(foundationSourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(foundationSourcePath)));
         var positionSourcePath = Path.Combine(
             Path.GetDirectoryName(foundationSourcePath)!,
             "20260902052903_Organization_000002_GlobalPositionDirectory.cs");
         Assert.Equal(
             positionDirectory.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionSourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(positionSourcePath)));
         var positionReferenceSourcePath = Path.Combine(
             Path.GetDirectoryName(foundationSourcePath)!,
             "20260902063356_Organization_000003_PositionReference.cs");
         Assert.Equal(
             positionReference.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(positionReferenceSourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(positionReferenceSourcePath)));
         var personnelTemporalSourcePath = Path.Combine(
             Path.GetDirectoryName(foundationSourcePath)!,
             "20260902110155_Organization_000004_PersonnelTemporalFields.cs");
         Assert.Equal(
             personnelTemporalFields.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(personnelTemporalSourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(personnelTemporalSourcePath)));
         var personRevisionRemovalSourcePath = Path.Combine(
             Path.GetDirectoryName(foundationSourcePath)!,
             "20260902135016_Organization_000005_RemovePersonRevision.cs");
         Assert.Equal(
             personRevisionRemoval.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(personRevisionRemovalSourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(personRevisionRemovalSourcePath)));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)
@@ -517,11 +516,11 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(root.GetProperty("modelDigest").GetString(), migration.GetProperty("toModelDigest").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(
-                typeof(ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations.PlatformFoundation).Assembly.Location))));
+            MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(
+                typeof(ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations.PlatformFoundation).Assembly.Location)));
         Assert.Equal(
             migration.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(sourcePath)));
     }
 
     private static void AssertManifest(
@@ -546,10 +545,10 @@ public sealed class IdentityFoundationMigrationTests
 
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assemblyPath))));
+            MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(assemblyPath)));
         Assert.Equal(
             migration.GetProperty("contentDigest").GetString(),
-            Convert.ToHexStringLower(SHA256.HashData(ReadCanonicalSourceBytes(sourcePath))));
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(sourcePath)));
     }
 
     private static void AssertPathMap(string repositoryRoot, string moduleId, string expectedPathMap)
@@ -581,14 +580,6 @@ public sealed class IdentityFoundationMigrationTests
             "<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>",
             project,
             StringComparison.Ordinal);
-    }
-
-    private static byte[] ReadCanonicalSourceBytes(string sourcePath)
-    {
-        var source = File.ReadAllText(sourcePath)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
-        return Encoding.UTF8.GetBytes(source);
     }
 
     private static ProviderTransitionFromDescriptor ReadFromDescriptor(MigrationOperation operation)

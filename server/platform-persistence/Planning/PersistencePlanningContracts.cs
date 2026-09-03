@@ -118,6 +118,7 @@ public static class PersistenceMigrationFailureCodes
 {
     public const string AssemblyInvalid = "PERSISTENCE_MIGRATION_ASSEMBLY_INVALID";
     public const string MigrationMissing = "PERSISTENCE_MIGRATION_MISSING";
+    public const string MigrationUndeclared = "PERSISTENCE_MIGRATION_UNDECLARED";
     public const string MigrationIdConflict = "PERSISTENCE_MIGRATION_ID_CONFLICT";
     public const string MigrationLockUnavailable = "PERSISTENCE_MIGRATION_LOCK_UNAVAILABLE";
     public const string NullValuesPresent = "PERSISTENCE_MIGRATION_NULL_VALUES_PRESENT";

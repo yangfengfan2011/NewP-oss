@@ -249,7 +249,7 @@ public static partial class MigrationManifestIntegrity
     }
 
     /// <summary>
-    /// 确认 manifest 声明的每个 migration id 都存在对应的 bundle migration 类型。
+    /// 确认 manifest 与 bundle migration 类型集合精确匹配。
     /// </summary>
     public static void ValidateMigrationTypes(
         IEnumerable<string> declaredMigrationIds,
@@ -258,14 +258,28 @@ public static partial class MigrationManifestIntegrity
         ArgumentNullException.ThrowIfNull(declaredMigrationIds);
         ArgumentNullException.ThrowIfNull(availableMigrationIds);
 
+        var declared = declaredMigrationIds.ToArray();
         var available = availableMigrationIds.ToHashSet(StringComparer.Ordinal);
-        var missingMigrationId = declaredMigrationIds.FirstOrDefault(id => !available.Contains(id));
+        var missingMigrationId = declared.FirstOrDefault(id => !available.Contains(id));
         if (missingMigrationId is not null)
         {
             throw new MigrationManifestValidationException(
                 PersistenceMigrationFailureCodes.MigrationMissing,
                 $"Migration type '{missingMigrationId}' is missing from the bundle.",
                 missingMigrationId);
+        }
+
+        var declaredSet = declared.ToHashSet(StringComparer.Ordinal);
+        var undeclaredMigrationId = available
+            .Where(id => !declaredSet.Contains(id))
+            .Order(StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (undeclaredMigrationId is not null)
+        {
+            throw new MigrationManifestValidationException(
+                PersistenceMigrationFailureCodes.MigrationUndeclared,
+                $"Migration type '{undeclaredMigrationId}' is not declared in the manifest.",
+                undeclaredMigrationId);
         }
     }
 

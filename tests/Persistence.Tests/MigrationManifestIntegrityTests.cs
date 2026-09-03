@@ -95,10 +95,23 @@ public sealed class MigrationManifestIntegrityTests
         var exception = Assert.Throws<MigrationManifestValidationException>(() =>
             MigrationManifestIntegrity.ValidateMigrationTypes(
                 ["migration-one", "migration-two"],
-                ["migration-one"]));
+                ["migration-one", "migration-three"]));
 
         Assert.Equal(PersistenceMigrationFailureCodes.MigrationMissing, exception.Code);
         Assert.Equal("migration-two", exception.CanonicalKey);
+    }
+
+    [Fact]
+    public void ValidateMigrationTypes_WhenBundleContainsUndeclaredType_ReportsMigrationId()
+    {
+        var exception = Assert.Throws<MigrationManifestValidationException>(() =>
+            MigrationManifestIntegrity.ValidateMigrationTypes(
+                ["migration-one"],
+                ["migration-z", "migration-one", "migration-a"]));
+
+        Assert.Equal("PERSISTENCE_MIGRATION_UNDECLARED", exception.Code);
+        Assert.Equal("migration-a", exception.CanonicalKey);
+        Assert.Equal("Migration type 'migration-a' is not declared in the manifest.", exception.Message);
     }
 
     [Fact]

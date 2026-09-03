@@ -5,6 +5,7 @@ using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
+using ICP.Platform.Persistence.ProviderTargets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -78,7 +79,7 @@ public sealed class PersistenceMigrationRunnerTests
     {
         const string missingMigrationId = "20990101000000_Missing";
         var plan = BuildPlan(missingMigrationId);
-        var runner = CreateRunner(plan, out var provider, out var scope);
+        var runner = CreateRunner(plan, out var provider, out var scope, requireExactMigrationTypeSet: true);
         await using var providerScope = provider;
         await using var migrationScope = scope;
 
@@ -87,6 +88,21 @@ public sealed class PersistenceMigrationRunnerTests
         Assert.Equal(PersistenceMigrationFailureCodes.MigrationMissing, exception.FailureCode);
         Assert.Equal("Partner.AssetCatalog", exception.ModuleId);
         Assert.Equal(missingMigrationId, exception.MigrationId);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_BundleContainsUndeclaredMigrationType_FailsBeforeOpeningConnection()
+    {
+        var plan = BuildPlan(ForbiddenSqlMigration.MigrationId);
+        var runner = CreateRunner(plan, out var provider, out var scope, requireExactMigrationTypeSet: true);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
+
+        var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(() => runner.MigrateAsync());
+
+        Assert.Equal(PersistenceMigrationFailureCodes.MigrationUndeclared, exception.FailureCode);
+        Assert.Equal("Partner.AssetCatalog", exception.ModuleId);
+        Assert.Equal(IncludedColumnsIndexMigration.MigrationId, exception.MigrationId);
     }
 
     [Fact]
@@ -174,23 +190,9 @@ public sealed class PersistenceMigrationRunnerTests
         string migrationId)
     {
         var plan = BuildPlan(migrationId);
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Persistence:Adapter"] = "EfCore",
-                ["Persistence:Provider"] = "SqlServer",
-                ["ConnectionStrings:SqlServer"] =
-                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
-            })
-            .Build();
-        var services = new ServiceCollection();
-        services.AddEfCorePersistence(
-            configuration,
-            plan,
-            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
-        await using var provider = services.BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var runner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
 
         var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
             () => runner.MigrateAsync());
@@ -278,23 +280,9 @@ public sealed class PersistenceMigrationRunnerTests
     {
         var migrationId = FilteredIndexMigration.MigrationId;
         var plan = BuildPlan(migrationId);
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Persistence:Adapter"] = "EfCore",
-                ["Persistence:Provider"] = "SqlServer",
-                ["ConnectionStrings:SqlServer"] =
-                    "Server=invalid.invalid,1;Database=never-connect;User Id=invalid;Password=REDACTED_FOR_OPEN_SOURCE;Connect Timeout=1;TrustServerCertificate=True;"
-            })
-            .Build();
-        var services = new ServiceCollection();
-        services.AddEfCorePersistence(
-            configuration,
-            plan,
-            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
-        await using var provider = services.BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var runner = scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
+        var runner = CreateRunner(plan, out var provider, out var scope);
+        await using var providerScope = provider;
+        await using var migrationScope = scope;
 
         var exception = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
             () => runner.MigrateAsync());
@@ -461,7 +449,8 @@ public sealed class PersistenceMigrationRunnerTests
     private static IPersistenceMigrationRunner CreateRunner(
         CompiledPersistencePlan plan,
         out ServiceProvider provider,
-        out AsyncServiceScope scope)
+        out AsyncServiceScope scope,
+        bool requireExactMigrationTypeSet = false)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -479,7 +468,12 @@ public sealed class PersistenceMigrationRunnerTests
             WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"));
         provider = services.BuildServiceProvider();
         scope = provider.CreateAsyncScope();
-        return scope.ServiceProvider.GetRequiredService<IPersistenceMigrationRunner>();
+        return new PersistenceMigrationRunner(
+            scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
+            plan,
+            scope.ServiceProvider.GetServices<IPersistenceMigrationGuard>(),
+            scope.ServiceProvider.GetRequiredService<IProviderTargetSource>(),
+            requireExactMigrationTypeSet);
     }
 
     private static IReadOnlyList<CompiledMigrationHistoryEntry> ReadCanonicalHistory(
@@ -502,7 +496,7 @@ public sealed class PersistenceMigrationRunnerTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        return new ModuleMigrationExecutor(dbContext, plan).ValidateBeforeConnection();
+        return new ModuleMigrationExecutor(dbContext, plan, requireExactMigrationTypeSet: false).ValidateBeforeConnection();
     }
 
     private static CompiledPersistencePlan BuildAppendableModulePlan(bool includeSecondMigration)

@@ -29,7 +29,8 @@ namespace ICP.Platform.Persistence.EfCore;
 /// </summary>
 internal sealed class ModuleMigrationExecutor(
     EfPlatformDbContext dbContext,
-    CompiledPersistencePlan plan)
+    CompiledPersistencePlan plan,
+    bool requireExactMigrationTypeSet = true)
 {
     private const string SqlServerProviderName = "Microsoft.EntityFrameworkCore.SqlServer";
     private static readonly ConditionalWeakTable<
@@ -786,7 +787,7 @@ internal sealed class ModuleMigrationExecutor(
         command.Parameters.Add(parameter);
     }
 
-    // 在打开数据库前验证计划边界、bundle migration 类型与 provider 操作。
+    // 在打开数据库前验证计划边界、bundle migration 类型与 provider 操作；生产路径要求类型集合精确匹配。
     private ValidatedMigrationStream ValidateStream(
         ModuleMigrationStream stream,
         VerifiedMigrationAssemblyLoadContext assemblyContext)
@@ -847,9 +848,13 @@ internal sealed class ModuleMigrationExecutor(
 
         try
         {
-            MigrationManifestIntegrity.ValidateMigrationTypes(
-                stream.Migrations.Select(static migration => migration.MigrationId),
-                migrationTypes.Keys);
+            var declaredMigrationIds = stream.Migrations
+                .Select(static migration => migration.MigrationId)
+                .ToArray();
+            var availableMigrationIds = requireExactMigrationTypeSet
+                ? migrationTypes.Keys
+                : migrationTypes.Keys.Where(declaredMigrationIds.Contains);
+            MigrationManifestIntegrity.ValidateMigrationTypes(declaredMigrationIds, availableMigrationIds);
         }
         catch (MigrationManifestValidationException exception)
         {

@@ -13,16 +13,28 @@ public sealed class PersistenceMigrationRunner : IPersistenceMigrationRunner, IP
     private readonly ModuleMigrationExecutor _moduleMigrationExecutor;
     private readonly SqlServerProviderTargetConsistencyChecker _providerTargetChecker;
 
+    // 生产 migration runner 始终要求 bundle type 集合与编译计划精确匹配。
     public PersistenceMigrationRunner(
         EfPlatformDbContext dbContext,
         CompiledPersistencePlan plan,
         IEnumerable<IPersistenceMigrationGuard> guards,
         IProviderTargetSource providerTargetSource)
+        : this(dbContext, plan, guards, providerTargetSource, requireExactMigrationTypeSet: true)
+    {
+    }
+
+    // 合并式测试 bundle 可关闭额外类型拒绝，但生产公开构造始终要求 manifest 与 bundle 精确匹配。
+    internal PersistenceMigrationRunner(
+        EfPlatformDbContext dbContext,
+        CompiledPersistencePlan plan,
+        IEnumerable<IPersistenceMigrationGuard> guards,
+        IProviderTargetSource providerTargetSource,
+        bool requireExactMigrationTypeSet)
     {
         _dbContext = dbContext;
         Plan = plan;
         _guards = guards.ToArray();
-        _moduleMigrationExecutor = new ModuleMigrationExecutor(dbContext, plan);
+        _moduleMigrationExecutor = new ModuleMigrationExecutor(dbContext, plan, requireExactMigrationTypeSet);
         _providerTargetChecker = new SqlServerProviderTargetConsistencyChecker(
             dbContext,
             providerTargetSource);

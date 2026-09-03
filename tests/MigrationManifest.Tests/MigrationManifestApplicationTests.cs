@@ -164,6 +164,7 @@ public sealed class MigrationManifestApplicationTests
     [InlineData("host-dll", "MIGRATION_MANIFEST_HOST_COPY_DRIFT")]
     [InlineData("host-manifest", "MIGRATION_MANIFEST_HOST_COPY_DRIFT")]
     [InlineData("type", "PERSISTENCE_MIGRATION_MISSING")]
+    [InlineData("undeclared-type", "PERSISTENCE_MIGRATION_UNDECLARED")]
     public void CheckAll_Drift_ReturnsStableLocatedFailure(string mutation, string expectedCode)
     {
         using var fixture = MigrationManifestFixture.Create(finalized: true);
@@ -183,6 +184,7 @@ public sealed class MigrationManifestApplicationTests
             case "host-dll": AppendByte(fixture.HostBundlePath); break;
             case "host-manifest": File.AppendAllText(fixture.HostManifestPath, " "); break;
             case "type": fixture.ReplaceTailWithMissingType(); break;
+            case "undeclared-type": fixture.RemoveTailFromManifest(); break;
         }
 
         var exception = Assert.Throws<MigrationManifestToolException>(() =>
@@ -350,6 +352,11 @@ internal sealed class MigrationManifestFixture : IDisposable
             ]
         }, synchronizeHost: true);
     }
+
+    internal void RemoveTailFromManifest() =>
+        RewriteManifest(
+            manifest => manifest with { Migrations = [manifest.Migrations[0], manifest.Migrations[1]] },
+            synchronizeHost: true);
 
     private void Initialize()
     {

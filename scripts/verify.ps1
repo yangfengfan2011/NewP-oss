@@ -359,6 +359,12 @@ try {
             "build", "ICP-Platform.sln", "--configuration", "Release", "--no-restore")
     }
 
+    $currentStage = "migration-manifest-preflight"
+    Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
+        "run", "--project", "server/tools/migration-manifest/MigrationManifest.csproj",
+        "--configuration", "Release", "--no-build", "--no-restore", "--",
+        "check", "--all", "--no-build", "--repository-root", $repoRoot)
+
     $currentStage = "model-dto-sync-check"
     Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
         "run", "--project", "server/tools/model-dto-sync/ModelDtoSync.csproj",

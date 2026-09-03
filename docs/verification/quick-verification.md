@@ -15,6 +15,27 @@ dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj --no-rest
 dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 ```
 
+### Migration manifest authoring 与只读检查
+
+功能 migration child 在自己的真实模块范围内显式完成 `finalize` 与定向 `check`。`finalize` 是唯一允许写回 manifest 派生字段的 authoring 动作；普通 build、测试发现和 `check` 都不得代替或隐式触发它。先生成确定性的 Release migration DLL，再 finalize 新尾节点，随后刷新 Host Release 副本并执行只读检查：
+
+```powershell
+dotnet build .\server\modules\<Module>\Migrations.SqlServer\<Module>.SqlServerMigrations.csproj -c Release
+dotnet run --project .\server\tools\migration-manifest\MigrationManifest.csproj -c Release -- finalize --module <Module> --provider SqlServer --migration <MigrationId> --compatibility <Compatibility>
+dotnet build .\apps\host-api\HostApi.csproj -c Release
+dotnet run --project .\server\tools\migration-manifest\MigrationManifest.csproj -c Release --no-build --no-restore -- check --all --no-build
+```
+
+新尾节点的纵向重放使用真实业务模块的隔离副本，不修改正式 migration 历史：隔离副本保留已发布的正式 manifest 前缀，并且 Release bundle 中恰好比该前缀多一个真实尾 migration。对隔离根使用 `--repository-root <隔离副本>` 运行两次相同的 `finalize`；第一次应报告 `finalized`，第二次应报告 `already finalized`，两次后的 manifest SHA-256 必须一致。同步隔离 Host Release 副本后，再运行同一工具的 `check --all --no-build --repository-root <隔离副本>`，让正式 `PersistencePlanCompiler` 一起参与检查。
+
+仓库用 Organization 当前真实尾节点保存了这条隔离重放入口。它要求上面的 Release 资产已经存在，测试会动态选择当前尾节点、只改临时副本，并在详细输出中写出单行 JSON 证据：
+
+```powershell
+dotnet test .\tests\MigrationManifest.Tests\MigrationManifest.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~MigrationManifestVerticalReplayTests --logger "console;verbosity=detailed"
+```
+
+child 的可复跑证据固定记录以下字段，不把一次性临时目录或结果另建成长期事实源：候选 commit，module/provider/migration/compatibility，隔离副本来源，migration 与 Host Release build 命令及 exit code，两次 finalize 的输出和 manifest SHA-256，check 的各 provider 汇总、bundle 数与 exit code，以及正式工作树、manifest、构建资产和数据库在重放前后未改变的对照。功能 child 只运行这组定向证据；全部 child 与审查修复完成后，父 Issue 才在冻结候选上运行一次下文的仓库完整验证。
+
 ### Acceptance Gate-only 所有权
 
 父 Issue 需要新增或改变某个 Acceptance Gate 时，child 划分必须指定恰好一个“验收资产所有者”，并在该 child 的验收标准中写清它所拥有的用户旅程。该 child 负责交付第一版可运行的 runner、fixture 与结构测试；定向测试通过并形成精确提交后，在候选不再编辑的条件下串行执行：
@@ -35,7 +56,7 @@ Gate-only 通过并记录提交、命令、结果与耗时后，该 child 才能
 
 ## 全量验证
 
-标准入口依次执行静态门禁、一次 Release 构建、`--no-build` 测试、前端测试与构建：
+标准入口依次执行静态门禁、一次 Release 构建、一次 `migration-manifest check --all --no-build` preflight、`--no-build` 测试、前端测试与构建。preflight 复用本轮 Release 资产；失败会保留 CLI 原始诊断并立即截断后续测试与 Acceptance：
 
 ```powershell
 .\scripts\verify.ps1

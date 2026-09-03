@@ -191,24 +191,101 @@ public sealed class MigrationManifestApplicationTests
         Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
     }
 
+    [Theory]
+    [InlineData(32)]
+    [InlineData(33)]
+    [InlineData(1175)]
+    public void Finalize_TransientAtomicReplaceFailure_RetriesOnceThenSucceeds(int win32Error)
+    {
+        using var fixture = MigrationManifestFixture.Create();
+        var attempts = 0;
+        var delays = new List<TimeSpan>();
+        var application = new MigrationManifestApplication(
+            fixture.Root,
+            replaceFile: (temporaryPath, manifestPath) =>
+            {
+                attempts++;
+                if (attempts == 1)
+                {
+                    throw CreateWin32IOException(win32Error);
+                }
+
+                File.Replace(temporaryPath, manifestPath, destinationBackupFileName: null);
+            },
+            retryDelay: delays.Add);
+
+        var result = application.Finalize(
+            fixture.ModuleId,
+            "SqlServer",
+            MigrationManifestFixture.TailMigrationId,
+            "safe-expand");
+
+        Assert.True(result.Changed);
+        Assert.InRange(attempts, 2, 4);
+        Assert.Equal(attempts - 1, delays.Count);
+        Assert.Equal("000003", MigrationManifestIntegrity.Parse(File.ReadAllBytes(fixture.ManifestPath)).Migrations[^1].Sequence);
+    }
+
     [Fact]
-    public void Finalize_AtomicReplaceFailure_PreservesOriginalManifest()
+    public void Finalize_TransientAtomicReplaceFailure_StopsAfterFourAttemptsAndPreservesOriginalManifest()
     {
         using var fixture = MigrationManifestFixture.Create();
         var before = File.ReadAllBytes(fixture.ManifestPath);
+        var failure = CreateWin32IOException(1175);
+        var attempts = 0;
         var application = new MigrationManifestApplication(
             fixture.Root,
-            replaceFile: static (_, _) => throw new IOException("injected replace failure"));
+            replaceFile: (_, _) =>
+            {
+                attempts++;
+                throw failure;
+            },
+            retryDelay: static _ => { });
 
-        Assert.Throws<IOException>(() => application.Finalize(
+        var thrown = Assert.Throws<IOException>(() => application.Finalize(
             fixture.ModuleId,
             "SqlServer",
             MigrationManifestFixture.TailMigrationId,
             "safe-expand"));
 
+        Assert.Same(failure, thrown);
+        Assert.Equal(4, attempts);
         Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(fixture.ManifestPath)!, ".migration-manifest-*.tmp"));
     }
+
+    [Fact]
+    public void Finalize_NonTransientAtomicReplaceFailure_DoesNotRetryAndPreservesOriginalManifest()
+    {
+        using var fixture = MigrationManifestFixture.Create();
+        var before = File.ReadAllBytes(fixture.ManifestPath);
+        var failure = CreateWin32IOException(1176);
+        var attempts = 0;
+        var application = new MigrationManifestApplication(
+            fixture.Root,
+            replaceFile: (_, _) =>
+            {
+                attempts++;
+                throw failure;
+            },
+            retryDelay: static _ => throw new InvalidOperationException("non-transient failures must not delay"));
+
+        var thrown = Assert.Throws<IOException>(() => application.Finalize(
+            fixture.ModuleId,
+            "SqlServer",
+            MigrationManifestFixture.TailMigrationId,
+            "safe-expand"));
+
+        Assert.Same(failure, thrown);
+        Assert.Equal(1, attempts);
+        Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(fixture.ManifestPath)!, ".migration-manifest-*.tmp"));
+    }
+
+    private static IOException CreateWin32IOException(int errorCode) =>
+        new(
+            $"injected Win32 replace failure {errorCode}",
+            unchecked((int)(0x80070000u | (uint)errorCode)));
 
     [Fact]
     public void Finalize_ExistingTailRejectsCompatibilityRewrite()

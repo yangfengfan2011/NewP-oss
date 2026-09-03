@@ -54,6 +54,13 @@ public sealed record MigrationManifestCheckResult(
 /// </summary>
 public sealed class MigrationManifestApplication
 {
+    private static readonly TimeSpan[] AtomicReplaceRetryDelays =
+    [
+        TimeSpan.FromMilliseconds(20),
+        TimeSpan.FromMilliseconds(50),
+        TimeSpan.FromMilliseconds(100)
+    ];
+
     private static readonly string[] SupportedCompatibility =
     [
         "safe-expand",
@@ -64,17 +71,20 @@ public sealed class MigrationManifestApplication
 
     private readonly string _repositoryRoot;
     private readonly Action<string, string> _replaceFile;
+    private readonly Action<TimeSpan> _retryDelay;
 
     /// <summary>
     /// 在给定仓库根上创建工具；默认使用同目录临时文件原子替换 manifest。
     /// </summary>
     public MigrationManifestApplication(
         string repositoryRoot,
-        Action<string, string>? replaceFile = null)
+        Action<string, string>? replaceFile = null,
+        Action<TimeSpan>? retryDelay = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         _repositoryRoot = Path.GetFullPath(repositoryRoot);
         _replaceFile = replaceFile ?? ReplaceFileAtomically;
+        _retryDelay = retryDelay ?? Thread.Sleep;
     }
 
     /// <summary>
@@ -905,7 +915,7 @@ public sealed class MigrationManifestApplication
         try
         {
             File.WriteAllBytes(temporaryPath, bytes);
-            _replaceFile(temporaryPath, manifestPath);
+            ReplaceManifestWithRetry(temporaryPath, manifestPath);
         }
         finally
         {
@@ -914,6 +924,39 @@ public sealed class MigrationManifestApplication
                 File.Delete(temporaryPath);
             }
         }
+    }
+
+    // Windows 文件扫描器或并行 reader 可能短暂阻止 replace；只在两侧文件仍完整时重试明确的共享/锁/删除冲突。
+    private void ReplaceManifestWithRetry(string temporaryPath, string manifestPath)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                _replaceFile(temporaryPath, manifestPath);
+                return;
+            }
+            catch (IOException exception) when (
+                attempt < AtomicReplaceRetryDelays.Length
+                && IsTransientReplaceFailure(exception)
+                && File.Exists(temporaryPath)
+                && File.Exists(manifestPath))
+            {
+                _retryDelay(AtomicReplaceRetryDelays[attempt]);
+            }
+        }
+    }
+
+    // HRESULT_FROM_WIN32 白名单：sharing violation、lock violation，以及本机重复观测到的 unable-to-remove-replaced。
+    private static bool IsTransientReplaceFailure(IOException exception)
+    {
+        var hresult = unchecked((uint)exception.HResult);
+        if ((hresult & 0xFFFF0000u) != 0x80070000u)
+        {
+            return false;
+        }
+
+        return (hresult & 0xFFFFu) is 32u or 33u or 1175u;
     }
 
     // File.Replace 在同一 volume 内提供替换语义，避免 delete/create 暴露半写窗口。

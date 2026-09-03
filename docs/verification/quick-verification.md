@@ -36,7 +36,7 @@ dotnet run --project .\server\tools\migration-manifest\MigrationManifest.csproj 
 dotnet test .\tests\MigrationManifest.Tests\MigrationManifest.Tests.csproj -c Release --no-build --no-restore --filter FullyQualifiedName~MigrationManifestVerticalReplayTests.OrganizationTail --logger "console;verbosity=detailed"
 ```
 
-该入口在隔离 Git repo 中同时保留 staged 与 unstaged 修改；check 前后比较 HEAD、index tree、porcelain v2 状态、全部 tracked worktree 内容，以及 authoring manifest、migration Release DLL、Host manifest/DLL 的 SHA-256。数据库状态由单独的只读 observer 证明，避免把“没有配置 SQL Server”误报为通过。启用后只查询 master 的 `sys.databases`，并比较 check 前后的 catalog 状态摘要：
+该入口在隔离 Git repo 中同时保留 staged 与 unstaged 修改；check 前后比较 HEAD、index tree、porcelain v2 状态、全部 tracked worktree 内容，以及 authoring manifest、migration Release DLL、Host manifest/DLL 的 SHA-256。数据库状态由单独的只读 observer 证明，避免把“没有配置 SQL Server”误报为通过。启用后 observer 在一次测试中保持 master 与全部可访问 ONLINE user database 的连接，逐库窄读所有 `__NewPMigrationHistory` 表的规范列并计算内容摘要，再从 `sys.dm_db_log_stats(database_id).log_end_lsn` 读取每库日志前沿；它不扫描业务表。check 前后的数据库集合、日志前沿、history 表数/行数/内容摘要必须完全相等：
 
 ```powershell
 $env:NEWP_RUN_MIGRATION_MANIFEST_DB_READONLY = "1"
@@ -48,9 +48,9 @@ finally {
 }
 ```
 
-observer 按 Acceptance 相同顺序读取 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和 `apps/host-api/appsettings.Development.json:ConnectionStrings:SqlServer`。环境门禁未开启时 xUnit 明确记为 skipped；已开启但连接缺失、无效或不可达时测试明确失败，不能降级成绿色结果。
+observer 按 Acceptance 相同顺序读取 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和 `apps/host-api/appsettings.Development.json:ConnectionStrings:SqlServer`。环境门禁未开启时 xUnit 明确记为 skipped；已开启但连接缺失、无效或不可达，SQL Server 版本或权限不支持 `sys.dm_db_log_stats`，任一 ONLINE user database 不可访问，或任一 history 表无法完整读取时，测试都 fail closed，不能退回 catalog-only 快照形成绿色结果。`DatabaseSnapshot_WhenFixtureCommitsBusinessAndHistoryWrites_Changes` 另用一次性数据库把夹具写入与被测 `check` 分开：提交普通业务行或 schema 变更时日志前沿必须变化，提交 history 行时日志前沿与 history 内容摘要都必须变化；测试结束后删除该精确命名的夹具数据库。
 
-child 的可复跑证据固定记录以下字段，不把一次性临时目录或结果另建成长期事实源：候选 commit，module/provider/migration/compatibility，隔离副本来源，migration 与 Host Release build 命令及 exit code，两次 finalize 的输出和 manifest SHA-256，check 的各 provider 汇总、bundle 数与 exit code，Git HEAD/index/status/tracked-content 摘要，manifest/Release 资产摘要，以及只读数据库 observer 的连接来源、catalog 数与前后状态摘要。功能 child 只运行这组定向证据；全部 child 与审查修复完成后，父 Issue 才在冻结候选上运行一次下文的仓库完整验证。
+child 的可复跑证据固定记录以下字段，不把一次性临时目录或结果另建成长期事实源：候选 commit，module/provider/migration/compatibility，隔离副本来源，migration 与 Host Release build 命令及 exit code，两次 finalize 的输出和 manifest SHA-256，check 的各 provider 汇总、bundle 数与 exit code，Git HEAD/index/status/tracked-content 摘要，manifest/Release 资产摘要，以及只读数据库 observer 的连接来源、数据库数、日志前沿摘要、history 表数/行数/内容摘要。功能 child 只运行这组定向证据；全部 child 与审查修复完成后，父 Issue 才在冻结候选上运行一次下文的仓库完整验证。
 
 ### Acceptance Gate-only 所有权
 

@@ -121,9 +121,10 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         Assert.Equal(before, after);
         _output.WriteLine(JsonSerializer.Serialize(new
         {
-            databaseProbe = "sys.dm_db_log_stats plus __NewPMigrationHistory content",
+            databaseProbe = "sys.databases metadata plus sys.dm_db_log_stats plus __NewPMigrationHistory content",
             connectionSource = observerConfiguration.Source,
             databaseCount = after.DatabaseCount,
+            databaseMetadataSha256 = after.DatabaseMetadataSha256,
             logFrontierSha256 = after.LogFrontierSha256,
             historyTableCount = after.HistoryTableCount,
             historyRowCount = after.HistoryRowCount,
@@ -135,25 +136,38 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
 
     [EnvironmentGatedFact(
         DatabaseEvidenceEnvironmentVariable,
-        "SQL Server 只读快照必须感知夹具提交的业务与 migration history 写入")]
+        "SQL Server 只读快照必须感知夹具提交的 metadata、schema、data 与 migration history 写入")]
     [Trait("Category", "SqlServerReadOnlyEvidence")]
-    public async Task DatabaseSnapshot_WhenFixtureCommitsBusinessAndHistoryWrites_Changes()
+    public async Task DatabaseSnapshot_WhenFixtureCommitsMetadataSchemaDataAndHistoryWrites_Changes()
     {
         var repositoryRoot = FindRepositoryRoot();
         InitializeIsolatedOrganizationRepository(repositoryRoot);
         var observerConfiguration = ResolveSqlServerObserver(repositoryRoot);
         var catalog = $"NewPMigrationManifestEvidence_{Guid.NewGuid():N}";
         await CreateEvidenceCatalogAsync(observerConfiguration.ConnectionString, catalog);
+        int? originalCompatibilityLevel = null;
         try
         {
+            originalCompatibilityLevel = await ReadEvidenceCatalogCompatibilityLevelAsync(
+                observerConfiguration.ConnectionString,
+                catalog);
+            var alternateCompatibilityLevel = SelectAlternateCompatibilityLevel(originalCompatibilityLevel.Value);
             await using var observer = await SqlServerDatabaseObserver.OpenAsync(observerConfiguration.ConnectionString);
-            var beforeBusinessWrite = await observer.CaptureAsync();
+            var beforeMetadataWrite = await observer.CaptureAsync();
+            _ = new MigrationManifestApplication(_fixtureRoot).CheckAll(noBuild: true);
+            await SetEvidenceCatalogCompatibilityLevelAsync(
+                observerConfiguration.ConnectionString,
+                catalog,
+                alternateCompatibilityLevel);
+            var afterMetadataWrite = await observer.CaptureAsync();
+            Assert.NotEqual(beforeMetadataWrite.DatabaseMetadataSha256, afterMetadataWrite.DatabaseMetadataSha256);
+
             _ = new MigrationManifestApplication(_fixtureRoot).CheckAll(noBuild: true);
             await InjectBusinessWriteAsync(observerConfiguration.ConnectionString, catalog);
             var afterBusinessWrite = await observer.CaptureAsync();
-            Assert.NotEqual(beforeBusinessWrite, afterBusinessWrite);
-            Assert.NotEqual(beforeBusinessWrite.LogFrontierSha256, afterBusinessWrite.LogFrontierSha256);
-            Assert.Equal(beforeBusinessWrite.HistoryContentSha256, afterBusinessWrite.HistoryContentSha256);
+            Assert.NotEqual(afterMetadataWrite, afterBusinessWrite);
+            Assert.NotEqual(afterMetadataWrite.LogFrontierSha256, afterBusinessWrite.LogFrontierSha256);
+            Assert.Equal(afterMetadataWrite.HistoryContentSha256, afterBusinessWrite.HistoryContentSha256);
 
             _ = new MigrationManifestApplication(_fixtureRoot).CheckAll(noBuild: true);
             await InjectSchemaWriteAsync(observerConfiguration.ConnectionString, catalog);
@@ -169,21 +183,44 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
             Assert.NotEqual(afterSchemaWrite.LogFrontierSha256, afterHistoryWrite.LogFrontierSha256);
             Assert.NotEqual(afterSchemaWrite.HistoryContentSha256, afterHistoryWrite.HistoryContentSha256);
             Assert.Equal(afterSchemaWrite.HistoryRowCount + 1, afterHistoryWrite.HistoryRowCount);
+            await SetEvidenceCatalogCompatibilityLevelAsync(
+                observerConfiguration.ConnectionString,
+                catalog,
+                originalCompatibilityLevel.Value);
+            var afterMetadataRestore = await observer.CaptureAsync();
+            Assert.Equal(beforeMetadataWrite.DatabaseMetadataSha256, afterMetadataRestore.DatabaseMetadataSha256);
             _output.WriteLine(JsonSerializer.Serialize(new
             {
                 databaseProbe = "negative sensitivity",
+                compatibilityLevelBefore = originalCompatibilityLevel,
+                compatibilityLevelChanged = alternateCompatibilityLevel,
+                metadataWriteChangedMetadata = true,
                 businessWriteChangedLogFrontier = true,
                 businessWriteChangedHistory = false,
                 schemaWriteChangedLogFrontier = true,
                 schemaWriteChangedHistory = false,
                 historyWriteChangedLogFrontier = true,
-                historyWriteChangedHistory = true
+                historyWriteChangedHistory = true,
+                metadataRestored = true
             }));
         }
         finally
         {
             SqlConnection.ClearAllPools();
-            await DropEvidenceCatalogAsync(observerConfiguration.ConnectionString, catalog);
+            try
+            {
+                if (originalCompatibilityLevel.HasValue)
+                {
+                    await SetEvidenceCatalogCompatibilityLevelAsync(
+                        observerConfiguration.ConnectionString,
+                        catalog,
+                        originalCompatibilityLevel.Value);
+                }
+            }
+            finally
+            {
+                await DropEvidenceCatalogAsync(observerConfiguration.ConnectionString, catalog);
+            }
         }
     }
 
@@ -365,9 +402,8 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
                 $"did not match log frontier ids [{string.Join(",", actualDatabases.Select(static database => database.Id))}].");
         }
 
-        return expectedDatabases.Zip(
-                actualDatabases,
-                static (database, log) => $"{database.Metadata}\u001f{log.LogEndLsn}")
+        return actualDatabases
+            .Select(static database => $"{database.Id}\u001f{database.Name}\u001f{database.LogEndLsn}")
             .ToArray();
     }
 
@@ -485,6 +521,43 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
             adminConnectionString,
             catalog,
             "INSERT INTO [dbo].[EvidenceBusiness] ([Id], [Value]) VALUES (1, N'committed');");
+    }
+
+    private static async Task<int> ReadEvidenceCatalogCompatibilityLevelAsync(
+        string adminConnectionString,
+        string catalog)
+    {
+        ValidateEvidenceCatalog(catalog);
+        await using var connection = new SqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT [compatibility_level] FROM sys.databases WHERE [name] = @catalog;";
+        command.Parameters.AddWithValue("@catalog", catalog);
+        var value = await command.ExecuteScalarAsync();
+        return value is byte compatibilityLevel
+            ? compatibilityLevel
+            : throw new InvalidOperationException("Evidence catalog compatibility level was unavailable.");
+    }
+
+    private static int SelectAlternateCompatibilityLevel(int currentCompatibilityLevel) =>
+        currentCompatibilityLevel == 100 ? 110 : Math.Max(100, currentCompatibilityLevel - 10);
+
+    private static async Task SetEvidenceCatalogCompatibilityLevelAsync(
+        string adminConnectionString,
+        string catalog,
+        int compatibilityLevel)
+    {
+        ValidateEvidenceCatalog(catalog);
+        if (compatibilityLevel is < 100 or > 170 || compatibilityLevel % 10 != 0)
+        {
+            throw new InvalidOperationException("Unsafe evidence compatibility level.");
+        }
+
+        await using var connection = new SqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"ALTER DATABASE [{catalog}] SET COMPATIBILITY_LEVEL = {compatibilityLevel};";
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task InjectSchemaWriteAsync(string adminConnectionString, string catalog)
@@ -684,6 +757,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
 
     private sealed record DatabaseSnapshot(
         int DatabaseCount,
+        string DatabaseMetadataSha256,
         string LogFrontierSha256,
         string LogFrontierEvidence,
         int HistoryTableCount,
@@ -693,7 +767,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     private sealed class SqlServerDatabaseObserver : IAsyncDisposable
     {
         private readonly SqlConnection _masterConnection;
-        private readonly IReadOnlyList<ObservedDatabase> _databases;
+        private readonly IReadOnlyList<ObservedDatabase> _openedDatabases;
         private readonly IReadOnlyDictionary<int, SqlConnection> _databaseConnections;
 
         private SqlServerDatabaseObserver(
@@ -702,7 +776,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
             IReadOnlyDictionary<int, SqlConnection> databaseConnections)
         {
             _masterConnection = masterConnection;
-            _databases = databases;
+            _openedDatabases = databases;
             _databaseConnections = databaseConnections;
         }
 
@@ -752,10 +826,19 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         {
             try
             {
+                var databases = await ReadObservedDatabasesAsync(_masterConnection);
+                if (!_openedDatabases.Select(static database => (database.Id, database.Name))
+                        .SequenceEqual(databases.Select(static database => (database.Id, database.Name))))
+                {
+                    throw new InvalidOperationException(
+                        $"MIGRATION_MANIFEST_DB_SNAPSHOT_UNSTABLE: opened user database ids [{string.Join(",", _openedDatabases.Select(static database => database.Id))}] " +
+                        $"did not match current user database ids [{string.Join(",", databases.Select(static database => database.Id))}].");
+                }
+
                 var historyFacts = new List<string>();
                 var historyTableCount = 0;
                 long historyRowCount = 0;
-                foreach (var database in _databases)
+                foreach (var database in databases)
                 {
                     var history = await CaptureMigrationHistoryAsync(_databaseConnections[database.Id], database);
                     historyTableCount += history.TableCount;
@@ -763,14 +846,15 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
                     historyFacts.AddRange(history.Facts);
                 }
 
-                var logFrontiers = await CaptureLogFrontiersAsync(_masterConnection, _databases);
+                var logFrontiers = await CaptureLogFrontiersAsync(_masterConnection, databases);
                 var logFrontierEvidence = string.Join(
                     ",",
-                    _databases.Zip(
+                    databases.Zip(
                         logFrontiers,
                         static (database, frontier) => $"{database.Id}:{ComputeSha256([frontier])}"));
                 return new DatabaseSnapshot(
-                    _databases.Count,
+                    databases.Count,
+                    ComputeSha256(databases.Select(static database => database.Metadata)),
                     ComputeSha256(logFrontiers),
                     logFrontierEvidence,
                     historyTableCount,

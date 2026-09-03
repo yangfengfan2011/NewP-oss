@@ -1,10 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
-using ICP.Platform.Modules.Authorization.DTOs;
-using ICP.Platform.Modules.Authorization.Services;
-using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace ICP.Platform.HostApi.Acceptance;
 
 /// <summary>
-/// 仅在显式 Acceptance 配置下映射的人员验收夹具。它只经应用服务准备 actor 与组织前置数据，
+/// 仅在显式 Acceptance 配置下映射的人员验收夹具。它只经应用服务准备组织前置数据，
 /// 不参与被测人员写入，也不向常规 Development/Production 暴露固定入口。
 /// </summary>
 public static class PersonnelAcceptanceFixture
@@ -35,11 +31,8 @@ public static class PersonnelAcceptanceFixture
 
         group.MapPost("/prepare", async (
             HttpContext context,
-            PersonnelAcceptanceFixtureRequest request,
-            IRoleService roleService,
             ICompanyService companyService,
             IDepartmentService departmentService,
-            IIdentityAccountDirectory accountDirectory,
             IIdentityLocalAdministratorReadinessProbe localAdministrator,
             CancellationToken cancellationToken) =>
         {
@@ -47,28 +40,6 @@ public static class PersonnelAcceptanceFixture
             {
                 return Results.NotFound();
             }
-
-            var readOnlyAccount = await accountDirectory.FindAsync(request.ReadOnlyAccountEid, cancellationToken);
-            if (readOnlyAccount is null || readOnlyAccount.IsLocalAdministrator)
-            {
-                return Results.Problem(statusCode: 400, title: "ACCEPTANCE_READ_ONLY_ACCOUNT_INVALID");
-            }
-
-            var role = await roleService.GetRoleByCodeAsync(options.ReadOnlyRoleCode, cancellationToken)
-                ?? await roleService.CreateRoleAsync(new RoleDto
-                {
-                    Code = options.ReadOnlyRoleCode,
-                    DisplayName = "Acceptance Read Only",
-                    Description = "Ephemeral role for the Personnel acceptance gate"
-                }, "acceptance", cancellationToken);
-            await roleService.AssignRolePermissionsAsync(role.Id, new AssignRolePermissionsRequest
-            {
-                PermissionCodes = [OrganizationPermissions.PersonView]
-            }, "acceptance", cancellationToken);
-            await roleService.AssignUserRolesAsync(readOnlyAccount.AccountEid, new AssignUserRolesRequest
-            {
-                RoleCodes = [role.Code]
-            }, "acceptance", cancellationToken);
 
             var company = (await companyService.GetAllAsync(cancellationToken))
                 .SingleOrDefault(item => string.Equals(item.Code, options.CompanyCode, StringComparison.Ordinal))
@@ -100,7 +71,6 @@ public static class PersonnelAcceptanceFixture
             return Results.Ok(new PersonnelAcceptanceFixtureResponse(
                 options.RunId,
                 administrator.AccountEid,
-                readOnlyAccount.AccountEid,
                 company.Id,
                 company.DisplayName,
                 department.Id,
@@ -125,7 +95,6 @@ public static class PersonnelAcceptanceFixture
 internal sealed record PersonnelAcceptanceFixtureOptions(
     string RunId,
     string Secret,
-    string ReadOnlyRoleCode,
     string CompanyCode,
     string CompanyName,
     string DepartmentCode,
@@ -139,7 +108,6 @@ internal sealed record PersonnelAcceptanceFixtureOptions(
         return new PersonnelAcceptanceFixtureOptions(
             runId,
             secret,
-            $"AcceptanceReadOnly{suffix}",
             $"ACC-C-{suffix}",
             $"Personnel Gate Company {suffix}",
             $"ACC-D-{suffix}",
@@ -155,10 +123,7 @@ internal sealed record PersonnelAcceptanceFixtureOptions(
 public sealed record PersonnelAcceptanceFixtureResponse(
     string RunId,
     string AdminUserId,
-    string ReadOnlyUserId,
     string CompanyId,
     string CompanyName,
     string DepartmentId,
     string DepartmentName);
-
-public sealed record PersonnelAcceptanceFixtureRequest(string ReadOnlyAccountEid);

@@ -49,7 +49,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             runner,
             StringComparison.Ordinal);
         Assert.Contains(
-            "await AssignPositionToPersonFromBrowserAsync(page, person, position, cancellationToken);",
+            "await UpdatePersonFromBrowserAsync(page, person, position, cancellationToken);",
             runner,
             StringComparison.Ordinal);
         Assert.Contains("/organization/positions", runner, StringComparison.Ordinal);
@@ -66,6 +66,42 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             "new LocatorGetByRoleOptions { Name = \"保存\", Exact = true }",
             runner,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrowserScenario_RemainsOnePrimaryPersonnelJourney()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        Assert.Contains("await AssertPersonBirthDateRangeAsync(page, person);", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("CaptureResponsiveBrowserEvidenceAsync", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("CaptureRestrictedBrowserEvidenceAsync", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("CaptureUnauthorizedDetailEvidenceAsync", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("CaptureDetailContractDriftBrowserEvidenceAsync", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("AssertFullDetailJourneyAsync", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("AssertSubmittedQueryAndKeyboardAsync", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("AssertApiAuditCheckpointAfterRestartAsync", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Preflight_DoesNotRepeatGateEntrypointBuild()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        Assert.DoesNotContain("preflight-build.json", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet build HostApi", runner, StringComparison.Ordinal);
     }
 
     private static string GetRepositoryRoot()

@@ -15,6 +15,24 @@ dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj --no-rest
 dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 ```
 
+### Acceptance Gate-only 所有权
+
+父 Issue 需要新增或改变某个 Acceptance Gate 时，child 划分必须指定恰好一个“验收资产所有者”，并在该 child 的验收标准中写清它所拥有的用户旅程。该 child 负责交付第一版可运行的 runner、fixture 与结构测试；定向测试通过并形成精确提交后，在候选不再编辑的条件下串行执行：
+
+```powershell
+.\scripts\accept.ps1 -Gate <Gate>
+```
+
+Gate-only 通过并记录提交、命令、结果与耗时后，该 child 才能关闭；失败若导致代码变化，则对新提交重跑。它是 child 的开发证据，不代替父 Issue 的正式验证。其他 child 只有在改动命中该用户旅程时才复跑同一个 Gate；未命中时只跑自己的最低层定向测试，不能为了“保险”重复跑 Gate 或全量验证。父级审查修复若改变该旅程，也先用同一 Gate-only 收敛。
+
+全部 child 和审查修复完成后冻结候选，父 Issue 只运行一次正式入口：
+
+```powershell
+.\scripts\verify.ps1 -AcceptanceGate <Gate>
+```
+
+因此，Gate 资产由一个 child 持有，影响范围决定其他 child 是否复跑，最终通过结论始终由父 Issue 的冻结候选验证持有。
+
 ## 全量验证
 
 标准入口依次执行静态门禁、一次 Release 构建、`--no-build` 测试、前端测试与构建：

@@ -8,8 +8,10 @@ import {
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { organizationCompanyLookupProvider } from './personStandardCrudResource';
-import { getDepartmentParentLookup } from '../services/organizationService';
+import {
+  getDepartmentCompanyLookup,
+  getDepartmentParentLookup,
+} from '../services/organizationService';
 
 export interface DepartmentListRow {
   id: string;
@@ -50,6 +52,15 @@ const departmentStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
   getRowId: (row: DepartmentListRow) => row.id,
 });
 
+const departmentCompanyLookupProvider: StandardCrudLookupProvider = {
+  key: 'organization.companies',
+  load: async (request, context) => getDepartmentCompanyLookup(
+    request,
+    request.fieldKey === 'companyId',
+    context?.signal,
+  ),
+};
+
 const departmentParentLookupProvider: StandardCrudLookupProvider = {
   key: 'organization.department.parents',
   load: async (request, context) => {
@@ -77,13 +88,13 @@ const departmentParentFilterLookupProvider: StandardCrudLookupProvider = {
   },
 };
 
-// 部门页面复用标准 REST 生命周期，并把依赖上级候选留在 Organization provider 内。
+// 部门页面复用标准 REST 生命周期，并把公司与上级部门候选留在自己的 Organization provider 内。
 export const departmentStandardCrudResource: StandardCrudResourceRegistration<Record<string, unknown>, DepartmentListRow> = {
   resourceKey: 'organization.department',
   dataAdapter: departmentStandardCrudDataAdapter,
   listViewKey: 'organization.department.list',
   lookupProviders: [
-    organizationCompanyLookupProvider,
+    departmentCompanyLookupProvider,
     departmentParentLookupProvider,
     departmentParentFilterLookupProvider,
   ],

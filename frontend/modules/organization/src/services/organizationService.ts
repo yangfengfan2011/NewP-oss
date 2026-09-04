@@ -317,6 +317,19 @@ export async function getCompanyLookup(
   ));
 }
 
+export async function getDepartmentCompanyLookup(
+  request: StandardCrudLookupRequest,
+  includeDisabled: boolean,
+  signal?: AbortSignal,
+): Promise<StandardCrudLookupPage> {
+  const search = buildOrganizationLookupSearch(request, includeDisabled);
+  return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
+    `/api/organization/department-lookups/companies?${search.toString()}`,
+    '加载公司列表失败',
+    signal,
+  ));
+}
+
 export async function getDepartmentLookup(
   companyId: string,
   request: StandardCrudLookupRequest,

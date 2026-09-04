@@ -164,6 +164,64 @@ public sealed class OrganizationPermissionPipelineTests
         }
     }
 
+    [Theory]
+    [InlineData(null, PermissionDecision.Granted, HttpStatusCode.Unauthorized, 0)]
+    [InlineData("subject", PermissionDecision.Denied, HttpStatusCode.Forbidden, 0)]
+    [InlineData("subject", PermissionDecision.Indeterminate, HttpStatusCode.ServiceUnavailable, 0)]
+    [InlineData("subject", PermissionDecision.Granted, HttpStatusCode.OK, 1)]
+    public async Task DepartmentCompanyLookup_EnforcesDepartmentViewBeforeDirectoryRead(
+        string? subjectId,
+        PermissionDecision decision,
+        HttpStatusCode expectedStatus,
+        int expectedDirectoryCalls)
+    {
+        var source = new MutablePermissionDecisionSource(decision);
+        await using var scenario = await Scenario.StartAsync(source);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/department-lookups/companies?page=1&pageSize=20",
+            subjectId);
+
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        Assert.Equal(expectedDirectoryCalls, scenario.CompanyDirectory.LookupCallCount);
+        if (subjectId is not null)
+        {
+            Assert.Equal(OrganizationPermissions.DepartmentView, source.LastPermissionCode);
+        }
+    }
+
+    [Fact]
+    public async Task DepartmentCompanyLookup_ForwardsPagingAndReturnsDisabledCurrentValue()
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
+            [new Company { Id = "Company_1", Name = "总部", IsEnabled = true }],
+            [new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
+            2,
+            10,
+            true);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/department-lookups/companies?keyword=%E6%80%BB%E9%83%A8&page=2&pageSize=10&currentValueIds=Company_2",
+            "subject");
+
+        using var response = await scenario.Client.SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(OrganizationPermissions.DepartmentView, source.LastPermissionCode);
+        Assert.Equal("总部", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
+        Assert.Equal("旧公司（已停用）", document.RootElement.GetProperty("currentItems")[0].GetProperty("label").GetString());
+        Assert.True(document.RootElement.GetProperty("currentItems")[0].GetProperty("disabled").GetBoolean());
+        Assert.Equal("总部", scenario.CompanyDirectory.Request?.Keyword);
+        Assert.Equal(2, scenario.CompanyDirectory.Request?.Page);
+        Assert.Equal(10, scenario.CompanyDirectory.Request?.PageSize);
+        Assert.Equal(["Company_2"], scenario.CompanyDirectory.Request?.CurrentValueIds);
+    }
+
     [Fact]
     public async Task DepartmentParentLookup_ResolvesCurrentDepartmentAndForwardsPaging()
     {
@@ -524,6 +582,10 @@ public sealed class OrganizationPermissionPipelineTests
 
     private sealed class RecordingCompanyDirectory : ICompanyDirectory
     {
+        private int _lookupCallCount;
+
+        public int LookupCallCount => Volatile.Read(ref _lookupCallCount);
+
         public OrganizationDirectoryLookupRequest? Request { get; private set; }
 
         public OrganizationDirectoryPage<Company> Result { get; set; } = new([], [], 1, 20, false);
@@ -543,6 +605,7 @@ public sealed class OrganizationPermissionPipelineTests
             OrganizationDirectoryLookupRequest request,
             CancellationToken cancellationToken = default)
         {
+            Interlocked.Increment(ref _lookupCallCount);
             Request = request;
             return Task.FromResult(Result);
         }

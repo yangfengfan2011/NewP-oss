@@ -44,6 +44,46 @@ describe('department standard CRUD resource', () => {
     });
   });
 
+  it('loads company candidates from the Department-owned lookup endpoint', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      items: [{ value: 'Company_1', label: '平台公司' }],
+      currentItems: [],
+      page: 2,
+      pageSize: 10,
+      hasMore: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const provider = departmentStandardCrudResource.lookupProviders?.find(
+      (candidate) => candidate.key === 'organization.companies',
+    );
+
+    const result = await provider?.load({
+      fieldKey: 'CompanyId',
+      keyword: '平台',
+      page: 2,
+      pageSize: 10,
+      currentValueIds: [],
+      values: {},
+      dependencyValues: {},
+    });
+    await provider?.load({
+      fieldKey: 'companyId',
+      keyword: '',
+      page: 1,
+      pageSize: 20,
+      currentValueIds: [],
+      values: {},
+      dependencyValues: {},
+    });
+
+    expect(result).toMatchObject({ page: 2, pageSize: 10, hasMore: true });
+    const url = String(fetchSpy.mock.calls[0]?.[0]);
+    expect(url).toContain('/api/organization/department-lookups/companies?');
+    expect(url).toContain('keyword=%E5%B9%B3%E5%8F%B0');
+    expect(url).toContain('page=2&pageSize=10');
+    expect(url).not.toContain('includeDisabled=true');
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('includeDisabled=true');
+  });
+
   it('loads parent candidates with company, immutable code, keyword, page and current value', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       items: [{ value: 'Department_Parent', label: '研发中心' }],

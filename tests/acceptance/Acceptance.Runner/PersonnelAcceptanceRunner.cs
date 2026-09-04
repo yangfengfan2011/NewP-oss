@@ -731,7 +731,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         string apiPath)
     {
         var lookup = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
-        await lookup.ClickAsync();
         var responseTask = page.WaitForResponseAsync(response =>
         {
             if (response.Request.Method != "GET")

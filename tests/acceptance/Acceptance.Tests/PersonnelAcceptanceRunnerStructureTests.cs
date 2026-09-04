@@ -94,6 +94,11 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             "Browser company create returned {response.Status}, expected 201: {body}",
             runner,
             StringComparison.Ordinal);
+        var lookupJourney = runner[
+            runner.IndexOf("private static async Task SelectOrganizationLookupAsync", StringComparison.Ordinal)..
+            runner.IndexOf("private static async Task ClickStandardCrudCreateActionAsync", StringComparison.Ordinal)];
+        Assert.DoesNotContain("await lookup.ClickAsync();", lookupJourney, StringComparison.Ordinal);
+        Assert.Contains("await lookup.FillAsync(option);", lookupJourney, StringComparison.Ordinal);
     }
 
     [Fact]

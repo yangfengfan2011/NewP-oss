@@ -49,6 +49,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private bool _catalogCreated;
     private FixtureData? _fixture;
     private PersonData? _person;
+    private CompanyData? _company;
+    private DepartmentData? _department;
     private PositionData? _position;
     private string? _adminPassword;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
@@ -386,21 +388,38 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var browserAssertions = new List<string>();
         if (phase == "initial")
         {
+            var company = await CreateCompanyFromBrowserAsync(page, cancellationToken);
+            var department = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);
             var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
-            person = await UpdatePersonFromBrowserAsync(page, person, position, cancellationToken);
+            person = await UpdatePersonFromBrowserAsync(
+                page,
+                person,
+                company,
+                department,
+                position,
+                cancellationToken);
+            _company = company;
+            _department = department;
             _position = position;
             _person = person;
             await AssertPersonBirthDateRangeAsync(page, person);
             browserAssertions.AddRange(
             [
+                "company-created",
+                "department-created",
                 "position-created",
-                "person-updated-through-standard-drawer",
+                "person-organization-affiliation-saved-through-standard-drawer",
                 "birth-date-range-finds-person"
             ]);
         }
 
         await OpenPersonnelFromShellAsync(page);
-        await AssertPersonListAndDrawerAsync(page, person, _position?.Name);
+        await AssertPersonListAndDrawerAsync(
+            page,
+            person,
+            _company?.Name,
+            _department?.Name,
+            _position?.Name);
         browserAssertions.Add(phase == "initial"
             ? "list-and-detail-show-updated-person"
             : "restart-list-and-detail-show-persisted-person");
@@ -440,6 +459,32 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
+    // 公司管理只通过 Shell 导航进入唯一标准列表，覆盖活动候选、导航和权限装配。
+    private async Task OpenCompanyManagementFromShellAsync(IPage page)
+    {
+        var companyEntry = page.GetByRole(
+            AriaRole.Link,
+            new PageGetByRoleOptions { Name = "公司管理", Exact = true }).First;
+        await companyEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await companyEntry.ClickAsync();
+        await page.WaitForURLAsync(
+            $"http://127.0.0.1:{_shellPort}/organization/companies",
+            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    }
+
+    // 部门管理同样从 Shell 导航进入，避免直达 URL 绕过模块候选与权限路径。
+    private async Task OpenDepartmentManagementFromShellAsync(IPage page)
+    {
+        var departmentEntry = page.GetByRole(
+            AriaRole.Link,
+            new PageGetByRoleOptions { Name = "部门管理", Exact = true }).First;
+        await departmentEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await departmentEntry.ClickAsync();
+        await page.WaitForURLAsync(
+            $"http://127.0.0.1:{_shellPort}/organization/departments",
+            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    }
+
     // 岗位管理只通过 Shell 导航进入现有标准列表，不用直达 URL 绕过候选导航与权限装配。
     private async Task OpenPositionManagementFromShellAsync(IPage page)
     {
@@ -451,6 +496,100 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.WaitForURLAsync(
             $"http://127.0.0.1:{_shellPort}/organization/positions",
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+    }
+
+    // 同一浏览器主旅程先通过公司标准 Drawer 建立后续部门与人员归属的真实前置资源。
+    private async Task<CompanyData> CreateCompanyFromBrowserAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await OpenCompanyManagementFromShellAsync(page);
+        var company = new CompanyData(
+            $"ACC-BC-{_runId[..8]}",
+            $"Personnel Gate Browser Company {_runId[..8]}");
+        await page.GetByRole(
+                AriaRole.Button,
+                new PageGetByRoleOptions { Name = "新建公司", Exact = true })
+            .ClickAsync();
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await drawer.GetByLabel("公司编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(company.Code);
+        await drawer.GetByLabel("公司名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(company.Name);
+        await drawer.GetByLabel("排序码", new LocatorGetByLabelOptions { Exact = true }).FillAsync("0100");
+
+        var responseTask = page.WaitForResponseAsync(static response =>
+            response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath.Equals(
+                "/api/organization/companies",
+                StringComparison.Ordinal));
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true })
+            .ClickAsync();
+        var response = await responseTask;
+        if (response.Status != (int)HttpStatusCode.Created)
+        {
+            throw new InvalidOperationException($"Browser company create returned {response.Status}, expected 201.");
+        }
+
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = company.Code })
+            .Filter(new LocatorFilterOptions { HasTextString = company.Name })
+            .Last
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        return company;
+    }
+
+    // 部门创建消费刚由浏览器建立的公司，并保持父部门为空来证明最小支持路径。
+    private async Task<DepartmentData> CreateDepartmentFromBrowserAsync(
+        IPage page,
+        CompanyData company,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await OpenDepartmentManagementFromShellAsync(page);
+        var department = new DepartmentData(
+            $"ACC-BD-{_runId[..8]}",
+            $"Personnel Gate Browser Department {_runId[..8]}");
+        await page.GetByRole(
+                AriaRole.Button,
+                new PageGetByRoleOptions { Name = "新建部门", Exact = true })
+            .ClickAsync();
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await SelectOrganizationLookupAsync(
+            page,
+            drawer,
+            "所属公司",
+            company.Name,
+            "/api/organization/person-lookups/companies");
+        await drawer.GetByLabel("部门编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Code);
+        await drawer.GetByLabel("部门名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Name);
+        await drawer.GetByLabel("排序码", new LocatorGetByLabelOptions { Exact = true }).FillAsync("0100");
+
+        var responseTask = page.WaitForResponseAsync(static response =>
+            response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath.Equals(
+                "/api/organization/departments",
+                StringComparison.Ordinal));
+        await drawer.GetByRole(
+                AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true })
+            .ClickAsync();
+        var response = await responseTask;
+        if (response.Status != (int)HttpStatusCode.Created)
+        {
+            throw new InvalidOperationException($"Browser department create returned {response.Status}, expected 201.");
+        }
+
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = department.Code })
+            .Filter(new LocatorFilterOptions { HasTextString = department.Name })
+            .Filter(new LocatorFilterOptions { HasTextString = company.Name })
+            .Last
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        return department;
     }
 
     // 同一 Personnel 浏览器场景通过标准 Drawer 创建岗位，不把字段边界语义提升到浏览器层。
@@ -498,6 +637,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private async Task<PersonData> UpdatePersonFromBrowserAsync(
         IPage page,
         PersonData person,
+        CompanyData company,
+        DepartmentData department,
         PositionData position,
         CancellationToken cancellationToken)
     {
@@ -515,6 +656,18 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await SelectOrganizationLookupAsync(
+            page,
+            drawer,
+            "所属公司",
+            company.Name,
+            "/api/organization/person-lookups/companies");
+        await SelectOrganizationLookupAsync(
+            page,
+            drawer,
+            "所属部门",
+            department.Name,
+            "/api/organization/person-lookups/departments");
         var positionLookup = drawer.GetByLabel(
             "岗位",
             new LocatorGetByLabelOptions { Exact = true });
@@ -571,6 +724,40 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .Last
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         return updated;
+    }
+
+    // Organization 私有分页 Lookup 必须在正式表单中完成搜索与选择，不能由 fixture 注入原始标识。
+    private static async Task SelectOrganizationLookupAsync(
+        IPage page,
+        ILocator drawer,
+        string label,
+        string option,
+        string apiPath)
+    {
+        var lookup = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
+        await lookup.ClickAsync();
+        var responseTask = page.WaitForResponseAsync(response =>
+        {
+            if (response.Request.Method != "GET")
+            {
+                return false;
+            }
+
+            var uri = new Uri(response.Url);
+            return uri.AbsolutePath.Equals(apiPath, StringComparison.Ordinal)
+                   && HasQueryValue(uri, "keyword", option);
+        });
+        await lookup.FillAsync(option);
+        var response = await responseTask;
+        if (response.Status != (int)HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException(
+                $"Browser {label} lookup returned {response.Status}, expected 200.");
+        }
+
+        await page.Locator(".ant-select-dropdown:visible").Last
+            .GetByText(option, new LocatorGetByTextOptions { Exact = true })
+            .ClickAsync();
     }
 
     // 高级筛选只观察用户旅程：应用显式两端后 URL 与数据库列表共同定位目标人员。
@@ -650,6 +837,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private static async Task AssertPersonListAndDrawerAsync(
         IPage page,
         PersonData person,
+        string? companyName,
+        string? departmentName,
         string? positionName)
     {
         await SubmitPersonnelKeywordAsync(page, person.PersonNo);
@@ -658,6 +847,14 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         if (!string.IsNullOrWhiteSpace(positionName))
         {
             row = row.Filter(new LocatorFilterOptions { HasTextString = positionName });
+        }
+        if (!string.IsNullOrWhiteSpace(companyName))
+        {
+            row = row.Filter(new LocatorFilterOptions { HasTextString = companyName });
+        }
+        if (!string.IsNullOrWhiteSpace(departmentName))
+        {
+            row = row.Filter(new LocatorFilterOptions { HasTextString = departmentName });
         }
 
         row = row.Last;
@@ -676,6 +873,16 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         if (!string.IsNullOrWhiteSpace(positionName))
         {
             await drawer.GetByText(positionName, new LocatorGetByTextOptions { Exact = true }).First
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        }
+        if (!string.IsNullOrWhiteSpace(companyName))
+        {
+            await drawer.GetByText(companyName, new LocatorGetByTextOptions { Exact = true }).First
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        }
+        if (!string.IsNullOrWhiteSpace(departmentName))
+        {
+            await drawer.GetByText(departmentName, new LocatorGetByTextOptions { Exact = true }).First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         }
     }
@@ -1265,6 +1472,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         string Id,
         string PersonNo,
         string Name);
+    private sealed record CompanyData(string Code, string Name);
+    private sealed record DepartmentData(string Code, string Name);
     private sealed record PositionData(string Name);
     private sealed record DatabaseOwnershipSnapshot(
         int Version,

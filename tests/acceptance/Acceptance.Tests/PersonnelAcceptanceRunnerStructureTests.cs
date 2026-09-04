@@ -34,6 +34,39 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     }
 
     [Fact]
+    public void BrowserScenario_CreatesCompanyAndDepartmentBeforeAssigningThePersonnelAffiliation()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        Assert.Contains(
+            "await CreateCompanyFromBrowserAsync(page, cancellationToken);",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await UpdatePersonFromBrowserAsync(",
+            runner,
+            StringComparison.Ordinal);
+        Assert.Contains("CompanyData company,", runner, StringComparison.Ordinal);
+        Assert.Contains("DepartmentData department,", runner, StringComparison.Ordinal);
+        Assert.Contains("/organization/companies", runner, StringComparison.Ordinal);
+        Assert.Contains("/api/organization/companies", runner, StringComparison.Ordinal);
+        Assert.Contains("/organization/departments", runner, StringComparison.Ordinal);
+        Assert.Contains("/api/organization/departments", runner, StringComparison.Ordinal);
+        Assert.Contains("\"所属公司\"", runner, StringComparison.Ordinal);
+        Assert.Contains("\"所属部门\"", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserScenario_CoversPositionCreationAndPersonLookupAssignmentInThePersonnelGate()
     {
         var repositoryRoot = GetRepositoryRoot();
@@ -49,7 +82,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             runner,
             StringComparison.Ordinal);
         Assert.Contains(
-            "await UpdatePersonFromBrowserAsync(page, person, position, cancellationToken);",
+            "await UpdatePersonFromBrowserAsync(",
             runner,
             StringComparison.Ordinal);
         Assert.Contains("/organization/positions", runner, StringComparison.Ordinal);

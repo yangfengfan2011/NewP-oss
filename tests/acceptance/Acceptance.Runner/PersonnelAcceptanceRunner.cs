@@ -508,10 +508,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var company = new CompanyData(
             $"ACC-BC-{_runId[..8]}",
             $"Personnel Gate Browser Company {_runId[..8]}");
-        await page.GetByRole(
-                AriaRole.Button,
-                new PageGetByRoleOptions { Name = "新建公司", Exact = true })
-            .ClickAsync();
+        await ClickStandardCrudCreateActionAsync(page, "新建公司");
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await drawer.GetByLabel("公司编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(company.Code);
@@ -552,10 +549,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var department = new DepartmentData(
             $"ACC-BD-{_runId[..8]}",
             $"Personnel Gate Browser Department {_runId[..8]}");
-        await page.GetByRole(
-                AriaRole.Button,
-                new PageGetByRoleOptions { Name = "新建部门", Exact = true })
-            .ClickAsync();
+        await ClickStandardCrudCreateActionAsync(page, "新建部门");
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await SelectOrganizationLookupAsync(
@@ -601,10 +595,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await OpenPositionManagementFromShellAsync(page);
         var name = $"Personnel Gate Position {_runId[..8]}";
         var description = "Personnel Gate browser journey";
-        await page.GetByRole(
-                AriaRole.Button,
-                new PageGetByRoleOptions { Name = "新建岗位", Exact = true })
-            .ClickAsync();
+        await ClickStandardCrudCreateActionAsync(page, "新建岗位");
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await drawer.GetByLabel("岗位名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(name);
@@ -758,6 +749,58 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.Locator(".ant-select-dropdown:visible").Last
             .GetByText(option, new LocatorGetByTextOptions { Exact = true })
             .ClickAsync();
+    }
+
+    // 标准页面动作缺失时优先暴露 capability/局部错误，而不是只留下无上下文的 locator 超时。
+    private static async Task ClickStandardCrudCreateActionAsync(IPage page, string actionLabel)
+    {
+        var action = page.GetByRole(
+            AriaRole.Button,
+            new PageGetByRoleOptions { Name = actionLabel, Exact = true });
+        try
+        {
+            await action.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        }
+        catch (TimeoutException exception)
+        {
+            var diagnostic = await ReadStandardCrudPageDiagnosticAsync(page);
+            throw new InvalidOperationException(
+                $"Standard CRUD page did not expose '{actionLabel}'. {diagnostic}",
+                exception);
+        }
+
+        await action.ClickAsync();
+    }
+
+    private static async Task<string> ReadStandardCrudPageDiagnosticAsync(IPage page)
+    {
+        var capabilityError = page.Locator("[data-route-capability-error]").First;
+        if (await capabilityError.IsVisibleAsync())
+        {
+            var code = await capabilityError.GetAttributeAsync("data-route-capability-error");
+            return $"Route capability error: {code ?? "unknown"}.";
+        }
+
+        var localError = page.Locator(".sh-error-state:visible").First;
+        if (await localError.IsVisibleAsync())
+        {
+            return $"Page error: {NormalizeDiagnostic(await localError.InnerTextAsync())}.";
+        }
+
+        var loading = page.GetByRole(AriaRole.Status).First;
+        if (await loading.IsVisibleAsync())
+        {
+            return $"Page status: {NormalizeDiagnostic(await loading.InnerTextAsync())}.";
+        }
+
+        var body = NormalizeDiagnostic(await page.Locator("body").InnerTextAsync());
+        return $"URL: {page.Url}; no route capability, page error, or loading state was visible. Visible body: {body}.";
+    }
+
+    private static string NormalizeDiagnostic(string value)
+    {
+        var normalized = value.ReplaceLineEndings(" ").Trim();
+        return normalized.Length <= 500 ? normalized : normalized[..500];
     }
 
     // 高级筛选只观察用户旅程：应用显式两端后 URL 与数据库列表共同定位目标人员。
@@ -1274,11 +1317,40 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
     private async Task LoginAdminAsync(HttpClient client, CancellationToken cancellationToken)
     {
-        using var _ = await LoginAsync(
+        using var user = await LoginAsync(
             client,
             "admin",
             _adminPassword ?? throw new InvalidOperationException("Administrator password was not prepared."),
             cancellationToken);
+        EnsurePersonnelJourneyPermissions(user.RootElement);
+    }
+
+    // 浏览器动作权限来自同一认证快照；在 API 层先给出缺失 permission 的精确失败信号。
+    private static void EnsurePersonnelJourneyPermissions(JsonElement user)
+    {
+        if (!user.TryGetProperty("permissions", out var permissions)
+            || permissions.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("Administrator authentication response did not contain permissions.");
+        }
+
+        var granted = permissions.EnumerateArray()
+            .Where(static permission => permission.ValueKind == JsonValueKind.String)
+            .Select(static permission => permission.GetString())
+            .Where(static permission => !string.IsNullOrWhiteSpace(permission))
+            .ToHashSet(StringComparer.Ordinal);
+        var required = new[]
+        {
+            "Organization.Company.Create",
+            "Organization.Department.Create",
+            "Organization.Person.Update"
+        };
+        var missing = required.Where(permission => !granted.Contains(permission)).ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Administrator authentication response is missing Personnel journey permissions: {string.Join(", ", missing)}.");
+        }
     }
 
     private static async Task<JsonDocument> LoginAsync(

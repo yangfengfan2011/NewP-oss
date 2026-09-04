@@ -67,6 +67,25 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     }
 
     [Fact]
+    public void BrowserScenario_ProvesAdministratorPermissionsAndReportsCapabilityErrors()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
+        Assert.Contains("Organization.Company.Create", runner, StringComparison.Ordinal);
+        Assert.Contains("Organization.Department.Create", runner, StringComparison.Ordinal);
+        Assert.Contains("Organization.Person.Update", runner, StringComparison.Ordinal);
+        Assert.Contains("[data-route-capability-error]", runner, StringComparison.Ordinal);
+        Assert.Contains(".sh-error-state:visible", runner, StringComparison.Ordinal);
+        Assert.Contains("Visible body:", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserScenario_CoversPositionCreationAndPersonLookupAssignmentInThePersonnelGate()
     {
         var repositoryRoot = GetRepositoryRoot();

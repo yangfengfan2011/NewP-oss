@@ -29,6 +29,12 @@ internal static class ExampleRequiredFieldMigrationFixture
 {
     private const string BeforeRecordSourceModelDigest = "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c";
     private const string NullableRecordSourceModelDigest = "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf";
+    private const string OrganizationFoundationCompanyMetadata = """
+        {"schemaVersion":"1.0","type":"model","Company":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"UX_Company_ECODE","fields":["ECODE"],"unique":true}]}}
+        """;
+    private const string OrganizationFoundationDepartmentMetadata = """
+        {"schemaVersion":"1.0","type":"model","Department":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"CompanyId","storage":{"type":"guid"}},{"name":"ParentDepartmentId","storage":{"type":"guid","nullable":true}},{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"IX_Department_Company","fields":["CompanyId"],"unique":false},{"name":"IX_Department_Parent","fields":["ParentDepartmentId"],"unique":false},{"name":"IX_Department_Company_Parent_ECODE","fields":["CompanyId","ParentDepartmentId","ECODE"],"unique":false}]}}
+        """;
     private const string OrganizationFoundationPositionMetadata = """
         {"schemaVersion":"1.0","type":"model","Position":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"CompanyId","storage":{"type":"guid"},"dataSource":{"type":"model","key":"Company","model":"Company"}},{"name":"DepartmentId","storage":{"type":"guid"},"dataSource":{"type":"model","key":"Department","model":"Department"}},{"name":"EmploymentStatus","storage":{"type":"string"},"contract":{"valueType":"enum","clrType":"EmploymentStatus"},"dataSource":{"type":"enum","key":"EmploymentStatus"}},{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"IX_Position_Department","fields":["DepartmentId"],"unique":false},{"name":"IX_Position_Company","fields":["CompanyId"],"unique":false}]}}
         """;
@@ -209,8 +215,9 @@ internal static class ExampleRequiredFieldMigrationFixture
         }
     }
 
-    // 该快照来自 000001 固定点：Position 使用当时的 authoring，Person 排除后续追加的 temporal 字段，
-    // 并临时补回 000005 才删除的历史 Revision 列。
+    // 该快照来自 20260812144235_Organization_000001_Foundation 固定点：
+    // Company、Department、Position 使用当时的 authoring，
+    // Person 排除后续追加的 temporal 字段，并临时补回 000005 才删除的历史 Revision 列。
     // 快照仍经当前正式 loader、storage map 和 projector 生成，并由 manifest 摘要守卫阻止漂移。
     private static ModelDefinition[] BuildOrganizationFoundationModels(
         string repositoryRoot,
@@ -219,29 +226,36 @@ internal static class ExampleRequiredFieldMigrationFixture
         var organizationModels = currentModels
             .Where(static model => string.Equals(model.OwnerModuleId, "Organization", StringComparison.Ordinal))
             .ToArray();
-        var position = organizationModels.Single(static model => model.Name == "Position");
         var person = organizationModels.Single(static model => model.Name == "Person");
-        var sourcePath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            "Organization",
-            "metadata",
-            "models",
-            "Position.model.json");
-        var document = new JsonModelMetadataDocumentLoader().Load(
-            Encoding.UTF8.GetBytes(OrganizationFoundationPositionMetadata),
-            sourcePath);
         var storageTypeMap = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(
             repositoryRoot,
             "server",
             "platform-modeling",
             "metadata",
             "storage-types.json"));
-        var foundationPosition = new ModelMetadataProjector().Project(document, storageTypeMap, "SqlServer") with
-        {
-            OwnerModuleId = "Organization",
-            SchemaName = "dbo"
-        };
+        var loader = new JsonModelMetadataDocumentLoader();
+        var projector = new ModelMetadataProjector();
+        var foundationCompany = ProjectOrganizationFoundationModel(
+            repositoryRoot,
+            "Company",
+            OrganizationFoundationCompanyMetadata,
+            storageTypeMap,
+            loader,
+            projector);
+        var foundationDepartment = ProjectOrganizationFoundationModel(
+            repositoryRoot,
+            "Department",
+            OrganizationFoundationDepartmentMetadata,
+            storageTypeMap,
+            loader,
+            projector);
+        var foundationPosition = ProjectOrganizationFoundationModel(
+            repositoryRoot,
+            "Position",
+            OrganizationFoundationPositionMetadata,
+            storageTypeMap,
+            loader,
+            projector);
         var foundationPersonFields = person.Fields
             .Where(static field =>
                 field.Name is not "BirthDate"
@@ -266,11 +280,39 @@ internal static class ExampleRequiredFieldMigrationFixture
         };
 
         return organizationModels
-            .Select(model => ReferenceEquals(model, position)
-                ? foundationPosition
-                : ReferenceEquals(model, person) ? foundationPerson : model)
+            .Select(model => model.Name switch
+            {
+                "Company" => foundationCompany,
+                "Department" => foundationDepartment,
+                "Position" => foundationPosition,
+                "Person" => foundationPerson,
+                _ => model
+            })
             .OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static ModelDefinition ProjectOrganizationFoundationModel(
+        string repositoryRoot,
+        string modelName,
+        string metadata,
+        StorageTypeMapDocument storageTypeMap,
+        JsonModelMetadataDocumentLoader loader,
+        ModelMetadataProjector projector)
+    {
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "modules",
+            "Organization",
+            "metadata",
+            "models",
+            $"{modelName}.model.json");
+        var document = loader.Load(Encoding.UTF8.GetBytes(metadata), sourcePath);
+        return projector.Project(document, storageTypeMap, "SqlServer") with
+        {
+            OwnerModuleId = "Organization",
+            SchemaName = "dbo"
+        };
     }
 
     // 当前计划只从各 owner 的正式 Model provider、manifest 和 migration assembly 构造。

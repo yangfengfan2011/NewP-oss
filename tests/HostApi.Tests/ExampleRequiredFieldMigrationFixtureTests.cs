@@ -56,6 +56,8 @@ public sealed class ExampleRequiredFieldMigrationFixtureTests
         Assert.Single(nullableOrganization.Migrations);
         Assert.EndsWith("_Organization_000001_Foundation", beforeOrganization.ExpectedFrontier, StringComparison.Ordinal);
         Assert.EndsWith("_Organization_000001_Foundation", nullableOrganization.ExpectedFrontier, StringComparison.Ordinal);
+        Assert.Equal(beforeOrganization.Migrations[0].ToModelDigest, beforeOrganization.ModelDigest);
+        Assert.Equal(beforeOrganization.ModelDigest, nullableOrganization.ModelDigest);
 
         var beforeModel = Assert.Single(beforeField.Models, model => model.LogicalKey == "Example/ExampleRecord");
         var nullableModel = Assert.Single(nullableField.Models, model => model.LogicalKey == "Example/ExampleRecord");
@@ -67,6 +69,25 @@ public sealed class ExampleRequiredFieldMigrationFixtureTests
         Assert.Contains(beforePosition.Fields, field => field.Name == "DepartmentId" && field.Required);
         Assert.Contains(beforePosition.Fields, field => field.Name == "ECODE" && field.Required);
         Assert.DoesNotContain(beforePosition.Fields, field => field.Name == "Description");
+
+        var beforeCompany = Assert.Single(beforeField.Models, model => model.LogicalKey == "Organization/Company");
+        Assert.Contains(beforeCompany.Indexes, index =>
+            index.Name == "UX_Company_ECODE"
+            && index.IsUnique
+            && index.Fields.SequenceEqual(["ECODE"]));
+        Assert.DoesNotContain(beforeCompany.Indexes, index => index.Name == "UX_Company_ENAME");
+        Assert.Empty(beforeCompany.ForeignKeys);
+
+        var beforeDepartment = Assert.Single(
+            beforeField.Models,
+            model => model.LogicalKey == "Organization/Department");
+        Assert.Contains(beforeDepartment.Indexes, index =>
+            index.Name == "IX_Department_Company_Parent_ECODE"
+            && !index.IsUnique
+            && index.Fields.SequenceEqual(["CompanyId", "ParentDepartmentId", "ECODE"]));
+        Assert.DoesNotContain(beforeDepartment.Indexes, index =>
+            index.Name is "UX_Department_Company_ECODE" or "UX_Department_Company_Parent_ENAME");
+        Assert.Empty(beforeDepartment.ForeignKeys);
     }
 
     private static string GetRepositoryRoot()

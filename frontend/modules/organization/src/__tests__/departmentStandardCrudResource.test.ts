@@ -99,7 +99,7 @@ describe('department standard CRUD resource', () => {
     const empty = await provider?.load(request);
     await provider?.load({ ...request, dependencyValues: { companyId: 'Company_1' } });
 
-    expect(empty?.options).toEqual([]);
+    expect(empty).toMatchObject({ options: [] });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const url = String(fetchSpy.mock.calls[0]?.[0]);
     expect(url).toContain('companyId=Company_1');

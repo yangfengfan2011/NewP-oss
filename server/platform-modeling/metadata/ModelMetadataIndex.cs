@@ -8,4 +8,9 @@ public sealed class ModelMetadataIndex
     public List<string> Fields { get; init; } = [];
 
     public bool Unique { get; init; }
+
+    /// <summary>
+    /// 唯一索引是否必须包含含 null 的记录；用于表达 nullable scope 中 null 也是一个受保护范围。
+    /// </summary>
+    public bool IncludeNullValues { get; init; }
 }

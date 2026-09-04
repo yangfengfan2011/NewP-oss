@@ -48,6 +48,25 @@ public sealed class DepartmentCrudDeleteExecutorTests
     }
 
     [Fact]
+    public async Task DeleteAsync_ChildReferenceReturnsStableConflictAndPreservesParent()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "Company_1");
+        AddDepartment(context, "Department_Parent", "Company_1");
+        AddDepartment(context, "Department_Child", "Company_1", "Department_Parent");
+        await context.SaveChangesAsync();
+
+        var result = await new DepartmentCrudDeleteExecutor(context).DeleteAsync(
+            DepartmentCrudDescriptorFactory.Create(),
+            "Department_Parent");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(409, result.Error?.StatusCode);
+        Assert.Equal("Organization.Department.DeleteBlockedByChild", result.Error?.Code);
+        Assert.Equal(2, await Rows(context, "Department").CountAsync());
+    }
+
+    [Fact]
     public async Task DeleteAsync_MissingDepartmentReturnsStandardNotFound()
     {
         await using var context = CreateContext();
@@ -86,11 +105,15 @@ public sealed class DepartmentCrudDeleteExecutorTests
             ["SortOrder"] = "0100"
         }));
 
-    private static void AddDepartment(EfPlatformDbContext context, string id, string companyId) =>
+    private static void AddDepartment(
+        EfPlatformDbContext context,
+        string id,
+        string companyId,
+        string? parentDepartmentId = null) =>
         Rows(context, "Department").Add(Row(id, new()
         {
             ["CompanyId"] = companyId,
-            ["ParentDepartmentId"] = null,
+            ["ParentDepartmentId"] = parentDepartmentId,
             ["ECODE"] = id,
             ["ENAME"] = id,
             ["IsEnabled"] = true,

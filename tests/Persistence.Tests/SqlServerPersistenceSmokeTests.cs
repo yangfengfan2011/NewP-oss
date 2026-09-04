@@ -114,6 +114,11 @@ public sealed class SqlServerPersistenceSmokeTests
     public Task SqlServerCompiledHostFullUp_DestructiveCompatibilityRunsWithoutRiskLabelCutoff() =>
         RunCatalogScenarioAsync("compiledfullup", VerifyCompiledHostFullUpAsync);
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的部门层级约束冒烟")]
+    [Trait("Category", "SqlServerSmoke")]
+    public Task SqlServerOrganizationDepartmentHierarchy_EnforcesSiblingUniquenessAndCompanyScopedParent() =>
+        RunCatalogScenarioAsync("departmenthierarchy", VerifyOrganizationDepartmentHierarchyAsync);
+
     private async Task RunCatalogScenarioAsync(
         string purpose,
         Func<string, string, WorktreeDatabaseIdentity, Task> scenario)
@@ -674,6 +679,67 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.False(await TableExistsAsync(applicationConnectionString, "__NewPDatabaseOwnership"));
         Assert.False(await TableExistsAsync(applicationConnectionString, "__EFMigrationsHistory"));
         Assert.True(await TableExistsAsync(applicationConnectionString, "ForeignTable"));
+    }
+
+    private static async Task VerifyOrganizationDepartmentHierarchyAsync(
+        string adminConnectionString,
+        string catalog,
+        WorktreeDatabaseIdentity identity)
+    {
+        var connectionString = BuildCatalogConnectionString(adminConnectionString, catalog);
+        await using var provider = BuildProvider(
+            connectionString,
+            identity,
+            TestPersistencePlan.CreateCurrentSqlServer());
+        Assert.False(await RunMigrationsAsync(provider));
+
+        Assert.Null(await ExecuteScalarAsync(connectionString, """
+            SELECT [filter_definition]
+            FROM [sys].[indexes]
+            WHERE [object_id] = OBJECT_ID(N'[dbo].[Department]')
+              AND [name] = N'UX_Department_Company_Parent_ENAME';
+            """));
+
+        await ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [dbo].[Company]
+                ([EID], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [IsEnabled], [SortOrder], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'C1', SYSUTCDATETIME(), N'test', N'C1', N'Company 1', 1, N'1', SYSUTCDATETIME(), N'test'),
+                (N'C2', SYSUTCDATETIME(), N'test', N'C2', N'Company 2', 1, N'2', SYSUTCDATETIME(), N'test');
+
+            INSERT INTO [dbo].[Department]
+                ([EID], [CompanyId], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [IsEnabled], [ParentDepartmentId], [SortOrder], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'P1', N'C1', SYSUTCDATETIME(), N'test', N'P1', N'Parent 1', 1, NULL, N'1', SYSUTCDATETIME(), N'test'),
+                (N'P2', N'C1', SYSUTCDATETIME(), N'test', N'P2', N'Parent 2', 1, NULL, N'2', SYSUTCDATETIME(), N'test'),
+                (N'R1', N'C1', SYSUTCDATETIME(), N'test', N'R1', N'Root Name', 1, NULL, N'3', SYSUTCDATETIME(), N'test'),
+                (N'C1-CHILD', N'C1', SYSUTCDATETIME(), N'test', N'C1-CHILD', N'Child Name', 1, N'P1', N'4', SYSUTCDATETIME(), N'test'),
+                (N'C1-OTHER', N'C1', SYSUTCDATETIME(), N'test', N'C1-OTHER', N'Child Name', 1, N'P2', N'5', SYSUTCDATETIME(), N'test');
+            """);
+
+        var duplicateRoot = await Assert.ThrowsAsync<SqlException>(() => ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [dbo].[Department]
+                ([EID], [CompanyId], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [IsEnabled], [ParentDepartmentId], [SortOrder], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'R2', N'C1', SYSUTCDATETIME(), N'test', N'R2', N'root name', 1, NULL, N'6', SYSUTCDATETIME(), N'test');
+            """));
+        Assert.Contains(duplicateRoot.Errors.Cast<SqlError>(), static error => error.Number is 2601 or 2627);
+
+        var duplicateSibling = await Assert.ThrowsAsync<SqlException>(() => ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [dbo].[Department]
+                ([EID], [CompanyId], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [IsEnabled], [ParentDepartmentId], [SortOrder], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'C1-DUP', N'C1', SYSUTCDATETIME(), N'test', N'C1-DUP', N'child name', 1, N'P1', N'7', SYSUTCDATETIME(), N'test');
+            """));
+        Assert.Contains(duplicateSibling.Errors.Cast<SqlError>(), static error => error.Number is 2601 or 2627);
+
+        var crossCompanyParent = await Assert.ThrowsAsync<SqlException>(() => ExecuteNonQueryAsync(connectionString, """
+            INSERT INTO [dbo].[Department]
+                ([EID], [CompanyId], [CreatedAt], [CreatedBy], [ECODE], [ENAME], [IsEnabled], [ParentDepartmentId], [SortOrder], [UpdatedAt], [UpdatedBy])
+            VALUES
+                (N'C2-CHILD', N'C2', SYSUTCDATETIME(), N'test', N'C2-CHILD', N'Cross Company', 1, N'P1', N'8', SYSUTCDATETIME(), N'test');
+            """));
+        Assert.Contains(crossCompanyParent.Errors.Cast<SqlError>(), static error => error.Number == 547);
     }
 
     private static async Task VerifyCatalogFingerprintMismatchIsRejectedAsync(

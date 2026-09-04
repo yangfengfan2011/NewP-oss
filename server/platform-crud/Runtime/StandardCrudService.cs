@@ -203,10 +203,10 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values, isCreate: true);
-        if (serverOwnedFieldError is not null)
+        var ownershipFieldError = FindReadOnlyOwnershipFieldError(descriptor, values, isCreate: true);
+        if (ownershipFieldError is not null)
         {
-            return StandardCrudMutationResult.Failure(serverOwnedFieldError);
+            return StandardCrudMutationResult.Failure(ownershipFieldError);
         }
 
         var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
@@ -309,10 +309,10 @@ public sealed class StandardCrudService : IStandardCrudService
             expectedRevision = submittedRevision;
         }
 
-        var serverOwnedFieldError = FindReadOnlyServerOwnedFieldError(descriptor, values, isCreate: false);
-        if (serverOwnedFieldError is not null)
+        var ownershipFieldError = FindReadOnlyOwnershipFieldError(descriptor, values, isCreate: false);
+        if (ownershipFieldError is not null)
         {
-            return StandardCrudMutationResult.Failure(serverOwnedFieldError);
+            return StandardCrudMutationResult.Failure(ownershipFieldError);
         }
 
         var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
@@ -752,19 +752,22 @@ public sealed class StandardCrudService : IStandardCrudService
             FieldErrors = [new StandardCrudFieldError(field, code, message)]
         };
 
-    // 规范字段策略是值所有权的唯一来源；ServerOnCreate 只阻止调用方伪造创建初始值，普通更新仍可维护该字段。
-    private static StandardCrudError? FindReadOnlyServerOwnedFieldError(
+    // 规范字段策略是值所有权的唯一来源；阶段型 owner 在过滤未知字段前拒绝越权输入。
+    private static StandardCrudError? FindReadOnlyOwnershipFieldError(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values,
         bool isCreate)
     {
         var submitted = descriptor.FieldPolicies.FirstOrDefault(policy =>
             (policy.ValueOwner == StandardCrudFieldValueOwner.Server
-                || isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate)
+                || isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate
+                || !isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.CallerOnCreate)
             && values.ContainsKey(policy.Field));
         return submitted is null
             ? null
-            : CreateReadOnlyServerOwnedFieldError(submitted.Field);
+            : submitted.ValueOwner == StandardCrudFieldValueOwner.CallerOnCreate
+                ? CreateImmutableFieldError(submitted.Field)
+                : CreateReadOnlyServerOwnedFieldError(submitted.Field);
     }
 
     // 服务端拥有字段使用字段级 400，调用方可直接移除伪造值且不会把平台事实误判为普通未知字段。
@@ -780,6 +783,22 @@ public sealed class StandardCrudService : IStandardCrudService
                 field,
                 "StandardCrud.ServerOwnedFieldReadOnly",
                 $"标准 CRUD 服务端字段 {field} 不能由客户端提交。")
+        ]
+    };
+
+    // 创建后不可变字段使用独立稳定码，避免把调用方创建事实误报成服务端生成事实。
+    private static StandardCrudError CreateImmutableFieldError(string field) => new()
+    {
+        StatusCode = 400,
+        Code = "StandardCrud.ImmutableFieldReadOnly",
+        ReasonKey = "standardCrud.immutableFieldReadOnly",
+        Message = $"标准 CRUD 字段 {field} 只能在创建时提交。",
+        FieldErrors =
+        [
+            new StandardCrudFieldError(
+                field,
+                "StandardCrud.ImmutableFieldReadOnly",
+                $"标准 CRUD 字段 {field} 只能在创建时提交。")
         ]
     };
 

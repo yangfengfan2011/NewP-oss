@@ -7,19 +7,22 @@ namespace ICP.Platform.Modules.Organization.Crud;
 public static class DepartmentCrudDescriptorFactory
 {
     /// <summary>
-    /// 创建根部门目录的列表、普通编辑与条件删除描述符；公司、编码与根节点归属在创建后不可修改。
+    /// 创建部门层级目录的列表、普通编辑与条件删除描述符；公司与编码在创建后不可修改。
     /// </summary>
     public static StandardCrudDescriptor Create()
     {
         var fieldSet = new StandardCrudFieldSet(
-            ListFields: ["EID", "CompanyId", "ECODE", "ENAME", "IsEnabled", "SortOrder", "UpdatedAt"],
+            ListFields:
+            [
+                "EID", "CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "IsEnabled", "SortOrder", "UpdatedAt"
+            ],
             DetailFields:
             [
                 "EID", "CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "IsEnabled", "SortOrder",
                 "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"
             ],
-            CreateFields: ["CompanyId", "ECODE", "ENAME", "SortOrder"],
-            UpdateFields: ["ENAME", "SortOrder", "IsEnabled"]);
+            CreateFields: ["CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "SortOrder"],
+            UpdateFields: ["ParentDepartmentId", "ENAME", "SortOrder", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
             ResourceKey = "organization.department",
@@ -48,7 +51,11 @@ public static class DepartmentCrudDescriptorFactory
             UniqueConstraints =
             [
                 Unique("code", ["CompanyId", "ECODE"], "Code", "部门编码在所属公司内必须唯一。"),
-                Unique("rootName", ["CompanyId", "ENAME"], "Name", "根部门名称在所属公司内必须唯一。")
+                Unique(
+                    "siblingName",
+                    ["CompanyId", "ParentDepartmentId", "ENAME"],
+                    "Name",
+                    "部门名称在所属公司同一上级下必须唯一。")
             ]
         };
     }
@@ -63,13 +70,13 @@ public static class DepartmentCrudDescriptorFactory
             .Project(document, model, fieldSet)
             .Select(policy => policy.Field switch
             {
+                "CompanyId" or "ECODE" => CopyPolicy(
+                    policy,
+                    StandardCrudFieldValueOwner.CallerOnCreate),
                 "IsEnabled" => CopyPolicy(
                     policy,
                     StandardCrudFieldValueOwner.ServerOnCreate,
                     createDefaultValue: true),
-                "ParentDepartmentId" => CopyPolicy(
-                    policy,
-                    StandardCrudFieldValueOwner.ServerOnCreate),
                 _ => policy
             })
             .ToArray();
@@ -106,7 +113,7 @@ public static class DepartmentCrudDescriptorFactory
         ReasonKey = $"organization.department.{char.ToLowerInvariant(codeStem[0])}{codeStem[1..]}Required"
     };
 
-    // 根部门编码与名称都以 CompanyId 为作用域，并统一使用 trim 后、不区分大小写的比较。
+    // 部门编码以 CompanyId 为作用域，名称以 CompanyId 与 ParentDepartmentId 为同级作用域。
     private static StandardCrudUniqueConstraint Unique(
         string key,
         IReadOnlyList<string> fields,

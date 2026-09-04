@@ -32,6 +32,18 @@ public sealed class ModelDefinitionValidator
             throw new InvalidOperationException($"Model '{definition.Name}' index '{invalidIndex.Name}' references undefined field.");
         }
 
+        var invalidNullScopeIndex = definition.Indexes.FirstOrDefault(index =>
+            index.IncludeNullValues
+            && (!index.IsUnique || !index.Fields.Any(fieldName =>
+                definition.Fields.Any(field =>
+                    string.Equals(field.Name, fieldName, StringComparison.OrdinalIgnoreCase)
+                    && !field.Required))));
+        if (invalidNullScopeIndex is not null)
+        {
+            throw new InvalidOperationException(
+                $"Model '{definition.Name}' index '{invalidNullScopeIndex.Name}' has invalid include-null scope.");
+        }
+
         var invalidForeignKey = definition.ForeignKeys.FirstOrDefault(foreignKey =>
             string.IsNullOrWhiteSpace(foreignKey.Name)
             || foreignKey.Fields.Count == 0

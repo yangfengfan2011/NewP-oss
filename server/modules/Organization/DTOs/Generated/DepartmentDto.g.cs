@@ -15,6 +15,7 @@ public sealed class DepartmentDto
     public string CompanyId { get; init; }
     public string? CompanyId_DisplayValue { get; init; }
     public string? ParentDepartmentId { get; init; }
+    public string? ParentDepartmentId_DisplayValue { get; init; }
     public bool IsEnabled { get; init; } = true;
     public string SortOrder { get; init; }
 }

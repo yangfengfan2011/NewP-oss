@@ -12,5 +12,8 @@ public enum StandardCrudFieldValueOwner
     Server,
 
     /// <summary>服务端拥有创建值，普通更新阶段改由调用方维护。</summary>
-    ServerOnCreate
+    ServerOnCreate,
+
+    /// <summary>调用方只能在创建时提供该字段，普通更新提交会被拒绝。</summary>
+    CallerOnCreate
 }

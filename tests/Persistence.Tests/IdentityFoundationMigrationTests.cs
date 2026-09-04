@@ -73,7 +73,7 @@ public sealed class IdentityFoundationMigrationTests
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
             .ToArray();
         var finalDigest = PersistenceModelDigest.Compute(definitions);
-        Assert.Equal("808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5", finalDigest);
+        Assert.Equal("6b1b4c75c7d11a0d512023bbd8923c80db7fc3d989f4cb8f93f8433f8e2c29c1", finalDigest);
     }
 
     [Fact]
@@ -487,13 +487,39 @@ public sealed class IdentityFoundationMigrationTests
         });
     }
 
+    [Fact]
+    public void OrganizationDepartmentHierarchyMigration_AddsUnfilteredSiblingUniquenessAndCompositeParentRestrictReference()
+    {
+        var migration = new Organization_000008_DepartmentHierarchy();
+
+        var siblingIndex = Assert.Single(
+            migration.UpOperations.OfType<CreateIndexOperation>(),
+            static operation => operation.Name == "UX_Department_Company_Parent_ENAME");
+        Assert.Equal(new[] { "CompanyId", "ParentDepartmentId", "ENAME" }, siblingIndex.Columns);
+        Assert.True(siblingIndex.IsUnique);
+        Assert.Null(siblingIndex.Filter);
+
+        var parentForeignKey = Assert.Single(migration.UpOperations.OfType<AddForeignKeyOperation>());
+        Assert.Equal("FK_Department_Company_ParentDepartment", parentForeignKey.Name);
+        Assert.Equal(new[] { "CompanyId", "ParentDepartmentId" }, parentForeignKey.Columns);
+        Assert.Equal(new[] { "CompanyId", "EID" }, parentForeignKey.PrincipalColumns);
+        Assert.Equal(Microsoft.EntityFrameworkCore.Migrations.ReferentialAction.Restrict, parentForeignKey.OnDelete);
+
+        var droppedIndex = Assert.Single(migration.UpOperations.OfType<DropIndexOperation>());
+        var descriptor = ReadFromDescriptor(droppedIndex);
+        Assert.Equal("Organization", descriptor.OwnerModuleId);
+        Assert.Equal("UX_Department_Company_ENAME", descriptor.Index!.Name);
+        Assert.Equal(new[] { "CompanyId", "ENAME" }, descriptor.Index.Columns);
+        Assert.True(descriptor.Index.IsUnique);
+    }
+
     private static void AssertOrganizationManifest(string repositoryRoot)
     {
         var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(7, migrations.Length);
+        Assert.Equal(8, migrations.Length);
         var foundation = migrations[0];
         var positionDirectory = migrations[1];
         var positionReference = migrations[2];
@@ -501,6 +527,7 @@ public sealed class IdentityFoundationMigrationTests
         var personRevisionRemoval = migrations[4];
         var companyStandardCrud = migrations[5];
         var rootDepartmentStandardCrud = migrations[6];
+        var departmentHierarchy = migrations[7];
         Assert.False(root.TryGetProperty("legacyCutover", out _));
         Assert.Equal("20260812144235_Organization_000001_Foundation", foundation.GetProperty("migrationId").GetString());
         Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
@@ -534,8 +561,13 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal("20260904041209_Organization_000007_RootDepartmentStandardCrud", rootDepartmentStandardCrud.GetProperty("migrationId").GetString());
         Assert.Equal(companyStandardCrud.GetProperty("contentDigest").GetString(), rootDepartmentStandardCrud.GetProperty("previousContentDigest").GetString());
         Assert.Equal(companyStandardCrud.GetProperty("toModelDigest").GetString(), rootDepartmentStandardCrud.GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), rootDepartmentStandardCrud.GetProperty("toModelDigest").GetString());
+        Assert.Equal("808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5", rootDepartmentStandardCrud.GetProperty("toModelDigest").GetString());
         Assert.Equal("backup-restore-only", rootDepartmentStandardCrud.GetProperty("compatibility").GetString());
+        Assert.Equal("20260904044325_Organization_000008_DepartmentHierarchy", departmentHierarchy.GetProperty("migrationId").GetString());
+        Assert.Equal(rootDepartmentStandardCrud.GetProperty("contentDigest").GetString(), departmentHierarchy.GetProperty("previousContentDigest").GetString());
+        Assert.Equal(rootDepartmentStandardCrud.GetProperty("toModelDigest").GetString(), departmentHierarchy.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), departmentHierarchy.GetProperty("toModelDigest").GetString());
+        Assert.Equal("backup-restore-only", departmentHierarchy.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             MigrationManifestIntegrity.ComputeBundleChecksum(
@@ -588,6 +620,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             rootDepartmentStandardCrud.GetProperty("contentDigest").GetString(),
             MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(rootDepartmentStandardCrudSourcePath)));
+        var departmentHierarchySourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260904044325_Organization_000008_DepartmentHierarchy.cs");
+        Assert.Equal(
+            departmentHierarchy.GetProperty("contentDigest").GetString(),
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(departmentHierarchySourcePath)));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)

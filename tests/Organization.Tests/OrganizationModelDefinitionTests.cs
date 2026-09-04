@@ -46,7 +46,7 @@ public class OrganizationModelDefinitionTests
     }
 
     [Fact]
-    public void Department_UsesStringSortOrderAndCompanyScopedRootConstraints()
+    public void Department_UsesStringSortOrderAndCompanyParentScopedConstraints()
     {
         var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
         var department = Assert.Single(definitions, definition => definition.Name == "Department");
@@ -57,9 +57,9 @@ public class OrganizationModelDefinitionTests
             && index.IsUnique
             && index.Fields.SequenceEqual(["CompanyId", "ECODE"]));
         Assert.Contains(department.Indexes, index =>
-            index.Name == "UX_Department_Company_ENAME"
+            index.Name == "UX_Department_Company_Parent_ENAME"
             && index.IsUnique
-            && index.Fields.SequenceEqual(["CompanyId", "ENAME"]));
+            && index.Fields.SequenceEqual(["CompanyId", "ParentDepartmentId", "ENAME"]));
     }
 
     [Fact]
@@ -127,6 +127,7 @@ public class OrganizationModelDefinitionTests
             Assert.Equal(expectedIndex.Name, actualIndex.Name);
             Assert.Equal(expectedIndex.Fields, actualIndex.Fields);
             Assert.Equal(expectedIndex.IsUnique, actualIndex.IsUnique);
+            Assert.Equal(expectedIndex.IncludeNullValues, actualIndex.IncludeNullValues);
         }
     }
 

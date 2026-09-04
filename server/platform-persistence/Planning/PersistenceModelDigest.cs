@@ -49,12 +49,20 @@ public static class PersistenceModelDigest
                     }),
                 indexes = definition.Indexes
                     .OrderBy(static index => index.Name, StringComparer.Ordinal)
-                    .Select(static index => new
-                    {
-                        index.Name,
-                        fields = index.Fields,
-                        index.IsUnique
-                    })
+                    .Select(static index => index.IncludeNullValues
+                        ? (object)new
+                        {
+                            index.Name,
+                            fields = index.Fields,
+                            index.IsUnique,
+                            index.IncludeNullValues
+                        }
+                        : new
+                        {
+                            index.Name,
+                            fields = index.Fields,
+                            index.IsUnique
+                        })
             })
             .ToArray();
         var bytes = JsonSerializer.SerializeToUtf8Bytes(models, CanonicalJsonOptions);

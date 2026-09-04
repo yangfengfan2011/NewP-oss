@@ -61,6 +61,31 @@ public sealed class OrganizationDirectoryTests
     }
 
     [Fact]
+    public async Task DepartmentDirectory_ParentLookupExcludesSelfAndDescendantsBeforePaging()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedDepartmentsAsync(dbContext,
+        [
+            Department("Department_Root", "Company_1", "D001", "根", enabled: true),
+            Department("Department_Child", "Company_1", "D002", "子", enabled: true, "Department_Root"),
+            Department("Department_Grandchild", "Company_1", "D003", "孙", enabled: true, "Department_Child"),
+            Department("Department_Peer", "Company_1", "D004", "同级", enabled: true),
+            Department("Department_Disabled", "Company_1", "D005", "停用", enabled: false),
+            Department("Department_OtherCompany", "Company_2", "D006", "跨公司", enabled: true)
+        ]);
+        var directory = new EfDepartmentDirectory(dbContext);
+
+        var page = await directory.LookupParentCandidatesAsync(
+            "Company_1",
+            "Department_Root",
+            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_Disabled"]));
+
+        Assert.Equal("Department_Peer", Assert.Single(page.Items).Id);
+        Assert.Equal("Department_Disabled", Assert.Single(page.CurrentItems).Id);
+        Assert.False(page.HasMore);
+    }
+
+    [Fact]
     public async Task DirectoriesResolveDistinctBatchesWithoutPerIdReads()
     {
         await using var dbContext = CreateDbContext();
@@ -107,13 +132,20 @@ public sealed class OrganizationDirectoryTests
         IsEnabled = enabled
     };
 
-    private static Department Department(string id, string companyId, string code, string name, bool enabled) => new()
+    private static Department Department(
+        string id,
+        string companyId,
+        string code,
+        string name,
+        bool enabled,
+        string? parentDepartmentId = null) => new()
     {
         Id = id,
         CompanyId = companyId,
         Code = code,
         Name = name,
-        IsEnabled = enabled
+        IsEnabled = enabled,
+        ParentDepartmentId = parentDepartmentId
     };
 
     private static async Task SeedCompaniesAsync(EfPlatformDbContext dbContext, IEnumerable<Company> companies)

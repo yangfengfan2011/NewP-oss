@@ -26,4 +26,19 @@ public class ModelDefinitionValidatorTests
         var ex = Assert.Throws<InvalidOperationException>(() => validator.Validate(definition));
         Assert.Contains("duplicate field", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Validate_ThrowsWhenIncludeNullValuesHasNoNullableUniqueScope()
+    {
+        var definition = new ModelDefinition(
+            "ConfigItem",
+            "config_items",
+            ModelKind.Entity,
+            [new FieldDefinition("Id", "id", FieldKind.Scalar, FieldValueType.Text, "string", true, true, false)],
+            [new IndexDefinition("IX_ConfigItem_Id", ["Id"], IsUnique: false, IncludeNullValues: true)]);
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ModelDefinitionValidator().Validate(definition));
+
+        Assert.Contains("include-null", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

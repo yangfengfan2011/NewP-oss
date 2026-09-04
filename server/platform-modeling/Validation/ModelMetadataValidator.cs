@@ -176,8 +176,26 @@ public sealed class ModelMetadataValidator
                         $"Index '{index.Name}' references unknown field '{fieldName}'.");
                 }
             }
+
+            if (index.IncludeNullValues && !index.Unique)
+            {
+                throw new InvalidOperationException(
+                    $"Index '{index.Name}' can use includeNullValues only when unique is true.");
+            }
+
+            if (index.IncludeNullValues && !index.Fields.Any(fieldName => IsNullableField(document, fieldName)))
+            {
+                throw new InvalidOperationException(
+                    $"Index '{index.Name}' can use includeNullValues only when it contains a nullable field.");
+            }
         }
     }
+
+    // 内核与 builtin 字段固定为必填；只有显式 storage nullable 字段能触发 nullable unique scope。
+    private static bool IsNullableField(ModelMetadataDocument document, string fieldName) =>
+        document.Model.Fields.Any(field =>
+            string.Equals(field.Name, fieldName, StringComparison.OrdinalIgnoreCase)
+            && field.Storage?.Nullable == true);
 
     private static void ValidateForeignKeyContracts(ModelMetadataDocument document)
     {

@@ -16,7 +16,7 @@ public class OrganizationGeneratedDtoTests
         Assert.NotNull(dtoType);
         Assert.Equal(typeof(string), dtoType!.GetProperty("SortOrder")!.PropertyType);
         Assert.Equal(typeof(string), dtoType.GetProperty("CompanyId_DisplayValue")!.PropertyType);
-        Assert.Null(dtoType.GetProperty("ParentDepartmentId_DisplayValue"));
+        Assert.Equal(typeof(string), dtoType.GetProperty("ParentDepartmentId_DisplayValue")!.PropertyType);
     }
 
     [Fact]

@@ -23,7 +23,11 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
         services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
-        services.AddScoped<IDepartmentDirectory, EfDepartmentDirectory>();
+        services.AddScoped<EfDepartmentDirectory>();
+        services.AddScoped<IDepartmentDirectory>(serviceProvider =>
+            serviceProvider.GetRequiredService<EfDepartmentDirectory>());
+        services.AddScoped<IDepartmentHierarchyDirectory>(serviceProvider =>
+            serviceProvider.GetRequiredService<EfDepartmentDirectory>());
         services.AddScoped<IPositionDirectory, PlatformQueryPositionDirectory>();
         services.AddScoped<IPersonUserBindingRepository, EfPersonUserBindingRepository>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();

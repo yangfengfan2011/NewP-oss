@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Organization",
-  "modelDigest": "808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5",
-  "bundleChecksum": "a3b35ec5966e4ee566ad86c3b3677944aab091d38bd86ef43a3572ca84a71de9",
+  "modelDigest": "6b1b4c75c7d11a0d512023bbd8923c80db7fc3d989f4cb8f93f8433f8e2c29c1",
+  "bundleChecksum": "0f056849b0543f4194c569cab57e9f87cb382efd2628187ba6ab03f545d4a8a2",
   "migrations": [
     {
       "sequence": "000001",
@@ -66,6 +66,15 @@
       "contentDigest": "69aa92ccaf5c88e19673c9e281ee397fcf9c4533411724a96ec2c4e524a18246",
       "fromModelDigest": "2168327921d492bbe85537bb09b5488e7b596bab13c358e644135c56abaef12b",
       "toModelDigest": "808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000008",
+      "migrationId": "20260904044325_Organization_000008_DepartmentHierarchy",
+      "previousContentDigest": "69aa92ccaf5c88e19673c9e281ee397fcf9c4533411724a96ec2c4e524a18246",
+      "contentDigest": "f61fac98d75d446fb7f27e04b90587d83e6b76042a405b0efc2975a128852725",
+      "fromModelDigest": "808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5",
+      "toModelDigest": "6b1b4c75c7d11a0d512023bbd8923c80db7fc3d989f4cb8f93f8433f8e2c29c1",
       "compatibility": "backup-restore-only"
     }
   ]

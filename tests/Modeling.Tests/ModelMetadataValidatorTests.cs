@@ -204,6 +204,27 @@ public class ModelMetadataValidatorTests
     }
 
     [Fact]
+    public void Validate_RejectsIncludeNullValuesOnNonUniqueIndex()
+    {
+        var document = DocumentWithFields(new ModelMetadataField
+        {
+            Name = "ParentId",
+            Storage = new ModelMetadataStorageSection { Type = "guid", Nullable = true }
+        });
+        document.Model.Indexes.Add(new ModelMetadataIndex
+        {
+            Name = "IX_Person_ParentId",
+            Fields = ["ParentId"],
+            IncludeNullValues = true
+        });
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Contains("includeNullValues", error.Message, StringComparison.Ordinal);
+        Assert.Contains("unique", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Validate_RejectsDisplayPlanningFailure()
     {
         var field = ReferenceFieldWithDisplay("computed");

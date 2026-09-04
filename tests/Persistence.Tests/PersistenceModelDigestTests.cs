@@ -78,6 +78,22 @@ public sealed class PersistenceModelDigestTests
             PersistenceModelDigest.Compute([instantModel]));
     }
 
+    [Fact]
+    public void Compute_IncludeNullValuesChangesDigest()
+    {
+        var baseline = BuildModel(["Code", "Name"]);
+        var explicitNullScope = baseline with
+        {
+            Indexes = baseline.Indexes
+                .Select(index => index with { IncludeNullValues = true, IsUnique = true })
+                .ToArray()
+        };
+
+        Assert.NotEqual(
+            PersistenceModelDigest.Compute([baseline]),
+            PersistenceModelDigest.Compute([explicitNullScope]));
+    }
+
     private static ModelDefinition BuildModel(IReadOnlyList<string> indexFields) =>
         new(
             "Asset",

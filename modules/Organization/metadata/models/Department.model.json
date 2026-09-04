@@ -11,7 +11,7 @@
       {
         "key": "basic",
         "titleKey": "Section_Basic",
-        "fields": ["CompanyId", "ECODE", "ENAME", "SortOrder", "IsEnabled"]
+        "fields": ["CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "SortOrder", "IsEnabled"]
       }
     ],
     "fields": [
@@ -41,6 +41,22 @@
         "storage": {
           "type": "guid",
           "nullable": true
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": { "mode": "editable" },
+          "edit": { "mode": "editable" }
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.department.parents",
+          "dependsOn": ["CompanyId"]
+        },
+        "display": {
+          "type": "reference",
+          "targetModel": "Department",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
         }
       },
       {
@@ -106,9 +122,10 @@
         "unique": true
       },
       {
-        "name": "UX_Department_Company_ENAME",
-        "fields": ["CompanyId", "ENAME"],
-        "unique": true
+        "name": "UX_Department_Company_Parent_ENAME",
+        "fields": ["CompanyId", "ParentDepartmentId", "ENAME"],
+        "unique": true,
+        "includeNullValues": true
       }
     ],
     "foreignKeys": [
@@ -122,6 +139,14 @@
         "principalFields": [
           "EID"
         ],
+        "onDelete": "Restrict"
+      },
+      {
+        "name": "FK_Department_Company_ParentDepartment",
+        "fields": ["CompanyId", "ParentDepartmentId"],
+        "principalModuleId": "Organization",
+        "principalModel": "Department",
+        "principalFields": ["CompanyId", "EID"],
         "onDelete": "Restrict"
       }
     ]

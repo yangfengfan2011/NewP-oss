@@ -332,6 +332,23 @@ export async function getDepartmentLookup(
   ));
 }
 
+export async function getDepartmentParentLookup(
+  companyId: string,
+  currentDepartmentCode: string | undefined,
+  request: StandardCrudLookupRequest,
+  includeDisabled: boolean,
+  signal?: AbortSignal,
+): Promise<StandardCrudLookupPage> {
+  const search = buildOrganizationLookupSearch(request, includeDisabled);
+  search.set('companyId', companyId);
+  if (currentDepartmentCode) search.set('currentDepartmentCode', currentDepartmentCode);
+  return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
+    `/api/organization/department-lookups/parents?${search.toString()}`,
+    '加载上级部门列表失败',
+    signal,
+  ));
+}
+
 // HTTP 响应使用服务端 items 命名，模块 provider 在边界转换为 SDK 的 options 命名。
 function mapOrganizationLookupPage(response: OrganizationLookupPageResponse): StandardCrudLookupPage {
   return {

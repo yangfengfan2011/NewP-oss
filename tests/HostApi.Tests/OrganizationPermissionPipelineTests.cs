@@ -136,6 +136,73 @@ public sealed class OrganizationPermissionPipelineTests
         }
     }
 
+    [Theory]
+    [InlineData(null, PermissionDecision.Granted, HttpStatusCode.Unauthorized, 0)]
+    [InlineData("subject", PermissionDecision.Denied, HttpStatusCode.Forbidden, 0)]
+    [InlineData("subject", PermissionDecision.Indeterminate, HttpStatusCode.ServiceUnavailable, 0)]
+    [InlineData("subject", PermissionDecision.Granted, HttpStatusCode.OK, 1)]
+    public async Task DepartmentParentLookup_EnforcesDepartmentViewBeforeDirectoryRead(
+        string? subjectId,
+        PermissionDecision decision,
+        HttpStatusCode expectedStatus,
+        int expectedDirectoryCalls)
+    {
+        var source = new MutablePermissionDecisionSource(decision);
+        await using var scenario = await Scenario.StartAsync(source);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/department-lookups/parents?companyId=Company_1&page=1&pageSize=20",
+            subjectId);
+
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        Assert.Equal(expectedDirectoryCalls, scenario.DepartmentDirectory.ParentLookupCallCount);
+        if (subjectId is not null)
+        {
+            Assert.Equal(OrganizationPermissions.DepartmentView, source.LastPermissionCode);
+        }
+    }
+
+    [Fact]
+    public async Task DepartmentParentLookup_ResolvesCurrentDepartmentAndForwardsPaging()
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.DepartmentDirectory.DepartmentByCode = new Department
+        {
+            Id = "Department_1",
+            CompanyId = "Company_1",
+            Code = "D001",
+            Name = "当前部门",
+            IsEnabled = true
+        };
+        scenario.DepartmentDirectory.ParentResult = new OrganizationDirectoryPage<Department>(
+            [new Department { Id = "Department_2", CompanyId = "Company_1", Name = "上级部门", IsEnabled = true }],
+            [new Department { Id = "Department_3", CompanyId = "Company_1", Name = "旧上级", IsEnabled = false }],
+            2,
+            10,
+            true);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/department-lookups/parents?companyId=Company_1&currentDepartmentCode=D001&keyword=%E4%B8%8A%E7%BA%A7&page=2&pageSize=10&currentValueIds=Department_3",
+            "subject");
+
+        using var response = await scenario.Client.SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("上级部门", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
+        Assert.Equal("旧上级（已停用）", document.RootElement.GetProperty("currentItems")[0].GetProperty("label").GetString());
+        Assert.True(document.RootElement.GetProperty("currentItems")[0].GetProperty("disabled").GetBoolean());
+        Assert.Equal("Company_1", scenario.DepartmentDirectory.ParentCompanyId);
+        Assert.Equal("Department_1", scenario.DepartmentDirectory.CurrentDepartmentId);
+        Assert.Equal("上级", scenario.DepartmentDirectory.ParentRequest?.Keyword);
+        Assert.Equal(2, scenario.DepartmentDirectory.ParentRequest?.Page);
+        Assert.Equal(10, scenario.DepartmentDirectory.ParentRequest?.PageSize);
+        Assert.Equal(["Department_3"], scenario.DepartmentDirectory.ParentRequest?.CurrentValueIds);
+    }
+
     [Fact]
     public async Task PersonOrganizationLookup_ForwardsPagingAndReturnsDisabledCurrentValue()
     {
@@ -420,6 +487,7 @@ public sealed class OrganizationPermissionPipelineTests
             builder.Services.AddSingleton(source);
             builder.Services.AddSingleton<ICompanyDirectory>(companyDirectory);
             builder.Services.AddSingleton<IDepartmentDirectory>(departmentDirectory);
+            builder.Services.AddSingleton<IDepartmentHierarchyDirectory>(departmentDirectory);
             builder.Services.AddSingleton<IStandardCrudService>(crudService);
             builder.Services.AddSingleton<StandardCrudXlsxWriter>();
             builder.Services.AddScoped<StandardCrudEndpoint>();
@@ -480,11 +548,24 @@ public sealed class OrganizationPermissionPipelineTests
         }
     }
 
-    private sealed class RecordingDepartmentDirectory : IDepartmentDirectory
+    private sealed class RecordingDepartmentDirectory : IDepartmentDirectory, IDepartmentHierarchyDirectory
     {
         private int _lookupCallCount;
+        private int _parentLookupCallCount;
 
         public int LookupCallCount => Volatile.Read(ref _lookupCallCount);
+
+        public int ParentLookupCallCount => Volatile.Read(ref _parentLookupCallCount);
+
+        public Department? DepartmentByCode { get; set; }
+
+        public OrganizationDirectoryPage<Department> ParentResult { get; set; } = new([], [], 1, 20, false);
+
+        public string? ParentCompanyId { get; private set; }
+
+        public string? CurrentDepartmentId { get; private set; }
+
+        public OrganizationDirectoryLookupRequest? ParentRequest { get; private set; }
 
         public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -498,7 +579,12 @@ public sealed class OrganizationPermissionPipelineTests
             string companyId,
             string code,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            Task.FromResult(
+                DepartmentByCode is not null
+                && string.Equals(DepartmentByCode.CompanyId, companyId, StringComparison.Ordinal)
+                && string.Equals(DepartmentByCode.Code, code, StringComparison.Ordinal)
+                    ? DepartmentByCode
+                    : null);
 
         public Task<OrganizationDirectoryPage<Department>> LookupAsync(
             string companyId,
@@ -507,6 +593,19 @@ public sealed class OrganizationPermissionPipelineTests
         {
             Interlocked.Increment(ref _lookupCallCount);
             return Task.FromResult(new OrganizationDirectoryPage<Department>([], [], request.Page, request.PageSize, false));
+        }
+
+        public Task<OrganizationDirectoryPage<Department>> LookupParentCandidatesAsync(
+            string companyId,
+            string? currentDepartmentId,
+            OrganizationDirectoryLookupRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _parentLookupCallCount);
+            ParentCompanyId = companyId;
+            CurrentDepartmentId = currentDepartmentId;
+            ParentRequest = request;
+            return Task.FromResult(ParentResult);
         }
     }
 

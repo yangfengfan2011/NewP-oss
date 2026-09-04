@@ -3,6 +3,7 @@ using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
 namespace ICP.Platform.Persistence.Tests;
@@ -70,5 +71,40 @@ public class EfModelProjectionTests
 
         Assert.Equal(typeof(DateOnly?), property.ClrType);
         Assert.Equal("date", property.GetColumnType());
+    }
+
+    [Fact]
+    public void OnModelCreating_ExplicitNullableUniqueScopeRemovesSqlServerNullFilter()
+    {
+        var definitions = new[]
+        {
+            new ModelDefinition(
+                "Department",
+                "Department",
+                ModelKind.Entity,
+                [
+                    new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false),
+                    new FieldDefinition("CompanyId", "CompanyId", FieldKind.Reference, FieldValueType.ObjectId, "guid", true, false, false),
+                    new FieldDefinition("ParentDepartmentId", "ParentDepartmentId", FieldKind.Reference, FieldValueType.ObjectId, "guid", false, false, false),
+                    new FieldDefinition("ENAME", "ENAME", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false)
+                ],
+                [
+                    new IndexDefinition(
+                        "UX_Department_Company_Parent_ENAME",
+                        ["CompanyId", "ParentDepartmentId", "ENAME"],
+                        IsUnique: true,
+                        IncludeNullValues: true)
+                ])
+        };
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=NewP_NullableUniqueProjection;Integrated Security=True")
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .Options;
+
+        using var db = new EfPlatformDbContext(options, definitions);
+        var index = Assert.Single(db.Model.FindEntityType("platform.core/Department")!.GetIndexes());
+
+        Assert.True(index.IsUnique);
+        Assert.Null(index.GetFilter());
     }
 }

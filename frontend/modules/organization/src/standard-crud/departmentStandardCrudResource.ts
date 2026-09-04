@@ -5,15 +5,19 @@ import {
   readStandardCrudBoolean,
   readStandardCrudNullableString,
   readStandardCrudString,
+  type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { organizationCompanyLookupProvider } from './personStandardCrudResource';
+import { getDepartmentParentLookup } from '../services/organizationService';
 
 export interface DepartmentListRow {
   id: string;
   EID: string;
   CompanyId: string;
   CompanyId_DisplayValue: string | null;
+  ParentDepartmentId: string | null;
+  ParentDepartmentId_DisplayValue: string | null;
   ECODE: string;
   ENAME: string;
   IsEnabled: boolean;
@@ -29,6 +33,8 @@ export function mapDepartmentListItem(value: unknown): DepartmentListRow {
     EID: id,
     CompanyId: readStandardCrudString(row, ['CompanyId']),
     CompanyId_DisplayValue: readStandardCrudNullableString(row, ['CompanyId_DisplayValue']),
+    ParentDepartmentId: readStandardCrudNullableString(row, ['ParentDepartmentId']),
+    ParentDepartmentId_DisplayValue: readStandardCrudNullableString(row, ['ParentDepartmentId_DisplayValue']),
     ECODE: readStandardCrudString(row, ['ECODE']),
     ENAME: readStandardCrudString(row, ['ENAME']),
     IsEnabled: readStandardCrudBoolean(row, ['IsEnabled'], true),
@@ -44,10 +50,41 @@ const departmentStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
   getRowId: (row: DepartmentListRow) => row.id,
 });
 
-// 根部门页面复用标准 REST 生命周期和 Organization 公司 Lookup，不注册层级、命令或版本字段。
+const departmentParentLookupProvider: StandardCrudLookupProvider = {
+  key: 'organization.department.parents',
+  load: async (request, context) => {
+    const companyId = request.dependencyValues.CompanyId;
+    if (typeof companyId !== 'string' || companyId.length === 0) {
+      return { options: [], currentOptions: [], page: request.page, pageSize: request.pageSize, hasMore: false };
+    }
+
+    const code = typeof request.values.ECODE === 'string' && request.values.ECODE.length > 0
+      ? request.values.ECODE
+      : undefined;
+    return getDepartmentParentLookup(companyId, code, request, false, context?.signal);
+  },
+};
+
+const departmentParentFilterLookupProvider: StandardCrudLookupProvider = {
+  key: 'organization.department.parent-filter',
+  load: async (request, context) => {
+    const companyId = request.dependencyValues.companyId;
+    if (typeof companyId !== 'string' || companyId.length === 0) {
+      return { options: [], currentOptions: [], page: request.page, pageSize: request.pageSize, hasMore: false };
+    }
+
+    return getDepartmentParentLookup(companyId, undefined, request, true, context?.signal);
+  },
+};
+
+// 部门页面复用标准 REST 生命周期，并把依赖上级候选留在 Organization provider 内。
 export const departmentStandardCrudResource: StandardCrudResourceRegistration<Record<string, unknown>, DepartmentListRow> = {
   resourceKey: 'organization.department',
   dataAdapter: departmentStandardCrudDataAdapter,
   listViewKey: 'organization.department.list',
-  lookupProviders: [organizationCompanyLookupProvider],
+  lookupProviders: [
+    organizationCompanyLookupProvider,
+    departmentParentLookupProvider,
+    departmentParentFilterLookupProvider,
+  ],
 };

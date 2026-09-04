@@ -1,17 +1,20 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
-public sealed class DepartmentCrudDisplayValueResolver(ICompanyDirectory companyDirectory)
+public sealed class DepartmentCrudDisplayValueResolver(
+    ICompanyDirectory companyDirectory,
+    IDepartmentDirectory departmentDirectory)
     : IStandardCrudDisplayValueResolver
 {
     public string ResourceKey => "organization.department";
 
     /// <summary>
-    /// 一次批量读取当前页涉及的公司，并补齐部门列表的 canonical CompanyId display value。
+    /// 各用一次批量读取补齐当前页的 canonical 公司与上级部门 display value。
     /// </summary>
     public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
         StandardCrudDescriptor descriptor,
@@ -20,29 +23,66 @@ public sealed class DepartmentCrudDisplayValueResolver(ICompanyDirectory company
         CancellationToken cancellationToken = default)
     {
         _ = descriptor;
-        if (!requestedDisplayFields.Any(static field => field.Field == "CompanyId_DisplayValue"))
+        var resolveCompany = requestedDisplayFields.Any(static field => field.Field == "CompanyId_DisplayValue");
+        var resolveParent = requestedDisplayFields.Any(static field => field.Field == "ParentDepartmentId_DisplayValue");
+        if (!resolveCompany && !resolveParent)
         {
             return rows.Select(static _ => (IReadOnlyDictionary<string, object?>)
                 new Dictionary<string, object?>(StringComparer.Ordinal)).ToList();
         }
 
-        var ids = rows
-            .Select(static row => row.GetValueOrDefault("CompanyId")?.ToString())
+        var companyIds = resolveCompany ? ReadIds(rows, "CompanyId") : [];
+        var parentIds = resolveParent ? ReadIds(rows, "ParentDepartmentId") : [];
+        var companies = resolveCompany
+            ? await companyDirectory.GetByIdsAsync(companyIds, cancellationToken)
+            : new Dictionary<string, Company>(StringComparer.Ordinal);
+        var parents = resolveParent
+            ? await departmentDirectory.GetByIdsAsync(parentIds, cancellationToken)
+            : new Dictionary<string, Department>(StringComparer.Ordinal);
+        return rows.Select(row =>
+        {
+            var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (resolveCompany)
+            {
+                values["CompanyId_DisplayValue"] = ReadDisplay(row, "CompanyId", companies);
+            }
+
+            if (resolveParent)
+            {
+                values["ParentDepartmentId_DisplayValue"] = ReadDisplay(row, "ParentDepartmentId", parents);
+            }
+
+            return (IReadOnlyDictionary<string, object?>)values;
+        }).ToList();
+    }
+
+    // 当前页标识先去空白和重复，保证每个目录最多执行一次批量读取。
+    private static string[] ReadIds(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        string field) => rows
+            .Select(row => row.GetValueOrDefault(field)?.ToString())
             .Where(static id => !string.IsNullOrWhiteSpace(id))
             .Select(static id => id!)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var companies = await companyDirectory.GetByIdsAsync(ids, cancellationToken);
-        return rows.Select(row =>
+
+    // 目录缺失时保留空 companion；停用事实只影响显示标记，不清除既有引用。
+    private static string ReadDisplay<T>(
+        IReadOnlyDictionary<string, object?> row,
+        string field,
+        IReadOnlyDictionary<string, T> directory) where T : class
+    {
+        var id = row.GetValueOrDefault(field)?.ToString();
+        if (id is null || !directory.TryGetValue(id, out var value))
         {
-            var companyId = row.GetValueOrDefault("CompanyId")?.ToString();
-            var displayValue = companyId is not null && companies.TryGetValue(companyId, out var company)
-                ? company.IsEnabled ? company.Name : $"{company.Name}（已停用）"
-                : string.Empty;
-            return (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(StringComparer.Ordinal)
-            {
-                ["CompanyId_DisplayValue"] = displayValue
-            };
-        }).ToList();
+            return string.Empty;
+        }
+
+        return value switch
+        {
+            Company company => company.IsEnabled ? company.Name : $"{company.Name}（已停用）",
+            Department department => department.IsEnabled ? department.Name : $"{department.Name}（已停用）",
+            _ => string.Empty
+        };
     }
 }

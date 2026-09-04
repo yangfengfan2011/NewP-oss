@@ -11,7 +11,7 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
     public string ResourceKey => "organization.department";
 
     /// <summary>
-    /// 校验根部门创建时的字符串排序码，并要求所属公司存在且启用。
+    /// 校验部门创建时的排序码、所属公司与可选同公司启用上级。
     /// </summary>
     public async Task<StandardCrudError?> ValidateCreateAsync(
         StandardCrudDescriptor descriptor,
@@ -36,27 +36,143 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
             .Where(company => EF.Property<string>(company, "EID") == companyId)
             .Select(company => new { IsEnabled = EF.Property<bool>(company, "IsEnabled") })
             .SingleOrDefaultAsync(cancellationToken);
-        return companyState is null
+        var companyError = companyState is null
             ? CompanyError(404, "CompanyNotFound", "所属公司不存在。")
             : companyState.IsEnabled
                 ? null
                 : CompanyError(409, "CompanyDisabled", "所属公司已停用，不能新建部门。");
+        if (companyError is not null)
+        {
+            return companyError;
+        }
+
+        return await ValidateParentAsync(
+            companyId,
+            ReadNullableId(values, "ParentDepartmentId"),
+            currentDepartmentId: null,
+            cancellationToken);
     }
 
     /// <summary>
-    /// 校验根部门普通编辑中的字符串排序码；本阶段没有子部门停用守卫。
+    /// 校验部门普通编辑中的排序码、同公司换父、防环与启用子级停用守卫。
     /// </summary>
-    public Task<StandardCrudError?> ValidateUpdateAsync(
+    public async Task<StandardCrudError?> ValidateUpdateAsync(
         StandardCrudDescriptor descriptor,
         string id,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
         _ = descriptor;
-        _ = id;
-        _ = cancellationToken;
-        return Task.FromResult(ValidateSortOrder(values));
+        var sortOrderError = ValidateSortOrder(values);
+        if (sortOrderError is not null)
+        {
+            return sortOrderError;
+        }
+
+        var current = await FindDepartmentAsync(id, cancellationToken);
+        if (current is null)
+        {
+            return null;
+        }
+
+        if (values.GetValueOrDefault("IsEnabled") is false
+            && await Departments().AsNoTracking().AnyAsync(
+                department => EF.Property<string?>(department, "ParentDepartmentId") == id
+                    && EF.Property<bool>(department, "IsEnabled"),
+                cancellationToken))
+        {
+            return LifecycleError(
+                "DisableBlockedByEnabledChild",
+                "部门仍有启用子部门，不能停用。");
+        }
+
+        if (!values.ContainsKey("ParentDepartmentId"))
+        {
+            return null;
+        }
+
+        return await ValidateParentAsync(
+            current.CompanyId,
+            ReadNullableId(values, "ParentDepartmentId"),
+            id,
+            cancellationToken);
     }
+
+    // 父引用必须存在、启用且属于同一公司；编辑时再沿完整祖先链拒绝自身和任意深度后代。
+    private async Task<StandardCrudError?> ValidateParentAsync(
+        string companyId,
+        string? parentDepartmentId,
+        string? currentDepartmentId,
+        CancellationToken cancellationToken)
+    {
+        if (parentDepartmentId is null)
+        {
+            return null;
+        }
+
+        var parent = await FindDepartmentAsync(parentDepartmentId, cancellationToken);
+        if (parent is null)
+        {
+            return ParentError(404, "ParentNotFound", "上级部门不存在。");
+        }
+
+        if (!string.Equals(parent.CompanyId, companyId, StringComparison.Ordinal))
+        {
+            return ParentError(400, "ParentCompanyMismatch", "上级部门必须属于同一公司。");
+        }
+
+        if (!parent.IsEnabled)
+        {
+            return ParentError(400, "ParentDisabled", "上级部门已停用，不能作为新的上级。");
+        }
+
+        if (currentDepartmentId is null)
+        {
+            return null;
+        }
+
+        var selectedParent = parent;
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (parent is not null)
+        {
+            if (string.Equals(parent.Id, currentDepartmentId, StringComparison.Ordinal))
+            {
+                return ParentError(
+                    400,
+                    ReferenceEquals(parent, selectedParent) ? "ParentSelfReference" : "ParentCycle",
+                    ReferenceEquals(parent, selectedParent) ? "部门不能把自身设为上级。" : "上级部门不能是当前部门的后代。");
+            }
+
+            if (!visited.Add(parent.Id))
+            {
+                return LifecycleError("HierarchyCorrupted", "现有部门层级包含环，不能调整上级。");
+            }
+
+            parent = parent.ParentDepartmentId is null
+                ? null
+                : await FindDepartmentAsync(parent.ParentDepartmentId, cancellationToken);
+        }
+
+        return null;
+    }
+
+    // 单次读取祖先节点所需的最小字段，避免把动态持久化行泄漏到领域校验分支。
+    private Task<DepartmentState?> FindDepartmentAsync(string id, CancellationToken cancellationToken) =>
+        Departments()
+            .AsNoTracking()
+            .Where(department => EF.Property<string>(department, "EID") == id)
+            .Select(department => new DepartmentState(
+                EF.Property<string>(department, "EID"),
+                EF.Property<string>(department, "CompanyId"),
+                EF.Property<string?>(department, "ParentDepartmentId"),
+                EF.Property<bool>(department, "IsEnabled")))
+            .SingleOrDefaultAsync(cancellationToken);
+
+    // 空字符串与 null 都表示根部门；字段策略会在持久化前把空字符串规范化为 null。
+    private static string? ReadNullableId(IReadOnlyDictionary<string, object?> values, string field) =>
+        values.GetValueOrDefault(field)?.ToString() is { } value && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
 
     // 排序码必须原样由一至三十二个 ASCII 数字组成，不能接受 Unicode 数字或隐式 trim。
     private static StandardCrudError? ValidateSortOrder(IReadOnlyDictionary<string, object?> values)
@@ -76,6 +192,10 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
     // 公司状态从 Organization 持久化边界直接读取，不恢复旧 Department service。
     private DbSet<Dictionary<string, object?>> Companies() =>
         dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company"));
+
+    // 部门状态只从 Organization 自有模型读取，层级校验不经过第二套写入服务。
+    private DbSet<Dictionary<string, object?>> Departments() =>
+        dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Department"));
 
     // 排序码格式错误绑定到 SortOrder，供标准 Drawer 精确展示。
     private static StandardCrudError SortOrderError() => new()
@@ -102,4 +222,29 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
         ReasonKey = $"organization.department.{char.ToLowerInvariant(codeStem[0])}{codeStem[1..]}",
         FieldErrors = [new StandardCrudFieldError("CompanyId", $"Organization.Department.{codeStem}", message)]
     };
+
+    // 可定位的父部门输入错误统一绑定 ParentDepartmentId。
+    private static StandardCrudError ParentError(int statusCode, string codeStem, string message) => new()
+    {
+        StatusCode = statusCode,
+        Code = $"Organization.Department.{codeStem}",
+        Message = message,
+        ReasonKey = $"organization.department.{char.ToLowerInvariant(codeStem[0])}{codeStem[1..]}",
+        FieldErrors = [new StandardCrudFieldError("ParentDepartmentId", $"Organization.Department.{codeStem}", message)]
+    };
+
+    // 生命周期冲突不归因于单个可修正字段，返回资源稳定 409。
+    private static StandardCrudError LifecycleError(string codeStem, string message) => new()
+    {
+        StatusCode = 409,
+        Code = $"Organization.Department.{codeStem}",
+        Message = message,
+        ReasonKey = $"organization.department.{char.ToLowerInvariant(codeStem[0])}{codeStem[1..]}"
+    };
+
+    private sealed record DepartmentState(
+        string Id,
+        string CompanyId,
+        string? ParentDepartmentId,
+        bool IsEnabled);
 }

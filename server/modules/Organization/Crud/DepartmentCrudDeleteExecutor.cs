@@ -13,20 +13,24 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext)
     public string ResourceKey => "organization.department";
 
     /// <summary>
-    /// 在删除前提供根部门当前人员引用状态；最终并发完整性仍由原子谓词和 Restrict 外键兜底。
+    /// 在删除前提供当前子部门和人员引用状态；最终并发完整性仍由原子谓词和 Restrict 外键兜底。
     /// </summary>
     public async Task<StandardCrudError?> CanDeleteAsync(
         StandardCrudDescriptor descriptor,
         string id,
         CancellationToken cancellationToken = default)
     {
-        _ = descriptor;
         if (string.IsNullOrWhiteSpace(id))
         {
             return InvalidIdError();
         }
 
-        return await HasPersonReferenceAsync(id, cancellationToken) ? ReferencedError() : null;
+        if (await HasChildReferenceAsync(descriptor, id, cancellationToken))
+        {
+            return ChildReferencedError();
+        }
+
+        return await HasPersonReferenceAsync(id, cancellationToken) ? PersonReferencedError() : null;
     }
 
     /// <summary>
@@ -52,6 +56,8 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext)
                 affected = await departments
                     .Where(department =>
                         EF.Property<string>(department, descriptor.IdField) == id
+                        && !departments.Any(child =>
+                            EF.Property<string?>(child, "ParentDepartmentId") == id)
                         && !persons.Any(person => EF.Property<string?>(person, "DepartmentId") == id))
                     .ExecuteDeleteAsync(cancellationToken);
             }
@@ -60,7 +66,9 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext)
                 var department = await departments.FirstOrDefaultAsync(
                     row => EF.Property<string>(row, descriptor.IdField) == id,
                     cancellationToken);
-                if (department is null || await HasPersonReferenceAsync(id, cancellationToken))
+                if (department is null
+                    || await HasChildReferenceAsync(descriptor, id, cancellationToken)
+                    || await HasPersonReferenceAsync(id, cancellationToken))
                 {
                     affected = 0;
                 }
@@ -75,7 +83,7 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext)
             dbContext.Database.ProviderName,
             exception))
         {
-            return StandardCrudMutationResult.Failure(ReferencedError());
+            return StandardCrudMutationResult.Failure(ReferenceRaceError());
         }
 
         if (affected == 1)
@@ -86,10 +94,27 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext)
         var exists = await departments.AsNoTracking().AnyAsync(
             department => EF.Property<string>(department, descriptor.IdField) == id,
             cancellationToken);
-        return exists
-            ? StandardCrudMutationResult.Failure(ReferencedError())
-            : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+        if (!exists)
+        {
+            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+        }
+
+        if (await HasChildReferenceAsync(descriptor, id, cancellationToken))
+        {
+            return StandardCrudMutationResult.Failure(ChildReferencedError());
+        }
+
+        return StandardCrudMutationResult.Failure(PersonReferencedError());
     }
+
+    // 任意状态的直接子部门都阻止物理删除；更深层后代必然经由直接子级形成引用。
+    private Task<bool> HasChildReferenceAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        CancellationToken cancellationToken) =>
+        Departments(descriptor).AsNoTracking().AnyAsync(
+            department => EF.Property<string?>(department, "ParentDepartmentId") == id,
+            cancellationToken);
 
     // 人员引用判断保持数据库侧聚合，停用人员同样阻止物理删除。
     private Task<bool> HasPersonReferenceAsync(string id, CancellationToken cancellationToken) =>
@@ -106,12 +131,30 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext)
         dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Person"));
 
     // 人员引用转为资源特定冲突，避免暴露约束名称与 provider 文本。
-    private static StandardCrudError ReferencedError() => new()
+    private static StandardCrudError PersonReferencedError() => new()
     {
         StatusCode = 409,
         Code = "Organization.Department.DeleteBlockedByPerson",
         Message = "部门仍被人员引用，不能删除。",
         ReasonKey = "organization.department.deleteBlockedByPerson"
+    };
+
+    // 子部门引用使用独立稳定码，方便管理员区分需要先调整层级的冲突。
+    private static StandardCrudError ChildReferencedError() => new()
+    {
+        StatusCode = 409,
+        Code = "Organization.Department.DeleteBlockedByChild",
+        Message = "部门仍有子部门，不能删除。",
+        ReasonKey = "organization.department.deleteBlockedByChild"
+    };
+
+    // 提交期由数据库 Restrict 兜底的竞态不泄漏 provider 约束名称。
+    private static StandardCrudError ReferenceRaceError() => new()
+    {
+        StatusCode = 409,
+        Code = "Organization.Department.DeleteBlockedByReference",
+        Message = "部门在删除提交时仍被引用，不能删除。",
+        ReasonKey = "organization.department.deleteBlockedByReference"
     };
 
     // 空标识在进入存储表达式前稳定拒绝。

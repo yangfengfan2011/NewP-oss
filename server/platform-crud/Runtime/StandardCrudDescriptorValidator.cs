@@ -223,10 +223,12 @@ public static class StandardCrudDescriptorValidator
             if ((policy.ValueOwner == StandardCrudFieldValueOwner.Server
                     && (policy.CreateInputRequired || policy.UpdateNonEmpty))
                 || policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate
-                    && policy.CreateInputRequired)
+                    && policy.CreateInputRequired
+                || policy.ValueOwner == StandardCrudFieldValueOwner.CallerOnCreate
+                    && policy.UpdateNonEmpty)
             {
                 throw new InvalidOperationException(
-                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端字段 {policy.Field} 不能声明调用方必填。");
+                    $"标准 CRUD 资源 {descriptor.ResourceKey} 的字段 {policy.Field} owner 与调用方必填范围冲突。");
             }
 
             var expectedScope = ResolveRequiredScope(policy);

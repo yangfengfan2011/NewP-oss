@@ -66,7 +66,8 @@ public class ModelMetadataProjectorTests
                         Name = "Code",
                         Storage = new ModelMetadataStorageSection
                         {
-                            Type = "string"
+                            Type = "string",
+                            Nullable = true
                         }
                     }
                 ]
@@ -154,7 +155,8 @@ public class ModelMetadataProjectorTests
                     {
                         Name = "UX_ConfigItem_Code",
                         Fields = ["Code"],
-                        Unique = true
+                        Unique = true,
+                        IncludeNullValues = true
                     }
                 ]
             }
@@ -181,7 +183,8 @@ public class ModelMetadataProjectorTests
         var definition = new ModelMetadataProjector().Project(document, typeMap, "SqlServer");
 
         Assert.Contains(definition.Indexes, static x => x is { Name: "UX_ConfigItem_EID", IsUnique: true });
-        Assert.Contains(definition.Indexes, static x => x is { Name: "UX_ConfigItem_Code", IsUnique: true });
+        Assert.Contains(definition.Indexes, static x => x is
+            { Name: "UX_ConfigItem_Code", IsUnique: true, IncludeNullValues: true });
     }
 
     [Fact]

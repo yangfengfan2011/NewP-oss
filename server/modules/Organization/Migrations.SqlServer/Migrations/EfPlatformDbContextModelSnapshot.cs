@@ -164,9 +164,9 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Department_Company_ECODE");
 
-                    b.HasIndex("CompanyId", "ENAME")
+                    b.HasIndex("CompanyId", "ParentDepartmentId", "ENAME")
                         .IsUnique()
-                        .HasDatabaseName("UX_Department_Company_ENAME");
+                        .HasDatabaseName("UX_Department_Company_Parent_ENAME");
 
                     b.ToTable("Department", "dbo");
                 });
@@ -345,6 +345,13 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_Department_Company");
+
+                    b.HasOne("Organization/Department", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ParentDepartmentId")
+                        .HasPrincipalKey("CompanyId", "EID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Department_Company_ParentDepartment");
                 });
 
             modelBuilder.Entity("Organization/Person", b =>

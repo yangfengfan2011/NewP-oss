@@ -728,6 +728,33 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task CallerOnCreateField_IsAcceptedOnCreateAndRejectedOnUpdateBeforeFiltering()
+    {
+        var descriptor = CallerOnCreateDescriptor();
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?> { ["EID"] = "item-1", ["ECODE"] = "C001", ["ENAME"] = "初始名称" }
+        ]);
+        var service = Service(repository);
+
+        var created = await service.CreateAsync(
+            descriptor,
+            new Dictionary<string, object?> { ["ECODE"] = "C002", ["ENAME"] = "新建名称" });
+        var updated = await service.UpdateAsync(
+            descriptor,
+            "item-1",
+            new Dictionary<string, object?> { ["ECODE"] = "C999", ["ENAME"] = "更新名称" });
+
+        Assert.True(created.Succeeded);
+        Assert.Equal("C002", created.Detail!.Fields["ECODE"]);
+        Assert.False(updated.Succeeded);
+        Assert.Equal(400, updated.Error!.StatusCode);
+        Assert.Equal("StandardCrud.ImmutableFieldReadOnly", updated.Error.Code);
+        Assert.Equal("ECODE", Assert.Single(updated.Error.FieldErrors).Field);
+        Assert.Equal("C001", (await repository.GetByIdAsync(descriptor, "item-1"))!["ECODE"]);
+    }
+
+    [Fact]
     public async Task UpdateAsync_WhenFieldIsServerOwnedOnlyOnCreate_UsesLastWriteWinsWithoutRevision()
     {
         var descriptor = ShortTextDescriptor();
@@ -1404,6 +1431,48 @@ public sealed class StandardCrudServiceWriteTests
                 StorageRequired = true,
                 ValueOwner = StandardCrudFieldValueOwner.ServerOnCreate,
                 CreateDefaultValue = true
+            }
+        ]
+    };
+
+    private static StandardCrudDescriptor CallerOnCreateDescriptor() => new()
+    {
+        ResourceKey = "example.immutable",
+        ModuleId = "Example",
+        ModelName = "ImmutableItem",
+        Route = "api/example/immutable-items",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "ECODE", "ENAME"],
+            DetailFields: ["EID", "ECODE", "ENAME"],
+            CreateFields: ["ECODE", "ENAME"],
+            UpdateFields: ["ENAME"]),
+        RequiredFields =
+        [
+            new StandardCrudRequiredField
+            {
+                Field = "ECODE",
+                Scope = StandardCrudRequiredFieldScope.CreateOnly,
+                ErrorCode = "Example.Immutable.CodeRequired",
+                Message = "编码不能为空。",
+                ReasonKey = "example.immutable.codeRequired"
+            }
+        ],
+        FieldPolicies =
+        [
+            new StandardCrudFieldPolicy
+            {
+                Field = "ECODE",
+                StorageRequired = true,
+                CreateInputRequired = true,
+                ValueOwner = StandardCrudFieldValueOwner.CallerOnCreate
+            },
+            new StandardCrudFieldPolicy
+            {
+                Field = "ENAME",
+                StorageRequired = true,
+                ValueOwner = StandardCrudFieldValueOwner.Caller
             }
         ]
     };

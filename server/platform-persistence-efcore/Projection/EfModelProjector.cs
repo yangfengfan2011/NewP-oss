@@ -61,6 +61,10 @@ public sealed class EfModelProjector
                 if (index.IsUnique)
                 {
                     indexBuilder.IsUnique();
+                    if (index.IncludeNullValues)
+                    {
+                        indexBuilder.HasFilter(null);
+                    }
                 }
             }
         }

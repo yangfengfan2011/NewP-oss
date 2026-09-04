@@ -256,7 +256,7 @@ public sealed class ModelMetadataProjector
         }
 
         indexes.AddRange(document.Model.Indexes.Select(index =>
-            new IndexDefinition(index.Name, index.Fields, index.Unique)));
+            new IndexDefinition(index.Name, index.Fields, index.Unique, index.IncludeNullValues)));
 
         return indexes;
     }

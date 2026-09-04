@@ -12,7 +12,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class DepartmentStandardCrudResourceTests
 {
     [Fact]
-    public void Descriptor_ExposesRootDepartmentFieldsStableSortAndConditionalDeleteWithoutRevision()
+    public void Descriptor_ExposesHierarchyFieldsStableSortAndConditionalDeleteWithoutRevision()
     {
         var descriptor = DepartmentCrudDescriptorFactory.Create();
 
@@ -21,12 +21,10 @@ public sealed class DepartmentStandardCrudResourceTests
         Assert.Equal("organization.department", descriptor.ResourceKey);
         Assert.Equal("api/organization/departments", descriptor.Route);
         Assert.Equal(
-            ["EID", "CompanyId", "ECODE", "ENAME", "IsEnabled", "SortOrder", "UpdatedAt"],
+            ["EID", "CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "IsEnabled", "SortOrder", "UpdatedAt"],
             descriptor.FieldSet.ListFields);
-        Assert.Equal(["CompanyId", "ECODE", "ENAME", "SortOrder"], descriptor.FieldSet.CreateFields);
-        Assert.Equal(["ENAME", "SortOrder", "IsEnabled"], descriptor.FieldSet.UpdateFields);
-        Assert.DoesNotContain("ParentDepartmentId", descriptor.FieldSet.CreateFields);
-        Assert.DoesNotContain("ParentDepartmentId", descriptor.FieldSet.UpdateFields);
+        Assert.Equal(["CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "SortOrder"], descriptor.FieldSet.CreateFields);
+        Assert.Equal(["ParentDepartmentId", "ENAME", "SortOrder", "IsEnabled"], descriptor.FieldSet.UpdateFields);
         Assert.Equal("SortOrder", descriptor.DefaultSortField);
         Assert.Equal(["ECODE"], descriptor.StableSortFields);
         Assert.Null(descriptor.ConcurrencyRevisionField);
@@ -40,7 +38,7 @@ public sealed class DepartmentStandardCrudResourceTests
         Assert.Collection(
             descriptor.UniqueConstraints,
             constraint => Assert.Equal(["CompanyId", "ECODE"], constraint.Fields),
-            constraint => Assert.Equal(["CompanyId", "ENAME"], constraint.Fields));
+            constraint => Assert.Equal(["CompanyId", "ParentDepartmentId", "ENAME"], constraint.Fields));
         Assert.All(descriptor.UniqueConstraints, constraint =>
         {
             Assert.True(constraint.CaseInsensitive);
@@ -50,9 +48,15 @@ public sealed class DepartmentStandardCrudResourceTests
         var enabled = Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "IsEnabled");
         Assert.Equal(StandardCrudFieldValueOwner.ServerOnCreate, enabled.ValueOwner);
         Assert.Equal(true, enabled.CreateDefaultValue);
+        Assert.Equal(
+            StandardCrudFieldValueOwner.CallerOnCreate,
+            Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "CompanyId").ValueOwner);
+        Assert.Equal(
+            StandardCrudFieldValueOwner.CallerOnCreate,
+            Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "ECODE").ValueOwner);
         var parent = Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "ParentDepartmentId");
-        Assert.Equal(StandardCrudFieldValueOwner.ServerOnCreate, parent.ValueOwner);
-        Assert.Null(parent.CreateDefaultValue);
+        Assert.Equal(StandardCrudFieldValueOwner.Caller, parent.ValueOwner);
+        Assert.False(parent.StorageRequired);
     }
 
     [Fact]
@@ -73,7 +77,7 @@ public sealed class DepartmentStandardCrudResourceTests
     }
 
     [Fact]
-    public void QueryCustomizer_SearchesCodeOrNameAndFiltersCompanyAndStatus()
+    public void QueryCustomizer_SearchesCodeOrNameAndFiltersCompanyParentAndStatus()
     {
         var conditions = new DepartmentCrudQueryCustomizer().BuildConditions(
             DepartmentCrudDescriptorFactory.Create(),
@@ -81,6 +85,7 @@ public sealed class DepartmentStandardCrudResourceTests
             {
                 ["keyword"] = "研发",
                 ["companyId"] = "Company_1",
+                ["parentDepartmentId"] = "Department_Parent",
                 ["isEnabled"] = "false"
             }));
 
@@ -89,6 +94,7 @@ public sealed class DepartmentStandardCrudResourceTests
             condition => Assert.Equal(new StandardCrudQueryCondition("ECODE", "contains", "研发", "keyword", "or"), condition),
             condition => Assert.Equal(new StandardCrudQueryCondition("ENAME", "contains", "研发", "keyword", "or"), condition),
             condition => Assert.Equal(new StandardCrudQueryCondition("CompanyId", "=", "Company_1"), condition),
+            condition => Assert.Equal(new StandardCrudQueryCondition("ParentDepartmentId", "=", "Department_Parent"), condition),
             condition => Assert.Equal(new StandardCrudQueryCondition("IsEnabled", "=", "false"), condition));
     }
 }

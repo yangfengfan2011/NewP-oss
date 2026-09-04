@@ -225,7 +225,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void DepartmentMetadata_UsesRootStandardListWithoutParentDetailExportOrBulkActions()
+    public void DepartmentMetadata_UsesHierarchyListAndDependentParentLookupWithoutDetailExportOrBulkActions()
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
@@ -236,10 +236,16 @@ public class OrganizationModuleTests
         Assert.Equal("readonly", FormMode(fields, "CompanyId", "edit"));
         Assert.Equal("editable", FormMode(fields, "ECODE", "create"));
         Assert.Equal("readonly", FormMode(fields, "ECODE", "edit"));
-        Assert.DoesNotContain(
+        Assert.Contains(
             "ParentDepartmentId",
             model.RootElement.GetProperty("Department").GetProperty("sections")[0].GetProperty("fields")
                 .EnumerateArray().Select(static field => field.GetString()));
+        Assert.Equal("editable", FormMode(fields, "ParentDepartmentId", "create"));
+        Assert.Equal("editable", FormMode(fields, "ParentDepartmentId", "edit"));
+        var parentSource = fields.Single(field => field.GetProperty("name").GetString() == "ParentDepartmentId")
+            .GetProperty("dataSource");
+        Assert.Equal("organization.department.parents", parentSource.GetProperty("key").GetString());
+        Assert.Equal(["CompanyId"], parentSource.GetProperty("dependsOn").EnumerateArray().Select(item => item.GetString()));
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(root, @"modules\Organization\metadata\views\DepartmentList.view.json"),
@@ -247,10 +253,10 @@ public class OrganizationModuleTests
         var view = listView.RootElement.GetProperty("view");
         Assert.Equal("organization.department.list", view.GetProperty("key").GetString());
         Assert.Equal(
-            ["CompanyId", "ECODE", "ENAME", "IsEnabled", "SortOrder", "UpdatedAt"],
+            ["CompanyId", "ECODE", "ENAME", "ParentDepartmentId", "IsEnabled", "SortOrder", "UpdatedAt"],
             view.GetProperty("columns").EnumerateArray().Select(column => column.GetProperty("field").GetString()));
         Assert.Equal(
-            ["keyword", "companyId", "isEnabled"],
+            ["keyword", "companyId", "parentDepartmentId", "isEnabled"],
             view.GetProperty("query").GetProperty("fields").EnumerateArray()
                 .Select(query => query.GetProperty("key").GetString()));
         Assert.Equal("create", Assert.Single(view.GetProperty("pageActions").EnumerateArray()).GetProperty("standardAction").GetString());

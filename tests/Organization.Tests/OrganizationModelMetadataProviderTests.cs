@@ -131,9 +131,15 @@ public class OrganizationModelMetadataProviderTests
                 && index.Fields.SequenceEqual(["CompanyId", "ECODE"]));
         Assert.Contains(
             department.Indexes,
-            index => index.Name == "UX_Department_Company_ENAME"
+            index => index.Name == "UX_Department_Company_Parent_ENAME"
                 && index.IsUnique
-                && index.Fields.SequenceEqual(["CompanyId", "ENAME"]));
+                && index.Fields.SequenceEqual(["CompanyId", "ParentDepartmentId", "ENAME"]));
+        var parentDepartment = Assert.Single(
+            department.ForeignKeys,
+            item => item.Name == "FK_Department_Company_ParentDepartment");
+        Assert.Equal(["CompanyId", "ParentDepartmentId"], parentDepartment.Fields);
+        Assert.Equal(["CompanyId", "EID"], parentDepartment.PrincipalFields);
+        Assert.Equal(ForeignKeyDeleteBehavior.Restrict, parentDepartment.DeleteBehavior);
     }
 
     [Fact]

@@ -7,11 +7,33 @@
       "ENAME",
       "ECODE"
     ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": ["CompanyId", "ECODE", "ENAME", "SortOrder", "IsEnabled"]
+      }
+    ],
     "fields": [
       {
         "name": "CompanyId",
         "storage": {
           "type": "guid"
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "readonly" }
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.companies"
+        },
+        "display": {
+          "type": "reference",
+          "targetModel": "Company",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME"
         }
       },
       {
@@ -22,15 +44,41 @@
         }
       },
       {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "readonly" }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "editable", "required": true }
+        }
+      },
+      {
         "name": "IsEnabled",
         "storage": {
           "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": { "mode": "hidden" },
+          "edit": { "mode": "editable" }
         }
       },
       {
         "name": "SortOrder",
         "storage": {
           "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": { "mode": "editable", "required": true },
+          "edit": { "mode": "editable", "required": true }
         }
       }
     ],
@@ -50,13 +98,17 @@
         "unique": false
       },
       {
-        "name": "IX_Department_Company_Parent_ECODE",
+        "name": "UX_Department_Company_ECODE",
         "fields": [
           "CompanyId",
-          "ParentDepartmentId",
           "ECODE"
         ],
-        "unique": false
+        "unique": true
+      },
+      {
+        "name": "UX_Department_Company_ENAME",
+        "fields": ["CompanyId", "ENAME"],
+        "unique": true
       }
     ],
     "foreignKeys": [

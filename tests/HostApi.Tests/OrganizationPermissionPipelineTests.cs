@@ -260,6 +260,28 @@ public sealed class OrganizationPermissionPipelineTests
     }
 
     [Theory]
+    [InlineData("GET", "/api/organization/departments", "Organization.Department.View")]
+    [InlineData("GET", "/api/organization/departments/options", "Organization.Department.View")]
+    [InlineData("POST", "/api/organization/departments", "Organization.Department.Create")]
+    [InlineData("PUT", "/api/organization/departments/Department_1", "Organization.Department.Update")]
+    [InlineData("DELETE", "/api/organization/departments/Department_1", "Organization.Department.Delete")]
+    public async Task DepartmentStandardCrud_OperationsUseFixedPermission(
+        string method,
+        string path,
+        string expectedPermission)
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+
+        using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
+        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(1, scenario.CrudService.CallCount);
+    }
+
+    [Theory]
     [InlineData("Position_Missing", HttpStatusCode.NotFound, "StandardCrud.NotFound")]
     [InlineData("Position_Referenced", HttpStatusCode.Conflict, "Organization.Position.DeleteBlockedByPersonReference")]
     [InlineData("Position_Enabled", HttpStatusCode.NoContent, null)]
@@ -405,6 +427,7 @@ public sealed class OrganizationPermissionPipelineTests
             builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
+            builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
 
             var application = builder.Build();
             application.UseAuthentication();

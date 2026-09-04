@@ -13,6 +13,7 @@ public sealed class DepartmentDto
     public string Name { get => DisplayName; init => DisplayName = value; }
     public string Code { get; init; }
     public string CompanyId { get; init; }
+    public string? CompanyId_DisplayValue { get; init; }
     public string? ParentDepartmentId { get; init; }
     public bool IsEnabled { get; init; } = true;
     public string SortOrder { get; init; }

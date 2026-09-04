@@ -3,8 +3,6 @@ using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
-using ICP.Platform.Modules.Organization.Repositories;
-using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
@@ -16,64 +14,6 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class EfOrganizationRepositoryTests
 {
     [Fact]
-    public async Task EfDepartmentRepository_ExistsSiblingCodeAsync_RespectsParentScope()
-    {
-        using var dbContext = CreateDbContext();
-        var repository = new EfDepartmentRepository(dbContext);
-        var companyId = "Company_11111111111111111111111111111111";
-        var rootId = "Department_22222222222222222222222222222222";
-
-        await repository.CreateAsync(new Department
-        {
-            Id = rootId,
-            CompanyId = companyId,
-            Code = "ROOT",
-            Name = "根部门"
-        });
-
-        await repository.CreateAsync(new Department
-        {
-            Id = "Department_33333333333333333333333333333333",
-            CompanyId = companyId,
-            ParentDepartmentId = rootId,
-            Code = "ENG",
-            Name = "工程部"
-        });
-
-        var duplicateUnderSameParent = await repository.ExistsSiblingCodeAsync(companyId, rootId, "ENG");
-        var sameCodeAtRoot = await repository.ExistsSiblingCodeAsync(companyId, null, "ENG");
-
-        Assert.True(duplicateUnderSameParent);
-        Assert.False(sameCodeAtRoot);
-    }
-
-    [Fact]
-    public async Task EfDepartmentRepository_GetByIdsAsync_ReturnsIndexedEntities()
-    {
-        using var dbContext = CreateDbContext();
-        var departmentRepository = new EfDepartmentRepository(dbContext);
-
-        var company = new Company
-        {
-            Id = "Company_44444444444444444444444444444444",
-            Code = "ROOT",
-            Name = "总公司"
-        };
-        var department = new Department
-        {
-            Id = "Department_55555555555555555555555555555555",
-            CompanyId = company.Id,
-            Code = "RD",
-            Name = "研发部"
-        };
-        await departmentRepository.CreateAsync(department);
-
-        var departments = await departmentRepository.GetByIdsAsync([department.Id, "Department_missing"]);
-
-        Assert.Equal("研发部", departments[department.Id].Name);
-    }
-
-    [Fact]
     public void OrganizationModule_ConfigureServices_RegistersRepositoriesAndServices()
     {
         var services = new ServiceCollection();
@@ -81,9 +21,6 @@ public class EfOrganizationRepositoryTests
 
         module.ConfigureServices(services);
 
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(IDepartmentRepository) &&
-            descriptor.ImplementationType == typeof(EfDepartmentRepository));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IPositionDirectory) &&
             descriptor.ImplementationType == typeof(PlatformQueryPositionDirectory));
@@ -93,9 +30,8 @@ public class EfOrganizationRepositoryTests
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IDepartmentDirectory) &&
             descriptor.ImplementationType == typeof(EfDepartmentDirectory));
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(IDepartmentService) &&
-            descriptor.ImplementationType == typeof(DepartmentService));
+        Assert.DoesNotContain(services, descriptor =>
+            descriptor.ServiceType.Name is "IDepartmentRepository" or "IDepartmentService");
     }
 
     [Fact]

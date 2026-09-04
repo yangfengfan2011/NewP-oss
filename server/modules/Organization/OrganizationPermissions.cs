@@ -18,9 +18,11 @@ public static class OrganizationPermissions
     public const string CompanyUpdate = CompanyStem + ".Update";
     public const string CompanyDelete = CompanyStem + ".Delete";
 
-    public const string DepartmentView = "Organization.Department.View";
-    public const string DepartmentCreate = "Organization.Department.Create";
-    public const string DepartmentUpdate = "Organization.Department.Update";
+    public const string DepartmentStem = "Organization.Department";
+    public const string DepartmentView = DepartmentStem + ".View";
+    public const string DepartmentCreate = DepartmentStem + ".Create";
+    public const string DepartmentUpdate = DepartmentStem + ".Update";
+    public const string DepartmentDelete = DepartmentStem + ".Delete";
 
     public const string PositionStem = "Organization.Position";
     public const string PositionView = PositionStem + ".View";

@@ -34,15 +34,17 @@ const LazyPersonUserBindingSummary = lazy(async () => {
   return { default: module.PersonUserBindingSummary };
 });
 
+export const organizationCompanyLookupProvider: StandardCrudLookupProvider = {
+  key: 'organization.companies',
+  load: async (request, context) => getCompanyLookup(
+    request,
+    request.fieldKey === 'companyId',
+    context?.signal,
+  ),
+};
+
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
-  {
-    key: 'organization.companies',
-    load: async (request, context) => getCompanyLookup(
-      request,
-      request.fieldKey === 'companyId',
-      context?.signal,
-    ),
-  },
+  organizationCompanyLookupProvider,
   {
     key: 'organization.departments',
     load: async (request, context) => {

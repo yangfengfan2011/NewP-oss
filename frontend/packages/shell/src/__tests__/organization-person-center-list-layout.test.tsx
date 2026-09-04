@@ -40,6 +40,13 @@ const serviceMocks = vi.hoisted(() => ({
     pageSize: 20,
     hasMore: false,
   })),
+  getDepartmentLookup: vi.fn(async () => ({
+    options: [],
+    currentOptions: [],
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+  })),
 }));
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -49,7 +56,7 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
     ...actual,
     setPersonLifecycleStatus: serviceMocks.setPersonLifecycleStatus,
     getCompanyLookup: serviceMocks.getCompanyLookup,
-    getDepartments: async () => [],
+    getDepartmentLookup: serviceMocks.getDepartmentLookup,
     getEmploymentStatusLabel: (value: string) => value,
   };
 });

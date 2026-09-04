@@ -24,7 +24,8 @@
       "organization.person.list",
       "organization.person.detail",
       "organization.position.list",
-      "organization.company.list"
+      "organization.company.list",
+      "organization.department.list"
     ]
   },
   "security": {
@@ -99,6 +100,12 @@
         "code": "Organization.Department.Update",
         "displayName": "更新部门",
         "description": "更新部门",
+        "group": "部门"
+      },
+      {
+        "code": "Organization.Department.Delete",
+        "displayName": "删除部门",
+        "description": "删除未被人员引用的根部门",
         "group": "部门"
       },
       {

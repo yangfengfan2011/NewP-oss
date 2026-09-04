@@ -21,6 +21,10 @@
     "CompanyManagement": {
       "zhs": "公司管理",
       "en": "Company Management"
+    },
+    "DepartmentManagement": {
+      "zhs": "部门管理",
+      "en": "Department Management"
     }
   }
 }

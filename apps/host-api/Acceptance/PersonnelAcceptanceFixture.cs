@@ -3,8 +3,6 @@ using System.Text;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Modules.Organization.DTOs;
-using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authorization;
 
 namespace ICP.Platform.HostApi.Acceptance;
@@ -37,7 +35,6 @@ public static class PersonnelAcceptanceFixture
             IDepartmentDirectory departmentDirectory,
             IStandardCrudResourceRegistry standardCrudResources,
             IStandardCrudService standardCrudService,
-            IDepartmentService departmentService,
             IIdentityLocalAdministratorReadinessProbe localAdministrator,
             CancellationToken cancellationToken) =>
         {
@@ -85,17 +82,31 @@ public static class PersonnelAcceptanceFixture
             var departmentName = existingDepartment?.Name;
             if (departmentId is null)
             {
-                var createdDepartment = await departmentService.CreateAsync(new DepartmentDto
+                var departmentDescriptor = standardCrudResources.FindByResourceKey("organization.department")
+                    ?? throw new InvalidOperationException("ACC_FIXTURE_DEPARTMENT_RESOURCE_MISSING");
+                var createdDepartment = await standardCrudService.CreateAsync(
+                    departmentDescriptor,
+                    new Dictionary<string, object?>
                 {
-                    Code = options.DepartmentCode,
-                    DisplayName = options.DepartmentName,
-                    CompanyId = companyId,
-                    ParentDepartmentId = null,
-                    IsEnabled = true,
-                    SortOrder = "10"
-                }, cancellationToken);
-                departmentId = createdDepartment.Id;
-                departmentName = createdDepartment.DisplayName;
+                    ["ECODE"] = options.DepartmentCode,
+                    ["ENAME"] = options.DepartmentName,
+                    ["CompanyId"] = companyId,
+                    ["SortOrder"] = "10"
+                },
+                    cancellationToken);
+                if (!createdDepartment.Succeeded || createdDepartment.Detail is null)
+                {
+                    throw new InvalidOperationException(
+                        $"ACC_FIXTURE_DEPARTMENT_CREATE_FAILED: {createdDepartment.Error?.Code ?? "missing-detail"}");
+                }
+
+                departmentId = createdDepartment.Detail.Fields.GetValueOrDefault("EID")?.ToString();
+                departmentName = createdDepartment.Detail.Fields.GetValueOrDefault("ENAME")?.ToString();
+            }
+
+            if (string.IsNullOrWhiteSpace(departmentId))
+            {
+                throw new InvalidOperationException("ACC_FIXTURE_DEPARTMENT_ID_MISSING");
             }
 
             var administrator = await localAdministrator.InspectAsync(cancellationToken);

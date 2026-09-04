@@ -46,6 +46,23 @@ public class OrganizationModelDefinitionTests
     }
 
     [Fact]
+    public void Department_UsesStringSortOrderAndCompanyScopedRootConstraints()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var department = Assert.Single(definitions, definition => definition.Name == "Department");
+
+        Assert.Contains(department.Fields, field => field.Name == "SortOrder" && field.ValueType == FieldValueType.Text);
+        Assert.Contains(department.Indexes, index =>
+            index.Name == "UX_Department_Company_ECODE"
+            && index.IsUnique
+            && index.Fields.SequenceEqual(["CompanyId", "ECODE"]));
+        Assert.Contains(department.Indexes, index =>
+            index.Name == "UX_Department_Company_ENAME"
+            && index.IsUnique
+            && index.Fields.SequenceEqual(["CompanyId", "ENAME"]));
+    }
+
+    [Fact]
     public void LegacyFacade_DefinitionsMatchMetadataProvider()
     {
         var expected = new OrganizationModelMetadataProvider().GetDefinitions();

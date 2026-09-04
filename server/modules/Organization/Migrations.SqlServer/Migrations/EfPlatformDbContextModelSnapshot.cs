@@ -160,8 +160,13 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                     b.HasIndex("ParentDepartmentId")
                         .HasDatabaseName("IX_Department_Parent");
 
-                    b.HasIndex("CompanyId", "ParentDepartmentId", "ECODE")
-                        .HasDatabaseName("IX_Department_Company_Parent_ECODE");
+                    b.HasIndex("CompanyId", "ECODE")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Department_Company_ECODE");
+
+                    b.HasIndex("CompanyId", "ENAME")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Department_Company_ENAME");
 
                     b.ToTable("Department", "dbo");
                 });
@@ -266,13 +271,13 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_Person_AccountEID")
                         .HasFilter("[AccountEID] IS NOT NULL");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("EID")
                         .IsUnique()
                         .HasDatabaseName("UX_Person_EID");
 
                     b.HasIndex("PositionId");
+
+                    b.HasIndex("CompanyId", "DepartmentId");
 
                     b.ToTable("Person", "dbo");
                 });
@@ -355,6 +360,13 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasForeignKey("PositionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_Person_Position");
+
+                    b.HasOne("Organization/Department", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "DepartmentId")
+                        .HasPrincipalKey("CompanyId", "EID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Person_Company_Department");
                 });
 #pragma warning restore 612, 618
         }

@@ -73,7 +73,7 @@ public sealed class IdentityFoundationMigrationTests
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
             .ToArray();
         var finalDigest = PersistenceModelDigest.Compute(definitions);
-        Assert.Equal("2168327921d492bbe85537bb09b5488e7b596bab13c358e644135c56abaef12b", finalDigest);
+        Assert.Equal("808adb10d897941053c08a141480758caa957b6b1b999517bf54a9d1d3f5b2d5", finalDigest);
     }
 
     [Fact]
@@ -441,19 +441,66 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Contains("DropIndex", down, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void OrganizationRootDepartmentStandardCrudMigration_AddsScopedUniquenessAndCompositeRestrictReference()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "server",
+            "modules",
+            "Organization",
+            "Migrations.SqlServer",
+            "Migrations",
+            "20260904041209_Organization_000007_RootDepartmentStandardCrud.cs");
+        var source = File.ReadAllText(sourcePath);
+        var up = source[..source.IndexOf("protected override void Down", StringComparison.Ordinal)];
+
+        Assert.Contains("name: \"UX_Department_Company_ECODE\"", up, StringComparison.Ordinal);
+        Assert.Contains("name: \"UX_Department_Company_ENAME\"", up, StringComparison.Ordinal);
+        Assert.Contains("name: \"AK_Department_CompanyId_EID\"", up, StringComparison.Ordinal);
+        Assert.Contains("name: \"FK_Person_Company_Department\"", up, StringComparison.Ordinal);
+        Assert.Contains("columns: new[] { \"CompanyId\", \"DepartmentId\" }", up, StringComparison.Ordinal);
+        Assert.Contains("principalColumns: new[] { \"CompanyId\", \"EID\" }", up, StringComparison.Ordinal);
+        Assert.Contains("onDelete: ReferentialAction.Restrict", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateData", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrationBuilder.Sql", up, StringComparison.Ordinal);
+        Assert.DoesNotContain("defaultValue", up, StringComparison.Ordinal);
+
+        var migration = new Organization_000007_RootDepartmentStandardCrud();
+        var droppedIndexes = migration.UpOperations
+            .OfType<DropIndexOperation>()
+            .ToDictionary(static operation => operation.Name, StringComparer.Ordinal);
+        Assert.Equal(2, droppedIndexes.Count);
+        Assert.Equal(
+            new[] { "CompanyId" },
+            ReadFromDescriptor(droppedIndexes["IX_Person_CompanyId"]).Index!.Columns);
+        Assert.Equal(
+            new[] { "CompanyId", "ParentDepartmentId", "ECODE" },
+            ReadFromDescriptor(droppedIndexes["IX_Department_Company_Parent_ECODE"]).Index!.Columns);
+        Assert.All(droppedIndexes, static entry =>
+        {
+            var descriptor = ReadFromDescriptor(entry.Value);
+            Assert.Equal("Organization", descriptor.OwnerModuleId);
+            Assert.Equal(entry.Key, descriptor.Index!.Name);
+            Assert.False(descriptor.Index.IsUnique);
+        });
+    }
+
     private static void AssertOrganizationManifest(string repositoryRoot)
     {
         var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(6, migrations.Length);
+        Assert.Equal(7, migrations.Length);
         var foundation = migrations[0];
         var positionDirectory = migrations[1];
         var positionReference = migrations[2];
         var personnelTemporalFields = migrations[3];
         var personRevisionRemoval = migrations[4];
         var companyStandardCrud = migrations[5];
+        var rootDepartmentStandardCrud = migrations[6];
         Assert.False(root.TryGetProperty("legacyCutover", out _));
         Assert.Equal("20260812144235_Organization_000001_Foundation", foundation.GetProperty("migrationId").GetString());
         Assert.Equal(new string('0', 64), foundation.GetProperty("fromModelDigest").GetString());
@@ -483,8 +530,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal("20260904033918_Organization_000006_CompanyStandardCrud", companyStandardCrud.GetProperty("migrationId").GetString());
         Assert.Equal(personRevisionRemoval.GetProperty("contentDigest").GetString(), companyStandardCrud.GetProperty("previousContentDigest").GetString());
         Assert.Equal(personRevisionRemoval.GetProperty("toModelDigest").GetString(), companyStandardCrud.GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), companyStandardCrud.GetProperty("toModelDigest").GetString());
         Assert.Equal("backup-restore-only", companyStandardCrud.GetProperty("compatibility").GetString());
+        Assert.Equal("20260904041209_Organization_000007_RootDepartmentStandardCrud", rootDepartmentStandardCrud.GetProperty("migrationId").GetString());
+        Assert.Equal(companyStandardCrud.GetProperty("contentDigest").GetString(), rootDepartmentStandardCrud.GetProperty("previousContentDigest").GetString());
+        Assert.Equal(companyStandardCrud.GetProperty("toModelDigest").GetString(), rootDepartmentStandardCrud.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), rootDepartmentStandardCrud.GetProperty("toModelDigest").GetString());
+        Assert.Equal("backup-restore-only", rootDepartmentStandardCrud.GetProperty("compatibility").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             MigrationManifestIntegrity.ComputeBundleChecksum(
@@ -531,6 +582,12 @@ public sealed class IdentityFoundationMigrationTests
         Assert.Equal(
             companyStandardCrud.GetProperty("contentDigest").GetString(),
             MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(companyStandardCrudSourcePath)));
+        var rootDepartmentStandardCrudSourcePath = Path.Combine(
+            Path.GetDirectoryName(foundationSourcePath)!,
+            "20260904041209_Organization_000007_RootDepartmentStandardCrud.cs");
+        Assert.Equal(
+            rootDepartmentStandardCrud.GetProperty("contentDigest").GetString(),
+            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(rootDepartmentStandardCrudSourcePath)));
     }
 
     private static void AssertPlatformFoundationManifest(string repositoryRoot)

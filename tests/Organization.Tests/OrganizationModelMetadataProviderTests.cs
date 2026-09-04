@@ -115,6 +115,25 @@ public class OrganizationModelMetadataProviderTests
         Assert.Equal(["CompanyId"], personCompany.Fields);
         Assert.Equal("Organization/Company", personCompany.PrincipalModelKey);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, personCompany.DeleteBehavior);
+
+        var personDepartment = Assert.Single(
+            person.ForeignKeys,
+            item => item.Name == "FK_Person_Company_Department");
+        Assert.Equal(["CompanyId", "DepartmentId"], personDepartment.Fields);
+        Assert.Equal("Organization/Department", personDepartment.PrincipalModelKey);
+        Assert.Equal(["CompanyId", "EID"], personDepartment.PrincipalFields);
+        Assert.Equal(ForeignKeyDeleteBehavior.Restrict, personDepartment.DeleteBehavior);
+
+        Assert.Contains(
+            department.Indexes,
+            index => index.Name == "UX_Department_Company_ECODE"
+                && index.IsUnique
+                && index.Fields.SequenceEqual(["CompanyId", "ECODE"]));
+        Assert.Contains(
+            department.Indexes,
+            index => index.Name == "UX_Department_Company_ENAME"
+                && index.IsUnique
+                && index.Fields.SequenceEqual(["CompanyId", "ENAME"]));
     }
 
     [Fact]

@@ -166,6 +166,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "identity.account.detail",
             "identity.account.list",
             "organization.company.list",
+            "organization.department.list",
             "organization.person.detail",
             "organization.person.list",
             "organization.position.list"

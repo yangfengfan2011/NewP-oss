@@ -24,9 +24,12 @@ interface Deferred<T> {
 }
 
 const organizationServiceMocks = vi.hoisted(() => ({
-  getCompanies: vi.fn(async () => []),
-  getDepartments: vi.fn(async () => []),
-  getPositions: vi.fn(async () => []),
+  getCompanyLookup: vi.fn(async () => ({
+    options: [], currentOptions: [], page: 1, pageSize: 20, hasMore: false,
+  })),
+  getDepartmentLookup: vi.fn(async () => ({
+    options: [], currentOptions: [], page: 1, pageSize: 20, hasMore: false,
+  })),
 }));
 
 function flattenZhsCatalog(dictionary: typeof personListDictionary): Record<string, string> {
@@ -71,9 +74,8 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
 
   return {
     ...actual,
-    getCompanies: organizationServiceMocks.getCompanies,
-    getDepartments: organizationServiceMocks.getDepartments,
-    getPositions: organizationServiceMocks.getPositions,
+    getCompanyLookup: organizationServiceMocks.getCompanyLookup,
+    getDepartmentLookup: organizationServiceMocks.getDepartmentLookup,
   };
 });
 
@@ -281,9 +283,12 @@ describe('人员中心 CRUD Pro 样板', () => {
   });
 
   beforeEach(() => {
-    organizationServiceMocks.getCompanies.mockResolvedValue([]);
-    organizationServiceMocks.getDepartments.mockResolvedValue([]);
-    organizationServiceMocks.getPositions.mockResolvedValue([]);
+    organizationServiceMocks.getCompanyLookup.mockResolvedValue({
+      options: [], currentOptions: [], page: 1, pageSize: 20, hasMore: false,
+    });
+    organizationServiceMocks.getDepartmentLookup.mockResolvedValue({
+      options: [], currentOptions: [], page: 1, pageSize: 20, hasMore: false,
+    });
     currentLocationSearch = '';
 
     const getComputedStyle = window.getComputedStyle.bind(window);

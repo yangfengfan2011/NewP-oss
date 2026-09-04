@@ -29,9 +29,12 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
 
   return {
     ...actual,
-    getCompanies: async () => [],
-    getDepartments: async () => [],
-    getPositions: async () => [],
+    getCompanyLookup: async () => ({
+      options: [], currentOptions: [], page: 1, pageSize: 20, hasMore: false,
+    }),
+    getDepartmentLookup: async () => ({
+      options: [], currentOptions: [], page: 1, pageSize: 20, hasMore: false,
+    }),
     getEmploymentStatusLabel: (value: string) => value,
     updatePerson: async () => {
       throw new Error('not used');

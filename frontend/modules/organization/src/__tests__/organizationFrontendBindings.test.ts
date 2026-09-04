@@ -46,6 +46,7 @@ describe('organization frontend bindings', () => {
       { kind: 'standard-crud-detail', targetKey: 'organization.person.detail' },
       { kind: 'standard-list', targetKey: 'organization.position.list' },
       { kind: 'standard-list', targetKey: 'organization.company.list' },
+      { kind: 'standard-list', targetKey: 'organization.department.list' },
     ]);
 
     const loaded = await bindings.standardCrudCapabilities?.[0]?.load();

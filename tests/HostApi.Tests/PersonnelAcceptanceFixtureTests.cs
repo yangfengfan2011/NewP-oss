@@ -23,6 +23,8 @@ public sealed class PersonnelAcceptanceFixtureTests
         Assert.Contains("IDepartmentDirectory departmentDirectory", source, StringComparison.Ordinal);
         Assert.DoesNotContain("companyService.GetAllAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("departmentService.GetByCompanyIdAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("IDepartmentService", source, StringComparison.Ordinal);
+        Assert.Contains("FindByResourceKey(\"organization.department\")", source, StringComparison.Ordinal);
     }
 
     private static string GetRepositoryRoot()

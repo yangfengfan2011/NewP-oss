@@ -9,6 +9,17 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class OrganizationGeneratedDtoTests
 {
     [Fact]
+    public void DepartmentDto_UsesStringSortOrderAndExposesOwnedCompanyDisplayCompanion()
+    {
+        var dtoType = typeof(OrganizationModule).Assembly.GetType("ICP.Platform.Modules.Organization.DTOs.DepartmentDto");
+
+        Assert.NotNull(dtoType);
+        Assert.Equal(typeof(string), dtoType!.GetProperty("SortOrder")!.PropertyType);
+        Assert.Equal(typeof(string), dtoType.GetProperty("CompanyId_DisplayValue")!.PropertyType);
+        Assert.Null(dtoType.GetProperty("ParentDepartmentId_DisplayValue"));
+    }
+
+    [Fact]
     public void PersonDto_OnlyExposesDisplayCompanionOwnedByCompiledPlan()
     {
         var dtoType = typeof(OrganizationModule).Assembly.GetType("ICP.Platform.Modules.Organization.DTOs.PersonDto");

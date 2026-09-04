@@ -32,12 +32,23 @@
         "permissions": ["Organization.Company.View"]
       },
       {
+        "key": "organization.departmentManagement",
+        "titleKey": "Navigation.DepartmentManagement",
+        "icon": "departments",
+        "parentKey": "organization",
+        "path": "/organization/departments",
+        "order": 130,
+        "entryType": "standard-list",
+        "targetKey": "organization.department.list",
+        "permissions": ["Organization.Department.View"]
+      },
+      {
         "key": "organization.positionManagement",
         "titleKey": "Navigation.PositionManagement",
         "icon": "positions",
         "parentKey": "organization",
         "path": "/organization/positions",
-        "order": 130,
+        "order": 140,
         "entryType": "standard-list",
         "targetKey": "organization.position.list",
         "permissions": ["Organization.Position.View"]

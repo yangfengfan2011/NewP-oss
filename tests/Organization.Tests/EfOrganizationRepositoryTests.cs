@@ -28,8 +28,25 @@ public class EfOrganizationRepositoryTests
             descriptor.ServiceType == typeof(ICompanyDirectory) &&
             descriptor.ImplementationType == typeof(EfCompanyDirectory));
         Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(IDepartmentDirectory) &&
-            descriptor.ImplementationType == typeof(EfDepartmentDirectory));
+            descriptor.ServiceType == typeof(EfDepartmentDirectory)
+            && descriptor.ImplementationType == typeof(EfDepartmentDirectory)
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(IDepartmentDirectory)
+            && descriptor.ImplementationFactory is not null
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(IDepartmentHierarchyDirectory)
+            && descriptor.ImplementationFactory is not null
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+
+        using var dbContext = CreateDbContext();
+        services.AddSingleton(dbContext);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var concrete = scope.ServiceProvider.GetRequiredService<EfDepartmentDirectory>();
+        Assert.Same(concrete, scope.ServiceProvider.GetRequiredService<IDepartmentDirectory>());
+        Assert.Same(concrete, scope.ServiceProvider.GetRequiredService<IDepartmentHierarchyDirectory>());
         Assert.DoesNotContain(services, descriptor =>
             descriptor.ServiceType.Name is "IDepartmentRepository" or "IDepartmentService");
     }

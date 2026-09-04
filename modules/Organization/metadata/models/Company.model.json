@@ -81,7 +81,15 @@
       },
       {
         "name": "UpdatedAt",
-        "uiType": "dateTime"
+        "uiType": "dateTime",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
       }
     ],
     "indexes": [

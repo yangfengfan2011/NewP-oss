@@ -64,6 +64,13 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Contains("/api/organization/departments", runner, StringComparison.Ordinal);
         Assert.Contains("\"所属公司\"", runner, StringComparison.Ordinal);
         Assert.Contains("\"所属部门\"", runner, StringComparison.Ordinal);
+        var departmentJourney = runner[
+            runner.IndexOf("private async Task<DepartmentData> CreateDepartmentFromBrowserAsync", StringComparison.Ordinal)..
+            runner.IndexOf("private async Task<PositionData> CreatePositionFromBrowserAsync", StringComparison.Ordinal)];
+        Assert.DoesNotContain(
+            ".Filter(new LocatorFilterOptions { HasTextString = company.Name })",
+            departmentJourney,
+            StringComparison.Ordinal);
     }
 
     [Fact]

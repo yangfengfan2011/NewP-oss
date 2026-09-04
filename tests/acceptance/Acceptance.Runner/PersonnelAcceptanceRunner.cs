@@ -584,7 +584,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
         await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = department.Code })
             .Filter(new LocatorFilterOptions { HasTextString = department.Name })
-            .Filter(new LocatorFilterOptions { HasTextString = company.Name })
             .Last
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         return department;

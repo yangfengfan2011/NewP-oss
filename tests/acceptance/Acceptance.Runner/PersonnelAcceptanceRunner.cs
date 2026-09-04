@@ -525,9 +525,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true })
             .ClickAsync();
         var response = await responseTask;
+        var body = await response.TextAsync();
         if (response.Status != (int)HttpStatusCode.Created)
         {
-            throw new InvalidOperationException($"Browser company create returned {response.Status}, expected 201.");
+            throw new InvalidOperationException(
+                $"Browser company create returned {response.Status}, expected 201: {body}");
         }
 
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
@@ -572,9 +574,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true })
             .ClickAsync();
         var response = await responseTask;
+        var body = await response.TextAsync();
         if (response.Status != (int)HttpStatusCode.Created)
         {
-            throw new InvalidOperationException($"Browser department create returned {response.Status}, expected 201.");
+            throw new InvalidOperationException(
+                $"Browser department create returned {response.Status}, expected 201: {body}");
         }
 
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
@@ -611,9 +615,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true })
             .ClickAsync();
         var response = await responseTask;
+        var body = await response.TextAsync();
         if (response.Status != (int)HttpStatusCode.Created)
         {
-            throw new InvalidOperationException($"Browser position create returned {response.Status}, expected 201.");
+            throw new InvalidOperationException(
+                $"Browser position create returned {response.Status}, expected 201: {body}");
         }
 
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });

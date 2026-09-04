@@ -83,6 +83,10 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Contains("[data-route-capability-error]", runner, StringComparison.Ordinal);
         Assert.Contains(".sh-error-state:visible", runner, StringComparison.Ordinal);
         Assert.Contains("Visible body:", runner, StringComparison.Ordinal);
+        Assert.Contains(
+            "Browser company create returned {response.Status}, expected 201: {body}",
+            runner,
+            StringComparison.Ordinal);
     }
 
     [Fact]

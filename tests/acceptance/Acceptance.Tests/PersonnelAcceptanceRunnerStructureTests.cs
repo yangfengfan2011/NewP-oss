@@ -67,6 +67,14 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         var departmentJourney = runner[
             runner.IndexOf("private async Task<DepartmentData> CreateDepartmentFromBrowserAsync", StringComparison.Ordinal)..
             runner.IndexOf("private async Task<PositionData> CreatePositionFromBrowserAsync", StringComparison.Ordinal)];
+        Assert.Contains(
+            "/api/organization/department-lookups/companies",
+            departmentJourney,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "/api/organization/person-lookups/companies",
+            departmentJourney,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             ".Filter(new LocatorFilterOptions { HasTextString = company.Name })",
             departmentJourney,

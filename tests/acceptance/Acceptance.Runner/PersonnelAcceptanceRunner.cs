@@ -559,7 +559,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             drawer,
             "所属公司",
             company.Name,
-            "/api/organization/person-lookups/companies");
+            "/api/organization/department-lookups/companies");
         await drawer.GetByLabel("部门编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Code);
         await drawer.GetByLabel("部门名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Name);
         await drawer.GetByLabel("排序码", new LocatorGetByLabelOptions { Exact = true }).FillAsync("0100");

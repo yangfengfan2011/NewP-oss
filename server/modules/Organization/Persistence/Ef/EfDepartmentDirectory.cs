@@ -103,7 +103,7 @@ public sealed class EfDepartmentDirectory(EfPlatformDbContext dbContext)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(companyId);
         var (page, pageSize) = NormalizePage(request);
-        var excludedIds = await ReadSubtreeIdsAsync(companyId, currentDepartmentId, cancellationToken);
+        var excludedIds = await ReadExcludedIdsAsync(companyId, currentDepartmentId, cancellationToken);
         var rows = Entities.AsNoTracking()
             .Where(row => EF.Property<string>(row, "CompanyId") == companyId);
         if (!request.IncludeDisabled)
@@ -140,32 +140,22 @@ public sealed class EfDepartmentDirectory(EfPlatformDbContext dbContext)
     private DbSet<Dictionary<string, object?>> Entities =>
         dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Department"));
 
-    // 按层批量读取后代标识；主候选查询再用单个排除谓词在 Skip/Take 前完成筛选。
-    private async Task<HashSet<string>> ReadSubtreeIdsAsync(
+    // 单次有界读取公司层级；超限时失败关闭，主候选查询仍在 Skip/Take 前排除子树。
+    private async Task<IReadOnlyCollection<string>> ReadExcludedIdsAsync(
         string companyId,
         string? currentDepartmentId,
         CancellationToken cancellationToken)
     {
-        var excluded = new HashSet<string>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(currentDepartmentId))
         {
-            return excluded;
+            return [];
         }
 
-        excluded.Add(currentDepartmentId);
-        IReadOnlyCollection<string> frontier = [currentDepartmentId];
-        while (frontier.Count > 0)
-        {
-            var parentIds = frontier.ToArray();
-            var children = await Entities.AsNoTracking()
-                .Where(row => EF.Property<string>(row, "CompanyId") == companyId
-                    && parentIds.Contains(EF.Property<string?>(row, "ParentDepartmentId")!))
-                .Select(row => EF.Property<string>(row, "EID"))
-                .ToListAsync(cancellationToken);
-            frontier = children.Where(excluded.Add).ToArray();
-        }
-
-        return excluded;
+        var snapshot = await DepartmentHierarchySnapshot.LoadAsync(
+            Entities.AsNoTracking(),
+            companyId,
+            cancellationToken);
+        return snapshot.ReadSubtreeIds(currentDepartmentId);
     }
 
     // 当前值仍受 CompanyId 约束，避免依赖切换后解析出另一公司的旧部门。

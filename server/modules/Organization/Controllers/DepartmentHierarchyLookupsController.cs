@@ -45,17 +45,32 @@ public sealed class DepartmentHierarchyLookupsController(
                 companyId,
                 currentDepartmentCode,
                 cancellationToken);
-        var result = await hierarchyDirectory.LookupParentCandidatesAsync(
-            companyId,
-            current?.Id,
-            new OrganizationDirectoryLookupRequest(
-                keyword,
-                page,
-                pageSize,
-                ParseCurrentValueIds(currentValueIds),
-                includeDisabled),
-            cancellationToken);
-        return Ok(Map(result, includeDisabled));
+        try
+        {
+            var result = await hierarchyDirectory.LookupParentCandidatesAsync(
+                companyId,
+                current?.Id,
+                new OrganizationDirectoryLookupRequest(
+                    keyword,
+                    page,
+                    pageSize,
+                    ParseCurrentValueIds(currentValueIds),
+                    includeDisabled),
+                cancellationToken);
+            return Ok(Map(result, includeDisabled));
+        }
+        catch (DepartmentHierarchyLimitExceededException exception)
+        {
+            var problem = new ProblemDetails
+            {
+                Status = 409,
+                Title = "部门层级超过支持上限。",
+                Detail = exception.Message
+            };
+            problem.Extensions["code"] = exception.Code;
+            problem.Extensions["maximumDepartments"] = exception.MaximumDepartments;
+            return Conflict(problem);
+        }
     }
 
     // Lookup HTTP 外形保持与模块现有分页 provider 一致，但筛选上下文不进入共享协议。

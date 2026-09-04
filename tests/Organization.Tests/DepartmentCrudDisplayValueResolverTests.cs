@@ -1,7 +1,11 @@
+using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Query.Descriptors;
+using ICP.Platform.Query.Models;
+using ICP.Platform.Query.Runtime;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -28,27 +32,57 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["ParentDepartmentId"] = "Department_Parent" }
         };
 
-        var result = await new DepartmentCrudDisplayValueResolver(directory, departments).ResolveListAsync(
-            DepartmentCrudDescriptorFactory.Create(),
+        var descriptor = DepartmentCrudDescriptorFactory.Create();
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
             rows,
-            [
-                new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME"),
-                new PlatformDisplayValueField(
-                    "ParentDepartmentId_DisplayValue",
-                    "ParentDepartmentId",
-                    "Department",
-                    "EID",
-                    "ENAME")
-            ]);
+            rows.Length,
+            1,
+            20,
+            "SortOrder",
+            "asc",
+            ["CompanyId", "CompanyId_DisplayValue", "ParentDepartmentId", "ParentDepartmentId_DisplayValue"],
+            descriptor.DisplayValueFields));
+        var service = new StandardCrudService(
+            repository: null!,
+            executor,
+            queryCustomizers: [],
+            displayResolvers: [new DepartmentCrudDisplayValueResolver(directory, departments)],
+            summaryProviders: [],
+            validators: [],
+            actionHandlers: [],
+            deleteGuards: []);
+
+        var result = await service.ListAsync(
+            descriptor,
+            new StandardCrudListQuery(Fields: ["CompanyId", "ParentDepartmentId"]));
 
         Assert.Equal(1, directory.BatchCallCount);
         Assert.Equal(1, departments.BatchCallCount);
         Assert.Equal(["Company_1", "Company_2"], directory.RequestedIds);
         Assert.Equal(["Department_Parent", "Department_Disabled"], departments.RequestedIds);
-        Assert.Equal("总部", result[0]["CompanyId_DisplayValue"]);
-        Assert.Equal("旧公司（已停用）", result[1]["CompanyId_DisplayValue"]);
-        Assert.Equal("研发中心", result[0]["ParentDepartmentId_DisplayValue"]);
-        Assert.Equal("旧中心（已停用）", result[1]["ParentDepartmentId_DisplayValue"]);
+        Assert.Equal(
+            ["CompanyId", "CompanyId_DisplayValue", "ParentDepartmentId", "ParentDepartmentId_DisplayValue"],
+            executor.Request!.Fields);
+        Assert.Equal("Company_1", result.Items[0]["CompanyId"]);
+        Assert.Equal("Department_Parent", result.Items[0]["ParentDepartmentId"]);
+        Assert.Equal("总部", result.Items[0]["CompanyId_DisplayValue"]);
+        Assert.Equal("旧公司（已停用）", result.Items[1]["CompanyId_DisplayValue"]);
+        Assert.Equal("研发中心", result.Items[0]["ParentDepartmentId_DisplayValue"]);
+        Assert.Equal("旧中心（已停用）", result.Items[1]["ParentDepartmentId_DisplayValue"]);
+    }
+
+    private sealed class RecordingPlatformQueryExecutor(PlatformQueryResult result) : IPlatformQueryExecutor
+    {
+        public PlatformQueryRequest? Request { get; private set; }
+
+        public Task<PlatformQueryResult> QueryAsync(
+            PlatformQueryDescriptor descriptor,
+            PlatformQueryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Request = request;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class RecordingCompanyDirectory(IEnumerable<Company> companies) : ICompanyDirectory

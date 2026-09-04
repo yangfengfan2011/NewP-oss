@@ -1,6 +1,8 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -98,7 +100,7 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
             cancellationToken);
     }
 
-    // 父引用必须存在、启用且属于同一公司；编辑时再沿完整祖先链拒绝自身和任意深度后代。
+    // 父引用必须存在、启用且属于同一公司；编辑时用单次有界公司快照拒绝自身和任意深度后代。
     private async Task<StandardCrudError?> ValidateParentAsync(
         string companyId,
         string? parentDepartmentId,
@@ -131,32 +133,40 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
             return null;
         }
 
-        var selectedParent = parent;
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        while (parent is not null)
+        DepartmentParentRelationship relationship;
+        try
         {
-            if (string.Equals(parent.Id, currentDepartmentId, StringComparison.Ordinal))
-            {
-                return ParentError(
-                    400,
-                    ReferenceEquals(parent, selectedParent) ? "ParentSelfReference" : "ParentCycle",
-                    ReferenceEquals(parent, selectedParent) ? "部门不能把自身设为上级。" : "上级部门不能是当前部门的后代。");
-            }
-
-            if (!visited.Add(parent.Id))
-            {
-                return LifecycleError("HierarchyCorrupted", "现有部门层级包含环，不能调整上级。");
-            }
-
-            parent = parent.ParentDepartmentId is null
-                ? null
-                : await FindDepartmentAsync(parent.ParentDepartmentId, cancellationToken);
+            var snapshot = await DepartmentHierarchySnapshot.LoadAsync(
+                Departments().AsNoTracking(),
+                companyId,
+                cancellationToken);
+            relationship = snapshot.ClassifyParent(currentDepartmentId, parentDepartmentId);
+        }
+        catch (DepartmentHierarchyLimitExceededException)
+        {
+            return LifecycleError(
+                "HierarchyLimitExceeded",
+                $"单个公司的部门层级超过 {DepartmentHierarchyLimits.MaximumDepartmentsPerCompany} 个，不能调整上级。");
         }
 
-        return null;
+        return relationship switch
+        {
+            DepartmentParentRelationship.Self => ParentError(
+                400,
+                "ParentSelfReference",
+                "部门不能把自身设为上级。"),
+            DepartmentParentRelationship.Descendant => ParentError(
+                400,
+                "ParentCycle",
+                "上级部门不能是当前部门的后代。"),
+            DepartmentParentRelationship.Corrupted => LifecycleError(
+                "HierarchyCorrupted",
+                "现有部门层级包含环或断链，不能调整上级。"),
+            _ => null
+        };
     }
 
-    // 单次读取祖先节点所需的最小字段，避免把动态持久化行泄漏到领域校验分支。
+    // 单次读取一个部门状态所需的最小字段，避免把动态持久化行泄漏到领域校验分支。
     private Task<DepartmentState?> FindDepartmentAsync(string id, CancellationToken cancellationToken) =>
         Departments()
             .AsNoTracking()

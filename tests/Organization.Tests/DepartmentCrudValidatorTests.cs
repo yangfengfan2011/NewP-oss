@@ -1,6 +1,7 @@
 using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
@@ -152,6 +153,71 @@ public sealed class DepartmentCrudValidatorTests
             Assert.Equal(400, error.StatusCode);
             Assert.Equal("ParentDepartmentId", Assert.Single(error.FieldErrors).Field);
         });
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_RejectsDeepDescendantWithOneBoundedHierarchyRead()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "Company_1", true);
+        string? parentId = null;
+        for (var index = 0; index < 64; index++)
+        {
+            var id = $"Department_{index:D3}";
+            AddDepartment(context, id, "Company_1", parentId);
+            parentId = id;
+        }
+
+        await context.SaveChangesAsync();
+
+        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+            DepartmentCrudDescriptorFactory.Create(),
+            "Department_000",
+            new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_063" });
+
+        Assert.Equal(400, error?.StatusCode);
+        Assert.Equal("Organization.Department.ParentCycle", error?.Code);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_WhenHierarchyExceedsSupportedBound_FailsClosedWithStableConflict()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "Company_1", true);
+        for (var index = 0; index <= DepartmentHierarchyLimits.MaximumDepartmentsPerCompany; index++)
+        {
+            AddDepartment(context, $"Department_{index:D4}", "Company_1");
+        }
+
+        await context.SaveChangesAsync();
+
+        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+            DepartmentCrudDescriptorFactory.Create(),
+            "Department_0000",
+            new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_0001" });
+
+        Assert.Equal(409, error?.StatusCode);
+        Assert.Equal(DepartmentHierarchyLimits.ErrorCode, error?.Code);
+        Assert.Empty(error!.FieldErrors);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_WhenExistingHierarchyContainsCycle_FailsClosed()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "Company_1", true);
+        AddDepartment(context, "Department_Current", "Company_1");
+        AddDepartment(context, "Department_A", "Company_1", "Department_B");
+        AddDepartment(context, "Department_B", "Company_1", "Department_A");
+        await context.SaveChangesAsync();
+
+        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+            DepartmentCrudDescriptorFactory.Create(),
+            "Department_Current",
+            new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_A" });
+
+        Assert.Equal(409, error?.StatusCode);
+        Assert.Equal("Organization.Department.HierarchyCorrupted", error?.Code);
     }
 
     [Fact]

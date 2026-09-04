@@ -1,6 +1,8 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
+using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
@@ -23,6 +25,10 @@ public static class DepartmentCrudDescriptorFactory
             ],
             CreateFields: ["CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "SortOrder"],
             UpdateFields: ["ParentDepartmentId", "ENAME", "SortOrder", "IsEnabled"]);
+        var models = OrganizationModelDefinitions.All;
+        var department = models.Single(model => string.Equals(model.Name, "Department", StringComparison.Ordinal));
+        var displayPlan = new ModelDisplayProjectionPlanner().Compile(department, models).Plan
+            ?? throw new InvalidOperationException("Department display projection plan could not be compiled.");
         return new StandardCrudDescriptor
         {
             ResourceKey = "organization.department",
@@ -39,6 +45,8 @@ public static class DepartmentCrudDescriptorFactory
             Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.DepartmentStem),
             FieldSet = fieldSet,
             OptionLabelFields = ["ECODE", "ENAME"],
+            DisplayValueFields = new ModelDisplayValueFieldProjector().Project(displayPlan),
+            DisplayProjectionPlan = displayPlan,
             DeletePolicy = StandardCrudDeletePolicy.Conditional,
             FieldPolicies = BuildFieldPolicies(fieldSet),
             RequiredFields =
@@ -50,10 +58,11 @@ public static class DepartmentCrudDescriptorFactory
             ],
             UniqueConstraints =
             [
-                Unique("code", ["CompanyId", "ECODE"], "Code", "部门编码在所属公司内必须唯一。"),
+                Unique("code", ["ECODE"], ["CompanyId"], "Code", "部门编码在所属公司内必须唯一。"),
                 Unique(
                     "siblingName",
-                    ["CompanyId", "ParentDepartmentId", "ENAME"],
+                    ["ENAME"],
+                    ["CompanyId", "ParentDepartmentId"],
                     "Name",
                     "部门名称在所属公司同一上级下必须唯一。")
             ]
@@ -117,11 +126,13 @@ public static class DepartmentCrudDescriptorFactory
     private static StandardCrudUniqueConstraint Unique(
         string key,
         IReadOnlyList<string> fields,
+        IReadOnlyList<string> scopeFields,
         string codeStem,
         string message) => new()
     {
         Key = key,
         Fields = fields,
+        ScopeFields = scopeFields,
         CaseInsensitive = true,
         TrimWhitespace = true,
         ErrorCode = $"Organization.Department.{codeStem}Duplicated",

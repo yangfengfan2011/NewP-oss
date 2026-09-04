@@ -37,8 +37,16 @@ public sealed class DepartmentStandardCrudResourceTests
 
         Assert.Collection(
             descriptor.UniqueConstraints,
-            constraint => Assert.Equal(["CompanyId", "ECODE"], constraint.Fields),
-            constraint => Assert.Equal(["CompanyId", "ParentDepartmentId", "ENAME"], constraint.Fields));
+            constraint =>
+            {
+                Assert.Equal(["ECODE"], constraint.Fields);
+                Assert.Equal(["CompanyId"], constraint.ScopeFields);
+            },
+            constraint =>
+            {
+                Assert.Equal(["ENAME"], constraint.Fields);
+                Assert.Equal(["CompanyId", "ParentDepartmentId"], constraint.ScopeFields);
+            });
         Assert.All(descriptor.UniqueConstraints, constraint =>
         {
             Assert.True(constraint.CaseInsensitive);
@@ -57,6 +65,20 @@ public sealed class DepartmentStandardCrudResourceTests
         var parent = Assert.Single(descriptor.FieldPolicies, static policy => policy.Field == "ParentDepartmentId");
         Assert.Equal(StandardCrudFieldValueOwner.Caller, parent.ValueOwner);
         Assert.False(parent.StorageRequired);
+
+        Assert.Collection(
+            descriptor.DisplayValueFields,
+            field =>
+            {
+                Assert.Equal("CompanyId_DisplayValue", field.Field);
+                Assert.Equal("CompanyId", field.SourceField);
+            },
+            field =>
+            {
+                Assert.Equal("ParentDepartmentId_DisplayValue", field.Field);
+                Assert.Equal("ParentDepartmentId", field.SourceField);
+            });
+        Assert.NotNull(descriptor.DisplayProjectionPlan);
     }
 
     [Fact]

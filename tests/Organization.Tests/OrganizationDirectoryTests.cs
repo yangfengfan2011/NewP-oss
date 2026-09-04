@@ -86,6 +86,31 @@ public sealed class OrganizationDirectoryTests
     }
 
     [Fact]
+    public async Task DepartmentDirectory_ParentLookupWhenHierarchyExceedsSupportedBound_FailsClosed()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedDepartmentsAsync(
+            dbContext,
+            Enumerable.Range(0, DepartmentHierarchyLimits.MaximumDepartmentsPerCompany + 1)
+                .Select(index => Department(
+                    $"Department_{index:D4}",
+                    "Company_1",
+                    $"D{index:D4}",
+                    $"部门 {index:D4}",
+                    enabled: true)));
+        var directory = new EfDepartmentDirectory(dbContext);
+
+        var exception = await Assert.ThrowsAsync<DepartmentHierarchyLimitExceededException>(() =>
+            directory.LookupParentCandidatesAsync(
+                "Company_1",
+                "Department_0000",
+                new OrganizationDirectoryLookupRequest(null, 1, 20)));
+
+        Assert.Equal(DepartmentHierarchyLimits.ErrorCode, exception.Code);
+        Assert.Equal(DepartmentHierarchyLimits.MaximumDepartmentsPerCompany, exception.MaximumDepartments);
+    }
+
+    [Fact]
     public async Task DirectoriesResolveDistinctBatchesWithoutPerIdReads()
     {
         await using var dbContext = CreateDbContext();

@@ -288,6 +288,18 @@
     ],
     "foreignKeys": [
       {
+        "name": "FK_Person_Company",
+        "fields": [
+          "CompanyId"
+        ],
+        "principalModuleId": "Organization",
+        "principalModel": "Company",
+        "principalFields": [
+          "EID"
+        ],
+        "onDelete": "Restrict"
+      },
+      {
         "name": "FK_Person_Position",
         "fields": [
           "PositionId"

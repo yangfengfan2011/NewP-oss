@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "CompanyListView": {
+    "Title": { "zhs": "公司管理", "en": "Company Management" },
+    "Description": { "zhs": "维护 Organization 范围内的顶层公司目录。", "en": "Manage the top-level company directory in Organization." },
+    "Section_Basic": { "zhs": "基本信息", "en": "Basic Information" },
+    "Field_ECODE": { "zhs": "公司编码", "en": "Company Code" },
+    "Field_ECODE_Placeholder": { "zhs": "请输入公司编码", "en": "Enter company code" },
+    "Field_ENAME": { "zhs": "公司名称", "en": "Company Name" },
+    "Field_ENAME_Placeholder": { "zhs": "请输入公司名称", "en": "Enter company name" },
+    "Field_SortOrder": { "zhs": "排序码", "en": "Sort Order Code" },
+    "Field_SortOrder_Placeholder": { "zhs": "请输入 1 至 32 位数字", "en": "Enter 1 to 32 digits" },
+    "Field_IsEnabled": { "zhs": "启用状态", "en": "Enabled" },
+    "Query_Keyword": { "zhs": "关键字", "en": "Keyword" },
+    "Query_Keyword_Placeholder": { "zhs": "按公司编码或名称搜索", "en": "Search by company code or name" },
+    "Query_IsEnabled": { "zhs": "启用状态", "en": "Enabled" },
+    "Column_Code": { "zhs": "公司编码", "en": "Company Code" },
+    "Column_Name": { "zhs": "公司名称", "en": "Company Name" },
+    "Column_IsEnabled": { "zhs": "启用状态", "en": "Enabled" },
+    "Column_SortOrder": { "zhs": "排序码", "en": "Sort Order Code" },
+    "Column_UpdatedAt": { "zhs": "最后更新时间", "en": "Last Updated" },
+    "Action_Create": { "zhs": "新建公司", "en": "Create Company" },
+    "Action_Edit": { "zhs": "编辑", "en": "Edit" },
+    "Action_Delete": { "zhs": "删除", "en": "Delete" },
+    "Action_Delete_Confirm": { "zhs": "确认删除该公司吗？", "en": "Delete this company?" },
+    "Drawer_Create": { "zhs": "新建公司", "en": "Create Company" },
+    "Drawer_Edit": { "zhs": "编辑公司", "en": "Edit Company" },
+    "Pagination_Prev": { "zhs": "上一页", "en": "Previous" },
+    "Pagination_Next": { "zhs": "下一页", "en": "Next" }
+  }
+}

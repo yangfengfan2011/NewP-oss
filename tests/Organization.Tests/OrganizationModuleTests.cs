@@ -29,13 +29,17 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void GetPermissions_DeclaresPersonAndPositionLifecyclePermissions()
+    public void GetPermissions_DeclaresPersonCompanyAndPositionLifecyclePermissions()
     {
         var module = new OrganizationModule();
         var permissions = module.GetPermissions();
 
         Assert.Contains(permissions, permission => permission.Code == "Organization.Person.View");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Person.Create");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.View");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.Create");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.Update");
+        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.Delete");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.View");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Create");
         Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Update");
@@ -64,10 +68,12 @@ public class OrganizationModuleTests
         AssertFileContains(root, @"modules\Organization\metadata\views\PersonList.view.json", "\"type\": \"view\"");
         AssertFileContains(root, @"modules\Organization\metadata\views\PersonDetail.view.json", "\"type\": \"view\"");
         AssertFileContains(root, @"modules\Organization\metadata\views\PositionList.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"modules\Organization\metadata\views\CompanyList.view.json", "\"type\": \"view\"");
         AssertFileContains(root, @"modules\Organization\metadata\models\Person.model.json", "\"type\": \"model\"");
         AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PersonListView.dic.json", "\"type\": \"dic\"");
         AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PersonDetailView.dic.json", "\"type\": \"dic\"");
         AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PositionListView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\CompanyListView.dic.json", "\"type\": \"dic\"");
     }
 
     [Fact]
@@ -176,6 +182,40 @@ public class OrganizationModuleTests
         Assert.Equal("Organization.Position.Delete", RequiredPermission(actions, "delete"));
         Assert.False(delete.TryGetProperty("visibleWhen", out _));
         Assert.False(delete.TryGetProperty("disabledWhen", out _));
+    }
+
+    [Fact]
+    public void CompanyMetadata_UsesStandardListCreateEditAndDeleteWithoutDetailOrExport()
+    {
+        var root = FindRepositoryRoot();
+        using var model = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Organization\metadata\models\Company.model.json"),
+            Encoding.UTF8));
+        var fields = model.RootElement.GetProperty("Company").GetProperty("fields").EnumerateArray().ToArray();
+        Assert.Equal("editable", FormMode(fields, "ECODE", "create"));
+        Assert.Equal("readonly", FormMode(fields, "ECODE", "edit"));
+        Assert.Equal("editable", FormMode(fields, "ENAME", "edit"));
+        Assert.Equal("editable", FormMode(fields, "SortOrder", "edit"));
+        Assert.Equal("hidden", FormMode(fields, "IsEnabled", "create"));
+        Assert.Equal("editable", FormMode(fields, "IsEnabled", "edit"));
+
+        using var listView = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, @"modules\Organization\metadata\views\CompanyList.view.json"),
+            Encoding.UTF8));
+        var view = listView.RootElement.GetProperty("view");
+        Assert.Equal("organization.company.list", view.GetProperty("key").GetString());
+        Assert.Equal("SortOrder", view.GetProperty("query").GetProperty("defaultSort").GetProperty("field").GetString());
+        Assert.Equal(
+            ["ECODE", "ENAME", "IsEnabled", "SortOrder", "UpdatedAt"],
+            view.GetProperty("columns").EnumerateArray().Select(column => column.GetProperty("field").GetString()));
+        Assert.Equal("create", Assert.Single(view.GetProperty("pageActions").EnumerateArray()).GetProperty("standardAction").GetString());
+        var rowActions = view.GetProperty("rowActions").EnumerateArray().ToArray();
+        Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
+        Assert.Equal("Organization.Company.Update", RequiredPermission(rowActions, "edit"));
+        Assert.Equal("Organization.Company.Delete", RequiredPermission(rowActions, "delete"));
+        Assert.False(view.TryGetProperty("detailViewKey", out _));
+        Assert.False(view.TryGetProperty("export", out _));
+        Assert.False(view.TryGetProperty("bulkActions", out _));
     }
 
     private static void AssertFileContains(string root, string relativePath, string expected)

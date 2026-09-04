@@ -258,6 +258,28 @@ public sealed class PlatformQueryExecutorTests
         Assert.Equal("Person_3", Assert.Single(secondPage.Items)["EID"]);
     }
 
+    [Fact]
+    public async Task QueryAsync_AppliesDescriptorStableSortFieldsBeforeId()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildDbContext(connection, []);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("Person_1", "P003", "同名", "FullTime", true),
+            Row("Person_2", "P001", "同名", "FullTime", true),
+            Row("Person_3", "P002", "同名", "FullTime", true));
+        await dbContext.SaveChangesAsync();
+        var executor = new EfPlatformQueryExecutor(dbContext);
+        var descriptor = Descriptor(["PersonNo"]);
+
+        var result = await executor.QueryAsync(
+            descriptor,
+            new PlatformQueryRequest(Fields: ["EID", "PersonNo", "ENAME"], SortBy: "ENAME", SortDirection: "asc"));
+
+        Assert.Equal(["P001", "P002", "P003"], result.Items.Select(row => row["PersonNo"]));
+    }
+
     private static EfPlatformDbContext BuildDbContext(SqliteConnection connection, List<string> sql)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
@@ -290,7 +312,7 @@ public sealed class PlatformQueryExecutorTests
         ["UpdatedAt"] = DateTime.UtcNow
     };
 
-    private static PlatformQueryDescriptor Descriptor() => new()
+    private static PlatformQueryDescriptor Descriptor(IReadOnlyList<string>? withStableSortFields = null) => new()
     {
         ResourceKey = "organization.person",
         ModelName = "Person",
@@ -298,6 +320,7 @@ public sealed class PlatformQueryExecutorTests
         AllowedModelFields = ["EID", "PersonNo", "ENAME", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "BirthDate", "IsEnabled"],
         DefaultFields = ["EID", "PersonNo", "ENAME"],
         SortableFields = ["PersonNo", "ENAME", "BirthDate", "IsEnabled"],
+        StableSortFields = withStableSortFields ?? [],
         DefaultSortField = "ENAME",
         DefaultSortDirection = "asc",
         DisplayValueFields =

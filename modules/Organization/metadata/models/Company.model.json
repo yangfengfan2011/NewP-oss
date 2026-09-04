@@ -7,17 +7,76 @@
       "ENAME",
       "ECODE"
     ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "SortOrder",
+          "IsEnabled"
+        ]
+      }
+    ],
     "fields": [
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly"
+          }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
+        }
+      },
       {
         "name": "IsEnabled",
         "storage": {
           "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "editable"
+          }
         }
       },
       {
         "name": "SortOrder",
         "storage": {
           "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
         }
       }
     ],
@@ -26,6 +85,13 @@
         "name": "UX_Company_ECODE",
         "fields": [
           "ECODE"
+        ],
+        "unique": true
+      },
+      {
+        "name": "UX_Company_ENAME",
+        "fields": [
+          "ENAME"
         ],
         "unique": true
       }

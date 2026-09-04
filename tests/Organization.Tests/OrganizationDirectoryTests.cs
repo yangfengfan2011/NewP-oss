@@ -118,11 +118,24 @@ public sealed class OrganizationDirectoryTests
 
     private static async Task SeedCompaniesAsync(EfPlatformDbContext dbContext, IEnumerable<Company> companies)
     {
-        var repository = new EfCompanyRepository(dbContext);
         foreach (var company in companies)
         {
-            await repository.CreateAsync(company);
+            dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company")).Add(
+                new Dictionary<string, object?>
+                {
+                    ["EID"] = company.Id,
+                    ["ECODE"] = company.Code,
+                    ["ENAME"] = company.Name,
+                    ["IsEnabled"] = company.IsEnabled,
+                    ["SortOrder"] = company.SortOrder,
+                    ["CreatedBy"] = "User_Admin",
+                    ["CreatedAt"] = DateTime.UtcNow,
+                    ["UpdatedBy"] = "User_Admin",
+                    ["UpdatedAt"] = DateTime.UtcNow
+                });
         }
+
+        await dbContext.SaveChangesAsync();
     }
 
     private static async Task SeedDepartmentsAsync(EfPlatformDbContext dbContext, IEnumerable<Department> departments)

@@ -333,6 +333,7 @@ public sealed class StandardCrudDescriptorTests
         Assert.Equal(["PersonNo", "ENAME"], queryDescriptor.SortableFields);
         Assert.Equal("PersonNo", queryDescriptor.DefaultSortField);
         Assert.Equal("desc", queryDescriptor.DefaultSortDirection);
+        Assert.Equal(["ENAME"], queryDescriptor.StableSortFields);
         var display = Assert.Single(queryDescriptor.DisplayValueFields);
         Assert.Equal("CompanyName", display.Field);
         Assert.Equal("CompanyId", display.SourceField);
@@ -359,6 +360,18 @@ public sealed class StandardCrudDescriptorTests
 
         Assert.Equal(
             "标准 CRUD 资源 organization.person 的默认排序字段 ENAME 未纳入排序白名单。",
+            error.Message);
+    }
+
+    [Fact]
+    public void Validate_WhenStableSortFieldIsNotAListField_ThrowsStableMessage()
+    {
+        var descriptor = DescriptorWithSort(["PersonNo"], defaultSortField: "PersonNo", stableSortFields: ["SecretField"]);
+
+        var error = Assert.Throws<InvalidOperationException>(() => StandardCrudDescriptorValidator.Validate(descriptor));
+
+        Assert.Equal(
+            "标准 CRUD 资源 organization.person 的稳定排序字段 SecretField 未纳入列表字段白名单。",
             error.Message);
     }
 
@@ -448,6 +461,7 @@ public sealed class StandardCrudDescriptorTests
         SortableFields = ["PersonNo", "ENAME"],
         DefaultSortField = "PersonNo",
         DefaultSortDirection = "desc",
+        StableSortFields = ["ENAME"],
         DisplayValueFields =
         [
             new PlatformDisplayValueField("CompanyName", sourceField, "Company", "EID", "ENAME")
@@ -456,7 +470,8 @@ public sealed class StandardCrudDescriptorTests
 
     private static StandardCrudDescriptor DescriptorWithSort(
         IReadOnlyList<string> sortableFields,
-        string? defaultSortField) => new()
+        string? defaultSortField,
+        IReadOnlyList<string>? stableSortFields = null) => new()
     {
         ResourceKey = "organization.person",
         ModuleId = "Organization",
@@ -470,6 +485,7 @@ public sealed class StandardCrudDescriptorTests
             CreateFields: ["PersonNo", "ENAME"],
             UpdateFields: ["PersonNo", "ENAME"]),
         SortableFields = sortableFields,
-        DefaultSortField = defaultSortField
+        DefaultSortField = defaultSortField,
+        StableSortFields = stableSortFields ?? []
     };
 }

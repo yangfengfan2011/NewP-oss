@@ -1,3 +1,4 @@
+using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using Xunit;
@@ -29,6 +30,19 @@ public class OrganizationModelDefinitionTests
         Assert.Contains(position.Fields, field => field.Name == "Description" && !field.Required);
         Assert.Contains(position.Indexes, index =>
             index.Name == "UX_Position_ENAME" && index.IsUnique && index.Fields.SequenceEqual(["ENAME"]));
+    }
+
+    [Fact]
+    public void Company_UsesStringSortOrderAndGlobalCodeAndNameConstraints()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var company = Assert.Single(definitions, definition => definition.Name == "Company");
+
+        Assert.Contains(company.Fields, field => field.Name == "SortOrder" && field.ValueType == FieldValueType.Text);
+        Assert.Contains(company.Indexes, index =>
+            index.Name == "UX_Company_ECODE" && index.IsUnique && index.Fields.SequenceEqual(["ECODE"]));
+        Assert.Contains(company.Indexes, index =>
+            index.Name == "UX_Company_ENAME" && index.IsUnique && index.Fields.SequenceEqual(["ENAME"]));
     }
 
     [Fact]

@@ -48,10 +48,11 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(MetadataModulesController).Assembly)
             .AddApplicationPart(typeof(SampleStatusController).Assembly)
             .AddApplicationPart(typeof(IdentityAccountsController).Assembly)
-            .AddApplicationPart(typeof(CompaniesController).Assembly)
+            .AddApplicationPart(typeof(PersonOrganizationLookupsController).Assembly)
             .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
+        builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
         using var app = builder.Build();
         app.MapControllers();
@@ -91,6 +92,9 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.Contains(
             plan.ActivePermissions,
             static permission => permission.Code == OrganizationPermissions.PersonDelete);
+        Assert.Contains(
+            plan.ActivePermissions,
+            static permission => permission.Code == OrganizationPermissions.CompanyDelete);
         Assert.Equal(
             [
                 "Example.Record.Create",

@@ -81,6 +81,10 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Company_EID");
 
+                    b.HasIndex("ENAME")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Company_ENAME");
+
                     b.ToTable("Company", "dbo");
                 });
 
@@ -262,6 +266,8 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_Person_AccountEID")
                         .HasFilter("[AccountEID] IS NOT NULL");
 
+                    b.HasIndex("CompanyId");
+
                     b.HasIndex("EID")
                         .IsUnique()
                         .HasDatabaseName("UX_Person_EID");
@@ -326,8 +332,24 @@ namespace ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations
                     b.ToTable("Position", "dbo");
                 });
 
+            modelBuilder.Entity("Organization/Department", b =>
+                {
+                    b.HasOne("Organization/Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_Department_Company");
+                });
+
             modelBuilder.Entity("Organization/Person", b =>
                 {
+                    b.HasOne("Organization/Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Person_Company");
+
                     b.HasOne("Organization/Position", null)
                         .WithMany()
                         .HasForeignKey("PositionId")

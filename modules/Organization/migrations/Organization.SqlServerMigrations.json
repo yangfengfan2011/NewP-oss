@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Organization",
-  "modelDigest": "579c6974b008e4695332d34269f1fc5f4d0ed386257015096079776c0d0f4973",
-  "bundleChecksum": "77212b952e5e3caea9813ab3d4febff544703ec47e5bc94058c774b43cd4b1cf",
+  "modelDigest": "2168327921d492bbe85537bb09b5488e7b596bab13c358e644135c56abaef12b",
+  "bundleChecksum": "39ec5bf8e238532f5870168b398203c5504e830028b9dd2cf4d9a90ebcfd986e",
   "migrations": [
     {
       "sequence": "000001",
@@ -48,6 +48,15 @@
       "contentDigest": "c4ff9f80fb561970bbb0eaa56037431471edf69fc0811c7274b100d59be69593",
       "fromModelDigest": "b3d160af02f7c6226cd462a79b3bef1e93e1cf7083380d76564273f0e636fe59",
       "toModelDigest": "579c6974b008e4695332d34269f1fc5f4d0ed386257015096079776c0d0f4973",
+      "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000006",
+      "migrationId": "20260904033918_Organization_000006_CompanyStandardCrud",
+      "previousContentDigest": "c4ff9f80fb561970bbb0eaa56037431471edf69fc0811c7274b100d59be69593",
+      "contentDigest": "16dc5cb44e993373a1e1fb50464b94f0d07e587af4546c4237173d255aec97ed",
+      "fromModelDigest": "579c6974b008e4695332d34269f1fc5f4d0ed386257015096079776c0d0f4973",
+      "toModelDigest": "2168327921d492bbe85537bb09b5488e7b596bab13c358e644135c56abaef12b",
       "compatibility": "backup-restore-only"
     }
   ]

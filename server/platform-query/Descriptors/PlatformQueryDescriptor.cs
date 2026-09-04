@@ -50,4 +50,9 @@ public sealed class PlatformQueryDescriptor
     /// 获取或设置默认排序方向；只允许 asc 或 desc。
     /// </summary>
     public string DefaultSortDirection { get; init; } = "asc";
+
+    /// <summary>
+    /// 获取或设置主排序后按升序追加的稳定业务字段；执行器最终仍以 IdField 消除完全相同值。
+    /// </summary>
+    public IReadOnlyList<string> StableSortFields { get; init; } = [];
 }

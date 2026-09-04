@@ -22,6 +22,15 @@ const loadPositionStandardCrudResource = createRecoverableCapabilityLoader<Stand
   }),
 );
 
+const loadCompanyStandardCrudResource = createRecoverableCapabilityLoader<StandardCrudCapabilityModule>(
+  async () => ({
+    default: (await import('./standard-crud/companyStandardCrudResource.primary')).primary,
+  }),
+  async () => ({
+    default: (await import('./standard-crud/companyStandardCrudResource.recovery')).recovery,
+  }),
+);
+
 export const organizationBindings: FrontendBehaviorBindings = {
   behaviorKey: 'organization.frontend',
   standardCrudCapabilities: [
@@ -39,6 +48,11 @@ export const organizationBindings: FrontendBehaviorBindings = {
       kind: 'standard-list',
       targetKey: 'organization.position.list',
       load: loadPositionStandardCrudResource,
+    },
+    {
+      kind: 'standard-list',
+      targetKey: 'organization.company.list',
+      load: loadCompanyStandardCrudResource,
     },
   ],
 };

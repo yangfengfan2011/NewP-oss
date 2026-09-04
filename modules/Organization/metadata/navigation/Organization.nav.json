@@ -21,12 +21,23 @@
         "permissions": ["Organization.Person.View"]
       },
       {
+        "key": "organization.companyManagement",
+        "titleKey": "Navigation.CompanyManagement",
+        "icon": "companies",
+        "parentKey": "organization",
+        "path": "/organization/companies",
+        "order": 120,
+        "entryType": "standard-list",
+        "targetKey": "organization.company.list",
+        "permissions": ["Organization.Company.View"]
+      },
+      {
         "key": "organization.positionManagement",
         "titleKey": "Navigation.PositionManagement",
         "icon": "positions",
         "parentKey": "organization",
         "path": "/organization/positions",
-        "order": 120,
+        "order": 130,
         "entryType": "standard-list",
         "targetKey": "organization.position.list",
         "permissions": ["Organization.Position.View"]

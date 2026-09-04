@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.DTOs;
@@ -34,7 +35,8 @@ public static class PersonnelAcceptanceFixture
             HttpContext context,
             ICompanyDirectory companyDirectory,
             IDepartmentDirectory departmentDirectory,
-            ICompanyService companyService,
+            IStandardCrudResourceRegistry standardCrudResources,
+            IStandardCrudService standardCrudService,
             IDepartmentService departmentService,
             IIdentityLocalAdministratorReadinessProbe localAdministrator,
             CancellationToken cancellationToken) =>
@@ -49,15 +51,30 @@ public static class PersonnelAcceptanceFixture
             var companyName = existingCompany?.Name;
             if (companyId is null)
             {
-                var createdCompany = await companyService.CreateAsync(new CompanyDto
+                var companyDescriptor = standardCrudResources.FindByResourceKey("organization.company")
+                    ?? throw new InvalidOperationException("ACC_FIXTURE_COMPANY_RESOURCE_MISSING");
+                var createdCompany = await standardCrudService.CreateAsync(
+                    companyDescriptor,
+                    new Dictionary<string, object?>
                 {
-                    Code = options.CompanyCode,
-                    DisplayName = options.CompanyName,
-                    IsEnabled = true,
-                    SortOrder = "10"
-                }, cancellationToken);
-                companyId = createdCompany.Id;
-                companyName = createdCompany.DisplayName;
+                    ["ECODE"] = options.CompanyCode,
+                    ["ENAME"] = options.CompanyName,
+                    ["SortOrder"] = "10"
+                },
+                    cancellationToken);
+                if (!createdCompany.Succeeded || createdCompany.Detail is null)
+                {
+                    throw new InvalidOperationException(
+                        $"ACC_FIXTURE_COMPANY_CREATE_FAILED: {createdCompany.Error?.Code ?? "missing-detail"}");
+                }
+
+                companyId = createdCompany.Detail.Fields.GetValueOrDefault("EID")?.ToString();
+                companyName = createdCompany.Detail.Fields.GetValueOrDefault("ENAME")?.ToString();
+            }
+
+            if (string.IsNullOrWhiteSpace(companyId))
+            {
+                throw new InvalidOperationException("ACC_FIXTURE_COMPANY_ID_MISSING");
             }
 
             var existingDepartment = await departmentDirectory.GetByCompanyAndCodeAsync(

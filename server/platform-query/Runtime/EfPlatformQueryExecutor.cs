@@ -332,7 +332,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
                 $"查询资源 {descriptor.ResourceKey} 的字段 {condition.Field} 无法转换为 {valueType.Name}。");
     }
 
-    // 主排序后固定追加 EID 升序，保证重复主排序值跨页时仍有确定次序。
+    // 主排序后依次追加 descriptor 声明的业务稳定字段与 EID，保证重复值跨页时仍有确定次序。
     private static IQueryable<Dictionary<string, object?>> ApplySort(
         IQueryable<Dictionary<string, object?>> source,
         PlatformQueryDescriptor descriptor,
@@ -354,17 +354,30 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
             : QueryableOrderByMethod;
         var genericMethod = method.MakeGenericMethod(typeof(Dictionary<string, object?>), fieldType);
         var ordered = (IOrderedQueryable<Dictionary<string, object?>>)genericMethod.Invoke(null, [source, keySelector])!;
-        if (string.Equals(sortField, descriptor.IdField, StringComparison.Ordinal))
+        var appendedFields = descriptor.StableSortFields
+            .Append(descriptor.IdField)
+            .Where(field => !string.Equals(field, sortField, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal);
+        foreach (var field in appendedFields)
         {
-            return ordered;
+            ordered = AppendAscendingSort(ordered, descriptor, entityType, row, field);
         }
 
-        var idType = ResolveFieldType(descriptor, entityType, descriptor.IdField);
-        var idSelector = Expression.Lambda(
-            BuildPropertyExpression(row, descriptor.IdField, idType),
-            row);
-        var thenBy = QueryableThenByMethod.MakeGenericMethod(typeof(Dictionary<string, object?>), idType);
-        return (IQueryable<Dictionary<string, object?>>)thenBy.Invoke(null, [ordered, idSelector])!;
+        return ordered;
+    }
+
+    // 稳定字段统一使用升序 ThenBy，调用方无法通过请求改变 descriptor 的分页裁决顺序。
+    private static IOrderedQueryable<Dictionary<string, object?>> AppendAscendingSort(
+        IOrderedQueryable<Dictionary<string, object?>> source,
+        PlatformQueryDescriptor descriptor,
+        IEntityType entityType,
+        ParameterExpression row,
+        string field)
+    {
+        var fieldType = ResolveFieldType(descriptor, entityType, field);
+        var selector = Expression.Lambda(BuildPropertyExpression(row, field, fieldType), row);
+        var thenBy = QueryableThenByMethod.MakeGenericMethod(typeof(Dictionary<string, object?>), fieldType);
+        return (IOrderedQueryable<Dictionary<string, object?>>)thenBy.Invoke(null, [source, selector])!;
     }
 
     private static Expression<Func<Dictionary<string, object?>, object?[]>> BuildSelector(

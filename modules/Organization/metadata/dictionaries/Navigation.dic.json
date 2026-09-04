@@ -17,6 +17,10 @@
     "PositionManagement": {
       "zhs": "岗位管理",
       "en": "Position Management"
+    },
+    "CompanyManagement": {
+      "zhs": "公司管理",
+      "en": "Company Management"
     }
   }
 }

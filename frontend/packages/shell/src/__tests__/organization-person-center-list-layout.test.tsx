@@ -33,7 +33,13 @@ async function flushProTableRequest(): Promise<void> {
 
 const serviceMocks = vi.hoisted(() => ({
   setPersonLifecycleStatus: vi.fn(),
-  getCompanies: vi.fn(async () => []),
+  getCompanyLookup: vi.fn(async () => ({
+    options: [],
+    currentOptions: [],
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+  })),
 }));
 
 vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
@@ -42,7 +48,7 @@ vi.mock('../../../../modules/organization/src/services/organizationService', asy
   return {
     ...actual,
     setPersonLifecycleStatus: serviceMocks.setPersonLifecycleStatus,
-    getCompanies: serviceMocks.getCompanies,
+    getCompanyLookup: serviceMocks.getCompanyLookup,
     getDepartments: async () => [],
     getEmploymentStatusLabel: (value: string) => value,
   };
@@ -436,22 +442,26 @@ describe('organization person center list layout', () => {
     expect(personRequests.at(-1)).not.toContain('birthDateTo');
   });
 
-  it('single-flights the real company lookup while the StrictMode list still loads', async () => {
+  it('single-flights the real narrow company lookup while the StrictMode list still loads', async () => {
     const actualService = await vi.importActual<
       typeof import('../../../../modules/organization/src/services/organizationService')
     >('../../../../modules/organization/src/services/organizationService');
-    serviceMocks.getCompanies.mockImplementation(actualService.getCompanies);
+    serviceMocks.getCompanyLookup.mockImplementation(actualService.getCompanyLookup);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      if (url === '/api/organization/companies') {
-        return new Response(JSON.stringify([{
-          id: 'company-1',
-          code: 'HQ',
-          name: '总部',
-          isEnabled: true,
-          sortOrder: 1,
-          createdAt: '2026-08-22T00:00:00Z',
-        }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (url.startsWith('/api/organization/person-lookups/companies?')) {
+        return new Response(JSON.stringify({
+          items: [{ value: 'company-1', label: '总部', disabled: false }],
+          currentItems: [],
+          page: 1,
+          pageSize: 20,
+          hasMore: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.startsWith('/api/organization/positions/options?')) {
+        return new Response(JSON.stringify({
+          items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.startsWith('/api/organization/persons?')) {
         return new Response(JSON.stringify({
@@ -480,10 +490,16 @@ describe('organization person center list layout', () => {
     await flushProTableRequest();
 
     await vi.waitFor(() => expect(container.textContent).toContain('张三'));
-    expect(serviceMocks.getCompanies).toHaveBeenCalledTimes(1);
-    expect(serviceMocks.getCompanies).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(serviceMocks.getCompanyLookup).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.getCompanyLookup).toHaveBeenCalledWith(
+      expect.objectContaining({ fieldKey: 'companyId', page: 1, pageSize: 20 }),
+      true,
+      expect.any(AbortSignal),
+    );
     expect(fetchSpy.mock.calls.filter(([url, init]) => (
-      url === '/api/organization/companies' && init?.method === 'GET'
+      typeof url === 'string'
+      && url.startsWith('/api/organization/person-lookups/companies?')
+      && init?.method === 'GET'
     ))).toHaveLength(1);
     expect(fetchSpy.mock.calls.filter(([url, init]) => (
       typeof url === 'string'

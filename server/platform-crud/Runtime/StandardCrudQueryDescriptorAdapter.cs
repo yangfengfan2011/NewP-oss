@@ -37,6 +37,7 @@ public static class StandardCrudQueryDescriptorAdapter
             SortableFields = descriptor.SortableFields,
             DefaultSortField = descriptor.DefaultSortField,
             DefaultSortDirection = descriptor.DefaultSortDirection,
+            StableSortFields = descriptor.StableSortFields,
             DisplayValueFields = displayValueFields
         };
     }

@@ -116,6 +116,16 @@ public static class StandardCrudDescriptorValidator
                 $"标准 CRUD 资源 {descriptor.ResourceKey} 的默认排序字段 {descriptor.DefaultSortField} 未纳入排序白名单。");
         }
 
+        var stableNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in descriptor.StableSortFields)
+        {
+            Require(!string.IsNullOrWhiteSpace(field), $"标准 CRUD 资源 {descriptor.ResourceKey} 的稳定排序字段不能为空。");
+            Require(stableNames.Add(field), $"标准 CRUD 资源 {descriptor.ResourceKey} 的稳定排序字段 {field} 重复。");
+            Require(
+                descriptor.FieldSet.ListFields.Contains(field, StringComparer.Ordinal),
+                $"标准 CRUD 资源 {descriptor.ResourceKey} 的稳定排序字段 {field} 未纳入列表字段白名单。");
+        }
+
         Require(
             descriptor.DefaultSortDirection is "asc" or "desc",
             $"标准 CRUD 资源 {descriptor.ResourceKey} 的默认排序方向 {descriptor.DefaultSortDirection} 无效。");

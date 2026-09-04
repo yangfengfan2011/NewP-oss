@@ -43,6 +43,11 @@ public sealed class StandardCrudDescriptor
     public string DefaultSortDirection { get; init; } = "asc";
 
     /// <summary>
+    /// 获取主排序后按升序追加的稳定业务字段；用于声明资源级确定性分页顺序。
+    /// </summary>
+    public IReadOnlyList<string> StableSortFields { get; init; } = [];
+
+    /// <summary>
     /// 标准写入前置必填字段声明；这里只描述字段、作用范围和错误契约，缺失判断由运行时内核执行。
     /// </summary>
     public IReadOnlyList<StandardCrudRequiredField> RequiredFields { get; init; } = [];

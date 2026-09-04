@@ -17,9 +17,7 @@ using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
-using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -55,7 +53,7 @@ public sealed class OrganizationPermissionPipelineTests
     [InlineData("subject", PermissionDecision.Denied, HttpStatusCode.Forbidden, 0)]
     [InlineData("subject", PermissionDecision.Indeterminate, HttpStatusCode.ServiceUnavailable, 0)]
     [InlineData("subject", PermissionDecision.Granted, HttpStatusCode.OK, 1)]
-    public async Task HandWrittenOrganizationEndpoint_EnforcesPermissionBeforeBusiness(
+    public async Task CompanyStandardCrud_EnforcesPermissionBeforeBusiness(
         string? subjectId,
         PermissionDecision decision,
         HttpStatusCode expectedStatus,
@@ -68,8 +66,17 @@ public sealed class OrganizationPermissionPipelineTests
         using var response = await scenario.Client.SendAsync(request);
 
         Assert.Equal(expectedStatus, response.StatusCode);
-        Assert.Equal(expectedBusinessCalls, scenario.CompanyService.CallCount);
-        Assert.Equal(0, scenario.CrudService.CallCount);
+        Assert.Equal(expectedBusinessCalls, scenario.CrudService.CallCount);
+        if (expectedStatus == HttpStatusCode.OK)
+        {
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
+            Assert.Equal(JsonValueKind.Array, document.RootElement.GetProperty("items").ValueKind);
+            Assert.True(document.RootElement.TryGetProperty("total", out _));
+            Assert.True(document.RootElement.TryGetProperty("page", out _));
+            Assert.True(document.RootElement.TryGetProperty("pageSize", out _));
+        }
+
         if (subjectId is not null)
         {
             Assert.Equal("Organization.Company.View", source.LastPermissionCode);
@@ -95,7 +102,6 @@ public sealed class OrganizationPermissionPipelineTests
 
         Assert.Equal(expectedStatus, response.StatusCode);
         Assert.Equal(expectedBusinessCalls, scenario.CrudService.CallCount);
-        Assert.Equal(0, scenario.CompanyService.CallCount);
         if (subjectId is not null)
         {
             Assert.Equal("Organization.Person.View", source.LastPermissionCode);
@@ -207,7 +213,6 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
         Assert.Equal(expectedPermission, source.LastPermissionCode);
         Assert.Equal(1, scenario.CrudService.CallCount);
-        Assert.Equal(0, scenario.CompanyService.CallCount);
     }
 
     [Theory]
@@ -217,6 +222,28 @@ public sealed class OrganizationPermissionPipelineTests
     [InlineData("PUT", "/api/organization/positions/Position_1", "Organization.Position.Update")]
     [InlineData("DELETE", "/api/organization/positions/Position_1", "Organization.Position.Delete")]
     public async Task PositionStandardCrud_OperationsUseFixedPermission(
+        string method,
+        string path,
+        string expectedPermission)
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+
+        using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
+        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(1, scenario.CrudService.CallCount);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/organization/companies", "Organization.Company.View")]
+    [InlineData("GET", "/api/organization/companies/options", "Organization.Company.View")]
+    [InlineData("POST", "/api/organization/companies", "Organization.Company.Create")]
+    [InlineData("PUT", "/api/organization/companies/Company_1", "Organization.Company.Update")]
+    [InlineData("DELETE", "/api/organization/companies/Company_1", "Organization.Company.Delete")]
+    public async Task CompanyStandardCrud_OperationsUseFixedPermission(
         string method,
         string path,
         string expectedPermission)
@@ -334,21 +361,17 @@ public sealed class OrganizationPermissionPipelineTests
 
         private Scenario(
             WebApplication application,
-            RecordingCompanyService companyService,
             RecordingStandardCrudService crudService,
             RecordingCompanyDirectory companyDirectory,
             RecordingDepartmentDirectory departmentDirectory)
         {
             _application = application;
-            CompanyService = companyService;
             CrudService = crudService;
             CompanyDirectory = companyDirectory;
             DepartmentDirectory = departmentDirectory;
         }
 
         public HttpClient Client { get; private set; } = null!;
-
-        public RecordingCompanyService CompanyService { get; }
 
         public RecordingStandardCrudService CrudService { get; }
 
@@ -358,7 +381,6 @@ public sealed class OrganizationPermissionPipelineTests
 
         public static async Task<Scenario> StartAsync(IPermissionDecisionSource source)
         {
-            var companyService = new RecordingCompanyService();
             var crudService = new RecordingStandardCrudService();
             var companyDirectory = new RecordingCompanyDirectory();
             var departmentDirectory = new RecordingDepartmentDirectory();
@@ -366,7 +388,7 @@ public sealed class OrganizationPermissionPipelineTests
             builder.WebHost.UseTestServer();
             builder.Services
                 .AddControllers()
-                .AddApplicationPart(typeof(CompaniesController).Assembly);
+                .AddApplicationPart(typeof(PersonOrganizationLookupsController).Assembly);
             builder.Services
                 .AddAuthentication(TestAuthenticationHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
@@ -374,7 +396,6 @@ public sealed class OrganizationPermissionPipelineTests
                     static _ => { });
             builder.Services.AddPlatformAuthorization();
             builder.Services.AddSingleton(source);
-            builder.Services.AddSingleton<ICompanyService>(companyService);
             builder.Services.AddSingleton<ICompanyDirectory>(companyDirectory);
             builder.Services.AddSingleton<IDepartmentDirectory>(departmentDirectory);
             builder.Services.AddSingleton<IStandardCrudService>(crudService);
@@ -383,6 +404,7 @@ public sealed class OrganizationPermissionPipelineTests
             builder.Services.AddScoped<StandardCrudExportService>();
             builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
+            builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
 
             var application = builder.Build();
             application.UseAuthentication();
@@ -393,7 +415,6 @@ public sealed class OrganizationPermissionPipelineTests
 
             var scenario = new Scenario(
                 application,
-                companyService,
                 crudService,
                 companyDirectory,
                 departmentDirectory)
@@ -490,35 +511,6 @@ public sealed class OrganizationPermissionPipelineTests
             LastPermissionCode = permissionCode;
             return ValueTask.FromResult(Decision);
         }
-    }
-
-    private sealed class RecordingCompanyService : ICompanyService
-    {
-        private int _callCount;
-
-        public int CallCount => Volatile.Read(ref _callCount);
-
-        public Task<List<CompanyDto>> GetAllAsync(CancellationToken cancellationToken = default)
-        {
-            Interlocked.Increment(ref _callCount);
-            return Task.FromResult(new List<CompanyDto>());
-        }
-
-        public Task<CompanyDto?> GetByIdAsync(
-            string companyId,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<CompanyDto> CreateAsync(
-            CompanyDto dto,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<CompanyDto> UpdateAsync(
-            string companyId,
-            CompanyDto dto,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     private sealed class RecordingStandardCrudService : IStandardCrudService

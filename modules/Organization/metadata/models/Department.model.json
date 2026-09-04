@@ -58,6 +58,20 @@
         ],
         "unique": false
       }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_Department_Company",
+        "fields": [
+          "CompanyId"
+        ],
+        "principalModuleId": "Organization",
+        "principalModel": "Company",
+        "principalFields": [
+          "EID"
+        ],
+        "onDelete": "Restrict"
+      }
     ]
   }
 }

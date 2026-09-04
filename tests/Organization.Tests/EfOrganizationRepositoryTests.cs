@@ -16,36 +16,6 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class EfOrganizationRepositoryTests
 {
     [Fact]
-    public async Task EfCompanyRepository_CanCreateAndUpdateCompany()
-    {
-        using var dbContext = CreateDbContext();
-        var repository = new EfCompanyRepository(dbContext);
-
-        var company = new Company
-        {
-            Id = "Company_11111111111111111111111111111111",
-            Code = "ICP",
-            Name = "研发中心",
-            SortOrder = 1
-        };
-
-        await repository.CreateAsync(company);
-        company.Name = "研发中心（更新）";
-        company.SortOrder = 2;
-        company.IsEnabled = false;
-        company.UpdatedAt = DateTime.UtcNow;
-        await repository.UpdateAsync(company);
-
-        var saved = await repository.GetByIdAsync(company.Id);
-
-        Assert.NotNull(saved);
-        Assert.Equal("ICP", saved!.Code);
-        Assert.Equal("研发中心（更新）", saved.Name);
-        Assert.False(saved.IsEnabled);
-        Assert.Equal(2, saved.SortOrder);
-    }
-
-    [Fact]
     public async Task EfDepartmentRepository_ExistsSiblingCodeAsync_RespectsParentScope()
     {
         using var dbContext = CreateDbContext();
@@ -78,10 +48,9 @@ public class EfOrganizationRepositoryTests
     }
 
     [Fact]
-    public async Task EfOrganizationRepositories_GetByIdsAsync_ReturnsIndexedEntities()
+    public async Task EfDepartmentRepository_GetByIdsAsync_ReturnsIndexedEntities()
     {
         using var dbContext = CreateDbContext();
-        var companyRepository = new EfCompanyRepository(dbContext);
         var departmentRepository = new EfDepartmentRepository(dbContext);
 
         var company = new Company
@@ -97,13 +66,10 @@ public class EfOrganizationRepositoryTests
             Code = "RD",
             Name = "研发部"
         };
-        await companyRepository.CreateAsync(company);
         await departmentRepository.CreateAsync(department);
 
-        var companies = await companyRepository.GetByIdsAsync([company.Id, "Company_missing"]);
         var departments = await departmentRepository.GetByIdsAsync([department.Id, "Department_missing"]);
 
-        Assert.Equal("总公司", companies[company.Id].Name);
         Assert.Equal("研发部", departments[department.Id].Name);
     }
 
@@ -116,9 +82,6 @@ public class EfOrganizationRepositoryTests
         module.ConfigureServices(services);
 
         Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(ICompanyRepository) &&
-            descriptor.ImplementationType == typeof(EfCompanyRepository));
-        Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IDepartmentRepository) &&
             descriptor.ImplementationType == typeof(EfDepartmentRepository));
         Assert.Contains(services, descriptor =>
@@ -130,9 +93,6 @@ public class EfOrganizationRepositoryTests
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IDepartmentDirectory) &&
             descriptor.ImplementationType == typeof(EfDepartmentDirectory));
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(ICompanyService) &&
-            descriptor.ImplementationType == typeof(CompanyService));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IDepartmentService) &&
             descriptor.ImplementationType == typeof(DepartmentService));

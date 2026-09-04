@@ -12,9 +12,11 @@ public static class OrganizationPermissions
     public const string PersonDelete = PersonStem + ".Delete";
     public const string PersonLinkUser = PersonStem + ".LinkUser";
 
-    public const string CompanyView = "Organization.Company.View";
-    public const string CompanyCreate = "Organization.Company.Create";
-    public const string CompanyUpdate = "Organization.Company.Update";
+    public const string CompanyStem = "Organization.Company";
+    public const string CompanyView = CompanyStem + ".View";
+    public const string CompanyCreate = CompanyStem + ".Create";
+    public const string CompanyUpdate = CompanyStem + ".Update";
+    public const string CompanyDelete = CompanyStem + ".Delete";
 
     public const string DepartmentView = "Organization.Department.View";
     public const string DepartmentCreate = "Organization.Department.Create";

@@ -23,7 +23,8 @@
     "bindings": [
       "organization.person.list",
       "organization.person.detail",
-      "organization.position.list"
+      "organization.position.list",
+      "organization.company.list"
     ]
   },
   "security": {
@@ -74,6 +75,12 @@
         "code": "Organization.Company.Update",
         "displayName": "更新公司",
         "description": "更新公司",
+        "group": "公司"
+      },
+      {
+        "code": "Organization.Company.Delete",
+        "displayName": "删除公司",
+        "description": "删除未被部门或人员引用的公司",
         "group": "公司"
       },
       {

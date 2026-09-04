@@ -165,6 +165,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "example.runtime-workload.list",
             "identity.account.detail",
             "identity.account.list",
+            "organization.company.list",
             "organization.person.detail",
             "organization.person.list",
             "organization.position.list"

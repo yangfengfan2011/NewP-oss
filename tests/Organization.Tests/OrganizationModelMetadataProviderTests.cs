@@ -100,6 +100,24 @@ public class OrganizationModelMetadataProviderTests
     }
 
     [Fact]
+    public void CompanyReferences_UseRestrictForeignKeys()
+    {
+        var definitions = new OrganizationModelMetadataProvider().GetDefinitions();
+        var department = Assert.Single(definitions, definition => definition.Name == "Department");
+        var person = Assert.Single(definitions, definition => definition.Name == "Person");
+
+        var departmentCompany = Assert.Single(department.ForeignKeys, item => item.Name == "FK_Department_Company");
+        Assert.Equal(["CompanyId"], departmentCompany.Fields);
+        Assert.Equal("Organization/Company", departmentCompany.PrincipalModelKey);
+        Assert.Equal(ForeignKeyDeleteBehavior.Restrict, departmentCompany.DeleteBehavior);
+
+        var personCompany = Assert.Single(person.ForeignKeys, item => item.Name == "FK_Person_Company");
+        Assert.Equal(["CompanyId"], personCompany.Fields);
+        Assert.Equal("Organization/Company", personCompany.PrincipalModelKey);
+        Assert.Equal(ForeignKeyDeleteBehavior.Restrict, personCompany.DeleteBehavior);
+    }
+
+    [Fact]
     public void Position_FormAllowsStandardCreateAndEditLifecycle()
     {
         var document = new OrganizationModelMetadataProvider().GetDocument("Position");

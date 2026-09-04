@@ -96,6 +96,10 @@
           "create": { "mode": "editable", "required": true },
           "edit": { "mode": "editable", "required": true }
         }
+      },
+      {
+        "name": "UpdatedAt",
+        "uiType": "dateTime"
       }
     ],
     "indexes": [

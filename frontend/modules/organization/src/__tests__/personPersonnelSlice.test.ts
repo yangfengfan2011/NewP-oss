@@ -19,20 +19,22 @@ describe('personnel center first vertical slice', () => {
     expect(personStandardCrudResource.detailRoutePath).toBeUndefined();
   });
 
-  it('includes disabled organization only for query lookup and marks its state', async () => {
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify([
-        { id: 'company-1', name: '总部', isEnabled: true },
-        { id: 'company-2', name: '停用公司', isEnabled: false },
-      ]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([
-        { id: 'department-1', companyId: 'company-1', name: '研发部', isEnabled: true },
-        { id: 'department-2', companyId: 'company-1', name: '停用部门', isEnabled: false },
-      ]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([
-        { id: 'company-1', name: '总部', isEnabled: true },
-        { id: 'company-2', name: '停用公司', isEnabled: false },
-      ]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  it('pages organization lookups and preserves disabled current values within the selected company', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ value: 'company-1', label: '总部', disabled: false }],
+        currentItems: [{ value: 'company-2', label: '停用公司（已停用）', disabled: true }],
+        page: 2,
+        pageSize: 10,
+        hasMore: true,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ value: 'department-1', label: '研发部', disabled: false }],
+        currentItems: [{ value: 'department-2', label: '停用部门（已停用）', disabled: true }],
+        page: 1,
+        pageSize: 20,
+        hasMore: false,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 
     const companyProvider = personStandardCrudResource.lookupProviders?.find(
       provider => provider.key === 'organization.companies',
@@ -41,30 +43,47 @@ describe('personnel center first vertical slice', () => {
       provider => provider.key === 'organization.departments',
     );
 
-    await expect(companyProvider?.load(lookupRequest('companyId'))).resolves.toEqual([
-      { value: 'company-1', label: '总部' },
-      { value: 'company-2', label: '停用公司（已停用）' },
-    ]);
-    await expect(departmentProvider?.load(lookupRequest(
-      'departmentId',
-      { companyId: 'company-1' },
-      { companyId: 'company-1' },
-    ))).resolves.toEqual([
-      { value: 'department-1', label: '研发部' },
-      { value: 'department-2', label: '停用部门（已停用）' },
-    ]);
+    await expect(companyProvider?.load({
+      ...lookupRequest('CompanyId'),
+      keyword: '总部',
+      page: 2,
+      pageSize: 10,
+      currentValueIds: ['company-2'],
+    })).resolves.toEqual({
+      options: [{ value: 'company-1', label: '总部', disabled: false }],
+      currentOptions: [{ value: 'company-2', label: '停用公司（已停用）', disabled: true }],
+      page: 2,
+      pageSize: 10,
+      hasMore: true,
+    });
+    await expect(departmentProvider?.load({
+      ...lookupRequest(
+        'DepartmentId',
+        { CompanyId: 'company-1' },
+        { CompanyId: 'company-1' },
+      ),
+      currentValueIds: ['department-2'],
+    })).resolves.toEqual({
+      options: [{ value: 'department-1', label: '研发部', disabled: false }],
+      currentOptions: [{ value: 'department-2', label: '停用部门（已停用）', disabled: true }],
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
+    });
 
-    await expect(companyProvider?.load(lookupRequest('CompanyId'))).resolves.toEqual([
-      { value: 'company-1', label: '总部' },
-    ]);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/api/organization/person-lookups/companies?');
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('keyword=%E6%80%BB%E9%83%A8');
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('page=2&pageSize=10');
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('currentValueIds=company-2');
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('/api/organization/person-lookups/departments?');
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('companyId=company-1');
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('currentValueIds=department-2');
   });
 
   it('forwards the lookup execution signal through every organization GET', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockImplementation(async (input) => new Response(
-        String(input).includes('/api/organization/positions/options')
-          ? JSON.stringify({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false })
-          : '[]',
+        JSON.stringify({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false }),
         {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -101,6 +120,47 @@ describe('personnel center first vertical slice', () => {
       expect(init?.method ?? 'GET').toBe('GET');
     });
     expect(String(fetchSpy.mock.calls[2]?.[0])).toContain('/api/organization/positions/options?page=1&pageSize=20');
+  });
+
+  it('uses the narrow lookup for disabled list filters without exposing disabled choices in forms', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      items: [{ value: 'company-disabled', label: '停用公司（已停用）', disabled: true }],
+      currentItems: [],
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const provider = personStandardCrudResource.lookupProviders?.find(
+      item => item.key === 'organization.companies',
+    );
+
+    await provider?.load(lookupRequest('companyId'));
+    await provider?.load(lookupRequest('CompanyId'));
+
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('includeDisabled=true');
+    expect(String(fetchSpy.mock.calls[1]?.[0])).not.toContain('includeDisabled=true');
+  });
+
+  it('can retry a failed organization lookup with the same paged request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('temporarily unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ value: 'company-1', label: '总部', disabled: false }],
+        currentItems: [],
+        page: 1,
+        pageSize: 20,
+        hasMore: false,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const provider = personStandardCrudResource.lookupProviders?.find(
+      item => item.key === 'organization.companies',
+    );
+    const request = lookupRequest('CompanyId');
+
+    await expect(provider?.load(request)).rejects.toThrow('temporarily unavailable');
+    await expect(provider?.load(request)).resolves.toMatchObject({
+      options: [{ value: 'company-1', label: '总部', disabled: false }],
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it('offers only enabled positions while preserving and marking the current disabled value', async () => {

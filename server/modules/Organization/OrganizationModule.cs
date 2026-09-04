@@ -22,6 +22,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
         services.AddScoped<ICompanyRepository, EfCompanyRepository>();
         services.AddScoped<IDepartmentRepository, EfDepartmentRepository>();
+        services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
+        services.AddScoped<IDepartmentDirectory, EfDepartmentDirectory>();
         services.AddScoped<IPositionDirectory, PlatformQueryPositionDirectory>();
         services.AddScoped<IPersonUserBindingRepository, EfPersonUserBindingRepository>();
         services.AddScoped<ICompanyService, CompanyService>();

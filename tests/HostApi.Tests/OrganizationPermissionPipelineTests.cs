@@ -13,9 +13,12 @@ using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.DTOs;
+using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -97,6 +100,88 @@ public sealed class OrganizationPermissionPipelineTests
         {
             Assert.Equal("Organization.Person.View", source.LastPermissionCode);
         }
+    }
+
+    [Theory]
+    [InlineData(null, PermissionDecision.Granted, HttpStatusCode.Unauthorized, 0)]
+    [InlineData("subject", PermissionDecision.Denied, HttpStatusCode.Forbidden, 0)]
+    [InlineData("subject", PermissionDecision.Indeterminate, HttpStatusCode.ServiceUnavailable, 0)]
+    [InlineData("subject", PermissionDecision.Granted, HttpStatusCode.OK, 1)]
+    public async Task PersonOrganizationLookup_EnforcesPersonViewBeforeDirectoryRead(
+        string? subjectId,
+        PermissionDecision decision,
+        HttpStatusCode expectedStatus,
+        int expectedDirectoryCalls)
+    {
+        var source = new MutablePermissionDecisionSource(decision);
+        await using var scenario = await Scenario.StartAsync(source);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/person-lookups/departments?companyId=Company_1&page=1&pageSize=20",
+            subjectId);
+
+        using var response = await scenario.Client.SendAsync(request);
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        Assert.Equal(expectedDirectoryCalls, scenario.DepartmentDirectory.LookupCallCount);
+        if (subjectId is not null)
+        {
+            Assert.Equal(OrganizationPermissions.PersonView, source.LastPermissionCode);
+        }
+    }
+
+    [Fact]
+    public async Task PersonOrganizationLookup_ForwardsPagingAndReturnsDisabledCurrentValue()
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
+            [new Company { Id = "Company_1", Name = "总部", IsEnabled = true }],
+            [new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
+            2,
+            10,
+            true);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/person-lookups/companies?keyword=%E6%80%BB%E9%83%A8&page=2&pageSize=10&currentValueIds=Company_2",
+            "subject");
+
+        using var response = await scenario.Client.SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("总部", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
+        Assert.Equal("旧公司（已停用）", document.RootElement.GetProperty("currentItems")[0].GetProperty("label").GetString());
+        Assert.True(document.RootElement.GetProperty("currentItems")[0].GetProperty("disabled").GetBoolean());
+        Assert.Equal("总部", scenario.CompanyDirectory.Request?.Keyword);
+        Assert.Equal(2, scenario.CompanyDirectory.Request?.Page);
+        Assert.Equal(10, scenario.CompanyDirectory.Request?.PageSize);
+        Assert.Equal(["Company_2"], scenario.CompanyDirectory.Request?.CurrentValueIds);
+    }
+
+    [Fact]
+    public async Task PersonOrganizationLookup_AllowsDisabledDirectoryItemsOnlyForExplicitListFiltering()
+    {
+        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
+            [new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
+            [],
+            1,
+            20,
+            false);
+        using var request = Request(
+            HttpMethod.Get,
+            "/api/organization/person-lookups/companies?includeDisabled=true",
+            "subject");
+
+        using var response = await scenario.Client.SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(scenario.CompanyDirectory.Request?.IncludeDisabled);
+        Assert.False(document.RootElement.GetProperty("items")[0].GetProperty("disabled").GetBoolean());
+        Assert.Equal("旧公司（已停用）", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
     }
 
     [Theory]
@@ -250,11 +335,15 @@ public sealed class OrganizationPermissionPipelineTests
         private Scenario(
             WebApplication application,
             RecordingCompanyService companyService,
-            RecordingStandardCrudService crudService)
+            RecordingStandardCrudService crudService,
+            RecordingCompanyDirectory companyDirectory,
+            RecordingDepartmentDirectory departmentDirectory)
         {
             _application = application;
             CompanyService = companyService;
             CrudService = crudService;
+            CompanyDirectory = companyDirectory;
+            DepartmentDirectory = departmentDirectory;
         }
 
         public HttpClient Client { get; private set; } = null!;
@@ -263,10 +352,16 @@ public sealed class OrganizationPermissionPipelineTests
 
         public RecordingStandardCrudService CrudService { get; }
 
+        public RecordingCompanyDirectory CompanyDirectory { get; }
+
+        public RecordingDepartmentDirectory DepartmentDirectory { get; }
+
         public static async Task<Scenario> StartAsync(IPermissionDecisionSource source)
         {
             var companyService = new RecordingCompanyService();
             var crudService = new RecordingStandardCrudService();
+            var companyDirectory = new RecordingCompanyDirectory();
+            var departmentDirectory = new RecordingDepartmentDirectory();
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services
@@ -280,6 +375,8 @@ public sealed class OrganizationPermissionPipelineTests
             builder.Services.AddPlatformAuthorization();
             builder.Services.AddSingleton(source);
             builder.Services.AddSingleton<ICompanyService>(companyService);
+            builder.Services.AddSingleton<ICompanyDirectory>(companyDirectory);
+            builder.Services.AddSingleton<IDepartmentDirectory>(departmentDirectory);
             builder.Services.AddSingleton<IStandardCrudService>(crudService);
             builder.Services.AddSingleton<StandardCrudXlsxWriter>();
             builder.Services.AddScoped<StandardCrudEndpoint>();
@@ -294,7 +391,12 @@ public sealed class OrganizationPermissionPipelineTests
             application.MapStandardCrudResources();
             await application.StartAsync();
 
-            var scenario = new Scenario(application, companyService, crudService)
+            var scenario = new Scenario(
+                application,
+                companyService,
+                crudService,
+                companyDirectory,
+                departmentDirectory)
             {
                 Client = application.GetTestClient()
             };
@@ -305,6 +407,62 @@ public sealed class OrganizationPermissionPipelineTests
         {
             Client.Dispose();
             await _application.DisposeAsync();
+        }
+    }
+
+    private sealed class RecordingCompanyDirectory : ICompanyDirectory
+    {
+        public OrganizationDirectoryLookupRequest? Request { get; private set; }
+
+        public OrganizationDirectoryPage<Company> Result { get; set; } = new([], [], 1, 20, false);
+
+        public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
+            IReadOnlyCollection<string> companyIds,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<OrganizationDirectoryPage<Company>> LookupAsync(
+            OrganizationDirectoryLookupRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Request = request;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class RecordingDepartmentDirectory : IDepartmentDirectory
+    {
+        private int _lookupCallCount;
+
+        public int LookupCallCount => Volatile.Read(ref _lookupCallCount);
+
+        public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(
+            IReadOnlyCollection<string> departmentIds,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<Department?> GetByCompanyAndCodeAsync(
+            string companyId,
+            string code,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<OrganizationDirectoryPage<Department>> LookupAsync(
+            string companyId,
+            OrganizationDirectoryLookupRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _lookupCallCount);
+            return Task.FromResult(new OrganizationDirectoryPage<Department>([], [], request.Page, request.PageSize, false));
         }
     }
 

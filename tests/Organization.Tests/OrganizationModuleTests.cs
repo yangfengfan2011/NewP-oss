@@ -85,6 +85,12 @@ public class OrganizationModuleTests
         Assert.False(IsEditRequired(fields, "DepartmentId"));
         Assert.True(IsCreateRequired(fields, "EmploymentStatus"));
         Assert.False(IsCreateRequired(fields, "PositionId"));
+        var departmentField = fields.Single(field => field.GetProperty("name").GetString() == "DepartmentId");
+        var departmentSource = departmentField.GetProperty("dataSource");
+        Assert.Equal("organization.departments", departmentSource.GetProperty("key").GetString());
+        Assert.Equal(
+            ["CompanyId"],
+            departmentSource.GetProperty("dependsOn").EnumerateArray().Select(item => item.GetString()));
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(root, @"modules\Organization\metadata\views\PersonList.view.json"),

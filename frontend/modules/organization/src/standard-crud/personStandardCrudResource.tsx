@@ -11,8 +11,8 @@ import { lazy, Suspense } from 'react';
 import {
   deletePerson,
   employmentStatusOptions,
-  getCompanies,
-  getDepartments,
+  getCompanyLookup,
+  getDepartmentLookup,
   mapPersonDetailView,
   mapPersonListItem,
   setPersonLifecycleStatus,
@@ -37,27 +37,32 @@ const LazyPersonUserBindingSummary = lazy(async () => {
 const organizationLookupProviders: StandardCrudLookupProvider[] = [
   {
     key: 'organization.companies',
-    load: async ({ fieldKey }, context) => (await getCompanies(context?.signal))
-      .filter((company) => fieldKey === 'companyId' || company.isEnabled)
-      .map((company) => ({
-        value: company.id,
-        label: company.isEnabled ? company.name : `${company.name}（已停用）`,
-      })),
+    load: async (request, context) => getCompanyLookup(
+      request,
+      request.fieldKey === 'companyId',
+      context?.signal,
+    ),
   },
   {
     key: 'organization.departments',
-    load: async ({ fieldKey, dependencyValues }, context) => {
-      const companyId = dependencyValues.CompanyId ?? dependencyValues.companyId;
+    load: async (request, context) => {
+      const companyId = request.dependencyValues.CompanyId ?? request.dependencyValues.companyId;
       if (typeof companyId !== 'string' || companyId.length === 0) {
-        return [];
+        return {
+          options: [],
+          currentOptions: [],
+          page: request.page,
+          pageSize: request.pageSize,
+          hasMore: false,
+        };
       }
 
-      return (await getDepartments(companyId, context?.signal))
-        .filter((department) => fieldKey === 'departmentId' || department.isEnabled)
-        .map((department) => ({
-          value: department.id,
-          label: department.isEnabled ? department.name : `${department.name}（已停用）`,
-        }));
+      return getDepartmentLookup(
+        companyId,
+        request,
+        request.fieldKey === 'departmentId',
+        context?.signal,
+      );
     },
   },
   createStandardCrudRestLookupProvider({

@@ -11,7 +11,6 @@ using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
-using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Runtime;
 using Microsoft.Extensions.DependencyInjection;
@@ -298,15 +297,15 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public async Task PersonCrudDisplayValueResolver_ReturnsOnlyRequestedCompanyCompanionAndBatchesDistinctIds()
     {
-        var companyRepository = new FakeCompanyRepository(
+        var companyDirectory = new FakeCompanyDirectory(
         [
             new Company { Id = "Company_1", Name = "总公司" }
         ]);
-        var departmentRepository = new FakeDepartmentRepository([]);
+        var departmentDirectory = new FakeDepartmentDirectory([]);
         var positionRepository = new FakePositionRepository([]);
         var resolver = new PersonCrudDisplayValueResolver(
-            companyRepository,
-            departmentRepository,
+            companyDirectory,
+            departmentDirectory,
             positionRepository);
         var descriptor = PersonCrudDescriptorFactory.Create();
         var companyDisplayField = Assert.Single(
@@ -333,22 +332,22 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("总公司", resolved[0]["CompanyId_DisplayValue"]);
         Assert.Equal("总公司", resolved[1]["CompanyId_DisplayValue"]);
         Assert.Equal(string.Empty, resolved[2]["CompanyId_DisplayValue"]);
-        Assert.Equal(1, companyRepository.BatchCallCount);
+        Assert.Equal(1, companyDirectory.BatchCallCount);
         Assert.Equal(
             new[] { "Company_1", "Company_missing" },
-            Assert.Single(companyRepository.RequestedBatches));
-        Assert.Equal(0, departmentRepository.BatchCallCount);
+            Assert.Single(companyDirectory.RequestedBatches));
+        Assert.Equal(0, departmentDirectory.BatchCallCount);
         Assert.Equal(0, positionRepository.BatchCallCount);
     }
 
     [Fact]
     public async Task PersonCrudDisplayValueResolver_ResolvesRequestedDisplayFieldsInBatch()
     {
-        var companyRepository = new FakeCompanyRepository(
+        var companyDirectory = new FakeCompanyDirectory(
         [
             new Company { Id = "Company_1", Name = "总公司" }
         ]);
-        var departmentRepository = new FakeDepartmentRepository(
+        var departmentDirectory = new FakeDepartmentDirectory(
         [
             new Department { Id = "Department_1", Name = "研发部" }
         ]);
@@ -358,8 +357,8 @@ public sealed class PersonStandardCrudResourceTests
             new Position { Id = "Position_2", Name = "旧岗位", IsEnabled = false }
         ]);
         var resolver = new PersonCrudDisplayValueResolver(
-            companyRepository,
-            departmentRepository,
+            companyDirectory,
+            departmentDirectory,
             positionRepository);
 
         var descriptor = PersonCrudDescriptorFactory.Create();
@@ -380,16 +379,42 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("研发部", resolved[1]["DepartmentName"]);
         Assert.Equal("工程师", resolved[0]["PositionName"]);
         Assert.Equal("旧岗位（已停用）", resolved[1]["PositionName"]);
-        Assert.Equal(1, companyRepository.BatchCallCount);
-        Assert.Equal(1, departmentRepository.BatchCallCount);
+        Assert.Equal(1, companyDirectory.BatchCallCount);
+        Assert.Equal(1, departmentDirectory.BatchCallCount);
         Assert.Equal(1, positionRepository.BatchCallCount);
     }
 
-    private sealed class FakeCompanyRepository : ICompanyRepository
+    [Fact]
+    public async Task PersonCrudDisplayValueResolver_MarksDisabledAffiliationWithoutHidingItsName()
+    {
+        var resolver = new PersonCrudDisplayValueResolver(
+            new FakeCompanyDirectory([new Company { Id = "Company_1", Name = "旧公司", IsEnabled = false }]),
+            new FakeDepartmentDirectory([new Department { Id = "Department_1", Name = "旧部门", IsEnabled = false }]),
+            new FakePositionRepository([]));
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
+        [
+            new Dictionary<string, object?>
+            {
+                ["CompanyId"] = "Company_1",
+                ["DepartmentId"] = "Department_1"
+            }
+        ];
+
+        var result = await resolver.ResolveListAsync(
+            PersonCrudDescriptorFactory.Create(),
+            rows,
+            PersonCrudDescriptorFactory.Create().DisplayValueFields,
+            CancellationToken.None);
+
+        Assert.Equal("旧公司（已停用）", result[0]["CompanyId_DisplayValue"]);
+        Assert.Equal("旧部门（已停用）", result[0]["DepartmentName"]);
+    }
+
+    private sealed class FakeCompanyDirectory : ICompanyDirectory
     {
         private readonly IReadOnlyDictionary<string, Company> _companies;
 
-        public FakeCompanyRepository(IEnumerable<Company> companies)
+        public FakeCompanyDirectory(IEnumerable<Company> companies)
         {
             _companies = companies.ToDictionary(company => company.Id, StringComparer.Ordinal);
         }
@@ -397,9 +422,6 @@ public sealed class PersonStandardCrudResourceTests
         public int BatchCallCount { get; private set; }
 
         public List<IReadOnlyCollection<string>> RequestedBatches { get; } = [];
-
-        public Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(_companies.Values.ToList());
 
         public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.TryGetValue(companyId, out var company) ? company : null);
@@ -419,26 +441,22 @@ public sealed class PersonStandardCrudResourceTests
         public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task CreateAsync(Company company, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task UpdateAsync(Company company, CancellationToken cancellationToken = default) =>
+        public Task<OrganizationDirectoryPage<Company>> LookupAsync(
+            OrganizationDirectoryLookupRequest request,
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 
-    private sealed class FakeDepartmentRepository : IDepartmentRepository
+    private sealed class FakeDepartmentDirectory : IDepartmentDirectory
     {
         private readonly IReadOnlyDictionary<string, Department> _departments;
 
-        public FakeDepartmentRepository(IEnumerable<Department> departments)
+        public FakeDepartmentDirectory(IEnumerable<Department> departments)
         {
             _departments = departments.ToDictionary(department => department.Id, StringComparer.Ordinal);
         }
 
         public int BatchCallCount { get; private set; }
-
-        public Task<List<Department>> GetByCompanyIdAsync(string companyId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_departments.Values.Where(department => department.CompanyId == companyId).ToList());
 
         public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.TryGetValue(departmentId, out var department) ? department : null);
@@ -454,18 +472,16 @@ public sealed class PersonStandardCrudResourceTests
                     .ToDictionary(department => department.Id, StringComparer.Ordinal));
         }
 
-        public Task<bool> ExistsSiblingCodeAsync(
+        public Task<Department?> GetByCompanyAndCodeAsync(
             string companyId,
-            string? parentDepartmentId,
             string code,
-            string? excludedDepartmentId = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task CreateAsync(Department department, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task UpdateAsync(Department department, CancellationToken cancellationToken = default) =>
+        public Task<OrganizationDirectoryPage<Department>> LookupAsync(
+            string companyId,
+            OrganizationDirectoryLookupRequest request,
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 

@@ -4,7 +4,6 @@ using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
-using ICP.Platform.Modules.Organization.Repositories;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -154,6 +153,51 @@ public sealed class PersonCrudValidatorTests
         Assert.Null(error);
         Assert.Equal("FullTime", existing["EmploymentStatus"]);
         Assert.Equal(1, repository.GetByIdCallCount);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_WhenAffiliationIsUnchanged_AllowsDisabledCurrentReferences()
+    {
+        var existing = Values(CompanyId, DepartmentId);
+        existing["EID"] = "Person_1";
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: false)],
+            [Department(DepartmentId, CompanyId, enabled: false)],
+            existing);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?> { ["ENAME"] = "更新姓名" },
+            CancellationToken.None);
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_WhenAffiliationChanges_RejectsDisabledTarget()
+    {
+        var existing = Values(CompanyId, DepartmentId);
+        existing["EID"] = "Person_1";
+        var validator = CreateValidator(
+            [Company(CompanyId, enabled: true), Company(OtherCompanyId, enabled: false)],
+            [
+                Department(DepartmentId, CompanyId, enabled: true),
+                Department(OtherDepartmentId, OtherCompanyId, enabled: true)
+            ],
+            existing);
+
+        var error = await validator.ValidateUpdateAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "Person_1",
+            new Dictionary<string, object?>
+            {
+                ["CompanyId"] = OtherCompanyId,
+                ["DepartmentId"] = OtherDepartmentId
+            },
+            CancellationToken.None);
+
+        AssertError(error, "Organization.Person.CompanyDisabled", "CompanyId");
     }
 
     [Fact]
@@ -438,8 +482,8 @@ public sealed class PersonCrudValidatorTests
         FakeStandardCrudRepository? repository = null,
         IEnumerable<Position>? positions = null) =>
         new(
-            new FakeCompanyRepository(companies),
-            new FakeDepartmentRepository(departments),
+            new FakeCompanyDirectory(companies),
+            new FakeDepartmentDirectory(departments),
             new FakePositionRepository(positions ?? []),
             repository ?? new FakeStandardCrudRepository(existing));
 
@@ -488,7 +532,7 @@ public sealed class PersonCrudValidatorTests
         Assert.Equal(expectedCode, fieldError.Code);
     }
 
-    private sealed class FakeCompanyRepository(IEnumerable<Company> companies) : ICompanyRepository
+    private sealed class FakeCompanyDirectory(IEnumerable<Company> companies) : ICompanyDirectory
     {
         private readonly IReadOnlyDictionary<string, Company> _companies =
             companies.ToDictionary(company => company.Id, StringComparer.Ordinal);
@@ -496,14 +540,12 @@ public sealed class PersonCrudValidatorTests
         public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_companies.GetValueOrDefault(companyId));
 
-        public Task<List<Company>> GetAllAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(IReadOnlyCollection<string> companyIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task CreateAsync(Company company, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task UpdateAsync(Company company, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<OrganizationDirectoryPage<Company>> LookupAsync(OrganizationDirectoryLookupRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class FakeDepartmentRepository(IEnumerable<Department> departments) : IDepartmentRepository
+    private sealed class FakeDepartmentDirectory(IEnumerable<Department> departments) : IDepartmentDirectory
     {
         private readonly IReadOnlyDictionary<string, Department> _departments =
             departments.ToDictionary(department => department.Id, StringComparer.Ordinal);
@@ -511,11 +553,9 @@ public sealed class PersonCrudValidatorTests
         public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_departments.GetValueOrDefault(departmentId));
 
-        public Task<List<Department>> GetByCompanyIdAsync(string companyId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(IReadOnlyCollection<string> departmentIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<bool> ExistsSiblingCodeAsync(string companyId, string? parentDepartmentId, string code, string? excludedDepartmentId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task CreateAsync(Department department, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task UpdateAsync(Department department, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Department?> GetByCompanyAndCodeAsync(string companyId, string code, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<OrganizationDirectoryPage<Department>> LookupAsync(string companyId, OrganizationDirectoryLookupRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class FakeStandardCrudRepository(IReadOnlyDictionary<string, object?>? existing = null) : IStandardCrudRepository

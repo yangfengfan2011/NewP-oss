@@ -9,29 +9,20 @@ import {
   StandardCrudRequestError,
   type StandardCrudDetail,
   type StandardCrudListResult,
+  type StandardCrudLookupPage,
+  type StandardCrudLookupRequest,
   type StandardCrudMutationValues,
+  type StandardCrudOption,
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
 import { platformFetch } from '@icp-platform/core';
 
-export interface CompanyDto {
-  id: string;
-  code: string;
-  name: string;
-  isEnabled: boolean;
-  sortOrder: number;
-  createdAt: string;
-}
-
-export interface DepartmentDto {
-  id: string;
-  companyId: string;
-  parentDepartmentId?: string | null;
-  code: string;
-  name: string;
-  isEnabled: boolean;
-  sortOrder: number;
-  createdAt: string;
+interface OrganizationLookupPageResponse {
+  items: StandardCrudOption[];
+  currentItems: StandardCrudOption[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
 export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
@@ -313,16 +304,59 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
   };
 }
 
-export async function getCompanies(signal?: AbortSignal): Promise<CompanyDto[]> {
-  return fetchJson<CompanyDto[]>('/api/organization/companies', '加载公司列表失败', signal);
+export async function getCompanyLookup(
+  request: StandardCrudLookupRequest,
+  includeDisabled: boolean,
+  signal?: AbortSignal,
+): Promise<StandardCrudLookupPage> {
+  const search = buildOrganizationLookupSearch(request, includeDisabled);
+  return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
+    `/api/organization/person-lookups/companies?${search.toString()}`,
+    '加载公司列表失败',
+    signal,
+  ));
 }
 
-export async function getDepartments(companyId: string, signal?: AbortSignal): Promise<DepartmentDto[]> {
-  return fetchJson<DepartmentDto[]>(
-    `/api/organization/departments?companyId=${encodeURIComponent(companyId)}`,
+export async function getDepartmentLookup(
+  companyId: string,
+  request: StandardCrudLookupRequest,
+  includeDisabled: boolean,
+  signal?: AbortSignal,
+): Promise<StandardCrudLookupPage> {
+  const search = buildOrganizationLookupSearch(request, includeDisabled);
+  search.set('companyId', companyId);
+  return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
+    `/api/organization/person-lookups/departments?${search.toString()}`,
     '加载部门列表失败',
     signal,
-  );
+  ));
+}
+
+// HTTP 响应使用服务端 items 命名，模块 provider 在边界转换为 SDK 的 options 命名。
+function mapOrganizationLookupPage(response: OrganizationLookupPageResponse): StandardCrudLookupPage {
+  return {
+    options: response.items,
+    currentOptions: response.currentItems,
+    page: response.page,
+    pageSize: response.pageSize,
+    hasMore: response.hasMore,
+  };
+}
+
+// 模块专用 Lookup 复用共享运行时的分页字段，但额外参数只停留在 Organization HTTP seam。
+function buildOrganizationLookupSearch(
+  request: StandardCrudLookupRequest,
+  includeDisabled: boolean,
+): URLSearchParams {
+  const search = new URLSearchParams();
+  if (request.keyword.length > 0) search.set('keyword', request.keyword);
+  search.set('page', String(request.page));
+  search.set('pageSize', String(request.pageSize));
+  if (request.currentValueIds.length > 0) {
+    search.set('currentValueIds', request.currentValueIds.join(','));
+  }
+  if (includeDisabled) search.set('includeDisabled', 'true');
+  return search;
 }
 
 export async function getPersons(query: {

@@ -125,6 +125,12 @@ public class EfOrganizationRepositoryTests
             descriptor.ServiceType == typeof(IPositionDirectory) &&
             descriptor.ImplementationType == typeof(PlatformQueryPositionDirectory));
         Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(ICompanyDirectory) &&
+            descriptor.ImplementationType == typeof(EfCompanyDirectory));
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(IDepartmentDirectory) &&
+            descriptor.ImplementationType == typeof(EfDepartmentDirectory));
+        Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(ICompanyService) &&
             descriptor.ImplementationType == typeof(CompanyService));
         Assert.Contains(services, descriptor =>

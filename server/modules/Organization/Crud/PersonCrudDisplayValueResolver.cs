@@ -2,27 +2,26 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
-using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
 public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueResolver
 {
-    private readonly ICompanyRepository _companyRepository;
-    private readonly IDepartmentRepository _departmentRepository;
+    private readonly ICompanyDirectory _companyDirectory;
+    private readonly IDepartmentDirectory _departmentDirectory;
     private readonly IPositionDirectory _positionDirectory;
 
     /// <summary>
-    /// 绑定组织归属仓储与独立岗位目录，供一页人员显示值批量投影。
+    /// 绑定组织归属窄目录与独立岗位目录，供一页人员显示值批量投影。
     /// </summary>
     public PersonCrudDisplayValueResolver(
-        ICompanyRepository companyRepository,
-        IDepartmentRepository departmentRepository,
+        ICompanyDirectory companyDirectory,
+        IDepartmentDirectory departmentDirectory,
         IPositionDirectory positionDirectory)
     {
-        _companyRepository = companyRepository;
-        _departmentRepository = departmentRepository;
+        _companyDirectory = companyDirectory;
+        _departmentDirectory = departmentDirectory;
         _positionDirectory = positionDirectory;
     }
 
@@ -40,10 +39,10 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
         _ = descriptor;
         var requested = requestedDisplayFields.Select(field => field.Field).ToHashSet(StringComparer.Ordinal);
         IReadOnlyDictionary<string, Company> companies = requested.Contains("CompanyId_DisplayValue")
-            ? await _companyRepository.GetByIdsAsync(CollectIds(rows, "CompanyId"), cancellationToken)
+            ? await _companyDirectory.GetByIdsAsync(CollectIds(rows, "CompanyId"), cancellationToken)
             : new Dictionary<string, Company>(StringComparer.Ordinal);
         IReadOnlyDictionary<string, Department> departments = requested.Contains("DepartmentName")
-            ? await _departmentRepository.GetByIdsAsync(CollectIds(rows, "DepartmentId"), cancellationToken)
+            ? await _departmentDirectory.GetByIdsAsync(CollectIds(rows, "DepartmentId"), cancellationToken)
             : new Dictionary<string, Department>(StringComparer.Ordinal);
         IReadOnlyDictionary<string, Position> positions = requested.Contains("PositionName")
             ? await _positionDirectory.GetByIdsAsync(CollectIds(rows, "PositionId"), cancellationToken)
@@ -80,20 +79,22 @@ public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueRe
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+    // 公司显示值保留当前名称，并显式标记停用事实。
     private static string ReadDisplayName(
         IReadOnlyDictionary<string, object?> row,
         string sourceField,
         IReadOnlyDictionary<string, Company> companies) =>
         ReadStringOrNull(row, sourceField) is { } id && companies.TryGetValue(id, out var company)
-            ? company.Name
+            ? company.IsEnabled ? company.Name : $"{company.Name}（已停用）"
             : string.Empty;
 
+    // 部门显示值保留当前名称，并显式标记停用事实。
     private static string ReadDisplayName(
         IReadOnlyDictionary<string, object?> row,
         string sourceField,
         IReadOnlyDictionary<string, Department> departments) =>
         ReadStringOrNull(row, sourceField) is { } id && departments.TryGetValue(id, out var department)
-            ? department.Name
+            ? department.IsEnabled ? department.Name : $"{department.Name}（已停用）"
             : string.Empty;
 
     // 人员读取始终消费岗位目录当前名称，并在停用后保留可见的生命周期标记。

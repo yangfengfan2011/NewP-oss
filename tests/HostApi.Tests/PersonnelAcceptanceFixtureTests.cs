@@ -9,6 +9,38 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class PersonnelAcceptanceFixtureTests
 {
+    [Fact]
+    public void FixtureReadsOrganizationPrerequisitesThroughNarrowDirectories()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(),
+            "apps",
+            "host-api",
+            "Acceptance",
+            "PersonnelAcceptanceFixture.cs"));
+
+        Assert.Contains("ICompanyDirectory companyDirectory", source, StringComparison.Ordinal);
+        Assert.Contains("IDepartmentDirectory departmentDirectory", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("companyService.GetAllAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("departmentService.GetByCompanyIdAsync", source, StringComparison.Ordinal);
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "ICP-Platform.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
     [Theory]
     [InlineData("Development")]
     [InlineData("Production")]

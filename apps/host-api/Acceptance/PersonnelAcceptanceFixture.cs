@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using ICP.Platform.Modules.Identity.Application;
+using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -31,6 +32,8 @@ public static class PersonnelAcceptanceFixture
 
         group.MapPost("/prepare", async (
             HttpContext context,
+            ICompanyDirectory companyDirectory,
+            IDepartmentDirectory departmentDirectory,
             ICompanyService companyService,
             IDepartmentService departmentService,
             IIdentityLocalAdministratorReadinessProbe localAdministrator,
@@ -41,26 +44,42 @@ public static class PersonnelAcceptanceFixture
                 return Results.NotFound();
             }
 
-            var company = (await companyService.GetAllAsync(cancellationToken))
-                .SingleOrDefault(item => string.Equals(item.Code, options.CompanyCode, StringComparison.Ordinal))
-                ?? await companyService.CreateAsync(new CompanyDto
+            var existingCompany = await companyDirectory.GetByCodeAsync(options.CompanyCode, cancellationToken);
+            var companyId = existingCompany?.Id;
+            var companyName = existingCompany?.Name;
+            if (companyId is null)
+            {
+                var createdCompany = await companyService.CreateAsync(new CompanyDto
                 {
                     Code = options.CompanyCode,
                     DisplayName = options.CompanyName,
                     IsEnabled = true,
                     SortOrder = "10"
                 }, cancellationToken);
-            var department = (await departmentService.GetByCompanyIdAsync(company.Id, cancellationToken))
-                .SingleOrDefault(item => string.Equals(item.Code, options.DepartmentCode, StringComparison.Ordinal))
-                ?? await departmentService.CreateAsync(new DepartmentDto
+                companyId = createdCompany.Id;
+                companyName = createdCompany.DisplayName;
+            }
+
+            var existingDepartment = await departmentDirectory.GetByCompanyAndCodeAsync(
+                companyId,
+                options.DepartmentCode,
+                cancellationToken);
+            var departmentId = existingDepartment?.Id;
+            var departmentName = existingDepartment?.Name;
+            if (departmentId is null)
+            {
+                var createdDepartment = await departmentService.CreateAsync(new DepartmentDto
                 {
                     Code = options.DepartmentCode,
                     DisplayName = options.DepartmentName,
-                    CompanyId = company.Id,
+                    CompanyId = companyId,
                     ParentDepartmentId = null,
                     IsEnabled = true,
                     SortOrder = "10"
                 }, cancellationToken);
+                departmentId = createdDepartment.Id;
+                departmentName = createdDepartment.DisplayName;
+            }
 
             var administrator = await localAdministrator.InspectAsync(cancellationToken);
             if (administrator is not { State: LocalAdministratorReadinessState.Ready, AccountEid: not null })
@@ -71,10 +90,10 @@ public static class PersonnelAcceptanceFixture
             return Results.Ok(new PersonnelAcceptanceFixtureResponse(
                 options.RunId,
                 administrator.AccountEid,
-                company.Id,
-                company.DisplayName,
-                department.Id,
-                department.DisplayName));
+                companyId,
+                companyName ?? options.CompanyName,
+                departmentId,
+                departmentName ?? options.DepartmentName));
         });
 
     }

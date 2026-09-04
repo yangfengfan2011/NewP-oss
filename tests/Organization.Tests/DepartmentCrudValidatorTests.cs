@@ -1,7 +1,7 @@
 using ICP.Platform.Modules.Authentication.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Crud;
-using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
@@ -135,7 +135,12 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_Child", "Company_1", "Department_Root");
         AddDepartment(context, "Department_Grandchild", "Company_1", "Department_Child");
         await context.SaveChangesAsync();
-        var validator = new DepartmentCrudValidator(context);
+        var validator = new DepartmentCrudValidator(
+            context,
+            new StubHierarchyQuery((current, parent) =>
+                string.Equals(current, parent, StringComparison.Ordinal)
+                    ? DepartmentParentRelationship.Self
+                    : DepartmentParentRelationship.Descendant));
 
         var self = await validator.ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
@@ -156,7 +161,7 @@ public sealed class DepartmentCrudValidatorTests
     }
 
     [Fact]
-    public async Task ValidateUpdateAsync_RejectsDeepDescendantWithOneBoundedHierarchyRead()
+    public async Task ValidateUpdateAsync_MapsDescendantClassificationToCycleError()
     {
         await using var context = CreateContext();
         AddCompany(context, "Company_1", true);
@@ -170,35 +175,15 @@ public sealed class DepartmentCrudValidatorTests
 
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+        var error = await new DepartmentCrudValidator(
+            context,
+            new StubHierarchyQuery(static (_, _) => DepartmentParentRelationship.Descendant)).ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_000",
             new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_063" });
 
         Assert.Equal(400, error?.StatusCode);
         Assert.Equal("Organization.Department.ParentCycle", error?.Code);
-    }
-
-    [Fact]
-    public async Task ValidateUpdateAsync_WhenHierarchyExceedsSupportedBound_FailsClosedWithStableConflict()
-    {
-        await using var context = CreateContext();
-        AddCompany(context, "Company_1", true);
-        for (var index = 0; index <= DepartmentHierarchyLimits.MaximumDepartmentsPerCompany; index++)
-        {
-            AddDepartment(context, $"Department_{index:D4}", "Company_1");
-        }
-
-        await context.SaveChangesAsync();
-
-        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
-            DepartmentCrudDescriptorFactory.Create(),
-            "Department_0000",
-            new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_0001" });
-
-        Assert.Equal(409, error?.StatusCode);
-        Assert.Equal(DepartmentHierarchyLimits.ErrorCode, error?.Code);
-        Assert.Empty(error!.FieldErrors);
     }
 
     [Fact]
@@ -211,7 +196,9 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_B", "Company_1", "Department_A");
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+        var error = await new DepartmentCrudValidator(
+            context,
+            new StubHierarchyQuery(static (_, _) => DepartmentParentRelationship.Corrupted)).ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_Current",
             new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_A" });
@@ -228,7 +215,9 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_1", "Company_1");
         AddDepartment(context, "Department_2", "Company_1");
         await context.SaveChangesAsync();
-        var validator = new DepartmentCrudValidator(context);
+        var validator = new DepartmentCrudValidator(
+            context,
+            new StubHierarchyQuery(static (_, _) => DepartmentParentRelationship.Allowed));
 
         var reparent = await validator.ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
@@ -323,5 +312,25 @@ public sealed class DepartmentCrudValidatorTests
         values["UpdatedBy"] = "User_Admin";
         values["UpdatedAt"] = DateTime.UtcNow;
         return values;
+    }
+
+    private sealed class StubHierarchyQuery(
+        Func<string, string, DepartmentParentRelationship> classify) : IDepartmentHierarchyQuery
+    {
+        public Task<DepartmentParentRelationship> ClassifyParentAsync(
+            string companyId,
+            string currentDepartmentId,
+            string candidateParentId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(classify(currentDepartmentId, candidateParentId));
+
+        public Task<DepartmentHierarchyCandidatePage> LookupParentCandidatesAsync(
+            string companyId,
+            string currentDepartmentId,
+            string? keyword,
+            int page,
+            int pageSize,
+            bool includeDisabled,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

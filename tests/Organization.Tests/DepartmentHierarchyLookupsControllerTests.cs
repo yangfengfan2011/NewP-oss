@@ -9,9 +9,9 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class DepartmentHierarchyLookupsControllerTests
 {
     [Fact]
-    public async Task Parents_WhenHierarchyExceedsSupportedBound_ReturnsStableConflictProblem()
+    public async Task Parents_WhenHierarchyIsCorrupted_ReturnsStableConflictProblem()
     {
-        var directory = new LimitExceededDirectory();
+        var directory = new CorruptedHierarchyDirectory();
         var controller = new DepartmentHierarchyLookupsController(directory, directory);
 
         var action = await controller.Parents("Company_1");
@@ -19,13 +19,10 @@ public sealed class DepartmentHierarchyLookupsControllerTests
         var conflict = Assert.IsType<ConflictObjectResult>(action.Result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal(409, problem.Status);
-        Assert.Equal(DepartmentHierarchyLimits.ErrorCode, problem.Extensions["code"]);
-        Assert.Equal(
-            DepartmentHierarchyLimits.MaximumDepartmentsPerCompany,
-            problem.Extensions["maximumDepartments"]);
+        Assert.Equal(DepartmentHierarchyErrors.Corrupted, problem.Extensions["code"]);
     }
 
-    private sealed class LimitExceededDirectory : IDepartmentDirectory, IDepartmentHierarchyDirectory
+    private sealed class CorruptedHierarchyDirectory : IDepartmentDirectory, IDepartmentHierarchyDirectory
     {
         public Task<Department?> GetByIdAsync(
             string departmentId,
@@ -51,6 +48,6 @@ public sealed class DepartmentHierarchyLookupsControllerTests
             OrganizationDirectoryLookupRequest request,
             CancellationToken cancellationToken = default) =>
             Task.FromException<OrganizationDirectoryPage<Department>>(
-                new DepartmentHierarchyLimitExceededException());
+                new DepartmentHierarchyCorruptedException());
     }
 }

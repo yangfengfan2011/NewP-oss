@@ -6,12 +6,30 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 
 /// <summary>
-/// 从 Organization Department 模型提供人员所需的公司受限窄目录读取。
+/// 从 Organization Department 模型提供公司受限目录与数据库侧层级候选读取。
 /// </summary>
-/// <param name="dbContext">当前请求范围内的动态模型数据库上下文。</param>
-public sealed class EfDepartmentDirectory(EfPlatformDbContext dbContext)
-    : IDepartmentDirectory, IDepartmentHierarchyDirectory
+public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHierarchyDirectory
 {
+    private readonly EfPlatformDbContext _dbContext;
+    private readonly IDepartmentHierarchyQuery _hierarchyQuery;
+
+    /// <summary>
+    /// 使用 Organization 当前 SQL Server 层级查询构造部门目录。
+    /// </summary>
+    public EfDepartmentDirectory(EfPlatformDbContext dbContext)
+        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext))
+    {
+    }
+
+    // 测试可替换内部层级查询，普通目录读取仍使用同一动态 EF 上下文。
+    internal EfDepartmentDirectory(
+        EfPlatformDbContext dbContext,
+        IDepartmentHierarchyQuery hierarchyQuery)
+    {
+        _dbContext = dbContext;
+        _hierarchyQuery = hierarchyQuery;
+    }
+
     /// <inheritdoc/>
     public async Task<Department?> GetByIdAsync(
         string departmentId,
@@ -103,17 +121,33 @@ public sealed class EfDepartmentDirectory(EfPlatformDbContext dbContext)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(companyId);
         var (page, pageSize) = NormalizePage(request);
-        var excludedIds = await ReadExcludedIdsAsync(companyId, currentDepartmentId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(currentDepartmentId))
+        {
+            var hierarchyPage = await _hierarchyQuery.LookupParentCandidatesAsync(
+                companyId,
+                currentDepartmentId,
+                request.Keyword,
+                page,
+                pageSize,
+                request.IncludeDisabled,
+                cancellationToken);
+            var hierarchyCurrentRows = await ReadCurrentRowsAsync(
+                companyId,
+                request.CurrentValueIds,
+                cancellationToken);
+            return new OrganizationDirectoryPage<Department>(
+                hierarchyPage.Items,
+                hierarchyCurrentRows.Select(Map).ToList(),
+                page,
+                pageSize,
+                hierarchyPage.HasMore);
+        }
+
         var rows = Entities.AsNoTracking()
             .Where(row => EF.Property<string>(row, "CompanyId") == companyId);
         if (!request.IncludeDisabled)
         {
             rows = rows.Where(row => EF.Property<bool>(row, "IsEnabled"));
-        }
-
-        if (excludedIds.Count > 0)
-        {
-            rows = rows.Where(row => !excludedIds.Contains(EF.Property<string>(row, "EID")));
         }
 
         var keyword = request.Keyword?.Trim();
@@ -138,25 +172,7 @@ public sealed class EfDepartmentDirectory(EfPlatformDbContext dbContext)
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>
-        dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Department"));
-
-    // 单次有界读取公司层级；超限时失败关闭，主候选查询仍在 Skip/Take 前排除子树。
-    private async Task<IReadOnlyCollection<string>> ReadExcludedIdsAsync(
-        string companyId,
-        string? currentDepartmentId,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(currentDepartmentId))
-        {
-            return [];
-        }
-
-        var snapshot = await DepartmentHierarchySnapshot.LoadAsync(
-            Entities.AsNoTracking(),
-            companyId,
-            cancellationToken);
-        return snapshot.ReadSubtreeIds(currentDepartmentId);
-    }
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Department"));
 
     // 当前值仍受 CompanyId 约束，避免依赖切换后解析出另一公司的旧部门。
     private async Task<List<Dictionary<string, object?>>> ReadCurrentRowsAsync(

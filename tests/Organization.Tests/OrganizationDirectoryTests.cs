@@ -61,7 +61,7 @@ public sealed class OrganizationDirectoryTests
     }
 
     [Fact]
-    public async Task DepartmentDirectory_ParentLookupExcludesSelfAndDescendantsBeforePaging()
+    public async Task DepartmentDirectory_ParentLookupCombinesBoundedHierarchyPageWithCurrentValue()
     {
         await using var dbContext = CreateDbContext();
         await SeedDepartmentsAsync(dbContext,
@@ -73,7 +73,12 @@ public sealed class OrganizationDirectoryTests
             Department("Department_Disabled", "Company_1", "D005", "停用", enabled: false),
             Department("Department_OtherCompany", "Company_2", "D006", "跨公司", enabled: true)
         ]);
-        var directory = new EfDepartmentDirectory(dbContext);
+        var directory = new EfDepartmentDirectory(
+            dbContext,
+            new StubHierarchyQuery(
+                new DepartmentHierarchyCandidatePage(
+                    [Department("Department_Peer", "Company_1", "D004", "同级", enabled: true)],
+                    HasMore: false)));
 
         var page = await directory.LookupParentCandidatesAsync(
             "Company_1",
@@ -83,31 +88,6 @@ public sealed class OrganizationDirectoryTests
         Assert.Equal("Department_Peer", Assert.Single(page.Items).Id);
         Assert.Equal("Department_Disabled", Assert.Single(page.CurrentItems).Id);
         Assert.False(page.HasMore);
-    }
-
-    [Fact]
-    public async Task DepartmentDirectory_ParentLookupWhenHierarchyExceedsSupportedBound_FailsClosed()
-    {
-        await using var dbContext = CreateDbContext();
-        await SeedDepartmentsAsync(
-            dbContext,
-            Enumerable.Range(0, DepartmentHierarchyLimits.MaximumDepartmentsPerCompany + 1)
-                .Select(index => Department(
-                    $"Department_{index:D4}",
-                    "Company_1",
-                    $"D{index:D4}",
-                    $"部门 {index:D4}",
-                    enabled: true)));
-        var directory = new EfDepartmentDirectory(dbContext);
-
-        var exception = await Assert.ThrowsAsync<DepartmentHierarchyLimitExceededException>(() =>
-            directory.LookupParentCandidatesAsync(
-                "Company_1",
-                "Department_0000",
-                new OrganizationDirectoryLookupRequest(null, 1, 20)));
-
-        Assert.Equal(DepartmentHierarchyLimits.ErrorCode, exception.Code);
-        Assert.Equal(DepartmentHierarchyLimits.MaximumDepartmentsPerCompany, exception.MaximumDepartments);
     }
 
     [Fact]
@@ -217,5 +197,23 @@ public sealed class OrganizationDirectoryTests
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private sealed class StubHierarchyQuery(DepartmentHierarchyCandidatePage result) : IDepartmentHierarchyQuery
+    {
+        public Task<DepartmentParentRelationship> ClassifyParentAsync(
+            string companyId,
+            string currentDepartmentId,
+            string candidateParentId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<DepartmentHierarchyCandidatePage> LookupParentCandidatesAsync(
+            string companyId,
+            string currentDepartmentId,
+            string? keyword,
+            int page,
+            int pageSize,
+            bool includeDisabled,
+            CancellationToken cancellationToken) => Task.FromResult(result);
     }
 }

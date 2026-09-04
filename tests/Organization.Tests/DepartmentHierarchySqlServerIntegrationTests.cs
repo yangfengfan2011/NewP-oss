@@ -1,4 +1,3 @@
-using System.Data.Common;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
@@ -8,7 +7,6 @@ using ICP.Platform.Persistence.EfCore.Projection;
 using ICP.Platform.Testing;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
@@ -38,41 +36,127 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests
                     parentId = id;
                 }
 
+                AddDepartment(setup, "Department_Peer", "Company_1", null);
+
                 await setup.SaveChangesAsync();
             }
 
-            var interceptor = new DepartmentQueryCounter();
-            await using var context = CreateContext(fixture.ConnectionString, interceptor);
+            await using var context = CreateContext(fixture.ConnectionString);
+            var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+            connection.StatisticsEnabled = true;
             var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
                 DepartmentCrudDescriptorFactory.Create(),
                 "Department_000",
                 new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_063" });
 
             Assert.Equal("Organization.Department.ParentCycle", error?.Code);
-            Assert.Equal(3, interceptor.ReaderCount);
+            Assert.Equal(3L, connection.RetrieveStatistics()["SelectCount"]);
 
-            interceptor.Reset();
+            connection.ResetStatistics();
             var page = await new EfDepartmentDirectory(context).LookupParentCandidatesAsync(
                 "Company_1",
                 "Department_000",
                 new OrganizationDirectoryLookupRequest(null, 1, 20));
 
-            Assert.Empty(page.Items);
-            Assert.Equal(2, interceptor.ReaderCount);
+            Assert.Equal("Department_Peer", Assert.Single(page.Items).Id);
+            Assert.Equal(2L, connection.RetrieveStatistics()["SelectCount"]);
         }
     }
 
-    private static EfPlatformDbContext CreateContext(
-        string connectionString,
-        DbCommandInterceptor? interceptor = null)
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上超过 1024 个部门的层级操作")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task DepartmentHierarchyAboveOneThousandTwentyFourKeepsReparentAndPagedLookupAvailable()
+    {
+        var fixture = await SqlFixture.CreateAsync();
+        await using (fixture)
+        {
+            await using (var setup = CreateContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddCompany(setup, "Company_1");
+                for (var index = 0; index <= 1024; index++)
+                {
+                    AddDepartment(
+                        setup,
+                        $"Department_{index:D4}",
+                        "Company_1",
+                        parentDepartmentId: null,
+                        enabled: index != 0);
+                }
+
+                await setup.SaveChangesAsync();
+            }
+
+            await using var context = CreateContext(fixture.ConnectionString);
+            var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+                DepartmentCrudDescriptorFactory.Create(),
+                "Department_0000",
+                new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_1024" });
+            var page = await new EfDepartmentDirectory(context).LookupParentCandidatesAsync(
+                "Company_1",
+                "Department_0000",
+                new OrganizationDirectoryLookupRequest(
+                    "Department_10",
+                    2,
+                    5,
+                    ["Department_0000"]));
+
+            Assert.Null(error);
+            Assert.Equal(5, page.Items.Count);
+            Assert.True(page.HasMore);
+            Assert.Equal("Department_0000", Assert.Single(page.CurrentItems).Id);
+            Assert.False(page.CurrentItems[0].IsEnabled);
+        }
+    }
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上损坏部门环的失败关闭")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task CorruptedDepartmentCycleFailsClosedForReparentAndParentLookup()
+    {
+        var fixture = await SqlFixture.CreateAsync();
+        await using (fixture)
+        {
+            await using (var setup = CreateContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddCompany(setup, "Company_1");
+                AddDepartment(setup, "Department_Current", "Company_1", null);
+                AddDepartment(setup, "Department_A", "Company_1", null);
+                AddDepartment(setup, "Department_B", "Company_1", null);
+                await setup.SaveChangesAsync();
+
+                var departments = setup.Set<Dictionary<string, object?>>(setup.ResolveModelKey("Department"));
+                var departmentA = await departments.SingleAsync(
+                    row => EF.Property<string>(row, "EID") == "Department_A");
+                var departmentB = await departments.SingleAsync(
+                    row => EF.Property<string>(row, "EID") == "Department_B");
+                departmentA["ParentDepartmentId"] = "Department_B";
+                departmentB["ParentDepartmentId"] = "Department_A";
+                await setup.SaveChangesAsync();
+            }
+
+            await using var context = CreateContext(fixture.ConnectionString);
+            var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+                DepartmentCrudDescriptorFactory.Create(),
+                "Department_Current",
+                new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_A" });
+            var exception = await Assert.ThrowsAsync<DepartmentHierarchyCorruptedException>(() =>
+                new EfDepartmentDirectory(context).LookupParentCandidatesAsync(
+                    "Company_1",
+                    "Department_A",
+                    new OrganizationDirectoryLookupRequest(null, 1, 20)));
+
+            Assert.Equal(409, error?.StatusCode);
+            Assert.Equal(DepartmentHierarchyErrors.Corrupted, error?.Code);
+            Assert.Equal(DepartmentHierarchyErrors.Corrupted, exception.Code);
+        }
+    }
+
+    private static EfPlatformDbContext CreateContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseSqlServer(connectionString)
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>();
-        if (interceptor is not null)
-        {
-            options.AddInterceptors(interceptor);
-        }
 
         var definitions = new OrganizationModelMetadataProvider().GetDefinitions()
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
@@ -98,7 +182,8 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests
         EfPlatformDbContext context,
         string eid,
         string companyId,
-        string? parentDepartmentId) =>
+        string? parentDepartmentId,
+        bool enabled = true) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Department")).Add(new Dictionary<string, object?>
         {
             ["EID"] = eid,
@@ -106,34 +191,13 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests
             ["ParentDepartmentId"] = parentDepartmentId,
             ["ECODE"] = eid,
             ["ENAME"] = eid,
-            ["IsEnabled"] = true,
+            ["IsEnabled"] = enabled,
             ["SortOrder"] = "0100",
             ["CreatedBy"] = "User_Admin",
             ["CreatedAt"] = DateTime.UtcNow,
             ["UpdatedBy"] = "User_Admin",
             ["UpdatedAt"] = DateTime.UtcNow
         });
-
-    private sealed class DepartmentQueryCounter : DbCommandInterceptor
-    {
-        public int ReaderCount { get; private set; }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            if (command.CommandText.Contains("[Department]", StringComparison.Ordinal))
-            {
-                ReaderCount++;
-            }
-
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public void Reset() => ReaderCount = 0;
-    }
 
     private sealed class SqlFixture(
         string adminConnectionString,

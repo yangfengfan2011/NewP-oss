@@ -8,8 +8,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
-public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : IStandardCrudValidator
+public sealed class DepartmentCrudValidator : IStandardCrudValidator
 {
+    private readonly EfPlatformDbContext _dbContext;
+    private readonly IDepartmentHierarchyQuery _hierarchyQuery;
+
+    /// <summary>
+    /// 使用 Organization 当前 SQL Server 层级查询构造部门写入校验器。
+    /// </summary>
+    public DepartmentCrudValidator(EfPlatformDbContext dbContext)
+        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext))
+    {
+    }
+
+    // 测试可替换内部层级查询，不把 provider 细节扩大到公共模块协议。
+    internal DepartmentCrudValidator(
+        EfPlatformDbContext dbContext,
+        IDepartmentHierarchyQuery hierarchyQuery)
+    {
+        _dbContext = dbContext;
+        _hierarchyQuery = hierarchyQuery;
+    }
+
     public string ResourceKey => "organization.department";
 
     /// <summary>
@@ -100,7 +120,7 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
             cancellationToken);
     }
 
-    // 父引用必须存在、启用且属于同一公司；编辑时用单次有界公司快照拒绝自身和任意深度后代。
+    // 父引用必须存在、启用且属于同一公司；编辑时用数据库递归查询拒绝自身和任意深度后代。
     private async Task<StandardCrudError?> ValidateParentAsync(
         string companyId,
         string? parentDepartmentId,
@@ -133,21 +153,11 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
             return null;
         }
 
-        DepartmentParentRelationship relationship;
-        try
-        {
-            var snapshot = await DepartmentHierarchySnapshot.LoadAsync(
-                Departments().AsNoTracking(),
-                companyId,
-                cancellationToken);
-            relationship = snapshot.ClassifyParent(currentDepartmentId, parentDepartmentId);
-        }
-        catch (DepartmentHierarchyLimitExceededException)
-        {
-            return LifecycleError(
-                "HierarchyLimitExceeded",
-                $"单个公司的部门层级超过 {DepartmentHierarchyLimits.MaximumDepartmentsPerCompany} 个，不能调整上级。");
-        }
+        var relationship = await _hierarchyQuery.ClassifyParentAsync(
+            companyId,
+            currentDepartmentId,
+            parentDepartmentId,
+            cancellationToken);
 
         return relationship switch
         {
@@ -201,11 +211,11 @@ public sealed class DepartmentCrudValidator(EfPlatformDbContext dbContext) : ISt
 
     // 公司状态从 Organization 持久化边界直接读取，不恢复旧 Department service。
     private DbSet<Dictionary<string, object?>> Companies() =>
-        dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Company"));
 
     // 部门状态只从 Organization 自有模型读取，层级校验不经过第二套写入服务。
     private DbSet<Dictionary<string, object?>> Departments() =>
-        dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Department"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Department"));
 
     // 排序码格式错误绑定到 SortOrder，供标准 Drawer 精确展示。
     private static StandardCrudError SortOrderError() => new()

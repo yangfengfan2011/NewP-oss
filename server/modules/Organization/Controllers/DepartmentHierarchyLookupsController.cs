@@ -59,16 +59,15 @@ public sealed class DepartmentHierarchyLookupsController(
                 cancellationToken);
             return Ok(Map(result, includeDisabled));
         }
-        catch (DepartmentHierarchyLimitExceededException exception)
+        catch (DepartmentHierarchyCorruptedException exception)
         {
             var problem = new ProblemDetails
             {
                 Status = 409,
-                Title = "部门层级超过支持上限。",
+                Title = "部门层级数据损坏。",
                 Detail = exception.Message
             };
             problem.Extensions["code"] = exception.Code;
-            problem.Extensions["maximumDepartments"] = exception.MaximumDepartments;
             return Conflict(problem);
         }
     }

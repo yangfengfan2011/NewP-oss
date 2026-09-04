@@ -78,6 +78,10 @@
             "required": true
           }
         }
+      },
+      {
+        "name": "UpdatedAt",
+        "uiType": "dateTime"
       }
     ],
     "indexes": [

@@ -229,7 +229,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   const rowNumberStart = (effectiveQuery.current - 1) * effectiveQuery.pageSize;
   const tableColumns = useMemo(() => {
     const rowNumberColumn: ProColumns<TRow> = {
-      title: '',
+      title: '序号',
       key: '__rowNumber',
       width: 64,
       fixed: 'left',
@@ -238,7 +238,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
       hideInSetting: true,
       sorter: false,
       className: 'np-table-row-number-cell',
-      onHeaderCell: () => ({ 'aria-label': '行号' }),
+      onHeaderCell: () => ({ 'aria-label': '序号' }),
       render: (_, __, index) => rowNumberStart + index + 1,
     };
 

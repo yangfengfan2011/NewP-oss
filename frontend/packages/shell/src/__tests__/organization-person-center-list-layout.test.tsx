@@ -298,13 +298,13 @@ describe('organization person center list layout', () => {
     expect(container.querySelector('.np-table-row-icon')).toBeNull();
     const rowNumberHeader = container.querySelector('th.np-table-row-number-cell.ant-table-cell-fix-left');
     expect(rowNumberHeader).not.toBeNull();
-    expect(rowNumberHeader?.textContent?.trim()).toBe('');
-    expect(rowNumberHeader?.getAttribute('aria-label')).toBe('行号');
+    expect(rowNumberHeader?.textContent?.trim()).toBe('序号');
+    expect(rowNumberHeader?.getAttribute('aria-label')).toBe('序号');
     expect(Array.from(container.querySelectorAll('td.np-table-row-number-cell')).map((node) => node.textContent)).toEqual(['1', '2']);
     const tableHeaderTexts = Array.from(container.querySelectorAll('.ant-table-thead th')).map((node) =>
       node.textContent?.replace(/\s+/g, ''),
     );
-    expect(tableHeaderTexts).not.toContain('行号');
+    expect(tableHeaderTexts).toContain('序号');
     expect(tableHeaderTexts).not.toContain('图标');
     const columnSettingIcon = container.querySelector('.anticon-setting');
     expect(columnSettingIcon).not.toBeNull();

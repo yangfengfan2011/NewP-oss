@@ -11,7 +11,7 @@ public sealed class ModelDisplayProjectionPlannerTests
 
     [Theory]
     [InlineData("instant", "dateTime")]
-    [InlineData("INSTANT", "DATETIME")]
+    [InlineData("INSTANT", "dateTime")]
     public void Compile_ExplicitEquivalentAuditDisplayIsIdempotent(string type, string format)
     {
         var result = _planner.Compile(new ModelMetadataDocument

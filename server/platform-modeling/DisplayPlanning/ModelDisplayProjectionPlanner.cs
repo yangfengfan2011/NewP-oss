@@ -81,10 +81,10 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
             Array.Empty<ModelDisplayProjectionDiagnostic>());
     }
 
-    // 类型和格式沿用 planner 的大小写语义；目标字段名仍须与规范目录完全相同。
+    // 类型沿用 planner 的忽略大小写语义；格式和目标字段名仍须与规范目录完全相同。
     private static bool MatchesAuditDisplay(FieldDisplayRuleDefinition actual, FieldDisplayRuleDefinition expected) =>
         string.Equals(actual.Type, expected.Type, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(actual.Format, expected.Format, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(actual.Format, expected.Format, StringComparison.Ordinal)
         && actual.TargetModel == expected.TargetModel
         && actual.TargetIdField == expected.TargetIdField
         && actual.TargetDisplayField == expected.TargetDisplayField;

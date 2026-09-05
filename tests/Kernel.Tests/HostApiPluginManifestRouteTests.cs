@@ -469,11 +469,11 @@ public class HostApiPluginManifestRouteTests : IDisposable
     public async Task MetadataRuntimeManifestRoute_ReturnsJson_AndServesModuleMetadata()
     {
         var installRoot = CreateTempRoot();
-        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Organization");
-        var packageMetadataRoot = Path.Combine(packageRoot, "modules", "Organization", "metadata");
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Audit");
+        var packageMetadataRoot = Path.Combine(packageRoot, "modules", "Audit", "metadata");
         Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "navigation"));
         File.WriteAllText(
-            Path.Combine(packageMetadataRoot, "navigation", "Organization.nav.json"),
+            Path.Combine(packageMetadataRoot, "navigation", "Audit.nav.json"),
             """
             {
               "schemaVersion": "1.0",
@@ -481,16 +481,16 @@ public class HostApiPluginManifestRouteTests : IDisposable
               "navigation": {
                 "items": [
                   {
-                    "key": "organization.personCenter",
-                    "path": "/organization/persons",
+                    "key": "audit.home",
+                    "path": "/audit",
                     "entryType": "standard-list",
-                    "targetKey": "organization.person.list"
+                    "targetKey": "audit.list"
                   }
                 ]
               }
             }
             """);
-        EnableInstalledPackage(packageRoot, installRoot, "Organization");
+        EnableInstalledPackage(packageRoot, installRoot, "Audit");
 
         await using var host = await StartHostAsync(installRoot);
 
@@ -512,16 +512,16 @@ public class HostApiPluginManifestRouteTests : IDisposable
         var organizationModule = manifestDocument.RootElement
             .GetProperty("modules")
             .EnumerateArray()
-            .Single(module => module.GetProperty("moduleId").GetString() == "Organization");
-        Assert.Equal("navigation/Organization.nav.json", organizationModule.GetProperty("navFiles")[0].GetString());
+            .Single(module => module.GetProperty("moduleId").GetString() == "Audit");
+        Assert.Equal("navigation/Audit.nav.json", organizationModule.GetProperty("navFiles")[0].GetString());
 
-        var navResponse = await client.GetAsync("/plugins/runtime/modules/Organization/metadata/navigation/Organization.nav.json");
+        var navResponse = await client.GetAsync("/plugins/runtime/modules/Audit/metadata/navigation/Audit.nav.json");
         var navBody = await navResponse.Content.ReadAsStringAsync();
 
         Assert.True(
             navResponse.IsSuccessStatusCode,
             $"Status: {navResponse.StatusCode}\nBody: {navBody}\nSTDOUT:\n{host.StdOut}\nSTDERR:\n{host.StdErr}");
-        Assert.Contains("organization.personCenter", navBody);
+        Assert.Contains("audit.home", navBody);
     }
 
     public void Dispose()

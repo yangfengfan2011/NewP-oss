@@ -51,8 +51,9 @@ public sealed class StandardCrudResourceRegistry : IStandardCrudResourceRegistry
             return descriptor;
         }
 
-        var model = persistencePlan.Models.Single(item => item.OwnerModuleId == descriptor.ModuleId
-            && (item.Name == descriptor.ModelName || item.LogicalKey == descriptor.ModelName));
+        var model = persistencePlan.Models.SingleOrDefault(item => item.OwnerModuleId == descriptor.ModuleId
+            && (item.Name == descriptor.ModelName || item.LogicalKey == descriptor.ModelName))
+            ?? throw new InvalidOperationException($"DISPLAY_MODEL_NOT_FOUND: {descriptor.ResourceKey} ({descriptor.ModuleId}/{descriptor.ModelName})");
         var compilation = new ModelDisplayProjectionPlanner().Compile(model, persistencePlan.Models);
         if (!compilation.IsSuccess)
         {

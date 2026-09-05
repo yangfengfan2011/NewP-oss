@@ -20,6 +20,7 @@ internal static class VerifiedAssemblyIdentityPolicy
             "PlatformPersistence.Composition",
             "PlatformPersistence.EfCore",
             "PlatformQuery",
+            "PlatformPresentation",
             "Microsoft.Data.SqlClient",
             "ICP.Platform.Plugin.Contracts",
             "Identity.Contracts",

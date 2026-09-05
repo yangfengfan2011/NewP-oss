@@ -147,7 +147,14 @@
             "type": "string",
             "nullable": false
           },
-          "uiType": "text"
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
         },
         {
           "name": "CreatedAt",
@@ -160,13 +167,20 @@
             }
           },
           "contract": {
-            "valueType": "dateTime"
+            "valueType": "instant"
           },
           "storage": {
             "type": "datetime",
             "nullable": false
           },
-          "uiType": "dateTime"
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
         },
         {
           "name": "UpdatedBy",
@@ -185,7 +199,14 @@
             "type": "string",
             "nullable": false
           },
-          "uiType": "text"
+          "uiType": "text",
+          "display": {
+            "type": "user",
+            "targetModel": "IdentityAccount",
+            "targetIdField": "EID",
+            "targetDisplayField": "ENAME",
+            "format": ""
+          }
         },
         {
           "name": "UpdatedAt",
@@ -198,13 +219,20 @@
             }
           },
           "contract": {
-            "valueType": "dateTime"
+            "valueType": "instant"
           },
           "storage": {
             "type": "datetime",
             "nullable": false
           },
-          "uiType": "dateTime"
+          "uiType": "dateTime",
+          "display": {
+            "type": "instant",
+            "targetModel": "",
+            "targetIdField": "",
+            "targetDisplayField": "",
+            "format": "dateTime"
+          }
         }
       ],
       "indexes": [

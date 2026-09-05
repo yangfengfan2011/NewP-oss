@@ -414,7 +414,7 @@ a:hover {
 .np-standard-crud-filter-grid {
   display: grid;
   width: fit-content;
-  grid-template-columns: minmax(240px, 320px) minmax(140px, 180px);
+  grid-template-columns: minmax(240px, 320px) repeat(3, minmax(140px, 180px));
   gap: 12px;
 }
 

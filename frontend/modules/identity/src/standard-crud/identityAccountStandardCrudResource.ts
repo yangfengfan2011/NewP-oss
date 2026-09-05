@@ -36,6 +36,10 @@ export interface IdentityAccountListRow {
   IsLocalAdministrator: boolean;
   IsPersonnelBound: boolean;
   PersonnelDisableHold: boolean;
+  CreatedBy?: string;
+  CreatedAt?: string;
+  UpdatedBy?: string;
+  UpdatedAt?: string;
 }
 
 function mapIdentityAccountListItem(value: unknown): IdentityAccountListRow {
@@ -53,6 +57,10 @@ function mapIdentityAccountListItem(value: unknown): IdentityAccountListRow {
     IsLocalAdministrator: readStandardCrudBoolean(row, ['IsLocalAdministrator', 'isLocalAdministrator']),
     IsPersonnelBound: readStandardCrudBoolean(row, ['IsPersonnelBound', 'isPersonnelBound']),
     PersonnelDisableHold: readStandardCrudBoolean(row, ['PersonnelDisableHold', 'personnelDisableHold']),
+    CreatedBy: readStandardCrudString(row, ['CreatedBy', 'createdBy']),
+    CreatedAt: readStandardCrudString(row, ['CreatedAt', 'createdAt']),
+    UpdatedBy: readStandardCrudString(row, ['UpdatedBy', 'updatedBy']),
+    UpdatedAt: readStandardCrudString(row, ['UpdatedAt', 'updatedAt']),
   };
 }
 
@@ -71,6 +79,10 @@ function mapIdentityAccountDetail(account: IdentityAccount) {
       CreatedAt: account.createdAt ?? null,
       UpdatedBy: account.updatedBy ?? null,
       UpdatedAt: account.updatedAt ?? null,
+      CreatedBy_DisplayValue: account.CreatedBy_DisplayValue ?? null,
+      CreatedAt_DisplayValue: account.CreatedAt_DisplayValue ?? null,
+      UpdatedBy_DisplayValue: account.UpdatedBy_DisplayValue ?? null,
+      UpdatedAt_DisplayValue: account.UpdatedAt_DisplayValue ?? null,
     },
     summaries: {
       securityEvents: {

@@ -15,6 +15,20 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
         IReadOnlyCollection<ModelDefinition>? modelCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(sourceDocument);
+        if (string.Equals(sourceDocument.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
+        {
+            var fixedFields = new ModelMetadataProjector().ProjectFixedFields(sourceDocument);
+            var conflicts = sourceDocument.Model.Fields.Where(field => field.Contract?.ValueType is { Length: > 0 }
+                && fixedFields.Any(fixedField => fixedField.IsAuditField
+                    && string.Equals(fixedField.Name, field.Name, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(fixedField.ValueType.ToString(), field.Contract.ValueType, StringComparison.OrdinalIgnoreCase)))
+                .Select(field => new ModelDisplayProjectionDiagnostic("MODEL_AUDIT_DISPLAY_CONFLICT", sourceDocument.Model.Name,
+                    field.Name, $"Field '{field.Name}' conflicts with the platform audit value semantics.")).ToArray();
+            if (conflicts.Length > 0)
+            {
+                return new ModelDisplayProjectionCompilationResult(null, conflicts);
+            }
+        }
         return Compile(new ModelMetadataProjector().Project(sourceDocument), modelCatalog);
     }
 
@@ -27,12 +41,24 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
 
         var plans = new List<FieldDisplayProjectionPlan>();
         var diagnostics = new List<ModelDisplayProjectionDiagnostic>();
+        var fixedFields = new ModelMetadataProjector().ProjectFixedFields(new ModelMetadataDocument
+        {
+            Model = new ModelMetadataModel { Name = sourceModel.Name, Kind = sourceModel.Kind.ToString() }
+        });
         foreach (var field in sourceModel.Fields.Where(static field => field.DisplayRule is not null))
         {
+            var fixedField = fixedFields.SingleOrDefault(item => item.Name == field.Name);
+            if (sourceModel.Kind == ModelKind.Entity && fixedField?.IsAuditField == true
+                && (field.ValueType != fixedField.ValueType || !MatchesAuditDisplay(field.DisplayRule!, fixedField.DisplayRule!)))
+            {
+                diagnostics.Add(new ModelDisplayProjectionDiagnostic("MODEL_AUDIT_DISPLAY_CONFLICT", sourceModel.Name, field.Name,
+                    $"Field '{field.Name}' conflicts with the platform audit display rule."));
+                continue;
+            }
             var fieldResult = CompileField(sourceModel, field, modelCatalog);
             if (fieldResult.Plan is not null)
             {
-                plans.Add(fieldResult.Plan);
+                plans.Add(fieldResult.Plan with { IsEntityAuditField = sourceModel.Kind == ModelKind.Entity && field.IsAuditField });
             }
 
             if (fieldResult.Diagnostic is not null)
@@ -54,6 +80,14 @@ public sealed class ModelDisplayProjectionPlanner : IModelDisplayProjectionPlann
                 Array.AsReadOnly(plans.ToArray())),
             Array.Empty<ModelDisplayProjectionDiagnostic>());
     }
+
+    // 类型和格式沿用 planner 的大小写语义；目标字段名仍须与规范目录完全相同。
+    private static bool MatchesAuditDisplay(FieldDisplayRuleDefinition actual, FieldDisplayRuleDefinition expected) =>
+        string.Equals(actual.Type, expected.Type, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(actual.Format, expected.Format, StringComparison.OrdinalIgnoreCase)
+        && actual.TargetModel == expected.TargetModel
+        && actual.TargetIdField == expected.TargetIdField
+        && actual.TargetDisplayField == expected.TargetDisplayField;
 
     // 每个字段只进入一个已知策略；未知 type 不得落入任何兼容分支。
     private static FieldCompilationResult CompileField(

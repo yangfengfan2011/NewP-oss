@@ -913,7 +913,15 @@ export function normalizeStandardCrudListResult<TItem>(
 ): StandardCrudListResult<TItem> {
   const record = isStandardCrudRecord(value) ? value : {};
   const rawItems = Array.isArray(record.items) ? record.items : [];
-  const items = rawItems.map(mapItem);
+  const items = rawItems.map((rawItem) => {
+    const mapped = mapItem(rawItem);
+    if (!isStandardCrudRecord(rawItem) || !isStandardCrudRecord(mapped)) return mapped;
+    // 标准响应的规范 companion 属于平台输出契约，模块行映射不能将它丢弃或重新格式化。
+    const companions = Object.fromEntries(Object.entries(rawItem).filter(([field, display]) => (
+      field.endsWith('_DisplayValue') && (display === null || typeof display === 'string')
+    )));
+    return { ...mapped, ...companions };
+  });
 
   return {
     items,

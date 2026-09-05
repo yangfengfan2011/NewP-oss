@@ -34,7 +34,7 @@ describe('company standard CRUD resource', () => {
 
   it('uses the standard paged company endpoint', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
-      items: [{ EID: 'Company_1', ECODE: 'ICP', ENAME: '平台公司', IsEnabled: true, SortOrder: '0100' }],
+      items: [{ EID: 'Company_1', ECODE: 'ICP', ENAME: '平台公司', IsEnabled: true, SortOrder: '0100', UpdatedAt: '2026-09-04T07:24:26.5023291Z', UpdatedAt_DisplayValue: '2026/9/4 15:24:26' }],
       total: 1,
       page: 1,
       pageSize: 20,
@@ -49,7 +49,7 @@ describe('company standard CRUD resource', () => {
       sortDirection: 'asc',
     });
 
-    expect(result.items[0]).toMatchObject({ id: 'Company_1', SortOrder: '0100' });
+    expect(result.items[0]).toMatchObject({ id: 'Company_1', SortOrder: '0100', UpdatedAt: '2026-09-04T07:24:26.5023291Z', UpdatedAt_DisplayValue: '2026/9/4 15:24:26' });
     expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/api/organization/companies?');
   });
 });

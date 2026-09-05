@@ -7,6 +7,31 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudResourceRegistryTests
 {
     [Fact]
+    public void Constructor_WithCanonicalModels_AutomaticallyAdoptsAuditPlanWithinReadFields()
+    {
+        var model = new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(
+            new ICP.Platform.Modeling.Metadata.ModelMetadataDocument
+            {
+                ModuleId = "Organization",
+                Model = new ICP.Platform.Modeling.Metadata.ModelMetadataModel { Name = "Person", Kind = "Entity" }
+            }) with { OwnerModuleId = "Organization" };
+        var persistence = new ICP.Platform.Persistence.Planning.CompiledPersistencePlan(
+            "candidate", "snapshot", "hash", default, "digest", [], [model], []);
+        var descriptor = Descriptor() with
+        {
+            FieldSet = new StandardCrudFieldSet(["EID", "UpdatedAt"],
+                ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"], [], [])
+        };
+
+        var registered = Assert.Single(new StandardCrudResourceRegistry([descriptor], persistence).GetAll());
+
+        Assert.Equal(4, registered.DisplayProjectionPlan!.Fields.Count);
+        var query = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(registered);
+        Assert.Equal("UpdatedAt_DisplayValue", Assert.Single(query.DisplayValueFields).Field);
+        Assert.DoesNotContain("CreatedBy", query.DefaultFields);
+    }
+
+    [Fact]
     public void GetAll_ReturnsRegisteredDescriptors()
     {
         var descriptor = Descriptor();

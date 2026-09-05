@@ -17,6 +17,7 @@ public sealed class ExampleStandardCrudResourceTests
     {
         var services = new ServiceCollection();
         new ExampleModule().ConfigureServices(services);
+        services.AddSingleton(ExampleCrudTestResources.Plan);
         using var provider = services.BuildServiceProvider();
 
         var registry = provider.GetRequiredService<IStandardCrudResourceRegistry>();
@@ -103,7 +104,7 @@ public sealed class ExampleStandardCrudResourceTests
             }
         });
         var resolver = new ExampleRecordDisplayValueResolver(directory);
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var displayField = Assert.Single(descriptor.DisplayValueFields);
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
@@ -132,7 +133,7 @@ public sealed class ExampleStandardCrudResourceTests
     public async Task ExampleRecordDisplayValueResolver_WhenDirectoryFails_DegradesToNullCompanionAndPreservesRaw()
     {
         var resolver = new ExampleRecordDisplayValueResolver(new ThrowingIdentityAccountDirectory(new InvalidOperationException("directory down")));
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var displayField = Assert.Single(descriptor.DisplayValueFields);
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
@@ -151,7 +152,7 @@ public sealed class ExampleStandardCrudResourceTests
         cancellationTokenSource.Cancel();
         var resolver = new ExampleRecordDisplayValueResolver(
             new ThrowingIdentityAccountDirectory(new OperationCanceledException(cancellationTokenSource.Token)));
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var displayField = Assert.Single(descriptor.DisplayValueFields);
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
@@ -167,7 +168,7 @@ public sealed class ExampleStandardCrudResourceTests
     {
         var resolver = new ExampleRecordDisplayValueResolver(
             new ThrowingIdentityAccountDirectory(new OperationCanceledException("directory canceled")));
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var displayField = Assert.Single(descriptor.DisplayValueFields);
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
@@ -188,7 +189,7 @@ public sealed class ExampleStandardCrudResourceTests
             new ModelDisplayValueFieldProjector().Project(displayPlan),
             field => field.SourceField == "ReviewerUserEID");
 
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var actual = Assert.Single(descriptor.DisplayValueFields);
 
         Assert.Equal(projected, actual);

@@ -57,7 +57,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void PersonCrudDescriptor_DeclaresRouteSummaryDisplayAndUniqueConstraint()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         Assert.Equal("organization.person", descriptor.ResourceKey);
         Assert.Equal("api/organization/persons", descriptor.Route);
@@ -80,7 +80,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void PersonCrudDescriptor_DoesNotDeclareRevisionConcurrency()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         Assert.Null(descriptor.ConcurrencyRevisionField);
         Assert.DoesNotContain("Revision", descriptor.FieldSet.ListFields);
@@ -91,7 +91,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void PersonCrudDescriptor_ExposesAllEntityAuditFieldsToDetailResponses()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         Assert.All(
             new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" },
@@ -101,7 +101,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void PersonCrudDescriptor_ExposesNullablePersonnelTemporalFieldsAcrossReadWriteAndDisplayPlans()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         var temporalFields = new[] { "BirthDate", "EmploymentStartedAt", "EmploymentEndedAt" };
 
         Assert.All(temporalFields, field =>
@@ -123,7 +123,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void Descriptor_ShouldExposePersonDisplayValueProjectionFields()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "DepartmentName");
         Assert.Contains(descriptor.DisplayValueFields, field => field.Field == "PositionName");
@@ -132,7 +132,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void PersonCrudDescriptor_DeclaresStructuredDisplayValueFields()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         Assert.Contains(descriptor.DisplayValueFields, field =>
             field.Field == "CompanyId_DisplayValue" &&
@@ -161,7 +161,7 @@ public sealed class PersonStandardCrudResourceTests
             new ModelDisplayValueFieldProjector().Project(displayPlan),
             field => field.SourceField == "CompanyId");
 
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         var actual = Assert.Single(
             descriptor.DisplayValueFields,
             field => field.SourceField == "CompanyId");
@@ -174,7 +174,7 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public void PersonCrudDescriptor_RequiresIdentityFieldsAndLeavesAffiliationOptional()
     {
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         var required = descriptor.RequiredFields.ToDictionary(item => item.Field, StringComparer.Ordinal);
 
@@ -196,7 +196,7 @@ public sealed class PersonStandardCrudResourceTests
     public void PersonCrudQueryCustomizer_MapsPositionAndEnabledFilters()
     {
         var customizer = new PersonCrudQueryCustomizer();
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         var conditions = customizer.BuildConditions(
             descriptor,
@@ -216,7 +216,7 @@ public sealed class PersonStandardCrudResourceTests
     public void PersonCrudQueryCustomizer_MapsExplicitBirthDateBoundsToInclusiveRawFieldConditions()
     {
         var customizer = new PersonCrudQueryCustomizer();
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
 
         var conditions = customizer.BuildConditions(
             descriptor,
@@ -242,7 +242,7 @@ public sealed class PersonStandardCrudResourceTests
         string expectedValue)
     {
         var conditions = new PersonCrudQueryCustomizer().BuildConditions(
-            PersonCrudDescriptorFactory.Create(),
+            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()),
             new StandardCrudListQuery(Filters: new Dictionary<string, string?>
             {
                 ["birthDateFrom"] = from,
@@ -260,7 +260,7 @@ public sealed class PersonStandardCrudResourceTests
     {
         var error = Assert.Throws<PlatformQueryValidationException>(() =>
             new PersonCrudQueryCustomizer().BuildConditions(
-                PersonCrudDescriptorFactory.Create(),
+                OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()),
                 new StandardCrudListQuery(Filters: new Dictionary<string, string?>
                 {
                     ["birthDateFrom"] = "2001-02-29"
@@ -274,7 +274,7 @@ public sealed class PersonStandardCrudResourceTests
     {
         var error = Assert.Throws<PlatformQueryValidationException>(() =>
             new PersonCrudQueryCustomizer().BuildConditions(
-                PersonCrudDescriptorFactory.Create(),
+                OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()),
                 new StandardCrudListQuery(Filters: new Dictionary<string, string?>
                 {
                     ["birthDateFrom"] = "2010-12-31",
@@ -307,7 +307,7 @@ public sealed class PersonStandardCrudResourceTests
             companyDirectory,
             departmentDirectory,
             positionRepository);
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         var companyDisplayField = Assert.Single(
             descriptor.DisplayValueFields,
             field => field.Field == "CompanyId_DisplayValue");
@@ -361,7 +361,7 @@ public sealed class PersonStandardCrudResourceTests
             departmentDirectory,
             positionRepository);
 
-        var descriptor = PersonCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = "Position_1" },
@@ -401,9 +401,9 @@ public sealed class PersonStandardCrudResourceTests
         ];
 
         var result = await resolver.ResolveListAsync(
-            PersonCrudDescriptorFactory.Create(),
+            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()),
             rows,
-            PersonCrudDescriptorFactory.Create().DisplayValueFields,
+            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()).DisplayValueFields,
             CancellationToken.None);
 
         Assert.Equal("旧公司（已停用）", result[0]["CompanyId_DisplayValue"]);

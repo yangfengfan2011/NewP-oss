@@ -318,7 +318,7 @@ public sealed class IdentityManagementControllerTests
             });
         }
 
-        var detail = await new IdentityManagementQueryService(
+        var detail = await IdentityCrudQueryTestFactory.Create(
                 repository,
                 new UnusedPlatformQueryExecutor(),
                 new TestTemporalDisplayProjectionExecutor())

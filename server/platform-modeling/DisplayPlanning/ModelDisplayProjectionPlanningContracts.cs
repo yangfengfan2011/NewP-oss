@@ -34,7 +34,11 @@ public interface IModelDisplayProjectionPlanner
 /// </summary>
 public abstract record FieldDisplayProjectionPlan(
     string SourceField,
-    string CompanionField);
+    string CompanionField)
+{
+    /// <summary>由 Modeling 标记 Entity 固定审计字段，公共执行器据此接管，模块不再重复解析。</summary>
+    public bool IsEntityAuditField { get; init; }
+}
 
 /// <summary>
 /// lookup projection 的受控策略种类。

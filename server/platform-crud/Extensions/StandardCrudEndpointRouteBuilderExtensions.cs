@@ -33,7 +33,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     public static IEndpointRouteBuilder MapStandardCrudResources(this IEndpointRouteBuilder endpoints)
     {
         var registry = endpoints.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>();
-        var descriptors = registry.GetAll();
+        var descriptors = registry.GetAll().Where(descriptor => descriptor.MapStandardEndpoints).ToArray();
         StandardCrudAuthorizationValidator.Validate(
             descriptors,
             StandardCrudAuthorizationValidator.MappedEndpointOperations);

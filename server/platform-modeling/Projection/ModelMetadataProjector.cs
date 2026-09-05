@@ -67,7 +67,7 @@ public sealed class ModelMetadataProjector
                     {
                         fields[projectedIndex] = fields[projectedIndex] with
                         {
-                            DisplayRule = ProjectDisplayRule(field.Display)
+                            DisplayRule = ProjectDisplayRule(field.Display) ?? fields[projectedIndex].DisplayRule
                         };
                     }
 
@@ -178,10 +178,10 @@ public sealed class ModelMetadataProjector
     private static void AddEntityFixedFields(List<FieldDefinition> fields, IReadOnlyCollection<string> builtinFields)
     {
         fields.Add(new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId, "string", true, true, false));
-        fields.Add(new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true));
-        fields.Add(new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
-        fields.Add(new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true));
-        fields.Add(new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.DateTime, "datetime", true, false, true));
+        fields.Add(new FieldDefinition("CreatedBy", "CreatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true, new FieldDisplayRuleDefinition("user", "IdentityAccount", "EID", "ENAME")));
+        fields.Add(new FieldDefinition("CreatedAt", "CreatedAt", FieldKind.Audit, FieldValueType.Instant, "datetime", true, false, true, new FieldDisplayRuleDefinition("instant", "", "", "", "dateTime")));
+        fields.Add(new FieldDefinition("UpdatedBy", "UpdatedBy", FieldKind.Audit, FieldValueType.User, "string", true, false, true, new FieldDisplayRuleDefinition("user", "IdentityAccount", "EID", "ENAME")));
+        fields.Add(new FieldDefinition("UpdatedAt", "UpdatedAt", FieldKind.Audit, FieldValueType.Instant, "datetime", true, false, true, new FieldDisplayRuleDefinition("instant", "", "", "", "dateTime")));
 
         if (builtinFields.Contains("ENAME", StringComparer.OrdinalIgnoreCase))
         {

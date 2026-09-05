@@ -274,11 +274,30 @@ public sealed class IdentityAccountsController : ControllerBase
     }
 }
 
-public sealed record CreateIdentityAccountRequest(string ECODE, string ENAME);
+public sealed record CreateIdentityAccountRequest(string ECODE, string ENAME) : IdentityAccountMutationRequest;
 
 public sealed record UpdateIdentityAccountRequest(
     string ENAME,
-    [Range(0, long.MaxValue)] long ExpectedRevision);
+    [Range(0, long.MaxValue)] long ExpectedRevision) : IdentityAccountMutationRequest;
+
+/// <summary>账号写协议拒绝服务端审计字段和输出 companion；未知业务扩展仍保持既有忽略语义。</summary>
+public abstract record IdentityAccountMutationRequest : IValidatableObject
+{
+    private static readonly IReadOnlySet<string> AuditFields = new ICP.Platform.Modeling.Projection.ModelMetadataProjector()
+        .ProjectFixedFields(new ICP.Platform.Modeling.Metadata.ModelMetadataDocument
+        {
+            Model = new ICP.Platform.Modeling.Metadata.ModelMetadataModel { Kind = "Entity" }
+        }).Where(field => field.IsAuditField).Select(field => field.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? ExtraFields { get; init; }
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) =>
+        (ExtraFields?.Keys.AsEnumerable() ?? []).Where(field => AuditFields.Contains(field)
+            || field.EndsWith("_DisplayValue", StringComparison.OrdinalIgnoreCase))
+            .Select(field => new ValidationResult("IDENTITY_OUTPUT_FIELD_READ_ONLY", [field]));
+}
 
 public sealed record SetIdentityAccountStatusRequest(
     IdentityAccountStatus TargetStatus,
@@ -380,6 +399,16 @@ public sealed record IdentityAccountViewResponse(
     string UpdatedBy,
     DateTime UpdatedAt)
 {
+    [System.Text.Json.Serialization.JsonPropertyName("CreatedBy_DisplayValue")]
+    public string? CreatedBy_DisplayValue { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("CreatedAt_DisplayValue")]
+    public string? CreatedAt_DisplayValue { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("UpdatedBy_DisplayValue")]
+    public string? UpdatedBy_DisplayValue { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("UpdatedAt_DisplayValue")]
+    public string? UpdatedAt_DisplayValue { get; init; }
+
+    // 只转换既有公开协议字段，保留公共 CRUD 已生成的伴随显示值。
     internal static IdentityAccountViewResponse From(IdentityManagementAccountView view) => new(
         view.AccountEid,
         view.ECODE,
@@ -392,7 +421,13 @@ public sealed record IdentityAccountViewResponse(
         view.CreatedBy,
         view.CreatedAt,
         view.UpdatedBy,
-        view.UpdatedAt);
+        view.UpdatedAt)
+    {
+        CreatedBy_DisplayValue = view.CreatedBy_DisplayValue,
+        CreatedAt_DisplayValue = view.CreatedAt_DisplayValue,
+        UpdatedBy_DisplayValue = view.UpdatedBy_DisplayValue,
+        UpdatedAt_DisplayValue = view.UpdatedAt_DisplayValue,
+    };
 }
 
 public sealed record IdentityAccountPageResponse(

@@ -32,7 +32,7 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["ParentDepartmentId"] = "Department_Parent" }
         };
 
-        var descriptor = DepartmentCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(DepartmentCrudDescriptorFactory.Create());
         var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
             rows,
             rows.Length,

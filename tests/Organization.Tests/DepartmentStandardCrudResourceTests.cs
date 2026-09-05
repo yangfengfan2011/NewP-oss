@@ -14,7 +14,7 @@ public sealed class DepartmentStandardCrudResourceTests
     [Fact]
     public void Descriptor_ExposesHierarchyFieldsStableSortAndConditionalDeleteWithoutRevision()
     {
-        var descriptor = DepartmentCrudDescriptorFactory.Create();
+        var descriptor = OrganizationCrudTestResources.Resolve(DepartmentCrudDescriptorFactory.Create());
 
         StandardCrudDescriptorValidator.Validate(descriptor);
 
@@ -102,7 +102,7 @@ public sealed class DepartmentStandardCrudResourceTests
     public void QueryCustomizer_SearchesCodeOrNameAndFiltersCompanyParentAndStatus()
     {
         var conditions = new DepartmentCrudQueryCustomizer().BuildConditions(
-            DepartmentCrudDescriptorFactory.Create(),
+            OrganizationCrudTestResources.Resolve(DepartmentCrudDescriptorFactory.Create()),
             new StandardCrudListQuery(1, 20, null, null, new Dictionary<string, string?>
             {
                 ["keyword"] = "研发",

@@ -19,7 +19,7 @@ public static class StandardCrudQueryDescriptorAdapter
     {
         ArgumentNullException.ThrowIfNull(descriptor);
 
-        var displayValueFields = GetQueryDisplayValueFields(descriptor);
+        var displayValueFields = GetQueryDisplayValueFields(descriptor, descriptor.FieldSet.ListFields);
         var defaultFields = descriptor.FieldSet.ListFields
             .Concat(displayValueFields.Select(static field => field.Field))
             .Distinct(StringComparer.Ordinal)
@@ -43,30 +43,31 @@ public static class StandardCrudQueryDescriptorAdapter
     }
 
     /// <summary>把 lookup 与 temporal companion 合并为查询层只读响应字段。</summary>
-    public static IReadOnlyList<PlatformDisplayValueField> GetQueryDisplayValueFields(StandardCrudDescriptor descriptor)
+    public static IReadOnlyList<PlatformDisplayValueField> GetQueryDisplayValueFields(StandardCrudDescriptor descriptor, IReadOnlyList<string>? allowedFields = null)
     {
         var fields = descriptor.DisplayValueFields.ToList();
         if (descriptor.DisplayProjectionPlan is null)
         {
-            return fields;
+            return allowedFields is null ? fields : fields.Where(field => allowedFields.Contains(field.SourceField, StringComparer.Ordinal)).ToArray();
         }
 
-        foreach (var plan in descriptor.DisplayProjectionPlan.Fields
-                     .Where(static plan => plan is TemporalFieldDisplayProjectionPlan or CalendarDateFieldDisplayProjectionPlan))
+        foreach (var plan in descriptor.DisplayProjectionPlan.Fields)
         {
-            if (fields.Any(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal)))
+            var projected = plan is LookupFieldDisplayProjectionPlan lookup
+                ? new PlatformDisplayValueField(lookup.CompanionField, lookup.SourceField, lookup.TargetModel, lookup.TargetIdField, lookup.TargetDisplayField)
+                : new PlatformDisplayValueField(plan.CompanionField, plan.SourceField, "$temporal", plan.SourceField, plan.CompanionField);
+            var existing = fields.SingleOrDefault(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal));
+            if (existing is not null)
             {
+                if (existing != projected)
+                {
+                    throw new InvalidOperationException($"DISPLAY_PLAN_CONFLICT: {descriptor.ResourceKey}.{plan.SourceField}");
+                }
                 continue;
             }
-
-            fields.Add(new PlatformDisplayValueField(
-                plan.CompanionField,
-                plan.SourceField,
-                "$temporal",
-                plan.SourceField,
-                plan.CompanionField));
+            fields.Add(projected);
         }
 
-        return fields;
+        return allowedFields is null ? fields : fields.Where(field => allowedFields.Contains(field.SourceField, StringComparer.Ordinal)).ToArray();
     }
 }

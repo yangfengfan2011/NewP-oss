@@ -1,3 +1,5 @@
+using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Models;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Identity.Models;
@@ -32,7 +34,13 @@ public sealed record IdentityManagementAccountView(
     string CreatedBy,
     DateTime CreatedAt,
     string UpdatedBy,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt)
+{
+    public string? CreatedBy_DisplayValue { get; init; }
+    public string? CreatedAt_DisplayValue { get; init; }
+    public string? UpdatedBy_DisplayValue { get; init; }
+    public string? UpdatedAt_DisplayValue { get; init; }
+}
 
 public sealed record IdentityManagementSecurityEventView(
     string EventEid,
@@ -101,23 +109,25 @@ public interface IIdentityManagementQueryService
 
 public sealed class IdentityManagementQueryService : IIdentityManagementQueryService
 {
-    private static readonly PlatformQueryDescriptor AccountListDescriptor = CreateAccountListDescriptor();
     private static readonly TemporalFieldDisplayProjectionPlan OccurredAtDisplayPlan =
         CompileOccurredAtDisplayPlan();
     private readonly IIdentityRepository _repository;
-    private readonly IPlatformQueryExecutor _queryExecutor;
+    private readonly IStandardCrudService _crud;
+    private readonly IStandardCrudResourceRegistry _resources;
     private readonly ITemporalDisplayProjectionExecutor _temporalDisplayProjectionExecutor;
 
     /// <summary>
-    /// 创建 Identity 管理查询服务；账号列表由平台查询内核执行，详情及安全事件仍由 Identity 仓储拥有。
+    /// 创建 Identity 管理查询服务；账号列表与详情采用通用 CRUD，安全事件仍由 Identity 仓储拥有。
     /// </summary>
     public IdentityManagementQueryService(
         IIdentityRepository repository,
-        IPlatformQueryExecutor queryExecutor,
-        ITemporalDisplayProjectionExecutor temporalDisplayProjectionExecutor)
+        IStandardCrudService crud,
+        ITemporalDisplayProjectionExecutor temporalDisplayProjectionExecutor,
+        IStandardCrudResourceRegistry resources)
     {
         _repository = repository;
-        _queryExecutor = queryExecutor;
+        _crud = crud;
+        _resources = resources;
         _temporalDisplayProjectionExecutor = temporalDisplayProjectionExecutor;
     }
 
@@ -129,14 +139,14 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(search);
-        var request = new PlatformQueryRequest(
-            Fields: null,
-            Page: search.Page,
-            PageSize: search.PageSize,
-            SortBy: search.SortBy,
-            SortDirection: search.SortDirection,
-            Conditions: BuildAccountListConditions(search));
-        var result = await _queryExecutor.QueryAsync(AccountListDescriptor, request, cancellationToken);
+        var result = await _crud.ListAsync(AccountDescriptor, new StandardCrudListQuery(
+            search.Page, search.PageSize, search.SortBy, search.SortDirection,
+            new Dictionary<string, string?>
+            {
+                ["query"] = search.Query, ["status"] = search.Status?.ToString(),
+                ["IsPersonnelBound"] = search.IsPersonnelBound?.ToString(),
+                ["IsLocalAdministrator"] = search.IsLocalAdministrator?.ToString()
+            }), cancellationToken);
         var items = result.Items.Select(ToAccountView).ToArray();
         return new IdentityManagementAccountPage(items, result.Page, result.PageSize, result.Total);
     }
@@ -155,14 +165,14 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
             return null;
         }
 
-        var account = await _repository.FindAccountAsync(accountEid, cancellationToken);
+        var account = await FindAccountAsync(accountEid, cancellationToken);
         if (account is null)
         {
             return null;
         }
 
         var events = await LoadSecurityEventPageAsync(accountEid, eventPage, eventPageSize, cancellationToken);
-        return new IdentityManagementAccountDetail(ToView(account), events);
+        return new IdentityManagementAccountDetail(account, events);
     }
 
     /// <summary>
@@ -177,8 +187,8 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
             return null;
         }
 
-        var account = await _repository.FindAccountAsync(accountEid, cancellationToken);
-        return account is null ? null : ToView(account);
+        var detail = await _crud.GetDetailAsync(AccountDescriptor, accountEid, cancellationToken);
+        return detail is null ? null : ToAccountView(detail.Fields);
     }
 
     /// <summary>
@@ -221,54 +231,6 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         return new IdentityManagementSecurityEventPage(items, page, pageSize, events.Length);
     }
 
-    internal static IdentityManagementAccountView ToView(IdentityAccount account) => new(
-        account.EID,
-        account.ECODE,
-        account.ENAME,
-        account.Status,
-        account.Revision,
-        account.IsLocalAdministrator,
-        account.IsPersonnelBound,
-        account.PersonnelDisableHold,
-        account.CreatedBy,
-        account.CreatedAt,
-        account.UpdatedBy,
-        account.UpdatedAt);
-
-    // 默认状态条件以 OR 组表达 Enabled 与 Disabled；Deleted 只能通过显式状态筛选进入结果。
-    private static IReadOnlyList<PlatformQueryCondition> BuildAccountListConditions(
-        IdentityManagementAccountSearch search)
-    {
-        var conditions = new List<PlatformQueryCondition>();
-        if (search.Status is null)
-        {
-            conditions.Add(new PlatformQueryCondition("Status", "=", "Enabled", "status", "or"));
-            conditions.Add(new PlatformQueryCondition("Status", "=", "Disabled", "status", "or"));
-        }
-        else
-        {
-            conditions.Add(new PlatformQueryCondition("Status", "=", search.Status.Value.ToString()));
-        }
-
-        if (!string.IsNullOrWhiteSpace(search.Query))
-        {
-            conditions.Add(new PlatformQueryCondition("ECODE", "contains", search.Query, "keyword", "or"));
-            conditions.Add(new PlatformQueryCondition("ENAME", "contains", search.Query, "keyword", "or"));
-        }
-
-        if (search.IsPersonnelBound is not null)
-        {
-            conditions.Add(new PlatformQueryCondition("IsPersonnelBound", "=", search.IsPersonnelBound.Value));
-        }
-
-        if (search.IsLocalAdministrator is not null)
-        {
-            conditions.Add(new PlatformQueryCondition("IsLocalAdministrator", "=", search.IsLocalAdministrator.Value));
-        }
-
-        return conditions;
-    }
-
     // 平台查询结果只包含账号列表稳定 DTO 所需字段，避免把 NormalizedECODE 等内部字段暴露给 API。
     private static IdentityManagementAccountView ToAccountView(IReadOnlyDictionary<string, object?> row) => new(
         ReadRequired<string>(row, "EID"),
@@ -282,7 +244,13 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         ReadRequired<string>(row, "CreatedBy"),
         ReadRequired<DateTime>(row, "CreatedAt"),
         ReadRequired<string>(row, "UpdatedBy"),
-        ReadRequired<DateTime>(row, "UpdatedAt"));
+        ReadRequired<DateTime>(row, "UpdatedAt"))
+    {
+        CreatedBy_DisplayValue = row.GetValueOrDefault("CreatedBy_DisplayValue") as string,
+        CreatedAt_DisplayValue = row.GetValueOrDefault("CreatedAt_DisplayValue") as string,
+        UpdatedBy_DisplayValue = row.GetValueOrDefault("UpdatedBy_DisplayValue") as string,
+        UpdatedAt_DisplayValue = row.GetValueOrDefault("UpdatedAt_DisplayValue") as string,
+    };
 
     // 缺少查询投影字段表示模块 descriptor 与稳定 API 已漂移，应显式失败而不是返回静默默认值。
     private static T ReadRequired<T>(IReadOnlyDictionary<string, object?> row, string field)
@@ -295,46 +263,8 @@ public sealed class IdentityManagementQueryService : IIdentityManagementQuerySer
         return typed;
     }
 
-    // Identity 只声明账号查询白名单和稳定 API 投影；执行机制及稳定 EID 兜底排序由平台查询内核负责。
-    private static PlatformQueryDescriptor CreateAccountListDescriptor() => new()
-    {
-        ResourceKey = "identity.account",
-        ModelName = "Identity/IdentityAccount",
-        IdField = "EID",
-        AllowedModelFields =
-        [
-            "EID",
-            "ECODE",
-            "ENAME",
-            "Status",
-            "Revision",
-            "IsLocalAdministrator",
-            "IsPersonnelBound",
-            "PersonnelDisableHold",
-            "CreatedBy",
-            "CreatedAt",
-            "UpdatedBy",
-            "UpdatedAt"
-        ],
-        DefaultFields =
-        [
-            "EID",
-            "ECODE",
-            "ENAME",
-            "Status",
-            "Revision",
-            "IsLocalAdministrator",
-            "IsPersonnelBound",
-            "PersonnelDisableHold",
-            "CreatedBy",
-            "CreatedAt",
-            "UpdatedBy",
-            "UpdatedAt"
-        ],
-        SortableFields = ["ECODE", "ENAME", "Status"],
-        DefaultSortField = "ECODE",
-        DefaultSortDirection = "asc"
-    };
+    private ICP.Platform.Crud.Descriptors.StandardCrudDescriptor AccountDescriptor =>
+        _resources.FindByResourceKey("identity.account") ?? throw new InvalidOperationException("IDENTITY_ACCOUNT_CRUD_REQUIRED");
 
     // Identity 只提交业务 raw 并消费公共 projection 结果，不自行解释 display.type 或 format。
     private IdentityManagementSecurityEventView ToView(IdentitySecurityEvent securityEvent)

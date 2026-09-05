@@ -18,11 +18,6 @@ public static class PersonCrudDescriptorFactory
             DetailFields: ["EID", "PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "AccountEID", "AccountBoundAt", "AccountBoundBy", "AccountBindingReason"],
             CreateFields: ["PersonNo", "ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "IsEnabled"],
             UpdateFields: ["ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "UpdatedAt"]);
-        var models = OrganizationModelDefinitions.All;
-        var person = models.Single(model => string.Equals(model.Name, "Person", StringComparison.Ordinal));
-        var displayPlan = new ModelDisplayProjectionPlanner().Compile(person, models).Plan
-            ?? throw new InvalidOperationException("Person display projection plan could not be compiled.");
-
         return new StandardCrudDescriptor
         {
             ResourceKey = "organization.person",
@@ -39,8 +34,7 @@ public static class PersonCrudDescriptorFactory
             FieldSet = fieldSet,
             OptionLabelFields = ["PersonNo", "ENAME"],
             SummaryBlockKeys = ["userBinding", "authorizationSummary"],
-            DisplayValueFields = BuildDisplayValueFields(displayPlan),
-            DisplayProjectionPlan = displayPlan,
+            DisplayValueFields = BuildDisplayValueFields(),
             FieldPolicies = BuildFieldPolicies(fieldSet),
             DeletePolicy = StandardCrudDeletePolicy.Conditional,
             RequiredFields =
@@ -92,14 +86,12 @@ public static class PersonCrudDescriptorFactory
         };
     }
 
-    // Company lookup 只消费统一编译计划，Department 与 Position 暂时保留既有非 canonical 手写计划。
-    private static IReadOnlyList<PlatformDisplayValueField> BuildDisplayValueFields(ModelDisplayProjectionPlan displayPlan)
+    // 这里只保留既有非 canonical 业务 companion；规范 Model 计划由平台资源解析装配。
+    private static IReadOnlyList<PlatformDisplayValueField> BuildDisplayValueFields()
     {
-        var modelDisplayValueFields = new ModelDisplayValueFieldProjector().Project(displayPlan);
 
         return
         [
-            .. modelDisplayValueFields,
             new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
             new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
         ];

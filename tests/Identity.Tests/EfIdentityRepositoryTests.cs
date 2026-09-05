@@ -37,10 +37,10 @@ public sealed class EfIdentityRepositoryTests
         await context.SaveChangesAsync();
         sql.Clear();
 
-        var result = await new IdentityManagementQueryService(
+        var result = await IdentityCrudQueryTestFactory.Create(
                 repository,
                 new EfPlatformQueryExecutor(context),
-                new TestTemporalDisplayProjectionExecutor())
+                new TestTemporalDisplayProjectionExecutor(), context)
             .SearchAsync(new IdentityManagementAccountSearch(
                 Query: "A",
                 Status: null,
@@ -51,6 +51,8 @@ public sealed class EfIdentityRepositoryTests
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal("A02", Assert.Single(result.Items).ECODE);
+        Assert.Equal("System", result.Items[0].CreatedBy_DisplayValue);
+        Assert.NotNull(result.Items[0].CreatedAt_DisplayValue);
         var executedSql = string.Join(Environment.NewLine, sql);
         Assert.Contains("COUNT", executedSql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("WHERE", executedSql, StringComparison.OrdinalIgnoreCase);
@@ -61,6 +63,15 @@ public sealed class EfIdentityRepositoryTests
         Assert.Contains("IsPersonnelBound", executedSql, StringComparison.Ordinal);
         Assert.Contains("IsLocalAdministrator", executedSql, StringComparison.Ordinal);
         Assert.DoesNotContain("NormalizedECODE", executedSql, StringComparison.Ordinal);
+
+        var queryService = IdentityCrudQueryTestFactory.Create(repository, new EfPlatformQueryExecutor(context), new TestTemporalDisplayProjectionExecutor(), context);
+        var controller = new ICP.Platform.Modules.Identity.Controllers.IdentityAccountsController(queryService, null!);
+        var response = await controller.GetSnapshot("User_2", CancellationToken.None);
+        var payload = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(response.Result).Value;
+        using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+        Assert.Equal("system", json.RootElement.GetProperty("createdBy").GetString());
+        Assert.Equal("System", json.RootElement.GetProperty("CreatedBy_DisplayValue").GetString());
+        Assert.Equal(result.Items[0].CreatedAt_DisplayValue, json.RootElement.GetProperty("CreatedAt_DisplayValue").GetString());
     }
 
     [Fact]

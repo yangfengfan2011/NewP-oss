@@ -81,7 +81,7 @@ public sealed class ModelRuntimeMetadataProjectorTests
 
         var updatedAt = Field(fields, "UpdatedAt");
         Assert.Equal("dateTime", updatedAt.GetProperty("uiType").GetString());
-        Assert.Equal("dateTime", updatedAt.GetProperty("contract").GetProperty("valueType").GetString());
+        Assert.Equal("instant", updatedAt.GetProperty("contract").GetProperty("valueType").GetString());
         Assert.Equal("datetime", updatedAt.GetProperty("storage").GetProperty("type").GetString());
         Assert.False(updatedAt.GetProperty("storage").GetProperty("nullable").GetBoolean());
         Assert.Equal(12, updatedAt.GetProperty("layout").GetProperty("span").GetInt32());

@@ -85,6 +85,21 @@ public sealed class IdentityHttpApiIntegrationTests
         Assert.Equal("REQUEST_VALIDATION_FAILED", invalidStatusProblem.RootElement.GetProperty("code").GetString());
         Assert.False(string.IsNullOrWhiteSpace(invalidStatusProblem.RootElement.GetProperty("traceId").GetString()));
         Assert.True(invalidStatusProblem.RootElement.GetProperty("errors").EnumerateObject().Any());
+
+        foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "CreatedBy_DisplayValue", "CreatedAt_DisplayValue", "UpdatedBy_DisplayValue", "UpdatedAt_DisplayValue" })
+        {
+            foreach (var method in new[] { HttpMethod.Post, HttpMethod.Put })
+            {
+            using var forged = new HttpRequestMessage(method, method == HttpMethod.Post ? "/api/identity/accounts" : "/api/identity/accounts/user-1")
+            {
+                Content = JsonContent.Create(new Dictionary<string, object?> { ["ecode"] = "audit", ["ename"] = "Audit", [field] = "forged" })
+            };
+            forged.Headers.Add("X-Test-User", "admin-1");
+            forged.Headers.Add("X-Test-Role", "LocalAdmin");
+            var rejected = await client.SendAsync(forged);
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+            }
+        }
     }
 
     private sealed class EmptyQueries : IIdentityManagementQueryService

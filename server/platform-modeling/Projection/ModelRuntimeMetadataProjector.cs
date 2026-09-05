@@ -17,6 +17,7 @@ public sealed class ModelRuntimeMetadataProjector
     {
         WriteIndented = true
     };
+    private static readonly JsonSerializerOptions DisplayJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private readonly JsonModelMetadataDocumentLoader _loader = new();
     private readonly ModelMetadataProjector _metadataProjector = new();
@@ -105,6 +106,11 @@ public sealed class ModelRuntimeMetadataProjector
         if (!contract.ContainsKey("valueType"))
         {
             contract["valueType"] = ContractValueType(field.ValueType);
+        }
+
+        if (field.DisplayRule is { } display)
+        {
+            runtimeField["display"] = JsonSerializer.SerializeToNode(display, DisplayJsonOptions);
         }
 
         var storage = runtimeField["storage"] as JsonObject ?? new JsonObject();

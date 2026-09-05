@@ -32,7 +32,6 @@ public static class ExampleRecordCrudDescriptorFactory
             Authorization = StandardCrudAuthorization.ByConvention(ExamplePermissions.RecordStem),
             FieldSet = fieldSet,
             OptionLabelFields = ["ECODE", "ENAME"],
-            DisplayValueFields = BuildDisplayValueFields(),
             DeletePolicy = StandardCrudDeletePolicy.Hard,
             FieldPolicies = BuildFieldPolicies(fieldSet),
             RequiredFields =
@@ -85,12 +84,4 @@ public static class ExampleRecordCrudDescriptorFactory
         return new ModelStandardCrudFieldPolicyProjector().Project(document, model, fieldSet);
     }
 
-    // Example 的 lookup descriptor 只消费统一编译计划；user target 不引入跨模块 metadata 依赖。
-    private static IReadOnlyList<PlatformDisplayValueField> BuildDisplayValueFields()
-    {
-        var models = ExampleModelDefinitions.All;
-        var exampleRecord = models.Single(model => string.Equals(model.Name, "ExampleRecord", StringComparison.Ordinal));
-        IModelDisplayProjectionPlanner planner = new ModelDisplayProjectionPlanner();
-        return new ModelDisplayValueFieldProjector().Project(planner.Compile(exampleRecord, models));
-    }
 }

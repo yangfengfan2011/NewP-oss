@@ -7,6 +7,21 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class TemporalDisplayProjectionExecutorTests
 {
     [Theory]
+    [InlineData("2024-03-10T09:59:59Z", "3/10/2024 1:59:59 AM")]
+    [InlineData("2024-03-10T10:00:00Z", "3/10/2024 3:00:00 AM")]
+    public void Project_HistoricalInstantUsesTimeZoneDstRules(string raw, string expected)
+    {
+        var instant = DateTime.Parse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
+        var executor = new TemporalDisplayProjectionExecutor(
+            new FixedPresentationContextAccessor(new RequestPresentationContext("en-US", "America/Los_Angeles")), new TemporalDisplayFormatter());
+
+        var result = executor.Project(new TemporalFieldDisplayProjectionPlan("UpdatedAt", "UpdatedAt_DisplayValue", TemporalDisplayFormat.DateTime), instant);
+
+        Assert.Equal(instant, result.RawValue);
+        Assert.Equal(expected, result.DisplayValue);
+    }
+
+    [Theory]
     [InlineData(TemporalDisplayFormat.Date, "zh-CN", "Asia/Taipei", "2030/1/2")]
     [InlineData(TemporalDisplayFormat.Date, "zh-CN", "America/New_York", "2030/1/1")]
     [InlineData(TemporalDisplayFormat.Date, "en-US", "Asia/Taipei", "1/2/2030")]

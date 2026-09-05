@@ -9,6 +9,68 @@ public sealed class ModelDisplayProjectionPlannerTests
 {
     private readonly IModelDisplayProjectionPlanner _planner = new ModelDisplayProjectionPlanner();
 
+    [Theory]
+    [InlineData("instant", "dateTime")]
+    [InlineData("INSTANT", "DATETIME")]
+    public void Compile_ExplicitEquivalentAuditDisplayIsIdempotent(string type, string format)
+    {
+        var result = _planner.Compile(new ModelMetadataDocument
+        {
+            ModuleId = "Organization", Model = new ModelMetadataModel
+            {
+                Name = "Company", Kind = "Entity", Fields = [new ModelMetadataField
+                { Name = "UpdatedAt", Display = new ModelMetadataDisplayRule { Type = type, Format = format } }]
+            }
+        });
+        Assert.True(result.IsSuccess, string.Join(";", result.Diagnostics.Select(item => item.Message)));
+        Assert.Equal(4, result.Plan!.Fields.Count);
+    }
+
+    [Fact]
+    public void Compile_FixedAuditTimeCannotOverrideStandardDateTimeFormat()
+    {
+        var result = _planner.Compile(new ModelMetadataDocument
+        {
+            ModuleId = "Organization",
+            Model = new ModelMetadataModel
+            {
+                Name = "Company", Kind = "Entity",
+                Fields = [new ModelMetadataField { Name = "UpdatedAt", Display = new ModelMetadataDisplayRule { Type = "instant", Format = "date" } }]
+            }
+        });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("UpdatedAt", Assert.Single(result.Diagnostics).FieldName);
+    }
+
+    [Fact]
+    public void Compile_EntityWithoutDisplay_ProvidesFourAuditPlans()
+    {
+        var document = new ModelMetadataDocument
+        {
+            ModuleId = "Organization",
+            Model = new ModelMetadataModel { Name = "Company", Kind = "Entity" }
+        };
+
+        var result = _planner.Compile(document);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(4, result.Plan!.Fields.Count);
+        foreach (var field in new[] { "CreatedBy", "UpdatedBy" })
+        {
+            var plan = Assert.IsType<LookupFieldDisplayProjectionPlan>(
+                Assert.Single(result.Plan.Fields, item => item.SourceField == field));
+            Assert.Equal(LookupDisplayProjectionKind.User, plan.Kind);
+            Assert.Equal("IdentityAccount", plan.TargetModel);
+            Assert.Equal("ENAME", plan.TargetDisplayField);
+        }
+        foreach (var field in new[] { "CreatedAt", "UpdatedAt" })
+        {
+            var plan = Assert.IsType<TemporalFieldDisplayProjectionPlan>(
+                Assert.Single(result.Plan.Fields, item => item.SourceField == field));
+            Assert.Equal(TemporalDisplayFormat.DateTime, plan.Format);
+        }
+    }
     public static TheoryData<ModelDefinition, IReadOnlyCollection<ModelDefinition>, Type> SupportedPlans => new()
     {
         { Source(Field("CompanyId", FieldKind.Reference, FieldValueType.ObjectId, Display("reference", "Company", "EID", "ENAME"))), [Target("Company")], typeof(LookupFieldDisplayProjectionPlan) },

@@ -41,7 +41,7 @@ public sealed class IdentityManagementQueryServiceTests
             SortDirection: "desc",
             ResponseFields: [],
             RequestedDisplayFields: []));
-        var service = new IdentityManagementQueryService(
+        var service = IdentityCrudQueryTestFactory.Create(
             new InMemoryIdentityRepository(),
             executor,
             new TestTemporalDisplayProjectionExecutor());
@@ -97,7 +97,7 @@ public sealed class IdentityManagementQueryServiceTests
             "asc",
             [],
             []));
-        var service = new IdentityManagementQueryService(
+        var service = IdentityCrudQueryTestFactory.Create(
             new InMemoryIdentityRepository(),
             executor,
             new TestTemporalDisplayProjectionExecutor());
@@ -139,7 +139,7 @@ public sealed class IdentityManagementQueryServiceTests
             UpdatedBy = "User_1",
             UpdatedAt = DateTime.UtcNow
         });
-        var service = new IdentityManagementQueryService(
+        var service = IdentityCrudQueryTestFactory.Create(
             repository,
             new UnusedPlatformQueryExecutor(),
             new TestTemporalDisplayProjectionExecutor());
@@ -176,7 +176,7 @@ public sealed class IdentityManagementQueryServiceTests
             ActorKind = IdentitySecurityActorKind.System
         });
         var executor = new RecordingTemporalDisplayProjectionExecutor(displayValue);
-        var service = new IdentityManagementQueryService(
+        var service = IdentityCrudQueryTestFactory.Create(
             repository,
             new UnusedPlatformQueryExecutor(),
             executor);
@@ -205,7 +205,7 @@ public sealed class IdentityManagementQueryServiceTests
         {
             Descriptor = descriptor;
             Request = request;
-            return Task.FromResult(result);
+            return Task.FromResult(result with { ResponseFields = result.Items.FirstOrDefault()?.Keys.ToArray() ?? [] });
         }
     }
 

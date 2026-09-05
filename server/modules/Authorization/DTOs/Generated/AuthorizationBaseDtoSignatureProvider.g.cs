@@ -8,9 +8,9 @@ public sealed class AuthorizationBaseDtoSignatureProvider
     public IReadOnlyDictionary<string, string> GetSignatures() =>
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["PermissionDto"] = "sha256:902176e4868cd3685c63c0ddd2630c240832d660d10aaed2304110a7587cdbaa",
-            ["RoleDto"] = "sha256:30294ea00d5ec0ff94ff53b20aea49807f27ce9c4f4c9d28eb0a87ea45c567e9",
-            ["RolePermissionDto"] = "sha256:deaf5268f58da3502ebd23a7da5836a762898d743ccb2e852959bc7099724147",
-            ["UserRoleDto"] = "sha256:8bf5b7eecc65824554e109d050a44c435cd1c47a6cb94f5d6f7da444bc38849d",
+            ["PermissionDto"] = "sha256:008ec0471dde0e0f60bc128dba764ab6a5a83eaccba6d157c0d909c2411de4ad",
+            ["RoleDto"] = "sha256:3923a698fade2a28dda81401b72cdeb31c2690dbdaf55f6977754ae5dd0546a3",
+            ["RolePermissionDto"] = "sha256:d39e169e8ef3b3a8e266271e54c9e44943da2ae7c1f31d6ff5981ce979add6a6",
+            ["UserRoleDto"] = "sha256:b8426a08429ab131fc5af61edac7b13a04ebc034e48c85339ca834e25b645476",
         };
 }

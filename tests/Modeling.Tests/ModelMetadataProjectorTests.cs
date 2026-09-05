@@ -404,9 +404,9 @@ public class ModelMetadataProjectorTests
 
         Assert.Contains(definition.Fields, static x => x is { Name: "EID", IsPrimaryKey: true, ValueType: FieldValueType.ObjectId });
         Assert.Contains(definition.Fields, static x => x is { Name: "CreatedBy", Kind: FieldKind.Audit, ValueType: FieldValueType.User, Required: true, IsAuditField: true });
-        Assert.Contains(definition.Fields, static x => x is { Name: "CreatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.DateTime, Required: true, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "CreatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.Instant, Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static x => x is { Name: "UpdatedBy", Kind: FieldKind.Audit, ValueType: FieldValueType.User, Required: true, IsAuditField: true });
-        Assert.Contains(definition.Fields, static x => x is { Name: "UpdatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.DateTime, Required: true, IsAuditField: true });
+        Assert.Contains(definition.Fields, static x => x is { Name: "UpdatedAt", Kind: FieldKind.Audit, ValueType: FieldValueType.Instant, Required: true, IsAuditField: true });
         Assert.Contains(definition.Fields, static x => x is { Name: "ENAME", ValueType: FieldValueType.Text });
         Assert.Contains(definition.Fields, static x => x is { Name: "ECODE", ValueType: FieldValueType.Text });
         Assert.Equal(1, definition.Fields.Count(static x => x.Name == "ENAME"));

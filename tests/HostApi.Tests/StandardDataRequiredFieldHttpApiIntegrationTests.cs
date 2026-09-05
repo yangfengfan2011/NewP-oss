@@ -25,6 +25,29 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposable
 {
+    [Fact]
+    public async Task StandardDataDetail_AutomaticallyProjectsAuditTimeAndRejectsUnselectedCompanionWrites()
+    {
+        var repository = new RecordingRepository();
+        var instant = new DateTime(2026, 9, 4, 7, 24, 26, DateTimeKind.Utc).AddTicks(5023291);
+        repository.Rows.Add(new Dictionary<string, object?> { ["EID"] = "Asset_1", ["Name"] = "Asset", ["SerialNo"] = "001", ["CreatedAt"] = instant, ["UpdatedAt"] = instant });
+        await using var app = BuildApplication(repository, auditProjection: true);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var result = await client.GetFromJsonAsync<JsonElement>("/api/standard/partner-asset-catalog/assets/Asset_1");
+        var fields = result.GetProperty("fields");
+        Assert.Equal(instant, fields.GetProperty("CreatedAt").GetDateTime());
+        Assert.Equal("2026/9/4 15:24:26", fields.GetProperty("CreatedAt_DisplayValue").GetString());
+        Assert.False(fields.TryGetProperty("CreatedBy_DisplayValue", out _));
+        var rejected = await client.PostAsJsonAsync("/api/standard/partner-asset-catalog/assets", new { Name = "Other", CreatedBy_DisplayValue = "forged" });
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
+    private sealed class Presentation : ICP.Platform.Presentation.IRequestPresentationContextAccessor
+    {
+        public ICP.Platform.Presentation.RequestPresentationContext? Current => new("zh-CN", "Asia/Taipei");
+    }
     private readonly string _packageRoot = Path.Combine(
         Path.GetTempPath(),
         "newp-standard-data-required-api-tests",
@@ -99,7 +122,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         }
     }
 
-    private WebApplication BuildApplication(RecordingRepository repository)
+    private WebApplication BuildApplication(RecordingRepository repository, bool auditProjection = false)
     {
         var descriptor = BuildDescriptor();
         var builder = WebApplication.CreateBuilder();
@@ -110,6 +133,16 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         builder.Services.AddSingleton<IStandardCrudRepository>(repository);
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
         builder.Services.AddStandardCrudResource(descriptor);
+        if (auditProjection)
+        {
+            var model = new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(new ICP.Platform.Modeling.Metadata.ModelMetadataDocument
+            {
+                ModuleId = descriptor.ModuleId,
+                Model = new ICP.Platform.Modeling.Metadata.ModelMetadataModel { Name = descriptor.ModelName, Kind = "Entity" }
+            }) with { OwnerModuleId = descriptor.ModuleId };
+            builder.Services.AddSingleton(new ICP.Platform.Persistence.Planning.CompiledPersistencePlan("candidate", "snapshot", "hash", default, "digest", [], [model], []));
+            builder.Services.AddSingleton<ICP.Platform.Presentation.ITemporalDisplayProjectionExecutor>(new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(new Presentation(), new ICP.Platform.Presentation.TemporalDisplayFormatter()));
+        }
 
         var app = builder.Build();
         app.Use(async (context, next) =>

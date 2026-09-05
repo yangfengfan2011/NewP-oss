@@ -20,7 +20,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task ListAsync_PreservesRawReviewerUserAndResolvesDisplayValueInOneBatch()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
             [
                 new Dictionary<string, object?>
@@ -56,7 +56,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [InlineData("all")]
     public async Task ExportAsync_WhenReviewerUserColumnRequested_WritesResolvedDisplayWithoutLeakingRawEid(string mode)
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
             [
                 new Dictionary<string, object?>
@@ -97,7 +97,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task GetDetailAsync_WhenReviewerAccountMissing_PreservesRawFieldAndFallsBackToRawEid()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var repository = new InMemoryStandardCrudRepository(
             [
                 new Dictionary<string, object?>
@@ -122,7 +122,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task CreateAsync_ReturnsRawReviewerUserAndResolvedDisplayValue()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var repository = new RecordingMutationStandardCrudRepository([]);
         var directory = new RecordingAccountDirectory([Account("User_A", "Alice")]);
         var service = CreateService(repository, EmptyQueryExecutor(), directory);
@@ -148,7 +148,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task UpdateAsync_ReturnsRawReviewerUserAndResolvedDisplayValue()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var repository = new RecordingMutationStandardCrudRepository(
             [
                 new Dictionary<string, object?>
@@ -183,7 +183,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task CreateAsync_WhenRecordSourceIsMissing_ReturnsStableRequiredErrorWithoutWriting()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var repository = new RecordingMutationStandardCrudRepository([]);
         var service = CreateService(repository, EmptyQueryExecutor(), new RecordingAccountDirectory([]));
 
@@ -205,7 +205,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task UpdateAsync_WhenRecordSourceIsBlank_ReturnsStableRequiredErrorWithoutWriting()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var repository = new RecordingMutationStandardCrudRepository(
         [
             new Dictionary<string, object?>
@@ -232,7 +232,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task CreateAsync_WhenCanonicalDisplayCompanionIsSubmitted_ReusesReadOnlyWriteReject()
     {
-        var descriptor = ExampleRecordCrudDescriptorFactory.Create();
+        var descriptor = ExampleCrudTestResources.Create();
         var repository = new RecordingMutationStandardCrudRepository([]);
         var directory = new RecordingAccountDirectory([Account("User_A", "Alice")]);
         var service = CreateService(repository, EmptyQueryExecutor(), directory);
@@ -270,7 +270,14 @@ public sealed class ExampleRecordStandardCrudServiceTests
             [],
             [],
             [],
-            auditStampProvider: new SystemEntityAuditStampProvider(TimeProvider.System));
+            auditStampProvider: new SystemEntityAuditStampProvider(TimeProvider.System),
+            temporalDisplayProjectionExecutor: new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(
+                new NoPresentationContext(), new ICP.Platform.Presentation.TemporalDisplayFormatter()));
+
+    private sealed class NoPresentationContext : ICP.Platform.Presentation.IRequestPresentationContextAccessor
+    {
+        public ICP.Platform.Presentation.RequestPresentationContext? Current => null;
+    }
 
     private static RecordingPlatformQueryExecutor EmptyQueryExecutor() =>
         new(new PlatformQueryResult([], 0, 1, 20, null, null, [], []));

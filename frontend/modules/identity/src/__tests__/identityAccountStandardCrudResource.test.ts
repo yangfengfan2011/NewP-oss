@@ -127,6 +127,8 @@ describe('Identity account Standard CRUD resource candidate', () => {
       isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
       createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z',
       updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
+      CreatedBy_DisplayValue: 'Current account name', CreatedAt_DisplayValue: '2026/8/1 08:00:00',
+      UpdatedBy_DisplayValue: null, UpdatedAt_DisplayValue: '2026/8/2 08:00:00',
     });
 
     const abortController = new AbortController();
@@ -138,6 +140,8 @@ describe('Identity account Standard CRUD resource candidate', () => {
     expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2', { signal: abortController.signal });
     expect(detail.normalized.fields).toMatchObject({
       EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Enabled', Revision: 7,
+      CreatedBy: 'User_1', CreatedBy_DisplayValue: 'Current account name', CreatedAt_DisplayValue: '2026/8/1 08:00:00',
+      UpdatedBy_DisplayValue: null, UpdatedAt_DisplayValue: '2026/8/2 08:00:00',
     });
     expect(detail.normalized.summaries).toEqual({
       securityEvents: { status: 'ready', data: { accountEid: 'User_2' } },

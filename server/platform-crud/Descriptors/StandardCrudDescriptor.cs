@@ -3,12 +3,14 @@ using ICP.Platform.Modeling.DisplayPlanning;
 
 namespace ICP.Platform.Crud.Descriptors;
 
-public sealed class StandardCrudDescriptor
+public sealed record StandardCrudDescriptor
 {
     public required string ResourceKey { get; init; }
     public required string ModuleId { get; init; }
     public required string ModelName { get; init; }
     public required string Route { get; init; }
+    /// <summary>是否映射标准 HTTP 协议；已有公开协议的适配入口可仅复用服务，并继续拥有原有授权。</summary>
+    public bool MapStandardEndpoints { get; init; } = true;
     public required string IdField { get; init; }
     public required string DisplayField { get; init; }
     public string? EnabledField { get; init; }

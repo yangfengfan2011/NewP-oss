@@ -10,7 +10,7 @@ Model authoring 声明业务字段、选择的 builtin 和显式固定字段覆�
 
 普通 authoring Model 的 Prepare 与 Stage 必须对同一份完整 runtime Model 集合执行相同投影并保持原子发布；`persistence.models` 只是持久化计划的子集，不能代替 runtime Model 集合。standard-data Model 在 Stage 内存生成后调用同一 runtime projector，再写入 staging；其业务 sections 和 columns 保持原样，追加的固定字段只通过 `model.fields` 提供给运行时消费者。
 
-投影只改变 runtime JSON，不反写 authoring，不改变持久化 model digest、数据库 schema 或数据。Shell 直接消费 `model.fields`，不合并自己的固定字段名单；表单继续消费字段的 form 结构，并在最终提交边界排除 `readOnly` 字段，即使资源的值构造器重新带回该字段。值构造器附加的合法非表单业务值仍须保留。
+本决策的目录与表单投影只改变 runtime JSON，不反写 authoring，不改变持久化 model digest、数据库 schema 或数据。后续固定审计时间的 Instant 语义与默认 display 由 [ADR-0040](0040-model-fields-own-raw-and-display-projection.md) 定义；它需要独立核对持久化摘要和迁移准入，不能直接沿用本决策的 runtime-only 结论。Shell 直接消费 `model.fields`，不合并自己的固定字段名单；表单继续消费字段的 form 结构，并在最终提交边界排除 `readOnly` 字段，即使资源的值构造器重新带回该字段。值构造器附加的合法非表单业务值仍须保留。
 
 ## 非目标
 

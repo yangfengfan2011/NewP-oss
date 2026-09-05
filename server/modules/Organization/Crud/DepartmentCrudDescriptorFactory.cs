@@ -25,10 +25,6 @@ public static class DepartmentCrudDescriptorFactory
             ],
             CreateFields: ["CompanyId", "ParentDepartmentId", "ECODE", "ENAME", "SortOrder"],
             UpdateFields: ["ParentDepartmentId", "ENAME", "SortOrder", "IsEnabled"]);
-        var models = OrganizationModelDefinitions.All;
-        var department = models.Single(model => string.Equals(model.Name, "Department", StringComparison.Ordinal));
-        var displayPlan = new ModelDisplayProjectionPlanner().Compile(department, models).Plan
-            ?? throw new InvalidOperationException("Department display projection plan could not be compiled.");
         return new StandardCrudDescriptor
         {
             ResourceKey = "organization.department",
@@ -45,8 +41,6 @@ public static class DepartmentCrudDescriptorFactory
             Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.DepartmentStem),
             FieldSet = fieldSet,
             OptionLabelFields = ["ECODE", "ENAME"],
-            DisplayValueFields = new ModelDisplayValueFieldProjector().Project(displayPlan),
-            DisplayProjectionPlan = displayPlan,
             DeletePolicy = StandardCrudDeletePolicy.Conditional,
             FieldPolicies = BuildFieldPolicies(fieldSet),
             RequiredFields =

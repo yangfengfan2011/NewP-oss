@@ -53,6 +53,17 @@ const companySchema = {
 } as StandardCrudResolvedDetailSchema;
 
 describe('standard CRUD detail presentation', () => {
+  it.each(['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'])('preserves raw audit %s while presenting its companion', (field) => {
+    const result = resolveStandardCrudDetailPresentation({
+      schema: { ...companySchema, sections: [{ key: 'audit', titleKey: 'Audit', fields: [{ key: field, labelKey: field, rendererKey: 'standard.text', rendererSource: 'standard' }] }] },
+      expectedId: 'person-1',
+      fields: { EID: 'person-1', [field]: 'raw-audit', [`${field}_DisplayValue`]: '服务端显示值' },
+    });
+    expect(result.kind).toBe('ready');
+    if (result.kind !== 'ready') return;
+    expect(result.sections[0].fields[0].value).toBe('服务端显示值');
+    expect(result.sourceFields[field]).toBe('raw-audit');
+  });
   it('keeps present null distinct from a missing field', () => {
     const result = resolveStandardCrudDetailPresentation({
       schema,

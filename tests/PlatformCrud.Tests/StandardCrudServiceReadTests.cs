@@ -15,6 +15,122 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudServiceReadTests
 {
     [Fact]
+    public async Task GetDetailAsync_AuditUsersShareOneDirectoryBatchAndPreserveRaw()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+            [new Dictionary<string, object?> { ["EID"] = "person-1", ["CreatedBy"] = "actor-1", ["UpdatedBy"] = "actor-1" }]);
+        var directory = new RecordingUserDirectory();
+        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], [], userDisplayNameDirectory: directory);
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person",
+            Route = "api/organization/persons", IdField = "EID", DisplayField = "EID",
+            FieldSet = new StandardCrudFieldSet(["EID"], ["EID", "CreatedBy", "UpdatedBy"], [], []),
+            DisplayProjectionPlan = new ModelDisplayProjectionPlan("Person", new[] { "CreatedBy", "UpdatedBy" }
+                .Select(field => (FieldDisplayProjectionPlan)new LookupFieldDisplayProjectionPlan(field, field + "_DisplayValue",
+                    LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME") { IsEntityAuditField = true }).ToArray())
+        };
+
+        var detail = await service.GetDetailAsync(descriptor, "person-1");
+
+        Assert.Equal(1, directory.Calls);
+        Assert.Equal("actor-1", Assert.Single(directory.Ids!));
+        Assert.Equal("actor-1", detail!.Fields["CreatedBy"]);
+        Assert.Equal("Current name", detail.Fields["CreatedBy_DisplayValue"]);
+        Assert.Equal("Current name", detail.Fields["UpdatedBy_DisplayValue"]);
+    }
+
+    private sealed class RecordingUserDirectory : IUserDisplayNameDirectory
+    {
+        public int Calls { get; private set; }
+        public IReadOnlyCollection<string>? Ids { get; private set; }
+        public Exception? Failure { get; set; }
+        public IReadOnlyDictionary<string, string> Names { get; set; } = new Dictionary<string, string> { ["actor-1"] = "Current name" };
+        public Task<IReadOnlyDictionary<string, string>> FindManyAsync(IReadOnlyCollection<string> accountIds, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            Ids = accountIds;
+            return Failure is null ? Task.FromResult(Names) : Task.FromException<IReadOnlyDictionary<string, string>>(Failure);
+        }
+    }
+
+    [Fact]
+    public async Task ListAsync_AuditBatchUsesIdsAcrossRowsAndReadsCurrentNamesOnEveryRequest()
+    {
+        var directory = new RecordingUserDirectory
+        {
+            Names = new Dictionary<string, string> { ["actor-2"] = "Disabled name", ["actor-1"] = "Original name" }
+        };
+        var fields = new[] { "CreatedBy", "UpdatedBy" };
+        var displayFields = fields.Select(field => new PlatformDisplayValueField(field + "_DisplayValue", field, "IdentityAccount", "EID", "ENAME")).ToArray();
+        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
+            [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = "actor-1", ["UpdatedBy"] = "actor-2" },
+             new Dictionary<string, object?> { ["EID"] = "2", ["CreatedBy"] = "actor-2", ["UpdatedBy"] = "deleted" },
+             new Dictionary<string, object?> { ["EID"] = "3", ["CreatedBy"] = "system", ["UpdatedBy"] = "actor-1" }],
+            3, 1, 20, null, null, ["EID", .. fields, .. displayFields.Select(field => field.Field)], displayFields));
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "organization.company", ModuleId = "Organization", ModelName = "Company", Route = "api/organization/companies",
+            IdField = "EID", DisplayField = "EID", FieldSet = new StandardCrudFieldSet(["EID", .. fields], ["EID", .. fields], [], []),
+            DisplayProjectionPlan = new ModelDisplayProjectionPlan("Company", fields.Select(field => (FieldDisplayProjectionPlan)
+                new LookupFieldDisplayProjectionPlan(field, field + "_DisplayValue", LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME")
+                { IsEntityAuditField = true }).ToArray())
+        };
+        var service = new StandardCrudService(new InMemoryStandardCrudRepository([]), executor, [], [], [], [], [], [],
+            userDisplayNameDirectory: directory,
+            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")));
+
+        var result = await service.ListAsync(descriptor, new StandardCrudListQuery());
+        Assert.Equal(1, directory.Calls);
+        Assert.Equal(new[] { "actor-1", "actor-2", "deleted" }, directory.Ids);
+        Assert.Equal("Disabled name", result.Items[0]["UpdatedBy_DisplayValue"]);
+        Assert.Equal("deleted", result.Items[1]["UpdatedBy_DisplayValue"]);
+        Assert.Equal("系统", result.Items[2]["CreatedBy_DisplayValue"]);
+        directory.Names = new Dictionary<string, string> { ["actor-1"] = "Renamed" };
+        result = await service.ListAsync(descriptor, new StandardCrudListQuery());
+        Assert.Equal(2, directory.Calls);
+        Assert.Equal("Renamed", result.Items[0]["CreatedBy_DisplayValue"]);
+        Assert.Equal("actor-1", result.Items[0]["CreatedBy"]);
+        directory.Failure = new IOException("offline");
+        result = await service.ListAsync(descriptor, new StandardCrudListQuery());
+        Assert.Null(result.Items[0]["CreatedBy_DisplayValue"]);
+        Assert.Equal("系统", result.Items[2]["CreatedBy_DisplayValue"]);
+        directory.Failure = new OperationCanceledException();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => service.ListAsync(descriptor, new StandardCrudListQuery()));
+        directory.Failure = new UserDisplayNameDirectoryContractException();
+        await Assert.ThrowsAsync<UserDisplayNameDirectoryContractException>(() => service.ListAsync(descriptor, new StandardCrudListQuery()));
+        directory.Failure = null;
+        directory.Names = new Dictionary<string, string> { ["unrequested-id"] = "Wrong record" };
+        await Assert.ThrowsAsync<UserDisplayNameDirectoryContractException>(() => service.ListAsync(descriptor, new StandardCrudListQuery()));
+    }
+
+    [Theory]
+    [InlineData(null, "en-US", null)]
+    [InlineData("system", "en-US", "System")]
+    [InlineData("system", "zh-CN", "系统")]
+    public async Task GetDetailAsync_EmptyOrSystemActorsDoNotCallDirectory(string? actor, string locale, string? expected)
+    {
+        var directory = new RecordingUserDirectory { Failure = new InvalidOperationException("must not call") };
+        var descriptor = new StandardCrudDescriptor
+        {
+            ResourceKey = "test.audit", ModuleId = "Organization", ModelName = "Company", Route = "api/companies",
+            IdField = "EID", DisplayField = "EID", FieldSet = new StandardCrudFieldSet(["EID"], ["EID", "CreatedBy"], [], []),
+            DisplayProjectionPlan = new ModelDisplayProjectionPlan("Company", [new LookupFieldDisplayProjectionPlan(
+                "CreatedBy", "CreatedBy_DisplayValue", LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME") { IsEntityAuditField = true }])
+        };
+        var service = new StandardCrudService(new InMemoryStandardCrudRepository(
+            [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = actor }]), EmptyQueryExecutor(), [], [], [], [], [], [],
+            userDisplayNameDirectory: directory,
+            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")));
+
+        var detail = await service.GetDetailAsync(descriptor, "1");
+        Assert.Equal(expected, detail!.Fields["CreatedBy_DisplayValue"]);
+        Assert.Equal(0, directory.Calls);
+        Assert.Null(await service.GetDetailAsync(descriptor, "missing"));
+        Assert.Equal(0, directory.Calls);
+    }
+
+    [Fact]
     public async Task GetDetailAsync_AppliesTypedTemporalCompanionsWithoutModuleFormatting()
     {
         var repository = new InMemoryStandardCrudRepository(

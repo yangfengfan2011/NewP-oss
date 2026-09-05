@@ -32,6 +32,9 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
         ArgumentNullException.ThrowIfNull(services);
         services.AddPlatformObjectIdGeneration();
         services.AddPlatformQueryKernel();
+        services.AddStandardCrudKernel();
+        services.AddStandardCrudResource(IdentityAccountCrudResource.Create());
+        services.AddScoped<ICP.Platform.Crud.Abstractions.IStandardCrudQueryCustomizer, IdentityAccountCrudResource>();
         services.AddOptions<IdentityCredentialOptions>()
             .Configure<IConfiguration>((options, configuration) =>
             {
@@ -49,6 +52,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IWebHostEnvironment>().EnvironmentName));
         services.AddScoped<IIdentityRepository, EfIdentityRepository>();
         services.AddScoped<IIdentityAccountDirectory, IdentityAccountDirectory>();
+        services.AddScoped<ICP.Platform.Presentation.IUserDisplayNameDirectory, IdentityUserDisplayNameDirectory>();
         services.AddScoped<IIdentityManagementQueryService, IdentityManagementQueryService>();
         services.AddScoped<IPasswordHasher<IdentityAccount>, PasswordHasher<IdentityAccount>>();
         services.AddScoped<ILocalCredentialAuthenticator, LocalCredentialAuthenticator>();

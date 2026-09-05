@@ -7,6 +7,7 @@ using ICP.Platform.Query.Runtime;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Presentation;
+using Microsoft.Extensions.Logging;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -24,6 +25,9 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IEntityAuditStampProvider? _auditStampProvider;
     private readonly ITemporalInputNormalizer? _temporalInputNormalizer;
     private readonly ITemporalDisplayProjectionExecutor? _temporalDisplayProjectionExecutor;
+    private readonly IUserDisplayNameDirectory? _userDisplayNameDirectory;
+    private readonly IRequestPresentationContextAccessor? _presentationContextAccessor;
+    private readonly ILogger<StandardCrudService>? _logger;
 
     /// <summary>
     /// 组合标准 CRUD 的共享读写依赖；可信审计 owner 只在资源声明服务端必填审计字段时使用。
@@ -40,7 +44,10 @@ public sealed class StandardCrudService : IStandardCrudService
         IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null,
         IEntityAuditStampProvider? auditStampProvider = null,
         ITemporalInputNormalizer? temporalInputNormalizer = null,
-        ITemporalDisplayProjectionExecutor? temporalDisplayProjectionExecutor = null)
+        ITemporalDisplayProjectionExecutor? temporalDisplayProjectionExecutor = null,
+        IUserDisplayNameDirectory? userDisplayNameDirectory = null,
+        IRequestPresentationContextAccessor? presentationContextAccessor = null,
+        ILogger<StandardCrudService>? logger = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -55,6 +62,9 @@ public sealed class StandardCrudService : IStandardCrudService
         _auditStampProvider = auditStampProvider;
         _temporalInputNormalizer = temporalInputNormalizer;
         _temporalDisplayProjectionExecutor = temporalDisplayProjectionExecutor;
+        _userDisplayNameDirectory = userDisplayNameDirectory;
+        _presentationContextAccessor = presentationContextAccessor;
+        _logger = logger;
     }
 
     /// <summary>
@@ -69,7 +79,7 @@ public sealed class StandardCrudService : IStandardCrudService
         var conditions = BuildConditions(descriptor, query);
         var queryDescriptor = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor);
         var platformRequest = new PlatformQueryRequest(
-            AddDisplayCompanionFields(query.Fields, StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor)),
+            AddDisplayCompanionFields(query.Fields, StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor, descriptor.FieldSet.ListFields)),
             query.Page,
             query.PageSize,
             query.SortBy,
@@ -158,7 +168,7 @@ public sealed class StandardCrudService : IStandardCrudService
         var fields = await ApplyDisplayValuesToSingleRowAsync(
             descriptor,
             row,
-            StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor),
+            StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor, descriptor.FieldSet.DetailFields),
             cancellationToken);
         var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
         foreach (var key in descriptor.SummaryBlockKeys)
@@ -506,6 +516,7 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var values = rows
             .Select(row => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(row, StringComparer.Ordinal))
             .ToList();
@@ -514,13 +525,23 @@ public sealed class StandardCrudService : IStandardCrudService
             return values;
         }
 
+        if (rows.Any(row => requestedDisplayFields.Any(field => row.ContainsKey(field.Field))))
+        {
+            throw new InvalidOperationException($"DISPLAY_RAW_FIELD_CONFLICT: {descriptor.ResourceKey}");
+        }
+
         var temporalPlans = descriptor.DisplayProjectionPlan?.Fields
             .Where(plan => requestedDisplayFields.Any(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal)))
             .Where(static plan => plan is TemporalFieldDisplayProjectionPlan or CalendarDateFieldDisplayProjectionPlan)
             .ToDictionary(static plan => plan.CompanionField, StringComparer.Ordinal)
             ?? new Dictionary<string, FieldDisplayProjectionPlan>(StringComparer.Ordinal);
+        var auditUserPlans = descriptor.DisplayProjectionPlan?.Fields
+            .OfType<LookupFieldDisplayProjectionPlan>()
+            .Where(plan => plan.IsEntityAuditField && requestedDisplayFields.Any(field => field.Field == plan.CompanionField))
+            .ToArray() ?? [];
         var lookupFields = requestedDisplayFields
             .Where(field => !temporalPlans.ContainsKey(field.Field))
+            .Where(field => !auditUserPlans.Any(plan => plan.CompanionField == field.Field))
             .ToArray();
 
         IStandardCrudDisplayValueResolver? resolver = null;
@@ -555,9 +576,10 @@ public sealed class StandardCrudService : IStandardCrudService
                 $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回行数 {resolvedRows.Count}，预期 {values.Count}。");
         }
 
-        var allowedDisplayFields = requestedDisplayFields
+        var allowedDisplayFields = lookupFields
             .Select(static field => field.Field)
             .ToHashSet(StringComparer.Ordinal);
+        var auditNames = await ResolveAuditNamesAsync(rows, auditUserPlans, cancellationToken);
         for (var index = 0; index < values.Count; index++)
         {
             foreach (var pair in resolvedRows[index])
@@ -598,10 +620,65 @@ public sealed class StandardCrudService : IStandardCrudService
                 };
                 ((Dictionary<string, object?>)values[index])[companionField] = displayValue;
             }
+
+            foreach (var plan in auditUserPlans)
+            {
+                var raw = ReadAuditActor(rows[index], plan.SourceField);
+                var display = raw == SystemEntityAuditStampProvider.SystemActorId
+                    ? (_presentationContextAccessor?.Current?.Locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true ? "系统" : "System")
+                    : raw is null || auditNames is null ? null
+                    : auditNames.TryGetValue(raw, out var name) ? name : raw;
+                ((Dictionary<string, object?>)values[index])[plan.CompanionField] = display;
+            }
         }
 
         return values;
     }
+
+    // 一个读取批次合并两列全部账号；只有非关键目录调用失败可以降级，结构校验留在 catch 外。
+    private async Task<IReadOnlyDictionary<string, string>?> ResolveAuditNamesAsync(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        IReadOnlyList<LookupFieldDisplayProjectionPlan> plans,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var ids = rows.SelectMany(row => plans.Select(plan => ReadAuditActor(row, plan.SourceField)))
+            .Where(id => id is not null && id != SystemEntityAuditStampProvider.SystemActorId)
+            .Cast<string>().ToHashSet(StringComparer.Ordinal);
+        if (ids.Count == 0)
+        {
+            return new Dictionary<string, string>();
+        }
+        IReadOnlyDictionary<string, string> names;
+        try
+        {
+            if (_userDisplayNameDirectory is null)
+            {
+                throw new InvalidOperationException("AUDIT_NAME_DIRECTORY_UNAVAILABLE");
+            }
+            names = await _userDisplayNameDirectory.FindManyAsync(ids, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not UserDisplayNameDirectoryContractException)
+        {
+            _logger?.LogWarning("AUDIT_NAME_DIRECTORY_UNAVAILABLE: {FailureType}", exception.GetType().Name);
+            return null;
+        }
+        if (names is null || names.Any(pair => !ids.Contains(pair.Key) || pair.Value is null))
+        {
+            throw new UserDisplayNameDirectoryContractException();
+        }
+        return names;
+    }
+
+    // 审计 ID 类型是公共契约；不能把结构错误当作名称未命中或字符串转换。
+    private static string? ReadAuditActor(IReadOnlyDictionary<string, object?> row, string field) =>
+        !row.TryGetValue(field, out var value) || value is null ? null
+        : value is string id ? id
+        : throw new InvalidOperationException($"AUDIT_ACTOR_TYPE_INVALID: {field}");
 
     private static void EnsureDisplayResolverImplementation(
         StandardCrudDescriptor descriptor,
@@ -640,7 +717,7 @@ public sealed class StandardCrudService : IStandardCrudService
         var fields = await ApplyDisplayValuesToSingleRowAsync(
             descriptor,
             row,
-            StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor),
+            StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor, descriptor.FieldSet.DetailFields),
             cancellationToken);
         var summaries = new Dictionary<string, StandardCrudSummaryBlock>(StringComparer.Ordinal);
         foreach (var key in descriptor.SummaryBlockKeys)
@@ -752,12 +829,17 @@ public sealed class StandardCrudService : IStandardCrudService
             FieldErrors = [new StandardCrudFieldError(field, code, message)]
         };
 
-    // 规范字段策略是值所有权的唯一来源；阶段型 owner 在过滤未知字段前拒绝越权输入。
+    // Modeling 标记的固定审计字段与规范字段策略共同保持服务端所有权，在过滤未知字段前拒绝越权输入。
     private static StandardCrudError? FindReadOnlyOwnershipFieldError(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values,
         bool isCreate)
     {
+        var auditField = descriptor.DisplayProjectionPlan?.Fields.FirstOrDefault(plan => plan.IsEntityAuditField && values.ContainsKey(plan.SourceField));
+        if (auditField is not null)
+        {
+            return CreateReadOnlyServerOwnedFieldError(auditField.SourceField);
+        }
         var submitted = descriptor.FieldPolicies.FirstOrDefault(policy =>
             (policy.ValueOwner == StandardCrudFieldValueOwner.Server
                 || isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate

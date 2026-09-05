@@ -16,6 +16,10 @@ export interface IdentityAccount {
   createdAt?: string;
   updatedBy?: string;
   updatedAt?: string;
+  CreatedBy_DisplayValue?: string | null;
+  CreatedAt_DisplayValue?: string | null;
+  UpdatedBy_DisplayValue?: string | null;
+  UpdatedAt_DisplayValue?: string | null;
 }
 
 export interface IdentitySecurityEvent {

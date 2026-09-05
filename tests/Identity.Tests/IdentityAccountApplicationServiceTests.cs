@@ -561,6 +561,16 @@ public sealed class IdentityAccountApplicationServiceTests
         Assert.Equal([alice.Account.AccountEid, bob.Account.AccountEid], snapshots.Keys);
         Assert.Equal("Alice", snapshots[alice.Account.AccountEid].ENAME);
         Assert.Equal("Bob", snapshots[bob.Account.AccountEid].ENAME);
+
+        var adapter = new IdentityUserDisplayNameDirectory(directory);
+        var renamed = await fixture.Service.UpdateNameAsync(new UpdateIdentityAccountNameCommand(
+            alice.Account.AccountEid, "Current ENAME", alice.Account.Revision, fixture.Actor));
+        await fixture.Service.SetStatusAsync(new SetIdentityAccountStatusCommand(
+            renamed.AccountEid, IdentityAccountStatus.Disabled, renamed.Revision, "disable", fixture.Actor));
+        var names = await adapter.FindManyAsync([alice.Account.AccountEid, deleted.Account.AccountEid, "User_Missing"]);
+        Assert.Equal("Current ENAME", names[alice.Account.AccountEid]);
+        Assert.DoesNotContain(deleted.Account.AccountEid, names.Keys);
+        Assert.DoesNotContain("User_Missing", names.Keys);
     }
 
     [Fact]

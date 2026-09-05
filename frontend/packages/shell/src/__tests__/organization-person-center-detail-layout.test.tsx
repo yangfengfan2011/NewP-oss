@@ -195,6 +195,10 @@ describe('organization person center detail layout', () => {
             CreatedAt: '2026-04-21T00:00:00Z',
             UpdatedBy: 'editor-2',
             UpdatedAt: '2026-04-23T00:00:00Z',
+            CreatedBy_DisplayValue: '创建账号当前名称',
+            CreatedAt_DisplayValue: '2026/4/21 08:00:00',
+            UpdatedBy_DisplayValue: '更新账号当前名称',
+            UpdatedAt_DisplayValue: '2026/4/23 08:00:00',
           },
           summaries: {
             userBinding: {
@@ -244,10 +248,11 @@ describe('organization person center detail layout', () => {
     expect(container.textContent).toContain('总部');
     expect(container.textContent).not.toContain('company-1');
     expect(container.textContent).toContain('审计信息');
-    expect(container.textContent).toContain('creator-1');
-    expect(container.textContent).toContain('2026-04-21T00:00:00Z');
-    expect(container.textContent).toContain('editor-2');
-    expect(container.textContent).toContain('2026-04-23T00:00:00Z');
+    expect(container.textContent).toContain('创建账号当前名称');
+    expect(container.textContent).toContain('2026/4/21 08:00:00');
+    expect(container.textContent).toContain('更新账号当前名称');
+    expect(container.textContent).toContain('2026/4/23 08:00:00');
+    expect(container.textContent).not.toContain('creator-1');
     await vi.waitFor(() => expect(container.textContent).toContain('账号绑定'));
     expect(container.textContent).toContain('已永久绑定');
     expect(container.textContent).toContain('zhangsan');

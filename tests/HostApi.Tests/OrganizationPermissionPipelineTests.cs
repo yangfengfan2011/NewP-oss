@@ -223,7 +223,7 @@ public sealed class OrganizationPermissionPipelineTests
     }
 
     [Fact]
-    public async Task DepartmentParentLookup_ResolvesCurrentDepartmentAndForwardsPaging()
+    public async Task DepartmentParentLookup_ResolvesCurrentDepartmentAndAllowsExplicitDisabledCandidate()
     {
         var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
@@ -236,21 +236,22 @@ public sealed class OrganizationPermissionPipelineTests
             IsEnabled = true
         };
         scenario.DepartmentDirectory.ParentResult = new OrganizationDirectoryPage<Department>(
-            [new Department { Id = "Department_2", CompanyId = "Company_1", Name = "上级部门", IsEnabled = true }],
+            [new Department { Id = "Department_2", CompanyId = "Company_1", Name = "停用上级", IsEnabled = false }],
             [new Department { Id = "Department_3", CompanyId = "Company_1", Name = "旧上级", IsEnabled = false }],
             2,
             10,
             true);
         using var request = Request(
             HttpMethod.Get,
-            "/api/organization/department-lookups/parents?companyId=Company_1&currentDepartmentCode=D001&keyword=%E4%B8%8A%E7%BA%A7&page=2&pageSize=10&currentValueIds=Department_3",
+            "/api/organization/department-lookups/parents?companyId=Company_1&currentDepartmentCode=D001&keyword=%E4%B8%8A%E7%BA%A7&page=2&pageSize=10&currentValueIds=Department_3&includeDisabled=true",
             "subject");
 
         using var response = await scenario.Client.SendAsync(request);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("上级部门", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
+        Assert.Equal("停用上级（已停用）", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
+        Assert.False(document.RootElement.GetProperty("items")[0].GetProperty("disabled").GetBoolean());
         Assert.Equal("旧上级（已停用）", document.RootElement.GetProperty("currentItems")[0].GetProperty("label").GetString());
         Assert.True(document.RootElement.GetProperty("currentItems")[0].GetProperty("disabled").GetBoolean());
         Assert.Equal("Company_1", scenario.DepartmentDirectory.ParentCompanyId);
@@ -259,6 +260,7 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.Equal(2, scenario.DepartmentDirectory.ParentRequest?.Page);
         Assert.Equal(10, scenario.DepartmentDirectory.ParentRequest?.PageSize);
         Assert.Equal(["Department_3"], scenario.DepartmentDirectory.ParentRequest?.CurrentValueIds);
+        Assert.True(scenario.DepartmentDirectory.ParentRequest?.IncludeDisabled);
     }
 
     [Fact]

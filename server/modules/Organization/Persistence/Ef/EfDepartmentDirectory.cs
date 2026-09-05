@@ -120,55 +120,30 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(companyId);
+        if (string.IsNullOrWhiteSpace(currentDepartmentId))
+        {
+            return await LookupAsync(companyId, request, cancellationToken);
+        }
+
         var (page, pageSize) = NormalizePage(request);
-        if (!string.IsNullOrWhiteSpace(currentDepartmentId))
-        {
-            var hierarchyPage = await _hierarchyQuery.LookupParentCandidatesAsync(
-                companyId,
-                currentDepartmentId,
-                request.Keyword,
-                page,
-                pageSize,
-                request.IncludeDisabled,
-                cancellationToken);
-            var hierarchyCurrentRows = await ReadCurrentRowsAsync(
-                companyId,
-                request.CurrentValueIds,
-                cancellationToken);
-            return new OrganizationDirectoryPage<Department>(
-                hierarchyPage.Items,
-                hierarchyCurrentRows.Select(Map).ToList(),
-                page,
-                pageSize,
-                hierarchyPage.HasMore);
-        }
-
-        var rows = Entities.AsNoTracking()
-            .Where(row => EF.Property<string>(row, "CompanyId") == companyId);
-        if (!request.IncludeDisabled)
-        {
-            rows = rows.Where(row => EF.Property<bool>(row, "IsEnabled"));
-        }
-
-        var keyword = request.Keyword?.Trim();
-        if (!string.IsNullOrEmpty(keyword))
-        {
-            rows = rows.Where(row =>
-                EF.Property<string>(row, "ECODE").Contains(keyword)
-                || EF.Property<string>(row, "ENAME").Contains(keyword));
-        }
-
-        var pageRows = await Order(rows)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize + 1)
-            .ToListAsync(cancellationToken);
-        var currentRows = await ReadCurrentRowsAsync(companyId, request.CurrentValueIds, cancellationToken);
+        var hierarchyPage = await _hierarchyQuery.LookupParentCandidatesAsync(
+            companyId,
+            currentDepartmentId,
+            request.Keyword,
+            page,
+            pageSize,
+            request.IncludeDisabled,
+            cancellationToken);
+        var currentRows = await ReadCurrentRowsAsync(
+            companyId,
+            request.CurrentValueIds,
+            cancellationToken);
         return new OrganizationDirectoryPage<Department>(
-            pageRows.Take(pageSize).Select(Map).ToList(),
+            hierarchyPage.Items,
             currentRows.Select(Map).ToList(),
             page,
             pageSize,
-            pageRows.Count > pageSize);
+            hierarchyPage.HasMore);
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>

@@ -1,7 +1,6 @@
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Modules.Organization.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.Organization.Controllers;
@@ -28,38 +27,9 @@ public sealed class DepartmentCompanyLookupsController(ICompanyDirectory company
         CancellationToken cancellationToken = default)
     {
         var result = await companyDirectory.LookupAsync(
-            new OrganizationDirectoryLookupRequest(
-                keyword,
-                page,
-                pageSize,
-                ParseCurrentValueIds(currentValueIds),
-                includeDisabled),
+            OrganizationLookupHttpProjection.CreateRequest(
+                keyword, page, pageSize, currentValueIds, includeDisabled),
             cancellationToken);
-        return Ok(Map(result, includeDisabled));
+        return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
     }
-
-    private static StandardCrudLookupResult Map(
-        OrganizationDirectoryPage<Company> page,
-        bool allowDisabledSelection) => new(
-        page.Items.Select(item => ToOption(item, allowDisabledSelection)).ToList(),
-        page.CurrentItems.Select(item => ToOption(item, allowDisabledSelection: false)).ToList(),
-        page.Page,
-        page.PageSize,
-        page.HasMore);
-
-    private static StandardCrudOptionItem ToOption(Company company, bool allowDisabledSelection) => new()
-    {
-        Value = company.Id,
-        Label = company.IsEnabled ? company.Name : $"{company.Name}（已停用）",
-        Disabled = !company.IsEnabled && !allowDisabledSelection
-    };
-
-    private static IReadOnlyCollection<string> ParseCurrentValueIds(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(static id => id.Length > 0)
-                .Distinct(StringComparer.Ordinal)
-                .Take(100)
-                .ToArray();
 }

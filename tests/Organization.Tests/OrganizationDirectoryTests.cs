@@ -91,6 +91,38 @@ public sealed class OrganizationDirectoryTests
     }
 
     [Fact]
+    public async Task DepartmentDirectory_ParentLookupWithoutCurrentDepartmentUsesOrdinaryLookupRules()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedDepartmentsAsync(dbContext,
+        [
+            Department("Department_1", "Company_1", "D001", "A研发", enabled: true),
+            Department("Department_2", "Company_1", "D002", "B研发", enabled: true),
+            Department("Department_Disabled", "Company_1", "D003", "旧研发", enabled: false),
+            Department("Department_OtherCompany", "Company_2", "D004", "跨公司研发", enabled: true)
+        ]);
+        var hierarchyQuery = new StubHierarchyQuery(new DepartmentHierarchyCandidatePage([], HasMore: false));
+        var directory = new EfDepartmentDirectory(dbContext, hierarchyQuery);
+        var request = new OrganizationDirectoryLookupRequest(
+            Keyword: "研发",
+            Page: 1,
+            PageSize: 1,
+            CurrentValueIds: ["Department_Disabled", "Department_OtherCompany"]);
+
+        var ordinary = await directory.LookupAsync("Company_1", request);
+        var parent = await directory.LookupParentCandidatesAsync("Company_1", null, request);
+
+        Assert.Equal(ordinary.Items.Select(static item => item.Id), parent.Items.Select(static item => item.Id));
+        Assert.Equal(
+            ordinary.CurrentItems.Select(static item => item.Id),
+            parent.CurrentItems.Select(static item => item.Id));
+        Assert.Equal(ordinary.Page, parent.Page);
+        Assert.Equal(ordinary.PageSize, parent.PageSize);
+        Assert.Equal(ordinary.HasMore, parent.HasMore);
+        Assert.Equal(0, hierarchyQuery.LookupCallCount);
+    }
+
+    [Fact]
     public async Task DirectoriesResolveDistinctBatchesWithoutPerIdReads()
     {
         await using var dbContext = CreateDbContext();
@@ -201,6 +233,8 @@ public sealed class OrganizationDirectoryTests
 
     private sealed class StubHierarchyQuery(DepartmentHierarchyCandidatePage result) : IDepartmentHierarchyQuery
     {
+        public int LookupCallCount { get; private set; }
+
         public Task<DepartmentParentRelationship> ClassifyParentAsync(
             string companyId,
             string currentDepartmentId,
@@ -214,6 +248,10 @@ public sealed class OrganizationDirectoryTests
             int page,
             int pageSize,
             bool includeDisabled,
-            CancellationToken cancellationToken) => Task.FromResult(result);
+            CancellationToken cancellationToken)
+        {
+            LookupCallCount++;
+            return Task.FromResult(result);
+        }
     }
 }

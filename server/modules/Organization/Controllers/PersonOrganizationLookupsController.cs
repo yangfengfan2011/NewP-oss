@@ -1,7 +1,6 @@
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Modules.Organization.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.Organization.Controllers;
@@ -32,17 +31,10 @@ public sealed class PersonOrganizationLookupsController(
         CancellationToken cancellationToken = default)
     {
         var result = await companyDirectory.LookupAsync(
-            new OrganizationDirectoryLookupRequest(
-                keyword,
-                page,
-                pageSize,
-                ParseCurrentValueIds(currentValueIds),
-                includeDisabled),
+            OrganizationLookupHttpProjection.CreateRequest(
+                keyword, page, pageSize, currentValueIds, includeDisabled),
             cancellationToken);
-        return Ok(Map(
-            result,
-            company => ToOption(company.Id, company.Name, company.IsEnabled, includeDisabled),
-            static company => ToOption(company.Id, company.Name, company.IsEnabled)));
+        return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
     }
 
     /// <summary>
@@ -69,50 +61,9 @@ public sealed class PersonOrganizationLookupsController(
 
         var result = await departmentDirectory.LookupAsync(
             companyId,
-            new OrganizationDirectoryLookupRequest(
-                keyword,
-                page,
-                pageSize,
-                ParseCurrentValueIds(currentValueIds),
-                includeDisabled),
+            OrganizationLookupHttpProjection.CreateRequest(
+                keyword, page, pageSize, currentValueIds, includeDisabled),
             cancellationToken);
-        return Ok(Map(
-            result,
-            department => ToOption(department.Id, department.Name, department.IsEnabled, includeDisabled),
-            static department => ToOption(department.Id, department.Name, department.IsEnabled)));
+        return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
     }
-
-    // 把模块目录页收敛为共享 Lookup 响应外形，但不改变共享请求协议。
-    private static StandardCrudLookupResult Map<T>(
-        OrganizationDirectoryPage<T> page,
-        Func<T, StandardCrudOptionItem> mapItem,
-        Func<T, StandardCrudOptionItem> mapCurrentItem) =>
-        new(
-            page.Items.Select(mapItem).ToList(),
-            page.CurrentItems.Select(mapCurrentItem).ToList(),
-            page.Page,
-            page.PageSize,
-            page.HasMore);
-
-    // 当前停用值不可重新选择；显式列表筛选中的停用项仍可用于查询历史归属。
-    private static StandardCrudOptionItem ToOption(
-        string id,
-        string name,
-        bool isEnabled,
-        bool allowDisabledSelection = false) => new()
-    {
-        Value = id,
-        Label = isEnabled ? name : $"{name}（已停用）",
-        Disabled = !isEnabled && !allowDisabledSelection
-    };
-
-    // 前端按共享约定发送逗号分隔标识；模块边界负责去空白、去重与数量上限。
-    private static IReadOnlyCollection<string> ParseCurrentValueIds(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(static id => id.Length > 0)
-                .Distinct(StringComparer.Ordinal)
-                .Take(100)
-                .ToArray();
 }

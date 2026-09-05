@@ -1,7 +1,6 @@
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Modules.Organization.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.Organization.Controllers;
@@ -50,14 +49,10 @@ public sealed class DepartmentHierarchyLookupsController(
             var result = await hierarchyDirectory.LookupParentCandidatesAsync(
                 companyId,
                 current?.Id,
-                new OrganizationDirectoryLookupRequest(
-                    keyword,
-                    page,
-                    pageSize,
-                    ParseCurrentValueIds(currentValueIds),
-                    includeDisabled),
+                OrganizationLookupHttpProjection.CreateRequest(
+                    keyword, page, pageSize, currentValueIds, includeDisabled),
                 cancellationToken);
-            return Ok(Map(result, includeDisabled));
+            return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
         }
         catch (DepartmentHierarchyCorruptedException exception)
         {
@@ -71,32 +66,4 @@ public sealed class DepartmentHierarchyLookupsController(
             return Conflict(problem);
         }
     }
-
-    // Lookup HTTP 外形保持与模块现有分页 provider 一致，但筛选上下文不进入共享协议。
-    private static StandardCrudLookupResult Map(
-        OrganizationDirectoryPage<Department> page,
-        bool allowDisabledSelection) => new(
-        page.Items.Select(item => ToOption(item, allowDisabledSelection)).ToList(),
-        page.CurrentItems.Select(item => ToOption(item, allowDisabledSelection: false)).ToList(),
-        page.Page,
-        page.PageSize,
-        page.HasMore);
-
-    // 停用当前值带稳定标记并禁止重新选择；列表筛选可以显式包含停用项。
-    private static StandardCrudOptionItem ToOption(Department department, bool allowDisabledSelection) => new()
-    {
-        Value = department.Id,
-        Label = department.IsEnabled ? department.Name : $"{department.Name}（已停用）",
-        Disabled = !department.IsEnabled && !allowDisabledSelection
-    };
-
-    // 当前值标识在模块 HTTP 边界去空白、去重并限制到一百个。
-    private static IReadOnlyCollection<string> ParseCurrentValueIds(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(static id => id.Length > 0)
-                .Distinct(StringComparer.Ordinal)
-                .Take(100)
-                .ToArray();
 }

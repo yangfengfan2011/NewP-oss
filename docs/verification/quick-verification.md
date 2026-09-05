@@ -15,6 +15,21 @@ dotnet run --project .\server\tools\model-dto-sync\ModelDtoSync.csproj --no-rest
 dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 ```
 
+### Child 完成证据
+
+采用父子 Issue 交付时，开始每个 child 前把验收条件对应到实际消费路径和最低层验证。先复用现有测试；只为本次改变且尚未覆盖的行为补回归。按改动选择下表适用项，不把整表变成每张票的固定检查清单。
+
+| 本次改动 | 关闭前需要的定向证据 |
+| --- | --- |
+| Model、View、Form 元数据 | 真实 authoring 经正式编译器生成可用 schema；列表字段引用有效；create/edit payload 正确处理服务端字段。 |
+| Lookup、权限或错误契约 | 通过实际端点及权限流水线验证最小所需权限、分页和当前值；校验错误断言 Problem Details 的具体字段。 |
+| Display | 通过正式 planner/descriptor 触发 resolver，并核对最终响应中的 canonical companion 与批量解析行为。 |
+| 前端 | 所属 workspace 包的定向测试和类型检查通过；从输出确认测试根目录、目标文件和实际检查范围。命令以该包脚本为准。 |
+| 模型或迁移输入 | 运行实际依赖这些输入的迁移与历史 fixture 定向检查。历史 fixture 使用完整冻结的历史 authoring 输入，经正式投影验证固定 digest，与当前模型演进隔离。 |
+| 层级、批量或分页查询 | 以代表性数据验证数据库往返次数、应用读取规模及数据库侧分页；复杂查询按风险核对执行计划和耗时。固定查询次数与有界返回量不能单独证明数据库计算成本有界；业务容量限制必须来自已确认规格。 |
+
+协调者关闭 child 前核对验收条件、范围提交和上述适用证据；测试通过数量不能替代正式调用链的证明。提交与 Issue 写入沿用本次任务授权。缺失的适用验证要明确记录原因和复跑命令，尚未证明的完成判据不能标记通过。后续返修继续由原 owner 负责，并在原 child 补充纠正提交、验证结果及被替代的证据，父 Issue 汇总最终候选。
+
 ### Migration manifest authoring 与只读检查
 
 功能 migration child 在自己的真实模块范围内显式完成 `finalize` 与定向 `check`。`finalize` 是唯一允许写回 manifest 派生字段的 authoring 动作；普通 build、测试发现和 `check` 都不得代替或隐式触发它。先生成确定性的 Release migration DLL，再 finalize 新尾节点，随后刷新 Host Release 副本并执行只读检查：
@@ -52,23 +67,39 @@ observer 按 Acceptance 相同顺序读取 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONN
 
 child 的可复跑证据固定记录以下字段，不把一次性临时目录或结果另建成长期事实源：候选 commit，module/provider/migration/compatibility，隔离副本来源，migration 与 Host Release build 命令及 exit code，两次 finalize 的输出和 manifest SHA-256，check 的各 provider 汇总、bundle 数与 exit code，Git HEAD/index/status/tracked-content 摘要，manifest/Release 资产摘要，以及只读数据库 observer 的连接来源、数据库数、日志前沿摘要、history 表数/行数/内容摘要。功能 child 只运行这组定向证据；全部 child 与审查修复完成后，父 Issue 才在冻结候选上运行一次下文的仓库完整验证。
 
-### Acceptance Gate-only 所有权
+### Acceptance Gate-only 所有权与首次集成
 
-父 Issue 需要新增或改变某个 Acceptance Gate 时，child 划分必须指定恰好一个“验收资产所有者”，并在该 child 的验收标准中写清它所拥有的用户旅程。该 child 负责交付第一版可运行的 runner、fixture 与结构测试；定向测试通过并形成精确提交后，在候选不再编辑的条件下串行执行：
+父 Issue 需要新增或改变某个 Acceptance Gate 时，child 划分必须指定恰好一个验收资产所有者，并写清所拥有的用户旅程。没有适用 Gate 时跳过，不为遵循流程新增 Gate。
+
+资产 owner 随首个真实功能 child 提前参与，将第一版可运行 runner、fixture 与必要的低层测试接入该切片。先贯通真实 authoring、runtime 页面挂载和一次写入成功，再扩展同类资源；使用真实业务模块。既有 Gate 随功能逐步扩展，最终验收 child 负责完整旅程收口，不能把首次集成留到最后。实施继续遵守原生依赖和本次任务的顺序约定。
+
+浏览器只证明用户路径可走通，数据语义在低层验证。首次运行前复用现有失败诊断，确保能定位当前路由、页面错误、失败请求及脱敏响应正文；超时是症状，只有证据确认后才报告根因。仍缺失的诊断由资产 owner 在其范围内补齐。
+
+定向测试通过并形成精确提交后，在候选不再编辑的条件下，由同一资产 owner 串行执行：
 
 ```powershell
 .\scripts\accept.ps1 -Gate <Gate>
 ```
 
-Gate-only 通过并记录提交、命令、结果与耗时后，该 child 才能关闭；失败若导致代码变化，则对新提交重跑。它是 child 的开发证据，不代替父 Issue 的正式验证。其他 child 只有在改动命中该用户旅程时才复跑同一个 Gate；未命中时只跑自己的最低层定向测试，不能为了“保险”重复跑 Gate 或全量验证。父级审查修复若改变该旅程，也先用同一 Gate-only 收敛。
+首个切片通过后再扩展同类资源；完整约定旅程 Gate-only 通过并记录提交、命令、结果与耗时后，验收资产 child 才能关闭。其他 child 只有在改动命中该用户旅程时才由同一 owner 复跑该 Gate；未命中时只跑自己的最低层定向测试。失败后先定位原因、完成修复和定向验证，再对新候选复跑；不能通过放宽断言掩盖产品缺陷。父级审查修复按下一节先复核再运行 Gate。
 
-全部 child 和审查修复完成后冻结候选，父 Issue 只运行一次正式入口：
+### 父级收尾
+
+采用父子 Issue 交付且任务已要求父级完整双轴审查时，child 只执行适用的定向验证与 Gate-only，完整审查和仓库完整验证在父级执行：
+
+1. 全部 child 完成后，以执行前 baseline 为 fixed point、当前已提交候选为终点，按任务要求执行一次 Standards + Spec 双轴审查。
+2. 由原 owner 修复本次引入且有稳定证据的阻塞 finding，并运行对应最低层验证；阻塞级别以本次任务约定为准。
+3. 先聚焦复核原 finding、修复差异和剩余 Spec 遗漏，尤其核对修复是否引入未经规格允许的权限、容量或行为限制。发现阻塞项则回到上一步，不重新开展完整双轴审查。
+4. 聚焦复核通过后，由唯一资产 owner 运行受影响的 Gate-only。若失败需要修改候选，对修复执行定向验证与聚焦复核，再复跑受影响 Gate；有效且未受影响的 Gate 证据保留。
+5. 阻塞项清零且适用 Gate-only 通过后，冻结最终已提交候选，运行一次仓库完整验证，包含父 Issue 要求的全部 Gate：
 
 ```powershell
 .\scripts\verify.ps1 -AcceptanceGate <Gate>
 ```
 
-因此，Gate 资产由一个 child 持有，影响范围决定其他 child 是否复跑，最终通过结论始终由父 Issue 的冻结候选验证持有。
+没有适用 Gate 时运行 `scripts/verify.ps1`。只有候选代码变化，或前次运行因已确认且已排除的环境或基础设施问题而无效时才重新运行；失败先读取原始诊断并完成对应修复与定向验证。通过后核对候选归属，按授权回写证据和关闭父 Issue。
+
+交付提示词引用本页，任务中只补充范围、baseline、适用 Gate、owner 和授权差异。下一次交付在父 Issue 收尾评论中简记 child 关闭后返修次数、Gate 才首次发现的低层缺陷数，以及因可提前发现的问题造成的 Gate 重跑次数，用于判断调整是否有效；不另建长期流水文档。
 
 ## 全量验证
 

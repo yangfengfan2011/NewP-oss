@@ -78,18 +78,6 @@
             "required": true
           }
         }
-      },
-      {
-        "name": "UpdatedAt",
-        "uiType": "dateTime",
-        "form": {
-          "create": {
-            "mode": "hidden"
-          },
-          "edit": {
-            "mode": "hidden"
-          }
-        }
       }
     ],
     "indexes": [

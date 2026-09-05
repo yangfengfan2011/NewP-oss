@@ -79,6 +79,9 @@ public sealed class HostPluginRuntimeProjection : IPluginRuntimeProjection
         _installRoot = installRoot;
     }
 
+    /// <inheritdoc/>
+    public void Validate(CanonicalModulePlan plan) => _materializer.ValidateModelMetadata(plan);
+
     public IPluginRuntimeStage Stage(CanonicalModulePlan plan) =>
         new StageAdapter(_materializer.Stage(_installRoot, plan));
 

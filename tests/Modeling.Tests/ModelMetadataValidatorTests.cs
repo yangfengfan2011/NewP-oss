@@ -7,6 +7,62 @@ namespace ICP.Platform.Modeling.Tests;
 public class ModelMetadataValidatorTests
 {
     [Fact]
+    public void Validate_RejectsEditableServerOwnedAuditFieldWithExactLocation()
+    {
+        var document = DocumentWithFields(new ModelMetadataField
+        {
+            Name = "UpdatedAt",
+            Form = new ModelMetadataFormSection
+            {
+                Edit = new ModelMetadataFormModeRule { Mode = "editable" }
+            }
+        });
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ModelMetadataValidator().Validate(document));
+
+        Assert.Contains("Organization", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Person", error.Message, StringComparison.Ordinal);
+        Assert.Contains("UpdatedAt", error.Message, StringComparison.Ordinal);
+        Assert.Contains("edit", error.Message, StringComparison.Ordinal);
+        Assert.Contains("editable", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("EID")]
+    [InlineData("LID")]
+    public void Validate_AllowsEditableExplicitPrimaryKey(string fieldName)
+    {
+        var kind = fieldName == "EID" ? "Entity" : "Link";
+        var document = new ModelMetadataDocument
+        {
+            SchemaVersion = "1.0",
+            ModuleId = "Example",
+            Model = new ModelMetadataModel
+            {
+                Name = "ExplicitKey",
+                Kind = kind,
+                LinkedTypes = kind == "Link"
+                    ? [new ModelMetadataLinkedType { Parent = "Parent", Child = "Child" }]
+                    : [],
+                Fields =
+                [
+                    new ModelMetadataField
+                    {
+                        Name = fieldName,
+                        Form = new ModelMetadataFormSection
+                        {
+                            Create = new ModelMetadataFormModeRule { Mode = "editable" },
+                            Edit = new ModelMetadataFormModeRule { Mode = "editable" }
+                        }
+                    }
+                ]
+            }
+        };
+
+        new ModelMetadataValidator().Validate(document);
+    }
+
+    [Fact]
     public void Validate_ThrowsWhenBuiltinFieldDoesNotMatchKind()
     {
         var document = new ModelMetadataDocument

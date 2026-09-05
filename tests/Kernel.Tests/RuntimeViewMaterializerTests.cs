@@ -1,7 +1,10 @@
 using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Modeling.Projection;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -14,6 +17,194 @@ public class RuntimeViewMaterializerTests : IDisposable
     public RuntimeViewMaterializerTests()
     {
         _testData = new UnifiedPluginPackageTestData();
+    }
+
+    [Fact]
+    public void ValidateAndMaterialize_ProjectEveryRuntimeModelWithoutChangingAuthoringOrPlan()
+    {
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Organization");
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Organization");
+        var metadataRoot = Path.Combine(
+            installRoot,
+            "packages",
+            "Organization",
+            "1.0.0",
+            "modules",
+            "Organization",
+            "metadata");
+        var modelsRoot = Path.Combine(metadataRoot, "models");
+        Directory.CreateDirectory(modelsRoot);
+        var companyPath = WriteModel(modelsRoot, "Company");
+        var departmentPath = WriteModel(modelsRoot, "Department");
+        var authoringCompany = File.ReadAllBytes(companyPath);
+        var authoringDepartment = File.ReadAllBytes(departmentPath);
+        var settingsPath = Path.Combine(metadataRoot, "settings", "Organization.settings.json");
+        var authoringSettings = File.ReadAllBytes(settingsPath);
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var baselinePlan = new RuntimeViewMaterializer(stateStore).Materialize(installRoot);
+        var projectedPaths = new List<string>();
+        var materializer = new RuntimeViewMaterializer(
+            stateStore,
+            new FrontendRuntimeManifestBuilder(),
+            builtInModuleSource: null,
+            (bytes, sourcePath) =>
+            {
+                projectedPaths.Add(Path.GetFileName(sourcePath));
+                var json = Encoding.UTF8.GetString(bytes.Span);
+                return Encoding.UTF8.GetBytes(json.Replace(
+                    "\"kind\": \"Entity\"",
+                    "\"kind\": \"Entity\", \"runtimeProjected\": true",
+                    StringComparison.Ordinal));
+            });
+
+        projectedPaths.Clear();
+        materializer.ValidateModelMetadata(baselinePlan);
+        Assert.Equal(["Company.model.json", "Department.model.json"], projectedPaths);
+
+        projectedPaths.Clear();
+        var projectedPlan = materializer.Materialize(installRoot);
+
+        Assert.Equal(["Company.model.json", "Department.model.json"], projectedPaths);
+        Assert.Equal(baselinePlan.PlanHash, projectedPlan.PlanHash);
+        Assert.Equal(baselinePlan.CanonicalBytes, projectedPlan.CanonicalBytes);
+        Assert.Equal(authoringCompany, File.ReadAllBytes(companyPath));
+        Assert.Equal(authoringDepartment, File.ReadAllBytes(departmentPath));
+        Assert.Equal(authoringSettings, File.ReadAllBytes(settingsPath));
+        Assert.Contains(
+            "\"runtimeProjected\": true",
+            File.ReadAllText(Path.Combine(installRoot, "runtime", "modules", "Organization", "metadata", "models", "Company.model.json")),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Materialize_WhenModelProjectionFails_PreservesActiveRuntimeAndRemovesStaging()
+    {
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Organization");
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Organization");
+        var modelsRoot = Path.Combine(
+            installRoot,
+            "packages",
+            "Organization",
+            "1.0.0",
+            "modules",
+            "Organization",
+            "metadata",
+            "models");
+        Directory.CreateDirectory(modelsRoot);
+        WriteModel(modelsRoot, "Company");
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        new RuntimeViewMaterializer(stateStore).Materialize(installRoot);
+        var runtimeModelPath = Path.Combine(
+            installRoot,
+            "runtime",
+            "modules",
+            "Organization",
+            "metadata",
+            "models",
+            "Company.model.json");
+        var previousRuntime = File.ReadAllBytes(runtimeModelPath);
+        var materializer = new RuntimeViewMaterializer(
+            stateStore,
+            new FrontendRuntimeManifestBuilder(),
+            builtInModuleSource: null,
+            (_, _) => throw new InvalidOperationException("model projection failed"));
+
+        var error = Assert.Throws<InvalidOperationException>(() => materializer.Materialize(installRoot));
+
+        Assert.Contains("model projection failed", error.Message, StringComparison.Ordinal);
+        Assert.Equal(previousRuntime, File.ReadAllBytes(runtimeModelPath));
+        Assert.Empty(Directory.EnumerateDirectories(installRoot, ".materialize-staging-*"));
+    }
+
+    [Fact]
+    public void Materialize_RealOrganizationModels_ProduceSharedCanonicalRuntimeContracts()
+    {
+        var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Organization");
+        var installRoot = CreateInstallRoot();
+        EnableInstalledPackage(packageRoot, installRoot, "Organization");
+        var installedModelsRoot = Path.Combine(
+            installRoot,
+            "packages",
+            "Organization",
+            "1.0.0",
+            "modules",
+            "Organization",
+            "metadata",
+            "models");
+        Directory.CreateDirectory(installedModelsRoot);
+        var repositoryModelsRoot = Path.Combine(FindRepositoryRoot(), "modules", "Organization", "metadata", "models");
+        var companyAuthoringPath = WriteModelWithoutField(repositoryModelsRoot, installedModelsRoot, "Company", "UpdatedAt");
+        var departmentAuthoringPath = WriteModelWithoutField(repositoryModelsRoot, installedModelsRoot, "Department", "UpdatedAt");
+        var personAuthoringPath = CopyModel(repositoryModelsRoot, installedModelsRoot, "Person");
+        var companyAuthoring = File.ReadAllBytes(companyAuthoringPath);
+        var departmentAuthoring = File.ReadAllBytes(departmentAuthoringPath);
+        var personAuthoring = File.ReadAllBytes(personAuthoringPath);
+        var stateStore = new InstalledPluginStateStore(installRoot);
+
+        var unprojectedPlan = new RuntimeViewMaterializer(stateStore).Materialize(installRoot);
+        var unprojectedCompanyPath = RuntimeModelPath(installRoot, "Company");
+        var unprojectedDepartmentPath = RuntimeModelPath(installRoot, "Department");
+        var unprojectedPersonPath = RuntimeModelPath(installRoot, "Person");
+        Assert.False(HasField(unprojectedCompanyPath, "Company", "UpdatedAt"));
+        Assert.False(HasField(unprojectedDepartmentPath, "Department", "UpdatedAt"));
+
+        var projector = new ModelRuntimeMetadataProjector();
+        var projectedPlan = new RuntimeViewMaterializer(
+            stateStore,
+            new FrontendRuntimeManifestBuilder(),
+            builtInModuleSource: null,
+            projector.Project).Materialize(installRoot);
+
+        var expectedContractPath = Path.Combine(
+            FindRepositoryRoot(),
+            "tests",
+            "Kernel.Tests",
+            "Fixtures",
+            "OrganizationRuntimeModels.contract.json");
+        var expectedContracts = JsonNode.Parse(File.ReadAllBytes(expectedContractPath))!.AsObject();
+        Assert.True(JsonNode.DeepEquals(expectedContracts["company"], JsonNode.Parse(File.ReadAllBytes(unprojectedCompanyPath))));
+        Assert.True(JsonNode.DeepEquals(expectedContracts["department"], JsonNode.Parse(File.ReadAllBytes(unprojectedDepartmentPath))));
+        Assert.True(JsonNode.DeepEquals(expectedContracts["person"], JsonNode.Parse(File.ReadAllBytes(unprojectedPersonPath))));
+        Assert.Equal("hidden", ReadMode(unprojectedCompanyPath, "Company", "UpdatedAt", "create"));
+        Assert.Equal("hidden", ReadMode(unprojectedCompanyPath, "Company", "UpdatedAt", "edit"));
+        Assert.Equal("hidden", ReadMode(unprojectedDepartmentPath, "Department", "UpdatedAt", "create"));
+        Assert.Equal("hidden", ReadMode(unprojectedDepartmentPath, "Department", "UpdatedAt", "edit"));
+        Assert.Equal("hidden", ReadMode(unprojectedCompanyPath, "Company", "IsEnabled", "create"));
+        Assert.Equal("editable", ReadMode(unprojectedCompanyPath, "Company", "IsEnabled", "edit"));
+        Assert.Equal("hidden", ReadMode(unprojectedDepartmentPath, "Department", "IsEnabled", "create"));
+        Assert.Equal("editable", ReadMode(unprojectedDepartmentPath, "Department", "IsEnabled", "edit"));
+        Assert.Equal(companyAuthoring, File.ReadAllBytes(companyAuthoringPath));
+        Assert.Equal(departmentAuthoring, File.ReadAllBytes(departmentAuthoringPath));
+        Assert.Equal(personAuthoring, File.ReadAllBytes(personAuthoringPath));
+        Assert.Equal(unprojectedPlan.PlanHash, projectedPlan.PlanHash);
+        Assert.Equal(unprojectedPlan.CanonicalBytes, projectedPlan.CanonicalBytes);
+    }
+
+    [Fact]
+    public void Project_RealIdentityAccount_ProducesSharedCanonicalRuntimeContract()
+    {
+        var sourcePath = Path.Combine(
+            FindRepositoryRoot(),
+            "modules",
+            "Identity",
+            "metadata",
+            "models",
+            "IdentityAccount.model.json");
+        var authoring = File.ReadAllBytes(sourcePath);
+
+        var runtimeBytes = new ModelRuntimeMetadataProjector().Project(authoring, sourcePath);
+
+        var contractPath = Path.Combine(
+            FindRepositoryRoot(),
+            "tests",
+            "Kernel.Tests",
+            "Fixtures",
+            "IdentityRuntimeModels.contract.json");
+        var expected = JsonNode.Parse(File.ReadAllBytes(contractPath))!.AsObject();
+        Assert.True(JsonNode.DeepEquals(expected["identityAccount"], JsonNode.Parse(runtimeBytes)));
+        Assert.Equal(File.ReadAllBytes(sourcePath), authoring);
     }
 
     [Fact]
@@ -607,6 +798,93 @@ public class RuntimeViewMaterializerTests : IDisposable
                     Directory.Move(source, destination);
                 })
             ]);
+    }
+
+    private static string WriteModel(string modelsRoot, string modelName)
+    {
+        var path = Path.Combine(modelsRoot, $"{modelName}.model.json");
+        File.WriteAllText(
+            path,
+            $$"""
+            {
+              "schemaVersion": "1.0",
+              "type": "model",
+              "{{modelName}}": {
+                "kind": "Entity",
+                "fields": []
+              }
+            }
+            """);
+        return path;
+    }
+
+    private static string WriteModelWithoutField(
+        string sourceModelsRoot,
+        string targetModelsRoot,
+        string modelName,
+        string fieldName)
+    {
+        var sourcePath = Path.Combine(sourceModelsRoot, $"{modelName}.model.json");
+        var root = JsonNode.Parse(File.ReadAllBytes(sourcePath))!.AsObject();
+        var fields = root[modelName]!["fields"]!.AsArray();
+        var field = fields
+            .Select(static node => node!.AsObject())
+            .SingleOrDefault(candidate => candidate["name"]!.GetValue<string>() == fieldName);
+        if (field is not null)
+        {
+            fields.Remove(field);
+        }
+        var targetPath = Path.Combine(targetModelsRoot, $"{modelName}.model.json");
+        File.WriteAllText(
+            targetPath,
+            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        return targetPath;
+    }
+
+    private static string CopyModel(string sourceModelsRoot, string targetModelsRoot, string modelName)
+    {
+        var targetPath = Path.Combine(targetModelsRoot, $"{modelName}.model.json");
+        File.Copy(Path.Combine(sourceModelsRoot, $"{modelName}.model.json"), targetPath);
+        return targetPath;
+    }
+
+    private static bool HasField(string path, string modelName, string fieldName)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+        return document.RootElement
+            .GetProperty(modelName)
+            .GetProperty("fields")
+            .EnumerateArray()
+            .Any(candidate => candidate.GetProperty("name").GetString() == fieldName);
+    }
+
+    private static string RuntimeModelPath(string installRoot, string modelName) =>
+        Path.Combine(
+            installRoot,
+            "runtime",
+            "modules",
+            "Organization",
+            "metadata",
+            "models",
+            $"{modelName}.model.json");
+
+    private static string? ReadMode(
+        string path,
+        string modelName,
+        string fieldName,
+        string scenario)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+        var field = document.RootElement
+            .GetProperty(modelName)
+            .GetProperty("fields")
+            .EnumerateArray()
+            .Single(candidate => candidate.GetProperty("name").GetString() == fieldName);
+        return field.TryGetProperty("form", out var form)
+            && form.TryGetProperty(scenario, out var rule)
+            && rule.TryGetProperty("mode", out var mode)
+            ? mode.GetString()
+            : null;
     }
 
     private string CreatePackageWithLocalizationMetadata(bool includeEnglishTranslation = true)

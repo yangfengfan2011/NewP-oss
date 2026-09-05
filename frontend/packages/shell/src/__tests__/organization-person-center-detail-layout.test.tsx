@@ -8,7 +8,7 @@ import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonDetailPage from '../../../../modules/organization/src/pages/PersonDetailPage';
 import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
-import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
@@ -107,7 +107,7 @@ describe('organization person center detail layout', () => {
                   manifest: { modules: [] },
                   navDocuments: [],
                   viewDocuments: [personDetailViewDocument],
-                  modelDocuments: [personModelDocument],
+                  modelDocuments: [organizationRuntimeModels.person],
                 }}
               >
                 <StandardCrudDetailPageHost viewKey="organization.person.detail" id="person-1" registration={registration} />
@@ -163,7 +163,7 @@ describe('organization person center detail layout', () => {
       },
     ]);
 
-    const fields = personModelDocument.Person.fields as Array<Record<string, unknown>>;
+    const fields = organizationRuntimeModels.person.Person.fields as Array<Record<string, unknown>>;
     expect(fields.every((field) => !Object.prototype.hasOwnProperty.call(field, 'view'))).toBe(true);
     expect(fields.every((field) => !Object.prototype.hasOwnProperty.call(field.form ?? {}, 'view'))).toBe(true);
     expect(fields.find((field) => field.name === 'PersonNo')?.form).toMatchObject({

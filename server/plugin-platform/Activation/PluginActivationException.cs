@@ -6,6 +6,7 @@ public static class PluginActivationFailureCodes
 {
     public const string PackagePreflightFailed = "PLUGIN_ACTIVATION_PREFLIGHT_FAILED";
     public const string ModulePlanFailed = "PLUGIN_ACTIVATION_MODULE_PLAN_FAILED";
+    public const string RuntimeMetadataValidationFailed = "PLUGIN_ACTIVATION_RUNTIME_METADATA_VALIDATION_FAILED";
     public const string PermissionCatalogFailed = "PLUGIN_ACTIVATION_PERMISSION_CATALOG_FAILED";
     public const string PersistencePlanFailed = "PLUGIN_ACTIVATION_PERSISTENCE_PLAN_FAILED";
     public const string MigrationFailed = "PLUGIN_ACTIVATION_MIGRATION_FAILED";

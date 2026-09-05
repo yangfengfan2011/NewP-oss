@@ -28,7 +28,7 @@ public sealed class PluginActivationGateTests : IDisposable
         using var session = gate.Prepare(inventory);
 
         Assert.Equal(
-            ["preflight", "module-plan", "permission-catalog", "persistence-plan"],
+            ["preflight", "module-plan", "runtime-metadata-validation", "permission-catalog", "persistence-plan"],
             events);
         Assert.Equal("1.0.0", Assert.Single(manager.Resolve(inventory).ActiveSnapshot!.Modules).Version);
         Assert.Equal("legacy-active", projection.ActiveSnapshotId);
@@ -41,6 +41,7 @@ public sealed class PluginActivationGateTests : IDisposable
             [
                 "preflight",
                 "module-plan",
+                "runtime-metadata-validation",
                 "permission-catalog",
                 "persistence-plan",
                 "migration",
@@ -55,6 +56,25 @@ public sealed class PluginActivationGateTests : IDisposable
         Assert.Equal("1.1.0", Assert.Single(state.ActiveSnapshot.Modules).Version);
         Assert.StartsWith("legacy-", state.LastKnownGoodSnapshot!.SnapshotId, StringComparison.Ordinal);
         Assert.Equal("snapshot-1-1", projection.ActiveSnapshotId);
+    }
+
+    [Fact]
+    public void Prepare_WhenRuntimeMetadataValidationFails_StopsBeforeOtherCandidateWork()
+    {
+        var events = new List<string>();
+        var manager = CreateManager();
+        var inventory = CreateInventory();
+        var plan = CreateModulePlan("snapshot-1-1", "1.1.0");
+        var persistencePlan = CreatePersistencePlan(plan);
+        var projection = new RecordingProjection(events, "legacy-active", failValidation: true);
+        var gate = CreateGate(events, manager, plan, persistencePlan, projection);
+
+        var error = Assert.Throws<PluginActivationException>(() => gate.Prepare(inventory));
+
+        Assert.Equal(PluginActivationFailureCodes.RuntimeMetadataValidationFailed, error.FailureCode);
+        Assert.False(error.DatabaseAhead);
+        Assert.Equal(["preflight", "module-plan", "runtime-metadata-validation"], events);
+        Assert.Equal("legacy-active", projection.ActiveSnapshotId);
     }
 
     [Fact]
@@ -115,7 +135,14 @@ public sealed class PluginActivationGateTests : IDisposable
         Assert.Equal(PersistenceConsistencyFailureCodes.SchemaTargetMismatch, error.FailureCode);
         Assert.True(error.DatabaseAhead);
         Assert.Equal(
-            ["preflight", "module-plan", "permission-catalog", "persistence-plan", "migration"],
+            [
+                "preflight",
+                "module-plan",
+                "runtime-metadata-validation",
+                "permission-catalog",
+                "persistence-plan",
+                "migration"
+            ],
             events);
         Assert.Equal("1.0.0", Assert.Single(manager.Resolve(inventory).ActiveSnapshot!.Modules).Version);
         Assert.Equal("legacy-active", projection.ActiveSnapshotId);
@@ -306,9 +333,19 @@ public sealed class PluginActivationGateTests : IDisposable
 
     private sealed class RecordingProjection(
         List<string> events,
-        string activeSnapshotId) : IPluginRuntimeProjection
+        string activeSnapshotId,
+        bool failValidation = false) : IPluginRuntimeProjection
     {
         public string ActiveSnapshotId { get; private set; } = activeSnapshotId;
+
+        public void Validate(CanonicalModulePlan plan)
+        {
+            events.Add("runtime-metadata-validation");
+            if (failValidation)
+            {
+                throw new InvalidOperationException("runtime metadata invalid");
+            }
+        }
 
         public IPluginRuntimeStage Stage(CanonicalModulePlan plan)
         {

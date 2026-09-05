@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
+import standardDataRuntimeModelDocument from '../../../../../tests/Kernel.Tests/Fixtures/StandardDataRuntimeModel.contract.json';
 import { resolveDetailViewDocument, resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import {
   buildStandardCrudListSchema,
@@ -59,6 +60,53 @@ describe('standard CRUD schema resolver and registry', () => {
 
     expect(schema.columnSource).toBe('metadata');
     expect(schema.columns).toHaveLength(1);
+  });
+
+  it('resolves standard-data list and detail fields from its projected runtime model catalog', () => {
+    const registration = {
+      ...personRegistration,
+      resourceKey: 'partner.asset',
+      listViewKey: 'partner.asset.list',
+      detailViewKey: 'partner.asset.detail',
+    };
+    const runtimeMetadata = { modelDocuments: [standardDataRuntimeModelDocument] };
+    const list = buildStandardCrudListSchema(
+      {
+        key: 'partner.asset.list',
+        mode: 'list',
+        model: 'Asset',
+        columns: [
+          { key: 'id', labelKey: 'Field_EID', source: 'model', field: 'EID' },
+          { key: 'createdAt', labelKey: 'Field_CreatedAt', source: 'model', field: 'CreatedAt' },
+          { key: 'name', labelKey: 'Field_Name', source: 'model', field: 'Name' },
+        ],
+      },
+      registration,
+      runtimeMetadata,
+    );
+    const detail = resolveStandardCrudDetailSchema(
+      [{
+        type: 'view',
+        view: {
+          key: 'partner.asset.detail',
+          mode: 'detail',
+          model: 'Asset',
+          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['EID', 'CreatedAt', 'Name'] }],
+        },
+      }],
+      registration,
+      runtimeMetadata,
+    );
+
+    expect(list.columns.map((column) => column.field)).toEqual(['EID', 'CreatedAt', 'Name']);
+    expect(detail.sections[0]?.fields).toEqual([
+      { key: 'EID', labelKey: 'Field_EID', rendererKey: 'standard.text', rendererSource: 'standard' },
+      { key: 'CreatedAt', labelKey: 'Field_CreatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
+      { key: 'Name', labelKey: 'Field_Name', rendererKey: 'standard.text', rendererSource: 'standard' },
+    ]);
+    expect(detail.fieldCatalog.map((field) => field.key)).toEqual(
+      standardDataRuntimeModelDocument.Asset.fields.map((field) => field.name),
+    );
   });
 
   it.each([
@@ -142,11 +190,17 @@ describe('standard CRUD schema resolver and registry', () => {
           type: 'model',
           Person: {
             kind: 'Entity',
-            builtinFields: ['ENAME', 'ECODE'],
             fields: [
               { name: 'PersonNo', storage: { type: 'string' } },
               { name: 'CompanyId', uiType: 'lookup' },
               { name: 'Revision', storage: { type: 'number' } },
+              { name: 'EID', storage: { type: 'guid', nullable: false }, uiType: 'text' },
+              { name: 'CreatedBy', storage: { type: 'string', nullable: false }, uiType: 'text' },
+              { name: 'CreatedAt', storage: { type: 'datetime', nullable: false }, uiType: 'dateTime' },
+              { name: 'UpdatedBy', storage: { type: 'string', nullable: false }, uiType: 'text' },
+              { name: 'UpdatedAt', storage: { type: 'datetime', nullable: false }, uiType: 'dateTime' },
+              { name: 'ENAME', storage: { type: 'string', nullable: false }, uiType: 'text' },
+              { name: 'ECODE', storage: { type: 'string', nullable: false }, uiType: 'text' },
             ],
           },
         }],

@@ -107,7 +107,7 @@ export type StandardCrudResolvedDetailFieldKind = 'text' | 'number' | 'boolean' 
 export interface StandardCrudResolvedDetailFieldCatalogEntry {
   key: string;
   kind: StandardCrudResolvedDetailFieldKind;
-  source: 'model' | 'entity' | 'builtin';
+  source: 'model';
   enumKey?: string;
 }
 
@@ -137,24 +137,11 @@ export interface StandardCrudResolvedDetailSchema {
   pageActions: StandardCrudRuntimeActionSchema[];
 }
 
-const builtinModelFields = ['EID', 'ENAME', 'ECODE'];
 const supportedStandardActions = new Set(['create', 'view', 'edit', 'refresh', 'delete', 'disable', 'enable', 'submit']);
 const supportedActionVariants = new Set(['default', 'primary', 'danger']);
 const supportedDataSourceTypes = new Set(['enum', 'model', 'provider', 'static']);
 const supportedQueryPresets = new Set(['keyword']);
 const reservedStandardCrudQueryKeys = new Set(['page', 'pageindex', 'pagesize', 'sortby', 'sortdirection', 'fields']);
-const entityDetailFields: Array<[string, StandardCrudResolvedDetailFieldKind]> = [
-  ['EID', 'text'],
-  ['CreatedBy', 'text'],
-  ['CreatedAt', 'date'],
-  ['UpdatedBy', 'text'],
-  ['UpdatedAt', 'date'],
-];
-const optionalBuiltinDetailFields = new Map<string, StandardCrudResolvedDetailFieldKind>([
-  ['ENAME', 'text'],
-  ['ECODE', 'text'],
-]);
-
 function readString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
 }
@@ -400,11 +387,10 @@ function buildResolvedDetailFieldCatalog(model: MetadataRecord): StandardCrudRes
   const append = (
     key: string,
     kind: StandardCrudResolvedDetailFieldKind,
-    source: StandardCrudResolvedDetailFieldCatalogEntry['source'],
     display: Pick<StandardCrudResolvedDetailFieldCatalogEntry, 'enumKey'> = {},
   ): void => {
     if (key.length > 0 && names.add(key)) {
-      catalog.push({ key, kind, source, ...display });
+      catalog.push({ key, kind, source: 'model', ...display });
     }
   };
 
@@ -413,25 +399,11 @@ function buildResolvedDetailFieldCatalog(model: MetadataRecord): StandardCrudRes
     const kind = inferResolvedDetailFieldKind(field);
     const dataSource = readRecord(field.dataSource);
     const contract = readRecord(field.contract);
-    append(key, kind, 'model', {
+    append(key, kind, {
       ...(kind === 'enum'
         ? { enumKey: readString(dataSource.key, readString(contract.clrType)) }
         : {}),
     });
-  }
-  if (readString(model.kind) === 'Entity') {
-    for (const [key, kind] of entityDetailFields) {
-      append(key, kind, 'entity');
-    }
-  }
-  for (const value of readArray<unknown>(model.builtinFields)) {
-    if (typeof value !== 'string') {
-      continue;
-    }
-    const kind = optionalBuiltinDetailFields.get(value);
-    if (kind) {
-      append(value, kind, 'builtin');
-    }
   }
 
   return catalog;
@@ -611,12 +583,7 @@ function collectModelFields(model: MetadataRecord): Set<string> {
     return new Set<string>();
   }
 
-  const names = new Set<string>(builtinModelFields);
-  for (const builtinField of readArray<unknown>(model.builtinFields)) {
-    if (typeof builtinField === 'string' && builtinField.length > 0) {
-      names.add(builtinField);
-    }
-  }
+  const names = new Set<string>();
   for (const field of readRecordArray(model.fields)) {
     const name = readString(field.name);
     if (name.length > 0) {

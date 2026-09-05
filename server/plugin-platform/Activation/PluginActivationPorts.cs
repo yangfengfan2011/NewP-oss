@@ -63,6 +63,12 @@ public interface IPluginPermissionSynchronizer
 /// </summary>
 public interface IPluginRuntimeProjection
 {
+    /// <summary>
+    /// 在任何持久化或运行时副作用前验证候选将发布的 metadata 集合。
+    /// </summary>
+    /// <param name="plan">已冻结的 Canonical Module Plan。</param>
+    void Validate(CanonicalModulePlan plan);
+
     IPluginRuntimeStage Stage(CanonicalModulePlan plan);
 }
 

@@ -1,6 +1,7 @@
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Ownership;
 
 namespace ICP.Platform.Modeling.Validation;
 
@@ -129,10 +130,31 @@ public sealed class ModelMetadataValidator
                     $"Field '{field.Name}' is kernel-managed and must not redefine storage.");
             }
 
+            ValidateServerOwnedFormMode(document, field, "create", field.Form?.Create);
+            ValidateServerOwnedFormMode(document, field, "edit", field.Form?.Edit);
+
             ValidateTemporalContract(field);
         }
 
         ValidateDisplayRules(document);
+    }
+
+    // 服务端拥有的显式固定字段只允许隐藏或只读，避免表单声明与写入所有权冲突。
+    private static void ValidateServerOwnedFormMode(
+        ModelMetadataDocument document,
+        ModelMetadataField field,
+        string scenario,
+        ModelMetadataFormModeRule? rule)
+    {
+        if (!PlatformModelFieldOwnership.IsServerOwned(document.Model.Kind, field.Name, hasExplicitAuthoring: true)
+            || !string.Equals(rule?.Mode, "editable", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Module '{document.ModuleId}' model '{document.Model.Name}' server-owned field '{field.Name}' "
+            + $"cannot declare form.{scenario} mode 'editable'.");
     }
 
     // CalendarDate 与 Instant 的 contract/storage 组合必须显式且唯一，避免 provider 从物理类型反推值语义。

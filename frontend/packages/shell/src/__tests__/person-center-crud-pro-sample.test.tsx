@@ -9,7 +9,7 @@ import { ModuleRegistry, type FrontendModule, type StandardCrudResourceRegistrat
 import baseOrganizationModule from '../../../../modules/organization/src/index';
 import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
 import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
-import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -210,7 +210,7 @@ function renderHost(
             manifest: { modules: [] },
             navDocuments: [],
             viewDocuments: [viewDocument, personDetailViewDocument],
-            modelDocuments: [personModelDocument],
+            modelDocuments: [organizationRuntimeModels.person],
           }}
         >
           <PlatformQueryProvider scopeKey="user-1">

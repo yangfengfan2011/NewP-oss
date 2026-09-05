@@ -24,6 +24,8 @@ C# 和 TypeScript 只把稳定 behavior key 绑定到实现，不得重新声明
 
 Host 编译出的 Canonical Module Plan、`active-module-runtime.json`、backend load view、权限索引和其他 runtime 目录都只是当前生效投影。投影不得反向成为 authoring 真源，也不得手工维护。
 
+Model 固定字段目录与服务端所有权由后端 modeling 统一派生；runtime `model.fields` 是 List、Detail 和 Form 的完整解析后字段目录。普通 authoring Model 在 Prepare 与 Stage 使用同一完整集合投影，standard-data Model 在 Stage 内存生成后、写入 staging 前调用同一 projector。Shell 不得维护或合并固定字段名单，`persistence.models` 子集和 authoring 回写也不能替代 runtime Model 集合，详见 [ADR-0045](../adr/0045-server-owned-fixed-fields-use-runtime-form-projection.md)。
+
 当前插件集合只在 Host 启动期编译和装载。插件包与期望状态的变更必须在 Host 停止期间完成；运行时插件运维写入口、热切换和热回滚不属于受支持边界，详见 ADR-0032。
 
 冲突、引用缺失或 behavior key 不一致时必须拒绝整份 candidate；不得依赖加载顺序覆盖、warning 后跳过或部分提交。

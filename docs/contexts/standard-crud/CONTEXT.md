@@ -69,7 +69,7 @@ _Avoid_: 隐藏的客户端必填、数据库永久 DEFAULT、可编辑默认值
 _Avoid_: migration backfill、数据库永久 DEFAULT、历史事实
 
 **解析后字段目录（Resolved Field Catalog）**：
-由 Model 显式字段、Entity 强制固定字段和 Model 选择的可选 builtin 组成的规范字段命名空间。它约束 Detail View 的静态字段名称，不声称每次详情响应都提供其中全部字段。
+后端 Model projector 从 authoring 显式字段、Entity 或 Link 固定字段和选择的 builtin 派生出的完整 runtime `model.fields`。List、Detail 和 Form 直接消费该目录；它约束静态字段名称与字段语义，不声称每次响应都提供其中全部字段。
 _Avoid_: DTO 属性列表、前端映射字段
 
 **Detail View（详情视图）**：

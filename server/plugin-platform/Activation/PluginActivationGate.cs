@@ -32,6 +32,7 @@ public sealed class PluginActivationGate
         _runtimeProjection = runtimeProjection;
     }
 
+    // Prepare 在迁移与权限同步前完成整份候选的静态编译和 runtime metadata 验证。
     public PluginActivationSession Prepare(IReadOnlyList<InstalledPluginInventoryItem> inventory)
     {
         ArgumentNullException.ThrowIfNull(inventory);
@@ -43,6 +44,9 @@ public sealed class PluginActivationGate
         var modulePlan = RunPhase(
             PluginActivationFailureCodes.ModulePlanFailed,
             () => _modulePlanCompiler.Compile(inventory, state));
+        RunPhase(
+            PluginActivationFailureCodes.RuntimeMetadataValidationFailed,
+            () => _runtimeProjection.Validate(modulePlan));
         RunPhase(
             PluginActivationFailureCodes.PermissionCatalogFailed,
             () => _permissionCatalogValidator.Validate(modulePlan));

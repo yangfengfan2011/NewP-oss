@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Ownership;
 
 namespace ICP.Platform.Crud.Planning;
 
@@ -42,7 +43,9 @@ public sealed class ModelStandardCrudFieldPolicyProjector
         FieldDefinition field,
         ModelMetadataField? metadata)
     {
-        var serverOwned = field.IsAuditField || field.IsPrimaryKey && metadata is null;
+        var serverOwned = PlatformModelFieldOwnership.IsServerOwned(
+            field,
+            hasExplicitAuthoring: metadata is not null);
         var isShortText = field.ValueType == FieldValueType.Text;
         return new StandardCrudFieldPolicy
         {

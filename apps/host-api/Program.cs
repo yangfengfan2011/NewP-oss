@@ -20,6 +20,7 @@ using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModuleLoader;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Persistence;
 using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
@@ -111,7 +112,12 @@ var standardDataInstaller = new StandardDataPackageInstaller(
     stateStore,
     standardDataInspector);
 var manifestBuilder = new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl);
-var materializer = new RuntimeViewMaterializer(stateStore, manifestBuilder, builtInModuleSource);
+var modelRuntimeMetadataProjector = new ModelRuntimeMetadataProjector();
+var materializer = new RuntimeViewMaterializer(
+    stateStore,
+    manifestBuilder,
+    builtInModuleSource,
+    modelRuntimeMetadataProjector.Project);
 
 builder.Services.AddSingleton(stateStore);
 builder.Services.AddSingleton(lifecycleManager);

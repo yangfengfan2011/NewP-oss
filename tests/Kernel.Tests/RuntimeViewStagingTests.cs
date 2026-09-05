@@ -1,6 +1,8 @@
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Modeling.Projection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -55,7 +57,12 @@ public sealed class RuntimeViewStagingTests : IDisposable
     {
         var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
         WriteStandardDataPackage(packageRoot);
-        var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(_installRoot));
+        var projector = new ModelRuntimeMetadataProjector();
+        var materializer = new RuntimeViewMaterializer(
+            new InstalledPluginStateStore(_installRoot),
+            new FrontendRuntimeManifestBuilder(),
+            builtInModuleSource: null,
+            projector.Project);
 
         using (var stage = materializer.Stage(_installRoot, CreateStandardDataPlan(packageRoot)))
         using (var commit = stage.BeginCommit())
@@ -101,12 +108,30 @@ public sealed class RuntimeViewStagingTests : IDisposable
 
         using var modelDocument = JsonDocument.Parse(File.ReadAllText(modelPath));
         var model = modelDocument.RootElement.GetProperty("Asset");
+        var contractPath = Path.Combine(
+            FindRepositoryRoot(),
+            "tests",
+            "Kernel.Tests",
+            "Fixtures",
+            "StandardDataRuntimeModel.contract.json");
+        Assert.True(JsonNode.DeepEquals(
+            JsonNode.Parse(File.ReadAllBytes(contractPath)),
+            JsonNode.Parse(File.ReadAllBytes(modelPath))));
         var nameField = model.GetProperty("fields").EnumerateArray()
             .Single(static field => field.GetProperty("name").GetString() == "Name");
         Assert.False(nameField.GetProperty("storage").GetProperty("nullable").GetBoolean());
         Assert.True(nameField.GetProperty("form").GetProperty("create").GetProperty("required").GetBoolean());
         Assert.True(nameField.GetProperty("form").GetProperty("edit").GetProperty("required").GetBoolean());
         Assert.False(nameField.GetProperty("form").GetProperty("create").TryGetProperty("defaultValue", out _));
+        var fields = model.GetProperty("fields").EnumerateArray().ToArray();
+        Assert.Equal(["Name", "IsEnabled", "EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+            fields.Select(static field => field.GetProperty("name").GetString()));
+        foreach (var fieldName in new[] { "EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+        {
+            var fixedField = fields.Single(field => field.GetProperty("name").GetString() == fieldName);
+            Assert.Equal("hidden", fixedField.GetProperty("form").GetProperty("create").GetProperty("mode").GetString());
+            Assert.Equal("hidden", fixedField.GetProperty("form").GetProperty("edit").GetProperty("mode").GetString());
+        }
 
         using var catalog = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(_installRoot, "runtime", "active-module-runtime.json")));
@@ -119,6 +144,37 @@ public sealed class RuntimeViewStagingTests : IDisposable
             "/plugins/runtime/modules/Partner.AssetCatalog/authoring/newp.plugin.json",
             frontend.GetProperty("blueprintUrl").GetString());
         Assert.False(frontend.TryGetProperty("url", out _));
+    }
+
+    [Fact]
+    public void Stage_StandardDataModelProjectionFails_PreservesPreviousProjectionAndCleansStaging()
+    {
+        SeedPreviousProjection();
+        var packageRoot = Path.Combine(_installRoot, "packages", "Partner.AssetCatalog", "1.0.0");
+        WriteStandardDataPackage(packageRoot);
+        var projectionCalls = 0;
+        var materializer = new RuntimeViewMaterializer(
+            new InstalledPluginStateStore(_installRoot),
+            new FrontendRuntimeManifestBuilder(),
+            builtInModuleSource: null,
+            (_, sourcePath) =>
+            {
+                projectionCalls++;
+                Assert.EndsWith(
+                    Path.Combine("metadata", "models", "Asset.model.json"),
+                    sourcePath,
+                    StringComparison.OrdinalIgnoreCase);
+                throw new InvalidOperationException("standard-data model projection failed");
+            });
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => materializer.Stage(_installRoot, CreateStandardDataPlan(packageRoot)));
+
+        Assert.Equal("standard-data model projection failed", error.Message);
+        Assert.Equal(1, projectionCalls);
+        AssertPreviousProjection();
+        Assert.Empty(Directory.GetDirectories(_installRoot, ".materialize-staging-*"));
+        Assert.Empty(Directory.GetDirectories(_installRoot, ".materialize-commit-*"));
     }
 
     [Fact]
@@ -215,6 +271,22 @@ public sealed class RuntimeViewStagingTests : IDisposable
             snapshotId,
             [1, 2, 3],
             []);
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "ICP-Platform.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root not found.");
+    }
 
     private static CanonicalModulePlan CreateStandardDataPlan(string packageRoot) =>
         new(

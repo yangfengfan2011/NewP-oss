@@ -1,9 +1,18 @@
 using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.ModulePlanning;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace ICP.Platform.Kernel.PluginPackages;
+
+/// <summary>
+/// 把一个已定位的 Model authoring 文档转换为 runtime Model 字节。
+/// </summary>
+/// <param name="authoringJson">候选中的原始 Model JSON。</param>
+/// <param name="sourcePath">可用于诊断模块与模型位置的候选路径。</param>
+/// <returns>只写入 staging 的 runtime Model JSON。</returns>
+public delegate byte[] RuntimeModelMetadataProjection(ReadOnlyMemory<byte> authoringJson, string sourcePath);
 
 /// <summary>
 /// 根据当前已启用插件重新生成运行时视图。
@@ -20,6 +29,7 @@ public class RuntimeViewMaterializer
     private readonly FrontendRuntimeManifestBuilder _frontendManifestBuilder;
     private readonly LocalizationRuntimeManifestBuilder _localizationManifestBuilder;
     private readonly MetadataRuntimeManifestBuilder _metadataRuntimeManifestBuilder;
+    private readonly RuntimeModelMetadataProjection _modelMetadataProjection;
     private readonly Action<string, string> _moveDirectory;
     private readonly TrustedBuiltInModuleSource? _builtInModuleSource;
     private readonly ModuleCapsuleCandidateReader _candidateReader = new();
@@ -30,16 +40,20 @@ public class RuntimeViewMaterializer
     {
     }
 
+    // 便捷构造保留原始 Model 字节，建模解释由 Host 显式组合。
     public RuntimeViewMaterializer(InstalledPluginStateStore stateStore, FrontendRuntimeManifestBuilder frontendManifestBuilder)
         : this(
             stateStore,
             frontendManifestBuilder,
             new LocalizationRuntimeManifestBuilder(),
             new MetadataRuntimeManifestBuilder(),
-            Directory.Move)
+            Directory.Move,
+            null,
+            IdentityModelMetadataProjection)
     {
     }
 
+    // 内建模块便捷构造保留原始 Model 字节，避免 Kernel 自带建模规则。
     internal RuntimeViewMaterializer(
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
@@ -50,10 +64,29 @@ public class RuntimeViewMaterializer
             new LocalizationRuntimeManifestBuilder(),
             new MetadataRuntimeManifestBuilder(),
             Directory.Move,
-            builtInModuleSource)
+            builtInModuleSource,
+            IdentityModelMetadataProjection)
     {
     }
 
+    // Host 通过此组合点同时提供内建快照与真实 Model runtime projector。
+    internal RuntimeViewMaterializer(
+        InstalledPluginStateStore stateStore,
+        FrontendRuntimeManifestBuilder frontendManifestBuilder,
+        TrustedBuiltInModuleSource? builtInModuleSource,
+        RuntimeModelMetadataProjection modelMetadataProjection)
+        : this(
+            stateStore,
+            frontendManifestBuilder,
+            new LocalizationRuntimeManifestBuilder(),
+            new MetadataRuntimeManifestBuilder(),
+            Directory.Move,
+            builtInModuleSource,
+            modelMetadataProjection)
+    {
+    }
+
+    // 测试可替换目录切换动作，同时继续使用无语义的 Model identity projection。
     internal RuntimeViewMaterializer(
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
@@ -63,10 +96,13 @@ public class RuntimeViewMaterializer
             frontendManifestBuilder,
             new LocalizationRuntimeManifestBuilder(),
             new MetadataRuntimeManifestBuilder(),
-            moveDirectory)
+            moveDirectory,
+            null,
+            IdentityModelMetadataProjection)
     {
     }
 
+    // 测试可替换全部 manifest builder 与目录切换动作。
     internal RuntimeViewMaterializer(
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
@@ -79,10 +115,12 @@ public class RuntimeViewMaterializer
             localizationManifestBuilder,
             metadataRuntimeManifestBuilder,
             moveDirectory,
-            null)
+            null,
+            IdentityModelMetadataProjection)
     {
     }
 
+    // 兼容现有内建快照组合，并把 Model 处理保持为 identity projection。
     internal RuntimeViewMaterializer(
         InstalledPluginStateStore stateStore,
         FrontendRuntimeManifestBuilder frontendManifestBuilder,
@@ -90,13 +128,41 @@ public class RuntimeViewMaterializer
         MetadataRuntimeManifestBuilder metadataRuntimeManifestBuilder,
         Action<string, string> moveDirectory,
         TrustedBuiltInModuleSource? builtInModuleSource)
+        : this(
+            stateStore,
+            frontendManifestBuilder,
+            localizationManifestBuilder,
+            metadataRuntimeManifestBuilder,
+            moveDirectory,
+            builtInModuleSource,
+            IdentityModelMetadataProjection)
+    {
+    }
+
+    // 最终构造统一持有 staging、快照与 Model 投影依赖。
+    internal RuntimeViewMaterializer(
+        InstalledPluginStateStore stateStore,
+        FrontendRuntimeManifestBuilder frontendManifestBuilder,
+        LocalizationRuntimeManifestBuilder localizationManifestBuilder,
+        MetadataRuntimeManifestBuilder metadataRuntimeManifestBuilder,
+        Action<string, string> moveDirectory,
+        TrustedBuiltInModuleSource? builtInModuleSource,
+        RuntimeModelMetadataProjection modelMetadataProjection)
     {
         _stateStore = stateStore;
         _frontendManifestBuilder = frontendManifestBuilder;
         _localizationManifestBuilder = localizationManifestBuilder;
         _metadataRuntimeManifestBuilder = metadataRuntimeManifestBuilder;
+        _modelMetadataProjection = modelMetadataProjection;
         _moveDirectory = moveDirectory;
         _builtInModuleSource = builtInModuleSource;
+    }
+
+    // 未组合建模能力的低层调用保持原始字节，Kernel 不自行解释 Model 语义。
+    private static byte[] IdentityModelMetadataProjection(ReadOnlyMemory<byte> authoringJson, string sourcePath)
+    {
+        _ = sourcePath;
+        return authoringJson.ToArray();
     }
 
     public CanonicalModulePlan Materialize(string installRoot)
@@ -130,6 +196,22 @@ public class RuntimeViewMaterializer
         using var commit = stage.BeginCommit();
         commit.Complete();
         return plan;
+    }
+
+    /// <summary>
+    /// 只读验证候选中所有将按普通 Model metadata 发布的文档。
+    /// </summary>
+    /// <param name="plan">已冻结且尚未产生启动副作用的候选计划。</param>
+    internal void ValidateModelMetadata(CanonicalModulePlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        foreach (var module in plan.Modules)
+        {
+            foreach (var document in EnumerateCandidateModelMetadata(module))
+            {
+                _modelMetadataProjection(document.Bytes, document.SourcePath);
+            }
+        }
     }
 
     /// <summary>
@@ -350,7 +432,8 @@ public class RuntimeViewMaterializer
             snapshot.ReadFile(entryManifestPath));
     }
 
-    private static void StageModuleMetadata(
+    // 先复制候选 metadata，再只在不可见 staging 中规范普通 Model JSON。
+    private void StageModuleMetadata(
         string runtimeRoot,
         CanonicalModulePlanModule module,
         VerifiedModuleArtifactSnapshot? snapshot)
@@ -378,10 +461,79 @@ public class RuntimeViewMaterializer
         {
             CopyDirectory(packageMetadataRoot, targetMetadataRoot);
         }
+
+        ProjectStagedModelMetadata(targetMetadataRoot);
+    }
+
+    // staging 与 Prepare 使用同一个 Model projector；这里复验可检测 installed 工件在两阶段之间的漂移。
+    private void ProjectStagedModelMetadata(string targetMetadataRoot)
+    {
+        var modelsRoot = Path.Combine(targetMetadataRoot, "models");
+        if (!Directory.Exists(modelsRoot))
+        {
+            return;
+        }
+
+        foreach (var path in Directory
+                     .EnumerateFiles(modelsRoot, "*.json", SearchOption.AllDirectories)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var authoringBytes = File.ReadAllBytes(path);
+            var runtimeBytes = _modelMetadataProjection(authoringBytes, path);
+            if (!authoringBytes.AsSpan().SequenceEqual(runtimeBytes))
+            {
+                File.WriteAllBytes(path, runtimeBytes);
+            }
+        }
+    }
+
+    // 普通 Model 的候选集合与 runtime manifest 的 metadata/models 目录边界保持一致。
+    private IEnumerable<(ReadOnlyMemory<byte> Bytes, string SourcePath)> EnumerateCandidateModelMetadata(
+        CanonicalModulePlanModule module)
+    {
+        if (string.Equals(module.FrontendBindingMode, "standard-data", StringComparison.Ordinal))
+        {
+            yield break;
+        }
+
+        if (module.Provenance.AuthenticatesBuiltIn(module))
+        {
+            if (_builtInModuleSource is null)
+            {
+                throw new InvalidOperationException(
+                    $"Authenticated built-in module '{module.ModuleId}' requires its Host trust source.");
+            }
+
+            var snapshot = _builtInModuleSource.GetSnapshotForConsumption(module);
+            foreach (var relativePath in snapshot
+                         .EnumerateFiles("metadata/models")
+                         .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+            {
+                yield return (
+                    snapshot.ReadFile(relativePath),
+                    Path.Combine(snapshot.ModuleRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            }
+
+            yield break;
+        }
+
+        var metadataRoot = Path.Combine(module.PackageRoot, "modules", module.ModuleId, "metadata");
+        var modelsRoot = Path.Combine(metadataRoot, "models");
+        if (!Directory.Exists(modelsRoot))
+        {
+            yield break;
+        }
+
+        foreach (var path in Directory
+                     .EnumerateFiles(modelsRoot, "*.json", SearchOption.AllDirectories)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            yield return (File.ReadAllBytes(path), path);
+        }
     }
 
     // standard-data 投影只复制包内 authoring 契约，并为共享列表宿主生成受控 metadata。
-    private static void StageStandardDataModule(
+    private void StageStandardDataModule(
         string runtimeRoot,
         CanonicalModulePlanModule module,
         VerifiedModuleArtifactSnapshot? snapshot)
@@ -441,7 +593,7 @@ public class RuntimeViewMaterializer
     }
 
     // 生成列表与导航投影；详情展示结构始终由包内显式 Detail View 拥有。
-    private static void WriteStandardDataMetadata(
+    private void WriteStandardDataMetadata(
         string metadataRoot,
         CanonicalModulePlanModule module,
         JsonObject blueprint,
@@ -621,27 +773,27 @@ public class RuntimeViewMaterializer
                     ["type"] = "view",
                     ["view"] = listView
                 });
-            WriteJson(
-                Path.Combine(metadataRoot, "models", $"{resourceKey}.model.json"),
-                new Dictionary<string, object?>
+            var modelPath = Path.Combine(metadataRoot, "models", $"{resourceKey}.model.json");
+            var modelDocument = new JsonObject
+            {
+                ["schemaVersion"] = "1.0",
+                ["type"] = "model",
+                [resourceKey] = JsonSerializer.SerializeToNode(new
                 {
-                    ["schemaVersion"] = "1.0",
-                    ["type"] = "model",
-                    [resourceKey] = new
+                    kind = "Entity",
+                    sections = new[]
                     {
-                        kind = "Entity",
-                        sections = new[]
+                        new
                         {
-                            new
-                            {
-                                key = "basic",
-                                titleKey = "Section_Basic",
-                                fields = modelFields.Select(static field => field.name).ToArray()
-                            }
-                        },
-                        fields = modelFields
-                    }
-                });
+                            key = "basic",
+                            titleKey = "Section_Basic",
+                            fields = modelFields.Select(static field => field.name).ToArray()
+                        }
+                    },
+                    fields = modelFields
+                })
+            };
+            WriteProjectedModelJson(modelPath, modelDocument);
         }
 
         WriteJson(
@@ -652,6 +804,16 @@ public class RuntimeViewMaterializer
                 type = "nav",
                 navigation = new { items = navigationItems }
             });
+    }
+
+    // standard-data 的生成模型先在内存中走与普通 Model 相同的投影，再以单个文件写入未发布 staging。
+    private void WriteProjectedModelJson(string path, JsonObject modelDocument)
+    {
+        var generatedBytes = Encoding.UTF8.GetBytes(
+            modelDocument.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        var runtimeBytes = _modelMetadataProjection(generatedBytes, path);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, runtimeBytes);
     }
 
     // Blueprint 的公开类型映射到现有 Model storage 词汇，不引入新的 profile 字段或运行时 fallback。

@@ -85,9 +85,15 @@ export function useStandardCrudMutationExecution({
     clearError();
 
     try {
-      const normalizedValues = registration.buildMutationValues
+      const builtValues = registration.buildMutationValues
         ? registration.buildMutationValues(values)
         : normalizeStandardCrudSubmitValues(fields, values);
+      const normalizedValues = { ...builtValues };
+      for (const field of fields) {
+        if (field.readOnly) {
+          delete normalizedValues[field.modelField];
+        }
+      }
       const mutationValues = mode === 'edit'
         && registration.concurrencyRevisionField
         && Object.prototype.hasOwnProperty.call(detailFields, registration.concurrencyRevisionField)

@@ -52,16 +52,7 @@ public sealed class ModelMetadataProjector
     {
         ArgumentNullException.ThrowIfNull(document);
 
-        var fields = new List<FieldDefinition>();
-
-        if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
-        {
-            AddEntityFixedFields(fields, document.Model.BuiltinFields);
-        }
-        else if (string.Equals(document.Model.Kind, "Link", StringComparison.OrdinalIgnoreCase))
-        {
-            AddLinkFixedFields(fields, document.Model.BuiltinFields);
-        }
+        var fields = ProjectFixedFields(document).ToList();
 
         foreach (var field in document.Model.Fields)
         {
@@ -99,6 +90,27 @@ public sealed class ModelMetadataProjector
             fields,
             indexes,
             ForeignKeys: foreignKeys);
+    }
+
+    /// <summary>
+    /// 投影平台为当前 Model kind 提供的规范固定字段目录。
+    /// </summary>
+    /// <param name="document">Model authoring 文档。</param>
+    /// <returns>按平台稳定顺序排列的固定字段定义；不包含业务字段。</returns>
+    public IReadOnlyList<FieldDefinition> ProjectFixedFields(ModelMetadataDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var fields = new List<FieldDefinition>();
+        if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase))
+        {
+            AddEntityFixedFields(fields, document.Model.BuiltinFields);
+        }
+        else if (string.Equals(document.Model.Kind, "Link", StringComparison.OrdinalIgnoreCase))
+        {
+            AddLinkFixedFields(fields, document.Model.BuiltinFields);
+        }
+
+        return fields;
     }
 
     // 将单个 authoring 字段投影为不含 UI 布局、但保留字段种类与展示语义的规范 artifact。

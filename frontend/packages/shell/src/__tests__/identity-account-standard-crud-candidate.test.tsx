@@ -9,7 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import identityModule from '../../../../modules/identity/src/index';
 import accountDetailDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountDetailView.dic.json';
 import accountListDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountListView.dic.json';
-import accountModelDocument from '../../../../../modules/Identity/metadata/models/IdentityAccount.model.json';
+import identityRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/IdentityRuntimeModels.contract.json';
 import identityNavigationDocument from '../../../../../modules/Identity/metadata/navigation/Identity.nav.json';
 import accountListViewDocument from '../../../../../modules/Identity/metadata/views/AccountList.view.json';
 import accountDetailViewDocument from '../../../../../modules/Identity/metadata/views/AccountDetail.view.json';
@@ -38,7 +38,7 @@ const runtimeMetadata = {
   manifest: { modules: [] },
   navDocuments: [identityNavigationDocument],
   viewDocuments: [accountListViewDocument, accountDetailViewDocument],
-  modelDocuments: [accountModelDocument],
+  modelDocuments: [identityRuntimeModels.identityAccount],
 };
 
 async function flushRequests(): Promise<void> {

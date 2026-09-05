@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
 import positionModelDocument from '../../../../../modules/Organization/metadata/models/Position.model.json';
 import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import standardDataRuntimeModelDocument from '../../../../../tests/Kernel.Tests/Fixtures/StandardDataRuntimeModel.contract.json';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 
 describe('standard CRUD metadata form schema', () => {
@@ -101,6 +102,38 @@ describe('standard CRUD metadata form schema', () => {
     expect(schema.fields.find((field) => field.key === 'PersonNo')).toMatchObject({ readOnly: true });
   });
 
+  it('consumes runtime hidden and readonly form modes without inferring field ownership', () => {
+    const runtimeModel = {
+      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['Name', 'CreatedAt', 'UpdatedAt'] }],
+      fields: [
+        {
+          name: 'Name',
+          uiType: 'text',
+          form: { create: { mode: 'editable' }, edit: { mode: 'editable' } },
+        },
+        {
+          name: 'CreatedAt',
+          uiType: 'dateTime',
+          form: { create: { mode: 'hidden' }, edit: { mode: 'hidden' } },
+        },
+        {
+          name: 'UpdatedAt',
+          uiType: 'dateTime',
+          form: { create: { mode: 'hidden' }, edit: { mode: 'readonly' } },
+        },
+      ],
+    };
+
+    const create = buildStandardCrudFormSchemaFromModel(runtimeModel, { mode: 'create', enumOptions: {} });
+    const edit = buildStandardCrudFormSchemaFromModel(runtimeModel, { mode: 'edit', enumOptions: {} });
+
+    expect(create.fields.map((field) => field.modelField)).toEqual(['Name']);
+    expect(create.sections[0]?.fields).toEqual(['Name']);
+    expect(edit.fields.map((field) => field.modelField)).toEqual(['Name', 'UpdatedAt']);
+    expect(edit.fields.find((field) => field.modelField === 'UpdatedAt')).toMatchObject({ readOnly: true });
+    expect(edit.sections[0]?.fields).toEqual(['Name', 'UpdatedAt']);
+  });
+
   it('keeps position enablement hidden on create and renders it in the edit section', () => {
     const create = buildStandardCrudFormSchemaFromModel(positionModelDocument.Position, {
       mode: 'create',
@@ -144,29 +177,7 @@ describe('standard CRUD metadata form schema', () => {
   });
 
   it('consumes standard-data runtime requiredness in create and edit without a frontend default', () => {
-    const standardDataAssetModel = {
-      sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['Name', 'SerialNo'] }],
-      fields: [
-        {
-          name: 'Name',
-          storage: { type: 'string', nullable: false },
-          uiType: 'text',
-          form: {
-            create: { mode: 'editable', required: true },
-            edit: { mode: 'editable', required: true },
-          },
-        },
-        {
-          name: 'SerialNo',
-          storage: { type: 'string', nullable: true },
-          uiType: 'text',
-          form: {
-            create: { mode: 'editable', required: false },
-            edit: { mode: 'editable', required: false },
-          },
-        },
-      ],
-    };
+    const standardDataAssetModel = standardDataRuntimeModelDocument.Asset;
 
     const create = buildStandardCrudFormSchemaFromModel(standardDataAssetModel, {
       mode: 'create',
@@ -187,8 +198,10 @@ describe('standard CRUD metadata form schema', () => {
       readOnly: false,
       defaultValue: undefined,
     });
-    expect(create.fields.find((field) => field.key === 'SerialNo')).toMatchObject({ required: false });
-    expect(edit.fields.find((field) => field.key === 'SerialNo')).toMatchObject({ required: false });
+    expect(create.fields.find((field) => field.key === 'IsEnabled')).toMatchObject({ required: false });
+    expect(edit.fields.find((field) => field.key === 'IsEnabled')).toMatchObject({ required: false });
+    expect(create.fields.some((field) => field.key === 'EID' || field.key === 'CreatedAt')).toBe(false);
+    expect(edit.fields.some((field) => field.key === 'EID' || field.key === 'CreatedAt')).toBe(false);
   });
 
   it('rejects unsupported uiType before rendering', () => {

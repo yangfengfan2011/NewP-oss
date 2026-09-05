@@ -94,6 +94,52 @@ describe('standard CRUD mutation execution', () => {
     expect(execution().error).toBeNull();
   });
 
+  it('removes readonly model fields restored by a mutation builder while preserving extra business values', async () => {
+    const create = vi.fn().mockResolvedValue({ operation: 'create' });
+    const builtValues = {
+      Name: 'Alice',
+      CreatedAt: '2026-09-05T01:02:03Z',
+      MutationReason: 'manual-entry',
+    };
+    const registration: StandardCrudResourceRegistration = {
+      resourceKey: 'sample.record',
+      listViewKey: 'sample.record.list',
+      buildMutationValues: () => builtValues,
+      dataAdapter: {
+        list: vi.fn(),
+        get: vi.fn(),
+        getRowId: () => 'record-1',
+        create,
+      },
+    };
+    const execution = await renderExecution(registration, vi.fn(), vi.fn());
+
+    await act(async () => {
+      await execution().execute({
+        mode: 'create',
+        fields: [
+          ...mutationFields,
+          {
+            key: 'createdAt',
+            labelKey: 'Created at',
+            modelField: 'CreatedAt',
+            kind: 'readonly',
+            readOnly: true,
+          },
+        ],
+        values: { name: ' Alice ', createdAt: '2026-09-05T01:02:03Z' },
+        detailFields: {},
+      });
+    });
+
+    expect(create).toHaveBeenCalledWith({ Name: 'Alice', MutationReason: 'manual-entry' }, {});
+    expect(builtValues).toEqual({
+      Name: 'Alice',
+      CreatedAt: '2026-09-05T01:02:03Z',
+      MutationReason: 'manual-entry',
+    });
+  });
+
   it('maps backend field errors to form keys and does not refresh on an ordinary failure', async () => {
     const create = vi.fn().mockRejectedValue(new StandardCrudRequestError('名称不能为空', 400, { Name: '名称不能为空' }));
     const refresh = vi.fn();

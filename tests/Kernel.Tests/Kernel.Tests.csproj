@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
     <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\server\platform-presentation\PlatformPresentation.csproj" />
+    <ProjectReference Include="..\..\server\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\..\apps\host-api\HostApi.csproj" />
   </ItemGroup>
 

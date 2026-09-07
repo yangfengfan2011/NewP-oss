@@ -83,7 +83,7 @@ class ModuleRegistryRouteCapabilityRuntime implements RouteCapabilityRuntime {
         )),
         ...(module.standardCrudResources ?? []).flatMap((registration) => [
           createStandardListRouteCapabilityBinding(registration.listViewKey),
-          ...(registration.detailViewKey
+          ...(registration.detailViewKey && registration.detailRoutePath
             ? [createStandardCrudDetailRouteCapabilityBinding(registration.detailViewKey)]
             : []),
         ]),

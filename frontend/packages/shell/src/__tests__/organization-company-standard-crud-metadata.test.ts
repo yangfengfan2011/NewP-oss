@@ -1,3 +1,4 @@
+import detailViewDocument from '../../../../../modules/Organization/metadata/views/CompanyDetail.view.json';
 import { describe, expect, it } from 'vitest';
 import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
 import companyModelDocument from '../../../../../modules/Organization/metadata/models/Company.model.json';
@@ -50,22 +51,13 @@ describe('organization company standard CRUD metadata', () => {
 
   it('resolves Company detail fields from the projected runtime field catalog', () => {
     const schema = resolveStandardCrudDetailSchema(
-      [{
-        type: 'view',
-        view: {
-          key: 'organization.company.detail',
-          mode: 'detail',
-          model: 'Company',
-          sections: [{ key: 'audit', titleKey: 'Section_Audit', fields: ['EID', 'UpdatedAt'] }],
-        },
-      }],
+      [detailViewDocument],
       { ...companyStandardCrudResource, detailViewKey: 'organization.company.detail' },
       { modelDocuments: [companyRuntimeModelDocument] },
     );
 
-    expect(schema.sections[0]?.fields).toEqual([
-      { key: 'EID', labelKey: 'Field_EID', rendererKey: 'standard.text', rendererSource: 'standard' },
-      { key: 'UpdatedAt', labelKey: 'Field_UpdatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
+    expect(schema.sections.at(-1)?.fields.map((field) => field.key)).toEqual([
+      'CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt',
     ]);
   });
 

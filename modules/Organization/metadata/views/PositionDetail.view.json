@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.position.detail",
+    "dicKey": "PositionDetailView",
+    "titleKey": "Title",
+    "descriptionKey": "Description",
+    "mode": "detail",
+    "model": "Position",
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ENAME",
+          "Description",
+          "IsEnabled"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Section_Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ]
+  }
+}

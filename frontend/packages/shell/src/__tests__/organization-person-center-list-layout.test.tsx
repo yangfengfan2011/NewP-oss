@@ -5,7 +5,7 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
 import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
@@ -176,6 +176,7 @@ describe('organization person center list layout', () => {
   }
 
   beforeEach(() => {
+    ModuleRegistry.replaceAll([{ metadata: { moduleId: 'organization', displayName: 'organization', version: '1.0.0' }, standardCrudCapabilities: organizationModule.standardCrudCapabilities }], 'organization-detail-test');
     const getComputedStyle = window.getComputedStyle.bind(window);
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -208,6 +209,7 @@ describe('organization person center list layout', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    ModuleRegistry.replaceAll([], 'detail-test-cleanup');
     vi.clearAllMocks();
 
     if (root) {

@@ -146,7 +146,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void PositionMetadata_UsesStandardEditDrawerWithUpdatePermission()
+    public void PositionMetadata_UsesViewAndEditDrawersWithSeparatePermissions()
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
@@ -191,7 +191,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void CompanyMetadata_UsesStandardListCreateEditAndDeleteWithoutDetailOrExport()
+    public void CompanyMetadata_UsesStandardViewCreateEditAndDeleteWithoutExport()
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
@@ -219,13 +219,13 @@ public class OrganizationModuleTests
         Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
         Assert.Equal("Organization.Company.Update", RequiredPermission(rowActions, "edit"));
         Assert.Equal("Organization.Company.Delete", RequiredPermission(rowActions, "delete"));
-        Assert.False(view.TryGetProperty("detailViewKey", out _));
+        Assert.Equal("organization.company.detail", view.GetProperty("detailViewKey").GetString());
         Assert.False(view.TryGetProperty("export", out _));
         Assert.False(view.TryGetProperty("bulkActions", out _));
     }
 
     [Fact]
-    public void DepartmentMetadata_UsesHierarchyListAndDependentParentLookupWithoutDetailExportOrBulkActions()
+    public void DepartmentMetadata_UsesHierarchyListWithDetailAndDependentParentLookupWithoutExportOrBulkActions()
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
@@ -264,9 +264,40 @@ public class OrganizationModuleTests
         Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
         Assert.Equal("Organization.Department.Update", RequiredPermission(rowActions, "edit"));
         Assert.Equal("Organization.Department.Delete", RequiredPermission(rowActions, "delete"));
-        Assert.False(view.TryGetProperty("detailViewKey", out _));
+        Assert.Equal("organization.department.detail", view.GetProperty("detailViewKey").GetString());
         Assert.False(view.TryGetProperty("export", out _));
         Assert.False(view.TryGetProperty("bulkActions", out _));
+    }
+
+    [Theory]
+    [InlineData("Company")]
+    [InlineData("Department")]
+    [InlineData("Position")]
+    public void DirectoryDetail_EndsWithCanonicalAuditAndDoesNotRegisterFullPage(string modelName)
+    {
+        var root = FindRepositoryRoot();
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            root, "modules", "Organization", "metadata", "views", $"{modelName}Detail.view.json")));
+        var view = document.RootElement.GetProperty("view");
+        Assert.Equal(modelName, view.GetProperty("model").GetString());
+        using var listDocument = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            root, "modules", "Organization", "metadata", "views", $"{modelName}List.view.json")));
+        var list = listDocument.RootElement.GetProperty("view");
+        var nameColumn = list.GetProperty("columns").EnumerateArray()
+            .Single(column => column.GetProperty("field").GetString() == "ENAME");
+        Assert.Equal("view", nameColumn.GetProperty("standardAction").GetString());
+        Assert.DoesNotContain(list.GetProperty("rowActions").EnumerateArray(),
+            action => action.GetProperty("standardAction").GetString() == "view");
+        var sections = view.GetProperty("sections").EnumerateArray().ToArray();
+        Assert.Equal("audit", sections[^1].GetProperty("key").GetString());
+        Assert.Equal(
+            ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+            sections[^1].GetProperty("fields").EnumerateArray().Select(field => field.GetString()));
+        Assert.False(view.TryGetProperty("pageActions", out _));
+        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            root, "modules", "Organization", "newp.plugin.json")));
+        Assert.DoesNotContain(view.GetProperty("key").GetString(), capsule.RootElement
+            .GetProperty("frontend").GetProperty("bindings").EnumerateArray().Select(binding => binding.GetString()));
     }
 
     private static void AssertFileContains(string root, string relativePath, string expected)

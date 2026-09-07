@@ -91,7 +91,10 @@ describe('standard CRUD schema resolver and registry', () => {
           key: 'partner.asset.detail',
           mode: 'detail',
           model: 'Asset',
-          sections: [{ key: 'basic', titleKey: 'Section_Basic', fields: ['EID', 'CreatedAt', 'Name'] }],
+          sections: [
+            { key: 'basic', titleKey: 'Section_Basic', fields: ['EID', 'Name'] },
+            { key: 'audit', titleKey: 'Section_Audit', fields: ['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'] },
+          ],
         },
       }],
       registration,
@@ -101,7 +104,6 @@ describe('standard CRUD schema resolver and registry', () => {
     expect(list.columns.map((column) => column.field)).toEqual(['EID', 'CreatedAt', 'Name']);
     expect(detail.sections[0]?.fields).toEqual([
       { key: 'EID', labelKey: 'Field_EID', rendererKey: 'standard.text', rendererSource: 'standard' },
-      { key: 'CreatedAt', labelKey: 'Field_CreatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
       { key: 'Name', labelKey: 'Field_Name', rendererKey: 'standard.text', rendererSource: 'standard' },
     ]);
     expect(detail.fieldCatalog.map((field) => field.key)).toEqual(
@@ -157,17 +159,19 @@ describe('standard CRUD schema resolver and registry', () => {
               fields: ['PersonNo', 'ENAME'],
             },
             {
+              key: 'organization',
+              titleKey: 'Section_Organization',
+              fields: [{ field: 'CompanyId', rendererKey: 'organization.reference' }],
+            },
+            {
               key: 'audit',
               titleKey: 'Section_Audit',
               fields: [
                 { field: 'CreatedBy', rendererKey: 'organization.actor' },
                 'CreatedAt',
+                'UpdatedBy',
+                'UpdatedAt',
               ],
-            },
-            {
-              key: 'organization',
-              titleKey: 'Section_Organization',
-              fields: [{ field: 'CompanyId', rendererKey: 'organization.reference' }],
             },
           ],
           pageActions: [{
@@ -217,14 +221,6 @@ describe('standard CRUD schema resolver and registry', () => {
         ],
       },
       {
-        key: 'audit',
-        titleKey: 'Section_Audit',
-        fields: [
-          { key: 'CreatedBy', labelKey: 'Field_CreatedBy', rendererKey: 'organization.actor', rendererSource: 'binding' },
-          { key: 'CreatedAt', labelKey: 'Field_CreatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
-        ],
-      },
-      {
         key: 'organization',
         titleKey: 'Section_Organization',
         fields: [
@@ -234,6 +230,16 @@ describe('standard CRUD schema resolver and registry', () => {
             rendererKey: 'organization.reference',
             rendererSource: 'binding',
           },
+        ],
+      },
+      {
+        key: 'audit',
+        titleKey: 'Section_Audit',
+        fields: [
+          { key: 'CreatedBy', labelKey: 'Field_CreatedBy', rendererKey: 'organization.actor', rendererSource: 'binding' },
+          { key: 'CreatedAt', labelKey: 'Field_CreatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
+          { key: 'UpdatedBy', labelKey: 'Field_UpdatedBy', rendererKey: 'standard.text', rendererSource: 'standard' },
+          { key: 'UpdatedAt', labelKey: 'Field_UpdatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
         ],
       },
     ]);

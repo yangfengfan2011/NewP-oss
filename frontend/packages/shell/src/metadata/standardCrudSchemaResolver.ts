@@ -500,6 +500,17 @@ export function resolveStandardCrudDetailSchema<TFilter, TRow, TDetail>(
     throw new Error(`detail view "${viewKey}" must contain at least one section and one field`);
   }
 
+  // 只校验显式 View，不向字段目录或展示结构补字段；固定字段仍由后端 Model 投影拥有。
+  if (readString(model.kind).toLowerCase() === 'entity') {
+    const auditFields = ['CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt'];
+    const lastSection = sections[sections.length - 1];
+    if (lastSection.key !== 'audit'
+      || lastSection.fields.length !== auditFields.length
+      || lastSection.fields.some((field, index) => field.key !== auditFields[index])) {
+      throw new Error(`detail view "${viewKey}" must end with an audit section containing CreatedBy, CreatedAt, UpdatedBy, UpdatedAt`);
+    }
+  }
+
   const pageActions = readRecordArray(view.pageActions)
     .map(readAction)
     .filter((action) => action.key.length > 0);

@@ -9,6 +9,7 @@
     "mode": "list",
     "model": "Department",
     "editorMode": "drawer",
+    "detailViewKey": "organization.department.detail",
     "query": {
       "fields": [
         { "key": "keyword", "labelKey": "Query_Keyword", "source": "preset", "preset": "keyword", "operator": "like" },
@@ -23,7 +24,7 @@
     "columns": [
       { "key": "company", "labelKey": "Column_Company", "source": "model", "field": "CompanyId", "sortable": true, "hideable": false, "responsivePriority": "high" },
       { "key": "code", "labelKey": "Column_Code", "source": "model", "field": "ECODE", "sortable": true, "hideable": false, "responsivePriority": "high" },
-      { "key": "name", "labelKey": "Column_Name", "source": "model", "field": "ENAME", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "name", "labelKey": "Column_Name", "source": "model", "field": "ENAME", "standardAction": "view", "sortable": true, "hideable": false, "responsivePriority": "high" },
       { "key": "parentDepartment", "labelKey": "Column_ParentDepartment", "source": "model", "field": "ParentDepartmentId", "responsivePriority": "medium" },
       { "key": "isEnabled", "labelKey": "Column_IsEnabled", "source": "model", "field": "IsEnabled", "sortable": true, "responsivePriority": "high" },
       { "key": "sortOrder", "labelKey": "Column_SortOrder", "source": "model", "field": "SortOrder", "sortable": true, "responsivePriority": "medium" },

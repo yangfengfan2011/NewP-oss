@@ -29,6 +29,7 @@ export type StandardCrudProjectionDiagnostic =
   | 'STANDARD_CRUD_NAV_NOT_UNIQUE'
   | 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE'
   | 'STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING'
+  | 'STANDARD_CRUD_DETAIL_ACTION_MISSING'
   | 'STANDARD_CRUD_DETAIL_VIEW_KEY_MISMATCH'
   | 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE'
   | 'STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE'
@@ -54,6 +55,7 @@ export class ModuleProjectionError extends Error {
 
 interface StandardCrudProjectionOwner {
   detailViewKey?: string;
+  projectsFullDetail?: boolean;
   path: string;
   permissions?: string[];
   projectsDrawer: boolean;
@@ -88,6 +90,9 @@ export function compileStandardCrudRouteProjection(
       const listView = requireUniqueView(viewDocuments, listBinding.targetKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
       const detailViewKey = readNonEmptyString(listView.view.detailViewKey);
       if (!detailViewKey) {
+        if (readNonEmptyString(listView.view.model)) {
+          fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', listBinding.targetKey);
+        }
         owners.push({
           path: nav.path,
           permissions: nav.permissions,
@@ -97,8 +102,9 @@ export function compileStandardCrudRouteProjection(
       }
 
       requireUniqueView(viewDocuments, detailViewKey, 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE');
+      requireObjectViewAction(listView);
       const matchingDetailTargets = lazyDetailTargets.filter((targetKey) => targetKey === detailViewKey);
-      if (matchingDetailTargets.length !== 1) {
+      if (matchingDetailTargets.length > 1) {
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);
       }
       if (consumedLazyDetailTargets.has(detailViewKey)) {
@@ -107,6 +113,7 @@ export function compileStandardCrudRouteProjection(
       consumedLazyDetailTargets.add(detailViewKey);
       owners.push({
         detailViewKey,
+        projectsFullDetail: matchingDetailTargets.length === 1,
         path: nav.path,
         permissions: nav.permissions,
         projectsDrawer: true,
@@ -120,7 +127,7 @@ export function compileStandardCrudRouteProjection(
     }
   }
 
-  const detailEntries = owners.flatMap((owner) => owner.detailViewKey
+  const detailEntries = owners.flatMap((owner) => owner.detailViewKey && owner.projectsFullDetail
     ? [{
         path: `${normalizeListPath(owner.path)}/:id`,
         viewKey: owner.detailViewKey,
@@ -186,19 +193,44 @@ function compileLegacyResourceOwner(
 
   const listView = requireUniqueView(viewDocuments, resource.listViewKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
   const metadataDetailViewKey = readNonEmptyString(listView.view.detailViewKey);
+  if (!metadataDetailViewKey && readNonEmptyString(listView.view.model)) {
+    fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', resource.listViewKey);
+  }
   if (resource.detailViewKey !== metadataDetailViewKey) {
     fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISMATCH', resource.listViewKey);
   }
   if (resource.detailViewKey) {
     requireUniqueView(viewDocuments, resource.detailViewKey, 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE');
+    requireObjectViewAction(listView);
   }
 
   return {
     detailViewKey: resource.detailViewKey,
+    projectsFullDetail: Boolean(resource.detailRoutePath),
     path: nav.path,
     permissions: nav.permissions,
     projectsDrawer: true,
   };
+}
+
+// 有 Model 的对象必须能从列表进入详情；纯统计视图没有对象操作要求。
+function requireObjectViewAction(document: RuntimeViewDocument): void {
+  if (!readNonEmptyString(document.view.model)) return;
+  const actions = [document.view.rowActions, document.view.columns]
+    .flatMap((value) => Array.isArray(value) ? value : []);
+  if (!actions.some((value: unknown) => typeof value === 'object' && value !== null
+    && 'standardAction' in value && value.standardAction === 'view')) {
+    fail('STANDARD_CRUD_DETAIL_ACTION_MISSING', String(document.view.key));
+  }
+}
+
+/** 完整页入口只消费显式 capability；Detail View 本身仅保证查看抽屉可用。 */
+export function hasStandardCrudFullDetailPage(modules: FrontendModule[], detailViewKey: string): boolean {
+  return modules.some((module) =>
+    (module.standardCrudCapabilities ?? []).some((binding) =>
+      binding.kind === 'standard-crud-detail' && binding.targetKey === detailViewKey)
+    || (module.standardCrudResources ?? []).some((resource) =>
+      resource.detailViewKey === detailViewKey && Boolean(resource.detailRoutePath)));
 }
 
 function requireUniqueListNav(

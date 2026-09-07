@@ -56,6 +56,7 @@ public sealed class ModuleCapsuleCandidateReader
             .ToArray();
     }
 
+    // 从同一胶囊和 metadata 快照读取候选；显式绑定决定哪些 Detail View 同时拥有完整页行为。
     private static ModuleCapsuleCandidate ReadBuiltInModule(
         string moduleRoot,
         TrustedBuiltInModuleSource? trustedSource,
@@ -113,9 +114,12 @@ public sealed class ModuleCapsuleCandidateReader
                     .ToArray()
                 : Array.Empty<string>();
 
+        var declaredBindings = frontendBindingMode == "behavior-bindings"
+            ? frontendBindings.ToHashSet(StringComparer.Ordinal)
+            : null;
         var metadata = snapshot is null
-            ? ReadMetadata(Path.Combine(moduleRoot, "metadata"), moduleId)
-            : ReadMetadata(snapshot, moduleId);
+            ? ReadMetadata(Path.Combine(moduleRoot, "metadata"), moduleId, declaredBindings)
+            : ReadMetadata(snapshot, moduleId, declaredBindings);
         if (permissionCodes.Length == 0)
         {
             // 未完成 capsule cutover 的内建模块通过显式 legacy adapter 保持现有权限引用可编译；
@@ -245,7 +249,11 @@ public sealed class ModuleCapsuleCandidateReader
         return new ModulePersistenceContribution(modelPaths, bundles);
     }
 
-    private static MetadataFacts ReadMetadata(string metadataRoot, string moduleId)
+    // 读取文件系统 authoring；查看专用 Detail View 贡献权限引用，但不要求完整页 binding。
+    private static MetadataFacts ReadMetadata(
+        string metadataRoot,
+        string moduleId,
+        IReadOnlySet<string>? declaredBindings = null)
     {
         if (!Directory.Exists(metadataRoot))
         {
@@ -287,7 +295,7 @@ public sealed class ModuleCapsuleCandidateReader
                 using var document = JsonDocument.Parse(File.ReadAllText(path));
                 if (TryGetObject(document.RootElement, "view", out var view))
                 {
-                    AddOptionalString(view, "key", bindingReferences);
+                    AddViewBindingReference(view, bindingReferences, declaredBindings);
                     CollectStringArrayProperties(view, "permissions", permissionReferences);
                 }
             }
@@ -322,9 +330,11 @@ public sealed class ModuleCapsuleCandidateReader
             modelKeys.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray());
     }
 
+    // 可信快照与普通文件读取使用同一 View/binding 分类，不因装载路径改变候选含义。
     private static MetadataFacts ReadMetadata(
         VerifiedModuleArtifactSnapshot snapshot,
-        string moduleId)
+        string moduleId,
+        IReadOnlySet<string>? declaredBindings = null)
     {
         var routes = new List<string>();
         var bindingReferences = new List<string>();
@@ -354,7 +364,7 @@ public sealed class ModuleCapsuleCandidateReader
             using var document = JsonDocument.Parse(snapshot.ReadFile(path));
             if (TryGetObject(document.RootElement, "view", out var view))
             {
-                AddOptionalString(view, "key", bindingReferences);
+                AddViewBindingReference(view, bindingReferences, declaredBindings);
                 CollectStringArrayProperties(view, "permissions", permissionReferences);
             }
         }
@@ -464,6 +474,22 @@ public sealed class ModuleCapsuleCandidateReader
         }
 
         return candidate;
+    }
+
+    // Detail View 是展示定义；显式声明完整页行为时，其 key 才同时成为 binding 引用。
+    private static void AddViewBindingReference(
+        JsonElement view,
+        ICollection<string> bindingReferences,
+        IReadOnlySet<string>? declaredBindings)
+    {
+        var key = OptionalString(view, "key");
+        if (key is not null
+            && (OptionalString(view, "mode") != "detail"
+                || declaredBindings is null
+                || declaredBindings.Contains(key)))
+        {
+            bindingReferences.Add(key);
+        }
     }
 
     private static void AddOptionalString(JsonElement element, string propertyName, ICollection<string> values)

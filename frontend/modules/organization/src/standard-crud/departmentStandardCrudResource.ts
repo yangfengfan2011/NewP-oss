@@ -93,6 +93,7 @@ export const departmentStandardCrudResource: StandardCrudResourceRegistration<Re
   resourceKey: 'organization.department',
   dataAdapter: departmentStandardCrudDataAdapter,
   listViewKey: 'organization.department.list',
+  detailViewKey: 'organization.department.detail',
   lookupProviders: [
     departmentCompanyLookupProvider,
     departmentParentLookupProvider,

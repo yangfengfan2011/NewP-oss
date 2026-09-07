@@ -375,6 +375,7 @@ describe('route capability authorization ordering', () => {
         dataAdapter: createStandardCrudTestDataAdapter('record-42'),
         listViewKey: 'records.list',
         detailViewKey: 'records.detail',
+        detailRoutePath: '/records/:id',
       }],
     }], 'snapshot-detail-route');
 

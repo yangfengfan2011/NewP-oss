@@ -441,6 +441,7 @@ describe('RouteCapabilityRuntime', () => {
         dataAdapter: createTestDataAdapter('example-id'),
         listViewKey: 'example.list',
         detailViewKey: 'example.detail',
+        detailRoutePath: '/examples/:id',
       }],
     }], 'snapshot-standard-detail');
 

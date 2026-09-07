@@ -9,6 +9,7 @@
     "mode": "list",
     "model": "Company",
     "editorMode": "drawer",
+    "detailViewKey": "organization.company.detail",
     "query": {
       "fields": [
         {
@@ -51,6 +52,7 @@
         "labelKey": "Column_Name",
         "source": "model",
         "field": "ENAME",
+        "standardAction": "view",
         "sortable": true,
         "hideable": false,
         "responsivePriority": "high"

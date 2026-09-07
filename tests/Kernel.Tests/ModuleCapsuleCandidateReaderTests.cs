@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginPackages;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -181,6 +182,36 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
         Assert.True(compilation.IsSuccess, string.Join(Environment.NewLine, compilation.Diagnostics.Select(static item => item.Message)));
         var compiledExample = Assert.Single(compilation.Plan!.Modules, static module => module.ModuleId == "Example");
         Assert.Equal(["Identity"], compiledExample.Dependencies);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReadBuiltIn_RealOrganizationDrawerViews_DoNotRequireFullPageBindings(bool trustedSnapshot)
+    {
+        var runtimeModulesRoot = Path.Combine(_root, "runtime-modules");
+        foreach (var moduleRoot in Directory.GetDirectories(Path.Combine(FindRepositoryRoot(), "modules")))
+        {
+            if (!File.Exists(Path.Combine(moduleRoot, "newp.plugin.json")))
+            {
+                continue;
+            }
+            CopyBuiltInModuleToRuntimeView(Path.GetFileName(moduleRoot), runtimeModulesRoot);
+            var assemblyName = Path.GetFileName(moduleRoot) + "Module.dll";
+            File.Copy(Path.Combine(AppContext.BaseDirectory, assemblyName), Path.Combine(_root, assemblyName));
+        }
+
+        var reader = new ModuleCapsuleCandidateReader();
+        var candidates = trustedSnapshot
+            ? reader.ReadTrustedBuiltIn(TrustedBuiltInModuleSource.CreateForHost(_root, runtimeModulesRoot))
+            : reader.ReadBuiltIn(runtimeModulesRoot);
+        var organization = Assert.Single(candidates, candidate => candidate.ModuleId == "Organization");
+        Assert.DoesNotContain("organization.company.detail", organization.FrontendBindingReferences);
+        Assert.DoesNotContain("organization.department.detail", organization.FrontendBindingReferences);
+        Assert.DoesNotContain("organization.position.detail", organization.FrontendBindingReferences);
+        Assert.Contains("organization.person.detail", organization.FrontendBindingReferences);
+        var result = new CanonicalModulePlanCompiler().Compile("required-object-detail", candidates);
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics));
     }
 
     public void Dispose()

@@ -1,3 +1,4 @@
+import detailViewDocument from '../../../../../modules/Organization/metadata/views/DepartmentDetail.view.json';
 import { describe, expect, it } from 'vitest';
 import { departmentStandardCrudResource } from '../../../../modules/organization/src/standard-crud/departmentStandardCrudResource';
 import departmentModelDocument from '../../../../../modules/Organization/metadata/models/Department.model.json';
@@ -57,22 +58,13 @@ describe('organization department standard CRUD metadata', () => {
 
   it('resolves Department detail fields from the projected runtime field catalog', () => {
     const schema = resolveStandardCrudDetailSchema(
-      [{
-        type: 'view',
-        view: {
-          key: 'organization.department.detail',
-          mode: 'detail',
-          model: 'Department',
-          sections: [{ key: 'audit', titleKey: 'Section_Audit', fields: ['EID', 'UpdatedAt'] }],
-        },
-      }],
+      [detailViewDocument],
       { ...departmentStandardCrudResource, detailViewKey: 'organization.department.detail' },
       { modelDocuments: [departmentRuntimeModelDocument] },
     );
 
-    expect(schema.sections[0]?.fields).toEqual([
-      { key: 'EID', labelKey: 'Field_EID', rendererKey: 'standard.text', rendererSource: 'standard' },
-      { key: 'UpdatedAt', labelKey: 'Field_UpdatedAt', rendererKey: 'standard.date', rendererSource: 'standard' },
+    expect(schema.sections.at(-1)?.fields.map((field) => field.key)).toEqual([
+      'CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt',
     ]);
   });
 });

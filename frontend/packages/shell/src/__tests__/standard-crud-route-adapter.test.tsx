@@ -24,6 +24,7 @@ const modules: FrontendModule[] = [
         dataAdapter: createStandardCrudTestDataAdapter(),
         listViewKey: 'organization.person.list',
         detailViewKey: 'organization.person.detail',
+        detailRoutePath: '/organization/persons/:id',
       },
     ],
   },
@@ -172,6 +173,7 @@ describe('standard CRUD route adapter', () => {
             dataAdapter: createStandardCrudTestDataAdapter(),
             listViewKey: 'employee.person.list',
             detailViewKey: 'employee.person.detail',
+            detailRoutePath: '/organization/persons/:id',
           },
         ],
       },
@@ -289,12 +291,10 @@ describe('standard CRUD route projection compiler', () => {
     },
   );
 
-  it.each(['missing-key', 'unknown-view', 'missing-descriptor', 'duplicate-descriptor'] as const)(
+  it.each(['missing-key', 'unknown-view', 'duplicate-descriptor'] as const)(
     'fails when the list detail projection is %s',
     (variant) => {
-      const module = variant === 'missing-descriptor'
-        ? { ...lazyModule, standardCrudCapabilities: [lazyModule.standardCrudCapabilities![0]] }
-        : variant === 'duplicate-descriptor'
+      const module = variant === 'duplicate-descriptor'
           ? {
               ...lazyModule,
               standardCrudCapabilities: [

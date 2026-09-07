@@ -537,6 +537,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .Filter(new LocatorFilterOptions { HasTextString = company.Name })
             .Last
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await OpenAndCloseDirectoryDetailAsync(page, company.Name);
         return company;
     }
 
@@ -586,6 +587,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .Filter(new LocatorFilterOptions { HasTextString = department.Name })
             .Last
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await OpenAndCloseDirectoryDetailAsync(page, department.Name);
         return department;
     }
 
@@ -626,7 +628,21 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .Filter(new LocatorFilterOptions { HasTextString = description })
             .Last;
         await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await OpenAndCloseDirectoryDetailAsync(page, name);
         return new PositionData(name);
+    }
+
+    // 沿已创建对象的同一旅程打开只读详情；字段语义与审计排序由下层测试验证。
+    private static async Task OpenAndCloseDirectoryDetailAsync(IPage page, string name)
+    {
+        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = name }).Last;
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = name, Exact = true })
+            .ClickAsync();
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.GetByText(name, new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await drawer.Locator(".ant-drawer-close").ClickAsync();
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
     }
 
     // 一次标准编辑同时维护岗位与时间字段，避免把同一主旅程拆成两次独立提交。

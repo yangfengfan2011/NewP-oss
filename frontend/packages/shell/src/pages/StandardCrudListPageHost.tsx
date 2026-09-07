@@ -44,7 +44,7 @@ import {
 } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
-import { resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
+import { hasStandardCrudFullDetailPage, resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
 import {
   buildStandardCrudListQuery,
   collectStandardCrudListRequestFields,
@@ -725,6 +725,7 @@ export default function StandardCrudListPageHost({
       viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
       detailRoutePath={listRoute && registration.detailViewKey
+        && hasStandardCrudFullDetailPage(ModuleRegistry.getAllModules(), registration.detailViewKey)
         ? `${listRoute.path.replace(/\/$/, '')}/:id`
         : undefined}
     />

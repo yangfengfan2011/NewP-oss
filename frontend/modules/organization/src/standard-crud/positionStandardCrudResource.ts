@@ -40,4 +40,5 @@ export const positionStandardCrudResource: StandardCrudResourceRegistration<Reco
   resourceKey: 'organization.position',
   dataAdapter: positionStandardCrudDataAdapter,
   listViewKey: 'organization.position.list',
+  detailViewKey: 'organization.position.detail',
 };

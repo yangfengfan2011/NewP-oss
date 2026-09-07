@@ -43,4 +43,5 @@ export const companyStandardCrudResource: StandardCrudResourceRegistration<Recor
   resourceKey: 'organization.company',
   dataAdapter: companyStandardCrudDataAdapter,
   listViewKey: 'organization.company.list',
+  detailViewKey: 'organization.company.detail',
 };

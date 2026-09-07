@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import identityModule from '../../../../modules/identity/src/index';
 import accountDetailDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountDetailView.dic.json';
@@ -90,6 +90,7 @@ describe('Identity account Standard CRUD production route', () => {
   });
 
   beforeEach(() => {
+    ModuleRegistry.replaceAll([{ metadata: { moduleId: 'identity', displayName: 'identity', version: '1.0.0' }, standardCrudCapabilities: identityModule.standardCrudCapabilities }], 'identity-detail-test');
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -107,6 +108,7 @@ describe('Identity account Standard CRUD production route', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    ModuleRegistry.replaceAll([], 'detail-test-cleanup');
     window.localStorage.clear();
     if (root) {
       await act(async () => root.unmount());
@@ -136,12 +138,12 @@ describe('Identity account Standard CRUD production route', () => {
     });
     expect(load).not.toHaveBeenCalled();
 
-    expect(() => compileStandardCrudRouteProjection(
+    expect(compileStandardCrudRouteProjection(
       [{ ...module, standardCrudCapabilities: module.standardCrudCapabilities.slice(0, 1) }],
       runtimeMetadata.navDocuments,
       runtimeMetadata.viewDocuments,
       [],
-    )).toThrow('MODULE_PROJECTION_FAILED: STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE: identity.account.detail');
+    ).detailEntries).toEqual([]);
     expect(load).not.toHaveBeenCalled();
   });
 

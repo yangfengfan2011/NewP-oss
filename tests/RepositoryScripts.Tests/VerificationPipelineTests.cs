@@ -54,6 +54,39 @@ public sealed class VerificationPipelineTests : IDisposable
         Assert.True(preflightIndex < acceptanceIndex);
         Assert.Single(commands, static command => command.StartsWith("dotnet build ", StringComparison.Ordinal));
         Assert.Contains("--configuration Release --no-build --no-restore -- check --all --no-build", commands[preflightIndex], StringComparison.Ordinal);
+        Assert.DoesNotContain(commands, static command => command.Contains("frontend lint", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FullVerification_RunsLintBeforeFrontendTestsBuildAndAcceptance()
+    {
+        var fixture = InitializeFixture(preflightFails: false);
+
+        var result = RunVerification(fixture, quick: false);
+
+        Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+        var commands = File.ReadAllLines(fixture.CommandLogPath);
+        var lintIndex = FindSingle(commands, "corepack pnpm --dir frontend lint");
+        Assert.True(lintIndex < FindSingle(commands, "corepack pnpm --dir frontend test"));
+        Assert.True(lintIndex < FindSingle(commands, "corepack pnpm --dir frontend build"));
+        Assert.True(lintIndex < FindSingle(commands, "acceptance -Gate Personnel -NoBuild"));
+    }
+
+    [Fact]
+    public void FullVerification_WhenLintFails_StopsAndPreservesDiagnostic()
+    {
+        var fixture = InitializeFixture(preflightFails: false, lintFails: true);
+
+        var result = RunVerification(fixture, quick: false);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("fixture.tsx:12 react-hooks/rules-of-hooks", result.StdOut + result.StdErr);
+        var commands = File.ReadAllLines(fixture.CommandLogPath);
+        Assert.DoesNotContain(commands, static command => command.Contains("frontend test", StringComparison.Ordinal));
+        Assert.DoesNotContain(commands, static command => command.Contains("frontend build", StringComparison.Ordinal));
+        Assert.DoesNotContain(commands, static command => command.StartsWith("acceptance ", StringComparison.Ordinal));
+        using var document = JsonDocument.Parse(File.ReadAllText(fixture.CurrentResultPath));
+        Assert.Equal("frontend-lint", document.RootElement.GetProperty("failureStage").GetString());
     }
 
     [Fact]
@@ -99,7 +132,7 @@ public sealed class VerificationPipelineTests : IDisposable
         Directory.Delete(_fixtureRoot, recursive: true);
     }
 
-    private Fixture InitializeFixture(bool preflightFails)
+    private Fixture InitializeFixture(bool preflightFails, bool lintFails = false)
     {
         var scriptsRoot = Path.Combine(_fixtureRoot, "scripts");
         var shimRoot = Path.Combine(_fixtureRoot, "shims");
@@ -133,7 +166,11 @@ public sealed class VerificationPipelineTests : IDisposable
             Path.Combine(shimRoot, "corepack.cmd"),
             "@echo off\r\n" +
             "echo corepack %*>>\"%NEWP_FAKE_COMMAND_LOG%\"\r\n" +
-            "exit /b 0\r\n");
+            "if not \"%NEWP_FAKE_LINT_FAIL%\"==\"1\" exit /b 0\r\n" +
+            "echo %*| findstr /C:\"frontend lint\" >nul\r\n" +
+            "if errorlevel 1 exit /b 0\r\n" +
+            "echo fixture.tsx:12 react-hooks/rules-of-hooks 1>&2\r\n" +
+            "exit /b 1\r\n");
 
         RunGit("init");
         RunGit("config", "user.name", "Verification Test");
@@ -146,20 +183,28 @@ public sealed class VerificationPipelineTests : IDisposable
             commandLogPath,
             Path.Combine(_fixtureRoot, ".codex-temp", "verify", "current-result.json"),
             shimRoot,
-            preflightFails);
+            preflightFails,
+            lintFails);
     }
 
-    private ProcessResult RunVerification(Fixture fixture)
+    private ProcessResult RunVerification(Fixture fixture, bool quick = true)
     {
         var environment = new Dictionary<string, string?>
         {
             ["PATH"] = fixture.ShimRoot + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
             ["NEWP_FAKE_COMMAND_LOG"] = fixture.CommandLogPath,
-            ["NEWP_FAKE_PREFLIGHT_FAIL"] = fixture.PreflightFails ? "1" : "0"
+            ["NEWP_FAKE_PREFLIGHT_FAIL"] = fixture.PreflightFails ? "1" : "0",
+            ["NEWP_FAKE_LINT_FAIL"] = fixture.LintFails ? "1" : "0"
         };
+        List<string> arguments = ["-NoProfile", "-File", Path.Combine(fixture.Root, "scripts", "verify.ps1")];
+        if (quick)
+        {
+            arguments.Add("-Quick");
+        }
+        arguments.AddRange(["-AcceptanceGate", "Personnel"]);
         return RunProcess(
             "pwsh",
-            ["-NoProfile", "-File", Path.Combine(fixture.Root, "scripts", "verify.ps1"), "-Quick", "-AcceptanceGate", "Personnel"],
+            arguments,
             environment);
     }
 
@@ -269,7 +314,8 @@ public sealed class VerificationPipelineTests : IDisposable
         string CommandLogPath,
         string CurrentResultPath,
         string ShimRoot,
-        bool PreflightFails)
+        bool PreflightFails,
+        bool LintFails)
     {
         internal const string PreflightDiagnostic =
             "MIGRATION_MANIFEST_SOURCE_DRIFT module='Organization' provider='SqlServer' field='contentDigest'";

@@ -39,10 +39,9 @@ public class RepositoryTestEntrypointTests
             StringComparison.OrdinalIgnoreCase);
     }
 
-    // verify.ps1 是仓库唯一的验证入口，没有 CI 兜底。它至少要覆盖整个 solution
-    // 和前端测试；-Quick 只允许省掉全量验证专用的步骤，不能省掉门禁本身。
+    // 此处检查入口声明；两种模式的实际执行和失败截断由 VerificationPipelineTests 覆盖。
     [Fact]
-    public void VerificationEntrypoint_CoversTheSolutionAndFrontendInBothModes()
+    public void VerificationEntrypoint_DeclaresSolutionAndFrontendChecks()
     {
         var verification = File.ReadAllText(
             Path.Combine(GetRepositoryRoot(), "scripts", "verify.ps1"));
@@ -50,25 +49,10 @@ public class RepositoryTestEntrypointTests
         Assert.Contains("\"test\", \"ICP-Platform.sln\"", verification, StringComparison.Ordinal);
         Assert.Contains("\"pnpm\", \"--dir\", \"frontend\", \"test\"", verification, StringComparison.Ordinal);
 
-        // -Quick 只包裹这三步；其余阶段必须无条件执行。
-        foreach (var quickOnlySkip in new[] { "diff-check", "dotnet-restore", "frontend-build" })
+        foreach (var fullModeCheck in new[] { "diff-check", "dotnet-restore", "frontend-lint", "frontend-build" })
         {
-            Assert.Contains(quickOnlySkip, verification, StringComparison.Ordinal);
+            Assert.Contains(fullModeCheck, verification, StringComparison.Ordinal);
         }
-        Assert.Equal(2, CountOccurrences(verification, "if (-not $Quick)"));
-    }
-
-    private static int CountOccurrences(string text, string value)
-    {
-        var count = 0;
-        for (var index = text.IndexOf(value, StringComparison.Ordinal);
-             index >= 0;
-             index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal))
-        {
-            count++;
-        }
-
-        return count;
     }
 
     [Fact]

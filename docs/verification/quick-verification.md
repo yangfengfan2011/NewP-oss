@@ -112,11 +112,13 @@ child 的可复跑证据固定记录以下字段，不把一次性临时目录�
 
 ## 全量验证
 
-标准入口依次执行静态门禁、一次 Release 构建、一次 `migration-manifest check --all --no-build` preflight、`--no-build` 测试、前端测试与构建。preflight 复用本轮 Release 资产；失败会保留 CLI 原始诊断并立即截断后续测试与 Acceptance：
+标准入口依次执行静态门禁、一次 Release 构建、一次 `migration-manifest check --all --no-build` preflight、`--no-build` 测试、前端 lint、前端测试与构建。preflight 复用本轮 Release 资产；失败会保留 CLI 原始诊断并立即截断后续测试与 Acceptance：
 
 ```powershell
 .\scripts\verify.ps1
 ```
+
+`-Quick` 跳过 diff-check、独立 dotnet restore 和前端 lint/build，适用于开发循环，不能替代交付前的完整验证。完整模式的 lint 失败会保留 ESLint 文件、行号及规则名，并停止后续阶段。
 
 结果写入 `.codex-temp/verify/runs/<run>/result.json`，`current-result.json` 指向最近一次结果。清单包含总耗时、各阶段耗时和命令；失败时读取 `failureStage`、同名阶段日志，以及 `msbuildDiagnosticPath` 下可能存在的 MSBuild 子节点诊断。
 
@@ -127,6 +129,22 @@ child 的可复跑证据固定记录以下字段，不把一次性临时目录�
 ```powershell
 .\scripts\verify.ps1 -AcceptanceGate IdentityFoundation,Personnel
 ```
+
+`accept.ps1` 除了启用环境开关和选择测试，还读取本次运行的原生 TRX，确认每个所选 Gate 恰好有一个通过结果。零匹配、跳过、缺失或不可读的结果都失败；`-Gate All` 要求三个 Gate 全部通过。测试自身失败时保留 `dotnet test` 原始输出和退出码。TRX 是临时执行确认，检查后删除，不另建裁决或证据协议。
+
+### 环境集成测试的选择与报告
+
+全量 verify 通过不等于所有 SQL Server、宿主重启和浏览器测试都已执行。`EnvironmentGatedFactAttribute` 在相应 `NEWP_RUN_*` 开关未设为 `1` 时将测试标为 skipped，这是开发循环的正常行为。不要为消除 skipped 无差别开启所有环境测试。
+
+开始实施时，按改动与验收条件选择需要真实数据库、进程或浏览器的测试，记录项目、过滤器、环境开关和环境前提；开关以对应测试属性为准。父级收尾继承并核对这些要求。Gate 内部执行的集成测试只覆盖它明确调用的项目和过滤器：例如 IdentityFoundation 的 SQL Server smoke 不替代 HostApi 或其他项目的环境测试。
+
+完成报告按所选范围列出实际命令与结果，区分：
+
+- **已执行**：实际匹配的测试数、通过/失败/跳过数；失败保留原始诊断。
+- **已跳过**：未启用的环境测试及原因；本次要求的测试被跳过或零匹配时，交付验证未完成，写明补跑命令和前提。
+- **不适用**：未涉及的环境测试范围及简短理由，不把它们计为通过。
+
+记录复用任务或 Issue 的现有验证说明；不额外建立清单文件。普通 verify 的绿色结果不能覆盖缺失的适用证据。
 
 ## 验收资产开发
 

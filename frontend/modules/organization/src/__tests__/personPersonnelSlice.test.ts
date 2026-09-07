@@ -82,7 +82,7 @@ describe('personnel center first vertical slice', () => {
 
   it('forwards the lookup execution signal through every organization GET', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockImplementation(async (input) => new Response(
+      .mockImplementation(async () => new Response(
         JSON.stringify({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false }),
         {
           status: 200,

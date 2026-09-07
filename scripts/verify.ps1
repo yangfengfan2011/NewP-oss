@@ -1,8 +1,7 @@
 # 仓库唯一的验证入口。没有 CI，本机就是唯一的验证位置。
 #
-# -Quick 供开发循环使用：跳过只有全量验证才需要的三步（diff-check、
-# dotnet restore、前端 build），其余门禁与完整跑法完全一致——不允许出现
-# 「快跑绿了、慢跑才发现」的两套判据。
+# -Quick 供开发循环使用：跳过 diff-check、dotnet restore、前端 lint/build。
+# 它不替代交付前的完整验证；其余阶段复用相同命令与判据。
 #
 # 本脚本**不要求也不检查干净工作树**。本机是唯一的验证位置，脏树跑验证是常态，
 # 拦住它等于把 verify 变成只有提交前才能用的东西。但结果必须能事后归属，
@@ -374,6 +373,13 @@ try {
     Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
         "test", "ICP-Platform.sln", "--configuration", "Release", "--no-build", "--no-restore")
 
+    if (-not $Quick)
+    {
+        $currentStage = "frontend-lint"
+        Invoke-VerificationStage -Name $currentStage -FilePath $corepackPath -Arguments @(
+            "pnpm", "--dir", "frontend", "lint")
+    }
+
     $currentStage = "frontend-test"
     Invoke-VerificationStage -Name $currentStage -FilePath $corepackPath -Arguments @(
         "pnpm", "--dir", "frontend", "test")
@@ -410,7 +416,7 @@ try {
     Write-Host ""
     if ($Quick)
     {
-        Write-Host "已跳过 diff-check、dotnet restore 与前端 build；合并前请跑一次完整 verify.ps1。" -ForegroundColor Yellow
+        Write-Host "已跳过 diff-check、dotnet restore 与前端 lint/build；合并前请跑一次完整 verify.ps1。" -ForegroundColor Yellow
     }
     Write-Host "VERIFY_RESULT: $resultPath" -ForegroundColor Green
     exit 0

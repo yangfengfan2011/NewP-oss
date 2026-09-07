@@ -9,7 +9,7 @@ import {
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useOptionalAuth } from '../contexts/AuthContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { resolveDetailViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
@@ -148,12 +148,7 @@ function StandardCrudDetailPageContent<TDetail>({
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
-  let sessionTimeZoneId: string | undefined;
-  try {
-    sessionTimeZoneId = useAuth().user?.timeZoneId;
-  } catch {
-    sessionTimeZoneId = undefined;
-  }
+  const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
   const titleKey = readMetadataString(view.titleKey, 'Title');

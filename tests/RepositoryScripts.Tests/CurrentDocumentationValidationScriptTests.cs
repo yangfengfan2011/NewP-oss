@@ -8,6 +8,64 @@ public sealed class CurrentDocumentationValidationScriptTests
 {
     private readonly string _repositoryRoot = FindRepositoryRoot();
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task CheckCurrentDocs_ValidatesWorkingTreeAfterTrackedDocumentDeletion(
+        bool stageDeletion,
+        bool keepLink)
+    {
+        var root = await CreateTemporaryRepositoryAsync();
+        try
+        {
+            var removedPath = Path.Combine(root, "removed.md");
+            await File.WriteAllTextAsync(removedPath, "# Removed\n", Encoding.UTF8);
+            var addResult = await RunProcessAsync("git", ["add", "--", "removed.md"], root);
+            Assert.Equal(0, addResult.ExitCode);
+            File.Delete(removedPath);
+            if (stageDeletion)
+            {
+                var stageResult = await RunProcessAsync("git", ["add", "-u", "--", "removed.md"], root);
+                Assert.Equal(0, stageResult.ExitCode);
+            }
+
+            // 保留一个未跟踪文档，证明检查仍覆盖工作区新增内容。
+            await File.WriteAllTextAsync(
+                Path.Combine(root, "README.md"),
+                keepLink ? "[Removed](removed.md)\n" : "# Current\n",
+                Encoding.UTF8);
+            var indexPath = Path.Combine(root, ".git", "index");
+            var indexBefore = await File.ReadAllBytesAsync(indexPath);
+
+            var result = await RunCurrentDocsCheckAsync(root);
+
+            Assert.Equal(indexBefore, await File.ReadAllBytesAsync(indexPath));
+            Assert.DoesNotContain("MISSING_DOCUMENT", result.Output, StringComparison.Ordinal);
+            if (keepLink)
+            {
+                Assert.Equal(1, result.ExitCode);
+                Assert.Contains("BROKEN_LINK README.md:1", result.Output, StringComparison.Ordinal);
+                Assert.Contains("removed.md", result.Output, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.True(result.ExitCode == 0, result.Output);
+                Assert.Contains("CURRENT_DOCS_CHECK_PASSED: 1 documents", result.Output, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            // git add 生成的对象在 Windows 上只读，清理前仅解除本夹具文件的只读属性。
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+            }
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task CheckCurrentDocs_PassesForValidDocuments()
     {

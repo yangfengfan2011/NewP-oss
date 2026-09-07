@@ -18,10 +18,13 @@ if ($LASTEXITCODE -ne 0) {
     throw '无法枚举当前 Markdown 文档。'
 }
 
-$currentDocuments = $documentPaths |
-    ForEach-Object { $_.Replace('\', '/') } |
-    Where-Object { $_ } |
-    Sort-Object -Unique
+# 索引仍会列出未暂存的删除；只检查工作树现有文档，剩余文档中的断链仍在下文校验。
+$currentDocuments = @(
+    $documentPaths |
+        ForEach-Object { $_.Replace('\', '/') } |
+        Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $repoRoot $_) -PathType Leaf) } |
+        Sort-Object -Unique
+)
 
 $retiredReferencePattern = '(?i)(docs/(superpowers|designs|phases|prompts|bootstrap|migration|modules)/|docs/current-status\.md|check-ai-first-design-targets|new-design-doc)'
 $machinePathPattern = '(?i)(?<![A-Za-z0-9])[A-Z]:[\\/](Users|Work|GitHub|Github|Projects|Source|Repos)[\\/]|/[a-z]/GitHub/'

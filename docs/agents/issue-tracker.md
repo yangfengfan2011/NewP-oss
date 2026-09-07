@@ -1,6 +1,6 @@
 # 任务跟踪器：GitHub
 
-本仓库的 issue 与规格存放在 GitHub Issues 中。所有操作默认使用 `gh` CLI，并从当前仓库的 `git remote` 自动识别目标仓库。
+本仓库以 GitHub Issues 保存需要持久化的规格与执行状态。GitHub 操作使用 `gh` CLI，并从当前仓库的 `git remote` 自动识别目标仓库；写入授权遵循 `AGENTS.md`。
 
 ## 约定
 
@@ -17,9 +17,10 @@
 
 ## 规格到交付
 
-1. 新功能、公共 seam、跨模块能力或其他非局部设计经确认后，实施前使用 `$to-spec` 综合当前对话和源码事实，发布一个带 `ready-for-agent` 的唯一 Spec Issue。局部缺陷和纯文档修正可以直接使用有界 Issue；已经开始实施的 Issue 不重复发布 Spec。
-2. Spec 发布后选择最小交付形态：一个 owner、一个回滚边界且可在一个执行上下文完成时，保留单 Issue 并按纵向检查点实施；只有存在多个可独立验收的增量、真实 blocker 或不同 owner 时，才使用 `$to-tickets` 创建纵向 child，每张票都必须独立可验证，不能按前端、后端或测试水平拆分。
-3. 新公共 seam 在扩大实施前需要一次真实纵向验证，规则见 `AGENTS.md` 的「设计与交付」。验证必须使用真实业务模块，不新建样例模块，也不为满足流程单独创建可行性 child。
+1. 实施前明确目标、范围、非目标与验收条件，优先复用已确认的对话或 Issue 规格。局部缺陷和纯文档修正可在当前任务中直接实施；复杂工作需要已确认规格，但不因此自动调用 `$to-spec` 或发布新 Issue。用户要求发布规格或显式调用 `$to-spec` 时，按对应技能发布一个带 `ready-for-agent` 的 Spec Issue；已有规格不重复发布。
+2. 选择最小交付形态：一个 owner、一个回滚边界且可在一个执行上下文完成时，保留单任务并按纵向检查点实施。只有存在多个可独立验收的增量、真实 blocker 或不同 owner 时，才考虑拆 child；用户授权拆票或显式调用 `$to-tickets` 后创建。每张 child 必须独立可验证，不能按前端、后端或测试水平拆分。
+3. 既有 GitHub child 图继续使用原生关系与 Issue 状态；已有规格通过链接引用，避免复制正文或另建执行状态副本。
+4. 新公共 seam 在扩大实施前需要一次真实纵向验证，规则见 `AGENTS.md` 的「设计与交付」。实施层级和验证分工见 [quick-verification.md](../verification/quick-verification.md)；不为满足流程单独创建可行性 child。
 
 ## 是否将 Pull Request 作为分流入口
 
@@ -47,11 +48,11 @@ GitHub Issues 与 Pull Requests 共用编号空间。遇到裸编号 `#42` 时�
 `/wayfinder` 使用一个 map issue 管理多个 child issue：
 
 - Map：单个带有 `wayfinder:map` 标签的 issue，正文保存 Notes、Decisions-so-far 和 Fog。
-- Child ticket：创建时使用 `--parent` 建立 GitHub sub-issue 关联；不可用时，在 map 正文中维护任务列表，并在 child 顶部写入 `Part of #<map>`。
+- Child ticket：创建时使用 `--parent` 建立 GitHub sub-issue 关联；正文链接只用于导航。
 - Child 标签：使用 `wayfinder:<type>`，类型包括 `research`、`prototype`、`grilling` 和 `task`。
-- 阻塞关系：创建时使用 `--blocked-by` 建立 GitHub 原生 issue dependencies；不可用时，在 child 顶部记录 `Blocked by: #<n>`。
+- 阻塞关系：创建时使用 `--blocked-by` 建立 GitHub 原生 issue dependencies；关系未建立时先修复该操作，再选择依赖它的执行前沿，不能把正文备注当成已建立关系。
 - Frontier：从 map 的未关闭 child 中排除仍被阻塞或已有负责人者，再按 map 顺序选择第一个。
-- 认领：`gh issue edit <n> --add-assignee @me`。这是执行会话的第一次写操作。
+- 认领：`gh issue edit <n> --add-assignee '@me'`。这是执行会话的第一次 GitHub 写操作。
 - 完成：向 child 写入结论、关闭 child，并在 map 的 Decisions-so-far 中追加上下文链接。
 
 ## 依赖关系

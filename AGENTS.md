@@ -11,7 +11,8 @@
 
 本仓库安装了 mattpocock engineering skills。它们是**按需调用**的工具，不是必须通过的关卡：用户点名或任务明确触发时才使用，不因为「流程规定」而强制运行。
 
-- 用户点名或任务触发某个 skill 时，以该 `SKILL.md` 为流程源；本文件只提供仓库事实、边界和护栏，不重复技能步骤。两者冲突时以 `SKILL.md` 的流程为准，以本文件的仓库事实为准。
+- 用户点名或任务触发某个 skill 时，读取该 `SKILL.md` 执行。通用 skill 的默认流程由本仓库的任务状态源、验证分工和授权边界约束；其余步骤沿用 skill。用户本次明确指令优先。
+- 实施任务（包括调用 `$implement`）前，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“执行层级”，确定本次承担单任务、child 还是父级收尾。
 - Skill 配置文件由 `/setup-matt-pocock-skills` 生成并被 skill 运行时读取，不要删除或改名：
   - `docs/agents/issue-tracker.md` — issue 跟踪器约定（GitHub + `gh` CLI）
   - `docs/agents/triage-labels.md` — 分流标签映射
@@ -66,15 +67,15 @@
 
 例外：冷启动、首次建库、迁移执行和管理员初始化保留完整验收，它们没有下层替代。
 
-新增任何验收旅程前先回答：这条断言能不能在更低层验证？能，就下沉。一次浏览器验收约 106 秒且失败信号无法二分，反复试错的成本远高于把断言写在下层。
+新增任何验收旅程前先回答：这条断言能不能在更低层验证？能，就下沉。
 
 验收闸门是 `tests/acceptance/Acceptance.Tests` 里的普通 xUnit 测试，未设 `NEWP_RUN_ACCEPTANCE=1` 时跳过，因此日常 `dotnet test` 可以放心包含它们。启用后用 `.\scripts\accept.ps1 -Gate <Gate>`（`dotnet test --filter` 的薄封装）。**失败就是异常与栈**，不要再引入失败码、事件流或裁决文件那类中间层——没有消费者的举证只会把失败信号变模糊。场景里写的 JSON 快照是排错转储，不是通过依据。
 
-闸门 runner 一律继承 `AcceptanceRunner`。收尾由它统一持有：无论场景成败都先归还一次性资源（用 `CancellationToken.None`，取消时更需要归还）、再反向扫描产物里的凭据。**这两步各自兜住异常**——扫描要读遍本轮全部产物，撞上被占用或已消失的文件就会抛，裸 `await` 会让这种基础设施异常顶掉更具体的场景失败。最后按「场景失败 → 查到凭据泄漏 → 扫描失败 → 清理抛异常 → 清理报未完成」由具体到泛报出去。子类只写两件事：场景序列和自己的资源归还方式；凭据一律经 `RegisterSecret` / `AddConnectionSecrets` 登记，`RunScenarioAsync` 负责场景归属，两者都不留绕过的口子。
+新增或修改验收 runner、fixture、资源清理或凭据处理时，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“验收资产开发”规则。
 
 闸门共享 `bin/Release`、`.codex-temp/dev/state.json` 与本机端口，必须串行；一轮在跑时不要编辑文件或起第二轮。
 
-闸门**不冻结工作树**，这是有意的：原来的仓库守卫要求验收全程工作树不变，代价是开发中永远跑不了验收（改一行就 `ACC_TREE_CHANGED`）。它唯一的用途是让证据包能证明「这次跑在某个确定提交上」，而证据包已随举证层一起删除。要一个可归属到提交的结论时自己先提交再跑。`AcceptanceRepositoryGuard` 只剩 production cold-start 在用——那里的性能数字必须能归属到 commit，且它从专用脚本触发，不在开发循环上。
+开发验证允许未提交改动；提交归属和 production cold-start 的特殊要求见 [quick-verification.md](docs/verification/quick-verification.md)。
 
 前端定向测试由拥有该测试的 workspace 包脚本执行，并使用包内相对路径；从 Vitest 输出核对运行根目录与目标文件数是否符合预期，确保加载了该包的配置和 `setupFiles`。workspace 根只运行递归聚合脚本。
 
@@ -93,7 +94,7 @@
 - 不确定方案时，先做出一个可运行的最小切片再判断，不先写设计文档。已跑通的代码比设计稿更可靠。
 - 平台能力、公共契约、持久化、安全边界和难以回退的变化，在扩大实施前必须有一次真实纵向验证：从真实 authoring 输入贯通到真实 runtime consumer。**纵向验证必须使用真实业务模块，不新建样例模块**——样例模块的验证成本与真实模块相同，但产出零业务价值。
 - 需要留存决策时写 ADR，只记录边界、非目标和回退路径，不记录过程。契约、模块边界或架构变化落地后，同步更新其唯一事实文档或 ADR。
-- 需要持久化任务目标时使用 GitHub Issue；用户显式调用 `to-spec` 或 `to-tickets` 时，按 skill 建立规格 Issue 和可执行 child Issues，其他情况不默认拆分。
+- 实施前明确目标、范围与验收条件，优先复用已确认规格。需要持久化任务目标与执行状态时使用 GitHub Issue；新建 Spec 或拆 child 按任务需要与用户授权决定，显式调用 `to-spec` 或 `to-tickets` 时按对应 skill 执行。选择规则见 [issue-tracker.md](docs/agents/issue-tracker.md)。
 - 用户明确要求“执行、实现、继续或完成 Issue #N”时，已授权该 Issue 的完整生命周期写入：认领（assignee 为进行中事实）、必要状态回写、完成评论与关闭；child 完成后同步父 Map。
 - 上述授权不包含新建或扩大其他 Issue、推送、PR、合并或无关远端修改；只读审查/诊断不授权写入，用户明确要求暂不关闭时除外。
 - 完成变更前按影响范围执行最小可复跑验证；未执行的验证必须说明原因和复跑方式。

@@ -405,6 +405,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 var company = await CreateCompanyFromBrowserAsync(page, cancellationToken);
                 var department = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);
                 await MaintainDepartmentFromBrowserAsync(page, cancellationToken);
+                await LocateDepartmentAndRestoreAddressAsync(page, department, cancellationToken);
                 var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
                 person = await UpdatePersonFromBrowserAsync(
                     page,
@@ -423,6 +424,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                     "company-created",
                     "department-created-in-tree-and-edited-from-context-menu",
                     "temporary-department-moved-from-global-list-and-deleted-in-tree",
+                    "department-search-location-restored-after-refresh-and-shared-address",
                     "position-created",
                     "person-organization-affiliation-saved-through-standard-drawer",
                     "birth-date-range-finds-person"
@@ -676,6 +678,43 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await confirm.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
         await tree.GetByText(name, new LocatorGetByTextOptions { Exact = true })
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    }
+    // 在现有组织维护旅程内搜索尚未展开的部门，并通过当前地址恢复可继续操作的节点内容。
+    private async Task LocateDepartmentAndRestoreAddressAsync(IPage page, DepartmentData department, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // 正式菜单地址重新进入树，避免只在已加载分支中命中结果。
+        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "组织管理", Exact = true }).First.ClickAsync();
+        await page.ReloadAsync();
+        var tree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
+        await tree.GetByLabel("搜索节点", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Name);
+        await tree.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = $"定位节点 {department.Name}", Exact = true }).ClickAsync();
+        var content = page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" });
+        await content.GetByText(department.Name, new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await content.GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "直属子部门", Exact = true }).ClickAsync();
+        var address = page.Url;
+        await page.ReloadAsync();
+        await page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" })
+            .GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "直属子部门", Selected = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await tree.GetByText(department.Name, new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var sharedPage = await page.Context.NewPageAsync();
+        try
+        {
+            await sharedPage.GotoAsync(address);
+            await sharedPage.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" })
+                .GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "直属子部门", Selected = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            await sharedPage.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" })
+                .GetByText(department.Name, new LocatorGetByTextOptions { Exact = true })
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        }
+        finally
+        {
+            await sharedPage.CloseAsync();
+        }
     }
     // 同一 Personnel 浏览器场景通过标准 Drawer 创建岗位，不把字段边界语义提升到浏览器层。
     private async Task<PositionData> CreatePositionFromBrowserAsync(

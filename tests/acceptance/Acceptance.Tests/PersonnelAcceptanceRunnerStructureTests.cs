@@ -217,13 +217,27 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
             "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
         var start = runner.IndexOf("private async Task MaintainDepartmentFromBrowserAsync", StringComparison.Ordinal);
-        var end = runner.IndexOf("private async Task<PositionData>", start, StringComparison.Ordinal);
+        var end = runner.IndexOf("private async Task LocateDepartmentAndRestoreAddressAsync", start, StringComparison.Ordinal);
         var maintenance = runner[start..end];
         Assert.Contains("Name = \"部门\"", maintenance, StringComparison.Ordinal);
         Assert.Contains("Name = \"组织结构\"", maintenance, StringComparison.Ordinal);
         Assert.Contains("response.Request.Method == \"DELETE\"", maintenance, StringComparison.Ordinal);
         Assert.DoesNotContain("OpenOrganizationTabAsync", maintenance, StringComparison.Ordinal);
         Assert.DoesNotContain("GotoAsync", maintenance, StringComparison.Ordinal);
+    }
+    [Fact]
+    public void SearchRecoveryJourney_ReusesTheActualAddressAndAuthenticatedContext()
+    {
+        var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
+            "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var start = runner.IndexOf("private async Task LocateDepartmentAndRestoreAddressAsync", StringComparison.Ordinal);
+        var end = runner.IndexOf("private async Task<PositionData>", start, StringComparison.Ordinal);
+        var recovery = runner[start..end];
+        Assert.Contains("var address = page.Url;", recovery, StringComparison.Ordinal);
+        Assert.Contains("page.Context.NewPageAsync()", recovery, StringComparison.Ordinal);
+        Assert.Contains("sharedPage.GotoAsync(address)", recovery, StringComparison.Ordinal);
+        Assert.Contains("Name = $\"定位节点 {department.Name}\"", recovery, StringComparison.Ordinal);
+        Assert.DoesNotContain("node=", recovery, StringComparison.Ordinal);
     }
     private static string GetRepositoryRoot()
     {

@@ -75,7 +75,7 @@ describe('standard CRUD mutation execution', () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith({ CompanyId: 'current', ParentDepartmentId: null, Name: 'saved' }, {});
     expect(committed).toHaveBeenCalledTimes(1);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
     expect(execution().error).toBeNull();
     expect(execution().synchronizationError).toContain('已保存，刷新失败');
   });

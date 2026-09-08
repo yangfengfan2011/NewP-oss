@@ -7,6 +7,7 @@ import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'r
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import exampleRecordListViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordList.view.json';
 import exampleRecordDetailViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordDetail.view.json';
@@ -252,6 +253,7 @@ describe('StandardCrudListPageHost', () => {
     initialEntry = '/organization/persons',
     options: {
       strictMode?: boolean;
+      embedded?: React.ContextType<typeof EmbeddedCrudContext>;
       modelDocument?: typeof personModelDocument;
     } = {},
   ) {
@@ -282,7 +284,7 @@ describe('StandardCrudListPageHost', () => {
                   viewDocuments: [viewDocument, personDetailViewDocument],
                 }}
               >
-                <StandardCrudListPageHost viewKey="organization.person.list" />
+                <EmbeddedCrudContext.Provider value={options.embedded ?? null}><StandardCrudListPageHost viewKey="organization.person.list" /></EmbeddedCrudContext.Provider>
               </RuntimeMetadataProvider>
             </PlatformQueryProvider>
           </LocalizationProvider>
@@ -2307,4 +2309,27 @@ describe('StandardCrudListPageHost', () => {
     expect(actions?.textContent).toContain('重置条件');
     expect(actions?.textContent).toContain('应用筛选');
   });
+  it.each([true, false])('executes a tree-target delete through the shared host, publishing only success=%s', async succeeds => {
+    const before = { EID: 'Person_1', ENAME: 'Current', DepartmentId: 'parent' };
+    const remove = vi.fn(async () => {
+      if (!succeeds) throw new Error('引用阻止删除');
+      return { operation: 'action' as const, payload: undefined, change: { operation: 'delete' as const, id: 'Person_1', before } };
+    });
+    const get = vi.fn(async () => ({ normalized: { fields: before, summaries: {} }, value: { fields: before, summaries: {} } }));
+    const list = vi.fn(); const committed = vi.fn(async () => undefined); const close = vi.fn();
+    mockStandardCrudModule({ actionHandlers: undefined, dataAdapter: { list, get, getRowId: () => 'Person_1', remove } });
+    const deleteView = { ...personListViewDocument, view: { ...personListViewDocument.view, rowActions: [{ key: 'delete', labelKey: 'Action_Delete', standardAction: 'delete', variant: 'danger' }] } } as typeof personListViewDocument;
+    await renderHost({}, deleteView, '/organization/persons', { embedded: {
+      input: { parameters: { presentation: 'drawer', standardAction: 'delete' }, recordId: 'Person_1' },
+      reportState: vi.fn(), refreshVersion: 0, committed, close,
+    } });
+    await waitForBodyText('确认删除当前记录');
+    const confirm = [...document.body.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!;
+    await act(async () => confirm.click());
+    expect(get).toHaveBeenCalledTimes(1); expect(list).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledTimes(1); expect(remove).toHaveBeenCalledWith('Person_1', before);
+    expect(committed).toHaveBeenCalledTimes(succeeds ? 1 : 0); expect(close).toHaveBeenCalledTimes(succeeds ? 1 : 0);
+    if (!succeeds) expect(document.body.textContent).toContain('引用阻止删除');
+  });
+
 });

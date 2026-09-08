@@ -20,4 +20,11 @@ describe('Organization page input adapters', () => {
     expect(await organizationTreeProvider.resolveChange({ resourceKey: 'organization.department', operation: 'update', id: 'd1', after: { CompanyId: 'c1', ParentDepartmentId: null } }, scope)).toEqual({ kind: 'unknown' });
     expect(await organizationTreeProvider.resolveChange({ resourceKey: 'organization.department', operation: 'create', id: 'd1', after: { CompanyId: 'c1', ParentDepartmentId: null } }, scope)).toEqual({ kind: 'located', operation: 'create', nodeKey: 'department:d1', beforeLocation: undefined, afterLocation: { nodeKey: 'department:d1', parentNodeKey: 'company:c1' } });
   });
+  it('keeps malformed or missing relationship fields unknown instead of inventing a company root', async () => {
+    for (const parent of [undefined, 42, false]) {
+      expect(await organizationTreeProvider.resolveChange({ resourceKey: 'organization.department', operation: 'delete', id: 'd', before: { CompanyId: 'c', ParentDepartmentId: parent } }, { kind: 'global' })).toEqual({ kind: 'unknown' });
+    }
+    expect(await organizationTreeProvider.resolveChange({ resourceKey: 'organization.person', operation: 'delete', id: 'p' }, { kind: 'global' })).toEqual({ kind: 'unrelated' });
+  });
+
 });

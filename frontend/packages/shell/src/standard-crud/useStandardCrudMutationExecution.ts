@@ -133,7 +133,7 @@ export function useStandardCrudMutationExecution({
       const followUps: Array<() => void | Promise<void>> = [
         () => { if (result) onResult?.(result); },
         async () => { if (result?.change) await onCommitted?.({ ...result.change, resourceKey: registration.resourceKey }); },
-        refresh,
+        () => { if (!(result?.change && onCommitted)) refresh(); },
       ];
       for (const followUp of followUps) {
         try { await followUp(); }

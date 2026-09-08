@@ -55,6 +55,19 @@ public sealed class PageCompositionMetadataTests
         else view["tabs"]![0]![property] = "missing";
         Assert.Throws<JsonException>(() => Validate(documents));
     }
+    [Theory]
+    [InlineData("createView")]
+    [InlineData("action")]
+    [InlineData("label")]
+    public void TreeMaintenance_RejectsInvalidActionReferences(string invalid)
+    {
+        var documents = ReadDocuments();
+        var tree = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "organization.structure")["view"]!;
+        if (invalid == "createView") tree["createAction"]!["viewKey"] = "organization.company.detail";
+        else if (invalid == "action") tree["nodeTypes"]![0]!["contextMenu"]![0]!["standardAction"] = "script";
+        else tree["createAction"]!["labelKey"] = "Missing";
+        Assert.Throws<JsonException>(() => Validate(documents));
+    }
     private static void Validate(JsonNode[] documents) => PageCompositionMetadataValidator.Validate(
         documents.Select(document => JsonSerializer.Deserialize<JsonElement>(document.ToJsonString())), null);
     private static JsonNode[] ReadDocuments() => Directory.GetFiles(Path.Combine(RepositoryRoot(), "modules/Organization/metadata"), "*.json", SearchOption.AllDirectories)

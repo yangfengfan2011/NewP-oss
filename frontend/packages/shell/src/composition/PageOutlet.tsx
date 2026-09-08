@@ -1,11 +1,11 @@
-import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ComponentType } from 'react';
 import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps, type PageRef, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@icp-platform/ui/core';
 import { useLocalization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
-import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext } from './pageCompositionRuntime';
+import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext } from './pageCompositionRuntime';
 import { PageComposition } from './PageCompositionContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -65,6 +65,13 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
   const viewKey = String(input.parameters.viewKey);
   const instanceId = useId();
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const originTreeId = useContext(TreeInstanceContext);
+  const pendingRefresh = useRef(false);
+  const [lifecycle, setLifecycle] = useState<PageLifecycleState>({ dirty: false, submitting: false });
+  const report = useCallback((state: PageLifecycleState, discard?: () => void) => {
+    setLifecycle(current => current.dirty === state.dirty && current.submitting === state.submitting ? current : state);
+    reportState(state, discard);
+  }, [reportState]);
   const [registration, setRegistration] = useState<StandardCrudResourceRegistration | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -81,9 +88,17 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     return () => { active = false; };
   }, [metadata, pageKey, viewKey]);
   useEffect(() => runtime.subscribe(instanceId, async change => {
-    if (change.resourceKey === registration?.resourceKey) setRefreshVersion(version => version + 1);
-  }), [instanceId, registration?.resourceKey, runtime]);
-  const bridge = useMemo(() => ({ input, instanceId, active, reportState, committed: runtime.committed, refreshVersion, close }), [active, close, input, instanceId, refreshVersion, reportState, runtime.committed]);
+    if (change.resourceKey !== registration?.resourceKey) return;
+    if (!active || lifecycle.dirty || lifecycle.submitting) pendingRefresh.current = true;
+    else setRefreshVersion(version => version + 1);
+  }), [active, instanceId, lifecycle, registration?.resourceKey, runtime]);
+  useEffect(() => {
+    if (active && !lifecycle.dirty && !lifecycle.submitting && pendingRefresh.current) {
+      pendingRefresh.current = false; setRefreshVersion(version => version + 1);
+    }
+  }, [active, lifecycle]);
+  const committed = useCallback((change: import('@icp-platform/sdk').ResourceChange) => runtime.committed({ ...change, originTreeId }), [originTreeId, runtime]);
+  const bridge = useMemo(() => ({ input, instanceId, active, reportState: report, committed, refreshVersion, close }), [active, close, committed, input, instanceId, refreshVersion, report]);
   if (error) return <div role="alert">{error}</div>;
   if (!registration) return <div role="status">正在加载标准资源…</div>;
   return <EmbeddedCrudContext.Provider value={bridge}>

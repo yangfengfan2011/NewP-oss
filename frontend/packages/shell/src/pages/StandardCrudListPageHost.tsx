@@ -4,6 +4,7 @@ import { useAuthorization, useLocalization, usePlatformQuery } from '@icp-platfo
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
+  isStandardCrudRecord,
   applyStandardCrudLookupValueChange,
   createStandardCrudOperationResultPresenterRegistry,
 } from '@icp-platform/sdk';
@@ -867,6 +868,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
     [drawerDetailQuery.detail],
   );
+  const [embeddedDelete, setEmbeddedDelete] = useState<StandardCrudDetail | null>(null);
+  const [embeddedActionError, setEmbeddedActionError] = useState<string | null>(null);
   const [drawerPreparationError, setDrawerPreparationError] = useState<string | null>(null);
   const detailError = drawerPreparationError ?? drawerDetailQuery.error;
   const detailLoading = drawerDetailQuery.loading;
@@ -1169,6 +1172,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }, [embedded?.refreshVersion]);
   const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
     refresh: refreshList,
+    resourceKey: registration.resourceKey,
+    onCommitted: embedded?.committed,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
@@ -1179,7 +1184,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     registration,
     fixedCreateValues: embedded?.input.fixedCreateValues,
     onCommitted: embedded?.committed,
-    refresh: embedded ? () => undefined : refreshList,
+    refresh: refreshList,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
@@ -1540,10 +1545,19 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     embedded?.reportState({ dirty: isDrawerDirty(), submitting: mutationExecution.pending || actionExecution.pendingKey !== null }, () => closeDrawer());
   });
   useEffect(() => {
-    if (embedded?.input.parameters.presentation === 'drawer' && embedded.input.recordId) void openEditDrawer(embedded.input.recordId);
+    if (embedded?.input.parameters.presentation !== 'drawer') return;
+    const operation = embedded.input.parameters.standardAction ?? 'edit';
+    const action = (operation === 'create' ? schema.pageActions : schema.rowActions).find(item => item.standardAction === operation);
+    if (!action || !hasActionPermission(action, grantedPermissions)) { setEmbeddedActionError('当前操作不可用。'); return; }
+    if (operation === 'create') void openCreateDrawer();
+    else if (operation === 'delete' && embedded.input.recordId) {
+      let cancelled = false;
+      void dataAdapter.get(embedded.input.recordId).then(detail => { if (!cancelled) setEmbeddedDelete(detail.normalized); }, failure => { if (!cancelled) setEmbeddedActionError(String(failure)); });
+      return () => { cancelled = true; };
+    } else if (embedded.input.recordId) void openEditDrawer(embedded.input.recordId);
     // 外层页面实例与操作参数拥有首次打开；表单更新不重复打开 Drawer。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded?.input.recordId]);
+  }, [embedded?.input.recordId, embedded?.input.parameters.standardAction]);
 
   // SearchTablePage 仍保留旧 request Interface；controlledResult 生效时该兼容函数不会执行远程读取。
   const tableRequest = useMemo(() => async () => ({
@@ -1677,7 +1691,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                       if (!dataAdapter.remove) {
                         throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
                       }
-                      await dataAdapter.remove(rowId);
+                      return dataAdapter.remove(rowId, isStandardCrudRecord(row) ? row : undefined);
                     });
                     const outcome = await actionExecution.execute({
                       key: pendingKey,
@@ -1973,6 +1987,25 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       {messageContextHolder}
+      {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={embedded?.close}>关闭</AntdButton></div>}
+      {embeddedDelete && <Suspense fallback={<span role="status">正在加载确认框…</span>}><Modal open={embedded?.active !== false}
+        title="确认删除当前记录？" okText="确认" cancelText="取消" confirmLoading={actionExecution.pendingKey !== null}
+        onCancel={() => { if (!actionExecution.pendingKey) { setEmbeddedDelete(null); embedded?.close?.(); } }}
+        onOk={async () => {
+          const id = embedded?.input.recordId;
+          const action = schema.rowActions.find(item => item.standardAction === 'delete');
+          if (!id || !action || !hasActionPermission(action, grantedPermissions)) return;
+          const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+          const outcome = await actionExecution.execute({ key: `delete:${id}`, context: { id, detail: embeddedDelete },
+            refreshOnConflict: false, handler: handler ?? (async () => {
+              if (!dataAdapter.remove) throw new Error('资源未提供删除能力。');
+              return dataAdapter.remove(id, embeddedDelete.fields);
+            }) });
+          if (outcome.status === 'succeeded') { setEmbeddedDelete(null); embedded?.close?.(); }
+        }}>
+        此操作不可撤销。
+        {actionExecution.error && <div role="alert">{actionExecution.error.message}</div>}
+      </Modal></Suspense>}
       {presentedOperationResult
         ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
             result: presentedOperationResult,
@@ -1987,6 +2020,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       >
         {content}
       </CrudWorkspacePage>}
+      {actionExecution.synchronizationError && <div role="alert">{actionExecution.synchronizationError}</div>}
       {mutationExecution.synchronizationError && <div role="alert">{mutationExecution.synchronizationError}</div>}
       {schema.advancedFilter.enabled && advancedFilterOpen && embedded?.active !== false ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载高级筛选…</div>}>

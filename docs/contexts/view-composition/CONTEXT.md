@@ -4,6 +4,12 @@
 
 导航 metadata 的 `routeOnly` 项声明不生成菜单的受控地址，`redirectTo` 兼容项只跳转，不装载另一套列表。完整详情可通过 `entryType: standard-crud-detail` 与目标 binding 显式声明，独立于列表菜单和兼容地址。导航根页面拥有标题与 `tab` 地址状态；嵌套页面保持局部选择、筛选和分页。PageProps 的 `active` 表示整个父链是否可见，隐藏页面仍报告未保存／提交状态，但应隐藏 Portal 呈现；同一配置的实例使用独立查询身份。
 
+标准 Mutation 与 Action Execution 将 Adapter 的 `ResourceChange` 成功事实交接一次；业务 presenter 只解释业务结果。Organization 用 `hasChangeSnapshot` 声明本次所需旧字段，不足时在写入前经既有详情入口补读；删除结果保留旧快照，不重读已删记录。`resolveChange` 在同一 Provider 范围内区分不相关、明确位置与待确认，缺少旧位置不是根位置。
+
+外层组合等未保存／提交状态解除后协调读取，当前脏输入不被刷新覆盖。已打开但非活动的树按节点合并待处理影响并保留全部旧、新父分支，激活时只读恢复；同资源的非活动标准页面延迟刷新。树内创建选择新节点；目录操作不抢导航；移动保留选择并解析新路径；删除回退父节点、剩余根或空状态。未知映射和读取失败显示已保存但待同步，重试只恢复当前组合已加载范围与路径，不重放写入。Provider 的 `TreeNodeNotFoundError` 明确表示节点不存在，与网络、权限及路径损坏区分。
+
+Tree View 的 `createAction` 引用标准 List View 的创建能力；节点菜单支持 `edit`、`delete`，目标身份由模块 input resolver 提供。菜单先通过选择保护，再打开既有标准 Drawer 或删除确认，共享执行继续使用原权限与服务端领域裁决。
+
 ## Language
 
 **页面（Page）**：

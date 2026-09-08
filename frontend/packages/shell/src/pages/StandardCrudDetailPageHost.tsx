@@ -223,6 +223,8 @@ function StandardCrudDetailPageContent<TDetail>({
     ? readyPresentation.pageActions.length > 0
       ? (
         <StandardCrudActions
+          resourceKey={registration.resourceKey}
+          onCommitted={embedded?.committed}
           actions={readyPresentation.pageActions.map((action) => ({
             ...action,
             labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),

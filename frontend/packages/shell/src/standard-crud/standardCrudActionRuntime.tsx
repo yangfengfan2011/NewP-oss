@@ -19,6 +19,8 @@ export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
   onResult?: (result: StandardCrudOperationResult) => void;
+  resourceKey?: string;
+  onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void>;
   refresh: () => void;
   context: StandardCrudActionContext<TDetail, TRow>;
 }
@@ -46,13 +48,13 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   handlers = {},
   actionInputs = {},
   actionStateResolver,
-  onResult,
+  onResult, resourceKey, onCommitted,
   refresh,
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
   const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
   const [inputValue, setInputValue] = useState<unknown>(undefined);
-  const actionExecution = useStandardCrudActionExecution<TDetail, TRow>({ refresh, onResult });
+  const actionExecution = useStandardCrudActionExecution<TDetail, TRow>({ refresh, onResult, resourceKey, onCommitted });
   const resolvedActions = actions.map((action) => {
     const state = actionStateResolver?.({ action, detail: context.detail, row: context.row });
     return {
@@ -140,6 +142,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           );
         })}
       </div>
+      {actionExecution.synchronizationError && <span role="alert">{actionExecution.synchronizationError}</span>}
       {actionExecution.error ? (
         <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
           {actionExecution.error.message}

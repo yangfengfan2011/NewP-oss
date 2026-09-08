@@ -41,7 +41,7 @@ async function render(browser = false, search = '', tree = false) {
   const element = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}>
     <RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [], viewDocuments: [{ type: 'view', view },
       { type: 'view', view: { ...view, key: 'other-tabs' } },
-      { type: 'view', view: { key: 'tree', mode: 'tree', dicKey: 'Tabs', providerKey: 'tree', nodeTypes: ['node', 'other'].map(key => ({ key, titleKey: key, pageRef: { pageKey: 'platform.tabs', parameters: { viewKey: key === 'node' ? 'tabs' : 'other-tabs' } } })) } },
+      { type: 'view', view: { key: 'tree', mode: 'tree', dicKey: 'Tabs', providerKey: 'tree', nodeTypes: ['node', 'other'].map(key => ({ key, titleKey: key, contextMenu: [{ key: 'edit', labelKey: 'Edit', standardAction: 'edit', viewKey: 'list', inputResolverKey: 'node' }], pageRef: { pageKey: 'platform.tabs', parameters: { viewKey: key === 'node' ? 'tabs' : 'other-tabs' } } })) } },
     ] }}>
       <PageEntry page={tree ? { pageKey: 'platform.tree', parameters: { viewKey: 'tree' }, inputResolverKey: 'global' } : { pageKey: 'platform.tabs', parameters: { viewKey: 'tabs' } }} />
     </RuntimeMetadataProvider></LocalizationProvider>;
@@ -68,6 +68,21 @@ describe('whole composition lifecycle', () => {
     await selectNode('other');
     expect(container.querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('a');
     expect(router.state.location.search).toBe('?external=keep');
+  });
+  it('selects a right-click target only after dirty-input protection, then opens its menu', async () => {
+    await render(false, '', true);
+    for (let i = 0; i < 30 && !container.querySelector('[role=tab]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+    await click('change a');
+    const target = [...container.querySelectorAll('.ant-tree-title')].find(node => node.textContent === 'two')!;
+    await act(async () => target.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('one');
+    expect(document.querySelector('[role=menu]')).toBeNull();
+    await click('继续编辑');
+    expect(container.textContent).toContain('a:dirty');
+    await act(async () => target.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    await click('放弃修改');
+    expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('two');
+    expect(document.querySelector('[role=menu]')?.textContent).toContain('Edit');
   });
   it('loads only the requested root tab, isolates identical custom page instances and preserves opened content on history restoration', async () => {
     await render(false, '?tab=b&other=keep');

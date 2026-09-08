@@ -41,6 +41,14 @@
     "Person": {
       "zhs": "人员",
       "en": "Persons"
+    },
+    "Delete": {
+      "zhs": "删除",
+      "en": "Delete"
+    },
+    "CreateCompany": {
+      "zhs": "新建公司",
+      "en": "Create company"
     }
   }
 }

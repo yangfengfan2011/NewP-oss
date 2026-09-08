@@ -1,9 +1,11 @@
 import { platformFetch } from '@icp-platform/core';
+import { TreeNodeNotFoundError } from '@icp-platform/sdk';
 import type { PageInputResolverBinding, TreeNodeDescriptor, TreeProviderBinding, TreeNodeLocation } from '@icp-platform/sdk';
 
 async function read<T>(operation: string, parameters: Record<string, string | number> = {}, signal?: AbortSignal): Promise<T> {
   const query = new URLSearchParams(Object.entries(parameters).map(([key, value]) => [key, String(value)]));
   const response = await platformFetch(`/api/organization/tree/${operation}?${query}`, { signal });
+  if (response.status === 404) throw new TreeNodeNotFoundError('组织节点已不存在');
   if (!response.ok) throw new Error(`组织树读取失败 (${response.status})`);
   return response.json() as Promise<T>;
 }
@@ -32,7 +34,7 @@ function globalScope(scope: Record<string, unknown>): string {
 function location(resourceKey: string, id: string, fields: Record<string, unknown> | undefined): TreeNodeLocation | undefined {
   if (!fields) return undefined;
   if (resourceKey === 'organization.company') return { nodeKey: `company:${id}`, parentNodeKey: null };
-  if (typeof fields.CompanyId !== 'string' || !Object.prototype.hasOwnProperty.call(fields, 'ParentDepartmentId')) return undefined;
+  if (typeof fields.CompanyId !== 'string' || !fields.CompanyId || (fields.ParentDepartmentId !== null && typeof fields.ParentDepartmentId !== 'string')) return undefined;
   return { nodeKey: `department:${id}`, parentNodeKey: typeof fields.ParentDepartmentId === 'string' ? `department:${fields.ParentDepartmentId}` : `company:${fields.CompanyId}` };
 }
 export const organizationTreeProvider: TreeProviderBinding = {
@@ -44,6 +46,7 @@ export const organizationTreeProvider: TreeProviderBinding = {
   resolveChange: async (change, scope) => {
     globalScope(scope);
     if (change.resourceKey !== 'organization.company' && change.resourceKey !== 'organization.department') return { kind: 'unrelated' };
+    if (!change.id) return { kind: 'unknown' };
     const beforeLocation = location(change.resourceKey, change.id, change.before);
     const afterLocation = location(change.resourceKey, change.id, change.after);
     if ((change.operation !== 'create' && !beforeLocation) || (change.operation !== 'delete' && !afterLocation)) return { kind: 'unknown' };

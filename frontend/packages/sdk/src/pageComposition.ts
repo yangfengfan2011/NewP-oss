@@ -35,6 +35,8 @@ export type TreeChange = { kind: 'unrelated' } | { kind: 'unknown' } | {
   kind: 'located'; operation: ResourceChange['operation']; nodeKey: string;
   beforeLocation?: TreeNodeLocation; afterLocation?: TreeNodeLocation;
 };
+/** Provider 明确目标不存在；与权限、网络及路径损坏失败区分。 */
+export class TreeNodeNotFoundError extends Error {}
 export interface TreeNodePathItem { nodeKey: string; label: string }
 export interface TreeProviderBinding {
   key: string;
@@ -52,6 +54,7 @@ export interface TabView {
 }
 export interface TreeView {
   key: string; mode: 'tree'; dicKey: string; providerKey: string;
+  createAction?: { labelKey: string; viewKey: string };
   nodeTypes: { key: string; titleKey: string; pageRef: PageRef;
-    contextMenu?: { key: string; labelKey: string; standardAction: 'edit'; viewKey: string; inputResolverKey: string }[] }[];
+    contextMenu?: { key: string; labelKey: string; standardAction: 'edit' | 'delete'; viewKey: string; inputResolverKey: string }[] }[];
 }

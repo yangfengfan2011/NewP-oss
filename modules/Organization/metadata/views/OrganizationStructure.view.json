@@ -23,6 +23,13 @@
             "standardAction": "edit",
             "viewKey": "organization.company.list",
             "inputResolverKey": "organization.node.detail"
+          },
+          {
+            "key": "delete",
+            "labelKey": "Delete",
+            "standardAction": "delete",
+            "viewKey": "organization.company.list",
+            "inputResolverKey": "organization.node.detail"
           }
         ]
       },
@@ -42,10 +49,21 @@
             "standardAction": "edit",
             "viewKey": "organization.department.list",
             "inputResolverKey": "organization.node.detail"
+          },
+          {
+            "key": "delete",
+            "labelKey": "Delete",
+            "standardAction": "delete",
+            "viewKey": "organization.department.list",
+            "inputResolverKey": "organization.node.detail"
           }
         ]
       }
     ],
-    "titleKey": "Structure"
+    "titleKey": "Structure",
+    "createAction": {
+      "labelKey": "CreateCompany",
+      "viewKey": "organization.company.list"
+    }
   }
 }

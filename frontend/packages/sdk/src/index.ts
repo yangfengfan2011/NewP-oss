@@ -3,6 +3,7 @@ import type { StandardCrudResourceRegistration } from './standardCrud';
 
 export { createRecoverableCapabilityLoader } from './capabilityLoader';
 export type * from './pageComposition';
+export { TreeNodeNotFoundError } from './pageComposition';
 import type { PageBinding, PageInputResolverBinding, TreeProviderBinding } from './pageComposition';
 
 export interface ModuleMetadata {

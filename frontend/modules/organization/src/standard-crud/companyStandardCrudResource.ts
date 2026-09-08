@@ -32,6 +32,7 @@ export function mapCompanyListItem(value: unknown): CompanyListRow {
 }
 
 const companyStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
+  hasChangeSnapshot: fields => typeof fields.EID === 'string',
   apiRoute: '/api/organization/companies',
   fetcher: (input, init) => platformFetch(input, init),
   mapListItem: mapCompanyListItem,

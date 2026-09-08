@@ -28,6 +28,8 @@ interface StandardCrudActionExecutionRequest<TDetail, TRow> {
 
 interface UseStandardCrudActionExecutionOptions {
   refresh: () => void;
+  resourceKey?: string;
+  onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void>;
   onResult?: (result: StandardCrudOperationResult) => void;
 }
 
@@ -37,8 +39,9 @@ interface UseStandardCrudActionExecutionOptions {
  */
 export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown>({
   refresh,
-  onResult,
+  onResult, resourceKey, onCommitted,
 }: UseStandardCrudActionExecutionOptions) {
+  const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
   const pendingRef = useRef(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<StandardCrudActionExecutionError | null>(null);
@@ -60,14 +63,16 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
     setError(null);
     try {
       const result = await handler(context);
-      if (refreshOnSuccess) {
-        refresh();
+      // 业务成功已确定；呈现和组合只读失败不能把动作标成失败或重放。
+      setSynchronizationError(null);
+      for (const followUp of [
+        () => { if (result) onResult?.(result); },
+        async () => { if (result?.change && resourceKey) await onCommitted?.({ ...result.change, resourceKey }); },
+        () => { if (refreshOnSuccess && !(result?.change && onCommitted && resourceKey)) refresh(); },
+      ]) {
+        try { await followUp(); } catch (failure) { setSynchronizationError(`已保存，刷新失败：${String(failure)}`); }
       }
-      if (result) {
-        onResult?.(result);
-        return { status: 'succeeded', result };
-      }
-      return { status: 'succeeded' };
+      return { status: 'succeeded', ...(result ? { result } : {}) };
     } catch (actionError) {
       const conflict = actionError instanceof StandardCrudRequestError && actionError.status === 409;
       setError({
@@ -83,12 +88,13 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       pendingRef.current = false;
       setPendingKey(null);
     }
-  }, [onResult, refresh]);
+  }, [onCommitted, onResult, refresh, resourceKey]);
 
   const clearError = useCallback(() => setError(null), []);
 
   return {
     pendingKey,
+    synchronizationError,
     error,
     execute,
     clearError,

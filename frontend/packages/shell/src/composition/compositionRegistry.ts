@@ -50,9 +50,13 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
       const tree = view as unknown as TreeView;
       if (!modules.some(module => module.treeProviders?.some(provider => provider.key === tree.providerKey))) throw new Error('缺少树 Provider binding');
       if (!tree.nodeTypes.length || new Set(tree.nodeTypes.map(item => item.key)).size !== tree.nodeTypes.length) throw new Error('重复或缺少节点类型');
+      if (tree.createAction) check({ pageKey: 'platform.list', parameters: { viewKey: tree.createAction.viewKey } }, next);
       for (const item of tree.nodeTypes) {
         if (!item.titleKey) throw new Error('节点类型缺少 titleKey');
-        check(item.pageRef, next); for (const menu of item.contextMenu ?? []) check({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey }, inputResolverKey: menu.inputResolverKey }, next);
+        check(item.pageRef, next); for (const menu of item.contextMenu ?? []) {
+          if (menu.standardAction !== 'edit' && menu.standardAction !== 'delete') throw new Error('无效树菜单动作');
+          check({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey }, inputResolverKey: menu.inputResolverKey }, next);
+        }
       }
     }
   };

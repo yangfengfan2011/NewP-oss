@@ -391,7 +391,7 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
   ) => Promise<StandardCrudOperationResult>;
-  remove?: (id: string) => Promise<void>;
+  remove?: (id: string, before?: Record<string, unknown>) => Promise<StandardCrudOperationResult | void>;
   exportList?: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
   getRowId: (row: TRow) => string;
 }
@@ -408,7 +408,7 @@ export interface StandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDetail>
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
   ) => Promise<StandardCrudOperationResult>;
-  remove: (id: string) => Promise<void>;
+  remove: (id: string, before?: Record<string, unknown>) => Promise<StandardCrudOperationResult>;
   exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
 }
 
@@ -419,6 +419,8 @@ export interface StandardCrudRestDataAdapterOptions<TRow, TDetail = StandardCrud
   mapListItem: (value: unknown) => TRow;
   getRowId: (row: TRow) => string;
   mapDetail?: (detail: StandardCrudDetail) => TDetail;
+  /** 模块定义完成本次操作前事实所需字段；不足时在写入之前补读详情。 */
+  hasChangeSnapshot?: (fields: Record<string, unknown>) => boolean;
 }
 
 /** 标准 CRUD 请求错误保留 HTTP 状态与字段错误，供 Shell 做冲突、鉴权和 Form.Item 反馈。 */
@@ -1123,7 +1125,19 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
   options: StandardCrudRestDataAdapterOptions<TRow, TDetail>,
 ): StandardCrudRestDataAdapter<TRow, TDetail> {
   const client = createStandardCrudClient(options.apiRoute, options.fetcher);
+  const snapshot = async (id: string, before?: Record<string, unknown>) =>
+    options.hasChangeSnapshot && !options.hasChangeSnapshot(before ?? {})
+      ? (await client.getDetail(id)).fields : before;
 
+  // HTTP 成功后的业务映射也属于同步阶段；失败保留成功事实，以 unknown 位置进行只读恢复。
+  const mutationResult = (operation: 'create' | 'update', detail: StandardCrudDetail, before?: Record<string, unknown>, previousId = ''): StandardCrudOperationResult => {
+    try {
+      const id = options.getRowId(options.mapListItem(detail.fields));
+      return { operation, payload: detail, change: { operation, id, before, after: detail.fields } };
+    } catch {
+      return { operation, payload: detail, change: { operation, id: previousId, before } };
+    }
+  };
   return {
     list: async (query, readContext) => {
       if (readContext?.columnContextToken) {
@@ -1140,15 +1154,18 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
     },
     create: async (values) => {
       const detail = await client.create(values);
-      return { operation: 'create', payload: detail,
-        change: { operation: 'create', id: options.getRowId(options.mapListItem(detail.fields)), after: detail.fields } };
+      return mutationResult('create', detail);
     },
     update: async (id, values, before) => {
+      before = await snapshot(id, before);
       const detail = await client.update(id, values);
-      return { operation: 'update', payload: detail,
-        change: { operation: 'update', id: options.getRowId(options.mapListItem(detail.fields)), before, after: detail.fields } };
+      return mutationResult('update', detail, before, id);
     },
-    remove: (id) => client.delete(id),
+    remove: async (id, fields) => {
+      const before = await snapshot(id, fields);
+      await client.delete(id);
+      return { operation: 'action', payload: undefined, change: { operation: 'delete', id, before } };
+    },
     exportList: (request) => client.exportList(request),
     getRowId: options.getRowId,
   };

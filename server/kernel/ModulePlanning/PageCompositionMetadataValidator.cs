@@ -60,6 +60,12 @@ public static class PageCompositionMetadataValidator
             else
             {
                 Bind(Required(view, "providerKey"));
+                if (view.TryGetProperty("createAction", out var createAction))
+                {
+                    Title(dictionary, createAction, "labelKey");
+                    var createViewKey = Required(createAction, "viewKey");
+                    if (!views.TryGetValue(createViewKey, out var createView) || Mode(createView) != "list") throw new JsonException("Tree create requires a List View.");
+                }
                 var types = view.GetProperty("nodeTypes").EnumerateArray().ToArray();
                 if (types.Length == 0 || types.Select(type => Required(type, "key")).Distinct(StringComparer.Ordinal).Count() != types.Length)
                     throw new JsonException("Invalid tree nodeTypes.");
@@ -68,7 +74,8 @@ public static class PageCompositionMetadataValidator
                     Title(dictionary, type); CheckPage(type.GetProperty("pageRef"), new(chain, StringComparer.Ordinal));
                     if (type.TryGetProperty("contextMenu", out var menus)) foreach (var menu in menus.EnumerateArray())
                     {
-                        if (Required(menu, "standardAction") != "edit") throw new JsonException("Unsupported tree action.");
+                        Title(dictionary, menu, "labelKey");
+                        if (Required(menu, "standardAction") is not ("edit" or "delete")) throw new JsonException("Unsupported tree action.");
                         Bind(Required(menu, "inputResolverKey"));
                         var listKey = Required(menu, "viewKey");
                         if (!views.TryGetValue(listKey, out var list) || Mode(list) != "list") throw new JsonException("Tree action requires a List View.");
@@ -77,9 +84,9 @@ public static class PageCompositionMetadataValidator
             }
         }
         // 组合标签和节点类型名称必须引用当前 authoring 词典。
-        void Title(string dictionary, JsonElement item)
+        void Title(string dictionary, JsonElement item, string property = "titleKey")
         {
-            var title = Required(item, "titleKey");
+            var title = Required(item, property);
             if (!all.Any(document => document.TryGetProperty(dictionary, out var words) && words.ValueKind == JsonValueKind.Object && words.TryGetProperty(title, out _)))
                 throw new JsonException($"Missing composition dictionary title: {dictionary}.{title}");
         }

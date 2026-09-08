@@ -46,6 +46,7 @@ export function mapDepartmentListItem(value: unknown): DepartmentListRow {
 }
 
 const departmentStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
+  hasChangeSnapshot: fields => typeof fields.CompanyId === 'string' && (fields.ParentDepartmentId === null || typeof fields.ParentDepartmentId === 'string'),
   apiRoute: '/api/organization/departments',
   fetcher: (input, init) => platformFetch(input, init),
   mapListItem: mapDepartmentListItem,

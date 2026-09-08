@@ -256,13 +256,13 @@ function StandardCrudDetailPageContent<TDetail>({
             close: () => setPresentedOperationResult(null),
           })
         : null}
-      <div className="sh-page">
-      <PageHeader
+      <div className={embedded ? undefined : "sh-page"}>
+      {!embedded && <PageHeader
         eyebrow={schema.resourceKey}
         title={t(`${dicKey}.${schema.titleKey ?? titleKey}`, schema.titleKey ?? titleKey)}
         description={t(`${dicKey}.${schema.descriptionKey ?? descriptionKey}`, schema.descriptionKey ?? descriptionKey)}
-        actions={embedded ? undefined : detailHeaderActions}
-      />
+        actions={detailHeaderActions}
+      />}
 
       {showLoading ? (
         <LoadingState message="正在加载详情..." />

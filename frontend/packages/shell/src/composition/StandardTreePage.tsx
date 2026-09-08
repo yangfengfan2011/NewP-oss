@@ -82,7 +82,7 @@ export default function StandardTreePage({ input }: PageProps) {
       {!roots.length && !error && <p>暂无节点</p>}
     </aside>
     <section aria-label="节点内容">
-      {selected && selectedType ? <PageOutlet key={selected.nodeKey} page={selectedType.pageRef} context={selected} /> : <p>请选择节点</p>}
+      {selected && selectedType ? <PageOutlet key={selectedType.key} page={selectedType.pageRef} context={selected} /> : <p>请选择节点</p>}
       {editPage && selected && <PageOutlet key={`editor:${selected.nodeKey}`} page={editPage} context={selected} close={() => setEditPage(null)} />}
     </section>
   </div>;

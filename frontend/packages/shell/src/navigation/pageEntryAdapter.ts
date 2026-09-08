@@ -11,6 +11,7 @@ export function buildPageEntriesFromNavDocuments(
       path: item.path,
       entryType: item.entryType,
       targetKey: item.targetKey,
+      ...(item.redirectTo ? { redirectTo: item.redirectTo } : {}),
       permissions: item.permissions,
       ...(item.localAdministratorOnly ? { localAdministratorOnly: true } : {}),
     })), ...document.navigation.items.filter(item => item.path && item.page).map(item => ({

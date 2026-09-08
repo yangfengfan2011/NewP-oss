@@ -29,6 +29,18 @@
     "Structure": {
       "zhs": "组织结构",
       "en": "Organization structure"
+    },
+    "Management": {
+      "zhs": "组织管理",
+      "en": "Organization management"
+    },
+    "Position": {
+      "zhs": "岗位",
+      "en": "Positions"
+    },
+    "Person": {
+      "zhs": "人员",
+      "en": "Persons"
     }
   }
 }

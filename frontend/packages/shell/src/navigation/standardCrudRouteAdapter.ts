@@ -86,14 +86,21 @@ export function compileStandardCrudRouteProjection(
     for (const listBinding of (module.standardCrudCapabilities ?? []).filter(
       (binding) => binding.kind === 'standard-list',
     )) {
-      const nav = requireUniqueListNav(navDocuments, listBinding.targetKey);
+      const navigationMatches = navDocuments.flatMap(document => document.navigation.items)
+        .filter(item => item.entryType === 'standard-list' && item.targetKey === listBinding.targetKey);
+      const composed = viewDocuments.some(document => {
+        const refs = [...(Array.isArray(document.view.tabs) ? document.view.tabs : []),
+          ...(Array.isArray(document.view.nodeTypes) ? document.view.nodeTypes : [])];
+        return refs.some(item => item.pageRef?.pageKey === 'platform.list' && item.pageRef.parameters?.viewKey === listBinding.targetKey);
+      });
+      const nav = navigationMatches.length === 0 && composed ? undefined : requireUniqueListNav(navDocuments, listBinding.targetKey);
       const listView = requireUniqueView(viewDocuments, listBinding.targetKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
       const detailViewKey = readNonEmptyString(listView.view.detailViewKey);
       if (!detailViewKey) {
         if (readNonEmptyString(listView.view.model)) {
           fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', listBinding.targetKey);
         }
-        owners.push({
+        if (nav) owners.push({
           path: nav.path,
           permissions: nav.permissions,
           projectsDrawer: false,
@@ -111,7 +118,7 @@ export function compileStandardCrudRouteProjection(
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);
       }
       consumedLazyDetailTargets.add(detailViewKey);
-      owners.push({
+      if (nav) owners.push({
         detailViewKey,
         projectsFullDetail: matchingDetailTargets.length === 1,
         path: nav.path,
@@ -127,13 +134,23 @@ export function compileStandardCrudRouteProjection(
     }
   }
 
-  const detailEntries = owners.flatMap((owner) => owner.detailViewKey && owner.projectsFullDetail
+  const explicitEntries = navDocuments.flatMap(document => document.navigation.items)
+    .filter(item => item.entryType === 'standard-crud-detail').map(item => {
+      const targetCount = lazyDetailTargets.filter(key => key === item.targetKey).length
+        + modules.flatMap(module => module.standardCrudResources ?? []).filter(resource => resource.detailViewKey === item.targetKey && resource.detailRoutePath).length;
+      if (!item.targetKey || !item.path || targetCount !== 1)
+        fail('STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN', item.targetKey ?? item.key);
+      resolveExplicitDetailRoute(navDocuments, item.targetKey);
+      return { path: item.path!, viewKey: item.targetKey!, permissions: item.permissions };
+    });
+  const detailEntries = [...explicitEntries, ...owners.flatMap((owner) => owner.detailViewKey && owner.projectsFullDetail
+    && !explicitEntries.some(entry => entry.viewKey === owner.detailViewKey)
     ? [{
         path: `${normalizeListPath(owner.path)}/:id`,
         viewKey: owner.detailViewKey,
         permissions: owner.permissions,
       }]
-    : []);
+    : [])];
   requireUniquePaths(
     detailEntries.map((entry) => entry.path),
     'STANDARD_CRUD_DETAIL_PATH_CONFLICT',
@@ -319,7 +336,16 @@ export function resolveStandardCrudListRoute(
   }
 
   return {
-    path: matches[0].path!,
+    path: matches[0].redirectTo ?? matches[0].path!,
     permissions: matches[0].permissions,
   };
+}
+
+/** 完整详情由显式路由声明拥有；历史独立列表仍沿用原有派生约定。 */
+export function resolveExplicitDetailRoute(navDocuments: RuntimeNavItemDocument[], detailViewKey: string) {
+  const matches = navDocuments.flatMap(document => document.navigation.items)
+    .filter(item => item.entryType === 'standard-crud-detail' && item.targetKey === detailViewKey);
+  if (matches.length > 1 || (matches.length === 1 && !matches[0].path))
+    fail('STANDARD_CRUD_DETAIL_PATH_CONFLICT', detailViewKey);
+  return matches[0];
 }

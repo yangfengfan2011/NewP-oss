@@ -20,7 +20,9 @@
         "targetKey": "organization.person.list",
         "permissions": [
           "Organization.Person.View"
-        ]
+        ],
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=persons"
       },
       {
         "key": "organization.companyManagement",
@@ -33,7 +35,9 @@
         "targetKey": "organization.company.list",
         "permissions": [
           "Organization.Company.View"
-        ]
+        ],
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=companies"
       },
       {
         "key": "organization.departmentManagement",
@@ -46,7 +50,9 @@
         "targetKey": "organization.department.list",
         "permissions": [
           "Organization.Department.View"
-        ]
+        ],
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=departments"
       },
       {
         "key": "organization.positionManagement",
@@ -59,21 +65,32 @@
         "targetKey": "organization.position.list",
         "permissions": [
           "Organization.Position.View"
-        ]
+        ],
+        "routeOnly": true,
+        "redirectTo": "/organization/structure?tab=positions"
       },
       {
         "key": "organization.structure",
-        "titleKey": "Navigation.OrganizationTree",
+        "titleKey": "Navigation.OrganizationManagement",
         "parentKey": "organization",
         "path": "/organization/structure",
         "order": 105,
         "page": {
-          "pageKey": "platform.tree",
+          "pageKey": "platform.tabs",
           "parameters": {
-            "viewKey": "organization.structure"
-          },
-          "inputResolverKey": "organization.tree.global"
+            "viewKey": "organization.management"
+          }
         }
+      },
+      {
+        "key": "organization.person.detail",
+        "path": "/organization/persons/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "organization.person.detail",
+        "permissions": [
+          "Organization.Person.View"
+        ]
       }
     ]
   }

@@ -14,6 +14,8 @@ export interface PageInput {
 export interface PageLifecycleState { dirty: boolean; submitting: boolean }
 export interface PageProps {
   input: PageInput;
+  /** 外层隐藏时保留实例；页面据此隐藏 Portal 等脱离 DOM 层级的呈现。 */
+  active?: boolean;
   reportState: (state: PageLifecycleState, discard?: () => void) => void;
 }
 export interface PageBinding {

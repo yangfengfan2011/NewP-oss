@@ -12,7 +12,7 @@ function authoring(): RuntimeMetadataState {
 }
 const modules: FrontendModule[] = [{ metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1' },
   treeProviders: [{ key: 'organization.tree', roots: async () => [], children: async () => [], path: async () => [], search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) } as TreeProviderBinding],
-  pageInputResolvers: ['organization.node.detail', 'organization.company.direct', 'organization.department.direct', 'organization.tree.global'].map(key => ({ key, pageKeys: ['platform.tree', 'platform.list', 'platform.detail'], resolve: parameters => ({ parameters }) })),
+  pageInputResolvers: ['organization.department.global', 'organization.node.detail', 'organization.company.direct', 'organization.department.direct', 'organization.tree.global'].map(key => ({ key, pageKeys: ['platform.tree', 'platform.list', 'platform.detail'], resolve: parameters => ({ parameters }) })),
 }];
 describe('formal page configuration references', () => {
   it('accepts real Organization Tree/Tab authoring without page identities per view', () => { expect(() => validateCompositionCandidate(modules, authoring())).not.toThrow(); });

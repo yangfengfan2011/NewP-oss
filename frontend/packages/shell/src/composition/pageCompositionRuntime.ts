@@ -9,6 +9,10 @@ export interface CompositionRuntime {
 }
 export const CompositionContext = createContext<CompositionRuntime | null>(null);
 export const EmbeddedCrudContext = createContext<{
-  input: PageInput; reportState: (state: PageLifecycleState, discard?: () => void) => void;
+  input: PageInput; instanceId?: string; active?: boolean; reportState: (state: PageLifecycleState, discard?: () => void) => void;
   committed: (change: ResourceChange) => Promise<void>; refreshVersion: number; close?: () => void;
 } | null>(null);
+
+/** 只有导航根页面拥有地址；嵌套 PageOutlet 清除此上下文。 */
+export const PageNavigationContext = createContext<{ tabKey: string | null; selectTab: (key: string) => void } | null>(null);
+export const PageActivityContext = createContext(true);

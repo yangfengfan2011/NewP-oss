@@ -28,7 +28,9 @@ export interface RuntimeNavItem {
   permissions?: string[];
   localAdministratorOnly?: boolean;
   shellViews?: string[];
-  entryType?: 'standard-list' | 'custom';
+  entryType?: 'standard-list' | 'custom' | 'standard-crud-detail';
+  routeOnly?: boolean;
+  redirectTo?: string;
   targetKey?: string;
   page?: import("@icp-platform/sdk").PageRef;
 }

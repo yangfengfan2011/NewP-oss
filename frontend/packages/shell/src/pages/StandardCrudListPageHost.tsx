@@ -44,7 +44,7 @@ import {
 } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
-import { hasStandardCrudFullDetailPage, resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
+import { hasStandardCrudFullDetailPage, resolveExplicitDetailRoute, resolveStandardCrudListRoute } from '../navigation/standardCrudRouteAdapter';
 import {
   buildStandardCrudListQuery,
   collectStandardCrudListRequestFields,
@@ -725,9 +725,10 @@ export default function StandardCrudListPageHost({
       registration={registration}
       viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
-      detailRoutePath={listRoute && registration.detailViewKey
+      detailRoutePath={registration.detailViewKey
         && hasStandardCrudFullDetailPage(ModuleRegistry.getAllModules(), registration.detailViewKey)
-        ? `${listRoute.path.replace(/\/$/, '')}/:id`
+        ? resolveExplicitDetailRoute(runtimeMetadata?.navDocuments ?? [], registration.detailViewKey)?.path
+          ?? (listRoute ? `${listRoute.path.replace(/\/$/, '')}/:id` : undefined)
         : undefined}
     />
     </StandardCrudHostErrorBoundary>
@@ -977,8 +978,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       : {}),
   }), [appliedFilters, listRequestFields, schema.advancedFilter, schema.query, tableQuery]);
   const metadataListQueryKey = useMemo(
-    () => createStandardCrudListQueryKey(registration.resourceKey, { ...metadataListRequest, queryScope: JSON.stringify(embedded?.input.queryScope), instanceId: embedded ? schema.viewKey + JSON.stringify(embedded.input.context?.nodeKey) : undefined }),
-    [embedded, metadataListRequest, registration.resourceKey, schema.viewKey],
+    () => createStandardCrudListQueryKey(registration.resourceKey, { ...metadataListRequest, queryScope: JSON.stringify(embedded?.input.queryScope), instanceId: embedded?.instanceId }),
+    [embedded, metadataListRequest, registration.resourceKey],
   );
   const metadataListQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
     key: metadataListQueryKey,
@@ -1979,14 +1980,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           })
         : null}
       {embedded?.input.parameters.presentation !== 'drawer' && <CrudWorkspacePage
-        title={pageTitle}
+        embedded={Boolean(embedded)}
+        title={embedded ? undefined : pageTitle}
         primaryActions={headerActions}
         filterBar={filterBar}
       >
         {content}
       </CrudWorkspacePage>}
       {mutationExecution.synchronizationError && <div role="alert">{mutationExecution.synchronizationError}</div>}
-      {schema.advancedFilter.enabled && advancedFilterOpen ? (
+      {schema.advancedFilter.enabled && advancedFilterOpen && embedded?.active !== false ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载高级筛选…</div>}>
           <Drawer
             open
@@ -2046,7 +2048,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           </Drawer>
         </Suspense>
       ) : null}
-      {drawerState.mode !== 'closed' ? (
+      {drawerState.mode !== 'closed' && embedded?.active !== false ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作面板…</div>}>
           <StandardCrudListDrawerRuntime
             mode={drawerState.mode}

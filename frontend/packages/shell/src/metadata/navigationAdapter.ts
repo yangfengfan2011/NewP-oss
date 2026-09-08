@@ -9,7 +9,7 @@ export function buildMenusFromNavDocuments(
   navDocuments: RuntimeNavItemDocument[],
   resolveLabel: (titleKey?: string, fallback?: string) => string,
 ): MenuConfig[] {
-  const items = navDocuments.flatMap((document) => document.navigation.items);
+  const items = navDocuments.flatMap((document) => document.navigation.items).filter(item => !item.routeOnly);
   const menuNodes = items.map<RuntimeMenuNode>((item) => ({
     id: item.key,
     label: resolveLabel(item.titleKey, item.key),

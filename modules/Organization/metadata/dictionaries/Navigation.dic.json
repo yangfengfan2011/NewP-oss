@@ -25,6 +25,10 @@
     "DepartmentManagement": {
       "zhs": "部门管理",
       "en": "Department Management"
+    },
+    "OrganizationManagement": {
+      "zhs": "组织管理",
+      "en": "Organization management"
     }
   }
 }

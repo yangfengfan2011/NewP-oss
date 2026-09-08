@@ -7,6 +7,7 @@ export interface RuntimePageEntry {
   entryType: RuntimePageEntryType;
   targetKey: string;
   page?: import("@icp-platform/sdk").PageRef;
+  redirectTo?: string;
   permissions?: string[];
   localAdministratorOnly?: boolean;
 }

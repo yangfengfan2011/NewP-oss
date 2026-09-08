@@ -30,7 +30,8 @@
       "organization.node.detail",
       "organization.company.direct",
       "organization.department.direct",
-      "organization.tree.global"
+      "organization.tree.global",
+      "organization.department.global"
     ]
   },
   "security": {

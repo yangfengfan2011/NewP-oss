@@ -4,6 +4,7 @@ import { Card, Space, Typography } from 'antd';
 const { Title, Paragraph } = Typography;
 
 export interface CrudWorkspacePageProps {
+  embedded?: boolean;
   title?: ReactNode;
   description?: ReactNode;
   primaryActions?: ReactNode;
@@ -12,12 +13,18 @@ export interface CrudWorkspacePageProps {
 }
 
 export function CrudWorkspacePage({
+  embedded = false,
   title,
   description,
   primaryActions,
   filterBar,
   children,
 }: CrudWorkspacePageProps) {
+  if (embedded) return <div className="np-crud-embedded">
+    {primaryActions && <Space className="np-crud-workspace-actions">{primaryActions}</Space>}
+    {filterBar}
+    {children}
+  </div>;
   const hasHeader = Boolean(title || description || primaryActions);
 
   return (

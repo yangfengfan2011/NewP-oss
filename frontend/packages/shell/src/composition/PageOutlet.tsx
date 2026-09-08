@@ -1,8 +1,11 @@
 import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, useState, type ComponentType } from 'react';
 import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps, type PageRef, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { PageHeader } from '@icp-platform/ui/core';
+import { useLocalization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
-import { CompositionContext, EmbeddedCrudContext } from './pageCompositionRuntime';
+import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext } from './pageCompositionRuntime';
 import { PageComposition } from './PageCompositionContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -10,10 +13,23 @@ const ListPage = lazy(() => import('../pages/StandardCrudListPageHost'));
 const DetailPage = lazy(() => import('../pages/StandardCrudDetailPageHost'));
 
 export function PageEntry({ page }: { page: PageRef }) {
-  return <PageComposition><PageOutlet page={page} /></PageComposition>;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const metadata = useRuntimeMetadata();
+  const { t } = useLocalization();
+  const view = metadata?.viewDocuments.find(document => document.view.key === page.parameters?.viewKey)?.view;
+  const navigation = { tabKey: new URLSearchParams(location.search).get('tab'), selectTab: (key: string) => {
+    const query = new URLSearchParams(location.search); query.set('tab', key);
+    navigate({ pathname: location.pathname, search: query.toString() });
+  } };
+  return <PageComposition><div className="sh-page">
+    {view && <PageHeader title={t(`${view.dicKey}.${view.titleKey}`, String(view.titleKey ?? ''))} />}
+    <PageOutlet page={page} navigation={navigation} />
+  </div></PageComposition>;
 }
-export function PageOutlet({ page, context, close }: { page: PageRef; context?: PageInput['context']; close?: () => void }) {
+export function PageOutlet({ page, context, close, navigation, active = true }: { page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; active?: boolean }) {
   const runtime = useContext(CompositionContext);
+  const parentActive = useContext(PageActivityContext);
   const instanceId = useId();
   const reportState = useCallback((state: PageLifecycleState, discard?: () => void) => runtime?.report(instanceId, state, discard), [instanceId, runtime]);
   useEffect(() => () => runtime?.report(instanceId, null), [instanceId, runtime]);
@@ -22,14 +38,14 @@ export function PageOutlet({ page, context, close }: { page: PageRef; context?: 
     catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
   }, [context, page]);
   if (!resolved.input) return <div role="alert">页面配置／上下文错误：{resolved.error}</div>;
-  const props: PageProps = { input: resolved.input, reportState };
-  return <Suspense fallback={<div role="status">正在加载页面…</div>}>
+  const props: PageProps = { input: resolved.input, reportState, active: parentActive && active };
+  return <PageActivityContext.Provider value={props.active!}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">正在加载页面…</div>}>
     {page.pageKey === 'platform.tree' ? <TreePage {...props} />
       : page.pageKey === 'platform.tabs' ? <TabPage {...props} />
         : page.pageKey === 'platform.list' || page.pageKey === 'platform.detail'
           ? <StandardPage pageKey={page.pageKey} {...props} close={close} />
           : <CustomPage pageKey={page.pageKey} {...props} />}
-  </Suspense>;
+  </Suspense></PageNavigationContext.Provider></PageActivityContext.Provider>;
 }
 function CustomPage({ pageKey, ...props }: PageProps & { pageKey: string }) {
   const [component, setComponent] = useState<ComponentType<PageProps> | null>(null);
@@ -43,7 +59,7 @@ function CustomPage({ pageKey, ...props }: PageProps & { pageKey: string }) {
   const Content = component;
   return error ? <div role="alert">{error}</div> : Content ? <Content {...props} /> : <div role="status">正在加载页面…</div>;
 }
-function StandardPage({ pageKey, input, reportState, close }: PageProps & { pageKey: string; close?: () => void }) {
+function StandardPage({ pageKey, input, reportState, close, active }: PageProps & { pageKey: string; close?: () => void }) {
   const metadata = useRuntimeMetadata();
   const runtime = useContext(CompositionContext)!;
   const viewKey = String(input.parameters.viewKey);
@@ -67,7 +83,7 @@ function StandardPage({ pageKey, input, reportState, close }: PageProps & { page
   useEffect(() => runtime.subscribe(instanceId, async change => {
     if (change.resourceKey === registration?.resourceKey) setRefreshVersion(version => version + 1);
   }), [instanceId, registration?.resourceKey, runtime]);
-  const bridge = useMemo(() => ({ input, reportState, committed: runtime.committed, refreshVersion, close }), [close, input, refreshVersion, reportState, runtime.committed]);
+  const bridge = useMemo(() => ({ input, instanceId, active, reportState, committed: runtime.committed, refreshVersion, close }), [active, close, input, instanceId, refreshVersion, reportState, runtime.committed]);
   if (error) return <div role="alert">{error}</div>;
   if (!registration) return <div role="status">正在加载标准资源…</div>;
   return <EmbeddedCrudContext.Provider value={bridge}>

@@ -13,6 +13,7 @@ function requireNode(context: TreeNodeDescriptor | undefined, nodeType?: string)
   return context.context as { id: string; companyId: string; parentDepartmentId: string | null };
 }
 export const organizationPageInputs: PageInputResolverBinding[] = [
+  { key: 'organization.department.global', pageKeys: ['platform.list'], resolve: parameters => ({ parameters, queryScope: {} }) },
   { key: 'organization.tree.global', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters, treeScope: { kind: 'global' } }) },
   { key: 'organization.node.detail', pageKeys: ['platform.detail', 'platform.list'], resolve: (parameters, context) => ({ parameters, context, recordId: requireNode(context).id }) },
   { key: 'organization.company.direct', pageKeys: ['platform.list'], resolve: (parameters, context) => {

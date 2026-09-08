@@ -644,10 +644,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = name }).Last;
         await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "编辑", Exact = true }).ClickAsync();
         drawer = page.Locator(".ant-drawer-content:visible").Last;
-        var parentField = drawer.Locator(".ant-form-item").Filter(new LocatorFilterOptions
-        {
-            Has = drawer.GetByLabel("上级部门", new LocatorGetByLabelOptions { Exact = true })
-        });
+        var parentField = drawer.Locator(".ant-form-item:has(#ParentDepartmentId)");
         await parentField.HoverAsync();
         await parentField.Locator(".ant-select-clear").ClickAsync();
         var moveResponse = page.WaitForResponseAsync(response => response.Request.Method == "PUT"

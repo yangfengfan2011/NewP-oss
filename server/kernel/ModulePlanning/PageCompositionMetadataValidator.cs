@@ -60,27 +60,37 @@ public static class PageCompositionMetadataValidator
             else
             {
                 Bind(Required(view, "providerKey"));
-                if (view.TryGetProperty("createAction", out var createAction))
-                {
-                    Title(dictionary, createAction, "labelKey");
-                    var createViewKey = Required(createAction, "viewKey");
-                    if (!views.TryGetValue(createViewKey, out var createView) || Mode(createView) != "list") throw new JsonException("Tree create requires a List View.");
-                }
+                CheckActions(view, "treeActions", dictionary);
                 var types = view.GetProperty("nodeTypes").EnumerateArray().ToArray();
                 if (types.Length == 0 || types.Select(type => Required(type, "key")).Distinct(StringComparer.Ordinal).Count() != types.Length)
                     throw new JsonException("Invalid tree nodeTypes.");
                 foreach (var type in types)
                 {
                     Title(dictionary, type); CheckPage(type.GetProperty("pageRef"), new(chain, StringComparer.Ordinal));
-                    if (type.TryGetProperty("contextMenu", out var menus)) foreach (var menu in menus.EnumerateArray())
-                    {
-                        Title(dictionary, menu, "labelKey");
-                        if (Required(menu, "standardAction") is not ("edit" or "delete")) throw new JsonException("Unsupported tree action.");
-                        Bind(Required(menu, "inputResolverKey"));
-                        var listKey = Required(menu, "viewKey");
-                        if (!views.TryGetValue(listKey, out var list) || Mode(list) != "list") throw new JsonException("Tree action requires a List View.");
-                    }
+                    CheckActions(type, "contextMenu", dictionary);
                 }
+            }
+        }
+        // 树只引用资源已经允许的动作；行为实现由该 List View 的受控注册拥有。
+        void CheckActions(JsonElement owner, string property, string dictionary)
+        {
+            if (!owner.TryGetProperty(property, out var actions)) return;
+            if (actions.ValueKind != JsonValueKind.Array) throw new JsonException("Tree actions must be an array.");
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var reference in actions.EnumerateArray())
+            {
+                if (!keys.Add(Required(reference, "key"))) throw new JsonException("Duplicate tree action key.");
+                Title(dictionary, reference, "labelKey");
+                if (reference.TryGetProperty("inputResolverKey", out _)) Bind(Required(reference, "inputResolverKey"));
+                var listKey = Required(reference, "viewKey");
+                if (!views.TryGetValue(listKey, out var list) || Mode(list) != "list") throw new JsonException("Tree action requires a List View.");
+                Bind(listKey);
+                var standard = reference.TryGetProperty("standardAction", out _);
+                if (standard == reference.TryGetProperty("actionKey", out _)) throw new JsonException("Tree action requires exactly one action reference.");
+                var target = Required(reference, standard ? "standardAction" : "actionKey");
+                var matches = new[] { "pageActions", "rowActions" }.SelectMany(name => list.TryGetProperty(name, out var items) ? items.EnumerateArray().ToArray() : [])
+                    .Where(action => action.TryGetProperty(standard ? "standardAction" : "key", out var value) && value.GetString() == target).ToArray();
+                if (matches.Length != 1) throw new JsonException("Tree action reference is missing or ambiguous.");
             }
         }
         // 组合标签和节点类型名称必须引用当前 authoring 词典。

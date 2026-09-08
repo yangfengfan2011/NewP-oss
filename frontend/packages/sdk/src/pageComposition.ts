@@ -54,7 +54,12 @@ export interface TabView {
 }
 export interface TreeView {
   key: string; mode: 'tree'; dicKey: string; providerKey: string;
-  createAction?: { labelKey: string; viewKey: string };
+  treeActions?: TreeActionReference[];
   nodeTypes: { key: string; titleKey: string; pageRef: PageRef;
-    contextMenu?: { key: string; labelKey: string; standardAction: 'edit' | 'delete'; viewKey: string; inputResolverKey: string }[] }[];
+    contextMenu?: TreeActionReference[] }[];
 }
+/** 引用已有 List View 动作；权限、确认和输入仍由资源动作声明拥有。 */
+export type TreeActionReference = {
+  key: string; labelKey: string; viewKey: string; inputResolverKey?: string;
+} & ({ standardAction: NonNullable<import('./standardCrud').StandardCrudActionDefinition['standardAction']>; actionKey?: never }
+  | { actionKey: string; standardAction?: never });

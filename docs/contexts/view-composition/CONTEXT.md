@@ -10,7 +10,7 @@
 
 外层组合等未保存／提交状态解除后协调读取，当前脏输入不被刷新覆盖。已打开但非活动的树按节点合并待处理影响并保留全部旧、新父分支，激活时只读恢复；同资源的非活动标准页面延迟刷新。树内创建选择新节点；目录操作不抢导航；移动保留选择并解析新路径；删除回退父节点、剩余根或空状态。未知映射和读取失败显示已保存但待同步，重试只恢复当前组合已加载范围与路径，不重放写入。Provider 的 `TreeNodeNotFoundError` 明确表示节点不存在，与网络、权限及路径损坏区分。
 
-Tree View 的 `createAction` 引用标准 List View 的创建能力；节点菜单支持 `edit`、`delete`，目标身份由模块 input resolver 提供。菜单先通过选择保护，再打开既有标准 Drawer 或删除确认，共享执行继续使用原权限与服务端领域裁决。
+Tree View 的 `treeActions` 与节点 `contextMenu` 都是可选数组，缺省为空并按声明顺序展示。每项用 `viewKey` 指向已有 List View，并在 `standardAction` 与稳定 `actionKey` 中二选一；`actionKey` 引用该资源既有 ActionSchema 的 key，不重定义 handler、权限、确认或输入。目标身份及创建范围由可选 `inputResolverKey` 提供。候选校验拒绝重复 key、缺失／歧义动作及不匹配的资源 binding；实际资源装载继续核对 handler/input 注册。菜单先完成选择保护，标准 Host 随后复用同一 Drawer、行操作确认、Action Review Dialog 和共享执行。模块专用动作仍按原 handler key 执行并使用原服务端领域裁决。
 
 ## Language
 

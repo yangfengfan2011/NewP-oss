@@ -1,12 +1,73 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Kernel.PluginDiscovery;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
 public sealed class PageCompositionMetadataTests
 {
+    [Fact]
+    public void OrganizationTreeActions_CompileAndStageTheSharedRuntimeContract()
+    {
+        var repository = RepositoryRoot();
+        var temporary = Directory.CreateTempSubdirectory("NewPTreeActions_");
+        try
+        {
+            var modulesRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "modules")).FullName;
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(modulesRoot, "Organization")).FullName;
+            var sourceRoot = Path.Combine(repository, "modules", "Organization");
+            foreach (var file in Directory.GetFiles(Path.Combine(sourceRoot, "metadata"), "*", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(moduleRoot, Path.GetRelativePath(sourceRoot, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(file, target);
+            }
+            var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(sourceRoot, "newp.plugin.json")))!;
+            manifest["dependencies"] = new JsonArray();
+            File.WriteAllText(Path.Combine(moduleRoot, "plugin.json"), manifest.ToJsonString());
+            File.WriteAllText(Path.Combine(temporary.FullName, "OrganizationModule.dll"), "fixture assembly");
+            var treePath = Path.Combine(moduleRoot, "metadata/views/OrganizationStructure.view.json");
+            var tree = JsonNode.Parse(File.ReadAllText(treePath))!;
+            tree["view"]!["treeActions"]!.AsArray().Add(JsonNode.Parse("""{"key":"secondCreate","labelKey":"Department","viewKey":"organization.department.list","actionKey":"create"}"""));
+            foreach (var node in tree["view"]!["nodeTypes"]!.AsArray())
+            {
+                var action = node!["contextMenu"]!.AsArray().Single(item => item!["standardAction"]!.GetValue<string>() == "delete")!.AsObject();
+                action.Remove("standardAction"); action["actionKey"] = "delete";
+            }
+            File.WriteAllText(treePath, tree.ToJsonString());
+            var source = TrustedBuiltInModuleSource.CreateForHost(temporary.FullName, modulesRoot);
+            var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+            var compiler = new CanonicalModulePlanCompiler();
+            var plan = Assert.IsType<CanonicalModulePlan>(compiler.Compile("tree-actions", [candidate]).Plan);
+            Assert.Null(compiler.Compile("missing-resource-binding", [candidate with { FrontendBindings = candidate.FrontendBindings.Where(key => key != "organization.department.list").ToArray() }]).Plan);
+            var install = Path.Combine(temporary.FullName, "install");
+            var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(install), new FrontendRuntimeManifestBuilder(), source);
+            using var stage = materializer.Stage(install, plan);
+            var runtime = JsonNode.Parse(File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "modules/Organization/metadata/views/OrganizationStructure.view.json")));
+            var contract = JsonNode.Parse(File.ReadAllText(Path.Combine(repository, "tests/Kernel.Tests/Fixtures/OrganizationTreeActions.contract.json")));
+            Assert.True(JsonNode.DeepEquals(contract, runtime));
+        }
+        finally { temporary.Delete(true); }
+    }
+
+    [Theory]
+    [InlineData("missing-action")]
+    [InlineData("duplicate")]
+    [InlineData("both")]
+    public void TreeActions_RejectInvalidStableReferences(string invalid)
+    {
+        var documents = ReadDocuments();
+        var tree = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "organization.structure")["view"]!;
+        tree["treeActions"] = JsonNode.Parse("""[{"key":"new","labelKey":"CreateCompany","viewKey":"organization.company.list","actionKey":"create"}]""");
+        var actions = tree["treeActions"]!.AsArray();
+        if (invalid == "missing-action") actions[0]!["actionKey"] = "missing";
+        if (invalid == "duplicate") actions.Add(actions[0]!.DeepClone());
+        if (invalid == "both") actions[0]!["standardAction"] = "create";
+        Assert.Throws<JsonException>(() => Validate(documents));
+    }
+
     [Fact]
     public void RealOrganizationAuthoring_UsesCanonicalReaderWithoutViewPageIdentities()
     {
@@ -63,9 +124,9 @@ public sealed class PageCompositionMetadataTests
     {
         var documents = ReadDocuments();
         var tree = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "organization.structure")["view"]!;
-        if (invalid == "createView") tree["createAction"]!["viewKey"] = "organization.company.detail";
+        if (invalid == "createView") tree["treeActions"]![0]!["viewKey"] = "organization.company.detail";
         else if (invalid == "action") tree["nodeTypes"]![0]!["contextMenu"]![0]!["standardAction"] = "script";
-        else tree["createAction"]!["labelKey"] = "Missing";
+        else tree["treeActions"]![0]!["labelKey"] = "Missing";
         Assert.Throws<JsonException>(() => Validate(documents));
     }
     private static void Validate(JsonNode[] documents) => PageCompositionMetadataValidator.Validate(

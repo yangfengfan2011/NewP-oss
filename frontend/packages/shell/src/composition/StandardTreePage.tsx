@@ -167,7 +167,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
     const title = <span title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? '（停用）' : ''}</span>;
     return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
-      title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).map(menu => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => select(node, () => { setMenuNode(null); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction }, inputResolverKey: menu.inputResolverKey }); }) })) }}
+      title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).map(menu => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => select(node, () => { setMenuNode(null); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
         onOpenChange={open => { if (open) select(node, () => setMenuNode(node.nodeKey)); else setMenuNode(null); }}>{title}</Dropdown>,
       children: branches[node.nodeKey] ? data(branches[node.nodeKey]) : undefined };
   });
@@ -176,7 +176,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   return <TreeInstanceContext.Provider value={instanceId}><div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 28%) 1fr', gap: 24 }}>
     <aside aria-label="结构树">
       <TreeSearch provider={provider} scope={treeScope} view={view} choose={key => runtime.leave(() => { void locate(key); })} />
-      {view.createAction && <Button onClick={() => runtime.leave(() => setEditPage({ pageKey: 'platform.list', parameters: { viewKey: view.createAction!.viewKey, presentation: 'drawer', standardAction: 'create' } }))}>{t(`${view.dicKey}.${view.createAction.labelKey}`, view.createAction.labelKey)}</Button>}
+      {(view.treeActions ?? []).map(action => <Button key={action.key} onClick={() => runtime.leave(() => { setEditContext(undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
       {error && <div role="alert">树读取失败：{error}<Button onClick={() => runtime.leave(() => { if (pendingChanges.current.size) void flush().catch(() => undefined); else void reloadRoots(); })}>重试</Button></div>}
       {locationError && <div role="alert">定位读取失败：{locationError}<button onClick={() => runtime.leave(() => { if (locationTarget.current) void locate(locationTarget.current); })}>重试定位</button></div>}
       {locationNotice && <div role="status">{locationNotice}</div>}
@@ -189,7 +189,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     </aside>
     <section aria-label="节点内容">
       {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${selectionEpoch}`} page={selectedType.pageRef} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>请选择节点</p>}
-      {editPage && <PageOutlet key={`editor:${editContext?.nodeKey ?? "root"}:${String(editPage.parameters?.standardAction)}`} page={editPage} context={editContext} close={() => setEditPage(null)} />}
+      {editPage && <PageOutlet key={`editor:${editContext?.nodeKey ?? "root"}:${String(editPage.parameters?.actionKey ?? editPage.parameters?.standardAction)}`} page={editPage} context={editContext} close={() => setEditPage(null)} />}
     </section>
   </div></TreeInstanceContext.Provider>;
 }

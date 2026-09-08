@@ -128,7 +128,7 @@ interface RowActionItem {
   loading?: boolean;
   confirmMessage?: string;
   inline?: boolean;
-  onClick: () => void | Promise<void>;
+  onClick: () => void | boolean | Promise<void | boolean>;
 }
 
 interface ResolvedStandardCrudListColumn {
@@ -500,7 +500,8 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
   return value == null ? '' : String(value);
 }
 
-function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
+function RowActionButtonGroup({ actions, requested = false, active = true, close }: { actions: RowActionItem[]; requested?: boolean; active?: boolean; close?: () => void }) {
+  const requestedOnce = useRef(false);
   const [confirmAction, setConfirmAction] = useState<RowActionItem | null>(null);
   const inlineActions = actions.filter((action) => action.inline).slice(0, 1);
   const overflowActions = actions.filter((action) => !inlineActions.includes(action));
@@ -532,10 +533,19 @@ function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
     setConfirmAction(action);
   };
 
+  useEffect(() => {
+    if (!requested || requestedOnce.current || !actions[0]) return;
+    requestedOnce.current = true;
+    if (!actions[0].disabled) runOverflowAction(actions[0]);
+    // 一个内嵌动作实例只请求一次；后续 pending/错误渲染不能重放写入。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requested, actions]);
+
   return (
     <div className="np-row-actions">
-      {inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
-      {overflowActions.length > 0 ? (
+      {requested && (!actions[0] || (actions[0].disabled && !actions[0].loading)) && <div role="alert">{actions[0]?.disabledReason ?? '当前操作不可用。'}<AntdButton onClick={close}>关闭</AntdButton></div>}
+      {!requested && inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
+      {!requested && overflowActions.length > 0 ? (
         <Dropdown
           trigger={['click']}
           menu={{
@@ -563,17 +573,18 @@ function RowActionButtonGroup({ actions }: { actions: RowActionItem[] }) {
       {confirmAction ? (
         <Suspense fallback={<span role="status">正在加载确认框…</span>}>
           <Modal
-            open
+            open={active}
             title={confirmAction.confirmMessage}
             okText="确认"
             cancelText="取消"
-            confirmLoading={confirmAction.loading}
+            confirmLoading={actions.find(action => action.key === confirmAction.key)?.loading}
             okButtonProps={{ danger: confirmAction.danger }}
             destroyOnHidden
-            onCancel={() => setConfirmAction(null)}
+            onCancel={() => { setConfirmAction(null); close?.(); }}
             onOk={async () => {
-              await confirmAction.onClick();
-              setConfirmAction(null);
+              const current = actions.find(action => action.key === confirmAction.key);
+              if (!current || current.disabled) return;
+              if (await current.onClick() !== false) setConfirmAction(null);
             }}
           />
         </Suspense>
@@ -868,7 +879,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
     [drawerDetailQuery.detail],
   );
-  const [embeddedDelete, setEmbeddedDelete] = useState<StandardCrudDetail | null>(null);
+  const [embeddedAction, setEmbeddedAction] = useState<{ action: StandardCrudRuntimeActionSchema; row: TRow; id: string } | null>(null);
   const [embeddedActionError, setEmbeddedActionError] = useState<string | null>(null);
   const [drawerPreparationError, setDrawerPreparationError] = useState<string | null>(null);
   const detailError = drawerPreparationError ?? drawerDetailQuery.error;
@@ -1542,22 +1553,25 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }, [location.search]);
 
   useEffect(() => {
-    embedded?.reportState({ dirty: isDrawerDirty(), submitting: mutationExecution.pending || actionExecution.pendingKey !== null }, () => closeDrawer());
+    embedded?.reportState({ dirty: isDrawerDirty() || (rowInputAction !== null && rowInputValue !== undefined), submitting: mutationExecution.pending || actionExecution.pendingKey !== null }, () => { setRowInputAction(null); setRowInputValue(undefined); closeDrawer(); });
   });
   useEffect(() => {
     if (embedded?.input.parameters.presentation !== 'drawer') return;
-    const operation = embedded.input.parameters.standardAction ?? 'edit';
-    const action = (operation === 'create' ? schema.pageActions : schema.rowActions).find(item => item.standardAction === operation);
+    const { standardAction, actionKey } = embedded.input.parameters;
+    const action = [...schema.pageActions, ...schema.rowActions].find(item => actionKey ? item.key === actionKey : item.standardAction === standardAction);
     if (!action || !hasActionPermission(action, grantedPermissions)) { setEmbeddedActionError('当前操作不可用。'); return; }
-    if (operation === 'create') void openCreateDrawer();
-    else if (operation === 'delete' && embedded.input.recordId) {
-      let cancelled = false;
-      void dataAdapter.get(embedded.input.recordId).then(detail => { if (!cancelled) setEmbeddedDelete(detail.normalized); }, failure => { if (!cancelled) setEmbeddedActionError(String(failure)); });
-      return () => { cancelled = true; };
-    } else if (embedded.input.recordId) void openEditDrawer(embedded.input.recordId);
+    if (action.standardAction === 'create') { void openCreateDrawer(); return; }
+    const id = embedded.input.recordId;
+    if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('当前操作缺少记录上下文。'); return; }
+    if (action.standardAction === 'edit' && id) { void openEditDrawer(id); return; }
+    if (action.standardAction === 'view' && id) { void openViewDrawer(id); return; }
+    let cancelled = false;
+    const load = id ? dataAdapter.get(id).then(detail => detail.normalized.fields as TRow) : Promise.resolve({} as TRow);
+    void load.then(row => { if (!cancelled) setEmbeddedAction({ action, row, id: id ?? '' }); }, failure => { if (!cancelled) setEmbeddedActionError(String(failure)); });
+    return () => { cancelled = true; };
     // 外层页面实例与操作参数拥有首次打开；表单更新不重复打开 Drawer。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded?.input.recordId, embedded?.input.parameters.standardAction]);
+  }, [embedded?.input.recordId, embedded?.input.parameters.standardAction, embedded?.input.parameters.actionKey]);
 
   // SearchTablePage 仍保留旧 request Interface；controlledResult 生效时该兼容函数不会执行远程读取。
   const tableRequest = useMemo(() => async () => ({
@@ -1569,6 +1583,127 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const createAction = schema.pageActions.find((action) => action.standardAction === 'create');
   const editAction = schema.rowActions.find((action) => action.standardAction === 'edit');
   const rowActionDefinitions = schema.rowActions;
+  // 列表菜单与组合动作入口共享资源动作解析与执行，Tree 不持有业务 handler。
+  function buildRowActions(row: TRow, definitions: StandardCrudRuntimeActionSchema[], rowId: string): RowActionItem[] {
+    return definitions
+      .filter((action) => hasActionPermission(action, grantedPermissions))
+      .filter((action) => isRowActionVisibleForRow(action, row as Record<string, unknown>))
+      .map((action) => ({
+        action,
+        actionState: registration.actionStateResolver?.({ action, row }),
+      }))
+      .filter(({ actionState }) => actionState?.visible !== false)
+      .map(({ action, actionState }): RowActionItem => {
+        const pendingKey = `${action.key}:${rowId}`;
+        const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
+        const metadataDisabledReason = resolveRowActionDisabledReason(
+          action,
+          row as Record<string, unknown>,
+          (key) => t(`${schema.dicKey}.${key}`, key),
+        );
+        const disabledReason = actionState?.available === false
+          ? actionState.reason ?? '当前状态不允许执行该操作。'
+          : metadataDisabledReason;
+        const confirmMessage = action.confirmMessageKey
+          ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
+          : embedded?.input.parameters.presentation === 'drawer' && action.standardAction === 'delete' ? '确认删除当前记录？' : undefined;
+        const handler = registration.actionHandlers?.[action.handlerKey ?? action.key]
+          ?? (action.standardAction === 'refresh' ? () => refreshList() : undefined);
+        const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
+
+        if (action.standardAction === 'view') {
+          return {
+            key: action.key,
+            label,
+            onClick: () => confirmDiscardIfNeeded(() => { void openViewDrawer(rowId); }),
+          };
+        }
+        if (action.standardAction === 'edit') {
+          return {
+            key: action.key,
+            label,
+            inline: true,
+            onClick: () => confirmDiscardIfNeeded(() => { void openEditDrawer(rowId); }),
+          };
+        }
+        if (action.standardAction === 'delete') {
+          if (inputRenderer) {
+            return {
+              key: action.key,
+              label,
+              danger: true,
+              loading: actionExecution.pendingKey === pendingKey,
+              disabled: actionExecution.pendingKey !== null || !handler || disabledReason !== undefined,
+              disabledReason,
+              onClick: async () => {
+                actionExecution.clearError();
+                setRowInputValue(undefined);
+                setRowInputAction({ action, row, rowId, pendingKey, label });
+              },
+            };
+          }
+          return {
+            key: action.key,
+            label,
+            danger: isDangerRowAction(action),
+            confirmMessage,
+            loading: actionExecution.pendingKey === pendingKey,
+            disabled: actionExecution.pendingKey !== null || disabledReason !== undefined,
+            disabledReason,
+            onClick: async () => {
+              const deleteHandler = handler ?? (async () => {
+                if (!dataAdapter.remove) {
+                  throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
+                }
+                return dataAdapter.remove(rowId, isStandardCrudRecord(row) ? row : undefined);
+              });
+              const outcome = await actionExecution.execute({
+                key: pendingKey,
+                handler: deleteHandler,
+                context: { id: rowId, row },
+                refreshOnConflict: false,
+                fallbackErrorMessage: '删除标准资源失败',
+              });
+              if (outcome.status === 'succeeded') {
+                closeDrawerForRow(rowId);
+                embedded?.close?.();
+              }
+              return outcome.status === 'succeeded';
+            },
+          };
+        }
+
+        return {
+          key: action.key,
+          label,
+          danger: isDangerRowAction(action),
+          confirmMessage: inputRenderer ? undefined : confirmMessage,
+          loading: actionExecution.pendingKey === pendingKey,
+          disabled: actionExecution.pendingKey !== null || !handler || disabledReason !== undefined,
+          disabledReason,
+          onClick: async () => {
+            if (!handler) {
+              return;
+            }
+
+            if (inputRenderer) {
+              actionExecution.clearError();
+              setRowInputValue(undefined);
+              setRowInputAction({ action, row, rowId, pendingKey, label });
+              return;
+            }
+
+            const outcome = await actionExecution.execute({
+              key: pendingKey,
+              handler,
+              context: { id: rowId, row },
+            });
+            if (outcome.status === 'succeeded') embedded?.close?.();
+            return outcome.status === 'succeeded';
+          },
+        };
+      });
+  }
   const metadataColumns = resolvedColumns.map((column) => {
     const renderColumn = column.standardAction === 'view'
       ? (row: TRow) => (
@@ -1622,119 +1757,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           const rowExecutionError = rowActionDefinitions.some((action) => actionExecution.error?.key === `${action.key}:${rowId}`)
             ? actionExecution.error
             : null;
-          const rowActions: RowActionItem[] = rowActionDefinitions
-            .filter((action) => hasActionPermission(action, grantedPermissions))
-            .filter((action) => isRowActionVisibleForRow(action, row as Record<string, unknown>))
-            .map((action) => ({
-              action,
-              actionState: registration.actionStateResolver?.({ action, row }),
-            }))
-            .filter(({ actionState }) => actionState?.visible !== false)
-            .map(({ action, actionState }): RowActionItem => {
-              const pendingKey = `${action.key}:${rowId}`;
-              const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
-              const metadataDisabledReason = resolveRowActionDisabledReason(
-                action,
-                row as Record<string, unknown>,
-                (key) => t(`${schema.dicKey}.${key}`, key),
-              );
-              const disabledReason = actionState?.available === false
-                ? actionState.reason ?? '当前状态不允许执行该操作。'
-                : metadataDisabledReason;
-              const confirmMessage = action.confirmMessageKey
-                ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
-                : undefined;
-              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
-              const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
-
-              if (action.standardAction === 'view') {
-                return {
-                  key: action.key,
-                  label,
-                  onClick: () => confirmDiscardIfNeeded(() => { void openViewDrawer(rowId); }),
-                };
-              }
-              if (action.standardAction === 'edit') {
-                return {
-                  key: action.key,
-                  label,
-                  inline: true,
-                  onClick: () => confirmDiscardIfNeeded(() => { void openEditDrawer(rowId); }),
-                };
-              }
-              if (action.standardAction === 'delete') {
-                if (inputRenderer) {
-                  return {
-                    key: action.key,
-                    label,
-                    danger: true,
-                    loading: actionExecution.pendingKey === pendingKey,
-                    disabled: actionExecution.pendingKey !== null || !handler || disabledReason !== undefined,
-                    disabledReason,
-                    onClick: async () => {
-                      actionExecution.clearError();
-                      setRowInputValue(undefined);
-                      setRowInputAction({ action, row, rowId, pendingKey, label });
-                    },
-                  };
-                }
-                return {
-                  key: action.key,
-                  label,
-                  danger: isDangerRowAction(action),
-                  confirmMessage,
-                  loading: actionExecution.pendingKey === pendingKey,
-                  disabled: actionExecution.pendingKey !== null || disabledReason !== undefined,
-                  disabledReason,
-                  onClick: async () => {
-                    const deleteHandler = handler ?? (async () => {
-                      if (!dataAdapter.remove) {
-                        throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
-                      }
-                      return dataAdapter.remove(rowId, isStandardCrudRecord(row) ? row : undefined);
-                    });
-                    const outcome = await actionExecution.execute({
-                      key: pendingKey,
-                      handler: deleteHandler,
-                      context: { id: rowId, row },
-                      refreshOnConflict: false,
-                      fallbackErrorMessage: '删除标准资源失败',
-                    });
-                    if (outcome.status === 'succeeded') {
-                      closeDrawerForRow(rowId);
-                    }
-                  },
-                };
-              }
-
-              return {
-                key: action.key,
-                label,
-                danger: isDangerRowAction(action),
-                confirmMessage: inputRenderer ? undefined : confirmMessage,
-                loading: actionExecution.pendingKey === pendingKey,
-                disabled: actionExecution.pendingKey !== null || !handler || disabledReason !== undefined,
-                disabledReason,
-                onClick: async () => {
-                  if (!handler) {
-                    return;
-                  }
-
-                  if (inputRenderer) {
-                    actionExecution.clearError();
-                    setRowInputValue(undefined);
-                    setRowInputAction({ action, row, rowId, pendingKey, label });
-                    return;
-                  }
-
-                  await actionExecution.execute({
-                    key: pendingKey,
-                    handler,
-                    context: { id: rowId, row },
-                  });
-                },
-              };
-            });
+          const rowActions = buildRowActions(row, rowActionDefinitions, rowId);
 
           return (
             <div style={{ display: 'grid', gap: 6 }}>
@@ -1988,24 +2011,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     <>
       {messageContextHolder}
       {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={embedded?.close}>关闭</AntdButton></div>}
-      {embeddedDelete && <Suspense fallback={<span role="status">正在加载确认框…</span>}><Modal open={embedded?.active !== false}
-        title="确认删除当前记录？" okText="确认" cancelText="取消" confirmLoading={actionExecution.pendingKey !== null}
-        onCancel={() => { if (!actionExecution.pendingKey) { setEmbeddedDelete(null); embedded?.close?.(); } }}
-        onOk={async () => {
-          const id = embedded?.input.recordId;
-          const action = schema.rowActions.find(item => item.standardAction === 'delete');
-          if (!id || !action || !hasActionPermission(action, grantedPermissions)) return;
-          const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
-          const outcome = await actionExecution.execute({ key: `delete:${id}`, context: { id, detail: embeddedDelete },
-            refreshOnConflict: false, handler: handler ?? (async () => {
-              if (!dataAdapter.remove) throw new Error('资源未提供删除能力。');
-              return dataAdapter.remove(id, embeddedDelete.fields);
-            }) });
-          if (outcome.status === 'succeeded') { setEmbeddedDelete(null); embedded?.close?.(); }
-        }}>
-        此操作不可撤销。
-        {actionExecution.error && <div role="alert">{actionExecution.error.message}</div>}
-      </Modal></Suspense>}
+      {embeddedAction && <RowActionButtonGroup requested active={embedded?.active !== false} close={embedded?.close}
+        actions={buildRowActions(embeddedAction.row, [embeddedAction.action], embeddedAction.id)} />}
+      {embeddedAction && actionExecution.error && <div role="alert">{actionExecution.error.message}</div>}
       {presentedOperationResult
         ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
             result: presentedOperationResult,
@@ -2143,6 +2151,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       {rowInputAction?.action.inputKey && registration.actionInputRenderers?.[rowInputAction.action.inputKey] ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作确认…</div>}>
           <StandardCrudActionReviewDialog
+            open={embedded?.active !== false}
             action={rowInputAction.action}
             title={rowInputAction.label}
             confirmMessage={rowInputAction.action.confirmMessageKey
@@ -2157,7 +2166,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}
             onChange={setRowInputValue}
             onCancel={() => {
-              if (actionExecution.pendingKey === null) setRowInputAction(null);
+              if (actionExecution.pendingKey === null) { setRowInputAction(null); embedded?.close?.(); }
             }}
             onConfirm={() => {
               const { action, row, rowId, pendingKey } = rowInputAction;
@@ -2171,6 +2180,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);
+                  embedded?.close?.();
                 } else if (outcome.status === 'failed' && outcome.conflict) {
                   setRowInputAction(null);
                 }

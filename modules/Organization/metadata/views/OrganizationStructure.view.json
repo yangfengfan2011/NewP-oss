@@ -61,9 +61,11 @@
       }
     ],
     "titleKey": "Structure",
-    "createAction": {
+    "treeActions": [{
+      "key": "createCompany",
       "labelKey": "CreateCompany",
-      "viewKey": "organization.company.list"
-    }
+      "viewKey": "organization.company.list",
+      "standardAction": "create"
+    }]
   }
 }

@@ -6,6 +6,7 @@ import type {
 } from '@icp-platform/sdk';
 
 interface StandardCrudActionReviewDialogProps {
+  open?: boolean;
   action: StandardCrudActionDefinition;
   title: ReactNode;
   confirmMessage?: string;
@@ -21,6 +22,7 @@ interface StandardCrudActionReviewDialogProps {
 
 /** 带业务输入的动作共用一个 Review Dialog，确认文案和不透明输入不会拆成两次确认。 */
 export function StandardCrudActionReviewDialog({
+  open = true,
   action,
   title,
   confirmMessage,
@@ -35,7 +37,7 @@ export function StandardCrudActionReviewDialog({
 }: StandardCrudActionReviewDialogProps): ReactElement {
   return (
     <Modal
-      open
+      open={open}
       title={title}
       okText="确认"
       cancelText="取消"

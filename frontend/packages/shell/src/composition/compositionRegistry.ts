@@ -50,13 +50,29 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
       const tree = view as unknown as TreeView;
       if (!modules.some(module => module.treeProviders?.some(provider => provider.key === tree.providerKey))) throw new Error('缺少树 Provider binding');
       if (!tree.nodeTypes.length || new Set(tree.nodeTypes.map(item => item.key)).size !== tree.nodeTypes.length) throw new Error('重复或缺少节点类型');
-      if (tree.createAction) check({ pageKey: 'platform.list', parameters: { viewKey: tree.createAction.viewKey } }, next);
+      const checkActions = (actions: TreeView['treeActions']) => {
+        if (!actions) return;
+        if (!Array.isArray(actions) || new Set(actions.map(action => action.key)).size !== actions.length) throw new Error('无效树动作数组或重复 key');
+        for (const action of actions) {
+          if (!action.key || !action.labelKey || Boolean(action.actionKey) === Boolean(action.standardAction)) throw new Error('树动作需要唯一的动作引用');
+          check({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey }, inputResolverKey: action.inputResolverKey }, next);
+          const target = views.get(action.viewKey)!;
+          const definitions = [...(target.pageActions as Array<Record<string, unknown>> ?? []), ...(target.rowActions as Array<Record<string, unknown>> ?? [])];
+          const matches = definitions.filter(item => action.actionKey ? item.key === action.actionKey : item.standardAction === action.standardAction);
+          if (matches.length !== 1) throw new Error('树动作引用不存在或不唯一');
+          const registered = modules.flatMap(module => module.standardCrudResources ?? []).find(resource => resource.listViewKey === action.viewKey);
+          const capability = modules.flatMap(module => module.standardCrudCapabilities ?? []).find(item => item.kind === 'standard-list' && item.targetKey === action.viewKey);
+          if (!registered && !capability) throw new Error('树动作缺少标准资源 binding');
+          const definition = matches[0];
+          const handlerKey = definition.handlerKey ?? (!definition.standardAction ? definition.key : undefined);
+          if (registered && ((handlerKey && !registered.actionHandlers?.[String(handlerKey)])
+            || (definition.inputKey && !registered.actionInputRenderers?.[String(definition.inputKey)]))) throw new Error('树动作 handler/input binding 不匹配');
+        }
+      };
+      checkActions(tree.treeActions);
       for (const item of tree.nodeTypes) {
         if (!item.titleKey) throw new Error('节点类型缺少 titleKey');
-        check(item.pageRef, next); for (const menu of item.contextMenu ?? []) {
-          if (menu.standardAction !== 'edit' && menu.standardAction !== 'delete') throw new Error('无效树菜单动作');
-          check({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey }, inputResolverKey: menu.inputResolverKey }, next);
-        }
+        check(item.pageRef, next); checkActions(item.contextMenu);
       }
     }
   };

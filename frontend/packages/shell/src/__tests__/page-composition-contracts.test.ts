@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { FrontendModule, TreeProviderBinding } from '@icp-platform/sdk';
 import { resolvePageInput, validateCompositionCandidate } from '../composition/compositionRegistry';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
+import organization from '../../../../modules/organization/src';
 
 const root = resolve(__dirname, '../../../../..');
 function authoring(): RuntimeMetadataState {
@@ -11,10 +12,28 @@ function authoring(): RuntimeMetadataState {
   return { manifest: { modules: [] }, navDocuments: read('navigation'), viewDocuments: read('views'), modelDocuments: read('models') };
 }
 const modules: FrontendModule[] = [{ metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1' },
+  standardCrudCapabilities: organization.standardCrudCapabilities,
   treeProviders: [{ key: 'organization.tree', roots: async () => [], children: async () => [], path: async () => [], search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) } as TreeProviderBinding],
   pageInputResolvers: ['organization.department.global', 'organization.node.detail', 'organization.company.direct', 'organization.department.direct', 'organization.tree.global'].map(key => ({ key, pageKeys: ['platform.tree', 'platform.list', 'platform.detail'], resolve: parameters => ({ parameters }) })),
 }];
 describe('formal page configuration references', () => {
+  it.each(['handler', 'input'])('rejects a stable action with a mismatched %s binding before consumption', async kind => {
+    const metadata = authoring();
+    const list = metadata.viewDocuments.find(item => item.view.key === 'organization.department.list')!.view;
+    const action = (list.rowActions as Array<Record<string, unknown>>).find(item => item.standardAction === 'delete')!;
+    action[kind === 'handler' ? 'handlerKey' : 'inputKey'] = 'missing';
+    const binding = organization.standardCrudCapabilities!.find(item => item.targetKey === list.key)!;
+    const { default: resource } = await binding.load();
+    expect(() => validateCompositionCandidate([{ ...modules[0], standardCrudResources: [resource] }], metadata)).toThrow(/binding/);
+  });
+  it('accepts omitted action arrays and rejects a missing resource binding', () => {
+    const metadata = authoring();
+    expect(() => validateCompositionCandidate([{ ...modules[0], standardCrudCapabilities: [] }], metadata)).toThrow(/binding/);
+    const tree = metadata.viewDocuments.find(item => item.view.mode === 'tree')!.view;
+    delete tree.treeActions;
+    for (const type of tree.nodeTypes as Array<Record<string, unknown>>) delete type.contextMenu;
+    expect(() => validateCompositionCandidate(modules, metadata)).not.toThrow();
+  });
   it('accepts real Organization Tree/Tab authoring without page identities per view', () => { expect(() => validateCompositionCandidate(modules, authoring())).not.toThrow(); });
   it('allows sibling reuse and rejects the current configuration chain returning through a tree', () => {
     const metadata = authoring();

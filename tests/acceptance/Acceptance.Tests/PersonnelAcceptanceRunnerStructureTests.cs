@@ -58,7 +58,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             StringComparison.Ordinal);
         Assert.Contains("CompanyData company,", runner, StringComparison.Ordinal);
         Assert.Contains("DepartmentData department,", runner, StringComparison.Ordinal);
-        Assert.Contains("/organization/companies", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"组织管理\"", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/companies", runner, StringComparison.Ordinal);
         Assert.Contains("/organization/structure", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/departments", runner, StringComparison.Ordinal);
@@ -134,7 +134,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             "await UpdatePersonFromBrowserAsync(",
             runner,
             StringComparison.Ordinal);
-        Assert.Contains("/organization/positions", runner, StringComparison.Ordinal);
+        Assert.Contains("OpenOrganizationTabAsync(page, \"岗位\", \"positions\")", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/positions", runner, StringComparison.Ordinal);
         Assert.Contains(
             "new LocatorGetByRoleOptions { Name = \"保存并关闭\", Exact = true }",
@@ -196,6 +196,20 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         var ownershipRead = bootstrap.IndexOf("_ownershipSnapshot = await ReadOwnershipSnapshotAsync", StringComparison.Ordinal);
         Assert.True(startupFailure >= 0 && startupFailure < ownershipRead);
         Assert.Contains("diagnostic={Sanitize(diagnostic)}; devRun={_lastDevRunId}", bootstrap, StringComparison.Ordinal);
+    }
+    [Fact]
+    public void PersonnelConsumers_UseTheManagementTabAndKeepTheLegacyAndFullDetailJourney()
+    {
+        var root = GetRepositoryRoot();
+        var runner = File.ReadAllText(Path.Combine(root, "tests", "acceptance", "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        Assert.Contains("/organization/persons/{person.Id}", runner, StringComparison.Ordinal);
+        Assert.Contains("Name = \"查看完整详情\"", runner, StringComparison.Ordinal);
+        Assert.DoesNotContain("searchParams.get('keyword')", runner, StringComparison.Ordinal);
+        var coldStart = File.ReadAllText(Path.Combine(root, "tests", "acceptance", "Acceptance.Runner", "ProductionColdStartBrowserRunner.cs"));
+        Assert.Contains("/organization/structure?tab=persons", coldStart, StringComparison.Ordinal);
+        Assert.Contains("Name = \"组织管理\"", coldStart, StringComparison.Ordinal);
+        Assert.Contains("Name = \"人员\"", coldStart, StringComparison.Ordinal);
+        Assert.DoesNotContain("Name = \"人员中心\"", coldStart, StringComparison.Ordinal);
     }
     private static string GetRepositoryRoot()
     {

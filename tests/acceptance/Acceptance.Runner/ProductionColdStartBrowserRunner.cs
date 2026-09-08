@@ -257,7 +257,7 @@ internal sealed class ProductionColdStartBrowserRunner
                 await route.ContinueAsync();
             });
 
-            await page.GotoAsync(origin + "/organization/persons", new PageGotoOptions
+            await page.GotoAsync(origin + "/organization/structure?tab=persons", new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.DOMContentLoaded
             });
@@ -294,9 +294,10 @@ internal sealed class ProductionColdStartBrowserRunner
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             var personnel = page.GetByRole(
                 AriaRole.Link,
-                new PageGetByRoleOptions { Name = "人员中心", Exact = true }).First;
+                new PageGetByRoleOptions { Name = "组织管理", Exact = true }).First;
             await personnel.ClickAsync();
-            await page.WaitForURLAsync(origin + "/organization/persons");
+            await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = "人员", Exact = true }).ClickAsync();
+            await page.WaitForURLAsync(origin + "/organization/structure?tab=persons");
             await page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true })
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             registryNavigationAvailable = true;
@@ -368,8 +369,8 @@ internal sealed class ProductionColdStartBrowserRunner
             {
                 ProductionColdStartScenarios.AnonymousLogin => "/login",
                 ProductionColdStartScenarios.AuthenticatedHome => "/",
-                ProductionColdStartScenarios.AuthenticatedPersonnel => "/organization/persons",
-                ProductionColdStartScenarios.UnauthorizedPersonnel => "/organization/persons",
+                ProductionColdStartScenarios.AuthenticatedPersonnel => "/organization/structure?tab=persons",
+                ProductionColdStartScenarios.UnauthorizedPersonnel => "/organization/structure?tab=persons",
                 _ => throw new InvalidOperationException($"Unknown production cold-start scenario '{scenario}'.")
             };
             var stopwatch = Stopwatch.StartNew();

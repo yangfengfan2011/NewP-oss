@@ -423,13 +423,20 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 ]);
             }
 
-            await OpenPersonnelFromShellAsync(page);
+            // 旧人员书签仍进入同一个组合页面，且完整详情保留独立受控地址。
+            await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons");
+            await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/organization/structure" && HasQueryValue(new Uri(url), "tab", "persons"));
             await AssertPersonListAndDrawerAsync(
                 page,
                 person,
                 _company?.Name,
                 _department?.Name,
                 _position?.Name);
+            await page.Locator(".ant-drawer-content:visible").Last.GetByRole(AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "查看完整详情", Exact = true }).ClickAsync();
+            await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/organization/persons/{person.Id}");
+            await page.GetByText(person.Name, new PageGetByTextOptions { Exact = true }).First
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             browserAssertions.Add(phase == "initial"
                 ? "list-and-detail-show-updated-person"
                 : "restart-list-and-detail-show-persisted-person");
@@ -480,44 +487,20 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
     }
 
-    private async Task OpenPersonnelFromShellAsync(IPage page)
-    {
-        var personnelEntry = page.GetByRole(
-            AriaRole.Link,
-            new PageGetByRoleOptions { Name = "人员中心", Exact = true }).First;
-        await personnelEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await personnelEntry.ClickAsync();
-        await page.WaitForURLAsync(
-            $"http://127.0.0.1:{_shellPort}/organization/persons",
-            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-    }
+    private Task OpenPersonnelFromShellAsync(IPage page) => OpenOrganizationTabAsync(page, "人员", "persons");
 
-    // 公司管理只通过 Shell 导航进入唯一标准列表，覆盖活动候选、导航和权限装配。
-    private async Task OpenCompanyManagementFromShellAsync(IPage page)
-    {
-        var companyEntry = page.GetByRole(
-            AriaRole.Link,
-            new PageGetByRoleOptions { Name = "公司管理", Exact = true }).First;
-        await companyEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await companyEntry.ClickAsync();
-        await page.WaitForURLAsync(
-            $"http://127.0.0.1:{_shellPort}/organization/companies",
-            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-    }
+    private Task OpenCompanyManagementFromShellAsync(IPage page) => OpenOrganizationTabAsync(page, "公司", "companies");
 
-    // 岗位管理只通过 Shell 导航进入现有标准列表，不用直达 URL 绕过候选导航与权限装配。
-    private async Task OpenPositionManagementFromShellAsync(IPage page)
-    {
-        var positionEntry = page.GetByRole(
-            AriaRole.Link,
-            new PageGetByRoleOptions { Name = "岗位管理", Exact = true }).First;
-        await positionEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await positionEntry.ClickAsync();
-        await page.WaitForURLAsync(
-            $"http://127.0.0.1:{_shellPort}/organization/positions",
-            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-    }
+    private Task OpenPositionManagementFromShellAsync(IPage page) => OpenOrganizationTabAsync(page, "岗位", "positions");
 
+    // 单一正式菜单与外层标签共同拥有入口，内嵌列表保留自己的筛选和 Drawer 状态。
+    private async Task OpenOrganizationTabAsync(IPage page, string title, string key)
+    {
+        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "组织管理", Exact = true }).First.ClickAsync();
+        await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = title, Exact = true }).ClickAsync();
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/organization/structure"
+            && HasQueryValue(new Uri(url), "tab", key));
+    }
     // 同一浏览器主旅程先通过公司标准 Drawer 建立后续部门与人员归属的真实前置资源。
     private async Task<CompanyData> CreateCompanyFromBrowserAsync(
         IPage page,
@@ -568,8 +551,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "组织树", Exact = true }).First.ClickAsync();
-        await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/organization/structure");
+        await OpenOrganizationTabAsync(page, "组织结构", "structure");
         var tree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
         await tree.GetByText(company.Name, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
         var content = page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" });
@@ -859,7 +841,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return normalized.Length <= 500 ? normalized : normalized[..500];
     }
 
-    // 高级筛选只观察用户旅程：应用显式两端后 URL 与数据库列表共同定位目标人员。
+    // 高级筛选只观察应用后仍能找到目标；内嵌页面不向外层 URL 写入列表筛选。
     private static async Task AssertPersonBirthDateRangeAsync(IPage page, PersonData person)
     {
         await page.GetByRole(
@@ -904,12 +886,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .Filter(new LocatorFilterOptions { HasTextString = person.Name })
             .Last
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        var currentUri = new Uri(page.Url);
-        if (!HasQueryValue(currentUri, "birthDateFrom", PersonnelBirthDate)
-            || !HasQueryValue(currentUri, "birthDateTo", PersonnelBirthDate))
-        {
-            throw new InvalidOperationException("Personnel applied birth date range was not preserved in the browser URL.");
-        }
     }
 
     // 浏览器请求查询值按 application/x-www-form-urlencoded 解码后做精确比较，避免空格编码差异伪造搜索证据。
@@ -988,12 +964,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
     private static async Task SubmitPersonnelKeywordAsync(IPage page, string keywordValue)
     {
-        var keyword = page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true });
+        var keyword = page.GetByLabel("关键字", new PageGetByLabelOptions { Exact = true }).And(page.Locator(":visible"));
         await keyword.FillAsync(keywordValue);
         await keyword.PressAsync("Enter");
-        await page.WaitForFunctionAsync(
-            "value => new URL(window.location.href).searchParams.get('keyword') === value",
-            keywordValue);
+
     }
 
     private async Task RunRestartScenarioAsync(CancellationToken cancellationToken)

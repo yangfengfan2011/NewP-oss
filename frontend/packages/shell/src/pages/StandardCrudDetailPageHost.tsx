@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useContext, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
@@ -212,7 +212,13 @@ function StandardCrudDetailPageContent<TDetail>({
   ) : null;
   const refresh = detailQuery.refresh;
   const embeddedRefreshVersion = embedded?.refreshVersion;
-  useEffect(() => { if ((embeddedRefreshVersion ?? 0) > 0) refresh(); }, [embeddedRefreshVersion, refresh]);
+  const consumedRefreshVersion = useRef(0);
+  useEffect(() => {
+    if (!embeddedRefreshVersion || consumedRefreshVersion.current === embeddedRefreshVersion) return;
+    // 先消费组合通知；查询快照更新产生的新 refresh 函数不能重放同一次读取。
+    consumedRefreshVersion.current = embeddedRefreshVersion;
+    refresh();
+  }, [embeddedRefreshVersion, refresh]);
   const detailActionHandlers = useMemo(() => ({
     ...registration.actionHandlers,
     edit: () => setEditing(true),

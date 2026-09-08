@@ -12,6 +12,7 @@ import {
   type StandardCrudDetail,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
+import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -175,6 +176,7 @@ describe('StandardCrudDetailPageHost', () => {
     registration?: StandardCrudResourceRegistration,
     detailViewDocument = personDetailViewDocument,
     strictMode = false,
+    refreshVersion?: number,
   ) {
     const host = (
       <LocalizationProvider
@@ -193,17 +195,55 @@ describe('StandardCrudDetailPageHost', () => {
               viewDocuments: [detailViewDocument],
             }}
           >
+            <EmbeddedCrudContext.Provider value={refreshVersion === undefined ? null : {
+              input: { parameters: {}, recordId: id ?? undefined }, refreshVersion,
+              reportState: () => undefined, committed: async () => undefined,
+            }}>
             <StandardCrudDetailPageHost
               viewKey="organization.person.detail"
               id={id}
               registration={registration}
             />
+            </EmbeddedCrudContext.Provider>
           </RuntimeMetadataProvider>
         </PlatformQueryProvider>
       </LocalizationProvider>
     );
     root.render(strictMode ? <StrictMode>{host}</StrictMode> : host);
   }
+
+  it('consumes each embedded refresh version once across success, failure and rerenders, with explicit read retry', async () => {
+    let failNext = false;
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      // Bound the RED case: a runaway host must fail by request count, not hang the suite.
+      if (fetcher.mock.calls.length > 8) return new Promise<Response>(() => undefined);
+      if (failNext) { failNext = false; throw new Error('refresh read failed'); }
+      return new Response(JSON.stringify({ fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null }, summaries: {} }));
+    });
+    const registration = createPersonRegistration();
+    await renderHost('Person_1', registration);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const renderVersion = async (version: number) => {
+      await act(async () => renderHostWithId('Person_1', registration, personDetailViewDocument, false, version));
+    };
+    await renderVersion(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await renderVersion(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    failNext = true;
+    await renderVersion(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(container.textContent).toContain('refresh read failed');
+    await renderVersion(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    const retry = [...container.querySelectorAll('button')].find(button => button.textContent === '重试');
+    expect(retry).toBeDefined();
+    await act(async () => retry!.click());
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    await renderVersion(3);
+    expect(fetcher).toHaveBeenCalledTimes(5);
+    expect(container.textContent).not.toContain('refresh read failed');
+  });
 
   it('loads detail through standard CRUD registration', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([

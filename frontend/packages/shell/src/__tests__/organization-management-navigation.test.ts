@@ -24,7 +24,7 @@ describe('Organization management authoring consumers', () => {
     expect(view.tabs.map(tab => tab.key)).toEqual(['structure', 'companies', 'departments', 'positions', 'persons']);
     const global = view.tabs.find(tab => tab.key === 'departments')!.pageRef;
     expect(global.inputResolverKey).toBe('organization.department.global');
-    expect(resolvePageInput(global, modules, { nodeKey: 'department:x', nodeType: 'department', label: 'x', hasChildren: false })).toEqual({ parameters: global.parameters, queryScope: {} });
+    expect(resolvePageInput(global, modules, { nodeKey: 'department:x', nodeType: 'department', label: 'x', hasChildren: false })).toEqual({ parameters: global.parameters, queryScope: { kind: 'global' } });
     const entries = buildPageEntriesFromNavDocuments(metadata.navDocuments);
     for (const tab of ['companies', 'departments', 'positions', 'persons']) {
       expect(entries.find(entry => entry.path === `/organization/${tab}`)).toMatchObject({ redirectTo: `/organization/structure?tab=${tab}` });

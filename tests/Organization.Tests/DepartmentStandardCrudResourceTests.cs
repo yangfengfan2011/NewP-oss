@@ -12,6 +12,23 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class DepartmentStandardCrudResourceTests
 {
     [Fact]
+    public void ExplicitGlobalScope_PreservesUserFiltersButRejectsEmptyPartialAndMixedScopes()
+    {
+        var customizer = new DepartmentCrudQueryCustomizer();
+        var descriptor = OrganizationCrudTestResources.Resolve(DepartmentCrudDescriptorFactory.Create());
+        var conditions = customizer.BuildConditions(descriptor, new StandardCrudListQuery(
+            Filters: new Dictionary<string, string?> { ["companyId"] = "Chosen" },
+            QueryScope: new Dictionary<string, string?> { ["kind"] = "global" }));
+        Assert.Equal([new StandardCrudQueryCondition("CompanyId", "=", "Chosen")], conditions);
+        foreach (var invalid in new Dictionary<string, string?>[]
+        {
+            new(), new() { ["CompanyId"] = "Chosen" }, new() { ["ParentDepartmentId"] = null },
+            new() { ["kind"] = "global", ["CompanyId"] = "Chosen" }, new() { ["kind"] = "unknown" }
+        })
+            Assert.Throws<Microsoft.AspNetCore.Http.BadHttpRequestException>(() => customizer.BuildConditions(descriptor, new StandardCrudListQuery(QueryScope: invalid)));
+    }
+
+    [Fact]
     public void QueryScope_IntersectsUserFiltersAndPreservesExplicitRoot()
     {
         var conditions = new DepartmentCrudQueryCustomizer().BuildConditions(

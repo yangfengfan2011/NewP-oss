@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
+import { organizationPageInputs } from '../organizationTree';
 import {
   departmentStandardCrudResource,
   mapDepartmentListItem,
 } from '../standard-crud/departmentStandardCrudResource';
 
 describe('department standard CRUD resource', () => {
+  it('carries the explicit global resolver through the real REST adapter without inheriting a selected node', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ items: [], total: 0, page: 2, pageSize: 1 }), { status: 200 }));
+    const resolver = organizationPageInputs.find(item => item.key === 'organization.department.global')!;
+    const input = resolver.resolve({ viewKey: 'organization.department.list' }, { nodeKey: 'department:old', nodeType: 'department', label: 'old', hasChildren: false, context: { id: 'old', companyId: 'OldCompany' } });
+    await departmentStandardCrudResource.dataAdapter.list({ companyId: 'ChosenCompany', pageIndex: 2, pageSize: 1 }, { queryScope: input.queryScope });
+    const query = new URL(String(fetchSpy.mock.calls[0]?.[0]), 'http://localhost').searchParams;
+    expect(JSON.parse(query.get('queryScope')!)).toEqual({ kind: 'global' });
+    expect(query.get('companyId')).toBe('ChosenCompany');
+    expect(query.get('pageIndex')).toBe('2');
+    expect(query.get('pageSize')).toBe('1');
+    expect(input.context).toBeUndefined();
+    expect(input.fixedCreateValues).toBeUndefined();
+    for (const key of ['organization.company.direct', 'organization.department.direct'])
+      expect(() => organizationPageInputs.find(item => item.key === key)!.resolve({}, undefined)).toThrow(/上下文/);
+    fetchSpy.mockRestore();
+  });
   it('binds the hierarchy list to standard mutations and Organization-owned dependent lookups', () => {
     expect(departmentStandardCrudResource.resourceKey).toBe('organization.department');
     expect(departmentStandardCrudResource.listViewKey).toBe('organization.department.list');

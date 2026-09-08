@@ -105,6 +105,33 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             var second = await Create("departments", new() { ["ECODE"] = "D2", ["ENAME"] = "Department 2", ["CompanyId"] = company, ["SortOrder"] = "02" });
             await Create("departments", new() { ["ECODE"] = "CH", ["ENAME"] = "Child", ["CompanyId"] = company, ["ParentDepartmentId"] = first, ["SortOrder"] = "00" });
             await Create("departments", new() { ["ECODE"] = "OTHER", ["ENAME"] = "Other", ["CompanyId"] = other, ["SortOrder"] = "00" });
+            var globalRoute = "/api/organization/departments?queryScope=" + Uri.EscapeDataString("{\"kind\":\"global\"}")
+                + "&pageSize=1&pageIndex=2&fields=EID&sortBy=SortOrder&sortDirection=asc";
+            recorder.Commands.Clear();
+            using var globalResponse = await client.GetAsync(globalRoute);
+            Assert.Equal(HttpStatusCode.OK, globalResponse.StatusCode);
+            var globalList = await globalResponse.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(4, globalList.GetProperty("total").GetInt32());
+            Assert.Single(globalList.GetProperty("items").EnumerateArray());
+            Assert.Equal(2, recorder.Commands.Count);
+            Assert.Contains(recorder.Commands, sql => sql.Contains("COUNT("));
+            Assert.Contains(recorder.Commands, sql => sql.Contains("OFFSET") && sql.Contains("FETCH NEXT"));
+            recorder.Commands.Clear();
+            var globalFiltered = await client.GetFromJsonAsync<JsonElement>(globalRoute + "&companyId=" + Uri.EscapeDataString(company));
+            Assert.Equal(3, globalFiltered.GetProperty("total").GetInt32());
+            Assert.Equal(first, Assert.Single(globalFiltered.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString());
+            Assert.Equal(2, recorder.Commands.Count);
+            Assert.All(recorder.Commands, sql => Assert.Contains("CompanyId] =", sql));
+            Assert.Contains(recorder.Commands, sql => sql.Contains("OFFSET") && sql.Contains("FETCH NEXT"));
+            foreach (var invalidScope in new[] { "{}", "{\"CompanyId\":\"missing-parent\"}", "{\"kind\":\"global\",\"ParentDepartmentId\":null}" })
+            {
+                recorder.Commands.Clear();
+                // TestServer 直接传播 Kestrel 会转为 HTTP 400 的 BadHttpRequestException。
+                var invalidScopeError = await Assert.ThrowsAsync<Microsoft.AspNetCore.Http.BadHttpRequestException>(
+                    () => client.GetAsync("/api/organization/departments?queryScope=" + Uri.EscapeDataString(invalidScope)));
+                Assert.Equal(400, invalidScopeError.StatusCode);
+                Assert.Empty(recorder.Commands);
+            }
             var scopeQuery = Uri.EscapeDataString(JsonSerializer.Serialize(new { CompanyId = company, ParentDepartmentId = (string?)null }));
             var route = $"/api/organization/departments?queryScope={scopeQuery}&pageSize=1&pageIndex=2&fields=EID,CompanyId,ParentDepartmentId";
             recorder.Commands.Clear();

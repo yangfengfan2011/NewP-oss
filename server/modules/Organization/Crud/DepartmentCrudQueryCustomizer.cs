@@ -40,6 +40,8 @@ public sealed class DepartmentCrudQueryCustomizer : IStandardCrudQueryCustomizer
 
         if (query.QueryScope is { } scope)
         {
+            // 全局目录由 Organization 解析器显式声明；空对象或不完整直属范围仍须拒绝。
+            if (scope.Count == 1 && scope.GetValueOrDefault("kind") == "global") return conditions;
             if (!scope.TryGetValue("CompanyId", out var scopedCompany) || string.IsNullOrWhiteSpace(scopedCompany)
                 || !scope.ContainsKey("ParentDepartmentId")
                 || scope.Keys.Any(key => key is not ("CompanyId" or "ParentDepartmentId")))

@@ -461,6 +461,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             try
             {
                 diagnostics.Add(await ReadStandardCrudPageDiagnosticAsync(page));
+                foreach (var drawer in await page.Locator(".ant-drawer-content:visible").AllAsync())
+                    diagnostics.Add($"Visible drawer: {await drawer.InnerTextAsync()}");
                 foreach (var response in failedResponses)
                 {
                     string body;
@@ -628,6 +630,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.GetByLabel("部门编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync($"ACC-M-{_runId[..8]}");
         await drawer.GetByLabel("部门名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(name);
+        await drawer.GetByLabel("排序码", new LocatorGetByLabelOptions { Exact = true }).FillAsync("0200");
         var createResponse = page.WaitForResponseAsync(response => response.Request.Method == "POST"
             && new Uri(response.Url).AbsolutePath == "/api/organization/departments");
         await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();

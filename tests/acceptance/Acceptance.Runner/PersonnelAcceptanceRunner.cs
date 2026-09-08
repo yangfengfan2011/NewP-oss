@@ -460,7 +460,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             {
                 diagnostics.Add(await ReadStandardCrudPageDiagnosticAsync(page));
                 foreach (var response in failedResponses)
-                    diagnostics.Add($"{response.Request.Method} {response.Url}: {response.Status} {await response.TextAsync()}");
+                {
+                    string body;
+                    try { body = await response.TextAsync(); }
+                    catch (PlaywrightException failure) { body = $"Response body unavailable: {failure.Message}"; }
+                    diagnostics.Add($"{response.Request.Method} {response.Url}: {response.Status} {body}");
+                }
                 await WriteEvidenceAsync($"personnel/browser-{phase}-failure.json", new
                 {
                     url = Sanitize(page.Url),
@@ -499,7 +504,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "组织管理", Exact = true }).First.ClickAsync();
         await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = title, Exact = true }).ClickAsync();
         await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/organization/structure"
-            && HasQueryValue(new Uri(url), "tab", key));
+            && (HasQueryValue(new Uri(url), "tab", key) || (key == "structure" && string.IsNullOrEmpty(new Uri(url).Query))));
     }
     // 同一浏览器主旅程先通过公司标准 Drawer 建立后续部门与人员归属的真实前置资源。
     private async Task<CompanyData> CreateCompanyFromBrowserAsync(

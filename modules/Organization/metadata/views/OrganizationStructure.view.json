@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.structure",
+    "mode": "tree",
+    "dicKey": "OrganizationComposition",
+    "providerKey": "organization.tree",
+    "nodeTypes": [
+      {
+        "titleKey": "Company",
+        "key": "company",
+        "pageRef": {
+          "pageKey": "platform.tabs",
+          "parameters": {
+            "viewKey": "organization.company.tabs"
+          }
+        },
+        "contextMenu": [
+          {
+            "key": "edit",
+            "labelKey": "Edit",
+            "standardAction": "edit",
+            "viewKey": "organization.company.list",
+            "inputResolverKey": "organization.node.detail"
+          }
+        ]
+      },
+      {
+        "titleKey": "Department",
+        "key": "department",
+        "pageRef": {
+          "pageKey": "platform.tabs",
+          "parameters": {
+            "viewKey": "organization.department.tabs"
+          }
+        },
+        "contextMenu": [
+          {
+            "key": "edit",
+            "labelKey": "Edit",
+            "standardAction": "edit",
+            "viewKey": "organization.department.list",
+            "inputResolverKey": "organization.node.detail"
+          }
+        ]
+      }
+    ],
+    "titleKey": "Structure"
+  }
+}

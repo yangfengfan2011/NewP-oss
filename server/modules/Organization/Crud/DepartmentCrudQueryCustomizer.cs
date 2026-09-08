@@ -38,6 +38,17 @@ public sealed class DepartmentCrudQueryCustomizer : IStandardCrudQueryCustomizer
             conditions.Add(new StandardCrudQueryCondition("IsEnabled", "=", isEnabled));
         }
 
+        if (query.QueryScope is { } scope)
+        {
+            if (!scope.TryGetValue("CompanyId", out var scopedCompany) || string.IsNullOrWhiteSpace(scopedCompany)
+                || !scope.ContainsKey("ParentDepartmentId")
+                || scope.Keys.Any(key => key is not ("CompanyId" or "ParentDepartmentId")))
+            {
+                throw new Microsoft.AspNetCore.Http.BadHttpRequestException("直属部门范围需要 CompanyId 和显式 ParentDepartmentId。");
+            }
+            conditions.Add(new StandardCrudQueryCondition("CompanyId", "=", scopedCompany));
+            conditions.Add(new StandardCrudQueryCondition("ParentDepartmentId", scope["ParentDepartmentId"] is null ? "isNull" : "=", scope["ParentDepartmentId"]));
+        }
         return conditions;
     }
 }

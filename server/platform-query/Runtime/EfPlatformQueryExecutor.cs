@@ -95,7 +95,8 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
             !string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(condition.Operator, "gte", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(condition.Operator, "lte", StringComparison.OrdinalIgnoreCase));
+            !string.Equals(condition.Operator, "lte", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(condition.Operator, "isNull", StringComparison.OrdinalIgnoreCase));
         if (unsupported is not null)
         {
             throw new PlatformQueryValidationException(
@@ -105,6 +106,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
 
         var executableConditions = conditions
             .Where(static condition =>
+                string.Equals(condition.Operator, "isNull", StringComparison.OrdinalIgnoreCase) ||
                 condition.Value is not null &&
                 (string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase) ||
@@ -176,6 +178,13 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         ParameterExpression row,
         PlatformQueryCondition condition)
     {
+        if (string.Equals(condition.Operator, "isNull", StringComparison.OrdinalIgnoreCase))
+        {
+            var fieldType = ResolveFieldType(descriptor, entityType, condition.Field);
+            return fieldType.IsValueType && Nullable.GetUnderlyingType(fieldType) is null
+                ? Expression.Constant(false)
+                : Expression.Equal(BuildPropertyExpression(row, condition.Field, fieldType), Expression.Constant(null, fieldType));
+        }
         if (string.Equals(condition.Operator, "contains", StringComparison.OrdinalIgnoreCase))
         {
             return BuildContainsExpression(descriptor, entityType, row, condition);

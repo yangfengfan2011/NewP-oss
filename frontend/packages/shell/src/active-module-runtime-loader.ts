@@ -100,6 +100,9 @@ function collectBehaviorBindingTargetKeys(bindings: FrontendBehaviorBindings): s
     ]),
     ...(bindings.standardListViews ?? []).map((registration) => registration.viewKey),
     ...(bindings.customPages ?? []).map((registration) => registration.pageKey),
+    ...(bindings.pages ?? []).map((binding) => binding.pageKey),
+    ...(bindings.pageInputResolvers ?? []).map((binding) => binding.key),
+    ...(bindings.treeProviders ?? []).map((binding) => binding.key),
   ];
 }
 
@@ -113,6 +116,9 @@ function collectModuleCapabilityTargetKeys(module: FrontendModule): string[] {
     ]),
     ...(module.standardListViews ?? []).map((registration) => registration.viewKey),
     ...(module.customPages ?? []).map((registration) => registration.pageKey),
+    ...(module.pages ?? []).map((binding) => binding.pageKey),
+    ...(module.pageInputResolvers ?? []).map((binding) => binding.key),
+    ...(module.treeProviders ?? []).map((binding) => binding.key),
     ...(module.routes ?? []).map((route) => route.path),
   ];
 }
@@ -414,6 +420,9 @@ export async function loadActiveModuleRuntimeWith(
               standardCrudResources: bindings.standardCrudResources,
               standardListViews: bindings.standardListViews,
               customPages: bindings.customPages,
+              pages: bindings.pages,
+              pageInputResolvers: bindings.pageInputResolvers,
+              treeProviders: bindings.treeProviders,
               initialize: bindings.initialize,
               cleanup: bindings.cleanup,
             } satisfies FrontendModule;

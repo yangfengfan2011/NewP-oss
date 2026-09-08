@@ -263,6 +263,9 @@ public sealed class ModuleCapsuleCandidateReader
         var routes = new List<string>();
         var bindingReferences = new List<string>();
         var permissionReferences = new List<string>();
+        bindingReferences.AddRange(PageCompositionMetadataValidator.Validate(
+            Directory.EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories)
+                .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))), declaredBindings));
         var navigationRoot = Path.Combine(metadataRoot, "navigation");
         if (Directory.Exists(navigationRoot))
         {
@@ -339,6 +342,9 @@ public sealed class ModuleCapsuleCandidateReader
         var routes = new List<string>();
         var bindingReferences = new List<string>();
         var permissionReferences = new List<string>();
+        bindingReferences.AddRange(PageCompositionMetadataValidator.Validate(
+            snapshot.EnumerateFiles("metadata").Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                .Select(path => JsonSerializer.Deserialize<JsonElement>(snapshot.ReadFile(path))), declaredBindings));
         foreach (var path in snapshot.EnumerateFiles("metadata/navigation")
                      .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
         {
@@ -482,6 +488,7 @@ public sealed class ModuleCapsuleCandidateReader
         ICollection<string> bindingReferences,
         IReadOnlySet<string>? declaredBindings)
     {
+        if (OptionalString(view, "mode") is "tree" or "tab") return;
         var key = OptionalString(view, "key");
         if (key is not null
             && (OptionalString(view, "mode") != "detail"

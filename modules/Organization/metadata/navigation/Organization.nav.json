@@ -18,7 +18,9 @@
         "order": 110,
         "entryType": "standard-list",
         "targetKey": "organization.person.list",
-        "permissions": ["Organization.Person.View"]
+        "permissions": [
+          "Organization.Person.View"
+        ]
       },
       {
         "key": "organization.companyManagement",
@@ -29,7 +31,9 @@
         "order": 120,
         "entryType": "standard-list",
         "targetKey": "organization.company.list",
-        "permissions": ["Organization.Company.View"]
+        "permissions": [
+          "Organization.Company.View"
+        ]
       },
       {
         "key": "organization.departmentManagement",
@@ -40,7 +44,9 @@
         "order": 130,
         "entryType": "standard-list",
         "targetKey": "organization.department.list",
-        "permissions": ["Organization.Department.View"]
+        "permissions": [
+          "Organization.Department.View"
+        ]
       },
       {
         "key": "organization.positionManagement",
@@ -51,7 +57,23 @@
         "order": 140,
         "entryType": "standard-list",
         "targetKey": "organization.position.list",
-        "permissions": ["Organization.Position.View"]
+        "permissions": [
+          "Organization.Position.View"
+        ]
+      },
+      {
+        "key": "organization.structure",
+        "titleKey": "Navigation.OrganizationTree",
+        "parentKey": "organization",
+        "path": "/organization/structure",
+        "order": 105,
+        "page": {
+          "pageKey": "platform.tree",
+          "parameters": {
+            "viewKey": "organization.structure"
+          },
+          "inputResolverKey": "organization.tree.global"
+        }
       }
     ]
   }

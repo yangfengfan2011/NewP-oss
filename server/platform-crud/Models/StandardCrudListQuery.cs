@@ -6,4 +6,5 @@ public sealed record StandardCrudListQuery(
     string? SortBy = null,
     string? SortDirection = null,
     IReadOnlyDictionary<string, string?>? Filters = null,
-    IReadOnlyList<string>? Fields = null);
+    IReadOnlyList<string>? Fields = null,
+    IReadOnlyDictionary<string, string?>? QueryScope = null);

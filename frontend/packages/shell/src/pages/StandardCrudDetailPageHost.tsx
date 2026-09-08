@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useContext, useEffect, useMemo, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
@@ -22,6 +22,8 @@ import {
   resolveStandardCrudDetailPresentation,
 } from '../standard-crud/standardCrudDetailPresentation';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
+
+import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -148,6 +150,7 @@ function StandardCrudDetailPageContent<TDetail>({
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
+  const embedded = useContext(EmbeddedCrudContext);
   const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
@@ -208,6 +211,8 @@ function StandardCrudDetailPageContent<TDetail>({
     />
   ) : null;
   const refresh = detailQuery.refresh;
+  const embeddedRefreshVersion = embedded?.refreshVersion;
+  useEffect(() => { if ((embeddedRefreshVersion ?? 0) > 0) refresh(); }, [embeddedRefreshVersion, refresh]);
   const detailActionHandlers = useMemo(() => ({
     ...registration.actionHandlers,
     edit: () => setEditing(true),
@@ -256,7 +261,7 @@ function StandardCrudDetailPageContent<TDetail>({
         eyebrow={schema.resourceKey}
         title={t(`${dicKey}.${schema.titleKey ?? titleKey}`, schema.titleKey ?? titleKey)}
         description={t(`${dicKey}.${schema.descriptionKey ?? descriptionKey}`, schema.descriptionKey ?? descriptionKey)}
-        actions={detailHeaderActions}
+        actions={embedded ? undefined : detailHeaderActions}
       />
 
       {showLoading ? (

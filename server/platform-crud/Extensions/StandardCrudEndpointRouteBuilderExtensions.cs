@@ -22,7 +22,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         "pageSize",
         "sortBy",
         "sortDirection",
-        "fields"
+        "fields",
+        "queryScope"
     };
 
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
@@ -229,6 +230,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         yield return StandardRouteCandidate.Create("DELETE", route + "/{id}", descriptor.ResourceKey);
     }
 
+    // 页面范围与用户筛选分离传入模块查询 owner；模块在计数和分页前取交集。
     private static StandardCrudListQuery BuildListQuery(IQueryCollection query)
     {
         var filters = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -246,7 +248,23 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             SortBy: ReadString(query, "sortBy"),
             SortDirection: ReadString(query, "sortDirection"),
             Filters: filters,
-            Fields: ParseFields(ReadString(query, "fields")));
+            Fields: ParseFields(ReadString(query, "fields")),
+            QueryScope: ReadQueryScope(query));
+    }
+
+    // 无效页面输入在 HTTP 边界拒绝，不降级为无范围列表。
+    private static IReadOnlyDictionary<string, string?>? ReadQueryScope(IQueryCollection query)
+    {
+        if (!query.TryGetValue("queryScope", out var value)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string?>>(value.ToString())
+                ?? throw new JsonException("queryScope must be an object.");
+        }
+        catch (JsonException exception)
+        {
+            throw new BadHttpRequestException("Invalid queryScope.", exception);
+        }
     }
 
     // lookup 使用独立稳定契约，避免把列表排序、字段投影和任意过滤器泄漏给 provider。

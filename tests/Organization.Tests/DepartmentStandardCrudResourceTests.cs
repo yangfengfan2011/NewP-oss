@@ -12,6 +12,18 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class DepartmentStandardCrudResourceTests
 {
     [Fact]
+    public void QueryScope_IntersectsUserFiltersAndPreservesExplicitRoot()
+    {
+        var conditions = new DepartmentCrudQueryCustomizer().BuildConditions(
+            OrganizationCrudTestResources.Resolve(DepartmentCrudDescriptorFactory.Create()),
+            new StandardCrudListQuery(Filters: new Dictionary<string, string?> { ["companyId"] = "Other" },
+                QueryScope: new Dictionary<string, string?> { ["CompanyId"] = "Current", ["ParentDepartmentId"] = null }));
+        Assert.Contains(new StandardCrudQueryCondition("CompanyId", "=", "Other"), conditions);
+        Assert.Contains(new StandardCrudQueryCondition("CompanyId", "=", "Current"), conditions);
+        Assert.Contains(new StandardCrudQueryCondition("ParentDepartmentId", "isNull", null), conditions);
+    }
+
+    [Fact]
     public void Descriptor_ExposesHierarchyFieldsStableSortAndConditionalDeleteWithoutRevision()
     {
         var descriptor = OrganizationCrudTestResources.Resolve(DepartmentCrudDescriptorFactory.Create());

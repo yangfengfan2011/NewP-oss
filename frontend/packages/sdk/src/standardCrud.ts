@@ -33,6 +33,7 @@ export type StandardCrudOperationKind = 'create' | 'update' | 'action';
 
 /** 操作结果保持不透明；只有声明支持该结果的模块 presenter 才能解释 payload。 */
 export interface StandardCrudOperationResult {
+  change?: Omit<import("./pageComposition").ResourceChange, "resourceKey">;
   operation: StandardCrudOperationKind;
   payload: unknown;
 }
@@ -345,9 +346,10 @@ export interface StandardCrudListQueryRequest {
   fields?: string;
 }
 
-/** 行读取执行上下文承载取消和列代际绑定，不参与 URL、筛选或标准 REST 查询序列化。 */
+/** 行读取上下文承载取消、列代际与独立范围；范围单独序列化，不混入用户筛选。 */
 export interface StandardCrudListReadContext {
   columnContextToken?: string;
+  queryScope?: Record<string, string | null>;
   signal?: AbortSignal;
 }
 
@@ -1041,7 +1043,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
   return {
     list: (query, readContext) => requestJson<unknown>(
       fetcher,
-      buildStandardCrudPath(apiRoute, query),
+      buildStandardCrudPath(apiRoute, { ...query, ...(readContext?.queryScope ? { queryScope: JSON.stringify(readContext.queryScope) } : {}) }),
       {
         method: 'GET',
         ...(readContext?.signal ? { signal: readContext.signal } : {}),
@@ -1136,14 +1138,16 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
         value: options.mapDetail ? options.mapDetail(normalized) : normalized as TDetail,
       };
     },
-    create: async (values) => ({
-      operation: 'create',
-      payload: await client.create(values),
-    }),
-    update: async (id, values) => ({
-      operation: 'update',
-      payload: await client.update(id, values),
-    }),
+    create: async (values) => {
+      const detail = await client.create(values);
+      return { operation: 'create', payload: detail,
+        change: { operation: 'create', id: options.getRowId(options.mapListItem(detail.fields)), after: detail.fields } };
+    },
+    update: async (id, values, before) => {
+      const detail = await client.update(id, values);
+      return { operation: 'update', payload: detail,
+        change: { operation: 'update', id: options.getRowId(options.mapListItem(detail.fields)), before, after: detail.fields } };
+    },
     remove: (id) => client.delete(id),
     exportList: (request) => client.exportList(request),
     getRowId: options.getRowId,

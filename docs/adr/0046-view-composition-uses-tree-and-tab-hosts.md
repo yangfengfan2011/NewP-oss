@@ -6,7 +6,7 @@ status: accepted
 
 NewP 需要在组织结构树右侧按节点类型展示不同标签页组，也需要让导航直接打开多标签页页面。平台通过 PageRef 引用已注册页面，将 Tree View、Tab View 等作为目标页面的配置参数；Organization 始终拥有组织数据与领域规则。页面是被组合的界面，View 是配置，二者不合并为同一种身份。
 
-这是[组织结构管理与通用 Tree Host 决策地图](https://github.com/yangfengfan2011/NewP/issues/173)已确认的目标设计，尚未实施。当前页面 capability 装载、标准 CRUD 与详情定义是复用基础，不构成已经可用的内嵌上下文或多实例生命周期契约。本 ADR 固定边界、非目标与回退方式，不冻结字段级 schema；具体交互与验收要求由地图中的决策结论保存。
+这是[组织结构管理与通用 Tree Host 决策地图](https://github.com/yangfengfan2011/NewP/issues/173)已确认的目标设计。首个实施切片已提供受控 PageRef、Tree/Tab 配置校验、组织树四类读取，以及公司直属部门创建和编辑的组合页面；标准 CRUD 与详情继续复用原定义，组合统一聚合未保存与提交状态，并将写入成功与后续读取失败分开。统一组织管理入口、完整结构变更操作和搜索呈现仍由 [交付地图 #179](https://github.com/yangfengfan2011/NewP/issues/179) 的后续切片完成。本 ADR 固定边界、非目标与回退方式；字段级契约及验收要求以该地图确认的规格为准。
 
 ## 边界与取舍
 

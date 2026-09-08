@@ -2,6 +2,8 @@ import { ComponentType, ReactNode } from 'react';
 import type { StandardCrudResourceRegistration } from './standardCrud';
 
 export { createRecoverableCapabilityLoader } from './capabilityLoader';
+export type * from './pageComposition';
+import type { PageBinding, PageInputResolverBinding, TreeProviderBinding } from './pageComposition';
 
 export interface ModuleMetadata {
   moduleId: string;
@@ -215,6 +217,9 @@ export interface FrontendBehaviorBindings {
   standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
+  pages?: PageBinding[];
+  pageInputResolvers?: PageInputResolverBinding[];
+  treeProviders?: TreeProviderBinding[];
   initialize?: () => void | Promise<void>;
   cleanup?: () => void | Promise<void>;
 }
@@ -226,6 +231,9 @@ export interface FrontendModule {
   standardCrudResources?: StandardCrudResourceRegistration[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
+  pages?: PageBinding[];
+  pageInputResolvers?: PageInputResolverBinding[];
+  treeProviders?: TreeProviderBinding[];
   routes?: RouteConfig[];
   menus?: MenuConfig[];
   permissions?: PermissionDeclaration[];

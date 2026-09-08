@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "organization.department.tabs",
+    "mode": "tab",
+    "dicKey": "OrganizationComposition",
+    "defaultTabKey": "information",
+    "tabs": [
+      {
+        "key": "information",
+        "titleKey": "Information",
+        "pageRef": {
+          "pageKey": "platform.detail",
+          "parameters": {
+            "viewKey": "organization.department.detail"
+          },
+          "inputResolverKey": "organization.node.detail"
+        }
+      },
+      {
+        "key": "direct",
+        "titleKey": "DirectChildren",
+        "pageRef": {
+          "pageKey": "platform.list",
+          "parameters": {
+            "viewKey": "organization.department.list"
+          },
+          "inputResolverKey": "organization.department.direct"
+        }
+      }
+    ],
+    "titleKey": "Information"
+  }
+}

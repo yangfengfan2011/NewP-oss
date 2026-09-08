@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "OrganizationComposition": {
+    "Information": {
+      "zhs": "基本信息",
+      "en": "Information"
+    },
+    "DirectDepartments": {
+      "zhs": "直属部门",
+      "en": "Direct departments"
+    },
+    "DirectChildren": {
+      "zhs": "直属子部门",
+      "en": "Direct children"
+    },
+    "Company": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "Department": {
+      "zhs": "部门",
+      "en": "Department"
+    },
+    "Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Structure": {
+      "zhs": "组织结构",
+      "en": "Organization structure"
+    }
+  }
+}

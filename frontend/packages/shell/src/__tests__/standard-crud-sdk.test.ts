@@ -210,6 +210,7 @@ describe('standard CRUD SDK helpers', () => {
 
     expect(result).toEqual({
       operation: 'create',
+      change: { operation: 'create', id: 'Person_1', after: { EID: 'Person_1', ENAME: '张三' } },
       payload: {
         fields: { EID: 'Person_1', ENAME: '张三' },
         summaries: {},
@@ -236,6 +237,7 @@ describe('standard CRUD SDK helpers', () => {
 
     expect(result).toEqual({
       operation: 'update',
+      change: { operation: 'update', id: 'Person_1', before: undefined, after: { EID: 'Person_1', ENAME: '李四', Revision: 2 } },
       payload: {
         fields: { EID: 'Person_1', ENAME: '李四', Revision: 2 },
         summaries: {},

@@ -30,6 +30,7 @@ export interface RuntimeNavItem {
   shellViews?: string[];
   entryType?: 'standard-list' | 'custom';
   targetKey?: string;
+  page?: import("@icp-platform/sdk").PageRef;
 }
 
 export interface RuntimeViewDocument {

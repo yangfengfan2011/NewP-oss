@@ -25,7 +25,12 @@
       "organization.person.detail",
       "organization.position.list",
       "organization.company.list",
-      "organization.department.list"
+      "organization.department.list",
+      "organization.tree",
+      "organization.node.detail",
+      "organization.company.direct",
+      "organization.department.direct",
+      "organization.tree.global"
     ]
   },
   "security": {

@@ -32,11 +32,12 @@ describe('standard CRUD mutation execution', () => {
     registration: StandardCrudResourceRegistration,
     refresh: () => void,
     onResult: (result: StandardCrudOperationResult) => void,
+    options: { fixedCreateValues?: Record<string, unknown>; onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void> } = {},
   ): Promise<() => StandardCrudMutationExecution> {
     let currentExecution: StandardCrudMutationExecution | undefined;
 
     function Harness() {
-      const execution = useStandardCrudMutationExecution({ registration, refresh, onResult });
+      const execution = useStandardCrudMutationExecution({ registration, refresh, onResult, ...options });
       useEffect(() => {
         currentExecution = execution;
       }, [execution]);
@@ -55,6 +56,29 @@ describe('standard CRUD mutation execution', () => {
       return currentExecution;
     };
   }
+
+  it('retains fixed creation context and publishes once even if subsequent reads fail', async () => {
+    const create = vi.fn().mockResolvedValue({ operation: 'create', payload: {}, change: { operation: 'create', id: 'd1', after: { CompanyId: 'current', ParentDepartmentId: null } } });
+    const committed = vi.fn().mockRejectedValue(new Error('offline'));
+    const refresh = vi.fn();
+    const registration: StandardCrudResourceRegistration = {
+      resourceKey: 'organization.department', listViewKey: 'department.list',
+      dataAdapter: { list: vi.fn(), get: vi.fn(), getRowId: () => 'd1', create },
+      buildMutationValues: values => values,
+    };
+    const execution = await renderExecution(registration, refresh, vi.fn(), { fixedCreateValues: { CompanyId: 'current', ParentDepartmentId: null }, onCommitted: committed });
+    let succeeded = false;
+    await act(async () => { succeeded = await execution().execute({ mode: 'create',
+      fields: [{ key: 'CompanyId', labelKey: 'Company', modelField: 'CompanyId', kind: 'text', readOnly: true }],
+      values: { CompanyId: 'tampered', ParentDepartmentId: 'tampered', Name: 'saved' }, detailFields: {} }); });
+    expect(succeeded).toBe(true);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({ CompanyId: 'current', ParentDepartmentId: null, Name: 'saved' }, {});
+    expect(committed).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(execution().error).toBeNull();
+    expect(execution().synchronizationError).toContain('已保存，刷新失败');
+  });
 
   it('refreshes once and presents the opaque result after a successful create', async () => {
     const result: StandardCrudOperationResult = {

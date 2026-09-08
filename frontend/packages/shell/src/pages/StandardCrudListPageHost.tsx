@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthorization, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -66,6 +66,7 @@ import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQ
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
+import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -746,7 +747,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   modelDocuments: MetadataRecord[];
   detailRoutePath?: string;
 }): ReactElement {
-  const location = useLocation();
+  const routeLocation = useLocation();
+  const embedded = useContext(EmbeddedCrudContext);
+  const location = embedded ? { ...routeLocation, search: '' } : routeLocation;
   const navigate = useNavigate();
   const [messageApi, messageContextHolder] = useMessage();
   const { t } = useLocalization();
@@ -798,8 +801,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const createFormSchema = preparedDrawerForms?.create ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
   const editFormSchema = preparedDrawerForms?.edit ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
   const createFields = useMemo(
-    () => localizeStandardCrudFields(resolveCreateFormFields(createFormSchema.fields), schema.dicKey, t),
-    [createFormSchema.fields, schema.dicKey, t],
+    () => localizeStandardCrudFields(resolveCreateFormFields(createFormSchema.fields).map(field =>
+      embedded?.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(embedded.input.fixedCreateValues, field.modelField)
+        ? { ...field, readOnly: true, defaultValue: embedded.input.fixedCreateValues[field.modelField] } : field), schema.dicKey, t),
+    [createFormSchema.fields, embedded?.input.fixedCreateValues, schema.dicKey, t],
   );
   const editFields = useMemo(
     () => localizeStandardCrudFields(editFormSchema.fields, schema.dicKey, t),
@@ -922,6 +927,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       sortBy: next.sortBy,
       sortDirection: next.sortDirection,
     });
+    if (embedded) return;
     const params = serializeStandardCrudListState(
       schema.query,
       next,
@@ -971,14 +977,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       : {}),
   }), [appliedFilters, listRequestFields, schema.advancedFilter, schema.query, tableQuery]);
   const metadataListQueryKey = useMemo(
-    () => createStandardCrudListQueryKey(registration.resourceKey, metadataListRequest),
-    [metadataListRequest, registration.resourceKey],
+    () => createStandardCrudListQueryKey(registration.resourceKey, { ...metadataListRequest, queryScope: JSON.stringify(embedded?.input.queryScope), instanceId: embedded ? schema.viewKey + JSON.stringify(embedded.input.context?.nodeKey) : undefined }),
+    [embedded, metadataListRequest, registration.resourceKey, schema.viewKey],
   );
   const metadataListQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
     key: metadataListQueryKey,
-    enabled: schema.columnSource !== 'runtime',
+    enabled: schema.columnSource !== 'runtime' && embedded?.input.parameters.presentation !== 'drawer',
     load: async ({ signal }) => {
-      const result = await dataAdapter.list(metadataListRequest, { signal });
+      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: embedded?.input.queryScope });
       return { items: result.items, total: result.total };
     },
   });
@@ -1156,6 +1162,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     else metadataListQuery.refresh();
   };
 
+  useEffect(() => { if (embedded && embedded.refreshVersion > 0) refreshList();
+    // refreshVersion 是组合成功事实的唯一触发源。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded?.refreshVersion]);
   const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
     refresh: refreshList,
     onResult: (result) => {
@@ -1166,7 +1176,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   });
   const mutationExecution = useStandardCrudMutationExecution({
     registration,
-    refresh: refreshList,
+    fixedCreateValues: embedded?.input.fixedCreateValues,
+    onCommitted: embedded?.committed,
+    refresh: embedded ? () => undefined : refreshList,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
@@ -1270,6 +1282,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const syncDrawerRoute = (mode: Exclude<CrudDrawerMode, 'closed'>, id?: string) => {
+    if (embedded) return;
     const search = buildDrawerSearch(mode, id);
     if (search === location.search) {
       return;
@@ -1280,6 +1293,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const clearDrawerRoute = () => {
+    if (embedded) return;
     if (!location.search.includes('drawer=') && !location.search.includes('id=')) {
       return;
     }
@@ -1294,6 +1308,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setClearConflictOnDetailLoad(false);
     setDrawerPreparationError(null);
     setDrawerState(CLOSED_DRAWER_STATE);
+    embedded?.close?.();
     mutationExecution.clearError();
     if (options.syncRoute !== false) {
       clearDrawerRoute();
@@ -1307,6 +1322,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   // 所有离开编辑态的入口共用同一个 Ant Modal，避免关闭、切换记录和浏览器返回出现不同保护语义。
   const confirmDiscardIfNeeded = (proceed: () => void): void => {
+    if (mutationExecution.pending) return;
     if (!isDrawerDirty()) {
       proceed();
       return;
@@ -1395,7 +1411,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const openCreateDrawer = async (source: CrudDrawerState['source'] = 'user-action') => {
     const prepared = await prepareDrawerForms();
     appliedDrawerDetailRef.current = null;
-    const initialValues = Object.fromEntries(prepared.createFields.map((field) => [field.key, field.defaultValue ?? '']));
+    const initialValues = Object.fromEntries(prepared.createFields.map((field) => [field.key,
+      embedded?.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(embedded.input.fixedCreateValues, field.modelField)
+        ? embedded.input.fixedCreateValues[field.modelField] : field.defaultValue ?? '']));
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     setFormValues(initialValues);
     initialFormValuesRef.current = initialValues;
@@ -1476,6 +1494,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   useEffect(() => {
+    if (embedded) return;
     if (handledRouteSearchRef.current === location.search) {
       return;
     }
@@ -1515,6 +1534,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     // URL 是抽屉兼容状态的唯一触发源，handler 身份变化不应重复打开或关闭抽屉。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
+
+  useEffect(() => {
+    embedded?.reportState({ dirty: isDrawerDirty(), submitting: mutationExecution.pending || actionExecution.pendingKey !== null }, () => closeDrawer());
+  });
+  useEffect(() => {
+    if (embedded?.input.parameters.presentation === 'drawer' && embedded.input.recordId) void openEditDrawer(embedded.input.recordId);
+    // 外层页面实例与操作参数拥有首次打开；表单更新不重复打开 Drawer。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded?.input.recordId]);
 
   // SearchTablePage 仍保留旧 request Interface；controlledResult 生效时该兼容函数不会执行远程读取。
   const tableRequest = useMemo(() => async () => ({
@@ -1950,13 +1978,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             close: () => setPresentedOperationResult(null),
           })
         : null}
-      <CrudWorkspacePage
+      {embedded?.input.parameters.presentation !== 'drawer' && <CrudWorkspacePage
         title={pageTitle}
         primaryActions={headerActions}
         filterBar={filterBar}
       >
         {content}
-      </CrudWorkspacePage>
+      </CrudWorkspacePage>}
+      {mutationExecution.synchronizationError && <div role="alert">{mutationExecution.synchronizationError}</div>}
       {schema.advancedFilter.enabled && advancedFilterOpen ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载高级筛选…</div>}>
           <Drawer

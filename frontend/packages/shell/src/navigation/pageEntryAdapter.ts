@@ -7,13 +7,15 @@ export function buildPageEntriesFromNavDocuments(
   navDocuments: RuntimeNavItemDocument[],
 ): RuntimePageEntry[] {
   return navDocuments.flatMap((document) =>
-    document.navigation.items.filter(hasRuntimePageEntryShape).map((item) => ({
+    [...document.navigation.items.filter(hasRuntimePageEntryShape).map((item) => ({
       path: item.path,
       entryType: item.entryType,
       targetKey: item.targetKey,
       permissions: item.permissions,
       ...(item.localAdministratorOnly ? { localAdministratorOnly: true } : {}),
-    })),
+    })), ...document.navigation.items.filter(item => item.path && item.page).map(item => ({
+      path: item.path!, entryType: 'page' as const, targetKey: item.page!.pageKey, page: item.page, permissions: item.permissions,
+    }))],
   );
 }
 

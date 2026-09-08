@@ -22,6 +22,7 @@ export interface StandardCrudMutationExecution {
   error: string | null;
   fieldErrors: Record<string, string>;
   conflict: boolean;
+  synchronizationError: string | null;
   execute: (request: StandardCrudMutationExecutionRequest) => Promise<boolean>;
   clearError: () => void;
 }
@@ -37,6 +38,8 @@ interface UseStandardCrudMutationExecutionOptions {
   registration: StandardCrudMutationRegistration;
   refresh: () => void;
   onResult?: (result: StandardCrudOperationResult) => void;
+  onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void>;
+  fixedCreateValues?: Record<string, unknown>;
 }
 
 function mapMutationFieldErrors(
@@ -56,12 +59,15 @@ export function useStandardCrudMutationExecution({
   registration,
   refresh,
   onResult,
+  onCommitted,
+  fixedCreateValues,
 }: UseStandardCrudMutationExecutionOptions): StandardCrudMutationExecution {
   const pendingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [conflict, setConflict] = useState(false);
+  const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -110,7 +116,7 @@ export function useStandardCrudMutationExecution({
           throw new Error(`标准资源 "${registration.resourceKey}" 未提供创建能力。`);
         }
 
-        result = await registration.dataAdapter.create(mutationValues, detailFields);
+        result = await registration.dataAdapter.create({ ...mutationValues, ...fixedCreateValues }, detailFields);
       } else {
         if (!id) {
           throw new Error('缺少资源标识，无法保存修改。');
@@ -122,9 +128,16 @@ export function useStandardCrudMutationExecution({
         result = await registration.dataAdapter.update(id, mutationValues, detailFields);
       }
 
-      refresh();
-      if (result) {
-        onResult?.(result);
+      // 写入已经提交；后置呈现或读取失败不能进入写入错误分支，也不能重放写入。
+      setSynchronizationError(null);
+      const followUps: Array<() => void | Promise<void>> = [
+        () => { if (result) onResult?.(result); },
+        async () => { if (result?.change) await onCommitted?.({ ...result.change, resourceKey: registration.resourceKey }); },
+        refresh,
+      ];
+      for (const followUp of followUps) {
+        try { await followUp(); }
+        catch (readError) { setSynchronizationError(`已保存，刷新失败：${readError instanceof Error ? readError.message : String(readError)}`); }
       }
 
       return true;
@@ -144,13 +157,14 @@ export function useStandardCrudMutationExecution({
       pendingRef.current = false;
       setPending(false);
     }
-  }, [clearError, onResult, refresh, registration]);
+  }, [clearError, fixedCreateValues, onCommitted, onResult, refresh, registration]);
 
   return {
     pending,
     error,
     fieldErrors,
     conflict,
+    synchronizationError,
     execute,
     clearError,
   };

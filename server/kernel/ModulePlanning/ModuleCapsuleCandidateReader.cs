@@ -265,7 +265,7 @@ public sealed class ModuleCapsuleCandidateReader
         var permissionReferences = new List<string>();
         bindingReferences.AddRange(PageCompositionMetadataValidator.Validate(
             Directory.EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories)
-                .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))), declaredBindings));
+                .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path))), declaredBindings));
         var navigationRoot = Path.Combine(metadataRoot, "navigation");
         if (Directory.Exists(navigationRoot))
         {
@@ -344,11 +344,11 @@ public sealed class ModuleCapsuleCandidateReader
         var permissionReferences = new List<string>();
         bindingReferences.AddRange(PageCompositionMetadataValidator.Validate(
             snapshot.EnumerateFiles("metadata").Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                .Select(path => JsonSerializer.Deserialize<JsonElement>(snapshot.ReadFile(path))), declaredBindings));
+                .Select(path => JsonSerializer.Deserialize<JsonElement>(ReadMetadataText(snapshot, path))), declaredBindings));
         foreach (var path in snapshot.EnumerateFiles("metadata/navigation")
                      .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
         {
-            using var document = JsonDocument.Parse(snapshot.ReadFile(path));
+            using var document = JsonDocument.Parse(ReadMetadataText(snapshot, path));
             if (!TryGetObject(document.RootElement, "navigation", out var navigation)
                 || !navigation.TryGetProperty("items", out var items)
                 || items.ValueKind != JsonValueKind.Array)
@@ -367,7 +367,7 @@ public sealed class ModuleCapsuleCandidateReader
         foreach (var path in snapshot.EnumerateFiles("metadata/views")
                      .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
         {
-            using var document = JsonDocument.Parse(snapshot.ReadFile(path));
+            using var document = JsonDocument.Parse(ReadMetadataText(snapshot, path));
             if (TryGetObject(document.RootElement, "view", out var view))
             {
                 AddViewBindingReference(view, bindingReferences, declaredBindings);
@@ -379,7 +379,7 @@ public sealed class ModuleCapsuleCandidateReader
         foreach (var path in snapshot.EnumerateFiles("metadata/models")
                      .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
         {
-            using var document = JsonDocument.Parse(snapshot.ReadFile(path));
+            using var document = JsonDocument.Parse(ReadMetadataText(snapshot, path));
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 if (property.NameEquals("schemaVersion") || property.NameEquals("type"))
@@ -409,6 +409,14 @@ public sealed class ModuleCapsuleCandidateReader
 
         value = default;
         return false;
+    }
+
+    // 快照字节保持原样用于来源验证；JSON 读取与 File.ReadAllText 一样检测 BOM。
+    private static string ReadMetadataText(VerifiedModuleArtifactSnapshot snapshot, string path)
+    {
+        using var stream = new MemoryStream(snapshot.ReadFile(path), writable: false);
+        using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private static string RequiredString(JsonElement element, string propertyName, string sourcePath)

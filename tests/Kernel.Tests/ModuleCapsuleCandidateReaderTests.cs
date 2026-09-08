@@ -185,9 +185,11 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ReadBuiltIn_RealOrganizationDrawerViews_DoNotRequireFullPageBindings(bool trustedSnapshot)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ReadBuiltIn_RealOrganizationDrawerViews_DoNotRequireFullPageBindings(bool trustedSnapshot, bool utf8Bom)
     {
         var runtimeModulesRoot = Path.Combine(_root, "runtime-modules");
         foreach (var moduleRoot in Directory.GetDirectories(Path.Combine(FindRepositoryRoot(), "modules")))
@@ -201,6 +203,13 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
             File.Copy(Path.Combine(AppContext.BaseDirectory, assemblyName), Path.Combine(_root, assemblyName));
         }
 
+        if (utf8Bom)
+        {
+            // 编码是 authoring 输入的一部分；覆盖正式可信快照及普通候选读取，不改仓库源文件。
+            foreach (var path in Directory.GetFiles(runtimeModulesRoot, "*.json", SearchOption.AllDirectories)
+                         .Where(path => path.Contains(Path.DirectorySeparatorChar + "metadata" + Path.DirectorySeparatorChar)))
+                File.WriteAllText(path, File.ReadAllText(path), new System.Text.UTF8Encoding(true));
+        }
         var reader = new ModuleCapsuleCandidateReader();
         var candidates = trustedSnapshot
             ? reader.ReadTrustedBuiltIn(TrustedBuiltInModuleSource.CreateForHost(_root, runtimeModulesRoot))

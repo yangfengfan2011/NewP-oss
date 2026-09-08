@@ -5,7 +5,7 @@ import { PageHeader } from '@icp-platform/ui/core';
 import { useLocalization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
-import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation } from './pageCompositionRuntime';
+import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation, type TreeLocation } from './pageCompositionRuntime';
 import { PageComposition } from './PageCompositionContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -18,8 +18,12 @@ export function PageEntry({ page }: { page: PageRef }) {
   const metadata = useRuntimeMetadata();
   const { t } = useLocalization();
   const view = metadata?.viewDocuments.find(document => document.view.key === page.parameters?.viewKey)?.view;
-  const navigation = { tabKey: new URLSearchParams(location.search).get('tab'), selectTab: (key: string) => {
+  const navigation = { tabKey: new URLSearchParams(location.search).get('tab'), selectTab: (key: string, treeLocation?: TreeLocation) => {
     const query = new URLSearchParams(location.search); query.set('tab', key);
+    if (treeLocation) {
+      if (treeLocation.nodeKey) query.set('node', treeLocation.nodeKey); else query.delete('node');
+      if (treeLocation.nodeTab) query.set('nodeTab', treeLocation.nodeTab); else query.delete('nodeTab');
+    }
     navigate({ pathname: location.pathname, search: query.toString() });
   } };
   const treeNavigation: TreeNavigation = { nodeKey: new URLSearchParams(location.search).get('node'), nodeTab: new URLSearchParams(location.search).get('nodeTab'), locate: (node, tab) => {

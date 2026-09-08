@@ -1,8 +1,8 @@
-import { useContext, useEffect, useId, useState } from 'react';
+import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import type { PageProps, TabView } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { CompositionContext, PageNavigationContext, TreeNavigationContext } from './pageCompositionRuntime';
+import { CompositionContext, PageNavigationContext, TreeNavigationContext, type TreeLocation } from './pageCompositionRuntime';
 import { PageOutlet } from './PageOutlet';
 
 /** 已打开的标签保持挂载，未激活页面仍参与当前组合保护。 */
@@ -16,6 +16,9 @@ export default function StandardTabPage({ input }: PageProps) {
   const id = useId();
   const [localSelected, setSelected] = useState(view.defaultTabKey);
   const selected = navigation ? (view.tabs.some(tab => tab.key === navigation.tabKey) ? navigation.tabKey! : view.defaultTabKey) : localSelected;
+  // URL 只描述当前标签；已打开兄弟树的位置留在本 Tab 实例，不能消费另一个标签的地址。
+  const treeLocations = useRef(new Map<string, TreeLocation>());
+  if (treeNavigation) treeLocations.current.set(selected, { nodeKey: treeNavigation.nodeKey, nodeTab: treeNavigation.nodeTab });
   const [opened, setOpened] = useState(() => new Set([selected]));
   useEffect(() => { setOpened(current => current.has(selected) ? current : new Set(current).add(selected)); }, [selected]);
   const visibleTabs = new Set([...opened, selected]);
@@ -24,14 +27,20 @@ export default function StandardTabPage({ input }: PageProps) {
       {view.tabs.map(tab => <button key={tab.key} role="tab" id={`${id}-${tab.key}`} aria-controls={`${id}-panel-${tab.key}`} aria-selected={selected === tab.key}
         onClick={() => {
           if (selected === tab.key) return;
-          if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(tab.key); }
+          if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(tab.key, treeNavigation ? treeLocations.current.get(tab.key) ?? { nodeKey: null, nodeTab: null } : undefined); }
           else runtime.leave(() => { setSelected(tab.key); setOpened(current => new Set(current).add(tab.key)); });
         }}>
         {t(`${view.dicKey}.${tab.titleKey}`, tab.titleKey)}
       </button>)}
     </div>
     {view.tabs.filter(tab => visibleTabs.has(tab.key)).map(tab => <div key={tab.key} role="tabpanel" id={`${id}-panel-${tab.key}`} aria-labelledby={`${id}-${tab.key}`} hidden={tab.key !== selected}>
-      <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} treeNavigation={treeNavigation} />
+      <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} treeNavigation={treeNavigation ? {
+        ...(treeLocations.current.get(tab.key) ?? { nodeKey: null, nodeTab: null }),
+        locate: (nodeKey, nodeTab) => {
+          treeLocations.current.set(tab.key, { nodeKey, nodeTab: nodeTab === undefined ? treeLocations.current.get(tab.key)?.nodeTab ?? null : nodeTab });
+          if (tab.key === selected) treeNavigation.locate(nodeKey, nodeTab);
+        },
+      } : null} />
     </div>)}
   </div>;
 }

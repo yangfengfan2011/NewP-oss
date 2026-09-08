@@ -30,6 +30,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationNotice, setLocationNotice] = useState<string | null>(null);
   const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
   const scopeController = useRef(new AbortController());
   const rootsController = useRef<AbortController>();
@@ -64,15 +65,22 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       if (signal.aborted) return;
       const target = [...currentRoots, ...Object.values(loaded).flat()].find(node => node.nodeKey === key);
       if (!target) throw new Error('路径目标未出现在当前分支');
-      setBranches(current => ({ ...current, ...loaded })); setExpanded(current => [...new Set([...current, ...path.slice(0, -1).map(node => node.nodeKey)])]);
-      setSelected(target); setEditPage(null); setLocationError(null);
-      navigationRef.current?.locate(key, selectedRef.current && selectedRef.current.nodeType !== target.nodeType ? null : undefined);
+      // 读取期间旧页面仍可编辑；落地前再次裁决，确认回调也不得应用已取消的定位。
+      runtime.leave(() => {
+        if (signal.aborted || !activeRef.current) return;
+        setBranches(current => ({ ...current, ...loaded })); setExpanded(current => [...new Set([...current, ...path.slice(0, -1).map(node => node.nodeKey)])]);
+        setSelected(target); setEditPage(null); setLocationError(null); setLocationNotice(null);
+        navigationRef.current?.locate(key, selectedRef.current && selectedRef.current.nodeType !== target.nodeType ? null : undefined);
+      });
     } catch (failure) {
       if (signal.aborted) return;
-      if (failure instanceof TreeNodeNotFoundError) { setSelected(currentRoots[0] ?? null); setLocationError(null); navigationRef.current?.locate(currentRoots[0]?.nodeKey ?? null, null); }
+      if (failure instanceof TreeNodeNotFoundError) {
+        setLocationNotice('目标节点已不存在');
+        runtime.leave(() => { if (signal.aborted || !activeRef.current) return; setSelected(currentRoots[0] ?? null); setLocationError(null); navigationRef.current?.locate(currentRoots[0]?.nodeKey ?? null, null); });
+      }
       else setLocationError(String(failure));
     }
-  }, [provider, treeScope]);
+  }, [provider, runtime, treeScope]);
   const reloadRoots = useCallback(async (signal?: AbortSignal) => {
     rootsController.current?.abort();
     const controller = new AbortController(); rootsController.current = controller;
@@ -146,7 +154,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   }, [flush, instanceId, provider, treeScope]);
   useEffect(() => runtime.subscribe(instanceId, synchronize), [instanceId, runtime, synchronize]);
   useEffect(() => { if (active) void flush().catch(() => undefined); }, [active, flush]);
-  const select = (node: TreeNodeDescriptor, after?: () => void) => runtime.leave(() => { locationController.current?.abort(); setSelected(node); setEditPage(null); navigationRef.current?.locate(node.nodeKey, selectedRef.current?.nodeType !== node.nodeType ? null : undefined); after?.(); });
+  const select = (node: TreeNodeDescriptor, after?: () => void) => runtime.leave(() => { locationController.current?.abort(); setSelected(node); setEditPage(null); setLocationNotice(null); navigationRef.current?.locate(node.nodeKey, selectedRef.current?.nodeType !== node.nodeType ? null : undefined); after?.(); });
   const readBranch = async (key: string) => {
     branchControllers.current.get(key)?.abort();
     const controller = new AbortController(); branchControllers.current.set(key, controller);
@@ -171,6 +179,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       {view.createAction && <Button onClick={() => runtime.leave(() => setEditPage({ pageKey: 'platform.list', parameters: { viewKey: view.createAction!.viewKey, presentation: 'drawer', standardAction: 'create' } }))}>{t(`${view.dicKey}.${view.createAction.labelKey}`, view.createAction.labelKey)}</Button>}
       {error && <div role="alert">树读取失败：{error}<Button onClick={() => runtime.leave(() => { if (pendingChanges.current.size) void flush().catch(() => undefined); else void reloadRoots(); })}>重试</Button></div>}
       {locationError && <div role="alert">定位读取失败：{locationError}<button onClick={() => runtime.leave(() => { if (locationTarget.current) void locate(locationTarget.current); })}>重试定位</button></div>}
+      {locationNotice && <div role="status">{locationNotice}</div>}
       {Object.entries(branchErrors).map(([key, message]) => <div key={key} role="alert">分支读取失败：{message}<button onClick={() => void readBranch(key)}>重试分支</button></div>)}
       <Tree treeData={data(roots)} selectedKeys={selected ? [selected.nodeKey] : []} expandedKeys={expanded}
         onExpand={keys => setExpanded(keys.map(String))}

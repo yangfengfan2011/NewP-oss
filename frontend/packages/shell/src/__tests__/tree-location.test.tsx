@@ -36,11 +36,13 @@ it.each(['restore', 'offline', 'missing', 'search-moved', 'search-deleted', 'sta
       expect(provider.path).toHaveBeenCalledWith(expect.anything(), 'd', expect.any(AbortSignal));
       if (scenario === 'stale') { await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === 'other')!.click()); await act(async () => finishPath([node('c'), node('d')])); expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('other'); return; }
       expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe(scenario === 'search-deleted' ? 'c' : 'd');
+      if (scenario === 'search-deleted') expect(container.textContent).toContain('目标节点已不存在');
       if (scenario === 'search-moved') expect(provider.children).toHaveBeenCalledWith(expect.anything(), 'other', expect.any(AbortSignal));
       return;
     }
     if (scenario === 'offline') { expect(container.textContent).toContain('offline'); expect(container.querySelector('.ant-tree-node-selected')).toBeNull(); offline = false; await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '重试定位')!.click()); }
     expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe(scenario === 'missing' ? 'c' : 'd');
+    if (scenario === 'missing') expect(container.textContent).toContain('目标节点已不存在');
     for (let i = 0; i < 50 && !container.textContent?.includes('d:children'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     if (scenario !== 'missing') expect(container.querySelector('[role=tabpanel]:not([hidden])')?.textContent).toContain('d:children');
   } finally { await act(async () => root.unmount()); router.dispose(); container.remove(); }

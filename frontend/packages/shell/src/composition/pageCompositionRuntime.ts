@@ -16,8 +16,9 @@ export const EmbeddedCrudContext = createContext<{
 } | null>(null);
 
 /** 只有导航根页面拥有地址；嵌套 PageOutlet 清除此上下文。 */
-export const PageNavigationContext = createContext<{ tabKey: string | null; selectTab: (key: string) => void } | null>(null);
-export interface TreeNavigation { nodeKey: string | null; nodeTab: string | null; locate: (node: string | null, tab?: string | null) => void }
+export interface TreeLocation { nodeKey: string | null; nodeTab: string | null }
+export const PageNavigationContext = createContext<{ tabKey: string | null; selectTab: (key: string, treeLocation?: TreeLocation) => void } | null>(null);
+export interface TreeNavigation extends TreeLocation { locate: (node: string | null, tab?: string | null) => void }
 /** 导航入口显式交给直属树；节点内的其他组合不共享该地址槽。 */
 export const TreeNavigationContext = createContext<TreeNavigation | null>(null);
 export const PageActivityContext = createContext(true);

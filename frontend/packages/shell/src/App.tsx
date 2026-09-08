@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import {
   AuthorizationProvider,
   FirstPasswordChangePage,
@@ -41,6 +41,7 @@ import {
   compileStandardCrudRouteProjection,
 } from './navigation/standardCrudRouteAdapter';
 import { renderPageEntry } from './navigation/pageRouteRenderer';
+import { ShellRouter } from './navigation/ShellRouter';
 import Home from './pages/Home';
 import Login from './pages/Login';
 
@@ -321,7 +322,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
 
   return (
     <ShellThemeProvider theme={shellAntdTheme}>
-      <BrowserRouter>
+      <ShellRouter>
         <LocalizationProvider
           defaultLanguage={localizationManifest.defaultLanguage}
           supportedLanguages={localizationManifest.supportedLanguages}
@@ -346,7 +347,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
             </AuthProvider>
           </PlatformRequestLocaleBridge>
         </LocalizationProvider>
-      </BrowserRouter>
+      </ShellRouter>
     </ShellThemeProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CompositionContext, type CompositionRuntime } from './pageCompositionRuntime';
+import { useBlocker } from 'react-router-dom';
 import Modal from 'antd/es/modal';
 import Alert from 'antd/es/alert';
 import Button from 'antd/es/button';
@@ -15,7 +16,13 @@ function CompositionOwner({ children }: { children: ReactNode }) {
   const readers = useRef(new Map<string, (change: ResourceChange) => Promise<void>>());
   const retryRead = useRef<(() => Promise<void>) | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void; cancel?: () => void } | null>(null);
+  const blocker = useBlocker(useCallback(() => [...states.current.values()].some(state => state.dirty || state.submitting), []));
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    if ([...states.current.values()].some(state => state.submitting)) { blocker.reset(); return; }
+    setPendingLeave({ proceed: blocker.proceed, cancel: blocker.reset });
+  }, [blocker]);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if ([...states.current.values()].some(state => state.dirty || state.submitting)) { event.preventDefault(); event.returnValue = ''; }
@@ -36,7 +43,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     report: (id, state, discard) => { if (state) states.current.set(id, { ...state, discard }); else states.current.delete(id); },
     leave: (proceed) => {
       if ([...states.current.values()].some(state => state.submitting)) return;
-      if ([...states.current.values()].some(state => state.dirty)) setPendingLeave(() => proceed);
+      if ([...states.current.values()].some(state => state.dirty)) setPendingLeave({ proceed });
       else proceed();
     },
     subscribe: (id, read) => { readers.current.set(id, read); return () => { readers.current.delete(id); }; },
@@ -46,9 +53,9 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     {error && <Alert type="warning" message={error} action={<Button onClick={() => void retryRead.current?.()}>重试读取</Button>} />}
     {children}
     <Modal open={pendingLeave !== null} title="放弃未保存的修改？" okText="放弃修改" cancelText="继续编辑"
-      onCancel={() => setPendingLeave(null)} onOk={() => { if ([...states.current.values()].some(state => state.submitting)) return;
+      onCancel={() => { pendingLeave?.cancel?.(); setPendingLeave(null); }} onOk={() => { if ([...states.current.values()].some(state => state.submitting)) return;
         for (const state of states.current.values()) if (state.dirty) state.discard?.();
-        const proceed = pendingLeave; setPendingLeave(null); proceed?.(); }}>
+        const proceed = pendingLeave?.proceed; setPendingLeave(null); proceed?.(); }}>
       当前组合包含未保存的输入，离开将放弃这些修改。
     </Modal>
   </CompositionContext.Provider>;

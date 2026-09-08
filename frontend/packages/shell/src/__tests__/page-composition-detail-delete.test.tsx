@@ -2,7 +2,7 @@
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/organization/src';
@@ -13,6 +13,16 @@ import detail from '../../../../../modules/Organization/metadata/views/Departmen
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (...args: Parameters<typeof fetch>) => fetch(...args) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+// 此测试验证删除后的读取收敛；在 setup 载入真实组件，冷启动仍由正式 Gate 覆盖。
+beforeAll(async () => {
+  await Promise.all([
+    import('../pages/StandardCrudDetailPageHost'),
+    import('../pages/StandardCrudListPageHost'),
+    import('../pages/StandardCrudListDrawerRuntime'),
+    import('../pages/StandardCrudListOverlayRuntime'),
+    organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
+  ]);
+});
 it('settles after one confirmed delete with the real embedded detail host and Organization REST adapter', async () => {
   const fields = { EID: 'd', CompanyId: 'c', CompanyId_DisplayValue: 'Company', ParentDepartmentId: null, ParentDepartmentId_DisplayValue: null, ECODE: 'D', ENAME: 'Department', IsEnabled: true, SortOrder: '001', CreatedAt: '2026-09-08T00:00:00Z', CreatedBy: 'system', UpdatedBy: 'system', UpdatedAt: '2026-09-08T00:00:00Z' };
   const requests: string[] = [];
@@ -32,7 +42,21 @@ it('settles after one confirmed delete with the real embedded detail host and Or
   const tree = { type: 'view', view: { key: 'tree', mode: 'tree', dicKey: 'Tree', providerKey: 'tree', nodeTypes: [{ key: 'department', titleKey: 'Department', pageRef: { pageKey: 'platform.detail', parameters: { viewKey: 'organization.department.detail' }, inputResolverKey: 'node' }, contextMenu: [{ key: 'delete', labelKey: 'Delete', standardAction: 'delete', viewKey: 'organization.department.list', inputResolverKey: 'node' }] }] } };
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><AuthorizationProvider permissions={['Organization.Department.View', 'Organization.Department.Delete']}><PlatformQueryProvider scopeKey="test"><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [runtimeModels.department], viewDocuments: [list, detail, tree] }}><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: 'tree' }, inputResolverKey: 'scope' }} /></RuntimeMetadataProvider></PlatformQueryProvider></AuthorizationProvider></LocalizationProvider> }]);
-  const waitFor = async (condition: () => boolean) => { for (let i = 0; i < 100 && !condition(); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect(condition(), document.body.textContent ?? '').toBe(true); };
+  let finished = false;
+  const cleanup = async () => {
+    if (finished) return;
+    finished = true;
+    await act(async () => root.unmount()); router.dispose(); container.remove(); fetcher.mockRestore();
+  };
+  onTestFinished(cleanup);
+  const waitFor = async (condition: () => boolean) => {
+    for (let i = 0; i < 100 && !condition(); i++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      if (finished) throw new Error('Detail delete test already disposed');
+      await act(async () => undefined);
+    }
+    expect(condition(), document.body.textContent ?? '').toBe(true);
+  };
   try {
     await act(async () => root.render(<StrictMode><RouterProvider router={router} /></StrictMode>));
     await waitFor(() => Boolean(container.querySelector('.ant-tree-title')));
@@ -51,5 +75,5 @@ it('settles after one confirmed delete with the real embedded detail host and Or
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
     expect(requests.filter(item => item === 'GET /api/organization/departments/d')).toHaveLength(detailReads);
     expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(1);
-  } finally { await act(async () => root.unmount()); router.dispose(); container.remove(); fetcher.mockRestore(); }
+  } finally { await cleanup(); }
 });

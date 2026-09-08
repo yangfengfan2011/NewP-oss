@@ -376,11 +376,15 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var page = await context.NewPageAsync();
         var browserErrors = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        var apiResponses = new System.Collections.Concurrent.ConcurrentQueue<object>();
         page.PageError += (_, message) => browserErrors.Enqueue(message);
         page.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
         page.Response += (_, response) =>
         {
             if (response.Status >= 400) failedResponses.Enqueue(response);
+            var path = new Uri(response.Url).AbsolutePath;
+            if (path.StartsWith("/api/organization/", StringComparison.Ordinal))
+                apiResponses.Enqueue(new { observedAtUtc = DateTimeOffset.UtcNow, method = response.Request.Method, path, status = response.Status });
         };
         page.SetDefaultTimeout(30_000);
         page.SetDefaultNavigationTimeout(120_000);
@@ -461,8 +465,9 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             try
             {
                 diagnostics.Add(await ReadStandardCrudPageDiagnosticAsync(page));
-                foreach (var drawer in await page.Locator(".ant-drawer-content:visible").AllAsync())
-                    diagnostics.Add($"Visible drawer: {await drawer.InnerTextAsync()}");
+                diagnostics.Add($"Visible DOM: {await page.Locator("body").InnerTextAsync()}");
+                foreach (var overlay in await page.Locator(".ant-drawer-content:visible, .ant-modal:visible, [role=dialog]:visible, [role=alert]:visible").AllAsync())
+                    diagnostics.Add($"Visible overlay: {await overlay.InnerTextAsync()}");
                 foreach (var response in failedResponses)
                 {
                     string body;
@@ -474,8 +479,15 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 {
                     url = Sanitize(page.Url),
                     diagnostic = Sanitize(exception.ToString()),
+                    apiResponses = apiResponses.ToArray(),
                     browserDiagnostics = diagnostics.Select(Sanitize).ToArray()
                 }, CancellationToken.None);
+                // 失败图片只观察当前页面与弹层；输入控件统一遮罩以免凭据出现在像素中。
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    Path = Path.Combine(_runDirectory, "personnel", $"browser-{phase}-failure.png"),
+                    FullPage = true, Mask = [page.Locator("input, textarea")]
+                });
             }
             catch (Exception diagnosticFailure)
             {

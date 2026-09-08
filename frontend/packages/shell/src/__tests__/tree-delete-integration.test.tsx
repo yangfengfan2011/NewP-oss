@@ -2,7 +2,7 @@
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, type StandardCrudActionContext } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/organization/src';
@@ -14,6 +14,15 @@ import treeContract from '../../../../../tests/Kernel.Tests/Fixtures/Organizatio
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (...args: Parameters<typeof fetch>) => fetch(...args) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+// 此测试验证动作生命周期；真实模块冷装载在 setup 完成，生产冷启动由正式 Gate 覆盖。
+beforeAll(async () => {
+  await Promise.all([
+    import('../pages/StandardCrudListPageHost'),
+    import('../pages/StandardCrudListDrawerRuntime'),
+    import('../pages/StandardCrudListOverlayRuntime'),
+    organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
+  ]);
+});
 it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create', 'pending-cancel', 'pending-close', 'pending-escape', 'read-cancel'])('consumes compiled tree actions through the real Organization adapter (%s)', async scenario => {
   const fields = { EID: 'd', CompanyId: 'c', CompanyId_DisplayValue: 'Company', ParentDepartmentId: null, ParentDepartmentId_DisplayValue: null, ECODE: 'D', ENAME: 'Department', IsEnabled: true, SortOrder: '001', UpdatedAt: '2026-09-08T00:00:00Z' };
   const requests: string[] = [];
@@ -59,7 +68,18 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
 
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><AuthorizationProvider permissions={scenario === 'denied' ? ['Organization.Department.View'] : ['Organization.Department.View', 'Organization.Department.Delete', 'Organization.Department.Create']}><PlatformQueryProvider scopeKey="test"><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [runtimeModels.department], viewDocuments: [listDocument, detail, tree] }}><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: 'tree' }, inputResolverKey: 'scope' }} /></RuntimeMetadataProvider></PlatformQueryProvider></AuthorizationProvider></LocalizationProvider> }]);
-  const waitFor = async (condition: () => boolean) => { for (let i = 0; i < 100 && !condition(); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect(condition(), document.body.textContent ?? '').toBe(true); };
+  let finished = false;
+  const cleanup = async () => {
+    if (finished) return;
+    finished = true; releaseRead(); releaseDelete();
+    await act(async () => root.unmount()); router.dispose(); container.remove(); fetcher.mockRestore();
+  };
+  onTestFinished(cleanup);
+  const waitFor = async (condition: () => boolean) => vi.waitFor(async () => {
+    if (finished) throw new Error('Tree action test already disposed');
+    await act(async () => undefined);
+    expect(condition(), document.body.textContent ?? '').toBe(true);
+  }, { timeout: 5000, interval: 25 });
   try {
     await act(async () => root.render(<StrictMode><RouterProvider router={router} /></StrictMode>));
     await waitFor(() => Boolean(container.querySelector('.ant-tree-title')));
@@ -119,5 +139,5 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0]).toMatchObject({ id: 'd', row: { EID: 'd' } });
     if (scenario === 'input') expect(handler.mock.calls[0][0].input).toEqual({ reason: 'confirmed' });
-  } finally { releaseRead(); releaseDelete(); await act(async () => root.unmount()); router.dispose(); container.remove(); fetcher.mockRestore(); }
+  } finally { await cleanup(); }
 });

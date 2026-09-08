@@ -538,7 +538,6 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
     requestedOnce.current = true;
     if (!actions[0].disabled) runOverflowAction(actions[0]);
     // 一个内嵌动作实例只请求一次；后续 pending/错误渲染不能重放写入。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requested, actions]);
 
   return (

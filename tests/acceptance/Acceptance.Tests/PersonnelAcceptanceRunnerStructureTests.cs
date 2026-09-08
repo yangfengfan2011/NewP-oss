@@ -60,14 +60,14 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Contains("DepartmentData department,", runner, StringComparison.Ordinal);
         Assert.Contains("/organization/companies", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/companies", runner, StringComparison.Ordinal);
-        Assert.Contains("/organization/departments", runner, StringComparison.Ordinal);
+        Assert.Contains("/organization/structure", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/departments", runner, StringComparison.Ordinal);
         Assert.Contains("\"所属公司\"", runner, StringComparison.Ordinal);
         Assert.Contains("\"所属部门\"", runner, StringComparison.Ordinal);
         var departmentJourney = runner[
             runner.IndexOf("private async Task<DepartmentData> CreateDepartmentFromBrowserAsync", StringComparison.Ordinal)..
             runner.IndexOf("private async Task<PositionData> CreatePositionFromBrowserAsync", StringComparison.Ordinal)];
-        Assert.Contains(
+        Assert.DoesNotContain(
             "/api/organization/department-lookups/companies",
             departmentJourney,
             StringComparison.Ordinal);
@@ -75,6 +75,12 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             "/api/organization/person-lookups/companies",
             departmentJourney,
             StringComparison.Ordinal);
+        Assert.Contains("Name = \"直属部门\"", departmentJourney, StringComparison.Ordinal);
+        Assert.Contains("Name = \"基本信息\", Selected = true", departmentJourney, StringComparison.Ordinal);
+        Assert.Contains("Button = MouseButton.Right", departmentJourney, StringComparison.Ordinal);
+        Assert.Contains("AriaRole.Menuitem", departmentJourney, StringComparison.Ordinal);
+        Assert.Contains("Name = \"保存修改\"", departmentJourney, StringComparison.Ordinal);
+        Assert.Contains("tree.GetByText(updated.Name", departmentJourney, StringComparison.Ordinal);
         Assert.DoesNotContain(
             ".Filter(new LocatorFilterOptions { HasTextString = company.Name })",
             departmentJourney,

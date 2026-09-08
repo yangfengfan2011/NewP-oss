@@ -374,66 +374,99 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             ViewportSize = new ViewportSize { Width = 1440, Height = 1000 }
         });
         var page = await context.NewPageAsync();
+        var browserErrors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        page.PageError += (_, message) => browserErrors.Enqueue(message);
+        page.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
+        page.Response += (_, response) =>
+        {
+            if (response.Status >= 400) failedResponses.Enqueue(response);
+        };
         page.SetDefaultTimeout(30_000);
         page.SetDefaultNavigationTimeout(120_000);
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login", new PageGotoOptions
+        try
         {
-            WaitUntil = WaitUntilState.DOMContentLoaded
-        });
-        await page.Locator("#ecode").FillAsync("admin");
-        await page.Locator("#password").FillAsync(adminPassword);
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-        await WaitForPostLoginNavigationAsync(page);
+            await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded
+            });
+            await page.Locator("#ecode").FillAsync("admin");
+            await page.Locator("#password").FillAsync(adminPassword);
+            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
+            await WaitForPostLoginNavigationAsync(page);
 
-        var browserAssertions = new List<string>();
-        if (phase == "initial")
-        {
-            var company = await CreateCompanyFromBrowserAsync(page, cancellationToken);
-            var department = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);
-            var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
-            person = await UpdatePersonFromBrowserAsync(
+            var browserAssertions = new List<string>();
+            if (phase == "initial")
+            {
+                var company = await CreateCompanyFromBrowserAsync(page, cancellationToken);
+                var department = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);
+                var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
+                person = await UpdatePersonFromBrowserAsync(
+                    page,
+                    person,
+                    company,
+                    department,
+                    position,
+                    cancellationToken);
+                _company = company;
+                _department = department;
+                _position = position;
+                _person = person;
+                await AssertPersonBirthDateRangeAsync(page, person);
+                browserAssertions.AddRange(
+                [
+                    "company-created",
+                    "department-created-in-tree-and-edited-from-context-menu",
+                    "position-created",
+                    "person-organization-affiliation-saved-through-standard-drawer",
+                    "birth-date-range-finds-person"
+                ]);
+            }
+
+            await OpenPersonnelFromShellAsync(page);
+            await AssertPersonListAndDrawerAsync(
                 page,
                 person,
-                company,
-                department,
-                position,
-                cancellationToken);
-            _company = company;
-            _department = department;
-            _position = position;
-            _person = person;
-            await AssertPersonBirthDateRangeAsync(page, person);
-            browserAssertions.AddRange(
-            [
-                "company-created",
-                "department-created",
-                "position-created",
-                "person-organization-affiliation-saved-through-standard-drawer",
-                "birth-date-range-finds-person"
-            ]);
+                _company?.Name,
+                _department?.Name,
+                _position?.Name);
+            browserAssertions.Add(phase == "initial"
+                ? "list-and-detail-show-updated-person"
+                : "restart-list-and-detail-show-persisted-person");
+
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            await WriteEvidenceAsync($"personnel/browser-{phase}.json", new
+            {
+                status = "passed",
+                phase,
+                url = page.Url,
+                browserAssertions,
+                screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath)
+            }, cancellationToken);
         }
-
-        await OpenPersonnelFromShellAsync(page);
-        await AssertPersonListAndDrawerAsync(
-            page,
-            person,
-            _company?.Name,
-            _department?.Name,
-            _position?.Name);
-        browserAssertions.Add(phase == "initial"
-            ? "list-and-detail-show-updated-person"
-            : "restart-list-and-detail-show-persisted-person");
-
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
-        await WriteEvidenceAsync($"personnel/browser-{phase}.json", new
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            status = "passed",
-            phase,
-            url = page.Url,
-            browserAssertions,
-            screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath)
-        }, cancellationToken);
+            // 排错失败不能覆盖原始场景异常；正文只经当前 runner 的凭据脱敏进入现有产物。
+            var diagnostics = new List<string>(browserErrors);
+            try
+            {
+                diagnostics.Add(await ReadStandardCrudPageDiagnosticAsync(page));
+                foreach (var response in failedResponses)
+                    diagnostics.Add($"{response.Request.Method} {response.Url}: {response.Status} {await response.TextAsync()}");
+                await WriteEvidenceAsync($"personnel/browser-{phase}-failure.json", new
+                {
+                    url = Sanitize(page.Url),
+                    diagnostic = Sanitize(exception.ToString()),
+                    browserDiagnostics = diagnostics.Select(Sanitize).ToArray()
+                }, CancellationToken.None);
+            }
+            catch (Exception diagnosticFailure)
+            {
+                diagnostics.Add($"Browser diagnostic capture failed: {diagnosticFailure.Message}");
+            }
+            throw new InvalidOperationException(Sanitize($"{exception.Message}; URL: {page.Url}; {string.Join("; ", diagnostics)}"), exception);
+        }
     }
 
     private async Task WaitForPostLoginNavigationAsync(IPage page)
@@ -469,19 +502,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await companyEntry.ClickAsync();
         await page.WaitForURLAsync(
             $"http://127.0.0.1:{_shellPort}/organization/companies",
-            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-    }
-
-    // 部门管理同样从 Shell 导航进入，避免直达 URL 绕过模块候选与权限路径。
-    private async Task OpenDepartmentManagementFromShellAsync(IPage page)
-    {
-        var departmentEntry = page.GetByRole(
-            AriaRole.Link,
-            new PageGetByRoleOptions { Name = "部门管理", Exact = true }).First;
-        await departmentEntry.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await departmentEntry.ClickAsync();
-        await page.WaitForURLAsync(
-            $"http://127.0.0.1:{_shellPort}/organization/departments",
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
@@ -541,26 +561,25 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return company;
     }
 
-    // 部门创建消费刚由浏览器建立的公司，并保持父部门为空来证明最小支持路径。
+    // 在真实组织树直属列表创建部门，沿自动选择的节点右键编辑，再消费更新后的结果。
     private async Task<DepartmentData> CreateDepartmentFromBrowserAsync(
         IPage page,
         CompanyData company,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await OpenDepartmentManagementFromShellAsync(page);
+        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "组织树", Exact = true }).First.ClickAsync();
+        await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/organization/structure");
+        var tree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
+        await tree.GetByText(company.Name, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
+        var content = page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" });
+        await content.GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "直属部门", Exact = true }).ClickAsync();
         var department = new DepartmentData(
             $"ACC-BD-{_runId[..8]}",
             $"Personnel Gate Browser Department {_runId[..8]}");
         await ClickStandardCrudCreateActionAsync(page, "新建部门");
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await SelectOrganizationLookupAsync(
-            page,
-            drawer,
-            "所属公司",
-            company.Name,
-            "/api/organization/department-lookups/companies");
         await drawer.GetByLabel("部门编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Code);
         await drawer.GetByLabel("部门名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(department.Name);
         await drawer.GetByLabel("排序码", new LocatorGetByLabelOptions { Exact = true }).FillAsync("0100");
@@ -583,12 +602,29 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         }
 
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
-        await page.Locator("tr:visible", new PageLocatorOptions { HasTextString = department.Code })
-            .Filter(new LocatorFilterOptions { HasTextString = department.Name })
-            .Last
+        var node = tree.GetByText(department.Name, new LocatorGetByTextOptions { Exact = true });
+        await node.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await content.GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "基本信息", Selected = true })
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await OpenAndCloseDirectoryDetailAsync(page, department.Name);
-        return department;
+        await content.GetByText(department.Name, new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await node.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
+        await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "编辑", Exact = true }).ClickAsync();
+        drawer = page.Locator(".ant-drawer-content:visible").Last;
+        var updated = department with { Name = department.Name + " Updated" };
+        await drawer.GetByLabel("部门名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(updated.Name);
+        var updateResponseTask = page.WaitForResponseAsync(static response =>
+            response.Request.Method == "PUT" && new Uri(response.Url).AbsolutePath.StartsWith("/api/organization/departments/", StringComparison.Ordinal));
+        await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存修改", Exact = true }).ClickAsync();
+        var updateResponse = await updateResponseTask;
+        if (updateResponse.Status != (int)HttpStatusCode.OK)
+            throw new InvalidOperationException($"Browser tree department edit returned {updateResponse.Status}: {await updateResponse.TextAsync()}");
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await tree.GetByText(updated.Name, new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await content.GetByText(updated.Name, new LocatorGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        return updated;
     }
 
     // 同一 Personnel 浏览器场景通过标准 Drawer 创建岗位，不把字段边界语义提升到浏览器层。

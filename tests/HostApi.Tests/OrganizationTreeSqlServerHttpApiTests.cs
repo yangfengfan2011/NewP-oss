@@ -8,6 +8,7 @@ using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Modules.Organization.Controllers;
+using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -55,6 +56,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.WebHost.UseTestServer();
             builder.Services.AddAuthentication("Test").AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TestAuthentication>("Test", _ => { });
             builder.Services.AddPlatformAuthorization();
+            builder.Services.AddAuthorization(OrganizationTreeAccess.Configure);
             builder.Services.AddSingleton<IPermissionDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
@@ -79,7 +81,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             await using var app = builder.Build();
             app.Use(async (context, next) =>
             {
-                context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, context.Request.Headers.ContainsKey("X-Deny") ? "denied" : "admin")], "Test"));
+                context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, context.Request.Headers["X-Deny"].FirstOrDefault() ?? "admin")], "Test"));
                 await next();
             });
             app.UseAuthorization();
@@ -123,6 +125,15 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode); Assert.Empty(recorder.Commands);
             using var deniedTree = new HttpRequestMessage(HttpMethod.Get, "/api/organization/tree/roots?scope=global"); deniedTree.Headers.Add("X-Deny", "1");
             using var treeRejected = await client.SendAsync(deniedTree); Assert.Equal(HttpStatusCode.Forbidden, treeRejected.StatusCode);
+            foreach (var permission in new[] { "Organization.Company.View", "Organization.Department.View" })
+            {
+                recorder.Commands.Clear();
+                using var partialRequest = new HttpRequestMessage(HttpMethod.Get, "/api/organization/tree/roots?scope=global");
+                partialRequest.Headers.Add("X-Deny", permission);
+                using var partialResponse = await client.SendAsync(partialRequest);
+                Assert.Equal(HttpStatusCode.Forbidden, partialResponse.StatusCode);
+                Assert.Empty(recorder.Commands);
+            }
             var roots = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/roots?scope=global");
             Assert.Equal(2, roots.GetArrayLength()); Assert.True(roots[0].TryGetProperty("label", out _));
             var children = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/children?scope=global&nodeKey=" + Uri.EscapeDataString("company:" + company));
@@ -171,6 +182,6 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
     private sealed class GrantedPermissions : IPermissionDecisionSource
     {
         public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string permissionCode, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(subjectId == "denied" ? PermissionDecision.Denied : PermissionDecision.Granted);
+            ValueTask.FromResult(subjectId == "1" || subjectId == permissionCode ? PermissionDecision.Denied : PermissionDecision.Granted);
     }
 }

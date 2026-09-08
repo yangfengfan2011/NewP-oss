@@ -1,14 +1,15 @@
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using ICP.Platform.Modules.Organization.Services;
 
 namespace ICP.Platform.Modules.Organization.Controllers;
 
 [ApiController]
 [Route("api/organization/tree")]
 [EndpointModule("Organization")]
-[RequirePermission(OrganizationPermissions.CompanyView)]
-[RequirePermission(OrganizationPermissions.DepartmentView)]
+[Authorize(Policy = OrganizationTreeAccess.PolicyName)]
 public sealed class OrganizationTreeController(OrganizationTreeReader reader) : ControllerBase
 {
     /// <summary>读取公司根节点。</summary>

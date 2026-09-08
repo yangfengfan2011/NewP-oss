@@ -7,6 +7,11 @@ using ICP.Platform.Sdk;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Xunit;
+using Microsoft.Extensions.DependencyInjection;
+using ICP.Platform.Modules.Organization.Controllers;
+using ICP.Platform.Modules.Organization.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
 
 namespace ICP.Platform.HostApi.Tests;
 
@@ -36,6 +41,24 @@ public sealed class EndpointAccessPlanCompilerTests
         Assert.Equal(
             ["Organization.Person.View"],
             plan.ActivePermissions.Select(static permission => permission.Code));
+    }
+
+    [Fact]
+    public void Compile_RealOrganizationTreeController_HasOneTerminalRulePerRead()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddAuthorization(OrganizationTreeAccess.Configure);
+        builder.Services.AddControllers().AddApplicationPart(typeof(OrganizationTreeController).Assembly);
+        using var app = builder.Build();
+        app.MapControllers();
+        var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>().Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("api/organization/tree/", StringComparison.Ordinal) == true).ToArray();
+        Assert.Equal(4, endpoints.Length);
+        var policy = app.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.GetPolicy(OrganizationTreeAccess.PolicyName)!;
+        Assert.Equal(new[] { "Organization.Company.View", "Organization.Department.View" },
+            policy.Requirements.OfType<PermissionAuthorizationRequirement>().Select(requirement => requirement.Requirement.PermissionCode));
+        EndpointAccessPlanCompiler.Compile([new DefaultEndpointDataSource(endpoints)], Registry(new PermissionModule("Organization",
+            Permission("Organization.Company.View", "Organization"), Permission("Organization.Department.View", "Organization"))));
     }
 
     [Fact]

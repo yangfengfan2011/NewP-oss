@@ -50,13 +50,13 @@ public sealed class OrganizationTreeReader(EfPlatformDbContext dbContext)
 
     /// <summary>按排序码、编码、身份读取全部公司根，不引入同级分页。</summary>
     public Task<IReadOnlyList<OrganizationTreeNode>> RootsAsync(CancellationToken token) => ExecuteAsync(
-        Nodes + " SELECT * FROM Nodes WHERE ParentKey IS NULL ORDER BY SortOrder, Code, NodeKey;", [],
+        Nodes + " SELECT * FROM Nodes WHERE ParentKey IS NULL ORDER BY SortOrder, Code, NodeType, NodeKey;", [],
         async reader => (IReadOnlyList<OrganizationTreeNode>)await ReadNodesAsync(reader, token), token);
 
     /// <summary>先确认父节点存在；空子集与不存在分别返回空列表和 null。</summary>
     public Task<IReadOnlyList<OrganizationTreeNode>?> ChildrenAsync(string nodeKey, CancellationToken token) => ExecuteAsync(
         Nodes + " SELECT COUNT(*) FROM Nodes WHERE NodeKey=@nodeKey; " + Nodes
-        + " SELECT * FROM Nodes WHERE ParentKey=@nodeKey ORDER BY SortOrder, Code, NodeKey;",
+        + " SELECT * FROM Nodes WHERE ParentKey=@nodeKey ORDER BY SortOrder, Code, NodeType, NodeKey;",
         new() { ["@nodeKey"] = nodeKey }, async reader =>
         {
             await reader.ReadAsync(token);
@@ -83,7 +83,7 @@ public sealed class OrganizationTreeReader(EfPlatformDbContext dbContext)
         const string predicate = " WHERE CHARINDEX(@keyword,DisplayName)>0 OR CHARINDEX(@keyword,Code)>0 ";
         return ExecuteAsync(Nodes + " SELECT COUNT(*) FROM Nodes " + predicate + "; " + Nodes
             + ", Seeds AS (SELECT NodeKey FROM Nodes " + predicate
-            + " ORDER BY SortOrder, Code, NodeKey OFFSET @offset ROWS FETCH NEXT @take ROWS ONLY) " + PathProjection,
+            + " ORDER BY SortOrder, Code, NodeType, NodeKey OFFSET @offset ROWS FETCH NEXT @take ROWS ONLY) " + PathProjection,
             new() { ["@keyword"] = keyword.Trim(), ["@offset"] = (page-1)*pageSize, ["@take"] = pageSize }, async reader =>
             {
                 await reader.ReadAsync(token);

@@ -12,10 +12,74 @@ using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
 
-public sealed class DepartmentHierarchySqlServerIntegrationTests
+public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION";
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实组织树代表性规模、数据库成本与稳定分页")]
+    public async Task OrganizationTreeRepresentativeScaleRecordsActualSqlCost()
+    {
+        foreach (var size in new[] { 100, 1000, 10000 })
+        {
+            await using var fixture = await SqlFixture.CreateAsync();
+            await using (var setup = CreateContext(fixture.ConnectionString))
+            {
+                await setup.Database.EnsureCreatedAsync();
+                AddCompany(setup, "Company_1");
+                for (var index = 0; index < size - 1; index++)
+                    AddDepartment(setup, $"Department_{index:D5}", "Company_1", index > 0 && index < 10 ? $"Department_{index - 1:D5}" : null);
+                await setup.SaveChangesAsync();
+            }
+            await using var context = CreateContext(fixture.ConnectionString);
+            var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+            await connection.OpenAsync();
+            connection.StatisticsEnabled = true;
+            await using (var initialize = connection.CreateCommand())
+            {
+                initialize.CommandText = "SELECT 1";
+                await initialize.ExecuteScalarAsync();
+            }
+            // 独立连接读取目标会话累计成本；不会把 observer 往返计进被测 Provider。
+            await using var observer = new SqlConnection(fixture.ConnectionString);
+            await observer.OpenAsync();
+            async Task<long[]> ReadCost()
+            {
+                await using var command = observer.CreateCommand();
+                command.CommandText = "SELECT cpu_time, reads, logical_reads, writes FROM sys.dm_exec_sessions WHERE session_id=@id";
+                command.Parameters.AddWithValue("@id", connection.ServerProcessId);
+                await using var reader = await command.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                return Enumerable.Range(0, 4).Select(index => Convert.ToInt64(reader.GetValue(index))).ToArray();
+            }
+            var tree = new OrganizationTreeReader(context);
+            async Task<T> Measure<T>(string operation, Func<Task<T>> read)
+            {
+                var before = await ReadCost(); connection.ResetStatistics();
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var result = await read(); watch.Stop();
+                var statistics = connection.RetrieveStatistics();
+                var after = await ReadCost();
+                output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new {
+                    size, operation, elapsedMs = watch.Elapsed.TotalMilliseconds,
+                    roundTrips = statistics["ServerRoundtrips"], rows = statistics["SelectRows"], bytes = statistics["BytesReceived"],
+                    serverCpuMs = after[0] - before[0], physicalReads = after[1] - before[1], logicalReads = after[2] - before[2], writes = after[3] - before[3]
+                }));
+                return result;
+            }
+            Assert.Single(await Measure("roots", () => tree.RootsAsync(default)));
+            Assert.Equal(size - 10, (await Measure("wide-children", () => tree.ChildrenAsync("company:Company_1", default)))!.Count);
+            Assert.Equal(11, (await Measure("path-depth-10", () => tree.PathAsync("department:Department_00009", default)))!.Count);
+            var first = await Measure("search-page-1", () => tree.SearchAsync("Department", 1, 20, default));
+            var second = await Measure("search-page-2", () => tree.SearchAsync("Department", 2, 20, default));
+            var repeated = await Measure("search-page-2-repeat", () => tree.SearchAsync("Department", 2, 20, default));
+            Assert.Equal(size - 1, first.Total); Assert.Equal(20, first.Items.Count);
+            Assert.Equal("department:Department_00000", first.Items[0].Node.NodeKey);
+            Assert.Equal("department:Department_00020", second.Items[0].Node.NodeKey);
+            Assert.Empty(first.Items.Select(item => item.Node.NodeKey).Intersect(second.Items.Select(item => item.Node.NodeKey)));
+            Assert.Equal(second.Items.Select(item => item.Node.NodeKey), repeated.Items.Select(item => item.Node.NodeKey));
+        }
+    }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Organization 树四类读取与批量路径")]
     public async Task OrganizationTreeReadsRootsChildrenSearchAndCurrentPath()
@@ -44,6 +108,16 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests
         Assert.Equal(2, search.Total);
         Assert.Equal("department:Department_B", Assert.Single(search.Items).Node.NodeKey);
         Assert.Equal(3, search.Items[0].Path.Count);
+        var departments = context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Department"));
+        var moved = await departments.SingleAsync(row => EF.Property<string>(row, "EID") == "Department_B");
+        moved["ParentDepartmentId"] = null;
+        await context.SaveChangesAsync();
+        Assert.Equal(new[] { "company:Company_1", "department:Department_B" }, (await tree.PathAsync("department:Department_B", default))!.Select(node => node.NodeKey));
+        departments.Remove(moved); await context.SaveChangesAsync();
+        Assert.Null(await tree.PathAsync("department:Department_B", default));
+        Assert.Empty((await tree.SearchAsync("absent", 1, 20, default)).Items);
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => tree.SearchAsync("Department", 1, 20, cancelled.Token));
     }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的部门层级固定查询次数")]

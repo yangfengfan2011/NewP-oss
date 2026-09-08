@@ -1,6 +1,29 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { platformFetch } from '@icp-platform/core';
+import { TreeNodeNotFoundError } from '@icp-platform/sdk';
 import { organizationPageInputs, organizationTreeProvider } from './organizationTree';
 const company = { nodeKey: 'company:c1', nodeType: 'company', label: '公司', hasChildren: true, context: { id: 'c1', companyId: 'c1' } };
+vi.mock('@icp-platform/core', () => ({ platformFetch: vi.fn() }));
+it.each(['roots', 'children', 'path', 'search'] as const)('carries explicit scope and cancellation for %s and preserves empty/notfound/failure differences', async operation => {
+  const request = (scope: Record<string, unknown>, signal: AbortSignal) => operation === 'roots' ? organizationTreeProvider.roots(scope, signal)
+    : operation === 'children' ? organizationTreeProvider.children(scope, 'department:d', signal)
+      : operation === 'path' ? organizationTreeProvider.path(scope, 'department:d', signal)
+        : organizationTreeProvider.search(scope, '研发', 1, 20, signal);
+  const controller = new AbortController();
+  const fetch = vi.mocked(platformFetch); fetch.mockReset();
+  expect(() => request({}, controller.signal)).toThrow(/范围/); expect(fetch).not.toHaveBeenCalled();
+  const empty = operation === 'search' ? { items: [], total: 0, page: 1, pageSize: 20 } : [];
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify(empty)));
+  expect(await request({ kind: 'global' }, controller.signal)).toEqual(empty);
+  const [url, init] = fetch.mock.calls[0];
+  expect(new URL(String(url), 'https://test').searchParams.get('scope')).toBe('global'); expect(init?.signal).toBe(controller.signal);
+  fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
+  await expect(request({ kind: 'global' }, controller.signal)).rejects.toBeInstanceOf(TreeNodeNotFoundError);
+  fetch.mockResolvedValueOnce(new Response(null, { status: 500 }));
+  await expect(request({ kind: 'global' }, controller.signal)).rejects.toThrow('500');
+  const cancelled = new DOMException('Cancelled', 'AbortError'); fetch.mockRejectedValueOnce(cancelled);
+  await expect(request({ kind: 'global' }, controller.signal)).rejects.toBe(cancelled);
+});
 describe('Organization page input adapters', () => {
   it('separates a company direct scope and fixed create values from user filters', () => {
     const resolver = organizationPageInputs.find(item => item.key === 'organization.company.direct')!;

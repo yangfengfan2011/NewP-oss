@@ -5,7 +5,7 @@ import { PageHeader } from '@icp-platform/ui/core';
 import { useLocalization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
-import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext } from './pageCompositionRuntime';
+import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation } from './pageCompositionRuntime';
 import { PageComposition } from './PageCompositionContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -22,12 +22,18 @@ export function PageEntry({ page }: { page: PageRef }) {
     const query = new URLSearchParams(location.search); query.set('tab', key);
     navigate({ pathname: location.pathname, search: query.toString() });
   } };
+  const treeNavigation: TreeNavigation = { nodeKey: new URLSearchParams(location.search).get('node'), nodeTab: new URLSearchParams(location.search).get('nodeTab'), locate: (node, tab) => {
+    const query = new URLSearchParams(location.search);
+    if (node) query.set('node', node); else query.delete('node');
+    if (tab) query.set('nodeTab', tab); else if (tab === null) query.delete('nodeTab');
+    if (query.toString() !== new URLSearchParams(location.search).toString()) navigate({ pathname: location.pathname, search: query.toString() }, { replace: true });
+  } };
   return <PageComposition><div className="sh-page">
     {view && <PageHeader title={t(`${view.dicKey}.${view.titleKey}`, String(view.titleKey ?? ''))} />}
-    <PageOutlet page={page} navigation={navigation} />
+    <PageOutlet page={page} navigation={navigation} treeNavigation={treeNavigation} />
   </div></PageComposition>;
 }
-export function PageOutlet({ page, context, close, navigation, active = true }: { page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; active?: boolean }) {
+export function PageOutlet({ page, context, close, navigation, treeNavigation, active = true }: { page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; treeNavigation?: TreeNavigation | null; active?: boolean }) {
   const runtime = useContext(CompositionContext);
   const parentActive = useContext(PageActivityContext);
   const instanceId = useId();
@@ -39,13 +45,13 @@ export function PageOutlet({ page, context, close, navigation, active = true }: 
   }, [context, page]);
   if (!resolved.input) return <div role="alert">页面配置／上下文错误：{resolved.error}</div>;
   const props: PageProps = { input: resolved.input, reportState, active: parentActive && active };
-  return <PageActivityContext.Provider value={props.active!}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">正在加载页面…</div>}>
+  return <PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">正在加载页面…</div>}>
     {page.pageKey === 'platform.tree' ? <TreePage {...props} />
       : page.pageKey === 'platform.tabs' ? <TabPage {...props} />
         : page.pageKey === 'platform.list' || page.pageKey === 'platform.detail'
           ? <StandardPage pageKey={page.pageKey} {...props} close={close} />
           : <CustomPage pageKey={page.pageKey} {...props} />}
-  </Suspense></PageNavigationContext.Provider></PageActivityContext.Provider>;
+  </Suspense></PageNavigationContext.Provider></TreeNavigationContext.Provider></PageActivityContext.Provider>;
 }
 function CustomPage({ pageKey, ...props }: PageProps & { pageKey: string }) {
   const [component, setComponent] = useState<ComponentType<PageProps> | null>(null);

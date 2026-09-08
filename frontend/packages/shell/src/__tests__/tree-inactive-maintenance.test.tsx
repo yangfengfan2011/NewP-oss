@@ -43,7 +43,7 @@ it.each(['move', 'delete', 'retry'])('defers %s while inactive, preserves naviga
     await click('[role=tab]:nth-child(2)');
     children.mockClear();
     await act(async () => [...container.querySelectorAll('button')].find(item => item.textContent === 'move')!.click());
-    expect(router.state.location.search).toBe('?tab=directory'); expect(children).not.toHaveBeenCalled();
+    expect(new URLSearchParams(router.state.location.search).get('tab')).toBe('directory'); expect(children).not.toHaveBeenCalled();
     await click('[role=tab]:first-child');
     if (scenario === 'retry') {
       expect(container.textContent).toContain('已保存，刷新失败');

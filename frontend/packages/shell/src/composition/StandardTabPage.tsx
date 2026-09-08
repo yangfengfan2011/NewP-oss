@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useState } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import type { PageProps, TabView } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { CompositionContext, PageNavigationContext } from './pageCompositionRuntime';
+import { CompositionContext, PageNavigationContext, TreeNavigationContext } from './pageCompositionRuntime';
 import { PageOutlet } from './PageOutlet';
 
 /** 已打开的标签保持挂载，未激活页面仍参与当前组合保护。 */
@@ -12,6 +12,7 @@ export default function StandardTabPage({ input }: PageProps) {
   const { t } = useLocalization();
   const view = metadata?.viewDocuments.find(document => document.view.key === input.parameters.viewKey)?.view as unknown as TabView;
   const navigation = useContext(PageNavigationContext);
+  const treeNavigation = useContext(TreeNavigationContext);
   const id = useId();
   const [localSelected, setSelected] = useState(view.defaultTabKey);
   const selected = navigation ? (view.tabs.some(tab => tab.key === navigation.tabKey) ? navigation.tabKey! : view.defaultTabKey) : localSelected;
@@ -30,7 +31,7 @@ export default function StandardTabPage({ input }: PageProps) {
       </button>)}
     </div>
     {view.tabs.filter(tab => visibleTabs.has(tab.key)).map(tab => <div key={tab.key} role="tabpanel" id={`${id}-panel-${tab.key}`} aria-labelledby={`${id}-${tab.key}`} hidden={tab.key !== selected}>
-      <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} />
+      <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} treeNavigation={treeNavigation} />
     </div>)}
   </div>;
 }

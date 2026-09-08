@@ -173,6 +173,24 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             using var invalid = await client.GetAsync("/api/organization/tree/roots?scope=missing"); Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
             var invalidProblem = await invalid.Content.ReadFromJsonAsync<JsonElement>();
             Assert.Equal("缺少或无效组织树范围。", invalidProblem.GetProperty("errors").GetProperty("scope")[0].GetString());
+            var defaultSearch = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/search?scope=global&keyword=Department");
+            Assert.Equal(1, defaultSearch.GetProperty("page").GetInt32());
+            Assert.Equal(20, defaultSearch.GetProperty("pageSize").GetInt32());
+            foreach (var query in new[] { "keyword=Department&page=0", "keyword=Department&pageSize=0", "keyword=Department&page=-1", "keyword=Department&page=2147483647&pageSize=20" })
+            {
+                using var badSearch = await client.GetAsync("/api/organization/tree/search?scope=global&" + query);
+                Assert.Equal(HttpStatusCode.BadRequest, badSearch.StatusCode);
+                Assert.True((await badSearch.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("search", out _));
+            }
+            foreach (var treeRoute in new[] { "roots", "children?nodeKey=company:missing", "path?nodeKey=company:missing", "search?keyword=Department" })
+            {
+                using var noScope = await client.GetAsync("/api/organization/tree/" + treeRoute);
+                Assert.Equal(HttpStatusCode.BadRequest, noScope.StatusCode);
+            }
+            using var missingChildren = await client.GetAsync("/api/organization/tree/children?scope=global&nodeKey=department:missing");
+            Assert.Equal(HttpStatusCode.NotFound, missingChildren.StatusCode);
+            var leafChildren = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/children?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + second));
+            Assert.Equal(0, leafChildren.GetArrayLength());
 
         }
         finally

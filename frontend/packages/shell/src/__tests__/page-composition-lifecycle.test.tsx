@@ -50,7 +50,7 @@ async function render(browser = false, search = '', tree = false) {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
 }
 describe('whole composition lifecycle', () => {
-  it('keeps the active tab within a node group, resets per-node filters, and defaults after a group change without changing the outer URL', async () => {
+  it('keeps the active tab within a node group, resets per-node filters, and defaults after a group change without replacing unrelated outer URL state', async () => {
     await render(false, '?external=keep', true);
     for (let i = 0; i < 30 && !container.querySelector('[role=tab]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     await click('b'); await click('filter b');
@@ -67,7 +67,7 @@ describe('whole composition lifecycle', () => {
     expect(container.textContent).not.toContain('one:1');
     await selectNode('other');
     expect(container.querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('a');
-    expect(router.state.location.search).toBe('?external=keep');
+    expect(new URLSearchParams(router.state.location.search).get('external')).toBe('keep');
   });
   it('selects a right-click target only after dirty-input protection, then opens its menu', async () => {
     await render(false, '', true);

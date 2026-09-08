@@ -669,7 +669,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = "组织结构", Exact = true }).ClickAsync();
         await tree.GetByText(name, new LocatorGetByTextOptions { Exact = true }).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
         await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "删除", Exact = true }).ClickAsync();
-        var confirm = page.GetByRole(AriaRole.Dialog).Filter(new LocatorFilterOptions { HasTextString = "确认删除当前记录？" });
+        var confirm = page.GetByRole(AriaRole.Dialog).Filter(new LocatorFilterOptions { HasTextString = "确认删除该部门吗？" });
         var deleteResponse = page.WaitForResponseAsync(response => response.Request.Method == "DELETE"
             && new Uri(response.Url).AbsolutePath.StartsWith("/api/organization/departments/", StringComparison.Ordinal));
         await confirm.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();

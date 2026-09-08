@@ -14,16 +14,20 @@ import treeContract from '../../../../../tests/Kernel.Tests/Fixtures/Organizatio
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (...args: Parameters<typeof fetch>) => fetch(...args) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create', 'pending-cancel', 'pending-close', 'pending-escape'])('consumes compiled tree actions through the real Organization adapter (%s)', async scenario => {
+it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create', 'pending-cancel', 'pending-close', 'pending-escape', 'read-cancel'])('consumes compiled tree actions through the real Organization adapter (%s)', async scenario => {
   const fields = { EID: 'd', CompanyId: 'c', CompanyId_DisplayValue: 'Company', ParentDepartmentId: null, ParentDepartmentId_DisplayValue: null, ECODE: 'D', ENAME: 'Department', IsEnabled: true, SortOrder: '001', UpdatedAt: '2026-09-08T00:00:00Z' };
   const requests: string[] = [];
   const pending = scenario.startsWith('pending-');
+  const readCancelled = scenario === 'read-cancel';
+  let readSignal: AbortSignal | null | undefined;
+  let releaseRead!: () => void;
+  const readResponse = new Promise<void>(resolve => { releaseRead = resolve; });
   let releaseDelete!: () => void;
   const deleteResponse = new Promise<void>(resolve => { releaseDelete = resolve; });
   const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
     requests.push(`${init?.method ?? 'GET'} ${String(url)}`);
     if (init?.method === 'DELETE') { if (pending) await deleteResponse; return new Response(null, { status: 204 }); }
-    if (String(url).endsWith('/departments/d')) return new Response(JSON.stringify({ fields, summaries: {} }));
+    if (String(url).endsWith('/departments/d')) { if (readCancelled) { readSignal = init?.signal; await readResponse; } return new Response(JSON.stringify({ fields, summaries: {} })); }
     return new Response(JSON.stringify({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false }));
   });
   const listDocument = structuredClone(list);
@@ -45,7 +49,7 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     standardCrudCapabilities: capabilities,
     pages: [{ pageKey: 'content', load: async () => ({ default: () => <p>node content</p> }) }],
     pageInputResolvers: [ { key: 'scope', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters, treeScope: {} }) }, { key: 'node', pageKeys: ['platform.list', 'platform.detail'], resolve: (parameters, context) => ({ parameters, context, recordId: String(context!.context!.id) }) } ],
-    treeProviders: [{ key: 'tree', roots: async () => [{ nodeKey: 'd', nodeType: 'department', label: 'Department', hasChildren: false, context: { id: 'd' } }, ...(pending ? [{ nodeKey: 'other', nodeType: 'department', label: 'Other', hasChildren: false, context: { id: 'other' } }] : [])], children: async () => [], path: async () => [], search: vi.fn(), resolveChange: async () => ({ kind: 'unrelated' }) }],
+    treeProviders: [{ key: 'tree', roots: async () => [{ nodeKey: 'd', nodeType: 'department', label: 'Department', hasChildren: false, context: { id: 'd' } }, ...(pending || readCancelled ? [{ nodeKey: 'other', nodeType: 'department', label: 'Other', hasChildren: false, context: { id: 'other' } }] : [])], children: async () => [], path: async () => [], search: vi.fn(), resolveChange: async () => ({ kind: 'unrelated' }) }],
   }], 'test');
   const actionReference = { ...treeContract.view.nodeTypes[1].contextMenu[1] } as Record<string, unknown>;
   if (scenario === 'standard') { delete actionReference.actionKey; actionReference.standardAction = 'delete'; }
@@ -70,6 +74,17 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     await act(async () => container.querySelector('.ant-tree-title')!.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     await waitFor(() => Boolean(document.querySelector('[role=menuitem]')));
     await act(async () => (document.querySelector('[role=menuitem]') as HTMLElement).click());
+    if (readCancelled) {
+      await waitFor(() => requests.some(item => item === 'GET /api/organization/departments/d'));
+      expect(readSignal).toBeInstanceOf(AbortSignal);
+      await act(async () => [...container.querySelectorAll('.ant-tree-title')].find(item => item.textContent === 'Other')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await waitFor(() => readSignal?.aborted === true);
+      await act(async () => { releaseRead(); await readResponse; });
+      expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('Other');
+      expect(document.querySelector('[role=dialog]')).toBeNull();
+      expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
+      return;
+    }
     if (scenario === 'denied' || scenario === 'disabled') {
       await waitFor(() => Boolean(document.querySelector('[role=alert]')));
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
@@ -104,5 +119,5 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0]).toMatchObject({ id: 'd', row: { EID: 'd' } });
     if (scenario === 'input') expect(handler.mock.calls[0][0].input).toEqual({ reason: 'confirmed' });
-  } finally { releaseDelete(); await act(async () => root.unmount()); router.dispose(); container.remove(); fetcher.mockRestore(); }
+  } finally { releaseRead(); releaseDelete(); await act(async () => root.unmount()); router.dispose(); container.remove(); fetcher.mockRestore(); }
 });

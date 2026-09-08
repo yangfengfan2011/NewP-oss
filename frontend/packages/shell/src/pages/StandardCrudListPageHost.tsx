@@ -878,7 +878,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
     [drawerDetailQuery.detail],
   );
-  const [embeddedAction, setEmbeddedAction] = useState<{ action: StandardCrudRuntimeActionSchema; row: TRow; id: string } | null>(null);
+  const [embeddedActionRequest, setEmbeddedActionRequest] = useState<{ action: StandardCrudRuntimeActionSchema; id: string } | null>(null);
+  const embeddedActionQuery = useStandardCrudDetailQuery({
+    resourceKey: registration.resourceKey,
+    id: embeddedActionRequest?.id,
+    dataAdapter,
+  });
+  const embeddedAction = embeddedActionRequest && (!embeddedActionRequest.id || embeddedActionQuery.detail)
+    ? { ...embeddedActionRequest, row: (embeddedActionQuery.detail?.normalized.fields ?? {}) as TRow }
+    : null;
   const [embeddedActionError, setEmbeddedActionError] = useState<string | null>(null);
   const [drawerPreparationError, setDrawerPreparationError] = useState<string | null>(null);
   const detailError = drawerPreparationError ?? drawerDetailQuery.error;
@@ -1564,10 +1572,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('当前操作缺少记录上下文。'); return; }
     if (action.standardAction === 'edit' && id) { void openEditDrawer(id); return; }
     if (action.standardAction === 'view' && id) { void openViewDrawer(id); return; }
-    let cancelled = false;
-    const load = id ? dataAdapter.get(id).then(detail => detail.normalized.fields as TRow) : Promise.resolve({} as TRow);
-    void load.then(row => { if (!cancelled) setEmbeddedAction({ action, row, id: id ?? '' }); }, failure => { if (!cancelled) setEmbeddedActionError(String(failure)); });
-    return () => { cancelled = true; };
+    setEmbeddedActionRequest({ action, id: id ?? '' });
     // 外层页面实例与操作参数拥有首次打开；表单更新不重复打开 Drawer。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [embedded?.input.recordId, embedded?.input.parameters.standardAction, embedded?.input.parameters.actionKey]);
@@ -2009,6 +2014,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       {messageContextHolder}
+      {embeddedActionQuery.error && <div role="alert">{embeddedActionQuery.error}<AntdButton onClick={embeddedActionQuery.retry}>重试读取</AntdButton></div>}
       {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={embedded?.close}>关闭</AntdButton></div>}
       {embeddedAction && <RowActionButtonGroup requested active={embedded?.active !== false} close={embedded?.close}
         actions={buildRowActions(embeddedAction.row, [embeddedAction.action], embeddedAction.id)} />}

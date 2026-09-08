@@ -4,6 +4,8 @@ status: accepted
 
 # Detail View 是标准 CRUD 详情展示结构的唯一事实源
 
+[ADR-0046](0046-view-composition-uses-tree-and-tab-hosts.md) 已确认将同一详情定义用于视图组合中的只读内容；该新增呈现面尚未实施，不改变本文的详情唯一事实源、字段结构及局部降级规则。
+
 标准 CRUD 曾同时从 Model 的 `form.view`、`view.visible`、`model.sections`、`form.edit` 和 Detail View 推断详情结构，导致人员查看 Drawer、完整详情页与 authoring metadata 表达不一致。平台决定由命名且完整的 Detail View 唯一拥有详情字段选择、顺序、分区、静态可见性和 renderer override；Model 只拥有字段结构、数据源以及 `form.create`、`form.edit`，现有创建和编辑行为不随本决策改变。本决策补充 ADR-0029 对 View、Model、Shell 和模块 binding 的职责划分。
 
 ## 决策

@@ -81,7 +81,7 @@ Detail View 经过字段语义、引用和 renderer binding 校验后形成的�
 _Avoid_: Model fallback、合并详情模式
 
 **Detail Surface（详情呈现面）**：
-呈现同一份 Resolved Detail Schema 的查看 Drawer 或完整详情页。两者共享普通字段结构；完整详情页可以承载 Detail View 显式声明的 summary block 和 page action。
+呈现同一份 Resolved Detail Schema 的查看 Drawer、完整详情页或视图组合中的只读详情区域。各呈现面共享普通字段结构；完整详情页可以承载 Detail View 显式声明的 summary block 和 page action。
 _Avoid_: 两套详情表单
 
 **详情数据可用性（Detail Data Availability）**：

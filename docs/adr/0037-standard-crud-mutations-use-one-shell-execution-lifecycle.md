@@ -4,6 +4,8 @@ status: accepted
 
 # Standard CRUD 变更共用一个 Shell 执行生命周期
 
+[ADR-0046](0046-view-composition-uses-tree-and-tab-hosts.md) 已确认组合视图中的上下文交接、多呈现面协调及写入成功／刷新失败分离，作为本文刷新范围的目标扩展，尚未实施。单一写入 owner、输入保留及显式并发策略不变，刷新重试不能重新提交写入。
+
 Standard CRUD 的创建与普通更新由 Shell 内一个共享 Mutation Execution Module 统一管理。列表 Drawer 与完整详情编辑必须走同一条生命周期：共享值规范化、可选值构造、create/update 能力选择、按资源已声明策略执行的可选并发令牌注入、字段错误映射、冲突归类、结果交接与刷新时机。模块只拥有普通写入 Adapter 与可选值构造，不拥有宿主内的校验回调、刷新策略或冲突重放策略。
 
 并发策略由每个资源的 Issue 或规格显式决定。未声明并发令牌时，Standard CRUD 不得推断、生成或注入 `Revision`、版本字段或等价机制；只有明确采用并发令牌的资源才执行版本注入和并发冲突恢复。

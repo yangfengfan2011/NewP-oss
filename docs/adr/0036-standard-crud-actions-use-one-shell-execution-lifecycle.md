@@ -4,6 +4,8 @@ status: accepted
 
 # Standard CRUD 动作共用一个 Shell 执行生命周期
 
+[ADR-0046](0046-view-composition-uses-tree-and-tab-hosts.md) 已确认组合视图中的多呈现面协调及写入成功／刷新失败分离，作为本文单个呈现面刷新描述的目标扩展，尚未实施。模块不持有刷新回调、动作只执行一次及本文错误／冲突语义继续成立。
+
 Standard CRUD 的远程业务动作由 Shell 内一个共享执行 Module 统一管理互斥、错误、数据刷新、冲突和不透明结果交接。模块 handler 只接收记录标识、详情或行快照以及可选业务输入，不再接收页面刷新回调；这使同一动作从列表或完整详情执行时具有相同生命周期，也让模块无法依赖宿主内部状态。
 
 远程动作成功后，Shell 恰好刷新一次当前呈现面的数据，再把可选结果交给已注册 presenter。列表投影必须包含行级动作声明的 `dataDependency.fields`，保证模块收到完整的确认快照。`409` 表示确认所依据的快照已失效：Shell 刷新最新数据、关闭旧 Review Dialog 且不自动重放；其他失败不刷新并保留输入。带业务输入的动作只使用一个 Review Dialog 同时呈现确认文案和模块输入。标准删除 Adapter 与模块专用 handler 都通过这一执行 Module；`view`、`create`、页面 `refresh` 等本地页面动作不要求模块 handler。

@@ -186,6 +186,17 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.DoesNotContain("dotnet build HostApi", runner, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BootstrapPreflight_ReportsUnexpectedStartupBeforeReadingDatabaseOwnership()
+    {
+        var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
+            "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var bootstrap = runner[runner.IndexOf("private async Task ObserveBootstrapRequiredDevAsync", StringComparison.Ordinal)..];
+        var startupFailure = bootstrap.IndexOf("Empty Personnel catalog startup returned", StringComparison.Ordinal);
+        var ownershipRead = bootstrap.IndexOf("_ownershipSnapshot = await ReadOwnershipSnapshotAsync", StringComparison.Ordinal);
+        Assert.True(startupFailure >= 0 && startupFailure < ownershipRead);
+        Assert.Contains("diagnostic={Sanitize(diagnostic)}; devRun={_lastDevRunId}", bootstrap, StringComparison.Ordinal);
+    }
     private static string GetRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

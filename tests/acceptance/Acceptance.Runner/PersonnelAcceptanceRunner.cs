@@ -1211,15 +1211,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var status = ReadString(json.RootElement, "status");
         var failureCode = ReadString(json.RootElement, "failureCode");
         var diagnostic = ReadString(json.RootElement, "diagnostic");
-        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
         if (result.ExitCode == 0
             || !string.Equals(status, "failed", StringComparison.Ordinal)
             || !string.Equals(failureCode, "DEV_HOST_READINESS_FAILED", StringComparison.Ordinal)
             || !diagnostic.Contains("IDENTITY_BOOTSTRAP_REQUIRED", StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Empty Personnel catalog startup returned exit={result.ExitCode}, status={status}, failure={failureCode}.");
+                $"Empty Personnel catalog startup returned exit={result.ExitCode}, status={status}, failure={failureCode}; diagnostic={Sanitize(diagnostic)}; devRun={_lastDevRunId}.");
         }
+
+        // 只有预期启动阶段已经完成持久化初始化，才读取其 ownership；提前退出应保留 supervisor 首因。
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
 
         await WriteEvidenceAsync("personnel/bootstrap-required.json", new
         {

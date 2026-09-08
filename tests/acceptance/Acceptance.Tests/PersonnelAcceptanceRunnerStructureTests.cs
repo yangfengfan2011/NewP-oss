@@ -211,6 +211,20 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Contains("Name = \"人员\"", coldStart, StringComparison.Ordinal);
         Assert.DoesNotContain("Name = \"人员中心\"", coldStart, StringComparison.Ordinal);
     }
+    [Fact]
+    public void MaintenanceJourney_SwitchesTabsWithoutRemountingTheInactiveTree()
+    {
+        var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
+            "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var start = runner.IndexOf("private async Task MaintainDepartmentFromBrowserAsync", StringComparison.Ordinal);
+        var end = runner.IndexOf("private async Task<PositionData>", start, StringComparison.Ordinal);
+        var maintenance = runner[start..end];
+        Assert.Contains("Name = \"部门\"", maintenance, StringComparison.Ordinal);
+        Assert.Contains("Name = \"组织结构\"", maintenance, StringComparison.Ordinal);
+        Assert.Contains("response.Request.Method == \"DELETE\"", maintenance, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenOrganizationTabAsync", maintenance, StringComparison.Ordinal);
+        Assert.DoesNotContain("GotoAsync", maintenance, StringComparison.Ordinal);
+    }
     private static string GetRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

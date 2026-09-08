@@ -400,6 +400,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             {
                 var company = await CreateCompanyFromBrowserAsync(page, cancellationToken);
                 var department = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);
+                await MaintainDepartmentFromBrowserAsync(page, cancellationToken);
                 var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
                 person = await UpdatePersonFromBrowserAsync(
                     page,
@@ -417,6 +418,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 [
                     "company-created",
                     "department-created-in-tree-and-edited-from-context-menu",
+                    "temporary-department-moved-from-global-list-and-deleted-in-tree",
                     "position-created",
                     "person-organization-affiliation-saved-through-standard-drawer",
                     "birth-date-range-finds-person"
@@ -614,6 +616,55 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return updated;
     }
 
+    // 沿当前部门创建临时子部门，在非活动树之外换父，再回树删除，复用同一人员主旅程。
+    private async Task MaintainDepartmentFromBrowserAsync(IPage page, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var name = $"Personnel Gate Moved Department {_runId[..8]}";
+        var tree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
+        var content = page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" });
+        await content.GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "直属子部门", Exact = true }).ClickAsync();
+        await ClickStandardCrudCreateActionAsync(page, "新建部门");
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.GetByLabel("部门编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync($"ACC-M-{_runId[..8]}");
+        await drawer.GetByLabel("部门名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(name);
+        var createResponse = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/organization/departments");
+        await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();
+        if ((await createResponse).Status != 201) throw new InvalidOperationException("Temporary department create failed.");
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await tree.GetByText(name, new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+        // 直接切外层标签保留已打开的树实例，不能点击菜单重新装载来掩盖延迟刷新缺陷。
+        await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = "部门", Exact = true }).ClickAsync();
+        var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = name }).Last;
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "编辑", Exact = true }).ClickAsync();
+        drawer = page.Locator(".ant-drawer-content:visible").Last;
+        var parentField = drawer.Locator(".ant-form-item").Filter(new LocatorFilterOptions
+        {
+            Has = drawer.GetByLabel("上级部门", new LocatorGetByLabelOptions { Exact = true })
+        });
+        await parentField.HoverAsync();
+        await parentField.Locator(".ant-select-clear").ClickAsync();
+        var moveResponse = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/organization/departments/", StringComparison.Ordinal));
+        await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存修改", Exact = true }).ClickAsync();
+        if ((await moveResponse).Status != 200) throw new InvalidOperationException("Temporary department move failed.");
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = "组织结构", Exact = true }).ClickAsync();
+        await tree.GetByText(name, new LocatorGetByTextOptions { Exact = true }).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
+        await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "删除", Exact = true }).ClickAsync();
+        var confirm = page.GetByRole(AriaRole.Dialog).Filter(new LocatorFilterOptions { HasTextString = "确认删除当前记录？" });
+        var deleteResponse = page.WaitForResponseAsync(response => response.Request.Method == "DELETE"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/organization/departments/", StringComparison.Ordinal));
+        await confirm.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "确认", Exact = true }).ClickAsync();
+        var deleted = await deleteResponse;
+        if (!deleted.Ok) throw new InvalidOperationException($"Temporary department delete returned {deleted.Status}.");
+        await confirm.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await tree.GetByText(name, new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    }
     // 同一 Personnel 浏览器场景通过标准 Drawer 创建岗位，不把字段边界语义提升到浏览器层。
     private async Task<PositionData> CreatePositionFromBrowserAsync(
         IPage page,

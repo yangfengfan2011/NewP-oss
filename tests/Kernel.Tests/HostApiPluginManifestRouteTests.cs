@@ -165,16 +165,28 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "example.runtime-workload.list",
             "identity.account.detail",
             "identity.account.list",
+            "organization.company.direct",
             "organization.company.list",
+            "organization.department.direct",
+            "organization.department.global",
             "organization.department.list",
+            "organization.node.detail",
             "organization.person.detail",
             "organization.person.list",
-            "organization.position.list"
+            "organization.position.list",
+            "organization.tree",
+            "organization.tree.global"
         };
         Assert.True(
             expectedBindings.SequenceEqual(projectedBindings, StringComparer.Ordinal),
             $"Expected bindings: [{string.Join(", ", expectedBindings)}]\n"
             + $"Projected bindings: [{string.Join(", ", projectedBindings)}]");
+        var organization = Assert.Single(document.RootElement.GetProperty("modules").EnumerateArray(),
+            module => module.GetProperty("moduleId").GetString() == "Organization");
+        Assert.Equal(
+            expectedBindings.Where(binding => binding.StartsWith("organization.", StringComparison.Ordinal)),
+            organization.GetProperty("frontend").GetProperty("bindings").EnumerateArray()
+                .Select(binding => binding.GetString()).Order(StringComparer.Ordinal));
     }
 
     [Fact]

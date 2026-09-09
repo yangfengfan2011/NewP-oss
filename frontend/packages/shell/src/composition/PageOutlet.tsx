@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
+import theme from 'antd/es/theme';
 import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps, type PageRef, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@icp-platform/ui/core';
@@ -7,6 +8,7 @@ import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
 import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation, type TreeLocation } from './pageCompositionRuntime';
 import { PageComposition } from './PageCompositionContext';
+import './composition.css';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
 const ListPage = lazy(() => import('../pages/StandardCrudListPageHost'));
@@ -17,6 +19,7 @@ export function PageEntry({ page }: { page: PageRef }) {
   const navigate = useNavigate();
   const metadata = useRuntimeMetadata();
   const { t } = useLocalization();
+  const { token } = theme.useToken();
   const view = metadata?.viewDocuments.find(document => document.view.key === page.parameters?.viewKey)?.view;
   const navigation = { tabKey: new URLSearchParams(location.search).get('tab'), selectTab: (key: string, treeLocation?: TreeLocation) => {
     const query = new URLSearchParams(location.search); query.set('tab', key);
@@ -32,7 +35,13 @@ export function PageEntry({ page }: { page: PageRef }) {
     if (tab) query.set('nodeTab', tab); else if (tab === null) query.delete('nodeTab');
     if (query.toString() !== new URLSearchParams(location.search).toString()) navigate({ pathname: location.pathname, search: query.toString() }, { replace: true });
   } };
-  return <PageComposition><div className="sh-page">
+  return <PageComposition><div className="sh-page np-composed-page" style={{
+    '--np-composition-surface': token.colorBgContainer,
+    '--np-composition-border': token.colorBorderSecondary,
+    '--np-composition-subtle': token.colorFillAlter,
+    '--np-composition-secondary': token.colorTextSecondary,
+    '--np-composition-radius': `${token.borderRadiusLG}px`,
+  } as CSSProperties}>
     {view && <PageHeader title={t(`${view.dicKey}.${view.titleKey}`, String(view.titleKey ?? ''))} />}
     <PageOutlet page={page} navigation={navigation} treeNavigation={treeNavigation} />
   </div></PageComposition>;

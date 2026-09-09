@@ -14,7 +14,8 @@ export default function StandardTabPage({ input }: PageProps) {
   const view = metadata?.viewDocuments.find(document => document.view.key === input.parameters.viewKey)?.view as unknown as TabView;
   const navigation = useContext(PageNavigationContext);
   const treeNavigation = useContext(TreeNavigationContext);
-  const id = useId();
+  const instanceId = useId();
+  const id = `np-tabs-${instanceId.replace(/:/g, '')}`;
   const [localSelected, setSelected] = useState(view.defaultTabKey);
   const selected = navigation ? (view.tabs.some(tab => tab.key === navigation.tabKey) ? navigation.tabKey! : view.defaultTabKey) : localSelected;
   // URL 只描述当前标签；已打开兄弟树的位置留在本 Tab 实例，不能消费另一个标签的地址。
@@ -23,7 +24,7 @@ export default function StandardTabPage({ input }: PageProps) {
   const [opened, setOpened] = useState(() => new Set([selected]));
   useEffect(() => { setOpened(current => current.has(selected) ? current : new Set(current).add(selected)); }, [selected]);
   const visibleTabs = new Set([...opened, selected]);
-  return <Tabs id={id} activeKey={selected} destroyOnHidden={false} animated={false}
+  return <Tabs id={id} className="np-composed-tabs" type={input.context ? 'line' : 'card'} size="small" activeKey={selected} destroyOnHidden={false} animated={false}
     onChange={key => {
       if (selected === key) return;
       if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(key, treeNavigation ? treeLocations.current.get(key) ?? { nodeKey: null, nodeTab: null } : undefined); }

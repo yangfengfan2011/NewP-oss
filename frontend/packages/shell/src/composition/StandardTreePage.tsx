@@ -180,9 +180,9 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   });
   const descriptors = [...roots, ...Object.values(branches).flat()];
   const selectedType = view.nodeTypes.find(type => type.key === selected?.nodeType);
-  return <TreeInstanceContext.Provider value={instanceId}><div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 28%) 1fr', gap: token.marginLG }}>
+  return <TreeInstanceContext.Provider value={instanceId}><div className="np-tree-workspace">
     <aside aria-label="结构树" style={{ minWidth: 0 }}>
-      <Card size="small" style={{ height: '100%', minHeight: 320 }}
+      <Card size="small" className="np-tree-sidebar-card"
         styles={{ header: { minHeight: token.controlHeightLG, padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
         title={view.treeActions?.length ? <Space role="toolbar" aria-label="树操作" size={token.marginXS} style={{ width: '100%' }} wrap>
           {view.treeActions.map(action => <Button key={action.key} size="small" icon={action.standardAction === 'create' ? <PlusOutlined aria-hidden="true" /> : undefined}
@@ -202,9 +202,15 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       {!roots.length && !error && <p>暂无节点</p>}
       </Card>
     </aside>
-    <section aria-label="节点内容" style={{ minWidth: 0 }}>
+    <section aria-label="节点内容" className="np-tree-content">
+      {selected && <header className="np-tree-context-header">
+        <h2>{selected.label}</h2>
+        {selectedType && <span>{t(`${view.dicKey}.${selectedType.titleKey}`, selectedType.titleKey)}</span>}
+      </header>}
+      <div className="np-tree-content-body">
       {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${selectionEpoch}`} page={selectedType.pageRef} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>请选择节点</p>}
       {editPage && <PageOutlet key={`editor:${editContext?.nodeKey ?? "root"}:${String(editPage.parameters?.actionKey ?? editPage.parameters?.standardAction)}`} page={editPage} context={editContext} close={() => setEditPage(null)} />}
+      </div>
     </section>
   </div></TreeInstanceContext.Provider>;
 }

@@ -1,12 +1,8 @@
 import { Drawer } from '../components/Drawer';
-import { PageHeader } from './PageHeader';
 import { Panel } from './Panel';
 import type { StandardListPageProps } from './StandardListPage.types';
 
 export function StandardListPage({
-  title,
-  eyebrow,
-  description,
   headerActions,
   filterBar,
   content,
@@ -22,12 +18,7 @@ export function StandardListPage({
 
   return (
     <div className="sh-page">
-      <PageHeader
-        eyebrow={eyebrow}
-        title={title}
-        description={description}
-        actions={headerActions}
-      />
+      {headerActions && <div className="sh-page-actions">{headerActions}</div>}
 
       {filterBar ? (
         <section className="sh-standard-list-page-filter">

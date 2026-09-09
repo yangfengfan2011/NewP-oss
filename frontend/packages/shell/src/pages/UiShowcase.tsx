@@ -134,19 +134,12 @@ export default function UiShowcase() {
 
   return (
     <div style={{ display: 'grid', gap: '20px' }}>
-      <PageHeader
-        eyebrow="UI Showcase"
-        title="控件展示"
-        description="面向 Shell 的最小交互示例，使用 @icp-platform/ui 真实组件与本地 mock 数据。"
-        actions={
-          <div style={inlineStyle}>
-            <Button variant="primary" onClick={() => setModalOpen(true)}>
-              打开 Modal 示例
-            </Button>
-            <Button onClick={() => setDrawerOpen(true)}>打开 Drawer 示例</Button>
-          </div>
-        }
-      />
+      <div style={inlineStyle}>
+        <Button variant="primary" onClick={() => setModalOpen(true)}>
+          打开 Modal 示例
+        </Button>
+        <Button onClick={() => setDrawerOpen(true)}>打开 Drawer 示例</Button>
+      </div>
 
       <section aria-labelledby="ui-showcase-basic">
         <Panel

@@ -7,7 +7,7 @@ import {
   type StandardCrudResourceRegistration,
   type StandardCrudOperationResult,
 } from '@icp-platform/sdk';
-import { ErrorState, LoadingState, PageHeader } from '@icp-platform/ui/core';
+import { ErrorState, LoadingState } from '@icp-platform/ui/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { useOptionalAuth } from '../contexts/AuthContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
@@ -154,8 +154,6 @@ function StandardCrudDetailPageContent<TDetail>({
   const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
-  const titleKey = readMetadataString(view.titleKey, 'Title');
-  const descriptionKey = readMetadataString(view.descriptionKey, 'Description');
   const dataAdapter = registration.dataAdapter;
   const operationResultPresenterRegistry = useMemo(
     () => createStandardCrudOperationResultPresenterRegistry(registration.operationResultPresenters ?? []),
@@ -265,12 +263,7 @@ function StandardCrudDetailPageContent<TDetail>({
           })
         : null}
       <div className={embedded ? undefined : "sh-page"}>
-      {!embedded && <PageHeader
-        eyebrow={schema.resourceKey}
-        title={t(`${dicKey}.${schema.titleKey ?? titleKey}`, schema.titleKey ?? titleKey)}
-        description={t(`${dicKey}.${schema.descriptionKey ?? descriptionKey}`, schema.descriptionKey ?? descriptionKey)}
-        actions={detailHeaderActions}
-      />}
+      {!embedded && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 
       {showLoading ? (
         <LoadingState message="正在加载详情..." />

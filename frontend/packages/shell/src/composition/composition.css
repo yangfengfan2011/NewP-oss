@@ -4,11 +4,6 @@
   min-width: 0;
 }
 
-.np-composed-page > .sh-page-header .sh-page-title {
-  font-size: 22px;
-  line-height: 30px;
-}
-
 .np-composed-tabs > .ant-tabs-nav {
   margin-bottom: 12px;
 }

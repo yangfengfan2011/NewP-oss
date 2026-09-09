@@ -2,8 +2,6 @@ import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, use
 import theme from 'antd/es/theme';
 import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps, type PageRef, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { PageHeader } from '@icp-platform/ui/core';
-import { useLocalization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
 import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation, type TreeLocation } from './pageCompositionRuntime';
@@ -17,10 +15,7 @@ const DetailPage = lazy(() => import('../pages/StandardCrudDetailPageHost'));
 export function PageEntry({ page }: { page: PageRef }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const metadata = useRuntimeMetadata();
-  const { t } = useLocalization();
   const { token } = theme.useToken();
-  const view = metadata?.viewDocuments.find(document => document.view.key === page.parameters?.viewKey)?.view;
   const navigation = { tabKey: new URLSearchParams(location.search).get('tab'), selectTab: (key: string, treeLocation?: TreeLocation) => {
     const query = new URLSearchParams(location.search); query.set('tab', key);
     if (treeLocation) {
@@ -42,7 +37,6 @@ export function PageEntry({ page }: { page: PageRef }) {
     '--np-composition-secondary': token.colorTextSecondary,
     '--np-composition-radius': `${token.borderRadiusLG}px`,
   } as CSSProperties}>
-    {view && <PageHeader title={t(`${view.dicKey}.${view.titleKey}`, String(view.titleKey ?? ''))} />}
     <PageOutlet page={page} navigation={navigation} treeNavigation={treeNavigation} />
   </div></PageComposition>;
 }

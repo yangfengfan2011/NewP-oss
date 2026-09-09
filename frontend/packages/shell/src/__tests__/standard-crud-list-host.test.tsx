@@ -1383,7 +1383,7 @@ describe('StandardCrudListPageHost', () => {
     );
   });
 
-  it('renders the metadata title once without expanding the compact header with description text', async () => {
+  it('omits the page heading while retaining create actions in the table toolbar', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
@@ -1395,8 +1395,9 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(container.querySelectorAll('.np-crud-workspace-title')).toHaveLength(1);
-    expect(container.querySelector('.np-crud-workspace-title')?.textContent).toBe('人员中心');
+    expect(container.querySelector('.np-crud-workspace-header')).toBeNull();
+    expect(container.querySelector('.np-standard-crud-table')?.textContent).toContain('新建人员');
+    expect(container.textContent).not.toContain('人员中心');
     expect(container.textContent).not.toContain('维护组织模块中的人员基础信息。');
     expect(container.textContent).not.toContain('人员中心列表');
     expect(container.textContent).not.toContain('Title');

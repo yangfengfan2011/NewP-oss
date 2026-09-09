@@ -27,17 +27,6 @@ export default function Home() {
 
   return (
     <div className="sh-page">
-      <section className="sh-page-header">
-        <div className="sh-page-header-main">
-          <span className="sh-page-eyebrow">{currentViewLabel}</span>
-          <h1 className="sh-page-title">欢迎使用 ICP Platform</h1>
-          <p className="sh-page-description">
-            在统一 Shell 中快速进入业务门户或平台门户，聚合常用入口、最近动作和代表性模块页面，
-            让第二阶段的页面模式从入口层开始保持一致。
-          </p>
-        </div>
-      </section>
-
       <div className="sh-section-grid">
         <div className="sh-summary-card">
           <span className="sh-summary-card-label">体验模式</span>

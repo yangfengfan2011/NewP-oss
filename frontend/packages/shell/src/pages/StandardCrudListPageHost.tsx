@@ -1973,7 +1973,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const content = (
     <div className="np-standard-crud-table">
       <CrudTableSection<TRow>
-        headerTitle={embedded ? headerActions : undefined}
+        headerTitle={headerActions}
         rowKey={dataAdapter.getRowId}
         columns={columns}
         request={tableRequest}
@@ -2028,8 +2028,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         : null}
       {embedded?.input.parameters.presentation !== 'drawer' && <CrudWorkspacePage
         embedded={Boolean(embedded)}
-        title={embedded ? undefined : pageTitle}
-        primaryActions={embedded ? undefined : headerActions}
         filterBar={filterBar}
       >
         {content}

@@ -470,7 +470,7 @@ describe('StandardCrudDetailPageHost', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('resolves detail title and description from the runtime dictionary', async () => {
+  it('omits the page heading while preserving localized sections and actions', async () => {
     vi.spyOn(ModuleRegistry, 'getAllModules').mockReturnValue([
       {
         metadata: { moduleId: 'organization', displayName: 'Organization', version: '1.0.0' },
@@ -503,8 +503,12 @@ describe('StandardCrudDetailPageHost', () => {
     await renderHost('Person_1');
     await act(async () => undefined);
 
-    expect(container.textContent).toContain('人员详情');
-    expect(container.textContent).toContain('查看和维护人员详情信息。');
+    expect(container.querySelector('.sh-page-header')).toBeNull();
+    expect(container.textContent).not.toContain('人员详情');
+    expect(container.textContent).not.toContain('查看和维护人员详情信息。');
+    expect(container.textContent).toContain('基础信息');
+    expect(container.textContent).toContain('组织信息');
+    expect(container.querySelector('.sh-page-actions')?.textContent).toContain('编辑');
     expect(container.textContent).not.toContain('Title');
     expect(container.textContent).not.toContain('Description');
   });

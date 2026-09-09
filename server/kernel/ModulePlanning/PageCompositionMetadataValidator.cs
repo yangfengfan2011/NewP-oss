@@ -59,7 +59,13 @@ public static class PageCompositionMetadataValidator
             }
             else
             {
-                Bind(Required(view, "providerKey"));
+                var providerKey = Required(view, "providerKey");
+                if (providerKey == RelationTreeMetadata.ProviderKey) RelationTreeMetadata.Read(view);
+                else
+                {
+                    if (view.TryGetProperty("relationSource", out _)) throw new JsonException("Custom Provider cannot declare relationSource.");
+                    Bind(providerKey);
+                }
                 CheckActions(view, "treeActions", dictionary);
                 var types = view.GetProperty("nodeTypes").EnumerateArray().ToArray();
                 if (types.Length == 0 || types.Select(type => Required(type, "key")).Distinct(StringComparer.Ordinal).Count() != types.Length)

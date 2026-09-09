@@ -54,9 +54,20 @@ export interface TabView {
 }
 export interface TreeView {
   key: string; mode: 'tree'; dicKey: string; providerKey: string;
+  relationSource?: RelationTreeSource;
   treeActions?: TreeActionReference[];
   nodeTypes: { key: string; titleKey: string; pageRef: PageRef;
     contextMenu?: TreeActionReference[] }[];
+}
+/** 标准关系树只声明模型字段和父关系，不接受 SQL 或表达式。 */
+export interface RelationTreeSource {
+  nodes: Array<{
+    key: string; model: string; resourceKey: string; idField: string; labelField: string;
+    codeField: string; sortField: string; enabledField?: string; rootWhenParentNull?: boolean;
+    parents?: Array<{ nodeType: string; field: string; fallback?: boolean }>;
+    filters?: Array<{ field: string; operator: '=' | 'contains' | 'isNull' | 'isNotNull'; value?: string | number | boolean }>;
+    contextFields?: Record<string, string>;
+  }>;
 }
 /** 引用已有 List View 动作；权限、确认和输入仍由资源动作声明拥有。 */
 export type TreeActionReference = {

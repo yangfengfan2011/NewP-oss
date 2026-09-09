@@ -4,7 +4,7 @@ import {
   type StandardCrudCapabilityModule,
 } from '@icp-platform/sdk';
 
-import { organizationPageInputs, organizationTreeProvider } from './organizationTree';
+import { organizationPageInputs } from './organizationTree';
 
 const loadPersonStandardCrudResource = createRecoverableCapabilityLoader<StandardCrudCapabilityModule>(
   async () => ({
@@ -45,7 +45,6 @@ const loadDepartmentStandardCrudResource = createRecoverableCapabilityLoader<Sta
 export const organizationBindings: FrontendBehaviorBindings = {
   behaviorKey: 'organization.frontend',
   pageInputResolvers: organizationPageInputs,
-  treeProviders: [organizationTreeProvider],
   standardCrudCapabilities: [
     {
       kind: 'standard-list',

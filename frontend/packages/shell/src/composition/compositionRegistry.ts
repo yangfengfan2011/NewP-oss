@@ -1,5 +1,6 @@
 import type { FrontendModule, PageInput, PageRef, TabView, TreeView } from '@icp-platform/sdk';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
+import { relationTreeProviderKey } from './relationTreeProvider';
 
 const modes: Record<string, string> = { 'platform.tree': 'tree', 'platform.tabs': 'tab', 'platform.list': 'list', 'platform.detail': 'detail' };
 export function resolvePageInput(ref: PageRef, modules: FrontendModule[], context?: PageInput['context']): PageInput {
@@ -48,7 +49,12 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
     }
     if (view.mode === 'tree') {
       const tree = view as unknown as TreeView;
-      if (!modules.some(module => module.treeProviders?.some(provider => provider.key === tree.providerKey))) throw new Error('缺少树 Provider binding');
+      if (tree.providerKey === relationTreeProviderKey) {
+        if (!tree.relationSource?.nodes.length
+          || tree.relationSource.nodes.length !== tree.nodeTypes.length
+          || new Set(tree.relationSource.nodes.map(node => node.key)).size !== tree.nodeTypes.length
+          || tree.relationSource.nodes.some(node => !tree.nodeTypes.some(type => type.key === node.key))) throw new Error('无效标准关系树配置');
+      } else if (!modules.some(module => module.treeProviders?.some(provider => provider.key === tree.providerKey))) throw new Error('缺少树 Provider binding');
       if (!tree.nodeTypes.length || new Set(tree.nodeTypes.map(item => item.key)).size !== tree.nodeTypes.length) throw new Error('重复或缺少节点类型');
       const checkActions = (actions: TreeView['treeActions']) => {
         if (!actions) return;

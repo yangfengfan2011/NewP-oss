@@ -5,7 +5,25 @@
     "key": "organization.structure",
     "mode": "tree",
     "dicKey": "OrganizationComposition",
-    "providerKey": "organization.tree",
+    "providerKey": "platform.relations",
+    "relationSource": {
+      "nodes": [
+        {
+          "key": "company", "model": "Company", "resourceKey": "organization.company",
+          "idField": "EID", "labelField": "ENAME", "codeField": "ECODE", "sortField": "SortOrder", "enabledField": "IsEnabled",
+          "contextFields": { "id": "EID", "companyId": "EID" }
+        },
+        {
+          "key": "department", "model": "Department", "resourceKey": "organization.department",
+          "idField": "EID", "labelField": "ENAME", "codeField": "ECODE", "sortField": "SortOrder", "enabledField": "IsEnabled",
+          "parents": [
+            { "nodeType": "department", "field": "ParentDepartmentId" },
+            { "nodeType": "company", "field": "CompanyId", "fallback": true }
+          ],
+          "contextFields": { "id": "EID", "companyId": "CompanyId", "parentDepartmentId": "ParentDepartmentId" }
+        }
+      ]
+    },
     "nodeTypes": [
       {
         "titleKey": "Company",

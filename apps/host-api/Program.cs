@@ -169,6 +169,7 @@ var activationGate = new PluginActivationGate(
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);
 var canonicalModulePlan = activationSession.ModulePlan;
+builder.Services.AddRelationTrees(canonicalModulePlan);
 
 // Build 前所有持久化服务都绑定到激活会话编译出的同一个计划实例。
 builder.Services.AddPlatformPersistence(builder.Configuration, activationSession.PersistencePlan);
@@ -259,6 +260,7 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Acceptan
 app.MapPluginManifestEndpoints(pluginInstallRoot);
 
 app.MapControllers();
+app.MapRelationTrees();
 app.MapPersonnelAcceptanceFixture(builder.Configuration);
 if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 {

@@ -174,7 +174,6 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "organization.person.detail",
             "organization.person.list",
             "organization.position.list",
-            "organization.tree",
             "organization.tree.global"
         };
         Assert.True(

@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
-import { organizationTreeProvider } from './organizationTree';
 import { departmentStandardCrudResource } from './standard-crud/departmentStandardCrudResource';
 vi.mock('@icp-platform/core', () => ({ platformFetch: (...args: unknown[]) => fetch(...args as Parameters<typeof fetch>) }));
 afterEach(() => { vi.restoreAllMocks(); });
@@ -37,5 +36,5 @@ it('retains write success when post-write mapping fails so the provider requests
   const adapter = createStandardCrudRestDataAdapter({ apiRoute: '/resource', fetcher, mapListItem: () => { throw new Error('mapping'); }, getRowId: () => 'd' });
   const result = await adapter.create({});
   expect(result.operation).toBe('create'); expect(fetcher).toHaveBeenCalledTimes(1);
-  expect(await organizationTreeProvider.resolveChange({ ...result.change!, resourceKey: 'organization.department' }, { kind: 'global' })).toEqual({ kind: 'unknown' });
+  expect(result.change).toEqual({ operation: 'create', id: '', before: undefined });
 });

@@ -2,11 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Modules.Organization.Directories;
@@ -41,6 +44,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
         var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" };
         var catalog = $"NewPOrganizationTree_{Guid.NewGuid():N}";
+        var treeArtifacts = Directory.CreateTempSubdirectory("NewPRelationTree_");
         await using var connection = new SqlConnection(admin.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
@@ -61,6 +65,8 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.Services.AddStandardCrudKernel();
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
+            var treePlan = ReadTreePlan(treeArtifacts.FullName);
+            builder.Services.AddRelationTrees(treePlan);
             builder.Services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
             builder.Services.AddScoped<IStandardCrudValidator, DepartmentCrudValidator>();
             builder.Services.AddScoped<IStandardCrudQueryCustomizer, DepartmentCrudQueryCustomizer>();
@@ -86,6 +92,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             });
             app.UseAuthorization();
             app.MapStandardCrudResources();
+            app.MapRelationTrees();
             app.MapControllers();
             await using (var scope = app.Services.CreateAsyncScope())
             {
@@ -192,13 +199,103 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             var leafChildren = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/children?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + second));
             Assert.Equal(0, leafChildren.GetArrayLength());
 
+            const string standard = "/api/trees/organization.structure/";
+            var standardRoots = await client.GetFromJsonAsync<JsonElement>(standard + "roots?scope=global");
+            Assert.Equal(roots.GetArrayLength(), standardRoots.GetArrayLength());
+            var standardChildren = await client.GetFromJsonAsync<JsonElement>(standard + "children?scope=global&nodeKey=" + Uri.EscapeDataString("company:" + company));
+            Assert.Equal(2, standardChildren.GetArrayLength());
+            Assert.Equal(company, standardChildren[0].GetProperty("context").GetProperty("companyId").GetString());
+            recorder.Commands.Clear();
+            var standardSearch = await client.GetFromJsonAsync<JsonElement>(standard + "search?scope=global&keyword=Department&page=2&pageSize=1");
+            Assert.Equal(2, standardSearch.GetProperty("total").GetInt32());
+            var hit = Assert.Single(standardSearch.GetProperty("items").EnumerateArray());
+            Assert.Equal("department:" + second, hit.GetProperty("node").GetProperty("nodeKey").GetString());
+            Assert.Equal(2, hit.GetProperty("path").GetArrayLength());
+            // 原生 DbCommand 沿用连接直接执行；SQL 形状由执行器测试证明，结果由真实数据库证明。
+            var standardPath = await client.GetFromJsonAsync<JsonElement>(standard + "path?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + second));
+            Assert.Equal(2, standardPath.GetArrayLength());
+            foreach (var permission in new[] { "Organization.Company.View", "Organization.Department.View" })
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, standard + "search?scope=global&keyword=Department&page=1&pageSize=20");
+                request.Headers.Add("X-Deny", permission);
+                using var response = await client.SendAsync(request);
+                Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            }
+            using var injection = await client.GetAsync(standard + "roots?scope=global&model=Person");
+            Assert.Equal(HttpStatusCode.BadRequest, injection.StatusCode);
+            Assert.True((await injection.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("query", out _));
+            using var badStandardPage = await client.GetAsync(standard + "search?scope=global&keyword=Department&page=0&pageSize=20");
+            Assert.Equal(HttpStatusCode.BadRequest, badStandardPage.StatusCode);
+            Assert.True((await badStandardPage.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("search", out _));
+            using var missingStandard = await client.GetAsync(standard + "path?scope=global&nodeKey=department:missing");
+            Assert.Equal(HttpStatusCode.NotFound, missingStandard.StatusCode);
+            await using (var treeScope = app.Services.CreateAsyncScope())
+            {
+                var reader = treeScope.ServiceProvider.GetRequiredService<RelationTreeReader>();
+                var definition = Assert.Single(RelationTreeMetadata.Project(treePlan));
+                var departmentNode = definition.Source.Nodes.Single(node => node.Key == "department");
+                var filtered = definition with { Source = new() { Nodes = [definition.Source.Nodes[0], departmentNode with
+                { Filters = [new() { Field = "ECODE", Operator = "=", Value = JsonSerializer.SerializeToElement("D2") }] }] } };
+                Assert.Single((await reader.ChildrenAsync(filtered, "company:" + company, default))!);
+                Assert.Equal(1, (await reader.SearchAsync(filtered, "Department", 1, 20, default)).Total);
+                var sql = treeScope.ServiceProvider.GetRequiredService<RelationTreeSql>().Build(filtered);
+                Assert.DoesNotContain("D2", sql.Sql);
+                Assert.Contains("D2", sql.Parameters.Values);
+                var constrained = new RelationTreeReader(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
+                    new RelationTreeSql(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
+                        treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new NarrowDepartmentQuery()]));
+                Assert.Equal(0, (await constrained.SearchAsync(filtered, "Department", 1, 20, default)).Total);
+                var selfTree = definition with { Source = new() { Nodes = [departmentNode with
+                { RootWhenParentNull = true, Parents = [departmentNode.Parents[0]] }] } };
+                Assert.Equal(3, (await reader.RootsAsync(selfTree, default)).Count);
+                Assert.Single((await reader.PathAsync(selfTree, "department:" + second, default))!);
+                var databaseContext = treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+                await using var transaction = await databaseContext.Database.BeginTransactionAsync();
+                await databaseContext.Database.ExecuteSqlInterpolatedAsync($"UPDATE Department SET ParentDepartmentId={second} WHERE EID={first}");
+                await databaseContext.Database.ExecuteSqlInterpolatedAsync($"UPDATE Department SET ParentDepartmentId={first} WHERE EID={second}");
+                await Assert.ThrowsAsync<InvalidOperationException>(() => reader.PathAsync(definition, "department:" + first, default));
+                await transaction.RollbackAsync();
+            }
+
         }
         finally
         {
             SqlConnection.ClearAllPools();
             command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
             await command.ExecuteNonQueryAsync();
+            treeArtifacts.Delete(true);
         }
+    }
+
+    private static CanonicalModulePlan ReadTreePlan(string root)
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules", "Organization", "newp.plugin.json"))) repository = repository.Parent;
+        var source = Path.Combine(repository!.FullName, "modules", "Organization");
+        var module = Path.Combine(root, "modules", "Organization");
+        foreach (var path in Directory.GetFiles(Path.Combine(source, "metadata"), "*.json", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(module, Path.GetRelativePath(source, path));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(path, target);
+        }
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(source, "newp.plugin.json")))!;
+        manifest["dependencies"] = new JsonArray();
+        File.WriteAllText(Path.Combine(module, "plugin.json"), manifest.ToJsonString());
+        File.WriteAllText(Path.Combine(root, "OrganizationModule.dll"), "fixture assembly");
+        var trust = TrustedBuiltInModuleSource.CreateForHost(root, Path.Combine(root, "modules"));
+        var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust));
+        var plan = Assert.IsType<CanonicalModulePlan>(new CanonicalModulePlanCompiler().Compile("relation-tree", [candidate]).Plan);
+        // 签发后改动磁盘不能改变本次启动消费的树定义。
+        File.WriteAllText(Path.Combine(module, "metadata/views/OrganizationStructure.view.json"), "{}");
+        return plan;
+    }
+
+    private sealed class NarrowDepartmentQuery : IStandardCrudQueryCustomizer
+    {
+        public string ResourceKey => "organization.department";
+        public IReadOnlyList<ICP.Platform.Crud.Models.StandardCrudQueryCondition> BuildConditions(
+            ICP.Platform.Crud.Descriptors.StandardCrudDescriptor descriptor, ICP.Platform.Crud.Models.StandardCrudListQuery query) =>
+            [new("ECODE", "=", "D1")];
     }
 
     private sealed class TestAuthentication(Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions> options,

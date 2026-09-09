@@ -84,7 +84,8 @@ public sealed class PageCompositionMetadataTests
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(file, target);
             }
             var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadBuiltIn(temporary.FullName));
-            Assert.Contains("organization.tree", candidate.FrontendBindingReferences);
+            Assert.DoesNotContain("organization.tree", candidate.FrontendBindingReferences);
+            Assert.DoesNotContain(RelationTreeMetadata.ProviderKey, candidate.FrontendBindingReferences);
             Assert.DoesNotContain("organization.company.tabs", candidate.FrontendBindingReferences);
             Assert.Contains("/organization/structure", candidate.Routes);
         }

@@ -16,6 +16,7 @@ import { CompositionContext, TreeInstanceContext, TreeNavigationContext, type Co
 import { PageOutlet } from './PageOutlet';
 import { synchronizeTree, type PendingTreeChange } from './treeSynchronization';
 import { TreeSearch } from './TreeSearch';
+import { createRelationTreeProvider, relationTreeProviderKey } from './relationTreeProvider';
 
 const unknownChangeKey = Symbol('unknown tree change');
 
@@ -30,7 +31,8 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const { token } = theme.useToken();
   const view = metadata?.viewDocuments.find(document => document.view.key === input.parameters.viewKey)?.view as unknown as TreeView;
   const treeScope = input.treeScope!;
-  const provider = useMemo(() => ModuleRegistry.getAllModules().flatMap(module => module.treeProviders ?? []).find(item => item.key === view.providerKey)!, [view.providerKey]);
+  const provider = useMemo(() => view.providerKey === relationTreeProviderKey ? createRelationTreeProvider(view)
+    : ModuleRegistry.getAllModules().flatMap(module => module.treeProviders ?? []).find(item => item.key === view.providerKey)!, [view]);
   const [roots, setRoots] = useState<TreeNodeDescriptor[]>([]);
   const [branches, setBranches] = useState<Record<string, TreeNodeDescriptor[]>>({});
   const [selected, setSelected] = useState<TreeNodeDescriptor | null>(null);

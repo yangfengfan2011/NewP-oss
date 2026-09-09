@@ -1,4 +1,4 @@
-/* 组合页面拥有导航、面板与内嵌内容的密度；独立 CRUD 页面沿用原布局。 */
+/* 组合页面只拥有导航与外层面板；CRUD 内容样式由共享 UI 组件负责。 */
 .np-composed-page {
   gap: 12px;
   min-width: 0;
@@ -62,88 +62,11 @@
   margin-bottom: 16px;
 }
 
-.np-composed-page .sh-page-stack {
-  gap: 20px;
-}
-
-.np-composed-page .ant-descriptions .ant-descriptions-header {
-  margin-bottom: 8px;
-}
-
-.np-composed-page .ant-descriptions .ant-descriptions-header .ant-descriptions-title {
-  font-size: 14px;
-  line-height: 22px;
-  font-weight: 600;
-}
-
-.np-composed-page .ant-descriptions.ant-descriptions-bordered > .ant-descriptions-view .ant-descriptions-row > .ant-descriptions-item-label,
-.np-composed-page .ant-descriptions.ant-descriptions-bordered > .ant-descriptions-view .ant-descriptions-row > .ant-descriptions-item-content {
-  padding: 10px 12px;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.np-composed-page .ant-descriptions-bordered .ant-descriptions-item-label {
-  width: 112px;
-  color: var(--np-composition-secondary);
-}
-
-.np-composed-page .ant-descriptions .ant-descriptions-view > table {
-  table-layout: fixed;
-}
-
-.np-composed-page .np-crud-embedded {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
 .np-composed-page > .np-composed-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane > .np-crud-embedded {
   padding: 16px;
   background: var(--np-composition-surface);
   border: 1px solid var(--np-composition-border);
   border-radius: var(--np-composition-radius);
-}
-
-.np-composed-page .np-crud-search-bar {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 12px;
-  background: var(--np-composition-subtle);
-  border-radius: 6px;
-}
-
-.np-composed-page .np-crud-search-fields {
-  flex: 1 1 100%;
-  width: 100%;
-  min-width: 0;
-}
-
-.np-composed-page .np-standard-crud-filter-grid {
-  width: 100%;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-  gap: 12px;
-}
-
-.np-composed-page .np-crud-search-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  margin-left: auto;
-}
-
-.np-composed-page .np-standard-crud-table .ant-pro-card-body {
-  padding: 0;
-}
-
-.np-composed-page .ant-pro-table-list-toolbar-container {
-  padding-block: 0 12px;
-}
-
-.np-composed-page .np-search-table-footer {
-  padding-top: 12px;
 }
 
 @media (max-width: 900px) {

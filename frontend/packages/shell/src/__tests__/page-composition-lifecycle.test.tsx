@@ -52,7 +52,10 @@ async function render(browser = false, search = '', tree = false) {
 describe('whole composition lifecycle', () => {
   it('keeps the active tab within a node group, resets per-node filters, and defaults after a group change without replacing unrelated outer URL state', async () => {
     await render(false, '?external=keep', true);
-    for (let i = 0; i < 30 && !container.querySelector('[role=tab]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+    await vi.waitFor(async () => {
+      await act(async () => undefined);
+      expect([...container.querySelectorAll('[role=tab]')].some(tab => tab.textContent === 'b')).toBe(true);
+    });
     await click('b'); await click('filter b');
     expect(container.textContent).toContain('one:1');
     await click('a'); await click('b');
@@ -71,7 +74,10 @@ describe('whole composition lifecycle', () => {
   });
   it('selects a right-click target only after dirty-input protection, then opens its menu', async () => {
     await render(false, '', true);
-    for (let i = 0; i < 30 && !container.querySelector('[role=tab]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+    await vi.waitFor(async () => {
+      await act(async () => undefined);
+      expect([...container.querySelectorAll('[role=tab]')].some(tab => tab.textContent === 'b')).toBe(true);
+    });
     await click('change a');
     const target = [...container.querySelectorAll('.ant-tree-title')].find(node => node.textContent === 'two')!;
     await act(async () => target.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));

@@ -282,13 +282,12 @@ describe('organization person center list layout', () => {
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();
-    expect(container.querySelectorAll('.np-crud-workspace-title')).toHaveLength(1);
-    expect(container.querySelector('.np-crud-workspace-title')?.textContent).toBe('人员中心');
-    expect(container.querySelectorAll('.np-crud-workspace-header .ant-btn')).toHaveLength(1);
-    expect(container.querySelector('.np-crud-workspace-header .ant-btn-primary')?.textContent).toContain('新建人员');
+    expect(container.querySelector('.np-crud-workspace-header')).toBeNull();
+    expect(container.querySelector('.np-standard-crud-table .ant-btn-primary')?.textContent).toContain('新建人员');
     expect(container.querySelectorAll('.ant-btn-primary')).toHaveLength(1);
-    expect(container.querySelector('.np-crud-workspace-filter.ant-card')).not.toBeNull();
-    expect(container.querySelector('.np-crud-workspace-content.ant-card')).not.toBeNull();
+    expect(container.querySelector('.np-crud-workspace-panel.ant-card')).not.toBeNull();
+    expect(container.querySelector('.np-crud-workspace-body .np-crud-workspace-filter')).not.toBeNull();
+    expect(container.querySelector('.np-crud-workspace-body .np-crud-workspace-content')).not.toBeNull();
     expect(container.querySelector('.np-crud-table-section-fill')).toBeNull();
     expect(container.querySelector('.ant-table')).not.toBeNull();
     expect(container.querySelector('.ant-pagination')).not.toBeNull();

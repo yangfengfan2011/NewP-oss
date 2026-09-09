@@ -241,7 +241,8 @@ describe('organization person center detail layout', () => {
       expect(container.querySelector('.ant-descriptions')).not.toBeNull();
     });
     expect(container.querySelector('.ant-form')).toBeNull();
-    expect(container.textContent).toContain('人员详情');
+    expect(container.querySelector('.sh-page-header')).toBeNull();
+    expect(container.querySelector('.np-crud-detail-sections')).not.toBeNull();
     expect(container.textContent).toContain('停用');
     expect(container.textContent).toContain('基础信息');
     expect(container.textContent).toContain('组织信息');

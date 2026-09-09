@@ -1,0 +1,183 @@
+.np-standard-crud-filter-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+}
+
+.np-crud-workspace,
+.np-crud-workspace-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.np-crud-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 32px;
+  margin-bottom: 8px;
+}
+
+.np-crud-workspace-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.np-crud-workspace-title {
+  margin: 0 !important;
+  font-size: 18px !important;
+  line-height: 26px !important;
+}
+
+.np-crud-workspace-description {
+  margin: 4px 0 0 !important;
+}
+
+.np-crud-workspace-actions {
+  margin-left: auto;
+}
+
+.np-crud-workspace-filter {
+  min-width: 0;
+}
+
+.np-crud-workspace-content {
+  min-width: 0;
+}
+
+.np-crud-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px;
+  background: var(--np-crud-subtle);
+  border-radius: var(--np-crud-radius);
+}
+
+.np-crud-search-fields {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.np-crud-search-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.np-filter-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.np-filter-field .sh-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.np-filter-control {
+  width: 100%;
+}
+
+.np-filter-select {
+  width: 100%;
+}
+
+.np-standard-crud-table {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.np-crud-table-section {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.np-standard-crud-table .ant-pro-table {
+  width: 100%;
+}
+
+.np-search-table-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.np-search-table-footer {
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.np-search-table-footer .ant-pagination {
+  margin: 0 !important;
+}
+
+/* 独立与内嵌页面共用内容布局；容器仅决定是否提供外层面板。 */
+.np-crud-workspace-panel > .ant-card-body {
+  padding: 16px;
+}
+
+.np-search-table-page .ant-pro-card-body {
+  padding: 0;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-container {
+  padding-block: 0 12px;
+}
+
+.np-crud-detail-sections {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-header {
+  margin-bottom: 8px;
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-header .ant-descriptions-title {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.np-crud-detail.ant-descriptions.ant-descriptions-bordered > .ant-descriptions-view .ant-descriptions-row > .ant-descriptions-item-label,
+.np-crud-detail.ant-descriptions.ant-descriptions-bordered > .ant-descriptions-view .ant-descriptions-row > .ant-descriptions-item-content {
+  padding: 10px 12px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.np-crud-detail.ant-descriptions-bordered .ant-descriptions-item-label {
+  width: 112px;
+  color: var(--np-crud-secondary);
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-view {
+  background: var(--np-crud-surface);
+}
+
+.np-crud-detail.ant-descriptions .ant-descriptions-view > table {
+  table-layout: fixed;
+}

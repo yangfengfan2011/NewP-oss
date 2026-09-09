@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Card, Space, Typography } from 'antd';
+import type { CSSProperties, ReactNode } from 'react';
+import { Card, Space, Typography, theme } from 'antd';
 
 const { Title, Paragraph } = Typography;
 
@@ -20,36 +20,38 @@ export function CrudWorkspacePage({
   filterBar,
   children,
 }: CrudWorkspacePageProps) {
-  if (embedded) return <div className="np-crud-embedded">
-    {primaryActions && <Space className="np-crud-workspace-actions">{primaryActions}</Space>}
-    {filterBar}
-    {children}
-  </div>;
-  const hasHeader = Boolean(title || description || primaryActions);
+  const { token } = theme.useToken();
+  const hasHeader = Boolean((!embedded && (title || description)) || primaryActions);
 
-  return (
-    <div className="np-crud-workspace">
+  const content = (
+    <div className="np-crud-workspace-body">
       {hasHeader ? (
         <div className="np-crud-workspace-header">
-          <div className="np-crud-workspace-heading">
+          {!embedded && (title || description) && <div className="np-crud-workspace-heading">
             {title ? (
               <Title level={3} className="np-crud-workspace-title">
                 {title}
               </Title>
             ) : null}
             {description ? <Paragraph className="np-crud-workspace-description">{description}</Paragraph> : null}
-          </div>
+          </div>}
           {primaryActions ? <Space className="np-crud-workspace-actions">{primaryActions}</Space> : null}
         </div>
       ) : null}
       {filterBar ? (
-        <Card size="small" className="np-crud-workspace-filter">
+        <div className="np-crud-workspace-filter">
           {filterBar}
-        </Card>
+        </div>
       ) : null}
-      <Card size="small" className="np-crud-workspace-content">
+      <div className="np-crud-workspace-content">
         {children}
-      </Card>
+      </div>
     </div>
   );
+  return <div className={`np-crud-workspace${embedded ? ' np-crud-embedded' : ''}`} style={{
+    '--np-crud-subtle': token.colorFillAlter,
+    '--np-crud-radius': `${token.borderRadius}px`,
+  } as CSSProperties}>
+    {embedded ? content : <Card size="small" className="np-crud-workspace-panel">{content}</Card>}
+  </div>;
 }

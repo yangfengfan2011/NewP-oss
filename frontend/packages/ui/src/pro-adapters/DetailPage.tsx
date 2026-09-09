@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ReactElement, type ReactNode } from 'react';
+import { lazy, Suspense, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import theme from 'antd/es/theme';
 import type { ProDescriptionsItemProps, ProDescriptionsProps } from '@ant-design/pro-descriptions';
 import { LoadingBlock } from './LoadingBlock';
 
@@ -25,9 +26,12 @@ export function DetailPage<TRecord extends Record<string, unknown> = Record<stri
   actions,
   column = 2,
 }: DetailPageProps<TRecord>) {
+  const { token } = theme.useToken();
   return (
     <Suspense fallback={<LoadingBlock message="正在加载详情视图..." />}>
       <ProDescriptions<TRecord>
+        className="np-crud-detail"
+        style={{ '--np-crud-secondary': token.colorTextSecondary, '--np-crud-surface': token.colorBgContainer } as CSSProperties}
         title={title}
         dataSource={dataSource}
         columns={columns}

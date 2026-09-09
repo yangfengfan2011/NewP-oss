@@ -41,7 +41,7 @@ export default function StandardCrudResolvedDetailSections({
   registration,
   textFor,
 }: StandardCrudResolvedDetailSectionsProps) {
-  return presentation.sections.map((section) => {
+  return <div className="np-crud-detail-sections">{presentation.sections.map((section) => {
     if (section.state === 'unavailable') {
       return (
         <section
@@ -95,5 +95,5 @@ export default function StandardCrudResolvedDetailSections({
         }))}
       />
     );
-  });
+  })}</div>;
 }

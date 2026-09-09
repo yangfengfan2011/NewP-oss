@@ -33,7 +33,6 @@ export function PageEntry({ page }: { page: PageRef }) {
   return <PageComposition><div className="sh-page np-composed-page" style={{
     '--np-composition-surface': token.colorBgContainer,
     '--np-composition-border': token.colorBorderSecondary,
-    '--np-composition-subtle': token.colorFillAlter,
     '--np-composition-secondary': token.colorTextSecondary,
     '--np-composition-radius': `${token.borderRadiusLG}px`,
   } as CSSProperties}>

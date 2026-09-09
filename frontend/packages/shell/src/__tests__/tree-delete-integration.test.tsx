@@ -83,9 +83,10 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
   try {
     await act(async () => root.render(<StrictMode><RouterProvider router={router} /></StrictMode>));
     await waitFor(() => Boolean(container.querySelector('.ant-tree-title')));
-    expect([...container.querySelectorAll('aside > button')].map(button => button.textContent?.replace(/\s/g, ''))).toEqual(['CreateCompany', 'Department']);
+    const treeActions = container.querySelector('[role=toolbar][aria-label="树操作"]')!;
+    expect([...treeActions.querySelectorAll('button')].map(button => button.textContent?.replace(/\s/g, ''))).toEqual(['CreateCompany', 'Department']);
     if (scenario === 'create') {
-      await act(async () => (container.querySelectorAll('aside > button')[1] as HTMLElement).click());
+      await act(async () => (treeActions.querySelectorAll('button')[1] as HTMLElement).click());
       await waitFor(() => Boolean(document.querySelector('.ant-drawer')));
       expect(document.body.textContent).toContain('Action_Create');
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);

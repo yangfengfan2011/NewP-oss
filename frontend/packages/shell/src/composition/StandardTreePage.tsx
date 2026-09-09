@@ -3,6 +3,12 @@ import Tree from 'antd/es/tree';
 import type { DataNode } from 'antd/es/tree';
 import Dropdown from 'antd/es/dropdown';
 import Button from 'antd/es/button';
+import Card from 'antd/es/card';
+import ConfigProvider from 'antd/es/config-provider';
+import Space from 'antd/es/space';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
+import DownOutlined from '@ant-design/icons/DownOutlined';
+import theme from 'antd/es/theme';
 import { useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, TreeNodeNotFoundError, type PageProps, type PageRef, type TreeNodeDescriptor, type TreeView } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
@@ -21,6 +27,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const navigationRef = useRef(navigation); navigationRef.current = navigation;
   const instanceId = useId();
   const { t } = useLocalization();
+  const { token } = theme.useToken();
   const view = metadata?.viewDocuments.find(document => document.view.key === input.parameters.viewKey)?.view as unknown as TreeView;
   const treeScope = input.treeScope!;
   const provider = useMemo(() => ModuleRegistry.getAllModules().flatMap(module => module.treeProviders ?? []).find(item => item.key === view.providerKey)!, [view.providerKey]);
@@ -165,7 +172,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   };
   const data = (nodes: TreeNodeDescriptor[]): DataNode[] => nodes.map(node => {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
-    const title = <span title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? '（停用）' : ''}</span>;
+    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? '（停用）' : ''}</span>;
     return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
       title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).map(menu => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => select(node, () => { setMenuNode(null); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
         onOpenChange={open => { if (open) select(node, () => setMenuNode(node.nodeKey)); else setMenuNode(null); }}>{title}</Dropdown>,
@@ -173,19 +180,27 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   });
   const descriptors = [...roots, ...Object.values(branches).flat()];
   const selectedType = view.nodeTypes.find(type => type.key === selected?.nodeType);
-  return <TreeInstanceContext.Provider value={instanceId}><div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 28%) 1fr', gap: 24 }}>
-    <aside aria-label="结构树">
+  return <TreeInstanceContext.Provider value={instanceId}><div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 28%) 1fr', gap: token.marginLG }}>
+    <aside aria-label="结构树" style={{ minWidth: 0 }}>
+      <Card size="small" style={{ height: '100%', minHeight: 320 }}
+        styles={{ header: { minHeight: token.controlHeightLG, padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
+        title={view.treeActions?.length ? <Space role="toolbar" aria-label="树操作" size={token.marginXS} style={{ width: '100%' }} wrap>
+          {view.treeActions.map(action => <Button key={action.key} size="small" icon={action.standardAction === 'create' ? <PlusOutlined aria-hidden="true" /> : undefined}
+            onClick={() => runtime.leave(() => { setEditContext(undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
+        </Space> : undefined}>
       <TreeSearch provider={provider} scope={treeScope} view={view} choose={key => runtime.leave(() => { void locate(key); })} />
-      {(view.treeActions ?? []).map(action => <Button key={action.key} onClick={() => runtime.leave(() => { setEditContext(undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
       {error && <div role="alert">树读取失败：{error}<Button onClick={() => runtime.leave(() => { if (pendingChanges.current.size) void flush().catch(() => undefined); else void reloadRoots(); })}>重试</Button></div>}
       {locationError && <div role="alert">定位读取失败：{locationError}<Button onClick={() => runtime.leave(() => { if (locationTarget.current) void locate(locationTarget.current); })}>重试定位</Button></div>}
       {locationNotice && <div role="status">{locationNotice}</div>}
       {Object.entries(branchErrors).map(([key, message]) => <div key={key} role="alert">分支读取失败：{message}<Button onClick={() => void readBranch(key)}>重试分支</Button></div>)}
-      <Tree treeData={data(roots)} selectedKeys={selected ? [selected.nodeKey] : []} expandedKeys={expanded}
+      <ConfigProvider theme={{ components: { Tree: { titleHeight: token.controlHeight, nodeSelectedBg: token.colorPrimaryBg, nodeSelectedColor: token.colorPrimaryText } } }}>
+      <Tree blockNode showLine={{ showLeafIcon: false }} switcherIcon={<DownOutlined aria-hidden="true" />} treeData={data(roots)} selectedKeys={selected ? [selected.nodeKey] : []} expandedKeys={expanded}
         onExpand={keys => setExpanded(keys.map(String))}
         onSelect={keys => { const node = descriptors.find(item => item.nodeKey === keys[0]); if (node) select(node); }}
         loadData={async node => { if (!branches[String(node.key)]) await readBranch(String(node.key)); }} />
+      </ConfigProvider>
       {!roots.length && !error && <p>暂无节点</p>}
+      </Card>
     </aside>
     <section aria-label="节点内容" style={{ minWidth: 0 }}>
       {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${selectionEpoch}`} page={selectedType.pageRef} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>请选择节点</p>}

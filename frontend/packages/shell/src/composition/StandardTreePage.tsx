@@ -127,8 +127,8 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
         if (scopeSignal.aborted) return;
         rootsRef.current = next.roots; branchesRef.current = next.branches; selectedRef.current = next.selected;
         setRoots(next.roots); setBranches(next.branches); setSelected(next.selected); setExpanded(next.expanded);
-        navigationRef.current?.locate(next.selected?.nodeKey ?? null, pending.some(([, change]) => change.selectCreated && change.impact.kind === 'located' && change.impact.operation === 'create') ? null : undefined);
-        if (pending.some(([, change]) => change.selectCreated && change.impact.kind === 'located' && change.impact.operation === 'create')) setSelectionEpoch(value => value + 1);
+        navigationRef.current?.locate(next.selected?.nodeKey ?? null, pending.some(([, change]) => change.selectCreated && (change.impact.kind === 'located' || change.impact.kind === 'reload') && change.impact.operation === 'create') ? null : undefined);
+        if (pending.some(([, change]) => change.selectCreated && (change.impact.kind === 'located' || change.impact.kind === 'reload') && change.impact.operation === 'create')) setSelectionEpoch(value => value + 1);
         pending.forEach(([key, change]) => { if (pendingChanges.current.get(key) === change) pendingChanges.current.delete(key); });
         setError(null);
       } catch (failure) { if (!scopeSignal.aborted) { setError(`已保存，刷新失败：${String(failure)}`); throw failure; } }
@@ -149,10 +149,10 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       }
       if (scopeSignal.aborted) return;
       if (impact.kind === 'unrelated') return;
-      const key = impact.kind === 'located' ? impact.nodeKey : unknownChangeKey;
+      const key = impact.kind !== 'unknown' ? impact.nodeKey : unknownChangeKey;
       const previous = pendingChanges.current.get(key);
       const affectedParents = new Set(previous?.affectedParents ?? []);
-      if (impact.kind === 'located') {
+      if (impact.kind !== 'unknown') {
         if (impact.beforeLocation) affectedParents.add(impact.beforeLocation.parentNodeKey);
         if (impact.afterLocation) affectedParents.add(impact.afterLocation.parentNodeKey);
       }

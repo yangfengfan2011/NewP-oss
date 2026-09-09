@@ -32,7 +32,8 @@ export interface ResourceChange {
 }
 export interface TreeNodeLocation { nodeKey: string; parentNodeKey: string | null }
 export type TreeChange = { kind: 'unrelated' } | { kind: 'unknown' } | {
-  kind: 'located'; operation: ResourceChange['operation']; nodeKey: string;
+  /** reload 保留变更身份，由服务器重新判定整棵已加载树的成员关系。 */
+  kind: 'located' | 'reload'; operation: ResourceChange['operation']; nodeKey: string;
   beforeLocation?: TreeNodeLocation; afterLocation?: TreeNodeLocation;
 };
 /** Provider 明确目标不存在；与权限、网络及路径损坏失败区分。 */

@@ -73,5 +73,5 @@ it('reconciles filtered trees through server reads rather than guessing database
   filtered.relationSource!.nodes[1].filters = [{ field: 'IsEnabled', operator: '=', value: true }];
   const provider = createRelationTreeProvider(filtered);
   expect(await provider.resolveChange({ resourceKey: 'organization.department', operation: 'update', id: 'd1',
-    before: { CompanyId: 'c1', ParentDepartmentId: null, IsEnabled: true }, after: { CompanyId: 'c1', ParentDepartmentId: null, IsEnabled: false } }, scope)).toEqual({ kind: 'unknown' });
+    before: { CompanyId: 'c1', ParentDepartmentId: null, IsEnabled: true }, after: { CompanyId: 'c1', ParentDepartmentId: null, IsEnabled: false } }, scope)).toMatchObject({ kind: 'reload', nodeKey: 'department:d1', operation: 'update' });
 });

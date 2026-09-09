@@ -245,6 +245,15 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
                     new RelationTreeSql(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
                         treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new NarrowDepartmentQuery()]));
                 Assert.Equal(0, (await constrained.SearchAsync(filtered, "Department", 1, 20, default)).Total);
+                // 可选空值条件须沿用普通 CRUD 的忽略语义，非空条件和 isNull 仍须执行。
+                var optional = new RelationTreeReader(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
+                    new RelationTreeSql(treeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(),
+                        treeScope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>(), [new OptionalDepartmentQuery()]));
+                Assert.Equal(1, (await optional.SearchAsync(definition, "Department", 1, 20, default)).Total);
+                Assert.Single((await optional.ChildrenAsync(definition, "company:" + company, default))!);
+                var staticNull = definition with { Source = new() { Nodes = [definition.Source.Nodes[0], departmentNode with
+                { Filters = [new() { Field = "ECODE", Operator = "=", Value = JsonSerializer.SerializeToElement<object?>(null) }] }] } };
+                Assert.Equal(0, (await optional.SearchAsync(staticNull, "Department", 1, 20, default)).Total);
                 var selfTree = definition with { Source = new() { Nodes = [departmentNode with
                 { RootWhenParentNull = true, Parents = [departmentNode.Parents[0]] }] } };
                 Assert.Equal(3, (await reader.RootsAsync(selfTree, default)).Count);
@@ -296,6 +305,15 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
         public IReadOnlyList<ICP.Platform.Crud.Models.StandardCrudQueryCondition> BuildConditions(
             ICP.Platform.Crud.Descriptors.StandardCrudDescriptor descriptor, ICP.Platform.Crud.Models.StandardCrudListQuery query) =>
             [new("ECODE", "=", "D1")];
+    }
+
+    private sealed class OptionalDepartmentQuery : IStandardCrudQueryCustomizer
+    {
+        public string ResourceKey => "organization.department";
+        public IReadOnlyList<ICP.Platform.Crud.Models.StandardCrudQueryCondition> BuildConditions(
+            ICP.Platform.Crud.Descriptors.StandardCrudDescriptor descriptor, ICP.Platform.Crud.Models.StandardCrudListQuery query) =>
+            [new("ENAME", "=", null), new("ENAME", "contains", null, "optional", "or"),
+                new("ECODE", "=", "D2", "optional", "or"), new("ParentDepartmentId", "isNull", null)];
     }
 
     private sealed class TestAuthentication(Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions> options,

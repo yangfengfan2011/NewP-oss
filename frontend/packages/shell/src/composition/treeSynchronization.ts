@@ -14,6 +14,7 @@ export async function synchronizeTree(provider: TreeProviderBinding, scope: Reco
     affectedParents?.forEach(parent => parents.add(parent));
     if (impact.kind === 'unrelated') continue;
     if (impact.kind === 'unknown') { parents.add(null); Object.keys(snapshot.branches).forEach(key => parents.add(key)); continue; }
+    if (impact.kind === 'reload') { parents.add(null); Object.keys(snapshot.branches).forEach(key => parents.add(key)); }
     if (impact.beforeLocation) parents.add(impact.beforeLocation.parentNodeKey);
     if (impact.afterLocation) parents.add(impact.afterLocation.parentNodeKey);
     if (impact.operation === 'create' && selectCreated) target = impact.nodeKey;

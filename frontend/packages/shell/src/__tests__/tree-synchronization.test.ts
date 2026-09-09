@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { synchronizeTree } from '../composition/treeSynchronization';
-import type { TreeProviderBinding } from '@icp-platform/sdk';
+import { TreeNodeNotFoundError, type TreeProviderBinding } from '@icp-platform/sdk';
 const node = (nodeKey: string) => ({ nodeKey, nodeType: 'node', label: nodeKey, hasChildren: true });
 it('refreshes both move parents once and restores the selected node using its current path', async () => {
   const children = vi.fn(async (_scope: unknown, parent: string) => parent === 'new' ? [node('d')] : []);
@@ -40,5 +40,14 @@ it('coalesces consecutive pending moves followed by delete without querying a de
 it('unknown mapping recovers all loaded branches and current path without assuming only roots were affected', async () => {
   const provider = { roots: vi.fn(async () => [node('root')]), children: vi.fn(async () => []), path: vi.fn(async () => [node('root')]) } as unknown as TreeProviderBinding;
   await synchronizeTree(provider, {}, { roots: [node('root')], branches: { root: [], p: [] }, selected: node('root'), expanded: [] }, [{ impact: { kind: 'unknown' }, selectCreated: false }]);
+  expect(provider.roots).toHaveBeenCalledTimes(1); expect(provider.children).toHaveBeenCalledTimes(2);
+});
+
+it.each([true, false])('reload preserves creation selection when visible=%s and rechecks every loaded branch', async visible => {
+  const provider = { roots: vi.fn(async () => [node('root')]), children: vi.fn(async (_scope, key) => key === 'root' && visible ? [node('new')] : []),
+    path: vi.fn(async (_scope, key) => { if (key === 'new' && !visible) throw new TreeNodeNotFoundError(); return key === 'new' ? [node('root'), node('new')] : [node('root')]; }) } as unknown as TreeProviderBinding;
+  const result = await synchronizeTree(provider, {}, { roots: [node('root')], branches: { root: [], other: [] }, selected: node('root'), expanded: [] },
+    [{ impact: { kind: 'reload', operation: 'create', nodeKey: 'new', afterLocation: { nodeKey: 'new', parentNodeKey: 'root' } }, selectCreated: true }]);
+  expect(result.selected?.nodeKey).toBe(visible ? 'new' : 'root');
   expect(provider.roots).toHaveBeenCalledTimes(1); expect(provider.children).toHaveBeenCalledTimes(2);
 });

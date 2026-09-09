@@ -80,6 +80,8 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
             var resource = resources.FindByResourceKey(node.ResourceKey) ?? throw new InvalidOperationException($"Tree resource is not registered: {node.ResourceKey}");
             return (applyResourceConditions ? customizers.SingleOrDefault(item => item.ResourceKey == node.ResourceKey)?.BuildConditions(resource,
                 new StandardCrudListQuery(QueryScope: new Dictionary<string, string?> { ["kind"] = "global" })) ?? [] : [])
+                // 与 Standard CRUD 一致：未赋值的可选查询不参与过滤；静态条件仍保持显式语义。
+                .Where(condition => condition.Value is not null || condition.Operator is not ("=" or "contains"))
                 .Concat(node.Filters.Select(filter => new StandardCrudQueryCondition(filter.Field, filter.Operator, Scalar(filter.Value)))).ToArray();
         }
 
@@ -118,24 +120,13 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
         // 资源字段白名单和物理映射都来自服务器；所有值通过参数进入命令。
         string Project(RelationTreeNodeSource node)
         {
-            var resource = resources.FindByResourceKey(node.ResourceKey)
-                ?? throw new InvalidOperationException($"Tree resource is not registered: {node.ResourceKey}");
-            if (resource.ModuleId != definition.ModuleId || resource.ModelName != node.Model || resource.IdField != node.IdField)
-                throw new InvalidOperationException($"Tree resource ownership/model mismatch: {node.Key}");
-            var entity = db.Model.FindEntityType(db.ResolveModelKey(definition.ModuleId + "/" + node.Model))!;
-            var table = StoreObjectIdentifier.Table(entity.GetTableName()!, entity.GetSchema());
+            var entity = entities[node.Key];
             if (entity.FindPrimaryKey()?.Properties is not { Count: 1 } primaryKey || primaryKey[0].Name != node.IdField)
                 throw new InvalidOperationException($"Tree requires the model's single primary key: {node.Key}");
             if (node.EnabledField is not null && entity.FindProperty(node.EnabledField)?.ClrType != typeof(bool))
                 throw new InvalidOperationException($"Tree enabled field must be boolean: {node.Key}");
             // 列映射同时验证当前资源的显式读取白名单。
-            string Column(string field)
-            {
-                if (!resource.FieldSet.ListFields.Contains(field, StringComparer.Ordinal))
-                    throw new InvalidOperationException($"Tree field is not readable: {node.ResourceKey}/{field}");
-                var property = entity.FindProperty(field) ?? throw new InvalidOperationException($"Unknown tree field: {field}");
-                return "e." + Quote(property.GetColumnName(table)!);
-            }
+            string Column(string field) => ColumnFor(node, "e", field);
             // 节点身份、搜索及顺序使用字符串字段，与公共树契约一致。
             foreach (var field in new[] { node.IdField, node.LabelField, node.CodeField, node.SortField })
                 if (entity.FindProperty(field) is not { ClrType: var fieldType, IsNullable: false } || fieldType != typeof(string))

@@ -31,8 +31,6 @@ export function createRelationTreeProvider(view: TreeView): TreeProviderBinding 
       if (!nodes.length) return { kind: 'unrelated' };
       if (nodes.length !== 1 || !change.id) return { kind: 'unknown' };
       const node = nodes[0];
-      // 静态条件可能使节点进入或离开树；由宿主重新读取已加载范围，避免客户端复制数据库比较规则。
-      if (source.nodes.some(item => item.filters?.length)) return { kind: 'unknown' };
       const location = (fields: Record<string, unknown> | undefined): TreeNodeLocation | undefined => {
         if (!fields) return undefined;
         for (const parent of node.parents ?? []) {
@@ -46,7 +44,8 @@ export function createRelationTreeProvider(view: TreeView): TreeProviderBinding 
       const beforeLocation = location(change.before);
       const afterLocation = location(change.after);
       if ((change.operation !== 'create' && !beforeLocation) || (change.operation !== 'delete' && !afterLocation)) return { kind: 'unknown' };
-      return { kind: 'located', operation: change.operation, nodeKey: `${node.key}:${change.id}`, beforeLocation, afterLocation };
+      // 静态条件可能使节点进入或离开树；正常重读不能进入 unknown 的异常恢复路径。
+      return { kind: source.nodes.some(item => item.filters?.length) ? 'reload' : 'located', operation: change.operation, nodeKey: `${node.key}:${change.id}`, beforeLocation, afterLocation };
     },
   };
 }

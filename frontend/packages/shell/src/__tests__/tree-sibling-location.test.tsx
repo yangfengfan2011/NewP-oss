@@ -18,7 +18,10 @@ it('keeps sibling tree instances separate and restores the active instance from 
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
     const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [], viewDocuments: [tree, inner, outer].map(view => ({ type: 'view', view })) }}><PageEntry page={{ pageKey: 'platform.tabs', parameters: { viewKey: 'outer' } }} /></RuntimeMetadataProvider></LocalizationProvider> }], { initialEntries: [address] });
     await act(async () => root.render(<RouterProvider router={router} />));
-    const panel = () => [...(container.querySelector('[role=tablist]')?.parentElement?.children ?? [])].find(element => element.getAttribute('role') === 'tabpanel' && !element.hasAttribute('hidden')) as HTMLElement;
+    const panel = () => {
+      const activeTab = container.querySelector('[role=tablist] [role=tab][aria-selected=true]');
+      return document.getElementById(activeTab?.getAttribute('aria-controls') ?? '')!;
+    };
     const wait = async () => { for (let i = 0; i < 100 && !panel()?.querySelector('input[aria-label="local query"]'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); expect(panel()?.querySelector('input[aria-label="local query"]')).not.toBeNull(); };
     await wait();
     return { container, router, panel, wait, dispose: async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); } };

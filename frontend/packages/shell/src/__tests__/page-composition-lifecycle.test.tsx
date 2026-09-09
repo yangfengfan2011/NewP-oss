@@ -27,7 +27,7 @@ let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); router?.dispose(); vi.unstubAllGlobals(); });
 async function click(text: string) {
-  const button = [...document.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === text.replace(/\s/g, ''));
+  const button = [...document.querySelectorAll('button, [role=tab]')].find(button => button.textContent?.replace(/\s/g, '') === text.replace(/\s/g, ''));
   expect(button, text).toBeDefined();
   await act(async () => button!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 }

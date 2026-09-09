@@ -34,17 +34,18 @@ it.each(['move', 'delete', 'retry'])('defers %s while inactive, preserves naviga
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [], viewDocuments: [{ type: 'view', view: tree }, { type: 'view', view: tabs }] }}><PageEntry page={{ pageKey: 'platform.tabs', parameters: { viewKey: 'tabs' } }} /></RuntimeMetadataProvider></LocalizationProvider> }]);
   const click = async (selector: string) => { await act(async () => container.querySelector(selector)!.dispatchEvent(new MouseEvent('click', { bubbles: true }))); };
+  const clickTab = async (label: string) => act(async () => [...container.querySelectorAll<HTMLElement>('[role=tab]')].find(tab => tab.textContent === label)!.click());
   try {
     await act(async () => root.render(<RouterProvider router={router} />));
     for (let i = 0; i < 50 && !container.querySelector('.ant-tree-switcher'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     await click('.ant-tree-switcher');
     const title = [...container.querySelectorAll('.ant-tree-title')].find(item => item.textContent === 'd')!;
     await act(async () => title.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await click('[role=tab]:nth-child(2)');
+    await clickTab('Directory');
     children.mockClear();
     await act(async () => [...container.querySelectorAll('button')].find(item => item.textContent === 'move')!.click());
     expect(new URLSearchParams(router.state.location.search).get('tab')).toBe('directory'); expect(children).not.toHaveBeenCalled();
-    await click('[role=tab]:first-child');
+    await clickTab('Tree');
     if (scenario === 'retry') {
       expect(container.textContent).toContain('已保存，刷新失败');
       children.mockClear();

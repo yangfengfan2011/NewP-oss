@@ -178,16 +178,16 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       <TreeSearch provider={provider} scope={treeScope} view={view} choose={key => runtime.leave(() => { void locate(key); })} />
       {(view.treeActions ?? []).map(action => <Button key={action.key} onClick={() => runtime.leave(() => { setEditContext(undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
       {error && <div role="alert">树读取失败：{error}<Button onClick={() => runtime.leave(() => { if (pendingChanges.current.size) void flush().catch(() => undefined); else void reloadRoots(); })}>重试</Button></div>}
-      {locationError && <div role="alert">定位读取失败：{locationError}<button onClick={() => runtime.leave(() => { if (locationTarget.current) void locate(locationTarget.current); })}>重试定位</button></div>}
+      {locationError && <div role="alert">定位读取失败：{locationError}<Button onClick={() => runtime.leave(() => { if (locationTarget.current) void locate(locationTarget.current); })}>重试定位</Button></div>}
       {locationNotice && <div role="status">{locationNotice}</div>}
-      {Object.entries(branchErrors).map(([key, message]) => <div key={key} role="alert">分支读取失败：{message}<button onClick={() => void readBranch(key)}>重试分支</button></div>)}
+      {Object.entries(branchErrors).map(([key, message]) => <div key={key} role="alert">分支读取失败：{message}<Button onClick={() => void readBranch(key)}>重试分支</Button></div>)}
       <Tree treeData={data(roots)} selectedKeys={selected ? [selected.nodeKey] : []} expandedKeys={expanded}
         onExpand={keys => setExpanded(keys.map(String))}
         onSelect={keys => { const node = descriptors.find(item => item.nodeKey === keys[0]); if (node) select(node); }}
         loadData={async node => { if (!branches[String(node.key)]) await readBranch(String(node.key)); }} />
       {!roots.length && !error && <p>暂无节点</p>}
     </aside>
-    <section aria-label="节点内容">
+    <section aria-label="节点内容" style={{ minWidth: 0 }}>
       {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${selectionEpoch}`} page={selectedType.pageRef} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>请选择节点</p>}
       {editPage && <PageOutlet key={`editor:${editContext?.nodeKey ?? "root"}:${String(editPage.parameters?.actionKey ?? editPage.parameters?.standardAction)}`} page={editPage} context={editContext} close={() => setEditPage(null)} />}
     </section>

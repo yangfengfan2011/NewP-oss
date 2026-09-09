@@ -1,4 +1,5 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react';
+import Tabs from 'antd/es/tabs';
 import { useLocalization } from '@icp-platform/core';
 import type { PageProps, TabView } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
@@ -22,25 +23,22 @@ export default function StandardTabPage({ input }: PageProps) {
   const [opened, setOpened] = useState(() => new Set([selected]));
   useEffect(() => { setOpened(current => current.has(selected) ? current : new Set(current).add(selected)); }, [selected]);
   const visibleTabs = new Set([...opened, selected]);
-  return <div>
-    <div role="tablist" style={{ display: 'flex', gap: 8, borderBottom: '1px solid #ddd', marginBottom: 16 }}>
-      {view.tabs.map(tab => <button key={tab.key} role="tab" id={`${id}-${tab.key}`} aria-controls={`${id}-panel-${tab.key}`} aria-selected={selected === tab.key}
-        onClick={() => {
-          if (selected === tab.key) return;
-          if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(tab.key, treeNavigation ? treeLocations.current.get(tab.key) ?? { nodeKey: null, nodeTab: null } : undefined); }
-          else runtime.leave(() => { setSelected(tab.key); setOpened(current => new Set(current).add(tab.key)); });
-        }}>
-        {t(`${view.dicKey}.${tab.titleKey}`, tab.titleKey)}
-      </button>)}
-    </div>
-    {view.tabs.filter(tab => visibleTabs.has(tab.key)).map(tab => <div key={tab.key} role="tabpanel" id={`${id}-panel-${tab.key}`} aria-labelledby={`${id}-${tab.key}`} hidden={tab.key !== selected}>
-      <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} treeNavigation={treeNavigation ? {
+  return <Tabs id={id} activeKey={selected} destroyOnHidden={false} animated={false}
+    onChange={key => {
+      if (selected === key) return;
+      if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(key, treeNavigation ? treeLocations.current.get(key) ?? { nodeKey: null, nodeTab: null } : undefined); }
+      else runtime.leave(() => { setSelected(key); setOpened(current => new Set(current).add(key)); });
+    }}
+    items={view.tabs.map(tab => ({
+      key: tab.key,
+      label: t(`${view.dicKey}.${tab.titleKey}`, tab.titleKey),
+      forceRender: visibleTabs.has(tab.key),
+      children: <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} treeNavigation={treeNavigation ? {
         ...(treeLocations.current.get(tab.key) ?? { nodeKey: null, nodeTab: null }),
         locate: (nodeKey, nodeTab) => {
           treeLocations.current.set(tab.key, { nodeKey, nodeTab: nodeTab === undefined ? treeLocations.current.get(tab.key)?.nodeTab ?? null : nodeTab });
           if (tab.key === selected) treeNavigation.locate(nodeKey, nodeTab);
         },
-      } : null} />
-    </div>)}
-  </div>;
+      } : null} />,
+    }))} />;
 }

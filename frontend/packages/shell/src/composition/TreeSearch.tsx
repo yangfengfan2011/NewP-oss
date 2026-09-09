@@ -1,4 +1,12 @@
 import { useEffect, useState } from 'react';
+import SearchOutlined from '@ant-design/icons/SearchOutlined';
+import Alert from 'antd/es/alert';
+import Button from 'antd/es/button';
+import Card from 'antd/es/card';
+import Empty from 'antd/es/empty';
+import Input from 'antd/es/input';
+import Spin from 'antd/es/spin';
+import theme from 'antd/es/theme';
 import { useLocalization } from '@icp-platform/core';
 import type { TreeProviderBinding, TreeView } from '@icp-platform/sdk';
 
@@ -13,6 +21,7 @@ export function TreeSearch({ provider, scope, view, choose }: {
   provider: TreeProviderBinding; scope: Record<string, unknown>; view: TreeView; choose: (key: string) => void;
 }) {
   const { t } = useLocalization();
+  const { token } = theme.useToken();
   const [keyword, setKeyword] = useState('');
   const [pagination, setPagination] = useState({ provider, scope, page: 1 });
   const page = pagination.provider === provider && pagination.scope === scope ? pagination.page : 1;
@@ -35,23 +44,25 @@ export function TreeSearch({ provider, scope, view, choose }: {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [keyword, opened, page, provider, retry, scope]);
-  return <div style={{ position: 'relative', margin: '12px 0' }}>
-    <input aria-label="搜索节点" placeholder="搜索名称或编码" value={keyword} onFocus={() => { if (keyword.trim() && !opened) { setPage(1); setItems([]); setOpened(true); } }}
+  return <div style={{ position: 'relative', marginBottom: token.marginSM }}>
+    <Input aria-label="搜索节点" placeholder="搜索名称或编码" prefix={<SearchOutlined style={{ color: token.colorTextPlaceholder }} />} allowClear value={keyword} onFocus={() => { if (keyword.trim() && !opened) { setPage(1); setItems([]); setOpened(true); } }}
       onChange={event => { setKeyword(event.target.value); setPage(1); setItems([]); setOpened(!!event.target.value.trim()); }} />
-    {opened && <div aria-label="搜索结果" style={{ position: 'absolute', zIndex: 10, width: '100%', background: 'white', border: '1px solid #ddd', padding: 8, maxHeight: 360, overflowY: 'auto' }}>
-      <button onClick={() => setOpened(false)}>关闭搜索结果</button>
+    {opened && <Card aria-label="搜索结果" size="small" title="搜索结果"
+      extra={<Button type="text" size="small" onClick={() => setOpened(false)}>关闭搜索结果</Button>}
+      style={{ position: 'absolute', zIndex: token.zIndexPopupBase, width: '100%', marginTop: token.marginXS, boxShadow: token.boxShadowSecondary }}
+      styles={{ body: { padding: token.paddingXS, maxHeight: 360, overflowY: 'auto' } }}>
       {items.map(item => {
         const type = view.nodeTypes.find(value => value.key === item.node.nodeType);
-        return <button key={item.node.nodeKey} aria-label={`定位节点 ${item.node.label}`} style={{ display: 'block', width: '100%', textAlign: 'left', whiteSpace: 'normal', overflowWrap: 'anywhere', padding: 8 }} onClick={() => { choose(item.node.nodeKey); setOpened(false); }}>
-          <Highlight text={item.node.label} keyword={keyword.trim()} /> {type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}
-          {item.node.code && <> · <Highlight text={item.node.code} keyword={keyword.trim()} /></>}
-          <div><Highlight text={item.path.map(node => node.label).join(' / ')} keyword={keyword.trim()} /></div>
-        </button>;
+        return <Button type="text" block key={item.node.nodeKey} aria-label={`定位节点 ${item.node.label}`} style={{ display: 'block', height: 'auto', textAlign: 'left', whiteSpace: 'normal', overflowWrap: 'anywhere', padding: token.paddingXS }} onClick={() => { choose(item.node.nodeKey); setOpened(false); }}>
+          <span><Highlight text={item.node.label} keyword={keyword.trim()} /> {type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}
+            {item.node.code && <> · <Highlight text={item.node.code} keyword={keyword.trim()} /></>}</span>
+          <span style={{ display: 'block', color: token.colorTextSecondary, fontSize: token.fontSizeSM }}><Highlight text={item.path.map(node => node.label).join(' / ')} keyword={keyword.trim()} /></span>
+        </Button>;
       })}
-      {loading && <p role="status">正在搜索…</p>}
-      {error && <div role="alert">搜索失败：{error}<button onClick={() => setRetry(value => value + 1)}>重试搜索</button></div>}
-      {!loading && !error && !items.length && <p>没有匹配节点</p>}
-      {!loading && !error && items.length < total && <button onClick={() => setPage(page + 1)}>加载更多</button>}
-    </div>}
+      {loading && <div role="status" style={{ padding: token.paddingSM, textAlign: 'center' }}><Spin size="small" /> 正在搜索…</div>}
+      {error && <Alert type="error" showIcon message={`搜索失败：${error}`} action={<Button size="small" onClick={() => setRetry(value => value + 1)}>重试搜索</Button>} />}
+      {!loading && !error && !items.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配节点" />}
+      {!loading && !error && items.length < total && <Button type="link" block onClick={() => setPage(page + 1)}>加载更多</Button>}
+    </Card>}
   </div>;
 }

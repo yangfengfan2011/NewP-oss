@@ -21,6 +21,16 @@
             { "nodeType": "company", "field": "CompanyId", "fallback": true }
           ],
           "contextFields": { "id": "EID", "companyId": "CompanyId", "parentDepartmentId": "ParentDepartmentId" }
+        },
+        {
+          "key": "person", "model": "Person", "resourceKey": "organization.person",
+          "idField": "EID", "labelField": "ENAME", "codeField": "PersonNo", "sortField": "PersonNo", "enabledField": "IsEnabled",
+          "parents": [
+            { "nodeType": "department", "field": "DepartmentId" },
+            { "nodeType": "company", "field": "CompanyId", "fallback": true }
+          ],
+          "filters": [{ "field": "CompanyId", "operator": "isNotNull" }],
+          "contextFields": { "id": "EID", "companyId": "CompanyId", "departmentId": "DepartmentId" }
         }
       ]
     },
@@ -74,6 +84,31 @@
             "viewKey": "organization.department.list",
             "inputResolverKey": "organization.node.detail",
             "actionKey": "delete"
+          }
+        ]
+      },
+      {
+        "titleKey": "Person",
+        "key": "person",
+        "pageRef": {
+          "pageKey": "platform.detail",
+          "parameters": { "viewKey": "organization.person.detail" },
+          "inputResolverKey": "organization.node.detail"
+        },
+        "contextMenu": [
+          {
+            "key": "edit",
+            "labelKey": "Edit",
+            "standardAction": "edit",
+            "viewKey": "organization.person.list",
+            "inputResolverKey": "organization.node.detail"
+          },
+          {
+            "key": "delete",
+            "labelKey": "Delete",
+            "actionKey": "delete",
+            "viewKey": "organization.person.list",
+            "inputResolverKey": "organization.node.detail"
           }
         ]
       }

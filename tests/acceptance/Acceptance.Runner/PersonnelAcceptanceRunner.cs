@@ -431,6 +431,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 ]);
             }
 
+            await OpenOrganizationTabAsync(page, "组织结构", "structure");
+            var personTree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
+            await personTree.GetByLabel("搜索节点", new LocatorGetByLabelOptions { Exact = true }).FillAsync(person.Name);
+            await personTree.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = $"定位节点 {person.Name}", Exact = true }).ClickAsync();
+            await page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" })
+                .GetByText("基础信息", new LocatorGetByTextOptions { Exact = true }).First
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            var treeScreenshot = Path.Combine(_runDirectory, "personnel", $"tree-person-{phase}.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = treeScreenshot, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, treeScreenshot));
+            browserAssertions.Add("person-located-in-organization-tree-and-detail-opened");
             // 旧人员书签仍进入同一个组合页面，且完整详情保留独立受控地址。
             await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons");
             await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/organization/structure" && HasQueryValue(new Uri(url), "tab", "persons"));

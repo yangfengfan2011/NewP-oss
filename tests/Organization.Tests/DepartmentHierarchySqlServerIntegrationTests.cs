@@ -91,7 +91,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             Assert.Empty(first.Items.Select(item => item.Node.NodeKey).Intersect(second.Items.Select(item => item.Node.NodeKey)));
             Assert.Equal(second.Items.Select(item => item.Node.NodeKey), repeated.Items.Select(item => item.Node.NodeKey));
             var definition = ReadRelationDefinition();
-            var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create()]);
+            var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
             var sql = new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]);
             var standard = new RelationTreeReader(context, sql);
             Assert.Single(await Measure("standard-roots", () => standard.RootsAsync(definition, default)));
@@ -160,11 +160,53 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         await Assert.ThrowsAsync<InvalidOperationException>(() => reader.PathAsync(definition, "department:Child", default));
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "人员按部门或公司进入真实配置树，并支持搜索和定位")]
+    public async Task RelationTree_PersonsAppearUnderDepartmentOrCompany()
+    {
+        await using var fixture = await SqlFixture.CreateAsync();
+        await using var context = CreateContext(fixture.ConnectionString);
+        await context.Database.EnsureCreatedAsync();
+        AddCompany(context, "Company_A");
+        AddDepartment(context, "Department_A", "Company_A", null);
+        foreach (var (id, companyId, departmentId) in new[] {
+            ("Person_Department", "Company_A", "Department_A"),
+            ("Person_Company", "Company_A", (string?)null),
+            ("Person_Unassigned", (string?)null, (string?)null)
+        })
+            context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Person")).Add(new()
+            {
+                ["EID"] = id, ["PersonNo"] = id, ["ENAME"] = id,
+                ["CompanyId"] = companyId, ["DepartmentId"] = departmentId, ["PositionId"] = null,
+                ["EmploymentStatus"] = "FullTime", ["IsEnabled"] = false,
+                ["CreatedBy"] = "User_Admin", ["UpdatedBy"] = "User_Admin",
+                ["CreatedAt"] = DateTime.UtcNow, ["UpdatedAt"] = DateTime.UtcNow
+            });
+        await context.SaveChangesAsync();
+        var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
+        var reader = new RelationTreeReader(context, new RelationTreeSql(context, registry, []));
+        var definition = ReadRelationDefinition();
+        Assert.Equal("company:Company_A", Assert.Single(await reader.RootsAsync(definition, default)).NodeKey);
+        var children = (await reader.ChildrenAsync(definition, "company:Company_A", default))!;
+        Assert.Contains(children, node => node.NodeKey == "person:Person_Company");
+        Assert.True(children.Single(node => node.NodeType == "department").HasChildren);
+        var person = Assert.Single((await reader.ChildrenAsync(definition, "department:Department_A", default))!);
+        Assert.Equal("person:Person_Department", person.NodeKey);
+        Assert.False(person.HasChildren);
+        Assert.False(person.IsEnabled);
+        Assert.Equal("Company_A", person.Context["companyId"]);
+        Assert.Equal("Department_A", person.Context["departmentId"]);
+        Assert.Equal(new[] { "company:Company_A", "department:Department_A", person.NodeKey },
+            (await reader.PathAsync(definition, person.NodeKey, default))!.Select(node => node.NodeKey));
+        var search = await reader.SearchAsync(definition, "Person_Department", 1, 20, default);
+        Assert.Equal(person.NodeKey, Assert.Single(search.Items).Node.NodeKey);
+        Assert.Equal(1, search.Total);
+        Assert.Equal(2, (await reader.SearchAsync(definition, "Person_", 1, 20, default)).Total);
+    }
     [Fact]
     public void RelationTree_RejectsUnreadableFieldsAndNonForeignKeyParents()
     {
         using var context = CreateContext("Server=(localdb)\\MSSQLLocalDB;Database=unused;Integrated Security=true");
-        var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create()]);
+        var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
         var compiler = new RelationTreeSql(context, registry, []);
         var definition = ReadRelationDefinition();
         var department = definition.Source.Nodes.Single(node => node.Key == "department");

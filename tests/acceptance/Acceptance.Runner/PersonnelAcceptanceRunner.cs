@@ -418,7 +418,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                     position,
                     cancellationToken);
                 var destination = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken, "B");
-                person = await UpdatePersonFromBrowserAsync(page, person, company, destination, position, cancellationToken);
+                person = await UpdatePersonFromBrowserAsync(page, person, company, destination, position, cancellationToken, departmentOnly: true);
                 _company = company;
                 _department = destination;
                 _position = position;
@@ -826,7 +826,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         CompanyData company,
         DepartmentData department,
         PositionData position,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool departmentOnly = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await OpenPersonnelFromShellAsync(page);
@@ -842,49 +843,55 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await SelectOrganizationLookupAsync(
-            page,
-            drawer,
-            "所属公司",
-            company.Name,
-            "/api/organization/person-lookups/companies");
+        if (!departmentOnly)
+        {
+            await SelectOrganizationLookupAsync(
+                page,
+                drawer,
+                "所属公司",
+                company.Name,
+                "/api/organization/person-lookups/companies");
+        }
         await SelectOrganizationLookupAsync(
             page,
             drawer,
             "所属部门",
             department.Name,
             "/api/organization/person-lookups/departments");
-        var positionLookup = drawer.GetByLabel(
-            "岗位",
-            new LocatorGetByLabelOptions { Exact = true });
-        await positionLookup.ClickAsync();
-        var lookupResponseTask = page.WaitForResponseAsync(response =>
+        if (!departmentOnly)
         {
-            if (response.Request.Method != "GET")
+            var positionLookup = drawer.GetByLabel(
+                "岗位",
+                new LocatorGetByLabelOptions { Exact = true });
+            await positionLookup.ClickAsync();
+            var lookupResponseTask = page.WaitForResponseAsync(response =>
             {
-                return false;
+                if (response.Request.Method != "GET")
+                {
+                    return false;
+                }
+
+                var uri = new Uri(response.Url);
+                return uri.AbsolutePath.Equals("/api/organization/positions/options", StringComparison.Ordinal)
+                       && HasQueryValue(uri, "keyword", position.Name);
+            });
+            await positionLookup.FillAsync(position.Name);
+            var lookupResponse = await lookupResponseTask;
+            if (lookupResponse.Status != (int)HttpStatusCode.OK)
+            {
+                throw new InvalidOperationException(
+                    $"Browser position lookup returned {lookupResponse.Status}, expected 200.");
             }
+            await page.Locator(".ant-select-dropdown:visible").Last
+                .GetByText(position.Name, new LocatorGetByTextOptions { Exact = true })
+                .ClickAsync();
 
-            var uri = new Uri(response.Url);
-            return uri.AbsolutePath.Equals("/api/organization/positions/options", StringComparison.Ordinal)
-                   && HasQueryValue(uri, "keyword", position.Name);
-        });
-        await positionLookup.FillAsync(position.Name);
-        var lookupResponse = await lookupResponseTask;
-        if (lookupResponse.Status != (int)HttpStatusCode.OK)
-        {
-            throw new InvalidOperationException(
-                $"Browser position lookup returned {lookupResponse.Status}, expected 200.");
-        }
-        await page.Locator(".ant-select-dropdown:visible").Last
-            .GetByText(position.Name, new LocatorGetByTextOptions { Exact = true })
-            .ClickAsync();
-
-        foreach (var (label, value) in PersonnelTemporalFormInputs)
-        {
-            var input = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
-            await input.FillAsync(value);
-            await input.PressAsync(PersonnelTemporalInputExitKey);
+            foreach (var (label, value) in PersonnelTemporalFormInputs)
+            {
+                var input = drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true });
+                await input.FillAsync(value);
+                await input.PressAsync(PersonnelTemporalInputExitKey);
+            }
         }
 
         var personApiPath = $"/api/organization/persons/{Uri.EscapeDataString(person.Id)}";

@@ -53,6 +53,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private DepartmentData? _department;
     private PositionData? _position;
     private string? _roleId;
+    private string? _readerRoleId;
+    private OrdinaryActor? _maintainer;
+    private OrdinaryActor? _reader;
+    private sealed record OrdinaryActor(string Id, string ECode, string Password);
     private string? _adminPassword;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
     private bool _secretLeakDetected;
@@ -294,10 +298,15 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     }
 
     // 无权限场景通过正式 Identity API 创建一次性普通账号，不直接修改数据库或伪造认证状态。
-    private async Task<(string ECode, string Password)> CreateUnauthorizedActorAsync(
-        CancellationToken cancellationToken)
+    private async Task<(string ECode, string Password)> CreateUnauthorizedActorAsync(CancellationToken cancellationToken)
     {
-        var ecode = $"acceptance.denied.{_runId[..8]}";
+        var actor = await CreateOrdinaryActorAsync("denied", cancellationToken);
+        return (actor.ECode, actor.Password);
+    }
+
+    private async Task<OrdinaryActor> CreateOrdinaryActorAsync(string purpose, CancellationToken cancellationToken)
+    {
+        var ecode = $"acceptance.{purpose}.{_runId[..8]}";
         var password = $"Denied-{_runId}-Pass";
         using var administrator = CreateClient(_hostPort);
         await LoginAdminAsync(administrator, cancellationToken);
@@ -305,7 +314,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             administrator,
             HttpMethod.Post,
             "/api/identity/accounts",
-            new { ecode, ename = "Production Cold Start Unauthorized" },
+            new { ecode, ename = $"Personnel {purpose} {_runId[..8]}" },
             cancellationToken);
         var createdBody = await created.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(created, HttpStatusCode.Created, createdBody, "create unauthorized acceptance account");
@@ -326,7 +335,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             password,
             ReadLong(restrictedLogin.RootElement, "revision"),
             cancellationToken);
-        return (ecode, password);
+        return new OrdinaryActor(ReadString(createdJson.RootElement.GetProperty("account"), "eid"), ecode, password);
     }
 
     // API 场景只准备浏览器旅程所需的真实人员；字段语义、权限和错误矩阵留在低层集成测试。
@@ -336,6 +345,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         using var admin = CreateClient(_hostPort);
         await LoginAdminAsync(admin, cancellationToken);
 
+        _maintainer = await CreateOrdinaryActorAsync("writer", cancellationToken);
+        _reader = await CreateOrdinaryActorAsync("reader", cancellationToken);
         var personNo = $"ACC-{_runId[..10]}";
         var personName = $"Personnel Gate Person {_runId[..8]}";
         _person = await CreatePersonAsync(
@@ -403,7 +414,19 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             var browserAssertions = new List<string>();
             await OpenAuditDetailFromBrowserAsync(page, person.Id, "person.created", phase);
             browserAssertions.Add("administrator-opened-person-business-change-detail");
-            if (phase == "initial") _roleId = await ConfigureRoleFromBrowserAsync(page);
+            var maintainer = _maintainer ?? throw new InvalidOperationException("Maintainer was not prepared.");
+            var reader = _reader ?? throw new InvalidOperationException("Reader was not prepared.");
+            if (phase == "initial")
+            {
+                string[] views = ["Organization.Company.View", "Organization.Department.View", "Organization.Position.View", "Organization.Person.View"];
+                _roleId = await ConfigureRoleFromBrowserAsync(page, "M", [.. views, "Organization.Person.Create", "Organization.Person.Update"]);
+                _readerRoleId = await ConfigureRoleFromBrowserAsync(page, "R", views);
+                await AssignAccountRoleFromBrowserAsync(page, _roleId, "M", maintainer);
+                await AssignAccountRoleFromBrowserAsync(page, _readerRoleId, "R", reader);
+            }
+            await OpenAuditDetailFromBrowserAsync(page, maintainer.Id, "user.roles.changed", $"maintainer-{phase}");
+            await OpenAuditDetailFromBrowserAsync(page, reader.Id, "user.roles.changed", $"reader-{phase}");
+            browserAssertions.Add("administrator-assigned-two-ordinary-account-roles-and-opened-change-details");
             await OpenAuditDetailFromBrowserAsync(page,
                 _roleId ?? throw new InvalidOperationException("Role configuration did not create a role."),
                 "role.permissions.changed", phase);
@@ -798,17 +821,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     }
 
     // 角色和权限集合均通过正式管理页面维护，记录值与事务语义留在 SQL/API 层。
-    private async Task<string> ConfigureRoleFromBrowserAsync(IPage page)
+    private async Task<string> ConfigureRoleFromBrowserAsync(IPage page, string suffix, string[] permissions)
     {
         await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "角色管理", Exact = true }).First.ClickAsync();
         await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/authorization/roles");
         await page.Locator(".ant-table-tbody tr.ant-table-row").First
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        var code = $"PersonnelGateRole{_runId[..8]}";
+        var code = $"PersonnelGateRole{suffix}{_runId[..8]}";
         await ClickStandardCrudCreateActionAsync(page, "新建角色");
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.GetByLabel("角色代码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(code);
-        await drawer.GetByLabel("角色名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync($"Personnel Gate Role {_runId[..8]}");
+        await drawer.GetByLabel("角色名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync($"Personnel Gate Role {suffix} {_runId[..8]}");
         await drawer.GetByLabel("说明", new LocatorGetByLabelOptions { Exact = true }).FillAsync("Personnel acceptance role configuration");
         var creation = page.WaitForResponseAsync(response => response.Request.Method == "POST"
             && new Uri(response.Url).AbsolutePath == "/api/authorization/roles");
@@ -822,7 +845,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "更多", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
         var modal = page.Locator(".ant-modal:visible").Last;
-        await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex(@"\(Organization\.Person\.View\)") }).CheckAsync();
+        foreach (var permission in permissions)
+            await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex($@"\({Regex.Escape(permission)}\)") }).CheckAsync();
         var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
             && new Uri(response.Url).AbsolutePath == $"/api/authorization/roles/{id}/permissions");
         await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
@@ -830,6 +854,29 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         if (saved.Status != 204) throw new InvalidOperationException($"Role permissions returned {saved.Status}: {await saved.TextAsync()}");
         await modal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
         return id;
+    }
+
+    // 账号选择和角色集合保存使用授权模块的受控动作，不直接写关系表。
+    private async Task AssignAccountRoleFromBrowserAsync(IPage page, string roleId, string suffix, OrdinaryActor actor)
+    {
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{roleId}");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "账号角色", Exact = true }).ClickAsync();
+        var modal = page.Locator(".ant-modal:visible").Last;
+        var account = modal.GetByLabel("账号", new LocatorGetByLabelOptions { Exact = true });
+        await account.FillAsync(actor.ECode);
+        await page.Locator(".ant-select-dropdown:visible").Last.GetByText(
+            $"Personnel {(suffix == "M" ? "writer" : "reader")} {_runId[..8]} ({actor.ECode})",
+            new LocatorGetByTextOptions { Exact = true }).ClickAsync();
+        await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions
+        {
+            Name = $"Personnel Gate Role {suffix} {_runId[..8]} (PersonnelGateRole{suffix}{_runId[..8]})", Exact = true
+        }).CheckAsync();
+        var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath == $"/api/authorization/users/{actor.Id}/roles");
+        await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
+        var saved = await save;
+        if (saved.Status != 204) throw new InvalidOperationException($"Account roles returned {saved.Status}: {await saved.TextAsync()}");
+        await modal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
     }
 
     // 同一条旅程从统一入口读取已提交事件；字段差异的语义由 SQL/API 与呈现测试验证。

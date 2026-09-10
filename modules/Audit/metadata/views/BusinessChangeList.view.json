@@ -8,7 +8,7 @@
     "mode": "list",
     "model": "BusinessChange",
     "pageActions": [],
-    "editorMode": "page",
+    "editorMode": "drawer",
     "detailViewKey": "audit.change.detail",
     "query": {
       "fields": [

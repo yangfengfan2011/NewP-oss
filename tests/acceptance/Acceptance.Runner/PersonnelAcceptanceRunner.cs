@@ -408,6 +408,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             var auditRow = page.Locator(".ant-table-tbody tr.ant-table-row").First;
             await auditRow.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             await auditRow.GetByRole(AriaRole.Button).First.ClickAsync();
+            await page.Locator(".ant-drawer-content:visible").Last.GetByRole(AriaRole.Button,
+                new LocatorGetByRoleOptions { Name = "查看完整详情", Exact = true }).ClickAsync();
             await page.WaitForURLAsync(url => new Uri(url).AbsolutePath.StartsWith("/audit/business-changes/", StringComparison.Ordinal));
             await page.GetByText("变化明细", new PageGetByTextOptions { Exact = true }).First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });

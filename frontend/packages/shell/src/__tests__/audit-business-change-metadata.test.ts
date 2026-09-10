@@ -15,7 +15,7 @@ it('compiles the real Audit filters and read-only list through the shared consum
   expect(schema.rowActions).toEqual([]);
   expect(schema.exportModes).toEqual([]);
   expect(schema.columns.find(column => column.standardAction === 'view')?.field).toBe('EventType');
-  expect(schema.editorMode).toBe('page');
+  expect(schema.editorMode).toBe('drawer');
 });
 
 it('resolves the real Audit detail renderer and summary bindings without mutation actions', () => {

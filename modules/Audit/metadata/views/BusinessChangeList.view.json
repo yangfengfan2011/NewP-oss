@@ -8,7 +8,7 @@
     "mode": "list",
     "model": "BusinessChange",
     "pageActions": [],
-    "editorMode": "drawer",
+    "editorMode": "page",
     "detailViewKey": "audit.change.detail",
     "query": {
       "fields": [
@@ -65,15 +65,15 @@
         "labelKey": "OccurredAt",
         "source": "model",
         "field": "OccurredAt",
-        "responsivePriority": "high",
-        "standardAction": "view"
+        "responsivePriority": "high"
       },
       {
         "key": "EventType",
         "labelKey": "EventType",
         "source": "model",
         "field": "EventType",
-        "responsivePriority": "high"
+        "responsivePriority": "high",
+        "standardAction": "view"
       },
       {
         "key": "Resource",

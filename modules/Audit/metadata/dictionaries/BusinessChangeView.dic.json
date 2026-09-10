@@ -42,10 +42,6 @@
       "zhs": "基本事实",
       "en": "Basic"
     },
-    "changes": {
-      "zhs": "变化明细",
-      "en": "changes"
-    },
     "From": {
       "zhs": "起始时间（UTC）",
       "en": "From (UTC)"
@@ -81,6 +77,54 @@
     "UpdatedAt": {
       "zhs": "更新时间",
       "en": "UpdatedAt"
+    },
+    "Field_EID": {
+      "zhs": "记录标识",
+      "en": "EID"
+    },
+    "Field_OccurredAt": {
+      "zhs": "发生时间",
+      "en": "OccurredAt"
+    },
+    "Field_EventType": {
+      "zhs": "事件类型",
+      "en": "EventType"
+    },
+    "Field_Resource": {
+      "zhs": "业务对象",
+      "en": "Resource"
+    },
+    "Field_TargetId": {
+      "zhs": "目标标识",
+      "en": "TargetId"
+    },
+    "Field_ActorId": {
+      "zhs": "操作者",
+      "en": "ActorId"
+    },
+    "Field_TraceId": {
+      "zhs": "TraceId",
+      "en": "TraceId"
+    },
+    "Field_CreatedBy": {
+      "zhs": "创建人",
+      "en": "CreatedBy"
+    },
+    "Field_CreatedAt": {
+      "zhs": "创建时间",
+      "en": "CreatedAt"
+    },
+    "Field_UpdatedBy": {
+      "zhs": "更新人",
+      "en": "UpdatedBy"
+    },
+    "Field_UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "UpdatedAt"
+    },
+    "Block_Changes": {
+      "zhs": "变化明细",
+      "en": "changes"
     }
   }
 }

@@ -1,3 +1,6 @@
+import navigation from '../../../../../modules/Audit/metadata/navigation/Audit.nav.json';
+import auditBindings from '../../../../modules/audit/src';
+import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import { expect, it } from 'vitest';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuditBusinessChangeRuntime.contract.json';
 import list from '../../../../../modules/Audit/metadata/views/BusinessChangeList.view.json';
@@ -11,7 +14,8 @@ it('compiles the real Audit filters and read-only list through the shared consum
   expect(schema.pageActions).toEqual([]);
   expect(schema.rowActions).toEqual([]);
   expect(schema.exportModes).toEqual([]);
-  expect(schema.columns.find(column => column.standardAction === 'view')?.field).toBe('OccurredAt');
+  expect(schema.columns.find(column => column.standardAction === 'view')?.field).toBe('EventType');
+  expect(schema.editorMode).toBe('page');
 });
 
 it('resolves the real Audit detail renderer and summary bindings without mutation actions', () => {
@@ -19,4 +23,11 @@ it('resolves the real Audit detail renderer and summary bindings without mutatio
   expect(schema.sections[0].fields.filter(field => field.rendererSource === 'binding').map(field => field.key)).toEqual(['TargetId', 'ActorId']);
   expect(schema.summaryBlocks).toEqual(['changes']);
   expect(schema.pageActions).toEqual([]);
+});
+
+it('projects the actual module detail route from its declared navigation and lazy bindings', () => {
+  const routes = compileStandardCrudRouteProjection([{ ...auditBindings,
+    metadata: { moduleId: 'Audit', displayName: 'Audit', version: '1.0.0' },
+  }], [navigation], [list, detail], []);
+  expect(routes.detailEntries).toContainEqual({ path: '/audit/business-changes/:id', viewKey: 'audit.change.detail', permissions: ['Audit.BusinessChange.View'] });
 });

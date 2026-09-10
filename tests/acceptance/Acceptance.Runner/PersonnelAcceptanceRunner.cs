@@ -408,12 +408,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             var auditRow = page.Locator(".ant-table-tbody tr.ant-table-row").First;
             await auditRow.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             await auditRow.GetByRole(AriaRole.Button).First.ClickAsync();
-            await page.Locator(".ant-drawer-content:visible").Last.GetByText("变化明细", new LocatorGetByTextOptions { Exact = true }).First
+            await page.WaitForURLAsync(url => new Uri(url).AbsolutePath.StartsWith("/audit/business-changes/", StringComparison.Ordinal));
+            await page.GetByText("变化明细", new PageGetByTextOptions { Exact = true }).First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             var auditScreenshot = Path.Combine(_runDirectory, "personnel", $"audit-detail-{phase}.png");
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = auditScreenshot, FullPage = true });
             _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
-            await page.Locator(".ant-drawer-content:visible").Last.Locator(".ant-drawer-close").ClickAsync();
             browserAssertions.Add("administrator-opened-person-business-change-detail");
 
             if (phase == "initial")

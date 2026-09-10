@@ -14,6 +14,16 @@
         "permissions": [
           "Audit.BusinessChange.View"
         ]
+      },
+      {
+        "key": "audit.change.detail",
+        "path": "/audit/business-changes/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "audit.change.detail",
+        "permissions": [
+          "Audit.BusinessChange.View"
+        ]
       }
     ]
   }

@@ -39,3 +39,14 @@ _Avoid_: root、权限通配符、角色名硬编码放行
 **当前主体权限投影（Current Subject Permission Projection）**：
 返回给 Shell 的当前已认证主体有效权限代码，用于菜单和按钮体验；它不替代服务端 endpoint 授权。
 _Avoid_: 任意用户权限查询、授权事实源、Cookie 权限快照
+
+## 普通角色管理与事务性权限配置
+
+- 对外角色、权限目录及既有用户角色管理入口额外要求可信主体当前有效的 LocalAdmin 分配。普通主体即使得到 Authorization.* 也不能管理；当前主体权限读取语义保持不变，任意主体权限查询和判权端点仍冻结。
+- 普通角色代码和内建标记不能进入初始化路径；LocalAdmin 定义、启停、删除和权限全集受保护。启动期通过独立 LocalAdministratorCatalog 收敛管理员定义及活动权限全集，不依赖 Audit 登记，也不以操作者字符串绕过普通保护。
+- PermissionService 在正式启动同步成功后发布不可变活动目录。权限目录、角色权限外部读取和有效权限并集只消费该目录；历史权限行不能成为授权源。停用角色关系可继续配置，但不进入有效权限并集。
+- RolePermissionWriter 通过平台事务执行器，在角色主键写锁内读取实际旧集合、完整校验新集合、登记关系与 role.permissions.changed，再统一保存与提交。规范权限代码分别记录 Boolean 前后成员资格，相同集合或排列变化不产生记录。角色新建、改名和说明修改本期不产生分配事件。
+- Authorization 只引用 Audit.Contracts，由 Audit 登记稳定 authorization.role 目标和字段差异；不形成反向模块加载依赖。缺少 recorder 或登记、写入、保存、确定未提交的提交失败都不会返回成功。当前角色名称由 Authorization 批量提供，删除目标后记录保留 ID。
+- 前端通过 Authorization capsule 和 metadata 进入标准列表、Drawer 表单和详情；模块只拥有权限选择输入，确认、pending、错误和刷新由共享动作宿主负责。网络结果未知时提示先核对实际结果，不自动重放写入。
+
+回退时先停用普通权限配置入口，再回退本票代码与 authoring；保留已提交角色关系和 Audit 历史，不改写迁移历史。用户角色整组事务保存与成员保护由后续独立交付接入。

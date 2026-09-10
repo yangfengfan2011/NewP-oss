@@ -13,7 +13,7 @@ public class PermissionServiceTests
     public async Task SyncPermissionsAsync_AssignsPermissionPrefixedId()
     {
         var repository = new PermissionRepository();
-        var service = new PermissionService(repository, new FixedObjectIdGenerator("Permission_00000000000000000000000000000001"));
+        var service = new PermissionService(repository, new FixedObjectIdGenerator("Permission_00000000000000000000000000000001"), new ActivePermissionCatalog());
 
         await service.SyncPermissionsAsync(
         [
@@ -42,7 +42,7 @@ public class PermissionServiceTests
             ModuleId = "Task6",
             CreatedAt = createdAt
         });
-        var service = new PermissionService(repository, new PlatformObjectIdGenerator());
+        var service = new PermissionService(repository, new PlatformObjectIdGenerator(), AuthorizationTestCatalog.Create("task6.read"));
 
         var dto = Assert.Single(await service.GetAllPermissionsAsync());
 
@@ -63,7 +63,7 @@ public class PermissionServiceTests
             Group = "测试"
         });
         repository.ResetCounts();
-        var service = new PermissionService(repository, new PlatformObjectIdGenerator());
+        var service = new PermissionService(repository, new PlatformObjectIdGenerator(), AuthorizationTestCatalog.Create("task6.read"));
 
         await service.SyncPermissionsAsync(
         [

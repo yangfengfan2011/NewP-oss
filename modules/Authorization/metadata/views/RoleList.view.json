@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dicKey": "RoleView",
+    "model": "Role",
+    "titleKey": "Title",
+    "key": "authorization.role.list",
+    "mode": "list",
+    "detailViewKey": "authorization.role.detail",
+    "editorMode": "drawer",
+    "query": {
+      "fields": [
+        {
+          "key": "query",
+          "labelKey": "Query",
+          "source": "preset",
+          "preset": "keyword",
+          "operator": "like"
+        }
+      ],
+      "defaultPageSize": 20,
+      "defaultSort": {
+        "field": "ECODE",
+        "direction": "asc"
+      }
+    },
+    "columns": [
+      {
+        "key": "ECODE",
+        "labelKey": "ECODE",
+        "source": "model",
+        "field": "ECODE",
+        "standardAction": "view"
+      },
+      {
+        "key": "ENAME",
+        "labelKey": "ENAME",
+        "source": "model",
+        "field": "ENAME"
+      },
+      {
+        "key": "Description",
+        "labelKey": "Description",
+        "source": "model",
+        "field": "Description"
+      },
+      {
+        "key": "IsEnabled",
+        "labelKey": "IsEnabled",
+        "source": "model",
+        "field": "IsEnabled"
+      },
+      {
+        "key": "IsBuiltIn",
+        "labelKey": "IsBuiltIn",
+        "source": "model",
+        "field": "IsBuiltIn"
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "create",
+        "labelKey": "Create",
+        "standardAction": "create",
+        "variant": "primary",
+        "requiredPermissions": [
+          "Authorization.Role.Create"
+        ]
+      }
+    ],
+    "rowActions": [
+      {
+        "key": "edit",
+        "labelKey": "Edit",
+        "standardAction": "edit",
+        "requiredPermissions": [
+          "Authorization.Role.Edit"
+        ]
+      },
+      {
+        "key": "permissions",
+        "labelKey": "Permissions",
+        "handlerKey": "permissions",
+        "inputKey": "permissions",
+        "confirmMessageKey": "ConfirmPermissions",
+        "requiredPermissions": [
+          "Authorization.Permission.Assign"
+        ]
+      }
+    ],
+    "export": {
+      "enabled": false
+    }
+  }
+}

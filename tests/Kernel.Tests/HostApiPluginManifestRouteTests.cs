@@ -160,6 +160,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
 
         var expectedBindings = new[]
         {
+            "authorization.role.detail",
+            "authorization.role.list",
             "example.record.detail",
             "example.record.list",
             "example.runtime-workload.list",
@@ -220,7 +222,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        var expectedModuleIds = new[] { "Example", "Identity", "Organization" };
+        var expectedModuleIds = new[] { "Authorization", "Example", "Identity", "Organization" };
         Assert.True(
             expectedModuleIds.SequenceEqual(frontendModuleIds, StringComparer.Ordinal),
             $"Expected frontend modules: [{string.Join(", ", expectedModuleIds)}]\n"
@@ -229,7 +231,6 @@ public class HostApiPluginManifestRouteTests : IDisposable
         var retiredFrontendModuleIds = new[]
         {
             "Audit",
-            "Authorization",
             "ConfigCenter",
             "Demo",
             "Files",

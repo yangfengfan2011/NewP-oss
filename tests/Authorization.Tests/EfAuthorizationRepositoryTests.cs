@@ -37,7 +37,7 @@ public class EfAuthorizationRepositoryTests
             userRoleRepository,
             rolePermissionRepository,
             permissionRepository,
-            roleRepository);
+            roleRepository, AuthorizationTestCatalog.Create("Test.View"));
 
         var hasPermission = await service.HasPermissionAsync("user1", "Test.View");
 

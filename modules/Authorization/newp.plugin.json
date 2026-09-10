@@ -1,0 +1,72 @@
+{
+  "moduleId": "Authorization",
+  "displayName": "权限管理",
+  "version": "1.0.0",
+  "description": "开发期内建插件清单",
+  "entryAssembly": "../../AuthorizationModule.dll",
+  "dependencies": [],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "frontend": {
+    "behaviorKey": "authorization.frontend",
+    "entry": "authorization",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "authorization.role.list",
+      "authorization.role.detail"
+    ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/Permission.model.json",
+      "metadata/models/Role.model.json",
+      "metadata/models/RolePermission.model.json",
+      "metadata/models/UserRole.model.json"
+    ]
+  },
+  "schemaVersion": "1.0",
+  "backend": {
+    "behaviorKey": "authorization.backend"
+  },
+  "security": {
+    "permissions": [
+      {
+        "code": "Authorization.Role.View",
+        "displayName": "查看角色",
+        "group": "角色管理"
+      },
+      {
+        "code": "Authorization.Role.Create",
+        "displayName": "创建角色",
+        "group": "角色管理"
+      },
+      {
+        "code": "Authorization.Role.Edit",
+        "displayName": "编辑角色",
+        "group": "角色管理"
+      },
+      {
+        "code": "Authorization.Role.Delete",
+        "displayName": "删除角色",
+        "group": "角色管理"
+      },
+      {
+        "code": "Authorization.Permission.View",
+        "displayName": "查看权限",
+        "group": "角色管理"
+      },
+      {
+        "code": "Authorization.Permission.Assign",
+        "displayName": "分配权限",
+        "group": "角色管理"
+      },
+      {
+        "code": "Authorization.User.AssignRole",
+        "displayName": "分配用户角色",
+        "group": "角色管理"
+      }
+    ]
+  }
+}

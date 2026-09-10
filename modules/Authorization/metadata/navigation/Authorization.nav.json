@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "authorization.roles",
+        "titleKey": "Navigation.Roles",
+        "path": "/authorization/roles",
+        "icon": "module",
+        "order": 10,
+        "entryType": "standard-list",
+        "targetKey": "authorization.role.list",
+        "permissions": [
+          "Authorization.Role.View"
+        ]
+      },
+      {
+        "key": "authorization.role.detail",
+        "path": "/authorization/roles/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "authorization.role.detail",
+        "permissions": [
+          "Authorization.Role.View"
+        ]
+      }
+    ]
+  }
+}

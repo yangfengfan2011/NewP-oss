@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.DTOs;
@@ -84,7 +85,7 @@ public sealed class AuthorizationCatalogInitializerTests
 
     private static AuthorizationCatalogInitializer CreateInitializer(
         IPermissionService permissionService,
-        IRoleService roleService) =>
+        ILocalAdministratorCatalog roleService) =>
         new(
             permissionService,
             roleService,
@@ -133,7 +134,7 @@ public sealed class AuthorizationCatalogInitializerTests
         }
     }
 
-    private sealed class RecordingRoleService : IRoleService
+    private sealed class RecordingRoleService : IRoleService, ILocalAdministratorCatalog
     {
         private readonly bool _rolePermissionsConverge;
         private readonly bool _userRolesConverge;
@@ -146,6 +147,12 @@ public sealed class AuthorizationCatalogInitializerTests
             _userRolesConverge = userRolesConverge;
         }
 
+        public Task SynchronizeAsync(IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
+        {
+            AssignedPermissionCodes = codes.ToArray();
+            if (!_rolePermissionsConverge) throw new InvalidOperationException("AUTH_LOCAL_ADMIN_CATALOG_MISMATCH");
+            return Task.CompletedTask;
+        }
         public IReadOnlyList<string> AssignedPermissionCodes { get; private set; } = [];
 
         public IReadOnlyList<string> AssignedRoleCodes { get; private set; } = [];

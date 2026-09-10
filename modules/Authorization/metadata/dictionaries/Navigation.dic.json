@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "Roles": {
+      "zhs": "角色管理",
+      "en": "Roles"
+    }
+  }
+}

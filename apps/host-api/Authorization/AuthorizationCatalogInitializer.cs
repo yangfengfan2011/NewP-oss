@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
@@ -8,19 +9,21 @@ public sealed class AuthorizationCatalogInitializer
 {
     public const string LocalAdministratorRoleCode = "LocalAdmin";
     private readonly IPermissionService _permissionService;
-    private readonly IRoleService _roleService;
+    private readonly ILocalAdministratorCatalog _catalog;
     private readonly ILogger<AuthorizationCatalogInitializer> _logger;
 
+    // 只组合启动期目录入口，普通角色命令不参与初始化。
     public AuthorizationCatalogInitializer(
         IPermissionService permissionService,
-        IRoleService roleService,
+        ILocalAdministratorCatalog catalog,
         ILogger<AuthorizationCatalogInitializer> logger)
     {
         _permissionService = permissionService;
-        _roleService = roleService;
+        _catalog = catalog;
         _logger = logger;
     }
 
+    // 仅将正式活动计划发布到权限目录与管理员全集。
     public async Task InitializeAsync(
         IReadOnlyCollection<PermissionDescriptor> activePermissions,
         CancellationToken cancellationToken = default)
@@ -43,26 +46,7 @@ public sealed class AuthorizationCatalogInitializer
                 $"AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: active permissions were not synchronized: {string.Join(", ", missingCodes)}");
         }
 
-        var role = await _roleService.GetRoleByCodeAsync(LocalAdministratorRoleCode, cancellationToken)
-            ?? await _roleService.CreateRoleAsync(new RoleDto
-            {
-                Code = LocalAdministratorRoleCode,
-                Name = "Local Administrator",
-                Description = "Protected platform local administrator"
-            }, "system", cancellationToken);
-        await _roleService.AssignRolePermissionsAsync(role.Id, new AssignRolePermissionsRequest
-        {
-            PermissionCodes = permissionCodes
-        }, "system", cancellationToken);
-        var assigned = (await _roleService.GetRolePermissionsAsync(role.Id, cancellationToken))
-            .PermissionCodes
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (!permissionCodes.SequenceEqual(assigned, StringComparer.Ordinal))
-        {
-            throw new InvalidOperationException(
-                "AUTH_LOCAL_ADMIN_CATALOG_MISMATCH: LocalAdmin role permissions did not converge to the active catalog.");
-        }
+        await _catalog.SynchronizeAsync(permissionCodes, cancellationToken);
 
         _logger.LogInformation("Synchronized LocalAdmin role with {PermissionCount} permissions.", permissionCodes.Count);
     }

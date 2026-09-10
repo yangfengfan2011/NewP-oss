@@ -1,0 +1,242 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Role": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
+    "fields": [
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly",
+            "required": true
+          }
+        },
+        "contract": {
+          "valueType": "text"
+        },
+        "storage": {
+          "type": "string",
+          "nullable": false
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          }
+        },
+        "contract": {
+          "valueType": "text"
+        },
+        "storage": {
+          "type": "string",
+          "nullable": false
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        },
+        "uiType": "textarea",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          }
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        },
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "IsBuiltIn",
+        "storage": {
+          "type": "bool"
+        },
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "EID",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        },
+        "contract": {
+          "valueType": "objectId"
+        },
+        "storage": {
+          "type": "string",
+          "nullable": false
+        },
+        "uiType": "text"
+      },
+      {
+        "name": "CreatedBy",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        },
+        "contract": {
+          "valueType": "user"
+        },
+        "display": {
+          "type": "user",
+          "targetModel": "IdentityAccount",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME",
+          "format": ""
+        },
+        "storage": {
+          "type": "string",
+          "nullable": false
+        },
+        "uiType": "text"
+      },
+      {
+        "name": "CreatedAt",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        },
+        "contract": {
+          "valueType": "instant"
+        },
+        "display": {
+          "type": "instant",
+          "targetModel": "",
+          "targetIdField": "",
+          "targetDisplayField": "",
+          "format": "dateTime"
+        },
+        "storage": {
+          "type": "datetime",
+          "nullable": false
+        },
+        "uiType": "dateTime"
+      },
+      {
+        "name": "UpdatedBy",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        },
+        "contract": {
+          "valueType": "user"
+        },
+        "display": {
+          "type": "user",
+          "targetModel": "IdentityAccount",
+          "targetIdField": "EID",
+          "targetDisplayField": "ENAME",
+          "format": ""
+        },
+        "storage": {
+          "type": "string",
+          "nullable": false
+        },
+        "uiType": "text"
+      },
+      {
+        "name": "UpdatedAt",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        },
+        "contract": {
+          "valueType": "instant"
+        },
+        "display": {
+          "type": "instant",
+          "targetModel": "",
+          "targetIdField": "",
+          "targetDisplayField": "",
+          "format": "dateTime"
+        },
+        "storage": {
+          "type": "datetime",
+          "nullable": false
+        },
+        "uiType": "dateTime"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Role_ECODE",
+        "fields": [
+          "ECODE"
+        ],
+        "unique": true
+      }
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "Description"
+        ]
+      }
+    ]
+  }
+}

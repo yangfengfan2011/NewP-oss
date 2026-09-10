@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.Authorization.Controllers;
 
 [ApiController]
+[ServiceFilter(typeof(LocalAdministratorManagementFilter))]
 [Route("api/authorization/permissions")]
 [EndpointModule("Authorization")]
 public class PermissionController : ControllerBase

@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Audit\Contracts\Audit.Contracts.csproj" />
     <ProjectReference Include="Contracts\Authorization.Contracts.csproj" />
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
@@ -18,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\..\modules\Authorization\newp.plugin.json"><LogicalName>ICP.Platform.Modules.Authorization.newp.plugin.json</LogicalName></EmbeddedResource>
     <Compile Remove="Contracts\**\*.cs" />
   </ItemGroup>
 
@@ -27,4 +29,5 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
   </ItemGroup>
 
+  <ItemGroup><AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute"><_Parameter1>Authorization.Tests</_Parameter1></AssemblyAttribute></ItemGroup>
 </Project>

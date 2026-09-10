@@ -183,6 +183,17 @@ public class RuntimeViewMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void Project_RealAuthorizationRole_ProducesSharedCanonicalRuntimeContract()
+    {
+        var sourcePath = Path.Combine(FindRepositoryRoot(), "modules", "Authorization", "metadata", "models", "Role.model.json");
+        var authoring = File.ReadAllBytes(sourcePath);
+        var runtimeBytes = new ModelRuntimeMetadataProjector().Project(authoring, sourcePath);
+        var contractPath = Path.Combine(FindRepositoryRoot(), "tests", "Kernel.Tests", "Fixtures", "AuthorizationRoleRuntime.contract.json");
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(File.ReadAllBytes(contractPath)), JsonNode.Parse(runtimeBytes)));
+        Assert.Equal(File.ReadAllBytes(sourcePath), authoring);
+    }
+
+    [Fact]
     public void Project_RealAuditBusinessChange_ProducesSharedCanonicalRuntimeContract()
     {
         var sourcePath = Path.Combine(FindRepositoryRoot(), "modules", "Audit", "metadata", "models", "BusinessChange.model.json");

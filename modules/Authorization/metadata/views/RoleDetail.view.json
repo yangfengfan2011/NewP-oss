@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "dicKey": "RoleView",
+    "model": "Role",
+    "titleKey": "Title",
+    "key": "authorization.role.detail",
+    "mode": "detail",
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Basic",
+        "fields": [
+          "ECODE",
+          "ENAME",
+          "Description",
+          "IsEnabled",
+          "IsBuiltIn"
+        ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
+      }
+    ],
+    "pageActions": [
+      {
+        "key": "edit",
+        "labelKey": "Edit",
+        "standardAction": "edit",
+        "requiredPermissions": [
+          "Authorization.Role.Edit"
+        ]
+      },
+      {
+        "key": "permissions",
+        "labelKey": "Permissions",
+        "handlerKey": "permissions",
+        "inputKey": "permissions",
+        "confirmMessageKey": "ConfirmPermissions",
+        "requiredPermissions": [
+          "Authorization.Permission.Assign"
+        ]
+      }
+    ]
+  }
+}

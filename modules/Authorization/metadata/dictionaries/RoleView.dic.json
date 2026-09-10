@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "RoleView": {
+    "Title": {
+      "zhs": "角色管理",
+      "en": "Title"
+    },
+    "ECODE": {
+      "zhs": "角色代码",
+      "en": "ECODE"
+    },
+    "ENAME": {
+      "zhs": "角色名称",
+      "en": "ENAME"
+    },
+    "Description": {
+      "zhs": "说明",
+      "en": "Description"
+    },
+    "IsEnabled": {
+      "zhs": "启用状态",
+      "en": "IsEnabled"
+    },
+    "IsBuiltIn": {
+      "zhs": "内建角色",
+      "en": "IsBuiltIn"
+    },
+    "Basic": {
+      "zhs": "基本信息",
+      "en": "Basic"
+    },
+    "Create": {
+      "zhs": "新建角色",
+      "en": "Create"
+    },
+    "Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "Permissions": {
+      "zhs": "配置权限",
+      "en": "Permissions"
+    },
+    "ConfirmPermissions": {
+      "zhs": "完整保存此角色权限集合",
+      "en": "ConfirmPermissions"
+    },
+    "Query": {
+      "zhs": "关键字",
+      "en": "Query"
+    },
+    "Audit": {
+      "zhs": "记录信息",
+      "en": "Record information"
+    },
+    "Field_ECODE": {
+      "zhs": "角色代码",
+      "en": "ECODE"
+    },
+    "Field_ENAME": {
+      "zhs": "角色名称",
+      "en": "ENAME"
+    },
+    "Field_Description": {
+      "zhs": "说明",
+      "en": "Description"
+    },
+    "Field_IsEnabled": {
+      "zhs": "启用状态",
+      "en": "IsEnabled"
+    },
+    "Field_IsBuiltIn": {
+      "zhs": "内建角色",
+      "en": "IsBuiltIn"
+    },
+    "Section_Basic": {
+      "zhs": "基本信息",
+      "en": "Basic"
+    }
+  }
+}

@@ -24,7 +24,7 @@ public class AuthorizationServiceTests
             _userRoleRepository,
             _rolePermissionRepository,
             _permissionRepository,
-            _roleRepository
+            _roleRepository, AuthorizationTestCatalog.Create("Test.View", "Test.Edit")
         );
     }
 

@@ -8,17 +8,20 @@ public class AuthorizationService : IAuthorizationService
     private readonly IRolePermissionRepository _rolePermissionRepository;
     private readonly IPermissionRepository _permissionRepository;
     private readonly IRoleRepository _roleRepository;
+    private readonly ActivePermissionCatalog _catalog;
 
+    // 有效权限并集只消费当前活动目录。
     public AuthorizationService(
         IUserRoleRepository userRoleRepository,
         IRolePermissionRepository rolePermissionRepository,
         IPermissionRepository permissionRepository,
-        IRoleRepository roleRepository)
+        IRoleRepository roleRepository, ActivePermissionCatalog catalog)
     {
         _userRoleRepository = userRoleRepository;
         _rolePermissionRepository = rolePermissionRepository;
         _permissionRepository = permissionRepository;
         _roleRepository = roleRepository;
+        _catalog = catalog;
     }
 
     public async Task<bool> HasPermissionAsync(string userId, string permissionCode, CancellationToken cancellationToken = default)
@@ -39,6 +42,7 @@ public class AuthorizationService : IAuthorizationService
         return permissionCodes.All(code => userPermissions.Contains(code));
     }
 
+    // 停用角色不进入权限并集，历史权限行也不产生授权。
     public async Task<List<string>> GetUserPermissionsAsync(string userId, CancellationToken cancellationToken = default)
     {
         // 获取用户的所有角色
@@ -70,7 +74,7 @@ public class AuthorizationService : IAuthorizationService
 
         // 获取权限代码
         var permissions = await _permissionRepository.GetByIdsAsync(permissionIds, cancellationToken);
-        return permissions.Select(p => p.Code).ToList();
+        return permissions.Select(p => p.Code).Where(_catalog.Codes.Contains).Distinct(StringComparer.Ordinal).ToList();
     }
 
     public async Task<List<string>> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default)

@@ -2,6 +2,13 @@ using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Modules.Authorization;
+using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Modules.Audit.Contracts;
+using ICP.Platform.Modules.Audit.Services;
+using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Application;
+using ICP.Platform.Modules.Identity.Persistence.Ef;
+using ICP.Platform.Modules.Identity.Repositories;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
@@ -63,6 +70,10 @@ public class HostPersistenceBootstrapTests
         var configuration = BuildConfiguration();
 
         services.AddLogging();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddScoped<IBusinessAuditRecorder, BusinessAuditRecorder>();
+        services.AddScoped<IIdentityRepository, EfIdentityRepository>();
+        services.AddScoped<IIdentityAccountDirectory, IdentityAccountDirectory>();
         services.AddPlatformPersistence(configuration, TestPersistencePlan.Create());
         services.AddModuleSystem(options =>
         {
@@ -80,6 +91,8 @@ public class HostPersistenceBootstrapTests
         var initializer = scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>();
 
         Assert.NotNull(initializer);
+        Assert.IsType<RolePermissionWriter>(scope.ServiceProvider.GetRequiredService<IRolePermissionWriter>());
+        Assert.IsType<UserRoleAssignments>(scope.ServiceProvider.GetRequiredService<IUserRoleAssignments>());
     }
 
     private static IConfiguration BuildConfiguration() =>

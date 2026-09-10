@@ -352,27 +352,36 @@ describe('Identity account Standard CRUD production route', () => {
       '/identity/accounts/User_2',
     ], 1)));
     await waitForBodyText('Account User_2');
+    const expectSingleSnapshot = (id: string) => {
+      expect(container.textContent).toContain(`Account ${id}`);
+      expect(fetchMock.mock.calls.map(([input]) => String(input)).filter(url => url.endsWith('/snapshot')))
+        .toEqual([`/api/identity/accounts/${id}/snapshot`]);
+      fetchMock.mockClear();
+    };
+    expectSingleSnapshot('User_2');
 
-    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history-back"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    // 离开详情后的查询只保留50ms孤儿宽限期，不保证历史导航永久命中缓存。
+    // 明确推进既有回收时钟，再逐阶段核对唯一活跃读取，避免全包负载决定总次数。
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history-back"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => vi.advanceTimersByTimeAsync(50));
+    } finally {
+      vi.useRealTimers();
+    }
     await waitForBodyText('Account User_1');
+    expectSingleSnapshot('User_1');
     await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="history-forward"]')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await waitForBodyText('Account User_2');
+    expectSingleSnapshot('User_2');
 
     await act(async () => root.unmount());
     root = createRoot(container);
     await act(async () => root.render(renderRouter(['/identity/accounts/User_2'])));
     await waitForBodyText('Account User_2');
-
-    const snapshotUrls = fetchMock.mock.calls
-      .map(([input]) => String(input))
-      .filter((url) => url.endsWith('/snapshot'));
-    expect(snapshotUrls).toEqual([
-      '/api/identity/accounts/User_2/snapshot',
-      '/api/identity/accounts/User_1/snapshot',
-      '/api/identity/accounts/User_2/snapshot',
-    ]);
+    expectSingleSnapshot('User_2');
     expect(identityNavigationDocument.navigation.items.find((item) => item.key === 'identity.accounts')).toMatchObject({
       entryType: 'standard-list',
       targetKey: 'identity.account.list',

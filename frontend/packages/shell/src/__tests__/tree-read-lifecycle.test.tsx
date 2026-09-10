@@ -169,3 +169,34 @@ it.each(['select', 'locate'] as const)('drops an approved %s request belonging t
   expect(tree.onSelectAccepted).not.toHaveBeenCalled();
   expect(tree.navigation.locate).not.toHaveBeenCalled();
 });
+
+it('defers hidden tree changes without rejecting the visible list commit', async () => {
+  const provider = providerWith([node('a')]);
+  provider.resolveChange = vi.fn(async () => ({ kind: 'unknown' as const }));
+  provider.roots = vi.fn(provider.roots);
+  const tree = await renderLifecycle(provider);
+  await tree.rerender({ active: false });
+  await act(async () => { await expect(tree.publish({ resourceKey: 'resource', operation: 'update', id: 'a' })).resolves.toBeUndefined(); });
+  expect(provider.resolveChange).toHaveBeenCalledTimes(1);
+  expect(provider.roots).toHaveBeenCalledTimes(1);
+  expect(tree.read().error).toBeNull();
+  await tree.rerender({ active: true });
+  expect(provider.roots).toHaveBeenCalledTimes(2);
+  expect(tree.read().error).toBeNull();
+});
+
+it('keeps activation read failure local to the tree and retries without another commit', async () => {
+  const provider = providerWith([node('a')]);
+  provider.resolveChange = vi.fn(async () => { throw new Error('classification failed'); });
+  const tree = await renderLifecycle(provider);
+  await tree.rerender({ active: false });
+  await act(async () => { await expect(tree.publish({ resourceKey: 'resource', operation: 'update', id: 'a' })).resolves.toBeUndefined(); });
+  expect(tree.read().error).toBeNull();
+  provider.roots = vi.fn().mockRejectedValueOnce(new Error('read failed')).mockResolvedValue([node('a')]);
+  await tree.rerender({ active: true });
+  expect(tree.read().error).toContain('read failed');
+  await act(async () => tree.read().retry({ kind: 'tree' }));
+  expect(tree.read().error).toBeNull();
+  expect(provider.roots).toHaveBeenCalledTimes(2);
+  expect(provider.resolveChange).toHaveBeenCalledTimes(1);
+});

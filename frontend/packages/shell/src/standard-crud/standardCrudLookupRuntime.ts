@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { usePlatformQuery } from '@icp-platform/core';
+import { useEffect, useRef, useState } from 'react';
+import { usePlatformQuery, usePlatformQueryActions } from '@icp-platform/core';
 import {
   loadStandardCrudLookupPage,
   type StandardCrudFieldDefinition,
@@ -40,6 +40,7 @@ interface StandardCrudLookupRequestState {
 
 interface StandardCrudLookupQueryPage extends StandardCrudLookupPage {
   error: string | null;
+  inputKey: string;
 }
 
 interface StandardCrudLookupQueryData {
@@ -65,17 +66,24 @@ export function useStandardCrudLookupRuntime({
   const [lookupOptions, setLookupOptions] = useState<Record<string, StandardCrudOption[]>>({});
   const [lookupErrors, setLookupErrors] = useState<Record<string, string | null>>({});
   const [lookupHasMore, setLookupHasMore] = useState<Record<string, boolean>>({});
+  const queryScope = usePlatformQueryActions();
+  const previous = useRef<{ scope: typeof queryScope; key: string; data: StandardCrudLookupQueryData }>();
+  const queryKey = createStandardCrudLookupQueryKey({
+    resourceKey,
+    fields: lookupFields,
+    providers,
+    values,
+    detailFields,
+    requests,
+  });
+  const serializedKey = JSON.stringify(queryKey);
   const query = usePlatformQuery<StandardCrudLookupQueryData>({
-    key: createStandardCrudLookupQueryKey({
-      resourceKey,
-      fields: lookupFields,
-      providers,
-      values,
-      detailFields,
-      requests,
-    }),
+    key: queryKey,
     enabled: lookupFields.length > 0,
     load: async ({ signal }) => loadLookupQuery({
+      resourceKey,
+      previous: previous.current?.scope === queryScope && previous.current.key !== serializedKey
+        ? previous.current.data : undefined,
       lookupFields,
       providers,
       values,
@@ -93,6 +101,9 @@ export function useStandardCrudLookupRuntime({
 
   useEffect(() => {
     if (!queryData) return;
+
+    // 只保留本表单上一轮结果；认证作用域切换及显式同 key 刷新必须重新读取。
+    previous.current = { scope: queryScope, key: serializedKey, data: queryData };
 
     setLookupOptions((current) => {
       const next = { ...current };
@@ -117,7 +128,7 @@ export function useStandardCrudLookupRuntime({
       });
       return next;
     });
-  }, [queryData]);
+  }, [queryData, queryScope, serializedKey]);
 
   return {
     lookupOptions,
@@ -142,6 +153,8 @@ export function useStandardCrudLookupRuntime({
 }
 
 async function loadLookupQuery({
+  resourceKey,
+  previous,
   lookupFields,
   providers,
   values,
@@ -149,6 +162,8 @@ async function loadLookupQuery({
   requests,
   signal,
 }: {
+  resourceKey: string;
+  previous?: StandardCrudLookupQueryData;
   lookupFields: StandardCrudFieldDefinition[];
   providers: NonNullable<SdkUseStandardCrudLookupRuntimeInput['providers']>;
   values: Record<string, unknown>;
@@ -163,6 +178,12 @@ async function loadLookupQuery({
 
   for (const field of lookupFields) {
     const request = requests[field.key] ?? { keyword: '', page: 1, pageSize: 20 };
+    const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({ resourceKey, fields: [field], providers, values, detailFields, requests }));
+    const retained = previous?.lookupPages[field.key];
+    if (retained?.inputKey === inputKey && !retained.error) {
+      data.lookupPages[field.key] = retained;
+      continue;
+    }
     const result = await loadStandardCrudLookupPage({
       field,
       providers,
@@ -170,7 +191,7 @@ async function loadLookupQuery({
       detailFields,
       ...request,
     }, { signal });
-    data.lookupPages[field.key] = result;
+    data.lookupPages[field.key] = { ...result, inputKey };
     if (result.error && isProviderExecutionFailure(field, providers, values)) {
       providerFailed = true;
     }

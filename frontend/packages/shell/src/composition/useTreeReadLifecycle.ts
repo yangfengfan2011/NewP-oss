@@ -209,6 +209,7 @@ export function useTreeReadLifecycle({
         }
       } catch (failure) {
         if (!scopeSignal.aborted) {
+          if (!activeRef.current) return;
           setError(`已保存，刷新失败：${String(failure)}`);
           throw failure;
         }
@@ -228,6 +229,7 @@ export function useTreeReadLifecycle({
       } catch (failure) {
         if (scopeSignal.aborted) return;
         pendingChanges.current.set(unknownChangeKey, { impact: { kind: 'unknown' }, selectCreated: false });
+        if (!activeRef.current) return;
         setError(`已保存，刷新失败：${String(failure)}`);
         throw failure;
       }
@@ -241,7 +243,8 @@ export function useTreeReadLifecycle({
         if (impact.afterLocation) affectedParents.add(impact.afterLocation.parentNodeKey);
       }
       pendingChanges.current.set(key, { impact, affectedParents: [...affectedParents], selectCreated: change.originTreeId === instanceId });
-      if (impact.kind === 'unknown') {
+      // 隐藏树只记录失效；激活后的读取负责恢复，不向当前列表报告待同步错误。
+      if (impact.kind === 'unknown' && activeRef.current) {
         setError('已保存，刷新失败：影响范围待确认。');
         throw new Error('树影响范围待确认');
       }

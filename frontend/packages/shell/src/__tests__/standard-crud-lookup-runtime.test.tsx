@@ -750,3 +750,29 @@ describe('standard CRUD lookup runtime', () => {
     expect(result).toEqual({ options, error: null });
   });
 });
+
+it('does not reload independent positions on company or name changes', async () => {
+  const departments = provider([]);
+  const positions = { key: 'positions', load: vi.fn(async () => []) };
+  const fields = [lookupField(), lookupField({ key: 'positionId', lookup: { providerKey: 'positions' } })];
+  const providers = [departments, positions];
+  const root = createRoot(document.createElement('div'));
+  function Probe({ tenantId, name }: { tenantId: string; name: string }) {
+    useStandardCrudLookupRuntime({ resourceKey: 'organization.person', fields, providers, values: { tenantId, name } });
+    return null;
+  }
+  const render = async (tenantId: string, name: string, scope = 'u1') => {
+    await act(async () => root.render(<PlatformQueryProvider scopeKey={scope}><Probe tenantId={tenantId} name={name} /></PlatformQueryProvider>));
+  };
+  try {
+    await render('a', 'first');
+    await render('b', 'first');
+    expect(departments.load).toHaveBeenCalledTimes(2);
+    expect(positions.load).toHaveBeenCalledTimes(1);
+    await render('b', 'second');
+    expect(departments.load).toHaveBeenCalledTimes(2);
+    expect(positions.load).toHaveBeenCalledTimes(1);
+    await render('b', 'second', 'u2');
+    expect(positions.load).toHaveBeenCalledTimes(2);
+  } finally { await act(async () => root.unmount()); }
+});

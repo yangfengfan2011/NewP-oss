@@ -105,7 +105,8 @@ export function createStandardCrudLookupQueryKey(
     input.resourceKey,
     {
       fields: lookupFields,
-      values: normalizeLookupQueryKeyObject(input.values, new Set()),
+      values: normalizeLookupQueryKeyObject(Object.fromEntries(input.fields.flatMap(field =>
+        [field.key, ...(field.lookup?.dependsOn ?? [])].map(key => [key, input.values[key]]))), new Set()),
     },
   ];
 }

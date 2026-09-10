@@ -103,6 +103,29 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         }));
     }
 
+    [Fact]
+    public void AuditFirstStream_InNewModule_FinalizesAndReplaysWithoutChangingCheckInputs()
+    {
+        InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Audit");
+        InitializeIsolatedGitRepository();
+        var manifestPath = Path.Combine(_fixtureRoot, "modules", "Audit", "migrations", "Audit.SqlServerMigrations.json");
+        var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+        var first = Assert.Single(original.Migrations);
+        File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with { Migrations = [], ModelDigest = new string('0', 64), BundleChecksum = new string('0', 64) }));
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        Assert.True(application.Finalize("Audit", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        var bytes = File.ReadAllBytes(manifestPath);
+        Assert.False(application.Finalize("Audit", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        Assert.Equal(bytes, File.ReadAllBytes(manifestPath));
+        File.Copy(manifestPath, Path.Combine(_fixtureRoot, "apps", "host-api", "bin", "Release", "net10.0", "modules", "Audit", "migrations", "Audit.SqlServerMigrations.json"), true);
+        var before = CaptureGitSnapshot();
+        var result = application.CheckAll(noBuild: true);
+        Assert.Equal(1, result.CheckedBundles);
+        Assert.Equal(before, CaptureGitSnapshot());
+        Assert.Equal(bytes, File.ReadAllBytes(manifestPath));
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Audit", migration = first.MigrationId, firstFinalize = "finalized", secondFinalize = "already finalized", manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)), result.CheckedBundles, result.ProviderResults, before.Head, before.IndexTree, before.Status, before.TrackedContentSha256 }));
+    }
+
     [EnvironmentGatedFact(
         DatabaseEvidenceEnvironmentVariable,
         "SQL Server 每库日志前沿与 migration history 内容的只读前后快照；配置来源与 Acceptance admin connection 一致")]
@@ -253,20 +276,20 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         }
     }
 
-    private void InitializeIsolatedOrganizationRepository(string repositoryRoot)
+    private void InitializeIsolatedOrganizationRepository(string repositoryRoot, string module = "Organization")
     {
         CopyDirectory(
-            Path.Combine(repositoryRoot, "modules", "Organization"),
-            Path.Combine(_fixtureRoot, "modules", "Organization"));
+            Path.Combine(repositoryRoot, "modules", module),
+            Path.Combine(_fixtureRoot, "modules", module));
         CopyDirectory(
-            Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations"),
-            Path.Combine(_fixtureRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations"));
+            Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"),
+            Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"));
         CopyDirectory(
-            Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "bin", "Release", "net10.0"),
-            Path.Combine(_fixtureRoot, "server", "modules", "Organization", "Migrations.SqlServer", "bin", "Release", "net10.0"));
+            Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", "bin", "Release", "net10.0"),
+            Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", "bin", "Release", "net10.0"));
         CopyFile(
-            Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Organization.SqlServerMigrations.csproj"),
-            Path.Combine(_fixtureRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Organization.SqlServerMigrations.csproj"));
+            Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", module + ".SqlServerMigrations.csproj"),
+            Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", module + ".SqlServerMigrations.csproj"));
         CopyFile(
             Path.Combine(repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json"),
             Path.Combine(_fixtureRoot, "server", "platform-modeling", "metadata", "storage-types.json"));

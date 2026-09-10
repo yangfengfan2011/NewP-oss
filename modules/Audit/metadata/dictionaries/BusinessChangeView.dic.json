@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "BusinessChangeView": {
+    "EID": {
+      "zhs": "记录标识",
+      "en": "EID"
+    },
+    "OccurredAt": {
+      "zhs": "发生时间",
+      "en": "OccurredAt"
+    },
+    "EventType": {
+      "zhs": "事件类型",
+      "en": "EventType"
+    },
+    "Resource": {
+      "zhs": "业务对象",
+      "en": "Resource"
+    },
+    "TargetId": {
+      "zhs": "目标标识",
+      "en": "TargetId"
+    },
+    "ActorId": {
+      "zhs": "操作者",
+      "en": "ActorId"
+    },
+    "TraceId": {
+      "zhs": "TraceId",
+      "en": "TraceId"
+    },
+    "FieldsJson": {
+      "zhs": "变化内容",
+      "en": "FieldsJson"
+    },
+    "Title": {
+      "zhs": "业务变更记录",
+      "en": "Title"
+    },
+    "Basic": {
+      "zhs": "基本事实",
+      "en": "Basic"
+    },
+    "changes": {
+      "zhs": "变化明细",
+      "en": "changes"
+    }
+  }
+}

@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Persistence.Auditing;
@@ -28,6 +29,8 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IUserDisplayNameDirectory? _userDisplayNameDirectory;
     private readonly IRequestPresentationContextAccessor? _presentationContextAccessor;
     private readonly ILogger<StandardCrudService>? _logger;
+    private readonly IReadOnlyDictionary<string, IStandardCrudCreationRecorder> _creationRecorders;
+    private readonly IPlatformTransactionExecutor? _transactionExecutor;
 
     /// <summary>
     /// 组合标准 CRUD 的共享读写依赖；可信审计 owner 只在资源声明服务端必填审计字段时使用。
@@ -47,7 +50,9 @@ public sealed class StandardCrudService : IStandardCrudService
         ITemporalDisplayProjectionExecutor? temporalDisplayProjectionExecutor = null,
         IUserDisplayNameDirectory? userDisplayNameDirectory = null,
         IRequestPresentationContextAccessor? presentationContextAccessor = null,
-        ILogger<StandardCrudService>? logger = null)
+        ILogger<StandardCrudService>? logger = null,
+        IEnumerable<IStandardCrudCreationRecorder>? creationRecorders = null,
+        IPlatformTransactionExecutor? transactionExecutor = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -65,6 +70,8 @@ public sealed class StandardCrudService : IStandardCrudService
         _userDisplayNameDirectory = userDisplayNameDirectory;
         _presentationContextAccessor = presentationContextAccessor;
         _logger = logger;
+        _creationRecorders = (creationRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
+        _transactionExecutor = transactionExecutor;
     }
 
     /// <summary>
@@ -276,7 +283,24 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> created;
         try
         {
-            created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
+            if (descriptor.RequiresCreationRecord)
+            {
+                if (!_creationRecorders.TryGetValue(descriptor.ResourceKey, out var recorder)
+                    || _transactionExecutor is null || _repository is not IStandardCrudCreationParticipant participant)
+                    throw new InvalidOperationException("Required creation registration is unavailable.");
+                var id = await _transactionExecutor.ExecuteAsync(async token =>
+                {
+                    var row = participant.RegisterCreate(descriptor, allowed);
+                    await recorder.RegisterAsync(row, token);
+                    return Convert.ToString(row[descriptor.IdField])!;
+                }, cancellationToken);
+                created = await _repository.GetByIdAsync(descriptor, id, cancellationToken)
+                    ?? throw new InvalidOperationException("Committed resource is unavailable.");
+            }
+            else
+            {
+                created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
+            }
         }
         catch (StandardCrudPersistenceConflictException)
         {

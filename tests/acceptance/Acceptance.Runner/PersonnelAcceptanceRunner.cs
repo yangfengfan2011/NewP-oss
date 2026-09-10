@@ -460,6 +460,18 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 ? "list-and-detail-show-updated-person"
                 : "restart-list-and-detail-show-persisted-person");
 
+            // 同一管理员从正式菜单查询已提交人员的记录；数据语义由 SQL/API 层断言。
+            await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "业务变更记录", Exact = true }).First.ClickAsync();
+            await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/audit/business-changes");
+            await page.GetByLabel("目标标识", new PageGetByLabelOptions { Exact = true }).FillAsync(person.Id);
+            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "查询", Exact = true }).ClickAsync();
+            var auditRow = page.Locator(".ant-table-tbody tr.ant-table-row").First;
+            await auditRow.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            await auditRow.GetByRole(AriaRole.Button).First.ClickAsync();
+            await page.Locator(".ant-drawer-content:visible").Last.GetByText("变化明细", new LocatorGetByTextOptions { Exact = true }).First
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            browserAssertions.Add("administrator-opened-person-business-change-detail");
+
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
             _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
             await WriteEvidenceAsync($"personnel/browser-{phase}.json", new

@@ -160,7 +160,8 @@ public static partial class MigrationManifestIntegrity
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
 
         ValidateOwner(moduleId, provider, manifest, manifestPath);
-        return ValidateLinearChain(moduleId, manifest);
+        // 尚未发布的新 stream 可从空前缀开始；runtime Validate 仍要求完整非空链。
+        return manifest.Migrations.Count == 0 ? [] : ValidateLinearChain(moduleId, manifest);
     }
 
     // owner/provider 在 runtime 与 authoring 两条入口中保持同一失败语义。

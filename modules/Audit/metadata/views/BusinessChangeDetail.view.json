@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0",
+  "type": "view",
+  "view": {
+    "key": "audit.change.detail",
+    "dicKey": "BusinessChangeView",
+    "titleKey": "Title",
+    "mode": "detail",
+    "model": "BusinessChange",
+    "pageActions": [],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Basic",
+        "fields": [
+          "EID",
+          "OccurredAt",
+          "EventType",
+          "Resource",
+          {
+            "field": "TargetId",
+            "rendererKey": "audit.change.reference"
+          },
+          {
+            "field": "ActorId",
+            "rendererKey": "audit.change.reference"
+          },
+          "TraceId"
+        ]
+      }
+    ],
+    "summaryBlocks": [
+      "changes"
+    ]
+  }
+}

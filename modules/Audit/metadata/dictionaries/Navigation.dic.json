@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Navigation": {
+    "BusinessChanges": {
+      "zhs": "业务变更记录",
+      "en": "Business changes"
+    }
+  }
+}

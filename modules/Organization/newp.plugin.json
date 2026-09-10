@@ -7,7 +7,8 @@
   "entryAssembly": "../../OrganizationModule.dll",
   "dependencies": [
     "Identity",
-    "Authentication"
+    "Authentication",
+    "Audit"
   ],
   "hostVersion": {
     "min": "1.1.0",

@@ -5,6 +5,8 @@ namespace ICP.Platform.Crud.Descriptors;
 
 public sealed record StandardCrudDescriptor
 {
+    /// <summary>创建必须登记业务事实；缺少资源登记实现或事务参与能力时失败关闭。</summary>
+    public bool RequiresCreationRecord { get; init; }
     public required string ResourceKey { get; init; }
     public required string ModuleId { get; init; }
     public required string ModelName { get; init; }

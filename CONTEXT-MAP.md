@@ -2,6 +2,8 @@
 
 ## Contexts
 
+- [Audit](./docs/contexts/audit/CONTEXT.md) — 拥有事务性业务变更记录与 LocalAdmin 只读查阅
+
 - [Identity](./docs/contexts/identity/CONTEXT.md) — 管理用户账号、账号状态与可供认证机制使用的账号目录
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
@@ -13,6 +15,8 @@
 - [Platform Acceptance](./docs/contexts/platform-acceptance/CONTEXT.md) — 编排正式观察面上的用户旅程与故障场景，并从完整证据集中产生两道闸门的唯一裁决
 
 ## Relationships
+
+- **Organization → Audit → Platform Persistence**：Organization 通过稳定 Audit.Contracts 登记明确业务字段；Audit 登记自身记录，平台事务执行器统一保存和提交。Identity 与对象拥有者只批量提供当前展示名称，不改变历史事实。
 
 - **Identity → LocalAuth**：Identity 拥有用户账号与账号状态；LocalAuth 只管理和验证与账号一对一关联的本地凭据。
 - **Identity → Authentication**：Identity 与 Authentication 都是 Host readiness 的必需内建能力。账号停用、删除或凭据重置会撤销该账号的全部认证会话；账号恢复不会恢复旧会话。

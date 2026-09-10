@@ -25,7 +25,8 @@ internal static class VerifiedAssemblyIdentityPolicy
             "ICP.Platform.Plugin.Contracts",
             "Identity.Contracts",
             "Authentication.Contracts",
-            "Authorization.Contracts"
+            "Authorization.Contracts",
+            "Audit.Contracts"
         ],
         StringComparer.Ordinal);
     private static readonly IReadOnlySet<string> FrameworkPublicKeyTokens = new HashSet<string>(

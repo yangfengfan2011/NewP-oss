@@ -21,6 +21,7 @@ public static class PersonCrudDescriptorFactory
         return new StandardCrudDescriptor
         {
             ResourceKey = "organization.person",
+            RequiresCreationRecord = true,
             ModuleId = "Organization",
             ModelName = "Person",
             Route = "api/organization/persons",

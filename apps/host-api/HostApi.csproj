@@ -14,6 +14,9 @@
 
   <ItemGroup>
     <Content Update="modules\**\plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\modules\Audit\newp.plugin.json"><Link>modules\Audit\plugin.json</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="..\..\modules\Audit\migrations\Audit.SqlServerMigrations.json"><Link>modules\Audit\migrations\Audit.SqlServerMigrations.json</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="..\..\server\modules\Audit\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Audit.SqlServerMigrations.dll"><Link>modules\Audit\migrations\Audit.SqlServerMigrations.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <Content Include="..\..\modules\Organization\newp.plugin.json">
       <Link>modules\Organization\plugin.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -89,6 +92,7 @@
     <ProjectReference Include="..\..\server\modules\ConfigCenter\ConfigCenter.csproj" />
     <ProjectReference Include="..\..\server\modules\MetadataConfigCenter\MetadataConfigCenter.csproj" />
     <ProjectReference Include="..\..\server\modules\Audit\AuditModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Audit\Migrations.SqlServer\Audit.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\modules\Files\FilesModule.csproj" />
     <ProjectReference Include="..\..\server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj" />
     <ProjectReference Include="..\..\server\modules\Organization\OrganizationModule.csproj" />

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Crud.Persistence;
 
-public sealed class EfStandardCrudRepository : IStandardCrudRepository
+public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandardCrudCreationParticipant
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
@@ -186,6 +186,17 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository
             (string.IsNullOrWhiteSpace(excludedId) ||
                 !string.Equals(ReadString(row, descriptor.IdField), excludedId, StringComparison.Ordinal)) &&
             equalityValues.All(pair => row.TryGetValue(pair.Key, out var value) && UniqueValuesEqual(value, pair.Value, constraint)));
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, object?> RegisterCreate(StandardCrudDescriptor descriptor, IReadOnlyDictionary<string, object?> values)
+    {
+        if (_dbContext.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A platform transaction is required for creation registration.");
+        var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        if (!row.ContainsKey(descriptor.IdField)) row[descriptor.IdField] = _objectIdGenerator.NewId(descriptor.ModelName);
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName)).Add(row);
+        return row;
     }
 
     /// <summary>

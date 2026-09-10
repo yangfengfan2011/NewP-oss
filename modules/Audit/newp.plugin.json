@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "Audit",
+  "displayName": "业务变更记录",
+  "version": "1.0.0",
+  "description": "可信业务变更记录与既有访问观测",
+  "entryAssembly": "../../AuditModule.dll",
+  "dependencies": [
+    "Identity",
+    "Authorization"
+  ],
+  "hostVersion": {
+    "min": "1.0.0",
+    "max": "2.0.0"
+  },
+  "backend": {
+    "behaviorKey": "audit.backend"
+  },
+  "frontend": {
+    "behaviorKey": "audit.frontend",
+    "entry": "audit",
+    "bindingMode": "behavior-bindings",
+    "bindings": [
+      "audit.change.list",
+      "audit.change.detail"
+    ]
+  },
+  "security": {
+    "permissions": [
+      {
+        "code": "Audit.BusinessChange.View",
+        "displayName": "查看业务变更记录",
+        "group": "业务变更记录"
+      },
+      {
+        "code": "Audit.OperationLog.View",
+        "displayName": "查看操作日志",
+        "group": "操作日志"
+      },
+      {
+        "code": "Audit.AccessLog.View",
+        "displayName": "查看访问日志",
+        "group": "访问日志"
+      }
+    ]
+  },
+  "persistence": {
+    "models": [
+      "metadata/models/BusinessChange.model.json"
+    ],
+    "migrations": {
+      "sqlServer": {
+        "assembly": "migrations/Audit.SqlServerMigrations.dll",
+        "manifest": "migrations/Audit.SqlServerMigrations.json"
+      }
+    }
+  }
+}

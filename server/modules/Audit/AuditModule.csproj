@@ -10,12 +10,19 @@
   <ItemGroup>
     <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="Contracts\Audit.Contracts.csproj" />
+    <ProjectReference Include="..\..\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\Authorization\Contracts\Authorization.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Contracts\**\*.cs;Migrations.SqlServer\**\*.cs" />
+    <EmbeddedResource Include="..\..\..\modules\Audit\newp.plugin.json"><LogicalName>ICP.Platform.Modules.Audit.newp.plugin.json</LogicalName></EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
   </ItemGroup>
 
 </Project>

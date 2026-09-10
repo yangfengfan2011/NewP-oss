@@ -173,6 +173,19 @@ public sealed class MigrationManifestApplicationTests
     }
 
     [Fact]
+    public void Finalize_PublishedModuleWithoutTrackedManifest_FailsClosed()
+    {
+        using var fixture = MigrationManifestFixture.Create();
+        var bytes = File.ReadAllBytes(fixture.ManifestPath);
+        File.Delete(fixture.ManifestPath);
+        fixture.CommitPublishedBaseline();
+        File.WriteAllBytes(fixture.ManifestPath, bytes);
+        var failure = Assert.Throws<MigrationManifestToolException>(() => new MigrationManifestApplication(fixture.Root).Finalize(fixture.ModuleId, "SqlServer", MigrationManifestFixture.TailMigrationId, "safe-expand"));
+        Assert.Equal("MIGRATION_MANIFEST_PUBLISHED_BASELINE_MISSING", failure.Code);
+        Assert.Equal(bytes, File.ReadAllBytes(fixture.ManifestPath));
+    }
+
+    [Fact]
     public void Finalize_IsolatedRootWithoutFrozenHostBaselineFailsClosed()
     {
         using var fixture = MigrationManifestFixture.Create();

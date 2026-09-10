@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0",
+  "type": "nav",
+  "navigation": {
+    "items": [
+      {
+        "key": "audit.changes",
+        "titleKey": "Navigation.BusinessChanges",
+        "icon": "module",
+        "path": "/audit/business-changes",
+        "order": 20,
+        "entryType": "standard-list",
+        "targetKey": "audit.change.list",
+        "permissions": [
+          "Audit.BusinessChange.View"
+        ]
+      }
+    ]
+  }
+}

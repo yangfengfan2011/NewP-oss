@@ -174,13 +174,13 @@ public sealed class MigrationManifestApplication
         var publishedBaseline = ValidatePublishedPrefix(workspace, prefix, migrationId);
         var sourcePath = ResolveMigrationSource(workspace, migrationId);
         var contentDigest = MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(sourcePath));
-        var previous = prefix[^1];
+        var previous = prefix.Count == 0 ? null : prefix[^1];
         var step = new MigrationManifestStep(
             (prefix.Count + 1).ToString("D6", System.Globalization.CultureInfo.InvariantCulture),
             migrationId,
-            previous.ContentDigest,
+            previous?.ContentDigest,
             contentDigest,
-            previous.ToModelDigest,
+            previous?.ToModelDigest ?? new string('0', 64),
             workspace.ModelDigest,
             compatibility!);
         var finalized = manifest with
@@ -547,6 +547,12 @@ public sealed class MigrationManifestApplication
             var gitManifest = RunGit("show", $"HEAD:{relativeManifestPath}");
             if (gitManifest.ExitCode != 0)
             {
+                // 只有 HEAD 中整个 authoring 模块尚不存在才是首次发布；已发布模块缺清单仍失败关闭。
+                var relativeModulePath = Path.GetRelativePath(_repositoryRoot, workspace.ModuleRoot).Replace(Path.DirectorySeparatorChar, '/');
+                var head = RunGit("rev-parse", "--verify", "HEAD");
+                var publishedModule = RunGit("ls-tree", "HEAD", "--", relativeModulePath);
+                if (head.ExitCode == 0 && publishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(publishedModule.Output))
+                    return new PublishedManifestBaseline($"git:HEAD:new-module:{relativeModulePath}", []);
                 throw Failure(
                     workspace.ModuleId,
                     workspace.Provider,

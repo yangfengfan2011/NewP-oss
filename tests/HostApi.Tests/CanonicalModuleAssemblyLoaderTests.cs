@@ -170,10 +170,10 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
     public void Load_VerifiedImageWithSameIdentityAndMvidButDifferentIl_CannotReuseDefaultAssembly()
     {
         var modulesRoot = Path.Combine(_root, "modules");
-        var packageRoot = Path.Combine(modulesRoot, "Audit");
+        var packageRoot = Path.Combine(modulesRoot, "Files");
         Directory.CreateDirectory(packageRoot);
-        var entryPath = Path.Combine(_root, "AuditModule.dll");
-        var alteredImage = File.ReadAllBytes(typeof(AuditModule).Assembly.Location);
+        var entryPath = Path.Combine(_root, "FilesModule.dll");
+        var alteredImage = File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.FilesModule).Assembly.Location);
         ReplaceAllUtf16(alteredImage, "1.0.0", "9.0.0");
         File.WriteAllBytes(entryPath, alteredImage);
         File.WriteAllText(
@@ -181,17 +181,17 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
             """
             {
               "schemaVersion": "1.0",
-              "moduleId": "Audit",
+              "moduleId": "Files",
               "displayName": "审计日志",
               "version": "1.0.0",
-              "entryAssembly": "../../AuditModule.dll",
+              "entryAssembly": "../../FilesModule.dll",
               "dependencies": []
             }
             """);
         var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
         var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
         var plan = Assert.IsType<CanonicalModulePlan>(
-            new CanonicalModulePlanCompiler().Compile("altered-audit", [candidate]).Plan);
+            new CanonicalModulePlanCompiler().Compile("altered-files", [candidate]).Plan);
 
         var error = Assert.Throws<InvalidDataException>(() =>
             new CanonicalModuleAssemblyLoader(_root).Load(plan));
@@ -259,6 +259,7 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
         Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
             new System.Reflection.AssemblyName("AuditModule, Version=1.0.0.0")));
         Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(expected));
+        Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(new System.Reflection.AssemblyName("Audit.Contracts, Version=1.0.0.0")));
         Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
             new System.Reflection.AssemblyName("PlatformPersistence, Version=1.0.0.0")));
         Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(

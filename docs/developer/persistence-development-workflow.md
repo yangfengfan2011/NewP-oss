@@ -20,6 +20,8 @@
 6. 通过 Host 启动链路应用 migration；不要运行独立 schema apply 工具、`dotnet ef database update` 或手工 SQL 代替正式入口。
 7. 补充模块、持久化和 Host readiness 的定向测试。
 
+新模块首个 migration 使用 `migration-manifest finalize` 从空 authoring 前缀生成首节点，摘要仍由工具计算。工具只有在有效 HEAD 尚未发布整个模块 authoring 目录时才承认新 stream；已发布模块缺少 manifest、非 Git checkout 缺少冻结 Host 前缀仍拒绝。运行时不能消费空 migration 链。完成后使用只读 `check --all` 校验当前产物，不手填摘要或改写已发布前缀。
+
 首个公开外部插件 profile 只支持 SQL Server。Oracle 或 MySQL 的新增迁移必须有单独设计与真实 provider 验证，不能因为仓库存在对应 provider 项目就机械生成三份迁移。
 
 ## Required 字段生命周期

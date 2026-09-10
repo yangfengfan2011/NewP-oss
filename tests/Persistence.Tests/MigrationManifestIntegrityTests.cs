@@ -133,6 +133,17 @@ public sealed class MigrationManifestIntegrityTests
     }
 
     [Fact]
+    public void EmptyAuthoringPrefix_IsAllowedButRuntimeStillRequiresMigration()
+    {
+        var manifest = CreateManifest() with { Migrations = [] };
+        Assert.Empty(MigrationManifestIntegrity.ValidateAuthoringPrefix("Example", PersistenceProvider.SqlServer, manifest, "manifest.json"));
+        var bytes = new byte[] { 1, 2, 3 };
+        manifest = manifest with { BundleChecksum = MigrationManifestIntegrity.ComputeBundleChecksum(bytes) };
+        var failure = Assert.Throws<MigrationManifestValidationException>(() => MigrationManifestIntegrity.Validate("Example", PersistenceProvider.SqlServer, manifest, bytes, "manifest.json", manifest.ModelDigest));
+        Assert.Equal("PERSISTENCE_MIGRATION_REQUIRED", failure.Code);
+    }
+
+    [Fact]
     public void ValidateAuthoringPrefix_BrokenHistoryStillFails()
     {
         var manifest = WithFirstStep(

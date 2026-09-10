@@ -18,6 +18,10 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddStandardCrudKernel();
+        services.AddScoped<IStandardCrudCreationRecorder, PersonCreationRecorder>();
+        foreach (var (kind, model) in new[] { ("company", "Company"), ("department", "Department"), ("position", "Position"), ("organization.person", "Person") })
+            services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory>(sp =>
+                new BusinessAuditOrganizationNames(sp.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(), kind, model));
         services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());

@@ -872,10 +872,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.Locator(".ant-select-dropdown:visible").Last.GetByText(
             $"Personnel {(suffix == "M" ? "writer" : "reader")} {_runId[..8]} ({actor.ECode})",
             new LocatorGetByTextOptions { Exact = true }).ClickAsync();
-        await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions
+        var role = modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions
         {
             Name = $"Personnel Gate Role {suffix} {_runId[..8]} (PersonnelGateRole{suffix}{_runId[..8]})", Exact = true
-        }).CheckAsync();
+        });
+        // Checkbox.Group 在 effect 中同步受控值，等待实际状态而非点击后的同步快照。
+        if (!await role.IsCheckedAsync()) await role.ClickAsync();
+        await Assertions.Expect(role).ToBeCheckedAsync();
         var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
             && new Uri(response.Url).AbsolutePath == $"/api/authorization/users/{actor.Id}/roles");
         await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();

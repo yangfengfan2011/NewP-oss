@@ -846,7 +846,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
         var modal = page.Locator(".ant-modal:visible").Last;
         foreach (var permission in permissions)
-            await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex($@"\({Regex.Escape(permission)}\)") }).CheckAsync();
+            await SelectControlledCheckboxAsync(modal.GetByRole(AriaRole.Checkbox,
+                new LocatorGetByRoleOptions { NameRegex = new Regex($@"\({Regex.Escape(permission)}\)") }));
         var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
             && new Uri(response.Url).AbsolutePath == $"/api/authorization/roles/{id}/permissions");
         await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
@@ -876,15 +877,20 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             Name = $"Personnel Gate Role {suffix} {_runId[..8]} (PersonnelGateRole{suffix}{_runId[..8]})", Exact = true
         });
-        // Checkbox.Group 在 effect 中同步受控值，等待实际状态而非点击后的同步快照。
-        if (!await role.IsCheckedAsync()) await role.ClickAsync();
-        await Assertions.Expect(role).ToBeCheckedAsync();
+        await SelectControlledCheckboxAsync(role);
         var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
             && new Uri(response.Url).AbsolutePath == $"/api/authorization/users/{actor.Id}/roles");
         await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
         var saved = await save;
         if (saved.Status != 204) throw new InvalidOperationException($"Account roles returned {saved.Status}: {await saved.TextAsync()}");
         await modal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    }
+
+    // Checkbox.Group 在 effect 中同步受控值，等待实际状态而非点击后的同步快照。
+    private static async Task SelectControlledCheckboxAsync(ILocator checkbox)
+    {
+        if (!await checkbox.IsCheckedAsync()) await checkbox.ClickAsync();
+        await Assertions.Expect(checkbox).ToBeCheckedAsync();
     }
 
     // 同一条旅程从统一入口读取已提交事件；字段差异的语义由 SQL/API 与呈现测试验证。

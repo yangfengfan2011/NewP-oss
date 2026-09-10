@@ -29,7 +29,7 @@ it('keeps malformed parent snapshots unknown and unrelated resources out of sync
     expect(await provider.resolveChange({ resourceKey: 'organization.department', operation: 'delete', id: 'd', before: { CompanyId: 'c', ParentDepartmentId: parent } }, scope)).toEqual({ kind: 'unknown' });
   }
   expect(await provider.resolveChange({ resourceKey: 'organization.department', operation: 'create', id: '' }, scope)).toEqual({ kind: 'unknown' });
-  expect(await provider.resolveChange({ resourceKey: 'organization.person', operation: 'delete', id: 'p' }, scope)).toEqual({ kind: 'unrelated' });
+  expect(await provider.resolveChange({ resourceKey: 'unrelated.resource', operation: 'delete', id: 'p' }, scope)).toEqual({ kind: 'unrelated' });
 });
 
 it('uses the same configured Provider for roots, branches, paths and paged searches', async () => {
@@ -45,8 +45,10 @@ it('uses the same configured Provider for roots, branches, paths and paged searc
   expect(fetchMock.mock.calls.every(([, options]) => options.signal === signal)).toBe(true);
 });
 
-it('maps creation, movement and deletion from configured parent fields', async () => {
-  const provider = createRelationTreeProvider(view);
+it('maps creation, movement and deletion from configured parent fields without membership filters', async () => {
+  const provider = createRelationTreeProvider({ ...view, relationSource: {
+    ...view.relationSource!, nodes: view.relationSource!.nodes.map(item => ({ ...item, filters: [] })),
+  } });
   const before = { CompanyId: 'c1', ParentDepartmentId: null };
   const after = { CompanyId: 'c1', ParentDepartmentId: 'd2' };
   const result = await provider.resolveChange({ resourceKey: 'organization.department', operation: 'update', id: 'd1', before, after }, scope);
@@ -74,4 +76,13 @@ it('reconciles filtered trees through server reads rather than guessing database
   const provider = createRelationTreeProvider(filtered);
   expect(await provider.resolveChange({ resourceKey: 'organization.department', operation: 'update', id: 'd1',
     before: { CompanyId: 'c1', ParentDepartmentId: null, IsEnabled: true }, after: { CompanyId: 'c1', ParentDepartmentId: null, IsEnabled: false } }, scope)).toMatchObject({ kind: 'reload', nodeKey: 'department:d1', operation: 'update' });
+});
+
+it('reloads the real filtered organization tree while retaining declared parent locations', async () => {
+  const provider = createRelationTreeProvider(view);
+  expect(await provider.resolveChange({ resourceKey: 'organization.department', operation: 'update', id: 'd',
+    before: { CompanyId: 'c', ParentDepartmentId: null }, after: { CompanyId: 'c', ParentDepartmentId: 'parent' } }, scope))
+    .toMatchObject({ kind: 'reload', beforeLocation: { parentNodeKey: 'company:c' }, afterLocation: { parentNodeKey: 'department:parent' } });
+  expect(await provider.resolveChange({ resourceKey: 'organization.person', operation: 'delete', id: 'p' }, scope))
+    .toEqual({ kind: 'unknown' });
 });

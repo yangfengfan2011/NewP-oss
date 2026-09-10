@@ -27,7 +27,7 @@ async function waitFor(test: () => boolean) {
   expect(test(), document.body.textContent ?? '').toBe(true);
 }
 async function click(text: string) {
-  const target = [...document.querySelectorAll('button,a')].find(item => item.textContent?.replace(/\s/g, '') === text.replace(/\s/g, ''));
+  const target = [...document.querySelectorAll('button,a,[role="tab"]')].find(item => item.textContent?.replace(/\s/g, '') === text.replace(/\s/g, ''));
   expect(target, text).toBeDefined();
   await act(async () => target!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
 }
@@ -66,7 +66,10 @@ it('loads the real personnel capability through an old address, keeps embedded q
   expect(router.state.location.pathname + router.state.location.search).toBe('/organization/structure?tab=persons');
   expect(calls.some(url => url.includes('/tree/'))).toBe(false);
   expect(container.querySelectorAll('.sh-page')).toHaveLength(1);
-  expect(container.querySelector('.np-crud-workspace')).toBeNull();
+  const activePanel = container.querySelector('.ant-tabs-tabpane-active')!;
+  expect(activePanel.querySelector('.np-crud-embedded')).not.toBeNull();
+  expect(activePanel.querySelector('.np-crud-workspace:not(.np-crud-embedded)')).toBeNull();
+  expect(activePanel.querySelector('.np-tree-workspace')).toBeNull();
   const keyword = container.querySelector('input[placeholder*="关键字"]') ?? container.querySelector('input');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(keyword, '张');

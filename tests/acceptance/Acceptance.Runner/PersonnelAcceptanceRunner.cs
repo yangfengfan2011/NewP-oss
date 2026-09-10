@@ -819,7 +819,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var id = payload.RootElement.GetProperty("id").GetString() ?? throw new InvalidOperationException("Role creation omitted id.");
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
         var row = page.Locator(".ant-table-tbody tr.ant-table-row").Filter(new LocatorFilterOptions { HasTextString = code }).Last;
-        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "更多", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
         var modal = page.Locator(".ant-modal:visible").Last;
         await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex(@"\(Organization\.Person\.View\)") }).CheckAsync();
         var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"

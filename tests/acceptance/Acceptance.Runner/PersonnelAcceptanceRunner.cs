@@ -400,22 +400,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             await WaitForPostLoginNavigationAsync(page);
 
             var browserAssertions = new List<string>();
-            // 同一管理员从正式菜单查询已提交人员的记录；数据语义由 SQL/API 层断言。
-            await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "业务变更记录", Exact = true }).First.ClickAsync();
-            await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/audit/business-changes");
-            await page.GetByLabel("目标标识", new PageGetByLabelOptions { Exact = true }).FillAsync(person.Id);
-            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "搜索", Exact = true }).ClickAsync();
-            var auditRow = page.Locator(".ant-table-tbody tr.ant-table-row").First;
-            await auditRow.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            await auditRow.GetByRole(AriaRole.Button).First.ClickAsync();
-            await page.Locator(".ant-drawer-content:visible").Last.GetByRole(AriaRole.Button,
-                new LocatorGetByRoleOptions { Name = "查看完整详情", Exact = true }).ClickAsync();
-            await page.WaitForURLAsync(url => new Uri(url).AbsolutePath.StartsWith("/audit/business-changes/", StringComparison.Ordinal));
-            await page.GetByText("变化明细", new PageGetByTextOptions { Exact = true }).First
-                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-            var auditScreenshot = Path.Combine(_runDirectory, "personnel", $"audit-detail-{phase}.png");
-            await page.ScreenshotAsync(new PageScreenshotOptions { Path = auditScreenshot, FullPage = true });
-            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
+            await OpenAuditDetailFromBrowserAsync(page, person, "person.created", phase);
             browserAssertions.Add("administrator-opened-person-business-change-detail");
 
             if (phase == "initial")
@@ -432,8 +417,10 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                     department,
                     position,
                     cancellationToken);
+                var destination = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken, "B");
+                person = await UpdatePersonFromBrowserAsync(page, person, company, destination, position, cancellationToken);
                 _company = company;
-                _department = department;
+                _department = destination;
                 _position = position;
                 _person = person;
                 await AssertPersonBirthDateRangeAsync(page, person);
@@ -445,9 +432,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                     "department-search-location-restored-after-refresh-and-shared-address",
                     "position-created",
                     "person-organization-affiliation-saved-through-standard-drawer",
+                    "person-moved-between-departments-in-same-company",
                     "birth-date-range-finds-person"
                 ]);
             }
+
+            await OpenAuditDetailFromBrowserAsync(page, person, "person.updated", phase);
+            browserAssertions.Add("administrator-opened-person-update-difference-detail");
 
             await OpenOrganizationTabAsync(page, "组织结构", "structure");
             var personTree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
@@ -600,7 +591,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private async Task<DepartmentData> CreateDepartmentFromBrowserAsync(
         IPage page,
         CompanyData company,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string suffix = "A")
     {
         cancellationToken.ThrowIfCancellationRequested();
         await OpenOrganizationTabAsync(page, "组织结构", "structure");
@@ -609,8 +601,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var content = page.GetByRole(AriaRole.Region, new PageGetByRoleOptions { Name = "节点内容" });
         await content.GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "直属部门", Exact = true }).ClickAsync();
         var department = new DepartmentData(
-            $"ACC-BD-{_runId[..8]}",
-            $"Personnel Gate Browser Department {_runId[..8]}");
+            $"ACC-BD-{suffix}-{_runId[..8]}",
+            $"Personnel Gate Browser Department {suffix} {_runId[..8]}");
         await ClickStandardCrudCreateActionAsync(page, "新建部门");
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
@@ -797,6 +789,32 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await drawer.Locator(".ant-drawer-close").ClickAsync();
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    }
+
+    // 同一条旅程从统一入口读取已提交事件；字段差异的语义由 SQL/API 与呈现测试验证。
+    private async Task OpenAuditDetailFromBrowserAsync(IPage page, PersonData person, string eventType, string phase)
+    {
+        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "业务变更记录", Exact = true }).First.ClickAsync();
+        await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/audit/business-changes");
+        await page.GetByLabel("目标标识", new PageGetByLabelOptions { Exact = true }).FillAsync(person.Id);
+        await page.GetByLabel("事件类型", new PageGetByLabelOptions { Exact = true }).FillAsync(eventType);
+        var queryResponse = page.WaitForResponseAsync(response =>
+            response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/audit/business-changes"
+            && HasQueryValue(new Uri(response.Url), "EventType", eventType));
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "搜索", Exact = true }).ClickAsync();
+        if (!(await queryResponse).Ok) throw new InvalidOperationException("Business change lookup failed.");
+        var auditRow = page.Locator(".ant-table-tbody tr.ant-table-row").First;
+        await auditRow.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await auditRow.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = eventType, Exact = true }).ClickAsync();
+        await page.Locator(".ant-drawer-content:visible").Last.GetByRole(AriaRole.Button,
+            new LocatorGetByRoleOptions { Name = "查看完整详情", Exact = true }).ClickAsync();
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath.StartsWith("/audit/business-changes/", StringComparison.Ordinal));
+        await page.GetByText("变化明细", new PageGetByTextOptions { Exact = true }).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var auditScreenshot = Path.Combine(_runDirectory, "personnel", $"audit-detail-{eventType}-{phase}.png");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = auditScreenshot, FullPage = true });
+        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
     }
 
     // 一次标准编辑同时维护岗位与时间字段，避免把同一主旅程拆成两次独立提交。

@@ -386,20 +386,28 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             ViewportSize = new ViewportSize { Width = 1440, Height = 1000 }
         });
         var page = await context.NewPageAsync();
+        var administratorPage = page;
+        await using var maintainerContext = await browser.NewContextAsync(new BrowserNewContextOptions { Locale = "zh-CN", ViewportSize = new ViewportSize { Width = 1440, Height = 1000 } });
+        await using var readerContext = await browser.NewContextAsync(new BrowserNewContextOptions { Locale = "zh-CN", ViewportSize = new ViewportSize { Width = 1440, Height = 1000 } });
+        var maintainerPage = await maintainerContext.NewPageAsync();
+        var readerPage = await readerContext.NewPageAsync();
         var browserErrors = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
         var apiResponses = new System.Collections.Concurrent.ConcurrentQueue<object>();
-        page.PageError += (_, message) => browserErrors.Enqueue(message);
-        page.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
-        page.Response += (_, response) =>
+        foreach (var observedPage in new[] { page, maintainerPage, readerPage })
         {
-            if (response.Status >= 400) failedResponses.Enqueue(response);
-            var path = new Uri(response.Url).AbsolutePath;
-            if (path.StartsWith("/api/organization/", StringComparison.Ordinal) || path.StartsWith("/api/audit/", StringComparison.Ordinal) || path.StartsWith("/api/authorization/", StringComparison.Ordinal))
-                apiResponses.Enqueue(new { observedAtUtc = DateTimeOffset.UtcNow, method = response.Request.Method, path, query = new Uri(response.Url).Query, status = response.Status });
-        };
-        page.SetDefaultTimeout(30_000);
-        page.SetDefaultNavigationTimeout(120_000);
+            observedPage.PageError += (_, message) => browserErrors.Enqueue(message);
+            observedPage.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
+            observedPage.Response += (_, response) =>
+            {
+                if (response.Status >= 400) failedResponses.Enqueue(response);
+                var path = new Uri(response.Url).AbsolutePath;
+                if (path.StartsWith("/api/organization/", StringComparison.Ordinal) || path.StartsWith("/api/audit/", StringComparison.Ordinal) || path.StartsWith("/api/authorization/", StringComparison.Ordinal))
+                    apiResponses.Enqueue(new { observedAtUtc = DateTimeOffset.UtcNow, method = response.Request.Method, path, query = new Uri(response.Url).Query, status = response.Status });
+            };
+            observedPage.SetDefaultTimeout(30_000);
+            observedPage.SetDefaultNavigationTimeout(120_000);
+        }
         try
         {
             await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login", new PageGotoOptions
@@ -412,8 +420,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             await WaitForPostLoginNavigationAsync(page);
 
             var browserAssertions = new List<string>();
-            await OpenAuditDetailFromBrowserAsync(page, person.Id, "person.created", phase);
-            browserAssertions.Add("administrator-opened-person-business-change-detail");
+
             var maintainer = _maintainer ?? throw new InvalidOperationException("Maintainer was not prepared.");
             var reader = _reader ?? throw new InvalidOperationException("Reader was not prepared.");
             if (phase == "initial")
@@ -439,15 +446,18 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 await MaintainDepartmentFromBrowserAsync(page, cancellationToken);
                 await LocateDepartmentAndRestoreAddressAsync(page, department, cancellationToken);
                 var position = await CreatePositionFromBrowserAsync(page, cancellationToken);
-                person = await UpdatePersonFromBrowserAsync(
-                    page,
-                    person,
-                    company,
-                    department,
-                    position,
-                    cancellationToken);
                 var destination = await CreateDepartmentFromBrowserAsync(page, company, cancellationToken, "B");
-                person = await UpdatePersonFromBrowserAsync(page, person, company, destination, position, cancellationToken, departmentOnly: true);
+                await LoginBrowserActorAsync(maintainerPage, maintainer);
+                await LoginBrowserActorAsync(readerPage, reader);
+                page = maintainerPage;
+                person = await CreatePersonFromBrowserAsync(page, company, department);
+                _person = person;
+                page = readerPage;
+                await OpenPersonnelFromShellAsync(page);
+                await AssertPersonListAndDrawerAsync(page, person, company.Name, department.Name, null);
+                await page.ScreenshotAsync(new PageScreenshotOptions { Path = Path.Combine(_runDirectory, "personnel", "reader-person.png"), FullPage = true });
+                page = maintainerPage;
+                person = await UpdatePersonFromBrowserAsync(page, person, company, destination, position, cancellationToken, sameCompany: true);
                 _company = company;
                 _department = destination;
                 _position = position;
@@ -455,6 +465,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 await AssertPersonBirthDateRangeAsync(page, person);
                 browserAssertions.AddRange(
                 [
+                    "maintainer-created-person-reader-viewed-and-maintainer-moved-department",
                     "company-created",
                     "department-created-in-tree-and-edited-from-context-menu",
                     "temporary-department-moved-from-global-list-and-deleted-in-tree",
@@ -466,8 +477,42 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 ]);
             }
 
+            if (phase != "initial")
+            {
+                await LoginBrowserActorAsync(maintainerPage, maintainer);
+                await LoginBrowserActorAsync(readerPage, reader);
+                page = readerPage;
+                await OpenPersonnelFromShellAsync(page);
+                await AssertPersonListAndDrawerAsync(page, person, _company?.Name, _department?.Name, _position?.Name);
+            }
+            page = administratorPage;
+            await OpenAuditDetailFromBrowserAsync(page, person.Id, "person.created", phase);
+            browserAssertions.Add("administrator-opened-person-business-change-detail");
             await OpenAuditDetailFromBrowserAsync(page, person.Id, "person.updated", phase);
             browserAssertions.Add("administrator-opened-person-update-difference-detail");
+            if (phase == "initial")
+            {
+                page = maintainerPage;
+                var originalDrawer = await OpenPersonEditDrawerAsync(page, person);
+                await originalDrawer.GetByLabel("姓名", new LocatorGetByLabelOptions { Exact = true }).FillAsync(person.Name + " denied");
+                page = administratorPage;
+                await RevokeUpdateFromBrowserAsync(page, _roleId!);
+                page = maintainerPage;
+                var rejected = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
+                    && new Uri(response.Url).AbsolutePath == $"/api/organization/persons/{person.Id}");
+                await originalDrawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存修改", Exact = true }).ClickAsync();
+                var denial = await rejected;
+                if (denial.Status != 403) throw new InvalidOperationException($"Original maintainer session write returned {denial.Status}, expected refusal.");
+                await page.GetByText("当前操作已被拒绝，请核对当前权限。", new PageGetByTextOptions { Exact = true }).First
+                    .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+                await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true })).ToHaveCountAsync(0);
+                await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "新建人员", Exact = true })).ToBeVisibleAsync();
+                var deniedScreenshot = Path.Combine(_runDirectory, "personnel", "maintainer-original-session-denied.png");
+                await page.ScreenshotAsync(new PageScreenshotOptions { Path = deniedScreenshot, FullPage = true });
+                _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, deniedScreenshot));
+                browserAssertions.Add("original-maintainer-session-refused-after-admin-revoked-update-and-actions-refreshed");
+            }
+            page = maintainerPage;
 
             await OpenOrganizationTabAsync(page, "组织结构", "structure");
             var personTree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
@@ -921,17 +966,39 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
     }
 
-    // 一次标准编辑同时维护岗位与时间字段，避免把同一主旅程拆成两次独立提交。
-    private async Task<PersonData> UpdatePersonFromBrowserAsync(
-        IPage page,
-        PersonData person,
-        CompanyData company,
-        DepartmentData department,
-        PositionData position,
-        CancellationToken cancellationToken,
-        bool departmentOnly = false)
+    private async Task LoginBrowserActorAsync(IPage page, OrdinaryActor actor)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login");
+        await page.Locator("#ecode").FillAsync(actor.ECode);
+        await page.Locator("#password").FillAsync(actor.Password);
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
+        await WaitForPostLoginNavigationAsync(page);
+    }
+
+    // 维护者使用正式创建表单，人员与登录账号保持不同对象。
+    private async Task<PersonData> CreatePersonFromBrowserAsync(IPage page, CompanyData company, DepartmentData department)
+    {
+        await OpenPersonnelFromShellAsync(page);
+        await ClickStandardCrudCreateActionAsync(page, "新建人员");
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        var number = $"ACT-{_runId[..10]}";
+        var name = $"Maintainer Created Person {_runId[..8]}";
+        await drawer.GetByLabel("人员编号", new LocatorGetByLabelOptions { Exact = true }).FillAsync(number);
+        await drawer.GetByLabel("姓名", new LocatorGetByLabelOptions { Exact = true }).FillAsync(name);
+        await SelectOrganizationLookupAsync(page, drawer, "所属公司", company.Name, "/api/organization/person-lookups/companies");
+        await SelectOrganizationLookupAsync(page, drawer, "所属部门", department.Name, "/api/organization/person-lookups/departments");
+        var save = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/organization/persons");
+        await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();
+        var created = await save;
+        if (created.Status != 201) throw new InvalidOperationException($"Maintainer create returned {created.Status}: {await created.TextAsync()}");
+        var person = ReadPerson(await created.TextAsync(), number, name);
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        return person;
+    }
+
+    private async Task<ILocator> OpenPersonEditDrawerAsync(IPage page, PersonData person)
+    {
         await OpenPersonnelFromShellAsync(page);
         await SubmitPersonnelKeywordAsync(page, person.PersonNo);
         var row = page.Locator("tr:visible", new PageLocatorOptions { HasTextString = person.PersonNo })
@@ -945,7 +1012,39 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
         var drawer = page.Locator(".ant-drawer-content:visible").Last;
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        if (!departmentOnly)
+        return drawer;
+    }
+
+    private async Task RevokeUpdateFromBrowserAsync(IPage page, string roleId)
+    {
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{roleId}");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
+        var modal = page.Locator(".ant-modal:visible").Last;
+        var update = modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex(@"\(Organization\.Person\.Update\)") });
+        await Assertions.Expect(update).ToBeCheckedAsync();
+        await update.ClickAsync();
+        await Assertions.Expect(update).Not.ToBeCheckedAsync();
+        var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath == $"/api/authorization/roles/{roleId}/permissions");
+        await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
+        if ((await save).Status != 204) throw new InvalidOperationException("Administrator permission revocation failed.");
+        await modal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+    }
+
+    // 一次标准编辑同时维护岗位与时间字段，避免把同一主旅程拆成两次独立提交。
+    private async Task<PersonData> UpdatePersonFromBrowserAsync(
+        IPage page,
+        PersonData person,
+        CompanyData company,
+        DepartmentData department,
+        PositionData position,
+        CancellationToken cancellationToken,
+        bool departmentOnly = false,
+        bool sameCompany = false)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var drawer = await OpenPersonEditDrawerAsync(page, person);
+        if (!departmentOnly && !sameCompany)
         {
             await SelectOrganizationLookupAsync(
                 page,

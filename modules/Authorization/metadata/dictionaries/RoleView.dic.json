@@ -77,6 +77,14 @@
     "Section_Basic": {
       "zhs": "基本信息",
       "en": "Basic"
+    },
+    "UserRoles": {
+      "en": "Account roles",
+      "zhs": "账号角色"
+    },
+    "ConfirmUserRoles": {
+      "en": "Save complete account role set",
+      "zhs": "完整保存此账号角色集合"
     }
   }
 }

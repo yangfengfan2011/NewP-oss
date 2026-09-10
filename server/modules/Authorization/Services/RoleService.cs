@@ -13,6 +13,7 @@ public class RoleService : IRoleService
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
     private readonly IRolePermissionWriter _permissionWriter;
+    private readonly IUserRoleAssignments _userAssignments;
 
     // 组合普通角色管理与完整权限集合提交；初始化使用独立入口。
     public RoleService(
@@ -21,7 +22,7 @@ public class RoleService : IRoleService
         IRolePermissionRepository rolePermissionRepository,
         IUserRoleRepository userRoleRepository,
         IPlatformObjectIdGenerator objectIdGenerator,
-        IRolePermissionWriter permissionWriter)
+        IRolePermissionWriter permissionWriter, IUserRoleAssignments userAssignments)
     {
         _roleRepository = roleRepository;
         _permissionRepository = permissionRepository;
@@ -29,6 +30,7 @@ public class RoleService : IRoleService
         _userRoleRepository = userRoleRepository;
         _objectIdGenerator = objectIdGenerator;
         _permissionWriter = permissionWriter;
+        _userAssignments = userAssignments;
     }
 
     public async Task<List<RoleDto>> GetAllRolesAsync(CancellationToken cancellationToken = default)
@@ -143,42 +145,13 @@ public class RoleService : IRoleService
     public Task AssignRolePermissionsAsync(string roleId, AssignRolePermissionsRequest request, string? grantedBy = null, CancellationToken cancellationToken = default) =>
         _permissionWriter.ReplaceAsync(roleId, request.PermissionCodes, cancellationToken);
 
-    public async Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default)
-    {
-        var userRoles = await _userRoleRepository.GetByUserIdAsync(userId, cancellationToken);
-        var roleIds = userRoles.Select(ur => ur.RoleId).ToList();
+    // 用户关系只通过完整校验及事务性写入边界访问。
+    public Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) =>
+        _userAssignments.GetAsync(userId, cancellationToken);
 
-        var roles = await _roleRepository.GetByIdsAsync(roleIds, cancellationToken);
-        var roleCodes = roles.Select(r => r.Code).ToList();
-
-        return new UserRoleAssignmentsDto
-        {
-            UserId = userId,
-            RoleCodes = roleCodes
-        };
-    }
-
-    public async Task AssignUserRolesAsync(string userId, AssignUserRolesRequest request, string? assignedBy = null, CancellationToken cancellationToken = default)
-    {
-        // 获取角色 ID
-        var roles = await _roleRepository.GetByCodesAsync(request.RoleCodes, cancellationToken);
-        var roleIds = roles.Select(r => r.Id).ToList();
-
-        // 删除现有角色
-        await _userRoleRepository.DeleteByUserIdAsync(userId, cancellationToken);
-
-        // 添加新角色
-        var userRoles = roleIds.Select(roleId => new UserRole
-        {
-            Id = _objectIdGenerator.NewId(nameof(UserRole)),
-            UserId = userId,
-            RoleId = roleId,
-            AssignedBy = assignedBy
-        }).ToList();
-
-        await _userRoleRepository.CreateBatchAsync(userRoles, cancellationToken);
-    }
-
+    // 操作者由可信请求上下文产生，调用者字符串不进入审计。
+    public Task AssignUserRolesAsync(string userId, AssignUserRolesRequest request, string? assignedBy = null, CancellationToken cancellationToken = default) =>
+        _userAssignments.ReplaceAsync(userId, request.RoleCodes, cancellationToken);
     private static RoleDto MapToDto(Role role)
     {
         return new RoleDto

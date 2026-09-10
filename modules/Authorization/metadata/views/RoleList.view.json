@@ -87,6 +87,16 @@
         "requiredPermissions": [
           "Authorization.Permission.Assign"
         ]
+      },
+      {
+        "labelKey": "UserRoles",
+        "requiredPermissions": [
+          "Authorization.User.AssignRole"
+        ],
+        "key": "userRoles",
+        "handlerKey": "userRoles",
+        "inputKey": "userRoles",
+        "confirmMessageKey": "ConfirmUserRoles"
       }
     ],
     "export": {

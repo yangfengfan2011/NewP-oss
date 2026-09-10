@@ -12,9 +12,9 @@ import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardC
 it('正式角色authoring经runtime投影进入列表、详情和表单', () => {
   const schema = buildStandardCrudListSchema(list.view, roleResource, { modelDocuments: [model] });
   expect(schema.columns.map(c => c.field)).toEqual(['ECODE', 'ENAME', 'Description', 'IsEnabled', 'IsBuiltIn']);
-  expect(schema.rowActions.map(a => a.key)).toEqual(['edit', 'permissions']);
+  expect(schema.rowActions.map(a => a.key)).toEqual(['edit', 'permissions', 'userRoles']);
   const resolved = resolveStandardCrudDetailSchema([detail], roleResource, { modelDocuments: [model] });
-  expect(resolved.pageActions.map(a => a.key)).toEqual(['edit', 'permissions']);
+  expect(resolved.pageActions.map(a => a.key)).toEqual(['edit', 'permissions', 'userRoles']);
   const create = buildStandardCrudFormSchemaFromModel(model.Role, { mode: 'create', enumOptions: {} });
   const edit = buildStandardCrudFormSchemaFromModel(model.Role, { mode: 'edit', enumOptions: {} });
   expect(create.fields.filter(f => !f.readOnly).map(f => f.key)).toEqual(['ECODE', 'ENAME', 'Description']);

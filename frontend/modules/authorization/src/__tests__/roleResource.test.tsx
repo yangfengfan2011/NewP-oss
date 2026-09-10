@@ -26,6 +26,18 @@ describe('普通角色正式适配器', () => {
     fetcher.mockResolvedValue(new Response(JSON.stringify({ title: '保护拒绝' }), { status: 403 }));
     await expect(resource.actionHandlers!.permissions({ id: 'role-1', input: { codes: [] } })).rejects.toMatchObject({ status: 403 });
   });
+  it('完整保存账号集合保留页外选择，未知提交不自动重放', async () => {
+    const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(new Response(null, { status: 204 }));
+    const resource = createRoleResource(fetcher);
+    await expect(resource.actionHandlers!.userRoles({ input: undefined })).rejects.toThrow('请选择账号');
+    expect(fetcher).not.toHaveBeenCalled();
+    await resource.actionHandlers!.userRoles({ input: { accountId: 'user/1', codes: ['shown', 'offpage'] } });
+    expect(fetcher.mock.calls[0][0]).toBe('/api/authorization/users/user%2F1/roles');
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ RoleCodes: ['shown', 'offpage'] });
+    fetcher.mockRejectedValue(new TypeError('network'));
+    await expect(resource.actionHandlers!.userRoles({ input: { accountId: 'user/1', codes: [] } })).rejects.toThrow('不会自动重试');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it('普通停用角色仍可配置，管理员角色仅隐藏受保护写入动作', () => {
     const resource = createRoleResource();
     expect(resource.actionStateResolver!({ action: { key: 'permissions', labelKey: '' }, row: { ECODE: 'ordinary', IsEnabled: false } }).available).toBe(true);

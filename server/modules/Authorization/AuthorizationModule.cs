@@ -21,6 +21,8 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditRoleNames>();
         services.AddScoped<Controllers.LocalAdministratorManagementFilter>();
         services.AddScoped<IRolePermissionWriter, RolePermissionWriter>();
+        services.AddScoped<IUserRoleAssignments, UserRoleAssignments>();
+        services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditAccountNames>();
         services.AddScoped<ILocalAdministratorCatalog, LocalAdministratorCatalog>();
         // 注册核心服务
         services.AddScoped<IAuthorizationService, AuthorizationService>();

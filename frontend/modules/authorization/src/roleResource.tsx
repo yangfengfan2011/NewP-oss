@@ -1,3 +1,4 @@
+import { UserRoleInput } from './userRoleInput';
 import { useEffect, useState } from 'react';
 import { Alert, Checkbox, Spin, Typography } from 'antd';
 import { platformFetch } from '@icp-platform/core';
@@ -77,11 +78,14 @@ export function createRoleResource(fetcher: typeof fetch = platformFetch as type
       const protectedAction = (current.ECODE === 'LocalAdmin' && ['edit', 'permissions'].includes(action.key)) || (current.IsBuiltIn === true && action.key === 'edit');
       return { visible: !protectedAction, available: !protectedAction };
     },
-    actionHandlers: { permissions: async ({ id, input }) => {
+    actionHandlers: { userRoles: async ({ input }) => {
+      if (!isStandardCrudRecord(input) || typeof input.accountId !== 'string' || !Array.isArray(input.codes)) throw new Error('请选择账号并等待角色读取成功。');
+      await requestRole(fetcher, `/api/authorization/users/${encodeURIComponent(input.accountId)}/roles`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ RoleCodes: input.codes }) });
+    }, permissions: async ({ id, input }) => {
       if (!id || !isStandardCrudRecord(input) || !Array.isArray(input.codes)) throw new Error('请等待权限目录读取成功。');
       await requestRole(fetcher, `${route}/${encodeURIComponent(id)}/permissions`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PermissionCodes: input.codes }) });
     } },
-    actionInputRenderers: { permissions: context => <RolePermissionInput {...context} /> },
+    actionInputRenderers: { userRoles: context => <UserRoleInput {...context} />, permissions: context => <RolePermissionInput {...context} /> },
   };
 }
 export const roleResource = createRoleResource();

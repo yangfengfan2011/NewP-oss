@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Audit\Contracts\Audit.Contracts.csproj" />
+    <ProjectReference Include="..\Identity\Contracts\Identity.Contracts.csproj" />
     <ProjectReference Include="Contracts\Authorization.Contracts.csproj" />
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />

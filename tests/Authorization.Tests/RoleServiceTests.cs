@@ -27,7 +27,7 @@ public class RoleServiceTests
             _permissionRepository,
             _rolePermissionRepository,
             _userRoleRepository,
-            new PlatformObjectIdGenerator(), new TestRolePermissionWriter(_permissionRepository, _rolePermissionRepository, new PlatformObjectIdGenerator())
+            new PlatformObjectIdGenerator(), new TestRolePermissionWriter(_permissionRepository, _rolePermissionRepository, new PlatformObjectIdGenerator()), new TestUserAssignments()
         );
     }
 
@@ -168,7 +168,7 @@ public class RoleServiceTests
         var roleRepository = new RoleRepository();
         var permissionRepository = new PermissionRepository();
         var rolePermissionRepository = new RolePermissionRepository();
-        var service = new RoleService(roleRepository, permissionRepository, rolePermissionRepository, new UserRoleRepository(), generator, new TestRolePermissionWriter(permissionRepository, rolePermissionRepository, generator));
+        var service = new RoleService(roleRepository, permissionRepository, rolePermissionRepository, new UserRoleRepository(), generator, new TestRolePermissionWriter(permissionRepository, rolePermissionRepository, generator), new TestUserAssignments());
         var role = new Role { Id = "Role_00000000000000000000000000000001", Code = "Admin", Name = "管理员" };
         var permission = new Permission { Id = "Permission_00000000000000000000000000000001", Code = "Test.View", DisplayName = "查看", ModuleId = "Test" };
         await roleRepository.CreateAsync(role);
@@ -215,25 +215,20 @@ public class RoleServiceTests
             new RoleDto { Code = code, Name = "冒充", IsBuiltIn = builtIn }, "system"));
     }
 
-    [Fact]
-    public async Task AssignUserRolesAsync_AssignsUserRolePrefixedIds()
-    {
-        var generator = new SequenceObjectIdGenerator(
-            "UserRole_00000000000000000000000000000001");
-        var roleRepository = new RoleRepository();
-        var userRoleRepository = new UserRoleRepository();
-        var service = new RoleService(roleRepository, new PermissionRepository(), new RolePermissionRepository(), userRoleRepository, generator, new TestRolePermissionWriter(new PermissionRepository(), new RolePermissionRepository(), generator));
-        var role = new Role { Id = "Role_00000000000000000000000000000001", Code = "Admin", Name = "管理员" };
-        await roleRepository.CreateAsync(role);
-
-        await service.AssignUserRolesAsync("user-1", new AssignUserRolesRequest { RoleCodes = ["Admin"] });
-
-        var links = await userRoleRepository.GetByUserIdAsync("user-1");
-        Assert.Equal("UserRole_00000000000000000000000000000001", Assert.Single(links).Id);
-    }
-
     private static RoleService BuildRoleService(IPlatformObjectIdGenerator generator) =>
-        new(new RoleRepository(), new PermissionRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator, new TestRolePermissionWriter(new PermissionRepository(), new RolePermissionRepository(), generator));
+        new(new RoleRepository(), new PermissionRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator, new TestRolePermissionWriter(new PermissionRepository(), new RolePermissionRepository(), generator), new TestUserAssignments());
+
+    private sealed class TestUserAssignments : IUserRoleAssignments
+    {
+        private readonly Dictionary<string, List<string>> _codes = new();
+        public Task<UserRoleAssignmentsDto> GetAsync(string userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new UserRoleAssignmentsDto { UserId = userId, RoleCodes = _codes.GetValueOrDefault(userId) ?? [] });
+        public Task ReplaceAsync(string userId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
+        {
+            _codes[userId] = codes.ToList();
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class SequenceObjectIdGenerator : IPlatformObjectIdGenerator
     {

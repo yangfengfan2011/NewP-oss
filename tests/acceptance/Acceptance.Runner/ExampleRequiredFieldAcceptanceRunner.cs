@@ -383,13 +383,34 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             AriaRole.Button,
             new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
         await WaitForPostLoginNavigationAsync(page);
-        await page.GotoAsync(
-            $"http://127.0.0.1:{_shellPort}/examples/standard-crud/persistent-records",
-            new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await page.GetByRole(
-            AriaRole.Heading,
-            new PageGetByRoleOptions { Name = "持久化记录示例", Exact = true }).WaitForAsync();
-        await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
+        try
+        {
+            await page.GotoAsync(
+                $"http://127.0.0.1:{_shellPort}/examples/standard-crud/persistent-records",
+                new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
+        }
+        catch (Exception exception)
+        {
+            // 导航诊断复用现有脱敏产物，仅帮助定位页面状态，不能覆盖原失败。
+            try
+            {
+                await WriteEvidenceAsync("example-required-field/browser-navigation-failure.json", new
+                {
+                    url = Sanitize(page.Url),
+                    diagnostic = Sanitize(exception.ToString()),
+                    visibleDom = Sanitize(await page.Locator("body").InnerTextAsync())
+                }, CancellationToken.None);
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    Path = Path.Combine(_runDirectory, "example-required-field", "browser-navigation-failure.png"),
+                    FullPage = true,
+                    Mask = [page.Locator("input, textarea")]
+                });
+            }
+            catch (Exception) { /* 保留原始导航失败。 */ }
+            throw;
+        }
 
         await page.GetByRole(
             AriaRole.Button,

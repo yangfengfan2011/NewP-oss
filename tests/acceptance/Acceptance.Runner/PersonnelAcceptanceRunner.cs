@@ -825,7 +825,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex(@"\(Organization\.Person\.View\)") }).CheckAsync();
         var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
             && new Uri(response.Url).AbsolutePath == $"/api/authorization/roles/{id}/permissions");
-        await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "确认", Exact = true }).ClickAsync();
+        await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
         var saved = await save;
         if (saved.Status != 204) throw new InvalidOperationException($"Role permissions returned {saved.Status}: {await saved.TextAsync()}");
         await modal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });

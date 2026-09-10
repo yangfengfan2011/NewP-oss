@@ -160,6 +160,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
 
         var expectedBindings = new[]
         {
+            "audit.change.detail",
+            "audit.change.list",
             "authorization.role.detail",
             "authorization.role.list",
             "example.record.detail",
@@ -222,7 +224,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        var expectedModuleIds = new[] { "Authorization", "Example", "Identity", "Organization" };
+        var expectedModuleIds = new[] { "Audit", "Authorization", "Example", "Identity", "Organization" };
         Assert.True(
             expectedModuleIds.SequenceEqual(frontendModuleIds, StringComparer.Ordinal),
             $"Expected frontend modules: [{string.Join(", ", expectedModuleIds)}]\n"
@@ -230,7 +232,6 @@ public class HostApiPluginManifestRouteTests : IDisposable
 
         var retiredFrontendModuleIds = new[]
         {
-            "Audit",
             "ConfigCenter",
             "Demo",
             "Files",
@@ -278,7 +279,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             module.GetProperty("moduleId").GetString() == "Audit");
 
         var auditFrontend = audit.GetProperty("frontend");
-        Assert.Equal(JsonValueKind.Null, auditFrontend.ValueKind);
+        Assert.Equal(JsonValueKind.Object, auditFrontend.ValueKind);
         Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
         Assert.DoesNotContain(modules, module => module.GetProperty("moduleId").GetString() == "PluginOps");
     }
@@ -287,16 +288,17 @@ public class HostApiPluginManifestRouteTests : IDisposable
     public async Task ExternalPluginLifecycle_WhenDisabledThenReenabled_RestoresExistingActiveState()
     {
         var installRoot = CreateTempRoot();
-        var packageRoot = _testData.CreateValidPackage();
-        EnableInstalledPackage(packageRoot, installRoot, "Audit");
+        // 此用例只验证外部开关；使用无迁移的现有模块，避免伪造 Audit 包撤去已发布迁移。
+        var packageRoot = _testData.CreateValidPackage("Files", "1.0.0");
+        EnableInstalledPackage(packageRoot, installRoot, "Files");
 
         string externalFrontendUrl;
         await using (var enabledHost = await StartHostAsync(
                          installRoot,
                          externalPluginsEnabled: true))
         {
-            var audit = await ReadActiveModuleAsync(enabledHost, "Audit");
-            externalFrontendUrl = audit.GetProperty("frontend").GetProperty("url").GetString()!;
+            var files = await ReadActiveModuleAsync(enabledHost, "Files");
+            externalFrontendUrl = files.GetProperty("frontend").GetProperty("url").GetString()!;
             Assert.False(string.IsNullOrWhiteSpace(externalFrontendUrl));
         }
 
@@ -305,8 +307,10 @@ public class HostApiPluginManifestRouteTests : IDisposable
                          installRoot,
                          externalPluginsEnabled: false))
         {
+            var files = await ReadActiveModuleAsync(disabledHost, "Files");
+            Assert.Equal(JsonValueKind.Null, files.GetProperty("frontend").ValueKind);
             var audit = await ReadActiveModuleAsync(disabledHost, "Audit");
-            Assert.Equal(JsonValueKind.Null, audit.GetProperty("frontend").ValueKind);
+            Assert.Equal(JsonValueKind.Object, audit.GetProperty("frontend").ValueKind);
         }
         AssertExternalPluginStateUnchanged(
             externalStateBeforeDisabledStartup,
@@ -316,8 +320,8 @@ public class HostApiPluginManifestRouteTests : IDisposable
                          installRoot,
                          externalPluginsEnabled: true))
         {
-            var audit = await ReadActiveModuleAsync(reenabledHost, "Audit");
-            Assert.Equal(externalFrontendUrl, audit.GetProperty("frontend").GetProperty("url").GetString());
+            var files = await ReadActiveModuleAsync(reenabledHost, "Files");
+            Assert.Equal(externalFrontendUrl, files.GetProperty("frontend").GetProperty("url").GetString());
         }
     }
 
@@ -594,6 +598,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         var moduleAssemblyPath = moduleId switch
         {
             "Audit" => typeof(ICP.Platform.Modules.Audit.AuditModule).Assembly.Location,
+            "Files" => typeof(ICP.Platform.Modules.Files.FilesModule).Assembly.Location,
             "Organization" => typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
             _ => throw new InvalidOperationException($"No test module assembly is registered for '{moduleId}'.")
         };

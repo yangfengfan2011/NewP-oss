@@ -103,6 +103,16 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenRequiredRecorderIsAbsent_FailsBeforeBusinessWrite()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var service = Service(repository);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(Descriptor() with { RequiresUpdateRecord = true },
+            "person", new Dictionary<string, object?> { ["ENAME"] = "新姓名" }));
+        Assert.Null(repository.LastUpdatedValues);
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenPersistenceFailureIsUnknown_PropagatesFailure()
     {
         var service = Service(new RecordingMutationStandardCrudRepository([], failCreate: true));

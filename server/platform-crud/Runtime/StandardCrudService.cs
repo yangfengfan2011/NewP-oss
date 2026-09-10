@@ -30,6 +30,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IRequestPresentationContextAccessor? _presentationContextAccessor;
     private readonly ILogger<StandardCrudService>? _logger;
     private readonly IReadOnlyDictionary<string, IStandardCrudCreationRecorder> _creationRecorders;
+    private readonly IReadOnlyDictionary<string, IStandardCrudUpdateRecorder> _updateRecorders;
     private readonly IPlatformTransactionExecutor? _transactionExecutor;
 
     /// <summary>
@@ -52,7 +53,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IRequestPresentationContextAccessor? presentationContextAccessor = null,
         ILogger<StandardCrudService>? logger = null,
         IEnumerable<IStandardCrudCreationRecorder>? creationRecorders = null,
-        IPlatformTransactionExecutor? transactionExecutor = null)
+        IPlatformTransactionExecutor? transactionExecutor = null,
+        IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -72,6 +74,7 @@ public sealed class StandardCrudService : IStandardCrudService
         _logger = logger;
         _creationRecorders = (creationRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _transactionExecutor = transactionExecutor;
+        _updateRecorders = (updateRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -310,8 +313,8 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     /// <summary>
-    /// 按描述符白名单更新资源；声明 revision 字段的资源必须提交详情版本并通过仓储条件更新，
-    /// 校验后发生的数据库约束竞争统一投影为稳定公共冲突。
+    /// 按描述符白名单更新资源；必需业务记录的资源从保护旧值到登记都在唯一事务中完成。
+    /// 既有 revision 资源保留条件更新协议，数据库约束竞争统一投影为稳定公共冲突。
     /// </summary>
     public async Task<StandardCrudMutationResult> UpdateAsync(
         StandardCrudDescriptor descriptor,
@@ -320,7 +323,32 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
+        if (!descriptor.RequiresUpdateRecord)
+            return await UpdateCoreAsync(descriptor, id, values, null, null, cancellationToken);
+        if (!_updateRecorders.TryGetValue(descriptor.ResourceKey, out var recorder)
+            || _transactionExecutor is null || _repository is not IStandardCrudUpdateParticipant participant
+            || !string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
+            throw new InvalidOperationException("Required protected update registration is unavailable.");
+        try
+        {
+            return await _transactionExecutor.ExecuteAsync(token => new ValueTask<StandardCrudMutationResult>(
+                UpdateCoreAsync(descriptor, id, values, participant, recorder, token)), cancellationToken);
+        }
+        catch (StandardCrudPersistenceConflictException)
+        {
+            return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
+        }
+    }
+
+    // 复用原更新校验顺序；参与者存在时，旧值读取、校验和规范新值登记均持有同一事务保护。
+    private async Task<StandardCrudMutationResult> UpdateCoreAsync(
+        StandardCrudDescriptor descriptor, string id, IReadOnlyDictionary<string, object?> values,
+        IStandardCrudUpdateParticipant? participant, IStandardCrudUpdateRecorder? recorder,
+        CancellationToken cancellationToken)
+    {
+        var existing = participant is null
+            ? await _repository.GetByIdAsync(descriptor, id, cancellationToken)
+            : await participant.ReadForUpdateAsync(descriptor, id, cancellationToken);
         if (existing is null)
         {
             return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
@@ -411,11 +439,19 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?>? updated;
         try
         {
-            updated = expectedRevision.HasValue
-                ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
-                : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
+            if (participant is not null)
+            {
+                updated = await participant.RegisterUpdateAsync(descriptor, id, allowed, cancellationToken);
+                await recorder!.RegisterAsync(existing, updated, cancellationToken);
+            }
+            else
+            {
+                updated = expectedRevision.HasValue
+                    ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
+                    : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
+            }
         }
-        catch (StandardCrudPersistenceConflictException)
+        catch (StandardCrudPersistenceConflictException) when (participant is null)
         {
             return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
         }

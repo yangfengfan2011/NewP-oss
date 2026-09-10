@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Crud.Persistence;
 
-public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandardCrudCreationParticipant
+public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandardCrudCreationParticipant, IStandardCrudUpdateParticipant
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
@@ -224,6 +224,35 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
             .AsNoTracking()
             .SingleAsync(item => EF.Property<string>(item, descriptor.IdField) == createdId, cancellationToken);
         return Project(created, descriptor.FieldSet.DetailFields);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<string, object?>?> ReadForUpdateAsync(
+        StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default)
+    {
+        if (_dbContext.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A platform transaction is required for update registration.");
+        var rows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName));
+        // 主键恒等更新获取 SQL 写锁并持有至外层提交；不增加版本字段，也不在事务外采集旧值。
+        var affected = await rows.Where(row => EF.Property<string>(row, descriptor.IdField) == id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                row => EF.Property<string>(row, descriptor.IdField),
+                row => EF.Property<string>(row, descriptor.IdField)), cancellationToken);
+        return affected == 0 ? null : await GetByIdAsync(descriptor, id, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<string, object?>> RegisterUpdateAsync(
+        StandardCrudDescriptor descriptor, string id, IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken = default)
+    {
+        if (_dbContext.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A platform transaction is required for update registration.");
+        var modelKey = _dbContext.ResolveModelKey(descriptor.ModelName);
+        var row = await _dbContext.Set<Dictionary<string, object?>>(modelKey)
+            .SingleAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
+        foreach (var pair in values) row[pair.Key] = NormalizeMappedValue(modelKey, pair.Key, pair.Value);
+        return Project(row, descriptor.FieldSet.DetailFields);
     }
 
     /// <summary>

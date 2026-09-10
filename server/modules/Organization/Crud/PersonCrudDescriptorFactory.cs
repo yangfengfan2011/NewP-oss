@@ -22,6 +22,7 @@ public static class PersonCrudDescriptorFactory
         {
             ResourceKey = "organization.person",
             RequiresCreationRecord = true,
+            RequiresUpdateRecord = true,
             ModuleId = "Organization",
             ModelName = "Person",
             Route = "api/organization/persons",

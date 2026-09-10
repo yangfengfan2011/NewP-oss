@@ -52,6 +52,10 @@ public sealed class PersonStandardCrudResourceTests
         Assert.NotNull(descriptor);
         Assert.Equal("api/organization/persons", descriptor!.Route);
         Assert.Equal(StandardCrudDeletePolicy.Conditional, descriptor.DeletePolicy);
+        Assert.True(descriptor.RequiresCreationRecord);
+        Assert.True(descriptor.RequiresUpdateRecord);
+        Assert.Contains(services, service => service.ServiceType == typeof(IStandardCrudUpdateRecorder)
+            && service.ImplementationType == typeof(PersonUpdateRecorder));
     }
 
     [Fact]

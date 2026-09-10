@@ -127,6 +127,9 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(actor, secondRecord.GetProperty("ActorId").GetString());
         Assert.Equal("人员操作者", secondRecord.GetProperty("ActorId_DisplayValue").GetString());
         Assert.Equal("维护者创建", secondRecord.GetProperty("TargetId_DisplayValue").GetString());
+        Assert.Equal(secondRecord.GetProperty("ActorId_DisplayValue").GetString(), secondRecord.GetProperty("CreatedBy_DisplayValue").GetString());
+        foreach (var range in new[] { "From=invalid", "From=2026-01-01T00:00:00", "From=2040-01-01T00:00:00Z&To=2020-01-01T00:00:00Z" })
+            Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync("/api/audit/business-changes?" + range)).StatusCode);
         fixture.Fault.Commands.Clear();
         var page1 = await admin.GetFromJsonAsync<JsonElement>("/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=1");
         var page2 = await admin.GetFromJsonAsync<JsonElement>("/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=2");

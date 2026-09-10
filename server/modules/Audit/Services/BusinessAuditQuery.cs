@@ -46,7 +46,8 @@ public sealed class BusinessAuditQuery(EfPlatformDbContext db, IEnumerable<IBusi
     // 每类目录只调用一次，目录故障只降级名称；数据库查询故障不在此吞掉。
     private async Task ProjectAsync(List<Dictionary<string, object?>> rows, CancellationToken token)
     {
-        var actors = rows.Select(r => (string)r["ActorId"]!).Distinct(StringComparer.Ordinal).ToArray();
+        var actors = rows.SelectMany(r => new[] { "ActorId", "CreatedBy", "UpdatedBy" }.Select(field => r.GetValueOrDefault(field) as string))
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
         var names = await ResolveAsync(() => userNames.FindManyAsync(actors, token), token);
         var fieldsByRow = rows.ToDictionary(r => (string)r["EID"]!, r => JsonSerializer.Deserialize<BusinessAuditField[]>((string)r["FieldsJson"]!)!);
         var values = fieldsByRow.Values.SelectMany(f => f).SelectMany(f => new[] { f.Before, f.After }).OfType<BusinessAuditValue>().ToList();
@@ -59,6 +60,11 @@ public sealed class BusinessAuditQuery(EfPlatformDbContext db, IEnumerable<IBusi
         }
         foreach (var row in rows)
         {
+            foreach (var field in new[] { "CreatedBy", "UpdatedBy" })
+                row[field + "_DisplayValue"] = row.GetValueOrDefault(field) is string actorId ? names.GetValueOrDefault(actorId) : null;
+            foreach (var field in new[] { "CreatedAt", "UpdatedAt" })
+                row[field + "_DisplayValue"] = row.GetValueOrDefault(field) is DateTime instant && presentation.Current is { } stampContext
+                    ? formatter.FormatInstant(DateTime.SpecifyKind(instant, DateTimeKind.Utc), TemporalDisplayFormat.DateTime, stampContext) : null;
             row["ActorId_DisplayValue"] = names.GetValueOrDefault((string)row["ActorId"]!);
             row["TargetId_DisplayValue"] = resolved.GetValueOrDefault((string)row["Resource"]!)?.GetValueOrDefault((string)row["TargetId"]!);
             var occurred = DateTime.SpecifyKind((DateTime)row["OccurredAt"]!, DateTimeKind.Utc);

@@ -17,37 +17,40 @@
           "labelKey": "Resource",
           "source": "model",
           "field": "Resource",
-          "operator": "eq"
+          "operator": "="
         },
         {
           "key": "TargetId",
           "labelKey": "TargetId",
           "source": "model",
           "field": "TargetId",
-          "operator": "eq"
+          "operator": "="
         },
         {
           "key": "ActorId",
           "labelKey": "ActorId",
           "source": "model",
           "field": "ActorId",
-          "operator": "eq"
+          "operator": "="
         },
         {
           "key": "EventType",
           "labelKey": "EventType",
           "source": "model",
           "field": "EventType",
-          "operator": "eq"
+          "operator": "="
         },
         {
-          "key": "occurredRange",
-          "labelKey": "OccurredAt",
+          "key": "From",
+          "labelKey": "From",
           "source": "model",
-          "field": "OccurredAt",
-          "operator": "dateRange",
-          "fromKey": "From",
-          "toKey": "To"
+          "field": "OccurredAt"
+        },
+        {
+          "key": "To",
+          "labelKey": "To",
+          "source": "model",
+          "field": "OccurredAt"
         }
       ],
       "defaultSort": {

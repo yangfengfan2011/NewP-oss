@@ -27,6 +27,16 @@
           },
           "TraceId"
         ]
+      },
+      {
+        "key": "audit",
+        "titleKey": "Audit",
+        "fields": [
+          "CreatedBy",
+          "CreatedAt",
+          "UpdatedBy",
+          "UpdatedAt"
+        ]
       }
     ],
     "summaryBlocks": [

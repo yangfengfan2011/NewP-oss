@@ -45,6 +45,42 @@
     "changes": {
       "zhs": "变化明细",
       "en": "changes"
+    },
+    "From": {
+      "zhs": "起始时间（UTC）",
+      "en": "From (UTC)"
+    },
+    "To": {
+      "zhs": "结束时间（UTC）",
+      "en": "To (UTC)"
+    },
+    "From_Placeholder": {
+      "zhs": "例如 2026-09-10T00:00:00Z",
+      "en": "e.g. 2026-09-10T00:00:00Z"
+    },
+    "To_Placeholder": {
+      "zhs": "例如 2026-09-11T00:00:00Z",
+      "en": "e.g. 2026-09-11T00:00:00Z"
+    },
+    "Audit": {
+      "zhs": "记录信息",
+      "en": "Audit"
+    },
+    "CreatedBy": {
+      "zhs": "创建人",
+      "en": "CreatedBy"
+    },
+    "CreatedAt": {
+      "zhs": "创建时间",
+      "en": "CreatedAt"
+    },
+    "UpdatedBy": {
+      "zhs": "更新人",
+      "en": "UpdatedBy"
+    },
+    "UpdatedAt": {
+      "zhs": "更新时间",
+      "en": "UpdatedAt"
     }
   }
 }

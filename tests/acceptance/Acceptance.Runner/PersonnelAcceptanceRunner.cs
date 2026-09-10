@@ -52,6 +52,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private CompanyData? _company;
     private DepartmentData? _department;
     private PositionData? _position;
+    private string? _roleId;
     private string? _adminPassword;
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
     private bool _secretLeakDetected;
@@ -383,7 +384,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             if (response.Status >= 400) failedResponses.Enqueue(response);
             var path = new Uri(response.Url).AbsolutePath;
-            if (path.StartsWith("/api/organization/", StringComparison.Ordinal) || path.StartsWith("/api/audit/", StringComparison.Ordinal))
+            if (path.StartsWith("/api/organization/", StringComparison.Ordinal) || path.StartsWith("/api/audit/", StringComparison.Ordinal) || path.StartsWith("/api/authorization/", StringComparison.Ordinal))
                 apiResponses.Enqueue(new { observedAtUtc = DateTimeOffset.UtcNow, method = response.Request.Method, path, query = new Uri(response.Url).Query, status = response.Status });
         };
         page.SetDefaultTimeout(30_000);
@@ -400,8 +401,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             await WaitForPostLoginNavigationAsync(page);
 
             var browserAssertions = new List<string>();
-            await OpenAuditDetailFromBrowserAsync(page, person, "person.created", phase);
+            await OpenAuditDetailFromBrowserAsync(page, person.Id, "person.created", phase);
             browserAssertions.Add("administrator-opened-person-business-change-detail");
+            if (phase == "initial") _roleId = await ConfigureRoleFromBrowserAsync(page);
+            await OpenAuditDetailFromBrowserAsync(page,
+                _roleId ?? throw new InvalidOperationException("Role configuration did not create a role."),
+                "role.permissions.changed", phase);
+            browserAssertions.Add("administrator-configured-role-and-opened-permission-change-detail");
 
             if (phase == "initial")
             {
@@ -437,7 +443,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 ]);
             }
 
-            await OpenAuditDetailFromBrowserAsync(page, person, "person.updated", phase);
+            await OpenAuditDetailFromBrowserAsync(page, person.Id, "person.updated", phase);
             browserAssertions.Add("administrator-opened-person-update-difference-detail");
 
             await OpenOrganizationTabAsync(page, "组织结构", "structure");
@@ -791,14 +797,48 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
     }
 
+    // 角色和权限集合均通过正式管理页面维护，记录值与事务语义留在 SQL/API 层。
+    private async Task<string> ConfigureRoleFromBrowserAsync(IPage page)
+    {
+        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "角色管理", Exact = true }).First.ClickAsync();
+        await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/authorization/roles");
+        await page.Locator(".ant-table-tbody tr.ant-table-row").First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var code = $"PersonnelGateRole{_runId[..8]}";
+        await ClickStandardCrudCreateActionAsync(page, "新建角色");
+        var drawer = page.Locator(".ant-drawer-content:visible").Last;
+        await drawer.GetByLabel("角色代码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(code);
+        await drawer.GetByLabel("角色名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync($"Personnel Gate Role {_runId[..8]}");
+        await drawer.GetByLabel("说明", new LocatorGetByLabelOptions { Exact = true }).FillAsync("Personnel acceptance role configuration");
+        var creation = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/authorization/roles");
+        await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();
+        var created = await creation;
+        if (created.Status != 201) throw new InvalidOperationException($"Role creation returned {created.Status}: {await created.TextAsync()}");
+        using var payload = JsonDocument.Parse(await created.TextAsync());
+        var id = payload.RootElement.GetProperty("id").GetString() ?? throw new InvalidOperationException("Role creation omitted id.");
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        var row = page.Locator(".ant-table-tbody tr.ant-table-row").Filter(new LocatorFilterOptions { HasTextString = code }).Last;
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
+        var modal = page.Locator(".ant-modal:visible").Last;
+        await modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex(@"\(Organization\.Person\.View\)") }).CheckAsync();
+        var save = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath == $"/api/authorization/roles/{id}/permissions");
+        await modal.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "确认", Exact = true }).ClickAsync();
+        var saved = await save;
+        if (saved.Status != 204) throw new InvalidOperationException($"Role permissions returned {saved.Status}: {await saved.TextAsync()}");
+        await modal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        return id;
+    }
+
     // 同一条旅程从统一入口读取已提交事件；字段差异的语义由 SQL/API 与呈现测试验证。
-    private async Task OpenAuditDetailFromBrowserAsync(IPage page, PersonData person, string eventType, string phase)
+    private async Task OpenAuditDetailFromBrowserAsync(IPage page, string targetId, string eventType, string phase)
     {
         await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "业务变更记录", Exact = true }).First.ClickAsync();
         await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/audit/business-changes");
         await page.Locator(".ant-table-tbody tr.ant-table-row").First
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-        await page.GetByLabel("目标标识", new PageGetByLabelOptions { Exact = true }).FillAsync(person.Id);
+        await page.GetByLabel("目标标识", new PageGetByLabelOptions { Exact = true }).FillAsync(targetId);
         await page.GetByLabel("事件类型", new PageGetByLabelOptions { Exact = true }).FillAsync(eventType);
         var queryResponse = page.WaitForResponseAsync(response =>
             response.Request.Method == "GET"

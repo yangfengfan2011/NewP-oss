@@ -388,10 +388,41 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(120_000);
         page.SetDefaultNavigationTimeout(120_000);
-        await LoginBrowserAsync(page, "admin", adminPassword);
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "账号管理", Exact = true }).WaitForAsync();
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).ClickAsync();
+        var navigationResponses = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        page.Response += (_, response) =>
+        {
+            navigationResponses.Enqueue($"{response.Request.Method} {new Uri(response.Url).AbsolutePath}: {response.Status}");
+            while (navigationResponses.Count > 30) navigationResponses.TryDequeue(out var discardedResponse);
+        };
+        try
+        {
+            await LoginBrowserAsync(page, "admin", adminPassword);
+            await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            // 标准列表不重复输出页面标题，以实际创建入口作为可操作就绪点。
+            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).ClickAsync();
+        }
+        catch (Exception exception)
+        {
+            // 仅捕获首次导航阶段，此时尚未产生一次性密码；诊断失败不能覆盖原异常。
+            try
+            {
+                await WriteEvidenceAsync("identity-foundation/browser-navigation-failure.json", new
+                {
+                    url = Sanitize(page.Url),
+                    diagnostic = Sanitize(exception.ToString()),
+                    visibleDom = Sanitize(await page.Locator("body").InnerTextAsync()),
+                    responses = navigationResponses.Select(Sanitize).ToArray()
+                }, CancellationToken.None);
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    Path = Path.Combine(_runDirectory, "identity-foundation", "browser-navigation-failure.png"),
+                    FullPage = true,
+                    Mask = [page.Locator("input, textarea")]
+                });
+            }
+            catch (Exception) { /* 保留原始导航失败。 */ }
+            throw;
+        }
         await page.Locator("#ECODE").FillAsync(browserCode);
         await page.Locator("#ENAME").FillAsync("Browser Acceptance Account");
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();

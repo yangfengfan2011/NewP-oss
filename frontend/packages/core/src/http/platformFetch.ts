@@ -42,9 +42,18 @@ export function installPlatformAccessRejectionHandler(handler: (isWrite: boolean
 async function observeAccessResponse(response: Response, path: string, isWrite = false): Promise<Response> {
   // 当前主体请求自身由认证边界处理，避免拒绝刷新形成递归。
   if ((response.status === 401 || response.status === 403) && path !== '/api/auth/current-user') {
-    await requestLocaleState().accessRejectionHandler?.(isWrite);
+    void notifyAccessRejection(isWrite);
   }
   return response;
+}
+
+async function notifyAccessRejection(isWrite: boolean): Promise<void> {
+  // 刷新是拒绝后的独立同步；慢请求或通知故障不能延迟、覆盖已知的原拒绝，也不能形成未处理拒绝。
+  try {
+    await requestLocaleState().accessRejectionHandler?.(isWrite);
+  } catch {
+    console.error('当前权限刷新失败，原请求拒绝结果保持不变。');
+  }
 }
 
 export function installPlatformRequestLocaleProvider(provider: () => string): () => void {

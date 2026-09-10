@@ -505,12 +505,24 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 if (denial.Status != 403) throw new InvalidOperationException($"Original maintainer session write returned {denial.Status}, expected refusal.");
                 await page.GetByText("当前操作已被拒绝，请核对当前权限。", new PageGetByTextOptions { Exact = true }).First
                     .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+                await page.Locator(".ant-table-tbody tr.ant-table-row").Filter(new LocatorFilterOptions { HasTextString = person.PersonNo }).Last
+                    .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
                 await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true })).ToHaveCountAsync(0);
                 await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "新建人员", Exact = true })).ToBeVisibleAsync();
                 var deniedScreenshot = Path.Combine(_runDirectory, "personnel", "maintainer-original-session-denied.png");
                 await page.ScreenshotAsync(new PageScreenshotOptions { Path = deniedScreenshot, FullPage = true });
                 _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, deniedScreenshot));
                 browserAssertions.Add("original-maintainer-session-refused-after-admin-revoked-update-and-actions-refreshed");
+                await originalDrawer.Locator(".ant-drawer-close").ClickAsync();
+                var closed = originalDrawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+                var discard = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "放弃更改", Exact = true });
+                var confirmation = discard.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+                if (await Task.WhenAny(closed, confirmation) == confirmation)
+                {
+                    await confirmation;
+                    await discard.ClickAsync();
+                }
+                await closed;
             }
             page = maintainerPage;
 

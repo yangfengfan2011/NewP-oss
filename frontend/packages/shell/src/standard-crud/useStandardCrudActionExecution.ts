@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
+import { handoffStandardCrudSuccess } from './standardCrudSuccessHandoff';
 import type {
   StandardCrudActionContext,
   StandardCrudActionHandler,
@@ -65,13 +66,11 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       const result = await handler(context);
       // 业务成功已确定；呈现和组合只读失败不能把动作标成失败或重放。
       setSynchronizationError(null);
-      for (const followUp of [
-        () => { if (result) onResult?.(result); },
-        async () => { if (result?.change && resourceKey) await onCommitted?.({ ...result.change, resourceKey }); },
-        () => { if (refreshOnSuccess && !(result?.change && onCommitted && resourceKey)) refresh(); },
-      ]) {
-        try { await followUp(); } catch (failure) { setSynchronizationError(`已保存，刷新失败：${String(failure)}`); }
-      }
+      await handoffStandardCrudSuccess({
+        owner: { kind: 'action', resourceKey, refreshOnSuccess },
+        result, onResult, onCommitted, refresh,
+        onSynchronizationError: failure => setSynchronizationError(`已保存，刷新失败：${String(failure)}`),
+      });
       return { status: 'succeeded', ...(result ? { result } : {}) };
     } catch (actionError) {
       const conflict = actionError instanceof StandardCrudRequestError && actionError.status === 409;

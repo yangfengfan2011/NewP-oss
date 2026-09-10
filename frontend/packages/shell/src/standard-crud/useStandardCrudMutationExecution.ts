@@ -6,6 +6,7 @@ import {
   type StandardCrudFieldDefinition,
   type StandardCrudOperationResult,
 } from '@icp-platform/sdk';
+import { handoffStandardCrudSuccess } from './standardCrudSuccessHandoff';
 
 const STANDARD_CRUD_MUTATION_CONFLICT_MESSAGE = '记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。';
 
@@ -130,15 +131,11 @@ export function useStandardCrudMutationExecution({
 
       // 写入已经提交；后置呈现或读取失败不能进入写入错误分支，也不能重放写入。
       setSynchronizationError(null);
-      const followUps: Array<() => void | Promise<void>> = [
-        () => { if (result) onResult?.(result); },
-        async () => { if (result?.change) await onCommitted?.({ ...result.change, resourceKey: registration.resourceKey }); },
-        () => { if (!(result?.change && onCommitted)) refresh(); },
-      ];
-      for (const followUp of followUps) {
-        try { await followUp(); }
-        catch (readError) { setSynchronizationError(`已保存，刷新失败：${readError instanceof Error ? readError.message : String(readError)}`); }
-      }
+      await handoffStandardCrudSuccess({
+        owner: { kind: 'mutation', resourceKey: registration.resourceKey },
+        result, onResult, onCommitted, refresh,
+        onSynchronizationError: readError => setSynchronizationError(`已保存，刷新失败：${readError instanceof Error ? readError.message : String(readError)}`),
+      });
 
       return true;
     } catch (mutationError) {

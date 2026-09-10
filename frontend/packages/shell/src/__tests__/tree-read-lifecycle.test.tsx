@@ -1,0 +1,171 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { expect, it, onTestFinished, vi } from 'vitest';
+import type { TreeNodeDescriptor, TreeProviderBinding } from '@icp-platform/sdk';
+import type { CompositionChange } from '../composition/pageCompositionRuntime';
+import { useTreeReadLifecycle } from '../composition/useTreeReadLifecycle';
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const node = (nodeKey: string, nodeType = 'node'): TreeNodeDescriptor => ({
+  nodeKey, nodeType, label: nodeKey, hasChildren: false,
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(complete => { resolve = complete; });
+  return { promise, resolve };
+}
+
+function providerWith(nodes: TreeNodeDescriptor[]): TreeProviderBinding {
+  return {
+    key: 'tree',
+    roots: async () => nodes,
+    children: async () => [],
+    path: async (_scope, key) => nodes.filter(item => item.nodeKey === key),
+    search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+    resolveChange: async () => ({ kind: 'unrelated' }),
+  };
+}
+
+async function renderLifecycle(provider: TreeProviderBinding) {
+  let current!: ReturnType<typeof useTreeReadLifecycle>;
+  let reader: ((change: CompositionChange) => Promise<void>) | undefined;
+  let proceed: (() => void) | undefined;
+  let blocked = false;
+  const navigation = { nodeKey: null as string | null, nodeTab: null as string | null, locate: vi.fn() };
+  const onSelectAccepted = vi.fn();
+  const runtime = {
+    leave: (action: () => void) => { if (blocked) proceed = action; else action(); },
+    subscribe: (_id: string, read: (change: CompositionChange) => Promise<void>) => {
+      reader = read;
+      return () => { if (reader === read) reader = undefined; };
+    },
+  };
+  let options = { provider, scope: {}, instanceId: 'tree-instance', active: true, runtime, navigation, onSelectAccepted };
+  function Harness() { current = useTreeReadLifecycle(options); return null; }
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  onTestFinished(async () => { await act(async () => root.unmount()); });
+  await act(async () => root.render(<Harness />));
+  return {
+    read: () => current,
+    navigation,
+    onSelectAccepted,
+    block: () => { blocked = true; },
+    accept: () => { const action = proceed; proceed = undefined; blocked = false; action?.(); },
+    publish: (change: CompositionChange) => reader!(change),
+    rerender: async (next: Partial<typeof options>) => {
+      options = { ...options, ...next };
+      await act(async () => root.render(<Harness />));
+    },
+  };
+}
+
+it('changes selection and opens its presentation only after the composition allows leaving', async () => {
+  const tree = await renderLifecycle(providerWith([node('a'), node('b', 'other')]));
+  const openEditor = vi.fn();
+  tree.block();
+  act(() => tree.read().select('b', openEditor));
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('a');
+  expect(openEditor).not.toHaveBeenCalled();
+  expect(tree.onSelectAccepted).not.toHaveBeenCalled();
+
+  act(() => tree.accept());
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('b');
+  expect(tree.navigation.locate).toHaveBeenLastCalledWith('b', null);
+  expect(tree.onSelectAccepted).toHaveBeenCalledOnce();
+  expect(openEditor).toHaveBeenCalledOnce();
+});
+
+it('cancels synchronization reads when their scope is replaced and does not continue the old path', async () => {
+  const branch = deferred<TreeNodeDescriptor[]>();
+  const provider = providerWith([node('a')]);
+  let readSignal: AbortSignal | undefined;
+  provider.children = async (_scope, _key, signal) => { readSignal = signal; return branch.promise; };
+  provider.resolveChange = async () => ({
+    kind: 'located', operation: 'update', nodeKey: 'a',
+    afterLocation: { nodeKey: 'a', parentNodeKey: 'parent' },
+  });
+  const path = vi.fn(provider.path);
+  provider.path = path;
+  const tree = await renderLifecycle(provider);
+  let finished!: Promise<void>;
+  act(() => { finished = tree.publish({ resourceKey: 'resource', operation: 'update', id: 'a' }); });
+  await act(async () => undefined);
+
+  await tree.rerender({ provider: providerWith([node('new-scope')]), scope: { name: 'new' } });
+  await act(async () => { branch.resolve([node('old-scope')]); await finished; });
+  expect(readSignal?.aborted).toBe(true);
+  expect(path).not.toHaveBeenCalled();
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('new-scope');
+  expect(tree.read().snapshot.branches).toEqual({});
+  expect(tree.read().error).toBeNull();
+});
+
+it('finishes changes received during an active synchronization without needing another event', async () => {
+  const firstBranch = deferred<TreeNodeDescriptor[]>();
+  const provider = providerWith(['root', 'p1', 'p2', 'p3'].map(key => node(key)));
+  let readingFirstBranch = true;
+  provider.children = async (_scope, key) => {
+    if (key === 'p1' && readingFirstBranch) return firstBranch.promise;
+    return key === 'p3' ? [node('d')] : [];
+  };
+  provider.resolveChange = async change => ({
+    kind: 'located', operation: 'update', nodeKey: 'd',
+    beforeLocation: { nodeKey: 'd', parentNodeKey: String(change.before?.parent) },
+    afterLocation: { nodeKey: 'd', parentNodeKey: String(change.after?.parent) },
+  });
+  const tree = await renderLifecycle(provider);
+  let first!: Promise<void>;
+  let second!: Promise<void>;
+  act(() => { first = tree.publish({ resourceKey: 'resource', operation: 'update', id: 'd', before: { parent: 'p1' }, after: { parent: 'p2' } }); });
+  await act(async () => undefined);
+  act(() => { second = tree.publish({ resourceKey: 'resource', operation: 'update', id: 'd', before: { parent: 'p2' }, after: { parent: 'p3' } }); });
+  await act(async () => undefined);
+  await act(async () => {
+    readingFirstBranch = false;
+    firstBranch.resolve([]);
+    await Promise.all([first, second]);
+  });
+  expect(tree.read().snapshot.branches).toMatchObject({ p1: [], p2: [], p3: [node('d')] });
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('root');
+  expect(tree.read().error).toBeNull();
+});
+
+it.each(['approval', 'superseded'])('applies a resolved location only while it remains allowed: %s', async scenario => {
+  const path = deferred<TreeNodeDescriptor[]>();
+  const provider = providerWith([node('a'), node('b'), node('c')]);
+  let signal: AbortSignal | undefined;
+  provider.path = async (_scope, _key, currentSignal) => { signal = currentSignal; return path.promise; };
+  const tree = await renderLifecycle(provider);
+  act(() => tree.read().locate('b'));
+  if (scenario === 'approval') tree.block();
+  else act(() => tree.read().select('c'));
+
+  await act(async () => { path.resolve([node('b')]); });
+  expect(tree.read().snapshot.selected?.nodeKey).toBe(scenario === 'approval' ? 'a' : 'c');
+  if (scenario === 'approval') {
+    expect(tree.onSelectAccepted).not.toHaveBeenCalled();
+    act(() => tree.accept());
+    expect(tree.read().snapshot.selected?.nodeKey).toBe('b');
+  } else {
+    expect(signal?.aborted).toBe(true);
+  }
+  expect(tree.onSelectAccepted).toHaveBeenCalledOnce();
+  expect(tree.read().locationError).toBeNull();
+});
+
+it.each(['select', 'locate'] as const)('drops an approved %s request belonging to a replaced scope', async operation => {
+  const provider = providerWith([node('a'), node('b')]);
+  const tree = await renderLifecycle(provider);
+  tree.block();
+  act(() => tree.read()[operation]('b'));
+  await tree.rerender({ provider: providerWith([node('new-scope')]), scope: { name: 'new' } });
+  await act(async () => tree.accept());
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('new-scope');
+  expect(tree.read().locationError).toBeNull();
+  expect(tree.onSelectAccepted).not.toHaveBeenCalled();
+  expect(tree.navigation.locate).not.toHaveBeenCalled();
+});

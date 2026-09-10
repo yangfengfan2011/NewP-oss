@@ -192,7 +192,9 @@ describe('Identity account Standard CRUD production route', () => {
       { method: 'GET', signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
-    expect(container.textContent).toContain('账号管理');
+    expect(container.querySelector('.np-crud-workspace-header')).toBeNull();
+    expect(container.textContent).not.toContain('账号管理');
+    expect(container.querySelector('.np-standard-crud-table')?.textContent).toContain('创建账号');
     expect(container.textContent).toContain('alice');
     expect(container.textContent).toContain('Alice');
     expect(container.textContent).toContain('已删除');

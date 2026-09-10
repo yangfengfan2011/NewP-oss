@@ -860,9 +860,14 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private async Task AssignAccountRoleFromBrowserAsync(IPage page, string roleId, string suffix, OrdinaryActor actor)
     {
         await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{roleId}");
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "账号角色", Exact = true }).ClickAsync();
+        var accountRoles = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "账号角色", Exact = true });
+        await accountRoles.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        var roleScreenshot = Path.Combine(_runDirectory, "personnel", $"role-detail-{suffix}.png");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = roleScreenshot, FullPage = true });
+        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, roleScreenshot));
+        await accountRoles.ClickAsync();
         var modal = page.Locator(".ant-modal:visible").Last;
-        var account = modal.GetByLabel("账号", new LocatorGetByLabelOptions { Exact = true });
+        var account = modal.GetByRole(AriaRole.Combobox, new LocatorGetByRoleOptions { Name = "账号", Exact = true });
         await account.FillAsync(actor.ECode);
         await page.Locator(".ant-select-dropdown:visible").Last.GetByText(
             $"Personnel {(suffix == "M" ? "writer" : "reader")} {_runId[..8]} ({actor.ECode})",

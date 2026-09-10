@@ -41,7 +41,7 @@ public class RoleController : ControllerBase
     [RequirePermission(AuthorizationPermissions.RoleView)]
     public async Task<ActionResult<RoleDto>> GetRoleById(string roleId, CancellationToken cancellationToken)
     {
-        var role = await _roleService.GetRoleByIdAsync(roleId, cancellationToken);
+        var role = await _query.GetAsync(roleId, cancellationToken);
         if (role == null)
         {
             return NotFound();

@@ -312,6 +312,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var rolePage = await client.GetFromJsonAsync<JsonElement>("/api/authorization/roles/query?query=audit-role&pageIndex=1&pageSize=1");
         Assert.Equal(1, rolePage.GetProperty("total").GetInt32());
         Assert.Equal(id, Assert.Single(rolePage.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString());
+        var presented = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/roles/{id}");
+        Assert.False(string.IsNullOrWhiteSpace(presented.GetProperty("createdBy_DisplayValue").GetString()));
+        Assert.NotEqual(presented.GetProperty("createdBy").GetString(), presented.GetProperty("createdBy_DisplayValue").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(presented.GetProperty("createdAt_DisplayValue").GetString()));
         var route = $"/api/authorization/roles/{id}/permissions";
         var initial = new[] { "Organization.Person.View", "Organization.Person.Create" };
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);

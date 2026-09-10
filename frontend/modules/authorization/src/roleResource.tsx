@@ -13,7 +13,9 @@ function fields(value: unknown): Record<string, unknown> {
 function mapRole(value: unknown) {
   if (!isStandardCrudRecord(value) || typeof value.id !== 'string') throw new Error('角色响应无效');
   return { EID: value.id, ECODE: value.code, ENAME: value.displayName, Description: value.description,
-    IsEnabled: value.isEnabled, IsBuiltIn: value.isBuiltIn, CreatedBy: value.createdBy, CreatedAt: value.createdAt, UpdatedBy: value.updatedBy, UpdatedAt: value.updatedAt };
+    IsEnabled: value.isEnabled, IsBuiltIn: value.isBuiltIn, CreatedBy: value.createdBy, CreatedAt: value.createdAt, UpdatedBy: value.updatedBy, UpdatedAt: value.updatedAt,
+    CreatedBy_DisplayValue: value.createdBy_DisplayValue, CreatedAt_DisplayValue: value.createdAt_DisplayValue,
+    UpdatedBy_DisplayValue: value.updatedBy_DisplayValue, UpdatedAt_DisplayValue: value.updatedAt_DisplayValue };
 }
 // 复用平台认证、防伪及请求错误；写入不重试，网络不确定时先核对实际结果。
 export async function requestRole(fetcher: typeof fetch, url: string, init?: RequestInit): Promise<unknown> {

@@ -27,7 +27,7 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
     if (String(url).endsWith('/authorization/permissions')) return new Response(JSON.stringify([{ code: 'Organization.Person.View', displayName: '查看人员', moduleId: 'Organization' }]));
     if (String(url).includes('pageIndex=2')) return new Response(JSON.stringify({ items: [{ EID: 'role-2', ECODE: 'offpage', ENAME: '另一页已配角色', IsEnabled: true }], total: 21 }));
     if (String(url).includes('/query')) return new Response(JSON.stringify({ items: [{ EID: 'role-1', ECODE: 'ordinary', ENAME: '真实角色', IsEnabled: false, IsBuiltIn: false }], total: 21 }));
-    return new Response(JSON.stringify({ id: 'role-1', code: 'ordinary', displayName: '真实角色', isEnabled: false, isBuiltIn: false, createdBy: 'admin', updatedBy: 'admin', createdAt: '2026-09-10T01:00:00Z', updatedAt: '2026-09-10T01:00:00Z' }));
+    return new Response(JSON.stringify({ id: 'role-1', code: 'ordinary', displayName: '真实角色', isEnabled: false, isBuiltIn: false, createdBy: 'actor-raw-id', updatedBy: 'actor-raw-id', createdBy_DisplayValue: '当前管理员', updatedBy_DisplayValue: '当前管理员', createdAt_DisplayValue: '2026/9/10 09:00:00', updatedAt_DisplayValue: '2026/9/10 09:00:00', createdAt: '2026-09-10T01:00:00Z', updatedAt: '2026-09-10T01:00:00Z' }));
   });
   vi.stubGlobal('fetch', fetcher);
   const resource = createRoleResource(fetcher);
@@ -45,6 +45,15 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   await vi.waitFor(async () => { await act(async () => undefined); expect(container.textContent).toContain('真实角色'); });
   await render(true);
   await vi.waitFor(async () => { await act(async () => undefined); expect(container.textContent).toContain('账号角色'); });
+  expect(container.textContent).toContain('创建人');
+  expect(container.textContent).toContain('创建时间');
+  expect(container.textContent).toContain('更新人');
+  expect(container.textContent).toContain('更新时间');
+  expect(container.textContent).toContain('当前管理员');
+  expect(container.textContent).toContain('2026/9/10 09:00:00');
+  expect(container.textContent).not.toContain('Field_');
+  expect(container.textContent).not.toContain('actor-raw-id');
+  expect(container.textContent).not.toContain('2026-09-10T01:00:00Z');
   const accounts = Array.from(container.querySelectorAll('button, a')).find(b => b.textContent === '账号角色') as HTMLElement | undefined;
   expect(accounts).toBeDefined();
   await act(async () => accounts!.click());

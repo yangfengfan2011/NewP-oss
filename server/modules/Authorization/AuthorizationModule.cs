@@ -16,6 +16,9 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
     {
         services.AddPlatformObjectIdGeneration();
 
+        services.AddStandardCrudKernel();
+        services.AddStandardCrudResource(RoleReadResource.Create());
+        services.AddScoped<ICP.Platform.Crud.Abstractions.IStandardCrudQueryCustomizer, RoleReadResource>();
         services.AddScoped<RoleManagementQuery>();
         services.AddSingleton<ActivePermissionCatalog>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditRoleNames>();

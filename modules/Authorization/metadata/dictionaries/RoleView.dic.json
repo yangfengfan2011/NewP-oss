@@ -50,6 +50,10 @@
       "zhs": "关键字",
       "en": "Query"
     },
+    "Field_CreatedBy": { "en": "Created by", "zhs": "创建人" },
+    "Field_CreatedAt": { "en": "Created at", "zhs": "创建时间" },
+    "Field_UpdatedBy": { "en": "Updated by", "zhs": "更新人" },
+    "Field_UpdatedAt": { "en": "Updated at", "zhs": "更新时间" },
     "Audit": {
       "zhs": "记录信息",
       "en": "Record information"

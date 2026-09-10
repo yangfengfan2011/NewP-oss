@@ -383,8 +383,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         {
             if (response.Status >= 400) failedResponses.Enqueue(response);
             var path = new Uri(response.Url).AbsolutePath;
-            if (path.StartsWith("/api/organization/", StringComparison.Ordinal))
-                apiResponses.Enqueue(new { observedAtUtc = DateTimeOffset.UtcNow, method = response.Request.Method, path, status = response.Status });
+            if (path.StartsWith("/api/organization/", StringComparison.Ordinal) || path.StartsWith("/api/audit/", StringComparison.Ordinal))
+                apiResponses.Enqueue(new { observedAtUtc = DateTimeOffset.UtcNow, method = response.Request.Method, path, query = new Uri(response.Url).Query, status = response.Status });
         };
         page.SetDefaultTimeout(30_000);
         page.SetDefaultNavigationTimeout(120_000);
@@ -796,6 +796,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     {
         await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "业务变更记录", Exact = true }).First.ClickAsync();
         await page.WaitForURLAsync($"http://127.0.0.1:{_shellPort}/audit/business-changes");
+        await page.Locator(".ant-table-tbody tr.ant-table-row").First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await page.GetByLabel("目标标识", new PageGetByLabelOptions { Exact = true }).FillAsync(person.Id);
         await page.GetByLabel("事件类型", new PageGetByLabelOptions { Exact = true }).FillAsync(eventType);
         var queryResponse = page.WaitForResponseAsync(response =>

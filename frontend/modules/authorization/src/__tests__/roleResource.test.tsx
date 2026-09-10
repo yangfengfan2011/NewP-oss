@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRoleResource } from '../roleResource';
+import { createRoleResource, requestRole } from '../roleResource';
 describe('普通角色正式适配器', () => {
   it('创建仅发送允许的字段，编辑保留停用状态且不回写保留身份', async () => {
     const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(new Response('{}'));
@@ -36,6 +36,38 @@ describe('普通角色正式适配器', () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ RoleCodes: ['shown', 'offpage'] });
     fetcher.mockRejectedValue(new TypeError('network'));
     await expect(resource.actionHandlers!.userRoles({ input: { accountId: 'user/1', codes: [] } })).rejects.toThrow('不会自动重试');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it.each(['create', 'update'] as const)('成功 %s 响应体断流提示先核对实际结果且不重放', async operation => {
+    const response = new Response('{}', { status: operation === 'create' ? 201 : 200 });
+    vi.spyOn(response, 'json').mockRejectedValue(new TypeError('body stream terminated'));
+    const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(response);
+    const resource = createRoleResource(fetcher);
+    const result = operation === 'create'
+      ? resource.dataAdapter.create!({ ECODE: 'ordinary', ENAME: '角色' })
+      : resource.dataAdapter.update!('role-1', { ENAME: '改名' }, { IsEnabled: true });
+    await expect(result).rejects.toThrow('操作结果未知，请刷新后核对；系统不会自动重试。');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each([undefined, 'GET'])('成功读取响应体断流保持普通读取错误（%s）', async method => {
+    const response = new Response('{}');
+    vi.spyOn(response, 'json').mockRejectedValue(new TypeError('body stream terminated'));
+    const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(response);
+    await expect(requestRole(fetcher, '/api/authorization/roles/role-1', { method })).rejects.toThrow('角色读取失败，请重试。');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('取消读取保留原始错误，204 不消费响应体', async () => {
+    const controller = new AbortController();
+    const failure = new DOMException('cancelled', 'AbortError');
+    const response = new Response('{}');
+    vi.spyOn(response, 'json').mockImplementation(async () => { controller.abort(); throw failure; });
+    const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(response);
+    await expect(requestRole(fetcher, '/api/authorization/roles/role-1', { signal: controller.signal })).rejects.toBe(failure);
+    const empty = new Response(null, { status: 204 });
+    const parse = vi.spyOn(empty, 'json');
+    fetcher.mockResolvedValue(empty);
+    await expect(requestRole(fetcher, '/api/authorization/roles/role-1/permissions', { method: 'PUT' })).resolves.toBeUndefined();
+    expect(parse).not.toHaveBeenCalled();
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it('普通停用角色仍可配置，管理员角色仅隐藏受保护写入动作', () => {

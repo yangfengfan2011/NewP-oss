@@ -19,17 +19,18 @@ function mapRole(value: unknown) {
 }
 // 复用平台认证、防伪及请求错误；写入不重试，网络不确定时先核对实际结果。
 export async function requestRole(fetcher: typeof fetch, url: string, init?: RequestInit): Promise<unknown> {
-  let response: Response;
-  try { response = await fetcher(url, init); }
-  catch (error) {
-    if (init?.signal?.aborted) throw error;
-    throw new Error(init?.method ? '操作结果未知，请刷新后核对；系统不会自动重试。' : '角色读取失败，请重试。');
+  try {
+    const response = await fetcher(url, init);
+    if (!response.ok) {
+      const problem: unknown = await response.json().catch(() => null);
+      throw new StandardCrudRequestError(isStandardCrudRecord(problem) && typeof problem.title === 'string' ? problem.title : '角色操作失败', response.status);
+    }
+    return response.status === 204 ? undefined : await response.json();
+  } catch (error) {
+    if (error instanceof StandardCrudRequestError || init?.signal?.aborted) throw error;
+    const isRead = ['GET', 'HEAD', 'OPTIONS'].includes((init?.method ?? 'GET').toUpperCase());
+    throw new Error(isRead ? '角色读取失败，请重试。' : '操作结果未知，请刷新后核对；系统不会自动重试。');
   }
-  if (!response.ok) {
-    const problem: unknown = await response.json().catch(() => null);
-    throw new StandardCrudRequestError(isStandardCrudRecord(problem) && typeof problem.title === 'string' ? problem.title : '角色操作失败', response.status);
-  }
-  return response.status === 204 ? undefined : response.json();
 }
 interface PermissionOption { code: string; displayName: string; moduleId: string; group?: string }
 export function RolePermissionInput({ detail, row, value, onChange }: StandardCrudActionInputRenderContext) {

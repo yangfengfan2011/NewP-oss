@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
@@ -29,16 +28,6 @@ internal static class ExampleRequiredFieldMigrationFixture
 {
     private const string BeforeRecordSourceModelDigest = "a5464035b4271ab8c1495edba7bfab00625a9ebb65978c459f05efd0758c4d9c";
     private const string NullableRecordSourceModelDigest = "05f1fa870d2f602d37cddd4c79d3e3931730c8d505223c0a35c57a7b662cc0cf";
-    private const string OrganizationFoundationCompanyMetadata = """
-        {"schemaVersion":"1.0","type":"model","Company":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"UX_Company_ECODE","fields":["ECODE"],"unique":true}]}}
-        """;
-    private const string OrganizationFoundationDepartmentMetadata = """
-        {"schemaVersion":"1.0","type":"model","Department":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"CompanyId","storage":{"type":"guid"}},{"name":"ParentDepartmentId","storage":{"type":"guid","nullable":true}},{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"IX_Department_Company","fields":["CompanyId"],"unique":false},{"name":"IX_Department_Parent","fields":["ParentDepartmentId"],"unique":false},{"name":"IX_Department_Company_Parent_ECODE","fields":["CompanyId","ParentDepartmentId","ECODE"],"unique":false}]}}
-        """;
-    private const string OrganizationFoundationPositionMetadata = """
-        {"schemaVersion":"1.0","type":"model","Position":{"kind":"Entity","builtinFields":["ENAME","ECODE"],"fields":[{"name":"CompanyId","storage":{"type":"guid"},"dataSource":{"type":"model","key":"Company","model":"Company"}},{"name":"DepartmentId","storage":{"type":"guid"},"dataSource":{"type":"model","key":"Department","model":"Department"}},{"name":"EmploymentStatus","storage":{"type":"string"},"contract":{"valueType":"enum","clrType":"EmploymentStatus"},"dataSource":{"type":"enum","key":"EmploymentStatus"}},{"name":"IsEnabled","storage":{"type":"bool"}},{"name":"SortOrder","storage":{"type":"string"}}],"indexes":[{"name":"IX_Position_Department","fields":["DepartmentId"],"unique":false},{"name":"IX_Position_Company","fields":["CompanyId"],"unique":false}]}}
-        """;
-
     /// <summary>
     /// 在 runner-owned catalog 上经 Host persistence composition 应用一个已验证历史前缀。
     /// </summary>
@@ -90,21 +79,7 @@ internal static class ExampleRequiredFieldMigrationFixture
         var currentModel = current.Models.Single(static model =>
             string.Equals(model.OwnerModuleId, "Example", StringComparison.Ordinal)
             && string.Equals(model.Name, "ExampleRecord", StringComparison.Ordinal));
-        var stageModel = stage == 2
-            ? currentModel with
-            {
-                Fields = currentModel.Fields
-                    .Where(static field => !string.Equals(field.Name, "RecordSource", StringComparison.Ordinal))
-                    .ToArray()
-            }
-            : currentModel with
-            {
-                Fields = currentModel.Fields
-                    .Select(static field => string.Equals(field.Name, "RecordSource", StringComparison.Ordinal)
-                        ? field with { Required = false }
-                        : field)
-                    .ToArray()
-            };
+        var stageModel = LoadHistoricalModels(repositoryRoot, $"Example.Stage{stage}", "Example").Single();
         var expectedModelDigest = stage == 2
             ? BeforeRecordSourceModelDigest
             : NullableRecordSourceModelDigest;
@@ -117,7 +92,7 @@ internal static class ExampleRequiredFieldMigrationFixture
         var currentStream = current.Streams.Single(static stream =>
             string.Equals(stream.ModuleId, "Example", StringComparison.Ordinal));
         var migrations = currentStream.Migrations.Take(stage).ToArray();
-        var stageStream = currentStream with
+        var stageStream = WithHistoricalBundle(currentStream, $"Example.Stage{stage}.SqlServerMigrations") with
         {
             ModelDigest = expectedModelDigest,
             ExpectedFrontier = migrations[^1].MigrationId,
@@ -154,7 +129,6 @@ internal static class ExampleRequiredFieldMigrationFixture
             {
                 AddSupportedHistoricalPrefix(
                     repositoryRoot,
-                    current.Models,
                     stream,
                     withinCutoff,
                     streams,
@@ -182,7 +156,6 @@ internal static class ExampleRequiredFieldMigrationFixture
     // 已冻结且摘要匹配的 Organization foundation 前缀，不为任意模块猜测历史模型。
     private static void AddSupportedHistoricalPrefix(
         string repositoryRoot,
-        IReadOnlyList<ModelDefinition> currentModels,
         ModuleMigrationStream stream,
         int migrationCount,
         ICollection<ModuleMigrationStream> streams,
@@ -195,7 +168,7 @@ internal static class ExampleRequiredFieldMigrationFixture
         }
 
         var migrations = stream.Migrations.Take(migrationCount).ToArray();
-        var organizationModels = BuildOrganizationFoundationModels(repositoryRoot, currentModels);
+        var organizationModels = LoadHistoricalModels(repositoryRoot, "Organization.Foundation", "Organization");
         var modelDigest = PersistenceModelDigest.Compute(organizationModels);
         if (!string.Equals(modelDigest, migrations[^1].ToModelDigest, StringComparison.Ordinal))
         {
@@ -203,7 +176,7 @@ internal static class ExampleRequiredFieldMigrationFixture
                 $"Organization foundation model digest {modelDigest} no longer matches accepted prefix {migrations[^1].ToModelDigest}.");
         }
 
-        streams.Add(stream with
+        streams.Add(WithHistoricalBundle(stream, "Organization.Foundation.SqlServerMigrations") with
         {
             ModelDigest = modelDigest,
             ExpectedFrontier = migrations[^1].MigrationId,
@@ -215,107 +188,37 @@ internal static class ExampleRequiredFieldMigrationFixture
         }
     }
 
-    // 该快照来自 20260812144235_Organization_000001_Foundation 固定点：
-    // Company、Department、Position 使用当时的 authoring，
-    // Person 排除后续追加的 temporal 字段，并临时补回 000005 才删除的历史 Revision 列。
-    // 快照仍经当前正式 loader、storage map 和 projector 生成，并由 manifest 摘要守卫阻止漂移。
-    private static ModelDefinition[] BuildOrganizationFoundationModels(
-        string repositoryRoot,
-        IReadOnlyList<ModelDefinition> currentModels)
+    // 测试消费者随包携带完整历史 authoring；正式 loader/projector 与固定 migration digest 校验共同拒绝漂移。
+    private static ModelDefinition[] LoadHistoricalModels(string repositoryRoot, string history, string owner)
     {
-        var organizationModels = currentModels
-            .Where(static model => string.Equals(model.OwnerModuleId, "Organization", StringComparison.Ordinal))
-            .ToArray();
-        var person = organizationModels.Single(static model => model.Name == "Person");
-        var storageTypeMap = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(
-            repositoryRoot,
-            "server",
-            "platform-modeling",
-            "metadata",
-            "storage-types.json"));
+        var storageMap = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(
+            repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json"));
         var loader = new JsonModelMetadataDocumentLoader();
         var projector = new ModelMetadataProjector();
-        var foundationCompany = ProjectOrganizationFoundationModel(
-            repositoryRoot,
-            "Company",
-            OrganizationFoundationCompanyMetadata,
-            storageTypeMap,
-            loader,
-            projector);
-        var foundationDepartment = ProjectOrganizationFoundationModel(
-            repositoryRoot,
-            "Department",
-            OrganizationFoundationDepartmentMetadata,
-            storageTypeMap,
-            loader,
-            projector);
-        var foundationPosition = ProjectOrganizationFoundationModel(
-            repositoryRoot,
-            "Position",
-            OrganizationFoundationPositionMetadata,
-            storageTypeMap,
-            loader,
-            projector);
-        var foundationPersonFields = person.Fields
-            .Where(static field =>
-                field.Name is not "BirthDate"
-                    and not "EmploymentStartedAt"
-                    and not "EmploymentEndedAt")
-            .ToList();
-        var isEnabledIndex = foundationPersonFields.FindIndex(static field => field.Name == "IsEnabled");
-        foundationPersonFields.Insert(
-            isEnabledIndex + 1,
-            new FieldDefinition(
-                "Revision",
-                "Revision",
-                FieldKind.Scalar,
-                FieldValueType.Integer,
-                "bigint",
-                Required: true,
-                IsPrimaryKey: false,
-                IsAuditField: false));
-        var foundationPerson = person with
-        {
-            Fields = foundationPersonFields
-        };
-
-        return organizationModels
-            .Select(model => model.Name switch
+        var root = Path.Combine(AppContext.BaseDirectory, "AcceptanceHistory", history);
+        return Directory.GetFiles(root, "*.model.json").Select(path =>
+            projector.Project(loader.Load(File.ReadAllBytes(path), Path.Combine(repositoryRoot, "modules", owner, "metadata", "models", Path.GetFileName(path))), storageMap, "SqlServer") with
             {
-                "Company" => foundationCompany,
-                "Department" => foundationDepartment,
-                "Position" => foundationPosition,
-                "Person" => foundationPerson,
-                _ => model
-            })
-            .OrderBy(static model => model.LogicalKey, StringComparer.Ordinal)
-            .ToArray();
+                OwnerModuleId = owner,
+                SchemaName = "dbo"
+            }).OrderBy(model => model.LogicalKey, StringComparer.Ordinal).ToArray();
     }
 
-    private static ModelDefinition ProjectOrganizationFoundationModel(
-        string repositoryRoot,
-        string modelName,
-        string metadata,
-        StorageTypeMapDocument storageTypeMap,
-        JsonModelMetadataDocumentLoader loader,
-        ModelMetadataProjector projector)
+    // 独立测试 bundle 只包含真实历史前缀类型；只更换夹具 artifact，正式 step digest/manifest 不变。
+    private static ModuleMigrationStream WithHistoricalBundle(ModuleMigrationStream stream, string assemblyName)
     {
-        var sourcePath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            "Organization",
-            "metadata",
-            "models",
-            $"{modelName}.model.json");
-        var document = loader.Load(Encoding.UTF8.GetBytes(metadata), sourcePath);
-        return projector.Project(document, storageTypeMap, "SqlServer") with
+        var path = Path.Combine(AppContext.BaseDirectory, assemblyName + ".dll");
+        var bytes = File.ReadAllBytes(path);
+        var image = new VerifiedArtifactImage(bytes);
+        return stream with
         {
-            OwnerModuleId = "Organization",
-            SchemaName = "dbo"
+            AssemblyPath = path,
+            AssemblyImage = image,
+            BundleChecksum = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes))
         };
     }
 
-    // 当前计划只从各 owner 的正式 Model provider、manifest 和 migration assembly 构造。
+    // 当前 stream 事实仍来自正式模型与 manifest，历史执行仅替换明确冻结的前缀。
     private static CompiledPersistencePlan BuildCurrentPlan(string repositoryRoot)
     {
         var foundation = BuildFoundationPlan(repositoryRoot);

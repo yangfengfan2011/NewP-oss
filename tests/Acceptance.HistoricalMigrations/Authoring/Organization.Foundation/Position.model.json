@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Position": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME",
+      "ECODE"
+    ],
+    "fields": [
+      {
+        "name": "CompanyId",
+        "storage": {
+          "type": "guid"
+        },
+        "dataSource": {
+          "type": "model",
+          "key": "Company",
+          "model": "Company"
+        }
+      },
+      {
+        "name": "DepartmentId",
+        "storage": {
+          "type": "guid"
+        },
+        "dataSource": {
+          "type": "model",
+          "key": "Department",
+          "model": "Department"
+        }
+      },
+      {
+        "name": "EmploymentStatus",
+        "storage": {
+          "type": "string"
+        },
+        "contract": {
+          "valueType": "enum",
+          "clrType": "EmploymentStatus"
+        },
+        "dataSource": {
+          "type": "enum",
+          "key": "EmploymentStatus"
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        }
+      },
+      {
+        "name": "SortOrder",
+        "storage": {
+          "type": "string"
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_Position_Department",
+        "fields": [
+          "DepartmentId"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_Position_Company",
+        "fields": [
+          "CompanyId"
+        ],
+        "unique": false
+      }
+    ]
+  }
+}

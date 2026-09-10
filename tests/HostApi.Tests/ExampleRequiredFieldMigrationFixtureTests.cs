@@ -1,3 +1,8 @@
+using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Persistence.ProviderTargets;
+using ICP.Platform.HostApi.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using ICP.Platform.HostApi.Acceptance;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -88,6 +93,37 @@ public sealed class ExampleRequiredFieldMigrationFixtureTests
         Assert.DoesNotContain(beforeDepartment.Indexes, index =>
             index.Name is "UX_Department_Company_ECODE" or "UX_Department_Company_Parent_ENAME");
         Assert.Empty(beforeDepartment.ForeignKeys);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task HistoricalBundle_PassesExactValidationBeforeAnyConnection(int stage)
+    {
+        var plan = ExampleRequiredFieldMigrationFixture.BuildHistoricalPlan(GetRepositoryRoot(), stage);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Persistence:Adapter"] = "EfCore",
+            ["Persistence:Provider"] = "SqlServer",
+            ["ConnectionStrings:SqlServer"] = "Server=invalid.invalid;Database=never-connect;Integrated Security=true;Connect Timeout=1"
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddPlatformPersistence(configuration, plan);
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var runner = new PersistenceMigrationRunner(
+            scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(), plan,
+            [new StopBeforeConnectionGuard()],
+            scope.ServiceProvider.GetRequiredService<IProviderTargetSource>());
+        // 公共 runner 先执行严格 ValidateBeforeConnection；只在通过后由 guard 截断数据库访问。
+        await Assert.ThrowsAsync<ConnectionBoundaryReachedException>(() => runner.MigrateAsync());
+    }
+
+    private sealed class ConnectionBoundaryReachedException : Exception;
+    private sealed class StopBeforeConnectionGuard : IPersistenceMigrationGuard
+    {
+        public Task<PersistenceMigrationGuardResult> VerifyAsync(CancellationToken cancellationToken = default) =>
+            throw new ConnectionBoundaryReachedException();
     }
 
     private static string GetRepositoryRoot()

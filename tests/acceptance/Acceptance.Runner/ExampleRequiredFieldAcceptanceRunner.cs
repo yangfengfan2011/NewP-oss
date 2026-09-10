@@ -142,14 +142,14 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             allowAlreadyStopped: true);
         var build = await AcceptanceInfrastructure.RunProcessAsync(
             "dotnet",
-            ["build", "apps/host-api/HostApi.csproj", "--configuration", "Release", "--no-restore", "--nologo"],
+            ["build", "apps/host-api/HostApi.csproj", "--configuration", "Release", "--no-restore", "--nologo", "/nodeReuse:false"],
             _repositoryRoot,
             cancellationToken: cancellationToken);
         await WriteEvidenceAsync(
             "example-required-field/preflight-build.json",
             new
             {
-                command = "dotnet build apps/host-api/HostApi.csproj --configuration Release --no-restore",
+                command = "dotnet build apps/host-api/HostApi.csproj --configuration Release --no-restore /nodeReuse:false",
                 exitCode = build.ExitCode,
                 standardError = Sanitize(build.StandardError)
             },

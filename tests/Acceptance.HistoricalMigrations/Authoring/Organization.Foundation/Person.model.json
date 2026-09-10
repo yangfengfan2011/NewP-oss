@@ -1,0 +1,260 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "Person": {
+    "kind": "Entity",
+    "builtinFields": [
+      "ENAME"
+    ],
+    "sections": [
+      {
+        "key": "basic",
+        "titleKey": "Section_Basic",
+        "fields": [
+          "PersonNo",
+          "ENAME"
+        ]
+      },
+      {
+        "key": "organization",
+        "titleKey": "Section_Organization",
+        "fields": [
+          "CompanyId",
+          "DepartmentId",
+          "PositionId",
+          "EmploymentStatus",
+          "IsEnabled"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "PersonNo",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        }
+      },
+      {
+        "name": "CompanyId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.companies"
+        }
+      },
+      {
+        "name": "DepartmentId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.departments",
+          "dependsOn": [
+            "CompanyId"
+          ]
+        }
+      },
+      {
+        "name": "PositionId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "lookup",
+        "form": {
+          "create": {
+            "mode": "editable"
+          },
+          "edit": {
+            "mode": "editable"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
+        "dataSource": {
+          "type": "provider",
+          "key": "organization.positions",
+          "dependsOn": [
+            "DepartmentId"
+          ]
+        }
+      },
+      {
+        "name": "EmploymentStatus",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        },
+        "contract": {
+          "valueType": "enum",
+          "clrType": "EmploymentStatus"
+        },
+        "uiType": "select",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "defaultValue": "FullTime",
+            "required": true
+          },
+          "edit": {
+            "mode": "editable",
+            "required": true
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        },
+        "dataSource": {
+          "type": "enum",
+          "key": "EmploymentStatus"
+        }
+      },
+      {
+        "name": "IsEnabled",
+        "storage": {
+          "type": "bool"
+        },
+        "uiType": "switch",
+        "form": {
+          "create": {
+            "mode": "editable",
+            "defaultValue": true
+          },
+          "edit": {
+            "mode": "readonly"
+          },
+          "view": {
+            "mode": "readonly"
+          }
+        },
+        "view": {
+          "visible": true
+        }
+      },
+      {
+        "name": "Revision",
+        "storage": {
+          "type": "long"
+        },
+        "contract": {
+          "valueType": "integer"
+        }
+      },
+      {
+        "name": "AccountEID",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "AccountBoundAt",
+        "storage": {
+          "type": "datetime",
+          "nullable": true
+        }
+      },
+      {
+        "name": "AccountBoundBy",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "AccountBindingReason",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_Person_AccountEID",
+        "fields": [
+          "AccountEID"
+        ],
+        "unique": true
+      }
+    ]
+  }
+}

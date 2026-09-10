@@ -12,6 +12,7 @@ using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Persistence;
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Audit;
 using ICP.Platform.Modules.Audit.Persistence.Descriptors;
 using ICP.Platform.Modules.Authentication;
@@ -669,6 +670,12 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         });
         IModule[] modules = [new IdentityModule(), new AuthenticationModule(), new AuthorizationModule(), new AuditModule(), new OrganizationModule()];
         foreach (var module in modules) module.ConfigureServices(builder.Services);
+        var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
+        var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
+        var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust);
+        var modulePlan = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates).Plan
+            ?? throw new InvalidOperationException("Formal module plan did not compile.");
+        builder.Services.AddRelationTrees(modulePlan);
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddAuthorization(options => { options.AddPolicy("AdminOnly", p => p.RequireRole("LocalAdmin")); options.AddPolicy(ICP.Platform.Authorization.Http.DenyAllAttribute.PolicyName, p => p.RequireAssertion(_ => false)); });
         builder.Services.AddSingleton<TimeProvider>(new FrozenClock());
@@ -693,7 +700,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddDbContext<EfPlatformDbContext>((sp, options) => options.UseSqlServer(_connection)
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().AddInterceptors(Fault, new SaveFault(Fault), new CommitFault(Fault)));
         builder.Services.AddControllers(options => { options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true; options.Filters.Add<AuthenticationSessionCookieResultFilter>(); })
-            .AddApplicationPart(typeof(AuthController).Assembly).AddApplicationPart(typeof(IdentityModule).Assembly).AddApplicationPart(typeof(AuditModule).Assembly).AddApplicationPart(typeof(AuthorizationModule).Assembly)
+            .AddApplicationPart(typeof(AuthController).Assembly).AddApplicationPart(typeof(IdentityModule).Assembly).AddApplicationPart(typeof(AuditModule).Assembly).AddApplicationPart(typeof(AuthorizationModule).Assembly).AddApplicationPart(typeof(OrganizationModule).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         _app = builder.Build();
         _app.Use(async (context, next) => { using var activity = new Activity("business-audit-http").Start(); await next(); });
@@ -705,6 +712,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.UseAuthorization();
         _app.MapControllers();
         _app.MapStandardCrudResources();
+        _app.MapRelationTrees();
         using (var scope = _app.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();

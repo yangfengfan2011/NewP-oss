@@ -1,4 +1,5 @@
 export {
+  installPlatformAccessRejectionHandler,
   installPlatformRequestLocaleProvider,
   invalidatePlatformAntiforgeryToken,
   platformFetch,

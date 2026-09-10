@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useAuthenticationState, type AuthenticationState } from '@icp-platform/core';
 import type { AuthContext as IAuthContext, AuthUser } from '@icp-platform/sdk';
 
-type ShellAuthContext = IAuthContext & Pick<AuthenticationState, 'sessionError' | 'retrySessionValidation'>;
+type ShellAuthContext = IAuthContext & Pick<AuthenticationState, 'sessionError' | 'retrySessionValidation' | 'permissionEpoch'>;
 
 const AuthContext = createContext<ShellAuthContext | null>(null);
 

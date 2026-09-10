@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Text.Json;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.ObjectIds;
@@ -43,7 +44,9 @@ public sealed class HostAuthenticationProcessRestartTests
         var plugins = Path.Combine(root, "plugins");
         Directory.CreateDirectory(keyRing);
         Directory.CreateDirectory(plugins);
-        var adminConnectionString = "Server=localhost;Database=master;Integrated Security=true;TrustServerCertificate=true";
+        // 与人员 SQL 组合共用显式连接选择；默认 LocalDB 保持 Windows 集成认证及同库重启语义。
+        var adminConnectionString = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
+            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
         var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
         {
             InitialCatalog = catalog
@@ -85,6 +88,30 @@ public sealed class HostAuthenticationProcessRestartTests
             var beforeRestart = await client.GetAsync("/api/auth/current-user");
             Assert.Equal(HttpStatusCode.OK, beforeRestart.StatusCode);
             Assert.Equal("Asia/Shanghai", (await beforeRestart.Content.ReadFromJsonAsync<AuthUserResponse>())?.TimeZoneId);
+            var current = await client.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
+            await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+            using var changedPassword = await client.PostAsJsonAsync("/api/identity/me/password-change", new {
+                CurrentPassword = "restart-secret-123", NewPassword = "Restart-final-secret-123!", ExpectedRevision = current.GetProperty("revision").GetInt64() });
+            Assert.Equal(HttpStatusCode.OK, changedPassword.StatusCode);
+            await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+            var company = BusinessAuditSqlServerHttpApiTests.Id(await BusinessAuditSqlServerHttpApiTests.CreateAsync(client,
+                "/api/organization/companies", new { ECODE = "RESTART", ENAME = "重启公司", SortOrder = "0100" }));
+            var department = BusinessAuditSqlServerHttpApiTests.Id(await BusinessAuditSqlServerHttpApiTests.CreateAsync(client,
+                "/api/organization/departments", new { ECODE = "RESTART-D", ENAME = "重启部门", CompanyId = company, SortOrder = "0100" }));
+            var person = BusinessAuditSqlServerHttpApiTests.Id(await BusinessAuditSqlServerHttpApiTests.CreateAsync(client,
+                "/api/organization/persons", new { PersonNo = "RESTART-P", ENAME = "重启人员", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
+            await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, person, new { ENAME = "持久姓名" });
+            using var roleResponse = await client.PostAsJsonAsync("/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
+            Assert.Equal(HttpStatusCode.Created, roleResponse.StatusCode);
+            var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+            using var permissionResponse = await client.PutAsJsonAsync($"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = new[] { "Organization.Person.View" } });
+            Assert.Equal(HttpStatusCode.NoContent, permissionResponse.StatusCode);
+            using var accountResponse = await client.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
+            Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
+            var accountId = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetProperty("eid").GetString();
+            using var assignment = await client.PutAsJsonAsync($"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });
+            Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
+            var historyBefore = await client.GetStringAsync("/api/audit/business-changes?pageSize=100");
             StopExactProcess(process);
             process = null;
 
@@ -97,6 +124,17 @@ public sealed class HostAuthenticationProcessRestartTests
             Assert.Equal("admin", afterRestartUser?.ECODE);
             Assert.Equal("Asia/Shanghai", afterRestartUser?.TimeZoneId);
             Assert.NotEmpty(Directory.GetFiles(keyRing, "key-*.xml"));
+            var restoredPerson = await client.GetFromJsonAsync<JsonElement>($"/api/organization/persons/{person}");
+            Assert.Equal("持久姓名", restoredPerson.GetProperty("fields").GetProperty("ENAME").GetString());
+            var restoredRoles = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/users/{accountId}/roles");
+            Assert.Equal("restart-reader", Assert.Single(restoredRoles.GetProperty("roleCodes").EnumerateArray()).GetString());
+            var restoredPermissions = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/roles/{roleId}/permissions");
+            Assert.Contains("Organization.Person.View", restoredPermissions.ToString());
+            var restoredHistory = await client.GetStringAsync("/api/audit/business-changes?pageSize=100");
+            Assert.Equal(historyBefore, restoredHistory);
+            using var historyDocument = JsonDocument.Parse(restoredHistory);
+            Assert.Equal(new[] { "person.created", "person.updated", "role.permissions.changed", "user.roles.changed" },
+                historyDocument.RootElement.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("EventType").GetString()).Order().ToArray());
         }
         finally
         {

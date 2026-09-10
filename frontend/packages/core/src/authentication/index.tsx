@@ -1,6 +1,6 @@
-import { FormEvent, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthUser } from '@icp-platform/sdk';
-import { invalidatePlatformAntiforgeryToken, platformFetch } from '../http';
+import { installPlatformAccessRejectionHandler, invalidatePlatformAntiforgeryToken, platformFetch } from '../http';
 
 const PASSWORD_CHANGE_PATH = '/account/change-password';
 
@@ -19,6 +19,7 @@ export interface AuthenticationState {
   isAuthenticated: boolean;
   isInitialized: boolean;
   sessionError?: string;
+  permissionEpoch: number;
   user?: AuthUser;
   login: (ecode: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -79,20 +80,38 @@ export function useAuthenticationState(
   const [user, setUser] = useState<AuthUser | undefined>(() => initialSnapshot?.user);
   const [isInitialized, setIsInitialized] = useState(hasInitialSnapshot);
   const [sessionError, setSessionError] = useState<string>();
+  const [permissionEpoch, setPermissionEpoch] = useState(0);
+  const rejectionRefresh = useRef<Promise<void>>();
+  const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     try {
       const current = await readCurrentUser();
-      setUser(current);
-      setSessionError(undefined);
-      if (!current) invalidatePlatformAntiforgeryToken();
+      if (generation === refreshGeneration.current) {
+        setUser(current);
+        setSessionError(undefined);
+        if (!current) invalidatePlatformAntiforgeryToken();
+      }
       return current;
     } catch (cause) {
       const error = normalizeSessionError(cause);
-      setSessionError(error.message);
+      if (generation === refreshGeneration.current) setSessionError(error.message);
       throw error;
     }
   }, []);
+
+  const onAccessRejection = useCallback((isWrite: boolean) => {
+    // 读拒绝由该查询的 error 状态清空结果；仅权限真的变化才重建它，避免自动拒绝/刷新循环。
+    if (isWrite) setPermissionEpoch(epoch => epoch + 1);
+    if (!rejectionRefresh.current) {
+      // 同批被拒请求共用一次当前主体读取。
+      rejectionRefresh.current = refresh().then(() => undefined, () => undefined)
+        .finally(() => { rejectionRefresh.current = undefined; });
+    }
+    return rejectionRefresh.current;
+  }, [refresh]);
+  useEffect(() => installPlatformAccessRejectionHandler(onAccessRejection), [onAccessRejection]);
 
   useEffect(() => {
     if (hasInitialSnapshot) {
@@ -127,6 +146,7 @@ export function useAuthenticationState(
       body: JSON.stringify({ ecode, password, timeZoneId: timeZoneId || undefined }),
     });
     if (!response.ok) throw new Error(await readProblemCode(response));
+    refreshGeneration.current += 1;
     invalidatePlatformAntiforgeryToken();
     const authenticatedUser = await response.json() as AuthUser;
     setUser(authenticatedUser);
@@ -150,6 +170,7 @@ export function useAuthenticationState(
       throw error;
     }
 
+    refreshGeneration.current += 1;
     invalidatePlatformAntiforgeryToken();
     setUser(undefined);
     setSessionError(undefined);
@@ -176,6 +197,7 @@ export function useAuthenticationState(
     isAuthenticated: Boolean(user),
     isInitialized,
     sessionError,
+    permissionEpoch,
     user,
     login,
     logout,

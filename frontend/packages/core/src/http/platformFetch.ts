@@ -10,6 +10,7 @@ let requestTokenPromise: { generation: number; promise: Promise<string> } | unde
 
 type PlatformRequestLocaleState = {
   provider?: () => string;
+  accessRejectionHandler?: (isWrite: boolean) => Promise<void>;
 };
 
 type PlatformGlobal = typeof globalThis & {
@@ -28,6 +29,22 @@ interface AntiforgeryTokenResponse {
 
 interface PlatformProblemDetails {
   code?: string;
+}
+
+/** Shell 只重取当前主体；响应仍由原调用方消费，禁止重放业务请求。 */
+export function installPlatformAccessRejectionHandler(handler: (isWrite: boolean) => Promise<void>): () => void {
+  requestLocaleState().accessRejectionHandler = handler;
+  return () => {
+    if (requestLocaleState().accessRejectionHandler === handler) requestLocaleState().accessRejectionHandler = undefined;
+  };
+}
+
+async function observeAccessResponse(response: Response, path: string, isWrite = false): Promise<Response> {
+  // 当前主体请求自身由认证边界处理，避免拒绝刷新形成递归。
+  if ((response.status === 401 || response.status === 403) && path !== '/api/auth/current-user') {
+    await requestLocaleState().accessRejectionHandler?.(isWrite);
+  }
+  return response;
 }
 
 export function installPlatformRequestLocaleProvider(provider: () => string): () => void {
@@ -123,13 +140,13 @@ export async function platformFetch(
 
   if (!isWrite) {
     if (requestLocale) {
-      return fetch(new Request(source, { credentials: 'include' }));
+      return observeAccessResponse(await fetch(new Request(source, { credentials: 'include' })), new URL(source.url).pathname);
     }
 
-    return fetch(input, {
+    return observeAccessResponse(await fetch(input, {
       ...init,
       credentials: 'include',
-    });
+    }), new URL(source.url).pathname);
   }
 
   const send = async (requestToken?: string): Promise<Response> => {
@@ -138,10 +155,16 @@ export async function platformFetch(
       headers.set(ANTIFORGERY_HEADER, requestToken);
     }
 
-    return fetch(new Request(source.clone(), {
-      credentials: 'include',
-      headers,
-    }));
+    let response: Response;
+    try {
+      response = await fetch(new Request(source.clone(), {
+        credentials: 'include',
+        headers,
+      }));
+    } catch (cause) {
+      throw Object.assign(new Error('操作结果尚未确认，请先查询实际结果，再决定是否重试。'), { cause });
+    }
+    return observeAccessResponse(response, new URL(source.url).pathname, true);
   };
 
   const response = await send(await getRequestToken());

@@ -981,14 +981,14 @@ async function requestJson<T>(fetcher: typeof fetch, path: string, init: Request
       }))
       : {};
     const fieldErrors = { ...legacyFieldErrors, ...standardFieldErrors };
-    const backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
-      ? problem.message
-      : typeof problem.title === 'string' && problem.title.trim().length > 0
-        ? problem.title
-        : response.status === 401
-          ? '登录状态已失效，请重新登录后重试'
-          : response.status === 403
-            ? '权限已变化，当前操作已被拒绝'
+    const backendMessage = response.status === 403
+      ? '当前操作已被拒绝，请核对当前权限。'
+      : typeof problem.message === 'string' && problem.message.trim().length > 0
+        ? problem.message
+        : typeof problem.title === 'string' && problem.title.trim().length > 0
+          ? problem.title
+          : response.status === 401
+            ? '登录状态已失效，请重新登录后重试'
             : errorMessage;
     throw new StandardCrudRequestError(backendMessage, response.status, fieldErrors);
   }
@@ -997,7 +997,14 @@ async function requestJson<T>(fetcher: typeof fetch, path: string, init: Request
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as T;
+  } catch (cause) {
+    if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase())) {
+      throw Object.assign(new Error('操作结果尚未确认，请先查询实际结果，再决定是否重试。'), { cause });
+    }
+    throw cause;
+  }
 }
 
 function parseContentDispositionFileName(contentDisposition: string | null): string | undefined {

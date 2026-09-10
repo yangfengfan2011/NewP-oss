@@ -97,7 +97,7 @@ describe('platformFetch', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(platformFetch('/api/test', { method: 'DELETE' }))
-      .rejects.toThrow('network unavailable');
+      .rejects.toThrow('请先查询实际结果，再决定是否重试');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

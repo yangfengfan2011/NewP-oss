@@ -4,14 +4,13 @@ import {
   AuthorizationProvider,
   FirstPasswordChangePage,
   LocalizationProvider,
-  PlatformQueryProvider,
   resolveAuthenticationDestination,
-  useLocalization,
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
 import { PermissionGuard } from './components/PermissionGuard';
 import { RouteCapabilityOutlet } from './capabilities/RouteCapabilityOutlet';
 import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
+import { CurrentPermissionScope } from './components/CurrentPermissionScope';
 import Layout from './components/Layout';
 import { ShellThemeProvider } from './components/ShellThemeProvider';
 import { shellAntdTheme } from './config/antdTheme';
@@ -104,16 +103,6 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AuthorizationProvider>
-  );
-}
-
-function AuthScopedPlatformQueryProvider({ children }: { children: React.ReactNode }) {
-  const auth = useAuth();
-  const { currentLanguage } = useLocalization();
-  return (
-    <PlatformQueryProvider scopeKey={`${auth.user?.id ?? 'anonymous'}:${currentLanguage}`}>
-      {children}
-    </PlatformQueryProvider>
   );
 }
 
@@ -330,7 +319,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
         >
           <PlatformRequestLocaleBridge>
             <AuthProvider initialUser={initialUser}>
-              <AuthScopedPlatformQueryProvider>
+              <CurrentPermissionScope>
                 <PlatformProvider
                   uiConfig={shellUiConfig}
                   shellView={shellView}
@@ -343,7 +332,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
                     </AuthorizationGate>
                   </RuntimeMetadataProvider>
                 </PlatformProvider>
-              </AuthScopedPlatformQueryProvider>
+              </CurrentPermissionScope>
             </AuthProvider>
           </PlatformRequestLocaleBridge>
         </LocalizationProvider>

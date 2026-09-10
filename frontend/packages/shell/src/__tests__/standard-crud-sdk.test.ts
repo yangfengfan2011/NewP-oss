@@ -399,9 +399,22 @@ describe('standard CRUD SDK helpers', () => {
     });
   });
 
+  it('reports a lost successful write response as uncertain without replaying', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('{', { status: 200 }));
+    const client = createStandardCrudClient('/api/sample-items', fetcher);
+    await expect(client.update('item-1', {})).rejects.toThrow('请先查询实际结果，再决定是否重试');
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('does not label an authorization dependency outage as a revocation', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('{"title":"AUTHORIZATION_UNAVAILABLE"}', { status: 503 }));
+    await expect(createStandardCrudClient('/api/sample-items', fetcher).update('item-1', {})).rejects.toThrow('AUTHORIZATION_UNAVAILABLE');
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it.each([
     [401, '登录状态已失效'],
-    [403, '权限已变化'],
+    [403, '当前操作已被拒绝'],
   ])('keeps %s authentication feedback explicit', async (status, expectedMessage) => {
     const client = createStandardCrudClient('/api/sample-items', vi.fn().mockResolvedValue(
       new Response(null, { status }),

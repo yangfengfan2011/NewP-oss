@@ -10,7 +10,7 @@ import {
   type AuthenticationBootstrapSnapshot,
   type AuthenticationState,
 } from './index';
-import { invalidatePlatformAntiforgeryToken } from '../http';
+import { invalidatePlatformAntiforgeryToken, platformFetch } from '../http';
 
 const authenticatedUser = {
   id: 'User_1',
@@ -33,6 +33,63 @@ function AuthenticationProbe({ initialSnapshot }: { initialSnapshot?: Authentica
 describe('authentication components', () => {
   let root: Root | undefined;
   let container: HTMLDivElement | undefined;
+
+  it('does not restore an old subject when a permission refresh completes after logout', async () => {
+    invalidatePlatformAntiforgeryToken();
+    let resolveOld!: (value: Response) => void;
+    const old = new Promise<Response>(resolve => { resolveOld = resolve; });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse(authenticatedUser)).mockReturnValueOnce(old)
+      .mockResolvedValueOnce(jsonResponse({ requestToken: 'token' })).mockResolvedValueOnce(new Response(null, { status: 204 })));
+    await renderAuthenticationProbe();
+    await act(async () => {
+      const earlier = observedAuthentication!.retrySessionValidation();
+      await observedAuthentication!.logout();
+      resolveOld(jsonResponse(authenticatedUser));
+      await earlier;
+    });
+    expect(observedAuthentication?.user).toBeUndefined();
+  });
+
+  it('does not let an older permission read replace a newer refresh', async () => {
+    let resolveOld!: (value: Response) => void;
+    const old = new Promise<Response>(resolve => { resolveOld = resolve; });
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(authenticatedUser)).mockReturnValueOnce(old)
+      .mockResolvedValueOnce(jsonResponse({ ...authenticatedUser, permissions: ['Current.View'] }));
+    vi.stubGlobal('fetch', fetchMock);
+    await renderAuthenticationProbe();
+    await act(async () => {
+      const earlier = observedAuthentication!.retrySessionValidation();
+      await observedAuthentication!.retrySessionValidation();
+      resolveOld(jsonResponse({ ...authenticatedUser, permissions: ['Stale.Update'] }));
+      await earlier;
+    });
+    expect(observedAuthentication?.user?.permissions).toEqual(['Current.View']);
+  });
+
+  it('keeps a rejected read as an error without a cache-reset refresh loop', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(authenticatedUser))
+      .mockResolvedValueOnce(problemResponse(403, 'AUTH_FORBIDDEN'))
+      .mockResolvedValueOnce(jsonResponse(authenticatedUser));
+    vi.stubGlobal('fetch', fetchMock);
+    await renderAuthenticationProbe();
+    await act(async () => { expect((await platformFetch('/api/resource')).status).toBe(403); });
+    expect(observedAuthentication?.permissionEpoch).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('refreshes current permissions after rejection and advances query ownership without another write', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(authenticatedUser))
+      .mockResolvedValueOnce(jsonResponse({ requestToken: 'token' }))
+      .mockResolvedValueOnce(problemResponse(403, 'AUTH_FORBIDDEN'))
+      .mockResolvedValueOnce(jsonResponse({ ...authenticatedUser, permissions: ['Resource.View'] }));
+    vi.stubGlobal('fetch', fetchMock);
+    await renderAuthenticationProbe();
+    await act(async () => { expect((await platformFetch('/api/resource', { method: 'PUT' })).status).toBe(403); });
+    expect(observedAuthentication?.user?.permissions).toEqual(['Resource.View']);
+    expect(observedAuthentication?.permissionEpoch).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    invalidatePlatformAntiforgeryToken();
+  });
 
   afterEach(async () => {
     if (root) await act(async () => root?.unmount());
@@ -193,6 +250,7 @@ describe('authentication components', () => {
       isAuthenticated: true,
       isInitialized: true,
       sessionError: undefined,
+      permissionEpoch: 0,
       user: {
         id: 'User_1', ecode: 'alice', ename: 'Alice', permissions: [], mustChangePassword: true,
         revision: 1, isLocalAdministrator: false,

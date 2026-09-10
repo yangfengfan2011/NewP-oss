@@ -2,12 +2,13 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { expect, it } from 'vitest';
+import { beforeAll, expect, it } from 'vitest';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, type PageProps } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+beforeAll(async () => { await Promise.all([import('../composition/StandardTreePage'), import('../composition/StandardTabPage')]); });
 it('keeps sibling tree instances separate and restores the active instance from a shared address', async () => {
   const nodes = ['a', 'b'].map(nodeKey => ({ nodeKey, nodeType: 'n', label: nodeKey, hasChildren: false }));
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'test', displayName: 'Test', version: '1' }, treeProviders: [{ key: 'tree', roots: async () => nodes, children: async () => [], path: async (_scope, key) => nodes.filter(node => node.nodeKey === key), search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) }], pageInputResolvers: [{ key: 'scope', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters, treeScope: {} }) }], pages: [{ pageKey: 'content', load: async () => ({ default: ({ input }: PageProps) => <label>{input.context?.nodeKey}:<input aria-label="local query" /></label> }) }] }], 'test');
@@ -26,7 +27,7 @@ it('keeps sibling tree instances separate and restores the active instance from 
     await wait();
     return { container, router, panel, wait, dispose: async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); } };
   };
-  const mounted = await mount('/?tab=A&node=a&nodeTab=children');
+  const mounted = await mount('/?tab=A&node=a&nodeTab=children&other=keep');
   let address = '';
   try {
     mounted.panel().querySelector<HTMLInputElement>('input[aria-label="local query"]')!.value = 'keep A';
@@ -38,6 +39,15 @@ it('keeps sibling tree instances separate and restores the active instance from 
     expect(mounted.panel().querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('children');
     expect(mounted.panel().querySelector<HTMLInputElement>('input[aria-label="local query"]')?.value).toBe('keep A');
     expect(new URLSearchParams(mounted.router.state.location.search).get('node')).toBe('a');
+    await act(async () => mounted.router.navigate(-1)); await mounted.wait();
+    expect(mounted.container.querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('B');
+    expect(mounted.panel().querySelector('.ant-tree-node-selected')?.textContent).toBe('b');
+    expect(mounted.panel().querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('children');
+    await act(async () => mounted.router.navigate(1)); await mounted.wait();
+    expect(mounted.container.querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('A');
+    expect(mounted.panel().querySelector('.ant-tree-node-selected')?.textContent).toBe('a');
+    expect(mounted.panel().querySelector<HTMLInputElement>('input[aria-label="local query"]')?.value).toBe('keep A');
+    expect(new URLSearchParams(mounted.router.state.location.search).get('other')).toBe('keep');
     address = '/' + mounted.router.state.location.search;
   } finally { await mounted.dispose(); }
   const refreshed = await mount(address);

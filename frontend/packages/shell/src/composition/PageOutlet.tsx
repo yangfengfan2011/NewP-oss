@@ -4,8 +4,9 @@ import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
-import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation, type TreeLocation } from './pageCompositionRuntime';
+import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation } from './pageCompositionRuntime';
 import { PageComposition } from './PageCompositionContext';
+import { createAddressNavigation } from './compositionNavigation';
 import './composition.css';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -16,20 +17,9 @@ export function PageEntry({ page }: { page: PageRef }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { token } = theme.useToken();
-  const navigation = { tabKey: new URLSearchParams(location.search).get('tab'), selectTab: (key: string, treeLocation?: TreeLocation) => {
-    const query = new URLSearchParams(location.search); query.set('tab', key);
-    if (treeLocation) {
-      if (treeLocation.nodeKey) query.set('node', treeLocation.nodeKey); else query.delete('node');
-      if (treeLocation.nodeTab) query.set('nodeTab', treeLocation.nodeTab); else query.delete('nodeTab');
-    }
-    navigate({ pathname: location.pathname, search: query.toString() });
-  } };
-  const treeNavigation: TreeNavigation = { nodeKey: new URLSearchParams(location.search).get('node'), nodeTab: new URLSearchParams(location.search).get('nodeTab'), locate: (node, tab) => {
-    const query = new URLSearchParams(location.search);
-    if (node) query.set('node', node); else query.delete('node');
-    if (tab) query.set('nodeTab', tab); else if (tab === null) query.delete('nodeTab');
-    if (query.toString() !== new URLSearchParams(location.search).toString()) navigate({ pathname: location.pathname, search: query.toString() }, { replace: true });
-  } };
+  const { navigation, treeNavigation } = createAddressNavigation(location.search, (search, replace) => {
+    navigate({ pathname: location.pathname, search }, { replace });
+  });
   return <PageComposition><div className="sh-page np-composed-page" style={{
     '--np-composition-surface': token.colorBgContainer,
     '--np-composition-border': token.colorBorderSecondary,

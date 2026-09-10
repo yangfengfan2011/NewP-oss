@@ -200,3 +200,41 @@ it('keeps activation read failure local to the tree and retries without another 
   expect(provider.roots).toHaveBeenCalledTimes(2);
   expect(provider.resolveChange).toHaveBeenCalledTimes(1);
 });
+
+it.each(['location', 'selection'])('late hidden-tree refresh preserves a newer explicit %s', async action => {
+  const nodes = [node('company'), node('person', 'person')];
+  const reloaded = deferred<TreeNodeDescriptor[]>();
+  const provider = providerWith(nodes);
+  const tree = await renderLifecycle(provider);
+  await tree.rerender({ active: false });
+  provider.resolveChange = async () => ({ kind: 'reload', operation: 'update', nodeKey: 'person' });
+  await act(async () => { await tree.publish({ resourceKey: 'resource', operation: 'update', id: 'person' }); });
+  provider.roots = async () => reloaded.promise;
+  await tree.rerender({ active: true });
+  await act(async () => {
+    if (action === 'location') tree.read().locate('person');
+    else tree.read().select('person');
+  });
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('person');
+  await act(async () => { reloaded.resolve(nodes); });
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('person');
+});
+
+it('waits for a newer pending location before applying an older refresh', async () => {
+  const nodes = [node('company'), node('person', 'person')];
+  const reloaded = deferred<TreeNodeDescriptor[]>();
+  const located = deferred<TreeNodeDescriptor[]>();
+  const provider = providerWith(nodes);
+  const tree = await renderLifecycle(provider);
+  provider.roots = async () => reloaded.promise;
+  provider.path = async (_scope, key) => key === 'person' ? located.promise : [nodes[0]];
+  provider.resolveChange = async () => ({ kind: 'reload', operation: 'update', nodeKey: 'person' });
+  let finished!: Promise<void>;
+  act(() => { finished = tree.publish({ resourceKey: 'resource', operation: 'update', id: 'person' }); });
+  await act(async () => undefined);
+  act(() => tree.read().locate('person'));
+  await act(async () => { reloaded.resolve(nodes); });
+  await act(async () => { located.resolve([nodes[1]]); await finished; });
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('person');
+  expect(tree.navigation.locate).toHaveBeenLastCalledWith('person', undefined);
+});

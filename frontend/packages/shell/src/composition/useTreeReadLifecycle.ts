@@ -59,6 +59,8 @@ export function useTreeReadLifecycle({
   const branchControllers = useRef(new Map<string, AbortController>());
   const locationController = useRef<AbortController>();
   const locationTarget = useRef<string>();
+  const selectionGeneration = useRef(0);
+  const pendingLocation = useRef<Promise<void> | null>(null);
   const [selectionEpoch, setSelectionEpoch] = useState(0);
   const pendingChanges = useRef(new Map<string | symbol, PendingTreeChange>());
   const receivedChanges = useRef(new WeakSet<CompositionChange>());
@@ -74,7 +76,7 @@ export function useTreeReadLifecycle({
   const branchesRef = useRef(branches);
   branchesRef.current = branches;
 
-  const readLocation = useCallback(async (key: string, currentRoots = rootsRef.current) => {
+  const readLocationCore = useCallback(async (key: string, currentRoots = rootsRef.current) => {
     locationTarget.current = key;
     locationController.current?.abort();
     const controller = new AbortController();
@@ -94,13 +96,16 @@ export function useTreeReadLifecycle({
       // 读取期间旧页面仍可编辑；落地前再次裁决，确认回调也不得应用已取消的定位。
       runtime.leave(() => {
         if (signal.aborted || !activeRef.current) return;
-        setBranches(current => ({ ...current, ...loaded }));
-        setExpanded(current => [...new Set([...current, ...path.slice(0, -1).map(node => node.nodeKey)])]);
+        const typeChanged = selectedRef.current && selectedRef.current.nodeType !== target.nodeType;
+        branchesRef.current = { ...branchesRef.current, ...loaded };
+        expandedRef.current = [...new Set([...expandedRef.current, ...path.slice(0, -1).map(node => node.nodeKey)])];
+        selectedRef.current = target;
+        setBranches(branchesRef.current);
+        setExpanded(expandedRef.current);
         setSelected(target);
         onSelectAcceptedRef.current();
         setLocationError(null);
         setLocationNotice(null);
-        const typeChanged = selectedRef.current && selectedRef.current.nodeType !== target.nodeType;
         navigationRef.current?.locate(key, typeChanged ? null : undefined);
       });
     } catch (failure) {
@@ -109,7 +114,8 @@ export function useTreeReadLifecycle({
         setLocationNotice('目标节点已不存在');
         runtime.leave(() => {
           if (signal.aborted || !activeRef.current) return;
-          setSelected(currentRoots[0] ?? null);
+          selectedRef.current = currentRoots[0] ?? null;
+          setSelected(selectedRef.current);
           setLocationError(null);
           navigationRef.current?.locate(currentRoots[0]?.nodeKey ?? null, null);
         });
@@ -118,6 +124,15 @@ export function useTreeReadLifecycle({
       }
     }
   }, [provider, runtime, treeScope]);
+
+  // 较新的定位意图优先于已在读取中的刷新；同步完成时必须基于它重新计算选择。
+  const readLocation = useCallback((key: string, currentRoots = rootsRef.current) => {
+    selectionGeneration.current += 1;
+    const read = readLocationCore(key, currentRoots);
+    pendingLocation.current = read;
+    void read.finally(() => { if (pendingLocation.current === read) pendingLocation.current = null; });
+    return read;
+  }, [readLocationCore]);
 
   const reloadRoots = useCallback(async (signal?: AbortSignal) => {
     rootsController.current?.abort();
@@ -184,11 +199,17 @@ export function useTreeReadLifecycle({
           locationController.current?.abort();
           branchControllers.current.forEach(request => request.abort());
           const pending = [...pendingChanges.current.entries()];
+          const generation = selectionGeneration.current;
           const next = await synchronizeTree(provider, treeScope, {
             roots: rootsRef.current, branches: branchesRef.current,
             selected: selectedRef.current, expanded: expandedRef.current,
           }, pending.map(([, change]) => change), scopeSignal);
           if (scopeSignal.aborted) return;
+          if (generation !== selectionGeneration.current) {
+            // 先让新定位结束，再以最新快照重算同一批失效事实，不能用旧选择覆盖用户。
+            while (!scopeSignal.aborted && pendingLocation.current) await pendingLocation.current;
+            continue;
+          }
           rootsRef.current = next.roots;
           branchesRef.current = next.branches;
           selectedRef.current = next.selected;
@@ -265,11 +286,14 @@ export function useTreeReadLifecycle({
     const node = [...rootsRef.current, ...Object.values(branchesRef.current).flat()].find(item => item.nodeKey === key);
     if (!node) return;
     leave(() => {
+      selectionGeneration.current += 1;
       locationController.current?.abort();
+      const typeChanged = selectedRef.current?.nodeType !== node.nodeType;
+      selectedRef.current = node;
       setSelected(node);
       onSelectAcceptedRef.current();
       setLocationNotice(null);
-      navigationRef.current?.locate(node.nodeKey, selectedRef.current?.nodeType !== node.nodeType ? null : undefined);
+      navigationRef.current?.locate(node.nodeKey, typeChanged ? null : undefined);
       after?.();
     });
   };

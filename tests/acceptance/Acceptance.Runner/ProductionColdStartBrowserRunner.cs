@@ -294,7 +294,7 @@ internal sealed class ProductionColdStartBrowserRunner
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             var personnel = page.GetByRole(
                 AriaRole.Link,
-                new PageGetByRoleOptions { Name = "组织管理", Exact = true }).First;
+                new PageGetByRoleOptions { Name = StandardCrudPageDriver.OrganizationManagementTitle, Exact = true }).First;
             await personnel.ClickAsync();
             await page.GetByRole(AriaRole.Tab, new PageGetByRoleOptions { Name = "人员", Exact = true }).ClickAsync();
             await page.WaitForURLAsync(origin + "/organization/structure?tab=persons");

@@ -412,22 +412,18 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             throw;
         }
 
-        await page.GetByRole(
-            AriaRole.Button,
-            new PageGetByRoleOptions { Name = "新建记录", Exact = true }).ClickAsync();
-        var createDrawer = page.Locator(".ant-drawer-content:visible");
-        await createDrawer.WaitForAsync();
-        await createDrawer.GetByLabel("示例编码", new LocatorGetByLabelOptions { Exact = true }).FillAsync(_browserCode);
-        await createDrawer.GetByLabel("示例名称", new LocatorGetByLabelOptions { Exact = true }).FillAsync(browserName);
-        await createDrawer.GetByRole(
-            AriaRole.Button,
-            new LocatorGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();
+        // 标准 Drawer 的定位、填写与提交由页面驱动持有；本旅程不观察写入响应，只以列表行出现为准。
+        var driver = new StandardCrudPageDriver(page);
+        var createDrawer = await driver.OpenCreateDrawerAsync("新建记录");
+        await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例编码", _browserCode);
+        await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例名称", browserName);
+        await driver.SaveAndCloseWithoutResponseAsync(createDrawer);
 
         var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
         await browserRow.WaitForAsync();
 
         await browserRow.GetByText(_browserCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
-        var detailDrawer = page.Locator(".ant-drawer-content:visible");
+        var detailDrawer = driver.VisibleDrawer();
         await detailDrawer.GetByText("查看记录", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
         await AssertLocatorContainsAsync(detailDrawer, _browserCode, "browser detail reached");
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });

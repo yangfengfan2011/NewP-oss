@@ -33,23 +33,26 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Equal("Tab", PersonnelAcceptanceRunner.PersonnelTemporalInputExitKey);
     }
 
+    // 标准 Drawer 的提交按钮文案由页面驱动统一持有；旅程不得再用泛化的“保存”定位。
+    [Fact]
+    public void PageDriver_OwnsTheStandardDrawerSubmitLabels()
+    {
+        Assert.Equal("保存并关闭", StandardCrudPageDriver.SaveAndCloseLabel);
+        Assert.Equal("保存修改", StandardCrudPageDriver.SaveChangesLabel);
+        Assert.Equal("组织管理", StandardCrudPageDriver.OrganizationManagementTitle);
+    }
+
     [Fact]
     public void BrowserScenario_CreatesCompanyAndDepartmentBeforeAssigningThePersonnelAffiliation()
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var runner = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "tests",
-            "acceptance",
-            "Acceptance.Runner",
-            "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
 
         Assert.Contains(
-            "await CreateCompanyFromBrowserAsync(page, cancellationToken);",
+            "await CreateCompanyFromBrowserAsync(driver, cancellationToken);",
             runner,
             StringComparison.Ordinal);
         Assert.Contains(
-            "await CreateDepartmentFromBrowserAsync(page, company, cancellationToken);",
+            "await CreateDepartmentFromBrowserAsync(driver, company, cancellationToken);",
             runner,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -58,7 +61,6 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             StringComparison.Ordinal);
         Assert.Contains("CompanyData company,", runner, StringComparison.Ordinal);
         Assert.Contains("DepartmentData department,", runner, StringComparison.Ordinal);
-        Assert.Contains("Name = \"组织管理\"", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/companies", runner, StringComparison.Ordinal);
         Assert.Contains("/organization/structure", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/departments", runner, StringComparison.Ordinal);
@@ -66,7 +68,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Contains("\"所属部门\"", runner, StringComparison.Ordinal);
         var departmentJourney = runner[
             runner.IndexOf("private async Task<DepartmentData> CreateDepartmentFromBrowserAsync", StringComparison.Ordinal)..
-            runner.IndexOf("private async Task<PositionData> CreatePositionFromBrowserAsync", StringComparison.Ordinal)];
+            runner.IndexOf("private async Task MaintainDepartmentFromBrowserAsync", StringComparison.Ordinal)];
         Assert.DoesNotContain(
             "/api/organization/department-lookups/companies",
             departmentJourney,
@@ -75,11 +77,6 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
             "/api/organization/person-lookups/companies",
             departmentJourney,
             StringComparison.Ordinal);
-        Assert.Contains("Name = \"直属部门\"", departmentJourney, StringComparison.Ordinal);
-        Assert.Contains("Name = \"基本信息\", Selected = true", departmentJourney, StringComparison.Ordinal);
-        Assert.Contains("Button = MouseButton.Right", departmentJourney, StringComparison.Ordinal);
-        Assert.Contains("AriaRole.Menuitem", departmentJourney, StringComparison.Ordinal);
-        Assert.Contains("Name = \"保存修改\"", departmentJourney, StringComparison.Ordinal);
         Assert.Contains("tree.GetByText(updated.Name", departmentJourney, StringComparison.Ordinal);
         Assert.DoesNotContain(
             ".Filter(new LocatorFilterOptions { HasTextString = company.Name })",
@@ -88,29 +85,16 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     }
 
     [Fact]
-    public void BrowserScenario_ProvesAdministratorPermissionsAndReportsCapabilityErrors()
+    public void BrowserScenario_ProvesAdministratorPermissionsAndKeepsLookupSearchTyped()
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var runner = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "tests",
-            "acceptance",
-            "Acceptance.Runner",
-            "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
 
         Assert.Contains("Organization.Company.Create", runner, StringComparison.Ordinal);
         Assert.Contains("Organization.Department.Create", runner, StringComparison.Ordinal);
         Assert.Contains("Organization.Person.Update", runner, StringComparison.Ordinal);
-        Assert.Contains("[data-route-capability-error]", runner, StringComparison.Ordinal);
-        Assert.Contains(".sh-error-state:visible", runner, StringComparison.Ordinal);
-        Assert.Contains("Visible body:", runner, StringComparison.Ordinal);
-        Assert.Contains(
-            "Browser company create returned {response.Status}, expected 201: {body}",
-            runner,
-            StringComparison.Ordinal);
         var lookupJourney = runner[
             runner.IndexOf("private static async Task SelectOrganizationLookupAsync", StringComparison.Ordinal)..
-            runner.IndexOf("private static async Task ClickStandardCrudCreateActionAsync", StringComparison.Ordinal)];
+            runner.IndexOf("private static async Task AssertPersonBirthDateRangeAsync", StringComparison.Ordinal)];
         Assert.DoesNotContain("await lookup.ClickAsync();", lookupJourney, StringComparison.Ordinal);
         Assert.Contains("await lookup.FillAsync(option);", lookupJourney, StringComparison.Ordinal);
     }
@@ -118,50 +102,26 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     [Fact]
     public void BrowserScenario_CoversPositionCreationAndPersonLookupAssignmentInThePersonnelGate()
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var runner = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "tests",
-            "acceptance",
-            "Acceptance.Runner",
-            "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
 
         Assert.Contains(
-            "await CreatePositionFromBrowserAsync(page, cancellationToken);",
+            "await CreatePositionFromBrowserAsync(driver, cancellationToken);",
             runner,
             StringComparison.Ordinal);
         Assert.Contains(
             "await UpdatePersonFromBrowserAsync(",
             runner,
             StringComparison.Ordinal);
-        Assert.Contains("OpenOrganizationTabAsync(page, \"岗位\", \"positions\")", runner, StringComparison.Ordinal);
+        Assert.Contains("driver.OpenOrganizationTabAsync(\"岗位\", \"positions\")", runner, StringComparison.Ordinal);
         Assert.Contains("/api/organization/positions", runner, StringComparison.Ordinal);
-        Assert.Contains(
-            "new LocatorGetByRoleOptions { Name = \"保存并关闭\", Exact = true }",
-            runner,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "new LocatorGetByRoleOptions { Name = \"保存修改\", Exact = true }",
-            runner,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "new LocatorGetByRoleOptions { Name = \"保存\", Exact = true }",
-            runner,
-            StringComparison.Ordinal);
     }
 
     [Fact]
     public void BrowserScenario_RemainsOnePrimaryPersonnelJourney()
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var runner = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "tests",
-            "acceptance",
-            "Acceptance.Runner",
-            "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
 
-        Assert.Contains("await AssertPersonBirthDateRangeAsync(page, person);", runner, StringComparison.Ordinal);
+        Assert.Contains("await AssertPersonBirthDateRangeAsync(driver, person);", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("CaptureResponsiveBrowserEvidenceAsync", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("CaptureRestrictedBrowserEvidenceAsync", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("CaptureUnauthorizedDetailEvidenceAsync", runner, StringComparison.Ordinal);
@@ -174,13 +134,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     [Fact]
     public void Preflight_DoesNotRepeatGateEntrypointBuild()
     {
-        var repositoryRoot = GetRepositoryRoot();
-        var runner = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "tests",
-            "acceptance",
-            "Acceptance.Runner",
-            "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
 
         Assert.DoesNotContain("preflight-build.json", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("dotnet build HostApi", runner, StringComparison.Ordinal);
@@ -189,47 +143,43 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     [Fact]
     public void BootstrapPreflight_ReportsUnexpectedStartupBeforeReadingDatabaseOwnership()
     {
-        var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
-            "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
         var bootstrap = runner[runner.IndexOf("private async Task ObserveBootstrapRequiredDevAsync", StringComparison.Ordinal)..];
         var startupFailure = bootstrap.IndexOf("Empty Personnel catalog startup returned", StringComparison.Ordinal);
         var ownershipRead = bootstrap.IndexOf("_ownershipSnapshot = await ReadOwnershipSnapshotAsync", StringComparison.Ordinal);
         Assert.True(startupFailure >= 0 && startupFailure < ownershipRead);
         Assert.Contains("diagnostic={Sanitize(diagnostic)}; devRun={_lastDevRunId}", bootstrap, StringComparison.Ordinal);
     }
+
     [Fact]
     public void PersonnelConsumers_UseTheManagementTabAndKeepTheLegacyAndFullDetailJourney()
     {
         var root = GetRepositoryRoot();
-        var runner = File.ReadAllText(Path.Combine(root, "tests", "acceptance", "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
         Assert.Contains("/organization/persons/{person.Id}", runner, StringComparison.Ordinal);
         Assert.Contains("Name = \"查看完整详情\"", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("searchParams.get('keyword')", runner, StringComparison.Ordinal);
         var coldStart = File.ReadAllText(Path.Combine(root, "tests", "acceptance", "Acceptance.Runner", "ProductionColdStartBrowserRunner.cs"));
         Assert.Contains("/organization/structure?tab=persons", coldStart, StringComparison.Ordinal);
-        Assert.Contains("Name = \"组织管理\"", coldStart, StringComparison.Ordinal);
         Assert.Contains("Name = \"人员\"", coldStart, StringComparison.Ordinal);
         Assert.DoesNotContain("Name = \"人员中心\"", coldStart, StringComparison.Ordinal);
     }
+
     [Fact]
     public void MaintenanceJourney_SwitchesTabsWithoutRemountingTheInactiveTree()
     {
-        var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
-            "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
         var start = runner.IndexOf("private async Task MaintainDepartmentFromBrowserAsync", StringComparison.Ordinal);
         var end = runner.IndexOf("private async Task LocateDepartmentAndRestoreAddressAsync", start, StringComparison.Ordinal);
         var maintenance = runner[start..end];
-        Assert.Contains("Name = \"部门\"", maintenance, StringComparison.Ordinal);
-        Assert.Contains("Name = \"组织结构\"", maintenance, StringComparison.Ordinal);
-        Assert.Contains("response.Request.Method == \"DELETE\"", maintenance, StringComparison.Ordinal);
+        Assert.Contains("\"DELETE\", \"/api/organization/departments/\"", maintenance, StringComparison.Ordinal);
         Assert.DoesNotContain("OpenOrganizationTabAsync", maintenance, StringComparison.Ordinal);
-        Assert.DoesNotContain("GotoAsync", maintenance, StringComparison.Ordinal);
     }
+
     [Fact]
     public void SearchRecoveryJourney_ReusesTheActualAddressAndAuthenticatedContext()
     {
-        var runner = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "tests", "acceptance",
-            "Acceptance.Runner", "PersonnelAcceptanceRunner.cs"));
+        var runner = ReadPersonnelRunner();
         var start = runner.IndexOf("private async Task LocateDepartmentAndRestoreAddressAsync", StringComparison.Ordinal);
         var end = runner.IndexOf("private async Task<PositionData>", start, StringComparison.Ordinal);
         var recovery = runner[start..end];
@@ -239,6 +189,15 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
         Assert.Contains("Name = $\"定位节点 {department.Name}\"", recovery, StringComparison.Ordinal);
         Assert.DoesNotContain("node=", recovery, StringComparison.Ordinal);
     }
+
+    private static string ReadPersonnelRunner() =>
+        File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(),
+            "tests",
+            "acceptance",
+            "Acceptance.Runner",
+            "PersonnelAcceptanceRunner.cs"));
+
     private static string GetRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

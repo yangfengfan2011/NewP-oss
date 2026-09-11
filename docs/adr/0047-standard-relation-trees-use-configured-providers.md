@@ -27,4 +27,4 @@ status: accepted
 
 ## 后续决定（2026-09-11）
 
-组织专用树 API（`/api/organization/tree/*`）、`OrganizationTreeReader` 与 `Organization.Tree.Read` 策略已退役。核实结果：前端与验收旅程均只消费 `/api/trees/organization.structure/*`，旧端点没有受支持的调用方，也没有版本化兼容承诺；其权限拒绝、参数校验与四类读取的等价断言已由标准端点测试覆盖。上文回退段中「现有组织专用 API 保持原有行为」不再适用；回退标准 Provider 时需恢复该 API 的实现与前端 Provider。`DepartmentHierarchyQuery` 承担父级候选与防环校验，职责不同，继续由 Organization 独立拥有。
+组织专用树 API（`/api/organization/tree/*`）、`OrganizationTreeReader` 与 `Organization.Tree.Read` 策略已退役。核实结果：前端与验收旅程均只消费 `/api/trees/organization.structure/*`，旧端点没有受支持的调用方，也没有版本化兼容承诺；标准端点测试保留权限拒绝、四类读取及部分参数校验证据，不表示两套 API 的参数契约完全等价。标准树搜索要求显式提供 `page` 与 `pageSize`，不沿用旧 API 缺省为 1/20 的行为。上文回退段中「现有组织专用 API 保持原有行为」不再适用；回退标准 Provider 时需恢复该 API 的实现与前端 Provider。`DepartmentHierarchyQuery` 承担父级候选与防环校验，职责不同，继续由 Organization 独立拥有。

@@ -14,6 +14,7 @@ internal sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid 
 /// </summary>
 internal static class VerifiedAssemblyIdentityReader
 {
+    // 同步解析程序集身份与 MVID，返回前释放读取资源，不保留输入字节引用。
     internal static VerifiedAssemblyIdentity Read(ReadOnlyMemory<byte> image)
     {
         // 数组支撑的输入按原段只读包装，不复制；其他来源才复制一份。
@@ -51,6 +52,7 @@ internal static class VerifiedAssemblyIdentityReader
     }
 
 #pragma warning disable SYSLIB0037
+    // 按 PE 机器类型映射程序集架构，I386 另由 Requires32Bit 区分 X86 与 MSIL。
     private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>
         headers.CoffHeader.Machine switch
         {

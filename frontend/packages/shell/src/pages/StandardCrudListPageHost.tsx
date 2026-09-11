@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthorization, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -67,7 +67,7 @@ import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQ
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
-import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
+import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -759,10 +759,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   modelDocuments: MetadataRecord[];
   detailRoutePath?: string;
 }): ReactElement {
+  // Router hook 无条件调用；是否真正拥有地址由宿主环境决定。
   const routeLocation = useLocation();
-  const embedded = useContext(EmbeddedCrudContext);
-  const location = embedded ? { ...routeLocation, search: '' } : routeLocation;
   const navigate = useNavigate();
+  const routePathname = routeLocation.pathname;
+  const routeSearch = routeLocation.search;
+  const routeAddress = useMemo<StandardCrudHostAddress>(() => ({
+    search: routeSearch,
+    write: (search, options) => navigate({ pathname: routePathname, search }, { replace: options?.replace === true }),
+  }), [navigate, routePathname, routeSearch]);
+  const host = useStandardCrudHostEnvironment(routeAddress);
+  // 不拥有地址时查询串恒为空：列表状态与 Drawer 参数都不进入外层 URL。
+  const location = { search: host.address?.search ?? '' };
   const [messageApi, messageContextHolder] = useMessage();
   const { t } = useLocalization();
   const currentSubjectId = useOptionalCurrentSubjectId();
@@ -814,9 +822,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const editFormSchema = preparedDrawerForms?.edit ?? EMPTY_STANDARD_CRUD_FORM_SCHEMA;
   const createFields = useMemo(
     () => localizeStandardCrudFields(resolveCreateFormFields(createFormSchema.fields).map(field =>
-      embedded?.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(embedded.input.fixedCreateValues, field.modelField)
-        ? { ...field, readOnly: true, defaultValue: embedded.input.fixedCreateValues[field.modelField] } : field), schema.dicKey, t),
-    [createFormSchema.fields, embedded?.input.fixedCreateValues, schema.dicKey, t],
+      host.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(host.input.fixedCreateValues, field.modelField)
+        ? { ...field, readOnly: true, defaultValue: host.input.fixedCreateValues[field.modelField] } : field), schema.dicKey, t),
+    [createFormSchema.fields, host.input.fixedCreateValues, schema.dicKey, t],
   );
   const editFields = useMemo(
     () => localizeStandardCrudFields(editFormSchema.fields, schema.dicKey, t),
@@ -949,7 +957,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       sortBy: next.sortBy,
       sortDirection: next.sortDirection,
     });
-    if (embedded) return;
+    if (!host.address) return;
     const params = serializeStandardCrudListState(
       schema.query,
       next,
@@ -959,7 +967,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const search = params.toString().length > 0 ? `?${params.toString()}` : '';
     if (search !== location.search) {
       handledListRouteSearchRef.current = search;
-      navigate({ pathname: location.pathname, search }, { replace: options.replace === true });
+      host.address.write(search, { replace: options.replace === true });
     }
   };
 
@@ -999,14 +1007,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       : {}),
   }), [appliedFilters, listRequestFields, schema.advancedFilter, schema.query, tableQuery]);
   const metadataListQueryKey = useMemo(
-    () => createStandardCrudListQueryKey(registration.resourceKey, { ...metadataListRequest, queryScope: JSON.stringify(embedded?.input.queryScope), instanceId: embedded?.instanceId }),
-    [embedded, metadataListRequest, registration.resourceKey],
+    () => createStandardCrudListQueryKey(registration.resourceKey, { ...metadataListRequest, queryScope: JSON.stringify(host.input.queryScope), instanceId: host.input.instanceId }),
+    [host.input.instanceId, host.input.queryScope, metadataListRequest, registration.resourceKey],
   );
   const metadataListQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
     key: metadataListQueryKey,
-    enabled: schema.columnSource !== 'runtime' && embedded?.input.parameters.presentation !== 'drawer',
+    enabled: schema.columnSource !== 'runtime' && host.presentation.kind !== 'action-drawer',
     load: async ({ signal }) => {
-      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: embedded?.input.queryScope });
+      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: host.input.queryScope });
       return { items: result.items, total: result.total };
     },
   });
@@ -1184,14 +1192,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     else metadataListQuery.refresh();
   };
 
-  useEffect(() => { if (embedded && embedded.refreshVersion > 0) refreshList();
+  useEffect(() => { if (host.sync.refreshVersion > 0) refreshList();
     // refreshVersion 是组合成功事实的唯一触发源。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded?.refreshVersion]);
+  }, [host.sync.refreshVersion]);
   const actionExecution = useStandardCrudActionExecution<StandardCrudDetail, TRow>({
     refresh: refreshList,
     resourceKey: registration.resourceKey,
-    onCommitted: embedded?.committed,
+    onCommitted: host.sync.committed,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
@@ -1200,8 +1208,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   });
   const mutationExecution = useStandardCrudMutationExecution({
     registration,
-    fixedCreateValues: embedded?.input.fixedCreateValues,
-    onCommitted: embedded?.committed,
+    fixedCreateValues: host.input.fixedCreateValues,
+    onCommitted: host.sync.committed,
     refresh: refreshList,
     onResult: (result) => {
       if (operationResultPresenterRegistry.resolve(result)) {
@@ -1306,25 +1314,25 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const syncDrawerRoute = (mode: Exclude<CrudDrawerMode, 'closed'>, id?: string) => {
-    if (embedded) return;
+    if (!host.address) return;
     const search = buildDrawerSearch(mode, id);
     if (search === location.search) {
       return;
     }
 
     handledRouteSearchRef.current = search;
-    navigate({ pathname: location.pathname, search });
+    host.address.write(search);
   };
 
   const clearDrawerRoute = () => {
-    if (embedded) return;
+    if (!host.address) return;
     if (!location.search.includes('drawer=') && !location.search.includes('id=')) {
       return;
     }
 
     const search = clearDrawerSearch();
     handledRouteSearchRef.current = search;
-    navigate({ pathname: location.pathname, search }, { replace: true });
+    host.address.write(search, { replace: true });
   };
 
   const closeDrawer = (options: { syncRoute?: boolean } = {}) => {
@@ -1332,7 +1340,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     setClearConflictOnDetailLoad(false);
     setDrawerPreparationError(null);
     setDrawerState(CLOSED_DRAWER_STATE);
-    embedded?.close?.();
+    host.lifecycle.close?.();
     mutationExecution.clearError();
     if (options.syncRoute !== false) {
       clearDrawerRoute();
@@ -1436,8 +1444,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const prepared = await prepareDrawerForms();
     appliedDrawerDetailRef.current = null;
     const initialValues = Object.fromEntries(prepared.createFields.map((field) => [field.key,
-      embedded?.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(embedded.input.fixedCreateValues, field.modelField)
-        ? embedded.input.fixedCreateValues[field.modelField] : field.defaultValue ?? '']));
+      host.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(host.input.fixedCreateValues, field.modelField)
+        ? host.input.fixedCreateValues[field.modelField] : field.defaultValue ?? '']));
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     setFormValues(initialValues);
     initialFormValuesRef.current = initialValues;
@@ -1518,7 +1526,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   useEffect(() => {
-    if (embedded) return;
+    if (!host.address) return;
     if (handledRouteSearchRef.current === location.search) {
       return;
     }
@@ -1548,7 +1556,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         confirmDiscardIfNeeded(() => {
           closeDrawer({ syncRoute: false });
           handledRouteSearchRef.current = searchWithoutDrawer;
-          navigate({ pathname: location.pathname, search: searchWithoutDrawer }, { replace: true });
+          host.address?.write(searchWithoutDrawer, { replace: true });
         });
         if (current.mode !== 'closed') syncDrawerRoute(current.mode, current.id);
       } else {
@@ -1560,22 +1568,24 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }, [location.search]);
 
   useEffect(() => {
-    embedded?.reportState({ dirty: isDrawerDirty() || (rowInputAction !== null && rowInputValue !== undefined), submitting: mutationExecution.pending || actionExecution.pendingKey !== null }, () => { setRowInputAction(null); setRowInputValue(undefined); closeDrawer(); });
+    host.lifecycle.reportState({ dirty: isDrawerDirty() || (rowInputAction !== null && rowInputValue !== undefined), submitting: mutationExecution.pending || actionExecution.pendingKey !== null }, () => { setRowInputAction(null); setRowInputValue(undefined); closeDrawer(); });
   });
+  const presentation = host.presentation;
+  const actionDrawerStandardAction = presentation.kind === 'action-drawer' ? presentation.standardAction : undefined;
+  const actionDrawerActionKey = presentation.kind === 'action-drawer' ? presentation.actionKey : undefined;
   useEffect(() => {
-    if (embedded?.input.parameters.presentation !== 'drawer') return;
-    const { standardAction, actionKey } = embedded.input.parameters;
-    const action = [...schema.pageActions, ...schema.rowActions].find(item => actionKey ? item.key === actionKey : item.standardAction === standardAction);
+    if (presentation.kind !== 'action-drawer') return;
+    const action = [...schema.pageActions, ...schema.rowActions].find(item => actionDrawerActionKey ? item.key === actionDrawerActionKey : item.standardAction === actionDrawerStandardAction);
     if (!action || !hasActionPermission(action, grantedPermissions)) { setEmbeddedActionError('当前操作不可用。'); return; }
     if (action.standardAction === 'create') { void openCreateDrawer(); return; }
-    const id = embedded.input.recordId;
+    const id = host.input.recordId;
     if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('当前操作缺少记录上下文。'); return; }
     if (action.standardAction === 'edit' && id) { void openEditDrawer(id); return; }
     if (action.standardAction === 'view' && id) { void openViewDrawer(id); return; }
     setEmbeddedActionRequest({ action, id: id ?? '' });
     // 外层页面实例与操作参数拥有首次打开；表单更新不重复打开 Drawer。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded?.input.recordId, embedded?.input.parameters.standardAction, embedded?.input.parameters.actionKey]);
+  }, [host.input.recordId, actionDrawerStandardAction, actionDrawerActionKey]);
 
   // SearchTablePage 仍保留旧 request Interface；controlledResult 生效时该兼容函数不会执行远程读取。
   const tableRequest = useMemo(() => async () => ({
@@ -1610,7 +1620,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           : metadataDisabledReason;
         const confirmMessage = action.confirmMessageKey
           ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
-          : embedded?.input.parameters.presentation === 'drawer' && action.standardAction === 'delete' ? '确认删除当前记录？' : undefined;
+          : host.presentation.kind === 'action-drawer' && action.standardAction === 'delete' ? '确认删除当前记录？' : undefined;
         const handler = registration.actionHandlers?.[action.handlerKey ?? action.key]
           ?? (action.standardAction === 'refresh' ? () => refreshList() : undefined);
         const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
@@ -1670,7 +1680,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               });
               if (outcome.status === 'succeeded') {
                 closeDrawerForRow(rowId);
-                embedded?.close?.();
+                host.lifecycle.close?.();
               }
               return outcome.status === 'succeeded';
             },
@@ -1702,7 +1712,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               handler,
               context: { id: rowId, row },
             });
-            if (outcome.status === 'succeeded') embedded?.close?.();
+            if (outcome.status === 'succeeded') host.lifecycle.close?.();
             return outcome.status === 'succeeded';
           },
         };
@@ -2016,8 +2026,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     <>
       {messageContextHolder}
       {embeddedActionQuery.error && <div role="alert">{embeddedActionQuery.error}<AntdButton onClick={embeddedActionQuery.retry}>重试读取</AntdButton></div>}
-      {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={embedded?.close}>关闭</AntdButton></div>}
-      {embeddedAction && <RowActionButtonGroup requested active={embedded?.active !== false} close={embedded?.close}
+      {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={host.lifecycle.close}>关闭</AntdButton></div>}
+      {embeddedAction && <RowActionButtonGroup requested active={host.lifecycle.active} close={host.lifecycle.close}
         actions={buildRowActions(embeddedAction.row, [embeddedAction.action], embeddedAction.id)} />}
       {embeddedAction && actionExecution.error && <div role="alert">{actionExecution.error.message}</div>}
       {presentedOperationResult
@@ -2026,15 +2036,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             close: () => setPresentedOperationResult(null),
           })
         : null}
-      {embedded?.input.parameters.presentation !== 'drawer' && <CrudWorkspacePage
-        embedded={Boolean(embedded)}
+      {host.presentation.kind !== 'action-drawer' && <CrudWorkspacePage
+        embedded={host.presentation.kind === 'workspace' && host.presentation.composed}
         filterBar={filterBar}
       >
         {content}
       </CrudWorkspacePage>}
       {actionExecution.synchronizationError && <div role="alert">{actionExecution.synchronizationError}</div>}
       {mutationExecution.synchronizationError && <div role="alert">{mutationExecution.synchronizationError}</div>}
-      {schema.advancedFilter.enabled && advancedFilterOpen && embedded?.active !== false ? (
+      {schema.advancedFilter.enabled && advancedFilterOpen && host.lifecycle.active ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载高级筛选…</div>}>
           <Drawer
             open
@@ -2094,7 +2104,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           </Drawer>
         </Suspense>
       ) : null}
-      {drawerState.mode !== 'closed' && embedded?.active !== false ? (
+      {drawerState.mode !== 'closed' && host.lifecycle.active ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作面板…</div>}>
           <StandardCrudListDrawerRuntime
             mode={drawerState.mode}
@@ -2155,7 +2165,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       {rowInputAction?.action.inputKey && registration.actionInputRenderers?.[rowInputAction.action.inputKey] ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作确认…</div>}>
           <StandardCrudActionReviewDialog
-            open={embedded?.active !== false}
+            open={host.lifecycle.active}
             action={rowInputAction.action}
             title={rowInputAction.label}
             confirmMessage={rowInputAction.action.confirmMessageKey
@@ -2170,7 +2180,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}
             onChange={setRowInputValue}
             onCancel={() => {
-              if (actionExecution.pendingKey === null) { setRowInputAction(null); embedded?.close?.(); }
+              if (actionExecution.pendingKey === null) { setRowInputAction(null); host.lifecycle.close?.(); }
             }}
             onConfirm={() => {
               const { action, row, rowId, pendingKey } = rowInputAction;
@@ -2184,7 +2194,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);
-                  embedded?.close?.();
+                  host.lifecycle.close?.();
                 } else if (outcome.status === 'failed' && outcome.conflict) {
                   setRowInputAction(null);
                 }

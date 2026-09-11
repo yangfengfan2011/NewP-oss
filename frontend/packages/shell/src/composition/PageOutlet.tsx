@@ -4,7 +4,8 @@ import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { resolvePageInput } from './compositionRegistry';
-import { CompositionContext, EmbeddedCrudContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation } from './pageCompositionRuntime';
+import { CompositionContext, PageNavigationContext, PageActivityContext, TreeInstanceContext, TreeNavigationContext, type TreeNavigation } from './pageCompositionRuntime';
+import { resolveComposedHostPresentation, StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
 import { PageComposition } from './PageCompositionContext';
 import { createAddressNavigation } from './compositionNavigation';
 import './composition.css';
@@ -100,11 +101,18 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     }
   }, [active, lifecycle]);
   const committed = useCallback((change: import('@icp-platform/sdk').ResourceChange) => runtime.committed({ ...change, originTreeId }), [originTreeId, runtime]);
-  const bridge = useMemo(() => ({ input, instanceId, active, reportState: report, committed, refreshVersion, close }), [active, close, committed, input, instanceId, refreshVersion, report]);
+  // 组合装载的嵌入 adapter：不拥有地址，生命周期与成功事实经组合运行时交接。
+  const environment = useMemo<StandardCrudHostEnvironment>(() => ({
+    address: null,
+    lifecycle: { active: active !== false, reportState: report, close },
+    sync: { committed, refreshVersion },
+    input: { instanceId, queryScope: input.queryScope, fixedCreateValues: input.fixedCreateValues, recordId: input.recordId },
+    presentation: resolveComposedHostPresentation(input.parameters),
+  }), [active, close, committed, input, instanceId, refreshVersion, report]);
   if (error) return <div role="alert">{error}</div>;
   if (!registration) return <div role="status">正在加载标准资源…</div>;
-  return <EmbeddedCrudContext.Provider value={bridge}>
+  return <StandardCrudHostEnvironmentContext.Provider value={environment}>
     {pageKey === 'platform.list' ? <ListPage viewKey={viewKey} registration={registration} />
       : <DetailPage viewKey={viewKey} id={input.recordId ?? null} registration={registration} />}
-  </EmbeddedCrudContext.Provider>;
+  </StandardCrudHostEnvironmentContext.Provider>;
 }

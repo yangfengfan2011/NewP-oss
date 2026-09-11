@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
@@ -23,7 +23,7 @@ import {
 } from '../standard-crud/standardCrudDetailPresentation';
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
-import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
+import { useStandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -150,7 +150,9 @@ function StandardCrudDetailPageContent<TDetail>({
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const { t } = useLocalization();
-  const embedded = useContext(EmbeddedCrudContext);
+  // 详情宿主从不拥有地址；独立路由下也传 null。
+  const host = useStandardCrudHostEnvironment(null);
+  const composed = host.presentation.kind !== 'workspace' || host.presentation.composed;
   const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
@@ -209,7 +211,7 @@ function StandardCrudDetailPageContent<TDetail>({
     />
   ) : null;
   const refresh = detailQuery.refresh;
-  const embeddedRefreshVersion = embedded?.refreshVersion;
+  const embeddedRefreshVersion = host.sync.refreshVersion;
   const consumedRefreshVersion = useRef(0);
   useEffect(() => {
     if (!embeddedRefreshVersion || consumedRefreshVersion.current === embeddedRefreshVersion) return;
@@ -228,7 +230,7 @@ function StandardCrudDetailPageContent<TDetail>({
       ? (
         <StandardCrudActions
           resourceKey={registration.resourceKey}
-          onCommitted={embedded?.committed}
+          onCommitted={host.sync.committed}
           actions={readyPresentation.pageActions.map((action) => ({
             ...action,
             labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
@@ -262,8 +264,8 @@ function StandardCrudDetailPageContent<TDetail>({
             close: () => setPresentedOperationResult(null),
           })
         : null}
-      <div className={embedded ? undefined : "sh-page"}>
-      {!embedded && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
+      <div className={composed ? undefined : "sh-page"}>
+      {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 
       {showLoading ? (
         <LoadingState message="正在加载详情..." />

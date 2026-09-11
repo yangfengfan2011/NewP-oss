@@ -12,7 +12,8 @@ import {
   type StandardCrudDetail,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
-import { EmbeddedCrudContext } from '../composition/pageCompositionRuntime';
+import { StandardCrudHostEnvironmentContext } from '../standard-crud/standardCrudHostEnvironment';
+import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -195,16 +196,15 @@ describe('StandardCrudDetailPageHost', () => {
               viewDocuments: [detailViewDocument],
             }}
           >
-            <EmbeddedCrudContext.Provider value={refreshVersion === undefined ? null : {
-              input: { parameters: {}, recordId: id ?? undefined }, refreshVersion,
-              reportState: () => undefined, committed: async () => undefined,
-            }}>
+            <StandardCrudHostEnvironmentContext.Provider value={refreshVersion === undefined ? null : createEmbeddedHostEnvironment({
+              input: { recordId: id ?? undefined }, sync: { refreshVersion },
+            })}>
             <StandardCrudDetailPageHost
               viewKey="organization.person.detail"
               id={id}
               registration={registration}
             />
-            </EmbeddedCrudContext.Provider>
+            </StandardCrudHostEnvironmentContext.Provider>
           </RuntimeMetadataProvider>
         </PlatformQueryProvider>
       </LocalizationProvider>

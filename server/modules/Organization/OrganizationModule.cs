@@ -49,26 +49,10 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudValidator, PersonCrudValidator>();
         services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
         services.AddScoped<IStandardCrudValidator, DepartmentCrudValidator>();
-        services.AddScoped<CompanyCrudDeleteExecutor>();
-        services.AddScoped<IStandardCrudDeleteGuard>(serviceProvider =>
-            serviceProvider.GetRequiredService<CompanyCrudDeleteExecutor>());
-        services.AddScoped<IStandardCrudConditionalDeleteExecutor>(serviceProvider =>
-            serviceProvider.GetRequiredService<CompanyCrudDeleteExecutor>());
-        services.AddScoped<DepartmentCrudDeleteExecutor>();
-        services.AddScoped<IStandardCrudDeleteGuard>(serviceProvider =>
-            serviceProvider.GetRequiredService<DepartmentCrudDeleteExecutor>());
-        services.AddScoped<IStandardCrudConditionalDeleteExecutor>(serviceProvider =>
-            serviceProvider.GetRequiredService<DepartmentCrudDeleteExecutor>());
-        services.AddScoped<PositionCrudDeleteExecutor>();
-        services.AddScoped<IStandardCrudDeleteGuard>(serviceProvider =>
-            serviceProvider.GetRequiredService<PositionCrudDeleteExecutor>());
-        services.AddScoped<IStandardCrudConditionalDeleteExecutor>(serviceProvider =>
-            serviceProvider.GetRequiredService<PositionCrudDeleteExecutor>());
-        services.AddScoped<PersonCrudDeleteGuard>();
-        services.AddScoped<IStandardCrudDeleteGuard>(serviceProvider =>
-            serviceProvider.GetRequiredService<PersonCrudDeleteGuard>());
-        services.AddScoped<IStandardCrudConditionalDeleteExecutor>(serviceProvider =>
-            serviceProvider.GetRequiredService<PersonCrudDeleteGuard>());
+        services.AddStandardCrudConditionalDelete<CompanyCrudDeleteExecutor>();
+        services.AddStandardCrudConditionalDelete<DepartmentCrudDeleteExecutor>();
+        services.AddStandardCrudConditionalDelete<PositionCrudDeleteExecutor>();
+        services.AddStandardCrudConditionalDelete<PersonCrudDeleteGuard>();
     }
 
 }

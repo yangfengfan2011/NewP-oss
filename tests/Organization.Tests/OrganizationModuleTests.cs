@@ -1,6 +1,12 @@
+using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Persistence.EfCore.Projection;
 using ICP.Platform.Sdk;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using System.Text.Json;
@@ -61,6 +67,31 @@ public class OrganizationModuleTests
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(IAuthorizationSummaryReader) &&
             descriptor.ImplementationType == typeof(NullAuthorizationSummaryReader));
+    }
+
+    [Fact]
+    public void ConfigureServices_PairsDeleteGuardAndConditionalDeleteExecutorPerResource()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .Options, PlatformPersistenceModelCatalog.AdaptPlatformCore(NonSqlPlatformBaselineModelSource.GetDefinitions()).ToArray()));
+        new OrganizationModule().ConfigureServices(services);
+        using var provider = services.BuildServiceProvider();
+
+        using var scope = provider.CreateScope();
+        var guards = scope.ServiceProvider.GetServices<IStandardCrudDeleteGuard>().ToDictionary(guard => guard.ResourceKey);
+        var executors = scope.ServiceProvider.GetServices<IStandardCrudConditionalDeleteExecutor>().ToDictionary(executor => executor.ResourceKey);
+        var expected = new[] { "organization.company", "organization.department", "organization.position", "organization.person" };
+        Assert.Equal(expected.Order(), guards.Keys.Order());
+        Assert.Equal(expected.Order(), executors.Keys.Order());
+        foreach (var resourceKey in expected)
+            Assert.Same(guards[resourceKey], executors[resourceKey]);
+
+        using var other = provider.CreateScope();
+        var otherGuard = other.ServiceProvider.GetServices<IStandardCrudDeleteGuard>().Single(guard => guard.ResourceKey == "organization.company");
+        Assert.NotSame(guards["organization.company"], otherGuard);
     }
 
     [Fact]

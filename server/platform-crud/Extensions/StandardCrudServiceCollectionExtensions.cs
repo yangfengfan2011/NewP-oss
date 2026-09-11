@@ -49,4 +49,17 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddSingleton(descriptor);
         return services;
     }
+
+    /// <summary>
+    /// 注册一个条件删除资源的删除守卫与原子条件删除执行器；内核要求二者成对存在，
+    /// 同一请求作用域内两个接口解析到同一个实例。
+    /// </summary>
+    public static IServiceCollection AddStandardCrudConditionalDelete<TExecutor>(this IServiceCollection services)
+        where TExecutor : class, IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
+    {
+        services.AddScoped<TExecutor>();
+        services.AddScoped<IStandardCrudDeleteGuard>(static provider => provider.GetRequiredService<TExecutor>());
+        services.AddScoped<IStandardCrudConditionalDeleteExecutor>(static provider => provider.GetRequiredService<TExecutor>());
+        return services;
+    }
 }

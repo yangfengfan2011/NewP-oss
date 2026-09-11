@@ -75,6 +75,12 @@
         "parentKey": "organization",
         "path": "/organization/structure",
         "order": 105,
+        "permissions": [
+          "Organization.Company.View",
+          "Organization.Department.View",
+          "Organization.Position.View",
+          "Organization.Person.View"
+        ],
         "page": {
           "pageKey": "platform.tabs",
           "parameters": {

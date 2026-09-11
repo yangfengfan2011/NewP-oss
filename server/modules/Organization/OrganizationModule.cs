@@ -27,8 +27,6 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
-        services.AddAuthorization(OrganizationTreeAccess.Configure);
-        services.AddScoped<OrganizationTreeReader>();
         services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
         services.AddScoped<EfDepartmentDirectory>();
         services.AddScoped<IDepartmentDirectory>(serviceProvider =>

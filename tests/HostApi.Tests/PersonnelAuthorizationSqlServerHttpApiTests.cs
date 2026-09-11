@@ -36,10 +36,6 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
                 await AssertStatusAsync(client.PostAsJsonAsync($"/api/organization/{route}/export", new { Mode = "current", Columns = new[] { new { Field = "ENAME", Title = "名称" } } }), HttpStatusCode.OK);
             }
             foreach (var route in new[] {
-                "/api/organization/tree/roots?scope=global",
-                $"/api/organization/tree/children?scope=global&nodeKey=company:{company}",
-                $"/api/organization/tree/path?scope=global&nodeKey=department:{a}",
-                "/api/organization/tree/search?scope=global&keyword=公司",
                 "/api/trees/organization.structure/roots?scope=global",
                 $"/api/trees/organization.structure/children?scope=global&nodeKey=department:{a}",
                 $"/api/trees/organization.structure/path?scope=global&nodeKey=person:{person}",

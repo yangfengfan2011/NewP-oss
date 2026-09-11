@@ -63,7 +63,6 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
                 Assert.True(await reader.ReadAsync());
                 return Enumerable.Range(0, 4).Select(index => Convert.ToInt64(reader.GetValue(index))).ToArray();
             }
-            var tree = new OrganizationTreeReader(context);
             var sample = 0;
             async Task<T> Measure<T>(string operation, Func<Task<T>> read)
             {
@@ -79,17 +78,6 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
                 }));
                 return result;
             }
-            Assert.Single(await Measure("roots", () => tree.RootsAsync(default)));
-            Assert.Equal(size - 10, (await Measure("wide-children", () => tree.ChildrenAsync("company:Company_1", default)))!.Count);
-            Assert.Equal(11, (await Measure("path-depth-10", () => tree.PathAsync("department:Department_00009", default)))!.Count);
-            var first = await Measure("search-page-1", () => tree.SearchAsync("Department", 1, 20, default));
-            var second = await Measure("search-page-2", () => tree.SearchAsync("Department", 2, 20, default));
-            var repeated = await Measure("search-page-2-repeat", () => tree.SearchAsync("Department", 2, 20, default));
-            Assert.Equal(size - 1, first.Total); Assert.Equal(20, first.Items.Count);
-            Assert.Equal("department:Department_00000", first.Items[0].Node.NodeKey);
-            Assert.Equal("department:Department_00020", second.Items[0].Node.NodeKey);
-            Assert.Empty(first.Items.Select(item => item.Node.NodeKey).Intersect(second.Items.Select(item => item.Node.NodeKey)));
-            Assert.Equal(second.Items.Select(item => item.Node.NodeKey), repeated.Items.Select(item => item.Node.NodeKey));
             var definition = ReadRelationDefinition();
             var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
             var sql = new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]);
@@ -97,26 +85,25 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             Assert.Single(await Measure("standard-roots", () => standard.RootsAsync(definition, default)));
             Assert.Equal(size - 10, (await Measure("standard-wide-children", () => standard.ChildrenAsync(definition, "company:Company_1", default)))!.Count);
             Assert.Equal(11, (await Measure("standard-path-depth-10", () => standard.PathAsync(definition, "department:Department_00009", default)))!.Count);
-            var standardFirst = await Measure("standard-search-page-1", () => standard.SearchAsync(definition, "Department", 1, 20, default));
-            var standardSecond = await Measure("standard-search-page-2", () => standard.SearchAsync(definition, "Department", 2, 20, default));
-            Assert.Equal(first.Total, standardFirst.Total);
-            Assert.Equal(first.Items.Select(item => item.Node.NodeKey), standardFirst.Items.Select(item => item.Node.NodeKey));
-            Assert.Equal(second.Items.Select(item => item.Node.NodeKey), standardSecond.Items.Select(item => item.Node.NodeKey));
-            // 首轮只作功能与预热证据；交替执行顺序，保留各样本而不以单次耗时作结论。
-            var operations = new (string Name, Func<Task<object>> Original, Func<Task<object>> Standard)[] {
-                ("roots", async () => await tree.RootsAsync(default), async () => await standard.RootsAsync(definition, default)),
-                ("wide-children", async () => (await tree.ChildrenAsync("company:Company_1", default))!, async () => (await standard.ChildrenAsync(definition, "company:Company_1", default))!),
-                ("path-depth-10", async () => (await tree.PathAsync("department:Department_00009", default))!, async () => (await standard.PathAsync(definition, "department:Department_00009", default))!),
-                ("search-page-1", async () => await tree.SearchAsync("Department", 1, 20, default), async () => await standard.SearchAsync(definition, "Department", 1, 20, default)),
-                ("search-page-2", async () => await tree.SearchAsync("Department", 2, 20, default), async () => await standard.SearchAsync(definition, "Department", 2, 20, default))
+            var first = await Measure("standard-search-page-1", () => standard.SearchAsync(definition, "Department", 1, 20, default));
+            var second = await Measure("standard-search-page-2", () => standard.SearchAsync(definition, "Department", 2, 20, default));
+            var repeated = await Measure("standard-search-page-2-repeat", () => standard.SearchAsync(definition, "Department", 2, 20, default));
+            Assert.Equal(size - 1, first.Total); Assert.Equal(20, first.Items.Count);
+            Assert.Equal("department:Department_00000", first.Items[0].Node.NodeKey);
+            Assert.Equal("department:Department_00020", second.Items[0].Node.NodeKey);
+            Assert.Empty(first.Items.Select(item => item.Node.NodeKey).Intersect(second.Items.Select(item => item.Node.NodeKey)));
+            Assert.Equal(second.Items.Select(item => item.Node.NodeKey), repeated.Items.Select(item => item.Node.NodeKey));
+            // 首轮只作功能与预热证据；保留各样本而不以单次耗时作结论。
+            var operations = new (string Name, Func<Task<object>> Standard)[] {
+                ("roots", async () => await standard.RootsAsync(definition, default)),
+                ("wide-children", async () => (await standard.ChildrenAsync(definition, "company:Company_1", default))!),
+                ("path-depth-10", async () => (await standard.PathAsync(definition, "department:Department_00009", default))!),
+                ("search-page-1", async () => await standard.SearchAsync(definition, "Department", 1, 20, default)),
+                ("search-page-2", async () => await standard.SearchAsync(definition, "Department", 2, 20, default))
             };
             for (sample = 1; sample <= 6; sample++)
                 foreach (var operation in operations)
-                {
-                    if (sample % 2 == 0) await Measure(operation.Name, operation.Original);
                     await Measure("standard-" + operation.Name, operation.Standard);
-                    if (sample % 2 != 0) await Measure(operation.Name, operation.Original);
-                }
 
         }
     }
@@ -241,17 +228,19 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             await setup.SaveChangesAsync();
         }
         await using var context = CreateContext(fixture.ConnectionString);
-        var tree = new OrganizationTreeReader(context);
-        var root = Assert.Single(await tree.RootsAsync(default));
+        var definition = ReadRelationDefinition();
+        var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
+        var tree = new RelationTreeReader(context, new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]));
+        var root = Assert.Single(await tree.RootsAsync(definition, default));
         Assert.Equal("company:Company_1", root.NodeKey);
         Assert.True(root.HasChildren);
-        Assert.Equal("department:Department_A", Assert.Single((await tree.ChildrenAsync(root.NodeKey, default))!).NodeKey);
-        var path = (await tree.PathAsync("department:Department_B", default))!;
+        Assert.Equal("department:Department_A", Assert.Single((await tree.ChildrenAsync(definition, root.NodeKey, default))!).NodeKey);
+        var path = (await tree.PathAsync(definition, "department:Department_B", default))!;
         Assert.Equal(new[] { "company:Company_1", "department:Department_A", "department:Department_B" }, path.Select(node => node.NodeKey));
         Assert.False(path[^1].IsEnabled);
-        Assert.Empty((await tree.ChildrenAsync("department:Department_B", default))!);
-        Assert.Null(await tree.ChildrenAsync("department:missing", default));
-        var search = await tree.SearchAsync("Department", 2, 1, default);
+        Assert.Empty((await tree.ChildrenAsync(definition, "department:Department_B", default))!);
+        Assert.Null(await tree.ChildrenAsync(definition, "department:missing", default));
+        var search = await tree.SearchAsync(definition, "Department", 2, 1, default);
         Assert.Equal(2, search.Total);
         Assert.Equal("department:Department_B", Assert.Single(search.Items).Node.NodeKey);
         Assert.Equal(3, search.Items[0].Path.Count);
@@ -259,12 +248,12 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         var moved = await departments.SingleAsync(row => EF.Property<string>(row, "EID") == "Department_B");
         moved["ParentDepartmentId"] = null;
         await context.SaveChangesAsync();
-        Assert.Equal(new[] { "company:Company_1", "department:Department_B" }, (await tree.PathAsync("department:Department_B", default))!.Select(node => node.NodeKey));
+        Assert.Equal(new[] { "company:Company_1", "department:Department_B" }, (await tree.PathAsync(definition, "department:Department_B", default))!.Select(node => node.NodeKey));
         departments.Remove(moved); await context.SaveChangesAsync();
-        Assert.Null(await tree.PathAsync("department:Department_B", default));
-        Assert.Empty((await tree.SearchAsync("absent", 1, 20, default)).Items);
+        Assert.Null(await tree.PathAsync(definition, "department:Department_B", default));
+        Assert.Empty((await tree.SearchAsync(definition, "absent", 1, 20, default)).Items);
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => tree.SearchAsync("Department", 1, 20, cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => tree.SearchAsync(definition, "Department", 1, 20, cancelled.Token));
     }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的部门层级固定查询次数")]

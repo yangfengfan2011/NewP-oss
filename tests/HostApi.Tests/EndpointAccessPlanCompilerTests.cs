@@ -8,8 +8,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Xunit;
 using Microsoft.Extensions.DependencyInjection;
-using ICP.Platform.Modules.Organization.Controllers;
-using ICP.Platform.Modules.Organization.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 
@@ -44,17 +42,21 @@ public sealed class EndpointAccessPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_RealOrganizationTreeController_HasOneTerminalRulePerRead()
+    public void Compile_CompositePermissionPolicy_HasOneTerminalRulePerRead()
     {
+        // 与标准关系树读取策略同形：一个命名策略组合两项既有权限，不新增权限码。
+        const string policyName = "Organization.Tree.Read";
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddAuthorization(OrganizationTreeAccess.Configure);
-        builder.Services.AddControllers().AddApplicationPart(typeof(OrganizationTreeController).Assembly);
+        builder.Services.AddAuthorization(options => options.AddPolicy(policyName, policy => policy.RequireAuthenticatedUser().AddRequirements(
+            new PermissionAuthorizationRequirement("Organization.Company.View"),
+            new PermissionAuthorizationRequirement("Organization.Department.View"))));
         using var app = builder.Build();
-        app.MapControllers();
+        foreach (var operation in new[] { "roots", "children", "path", "search" })
+            app.MapGet("/api/trees/organization.structure/" + operation, static () => "ok").RequireAuthorization(policyName);
         var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
-            .OfType<RouteEndpoint>().Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("api/organization/tree/", StringComparison.Ordinal) == true).ToArray();
+            .OfType<RouteEndpoint>().Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/trees/", StringComparison.Ordinal) == true).ToArray();
         Assert.Equal(4, endpoints.Length);
-        var policy = app.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.GetPolicy(OrganizationTreeAccess.PolicyName)!;
+        var policy = app.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.GetPolicy(policyName)!;
         Assert.Equal(new[] { "Organization.Company.View", "Organization.Department.View" },
             policy.Requirements.OfType<PermissionAuthorizationRequirement>().Select(requirement => requirement.Requirement.PermissionCode));
         EndpointAccessPlanCompiler.Compile([new DefaultEndpointDataSource(endpoints)], Registry(new PermissionModule("Organization",

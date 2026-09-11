@@ -24,3 +24,7 @@ status: accepted
 ## 回退
 
 回退标准 Provider、服务端装配与 Organization 配置时必须配套恢复前端 Provider 注册和胶囊引用。现有组织专用 API 保持原有行为，本次不改变业务数据及数据库结构；业务模块的自定义 Provider 契约保持可用。字段契约与接入方式见 [配置指南](../developer/relation-tree-configuration.md)。
+
+## 后续决定（2026-09-11）
+
+组织专用树 API（`/api/organization/tree/*`）、`OrganizationTreeReader` 与 `Organization.Tree.Read` 策略已退役。核实结果：前端与验收旅程均只消费 `/api/trees/organization.structure/*`，旧端点没有受支持的调用方，也没有版本化兼容承诺；其权限拒绝、参数校验与四类读取的等价断言已由标准端点测试覆盖。上文回退段中「现有组织专用 API 保持原有行为」不再适用；回退标准 Provider 时需恢复该 API 的实现与前端 Provider。`DepartmentHierarchyQuery` 承担父级候选与防环校验，职责不同，继续由 Organization 独立拥有。

@@ -10,8 +10,6 @@ using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Runtime;
-using ICP.Platform.Modules.Organization.Controllers;
-using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -60,11 +58,12 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.WebHost.UseTestServer();
             builder.Services.AddAuthentication("Test").AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TestAuthentication>("Test", _ => { });
             builder.Services.AddPlatformAuthorization();
-            builder.Services.AddAuthorization(OrganizationTreeAccess.Configure);
             builder.Services.AddSingleton<IPermissionDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
+            // 组织结构树视图含人员节点，树 SQL 在启动期需要能解析全部节点资源。
+            builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
             var treePlan = ReadTreePlan(treeArtifacts.FullName);
             builder.Services.AddRelationTrees(treePlan);
             builder.Services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
@@ -73,8 +72,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.Services.AddScoped<IStandardCrudDisplayValueResolver, DepartmentCrudDisplayValueResolver>();
             builder.Services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
             builder.Services.AddScoped<IDepartmentDirectory, EfDepartmentDirectory>();
-            builder.Services.AddScoped<OrganizationTreeReader>();
-            builder.Services.AddControllers().AddApplicationPart(typeof(OrganizationTreeController).Assembly);
+            builder.Services.AddControllers();
             builder.Services.AddSingleton(plan);
             builder.Services.AddSingleton<IEntityAuditStampProvider>(stamp);
             builder.Services.AddSingleton<IRequestPresentationContextAccessor, Presentation>();
@@ -157,51 +155,20 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             recorder.Commands.Clear();
             using var rejected = await client.SendAsync(denied);
             Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode); Assert.Empty(recorder.Commands);
-            using var deniedTree = new HttpRequestMessage(HttpMethod.Get, "/api/organization/tree/roots?scope=global"); deniedTree.Headers.Add("X-Deny", "1");
-            using var treeRejected = await client.SendAsync(deniedTree); Assert.Equal(HttpStatusCode.Forbidden, treeRejected.StatusCode);
-            foreach (var permission in new[] { "Organization.Company.View", "Organization.Department.View" })
-            {
-                recorder.Commands.Clear();
-                using var partialRequest = new HttpRequestMessage(HttpMethod.Get, "/api/organization/tree/roots?scope=global");
-                partialRequest.Headers.Add("X-Deny", permission);
-                using var partialResponse = await client.SendAsync(partialRequest);
-                Assert.Equal(HttpStatusCode.Forbidden, partialResponse.StatusCode);
-                Assert.Empty(recorder.Commands);
-            }
-            var roots = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/roots?scope=global");
-            Assert.Equal(2, roots.GetArrayLength()); Assert.True(roots[0].TryGetProperty("label", out _));
-            var children = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/children?scope=global&nodeKey=" + Uri.EscapeDataString("company:" + company));
-            Assert.Equal(2, children.GetArrayLength());
-            var path = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/path?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + second));
-            Assert.Equal(2, path.GetArrayLength());
-            var search = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/search?scope=global&keyword=Department&page=2&pageSize=1");
-            Assert.Equal(2, search.GetProperty("total").GetInt32()); Assert.Single(search.GetProperty("items").EnumerateArray());
-            using var absent = await client.GetAsync("/api/organization/tree/path?scope=global&nodeKey=department:missing"); Assert.Equal(HttpStatusCode.NotFound, absent.StatusCode);
-            using var invalid = await client.GetAsync("/api/organization/tree/roots?scope=missing"); Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
-            var invalidProblem = await invalid.Content.ReadFromJsonAsync<JsonElement>();
-            Assert.Equal("缺少或无效组织树范围。", invalidProblem.GetProperty("errors").GetProperty("scope")[0].GetString());
-            var defaultSearch = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/search?scope=global&keyword=Department");
-            Assert.Equal(1, defaultSearch.GetProperty("page").GetInt32());
-            Assert.Equal(20, defaultSearch.GetProperty("pageSize").GetInt32());
-            foreach (var query in new[] { "keyword=Department&page=0", "keyword=Department&pageSize=0", "keyword=Department&page=-1", "keyword=Department&page=2147483647&pageSize=20" })
-            {
-                using var badSearch = await client.GetAsync("/api/organization/tree/search?scope=global&" + query);
-                Assert.Equal(HttpStatusCode.BadRequest, badSearch.StatusCode);
-                Assert.True((await badSearch.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").TryGetProperty("search", out _));
-            }
-            foreach (var treeRoute in new[] { "roots", "children?nodeKey=company:missing", "path?nodeKey=company:missing", "search?keyword=Department" })
-            {
-                using var noScope = await client.GetAsync("/api/organization/tree/" + treeRoute);
-                Assert.Equal(HttpStatusCode.BadRequest, noScope.StatusCode);
-            }
-            using var missingChildren = await client.GetAsync("/api/organization/tree/children?scope=global&nodeKey=department:missing");
-            Assert.Equal(HttpStatusCode.NotFound, missingChildren.StatusCode);
-            var leafChildren = await client.GetFromJsonAsync<JsonElement>("/api/organization/tree/children?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + second));
-            Assert.Equal(0, leafChildren.GetArrayLength());
 
             const string standard = "/api/trees/organization.structure/";
+            // 树读取策略组合公司与部门两项权限：整体拒绝或缺任一项都在执行 SQL 之前被拒绝。
+            foreach (var deny in new[] { "1", "Organization.Company.View", "Organization.Department.View" })
+            {
+                recorder.Commands.Clear();
+                using var deniedTree = new HttpRequestMessage(HttpMethod.Get, standard + "roots?scope=global");
+                deniedTree.Headers.Add("X-Deny", deny);
+                using var treeRejected = await client.SendAsync(deniedTree);
+                Assert.Equal(HttpStatusCode.Forbidden, treeRejected.StatusCode);
+                Assert.Empty(recorder.Commands);
+            }
             var standardRoots = await client.GetFromJsonAsync<JsonElement>(standard + "roots?scope=global");
-            Assert.Equal(roots.GetArrayLength(), standardRoots.GetArrayLength());
+            Assert.Equal(2, standardRoots.GetArrayLength()); Assert.True(standardRoots[0].TryGetProperty("label", out _));
             var standardChildren = await client.GetFromJsonAsync<JsonElement>(standard + "children?scope=global&nodeKey=" + Uri.EscapeDataString("company:" + company));
             Assert.Equal(2, standardChildren.GetArrayLength());
             Assert.Equal(company, standardChildren[0].GetProperty("context").GetProperty("companyId").GetString());

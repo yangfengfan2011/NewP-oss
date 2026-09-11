@@ -373,16 +373,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(120_000);
         page.SetDefaultNavigationTimeout(120_000);
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login", new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.DOMContentLoaded
-        });
-        await page.Locator("#ecode").FillAsync("admin");
-        await page.Locator("#password").FillAsync(password);
-        await page.GetByRole(
-            AriaRole.Button,
-            new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-        await WaitForPostLoginNavigationAsync(page);
+        await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", password);
         try
         {
             await page.GotoAsync(
@@ -1443,15 +1434,6 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         {
             throw new InvalidOperationException($"{check} replayed migration or changed Example required-field state.");
         }
-    }
-
-    // 登录成功以离开 /login 且退出登录入口出现为准。
-    private static async Task WaitForPostLoginNavigationAsync(IPage page)
-    {
-        await page.WaitForURLAsync(
-            url => !url.Contains("/login", StringComparison.OrdinalIgnoreCase),
-            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await page.GetByText("退出登录", new PageGetByTextOptions { Exact = true }).WaitForAsync();
     }
 
     // Locator 文本断言在真实 DOM 稳定后执行，失败时只暴露期望标签。

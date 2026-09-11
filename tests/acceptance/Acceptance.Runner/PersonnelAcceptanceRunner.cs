@@ -415,14 +415,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         }
         try
         {
-            await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login", new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.DOMContentLoaded
-            });
-            await page.Locator("#ecode").FillAsync("admin");
-            await page.Locator("#password").FillAsync(adminPassword);
-            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-            await WaitForPostLoginNavigationAsync(page);
+            await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", adminPassword);
 
             var browserAssertions = new List<string>();
 
@@ -618,17 +611,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             }
             throw new InvalidOperationException(Sanitize($"{exception.Message}; URL: {page.Url}; {string.Join("; ", diagnostics)}"), exception);
         }
-    }
-
-    private async Task WaitForPostLoginNavigationAsync(IPage page)
-    {
-        await page.WaitForURLAsync(
-            $"http://127.0.0.1:{_shellPort}/",
-            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await page.GetByRole(
-                AriaRole.Button,
-                new PageGetByRoleOptions { Name = "退出登录", Exact = true })
-            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
     }
 
     private static Task OpenPersonnelFromShellAsync(StandardCrudPageDriver driver) => driver.OpenOrganizationTabAsync("人员", "persons");
@@ -910,14 +892,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
     }
 
-    private async Task LoginBrowserActorAsync(IPage page, OrdinaryActor actor)
-    {
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login");
-        await page.Locator("#ecode").FillAsync(actor.ECode);
-        await page.Locator("#password").FillAsync(actor.Password);
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-        await WaitForPostLoginNavigationAsync(page);
-    }
+    private Task LoginBrowserActorAsync(IPage page, OrdinaryActor actor) =>
+        new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync(actor.ECode, actor.Password);
 
     // 维护者使用正式创建表单，人员与登录账号保持不同对象。
     private async Task<PersonData> CreatePersonFromBrowserAsync(StandardCrudPageDriver driver, CompanyData company, DepartmentData department)

@@ -1266,16 +1266,12 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         return artifact;
     }
 
+    // 管理员与受限账号登录后的落点由业务决定（首页或改密页），因此只确认离开登录页。
     private async Task LoginBrowserAsync(IPage page, string ecode, string password)
     {
-        if (!new Uri(page.Url).AbsolutePath.Equals("/login", StringComparison.Ordinal))
-        {
-            await page.GotoAsync($"http://127.0.0.1:{_shellPort}/login");
-        }
-        await page.Locator("#ecode").FillAsync(ecode);
-        await page.Locator("#password").FillAsync(password);
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "登录", Exact = true }).ClickAsync();
-        await page.WaitForFunctionAsync("() => window.location.pathname !== '/login'");
+        var shell = new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}");
+        await shell.SubmitLoginAsync(ecode, password);
+        await shell.WaitForLoginPageLeftAsync();
     }
 
     private void CaptureFailedDevRunIdentity()

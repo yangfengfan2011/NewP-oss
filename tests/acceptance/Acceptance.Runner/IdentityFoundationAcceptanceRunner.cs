@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Microsoft.Data.SqlClient;
 using Microsoft.Playwright;
 
@@ -93,12 +94,16 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         _hostEnvironment["Logging__LogLevel__Default"] = "Information";
 
         await RunStopDevAsync("identity-foundation/preflight-stop-existing.json", cancellationToken, true);
-        var build = await RunCheckedProcessAsync(
-            "dotnet",
-            ["build", "apps/host-api/HostApi.csproj", "--configuration", "Release", "--no-restore", "--nologo"],
-            null,
-            cancellationToken);
-        await WriteEvidenceAsync("identity-foundation/preflight-build.json", ProcessEvidence("dotnet build HostApi", build), cancellationToken);
+        // Gate 启动 Host 前准备全部 Release 测试输入，运行中只执行 no-build，避免改写宿主已加载的 DLL。
+        foreach (var project in new[] { "HostApi", "Identity", "Authentication", "Organization" })
+        {
+            var path = $"tests/{project}.Tests/{project}.Tests.csproj";
+            var build = await RunCheckedProcessAsync(
+                "dotnet", ["build", path, "--configuration", "Release", "--no-restore", "--nologo", "/nodeReuse:false"],
+                null, cancellationToken);
+            await WriteEvidenceAsync($"identity-foundation/preflight-build-{project}.json",
+                ProcessEvidence($"dotnet build {path} -c Release --no-restore /nodeReuse:false", build), cancellationToken);
+        }
         await CreateCatalogAsync(cancellationToken);
 
         var notReady = await ObserveNotReadyDevAsync(cancellationToken);
@@ -592,7 +597,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var hostTests = await RunCheckedProcessAsync(
             "dotnet",
             [
-                "test", "tests/HostApi.Tests/HostApi.Tests.csproj", "--no-restore", "--nologo",
+                "test", "tests/HostApi.Tests/HostApi.Tests.csproj", "-c", "Release", "--no-build", "--no-restore", "--nologo",
                 "--filter", "FullyQualifiedName~HostAntiforgeryTests|FullyQualifiedName~HostAuthenticationSecurityTests"
             ],
             null,
@@ -600,7 +605,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var requiredBuiltinsTests = await RunCheckedProcessAsync(
             "dotnet",
             [
-                "test", "tests/HostApi.Tests/HostApi.Tests.csproj", "--no-restore", "--nologo",
+                "test", "tests/HostApi.Tests/HostApi.Tests.csproj", "-c", "Release", "--no-build", "--no-restore", "--nologo",
                 "--filter", "FullyQualifiedName~RequiredBuiltinReadinessTests"
             ],
             null,
@@ -628,8 +633,8 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             commands = new[]
             {
                 ProcessSummary("corepack pnpm --dir frontend --filter @icp-platform/core test", coreTests),
-                ProcessSummary("dotnet test HostApi.Tests --filter HostAntiforgeryTests|HostAuthenticationSecurityTests", hostTests),
-                ProcessSummary("dotnet test HostApi.Tests --filter FullyQualifiedName~RequiredBuiltinReadinessTests", requiredBuiltinsTests)
+                ProcessSummary("dotnet test HostApi.Tests -c Release --no-build --no-restore --filter HostAntiforgeryTests|HostAuthenticationSecurityTests", hostTests),
+                ProcessSummary("dotnet test HostApi.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~RequiredBuiltinReadinessTests", requiredBuiltinsTests)
             },
             legacyRuntimeMatches = staticScan.Count
         }, cancellationToken);
@@ -664,12 +669,26 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
                 [command.EnableVariable] = "1",
                 [command.AdminConnectionVariable] = adminConnection
             };
-            var result = await RunCheckedProcessAsync(
-                "dotnet",
-                ["test", command.Project, "--no-restore", "--nologo", "--filter", "Category=SqlServerSmoke"],
-                environment,
-                cancellationToken);
-            evidence.Add(ProcessSummary($"dotnet test {command.Project} --filter Category=SqlServerSmoke", result));
+            var resultsRoot = Path.Combine(_runDirectory, "identity-foundation", $"sql-{command.Name}");
+            Directory.CreateDirectory(resultsRoot);
+            var trxPath = Path.Combine(resultsRoot, "smoke.trx");
+            AcceptanceProcessResult result;
+            try
+            {
+                result = await RunCheckedProcessAsync(
+                    "dotnet",
+                    ["test", command.Project, "-c", "Release", "--no-build", "--no-restore", "--nologo",
+                        "--filter", "Category=SqlServerSmoke", "--logger", "trx;LogFileName=smoke.trx", "--results-directory", resultsRoot],
+                    environment, cancellationToken);
+            }
+            finally
+            {
+                // 保留原生 TRX 供核对真实执行数量，失败输出同样经过既有凭据脱敏。
+                if (File.Exists(trxPath))
+                    await File.WriteAllTextAsync(trxPath, Sanitize(await File.ReadAllTextAsync(trxPath, CancellationToken.None)), CancellationToken.None);
+            }
+            RequireExecutedSmokeTests(await File.ReadAllTextAsync(trxPath, cancellationToken));
+            evidence.Add(ProcessSummary($"dotnet test {command.Project} -c Release --no-build --no-restore --filter Category=SqlServerSmoke", result));
         }
 
         var remainingCatalogs = await CountDisposableIntegrationCatalogsAsync(cancellationToken);
@@ -857,6 +876,17 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             ]);
         }
         return arguments;
+    }
+
+    // 原生 TRX 必须证明筛选匹配非零且全部实际执行通过，不能把未开启 SQL 的跳过当成成功。
+    internal static void RequireExecutedSmokeTests(string trx)
+    {
+        XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+        var counters = XDocument.Parse(trx).Descendants(ns + "Counters").Single();
+        var total = (int?)counters.Attribute("total") ?? 0;
+        if (total <= 0 || (int?)counters.Attribute("executed") != total
+            || (int?)counters.Attribute("passed") != total || (int?)counters.Attribute("notExecuted") != 0)
+            throw new InvalidOperationException("SQL Server smoke TRX must contain matching tests, all executed and passed, with zero skipped tests.");
     }
 
     private async Task<AcceptanceProcessResult> RunCheckedProcessAsync(

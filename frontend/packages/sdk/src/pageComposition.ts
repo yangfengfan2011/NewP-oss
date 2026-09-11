@@ -73,5 +73,5 @@ export interface RelationTreeSource {
 /** 引用已有 List View 动作；权限、确认和输入仍由资源动作声明拥有。 */
 export type TreeActionReference = {
   key: string; labelKey: string; viewKey: string; inputResolverKey?: string;
-} & ({ standardAction: NonNullable<import('./standardCrud').StandardCrudActionDefinition['standardAction']>; actionKey?: never }
+} & ({ standardAction: NonNullable<import('./standardCrud.types').StandardCrudActionDefinition['standardAction']>; actionKey?: never }
   | { actionKey: string; standardAction?: never });

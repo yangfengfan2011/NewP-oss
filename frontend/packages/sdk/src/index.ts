@@ -1,5 +1,5 @@
 import { ComponentType, ReactNode } from 'react';
-import type { StandardCrudResourceRegistration } from './standardCrud';
+import type { StandardCrudResourceRegistration } from './standardCrud.types';
 
 export { createRecoverableCapabilityLoader } from './capabilityLoader';
 export type * from './pageComposition';
@@ -175,16 +175,12 @@ export type {
   StandardCrudSummaryRendererContext,
   StandardCrudSummaryStatus,
   UseStandardCrudLookupRuntimeInput,
-} from './standardCrud';
+} from './standardCrud.types';
 
 export {
   applyStandardCrudLookupValueChange,
   buildStandardCrudI18nLabel,
-  buildStandardCrudPath,
   clearStandardCrudDependentLookupValues,
-  createStandardCrudClient,
-  createStandardCrudRestDataAdapter,
-  createStandardCrudRestLookupProvider,
   createStandardCrudOperationResultPresenterRegistry,
   isStandardCrudRecord,
   loadStandardCrudLookupOptions,
@@ -200,8 +196,15 @@ export {
   readStandardCrudString,
   resolveStandardCrudSummaryMessage,
   useStandardCrudLookupRuntime,
-  StandardCrudRequestError,
 } from './standardCrud';
+
+export {
+  buildStandardCrudPath,
+  createStandardCrudClient,
+  createStandardCrudRestDataAdapter,
+  createStandardCrudRestLookupProvider,
+  StandardCrudRequestError,
+} from './standardCrudRest';
 
 export interface I18nResource {
   locale: string;

@@ -2,7 +2,7 @@
 import { act, StrictMode, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createMemoryRouter, Link, RouterProvider, Route, Routes, useNavigate } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '@icp-platform/core';
 import { ModuleRegistry, type PageProps } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -10,6 +10,10 @@ import { ShellRouter } from '../navigation/ShellRouter';
 import { PageEntry } from '../composition/PageOutlet';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+// 生命周期断言从真实页面模块就绪后开始，不把首次lazy转换耗时计入交互等待。
+beforeAll(async () => {
+  await Promise.all([import('../composition/StandardTreePage'), import('../composition/StandardTabPage')]);
+});
 function FormPage({ input, reportState }: PageProps) {
   const navigate = useNavigate();
   const [dirty, setDirty] = useState(false);

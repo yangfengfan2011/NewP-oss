@@ -1,6 +1,4 @@
 using System.Reflection;
-using System.Reflection.Metadata;
-using System.Reflection.PortableExecutable;
 using System.Runtime.Loader;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.Kernel.Abstractions;
@@ -226,8 +224,6 @@ public sealed class TrustedDefaultModuleAssemblyRegistry
     private sealed record TrustedDefaultModuleAssembly(Assembly Assembly, byte[] Image);
 }
 
-internal sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
-
 public sealed class CanonicalModuleAssemblyLoader
 {
     private readonly string _distributionRoot;
@@ -283,7 +279,7 @@ public sealed class CanonicalModuleAssemblyLoader
         VerifiedModuleImage image,
         VerifiedModuleAssemblyLoadContext context)
     {
-        var identity = ReadIdentity(image.Bytes);
+        var identity = VerifiedAssemblyIdentityReader.Read(image.Bytes);
         var assembly = image.IsBuiltIn
             ? _trustedDefaultRegistry?.LoadAtTrustedComposition(
                 image.Module.ModuleId,
@@ -333,7 +329,7 @@ public sealed class CanonicalModuleAssemblyLoader
             _verifiedImages = images
                 .Select(image => new
                 {
-                    Identity = ReadIdentity(image.Bytes),
+                    Identity = VerifiedAssemblyIdentityReader.Read(image.Bytes),
                     image.Bytes,
                 })
                 .GroupBy(static image => image.Identity.AssemblyName.Name!, StringComparer.OrdinalIgnoreCase)
@@ -348,7 +344,7 @@ public sealed class CanonicalModuleAssemblyLoader
 
         internal Assembly LoadVerifiedImage(string owner, byte[] image)
         {
-            var identity = ReadIdentity(image);
+            var identity = VerifiedAssemblyIdentityReader.Read(image);
             var existing = Assemblies.FirstOrDefault(assembly =>
                 MatchesIdentity(assembly, identity));
             if (existing is not null)
@@ -420,7 +416,7 @@ public sealed class CanonicalModuleAssemblyLoader
             }
 
             var bytes = PathContainment.ReadContainedFile(_distributionRoot, path);
-            var identity = ReadIdentity(bytes);
+            var identity = VerifiedAssemblyIdentityReader.Read(bytes);
             if (!VerifiedAssemblyIdentityPolicy.MatchesExact(identity.AssemblyName, assemblyName))
             {
                 throw new FileLoadException($"Host/platform shared dependency '{assemblyName.FullName}' differs from its distribution image.");
@@ -436,58 +432,11 @@ public sealed class CanonicalModuleAssemblyLoader
 
             return assembly;
         }
-
     }
 
     internal static bool MatchesIdentity(Assembly assembly, VerifiedAssemblyIdentity expected) =>
         VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expected.AssemblyName)
         && assembly.ManifestModule.ModuleVersionId == expected.Mvid;
-
-    private static VerifiedAssemblyIdentity ReadIdentity(byte[] image)
-    {
-        using var metadataStream = new MemoryStream(image, writable: false);
-        using var peReader = new PEReader(metadataStream);
-        var metadata = peReader.GetMetadataReader();
-        var definition = metadata.GetAssemblyDefinition();
-        var assemblyName = new AssemblyName
-        {
-            Name = metadata.GetString(definition.Name),
-            Version = definition.Version,
-            CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
-        };
-#pragma warning disable SYSLIB0037
-        assemblyName.ProcessorArchitecture = ReadProcessorArchitecture(peReader.PEHeaders);
-#pragma warning restore SYSLIB0037
-        if (!definition.PublicKey.IsNil)
-        {
-            assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
-        }
-        if (definition.Flags.HasFlag(AssemblyFlags.Retargetable))
-        {
-            assemblyName.Flags |= AssemblyNameFlags.Retargetable;
-        }
-        if (definition.Flags.HasFlag(AssemblyFlags.WindowsRuntime))
-        {
-            assemblyName.ContentType = AssemblyContentType.WindowsRuntime;
-        }
-
-        return new VerifiedAssemblyIdentity(
-            assemblyName,
-            metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
-    }
-
-#pragma warning disable SYSLIB0037
-    private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>
-        headers.CoffHeader.Machine switch
-        {
-            Machine.I386 when headers.CorHeader?.Flags.HasFlag(CorFlags.Requires32Bit) == true => ProcessorArchitecture.X86,
-            Machine.I386 => ProcessorArchitecture.MSIL,
-            Machine.Amd64 => ProcessorArchitecture.Amd64,
-            Machine.IA64 => ProcessorArchitecture.IA64,
-            Machine.Arm or Machine.ArmThumb2 or Machine.Arm64 => ProcessorArchitecture.Arm,
-            _ => ProcessorArchitecture.None
-        };
-#pragma warning restore SYSLIB0037
 
     private sealed record VerifiedDependencyImage(VerifiedAssemblyIdentity Identity, byte[] Bytes);
 

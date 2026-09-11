@@ -1,8 +1,6 @@
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
-using System.Reflection.Metadata;
-using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
@@ -970,7 +968,7 @@ internal sealed class ModuleMigrationExecutor(
                 throw new InvalidDataException("Migration assembly checksum does not match the compiled plan.");
             }
 
-            var expectedIdentity = ReadIdentity(verifiedBytes);
+            var expectedIdentity = VerifiedAssemblyIdentityReader.Read(verifiedBytes);
             var assembly = context.LoadVerifiedImage(stream.ModuleId, verifiedBytes);
             if (!VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expectedIdentity.AssemblyName)
                 || assembly.ManifestModule.ModuleVersionId != expectedIdentity.Mvid)
@@ -990,39 +988,6 @@ internal sealed class ModuleMigrationExecutor(
         }
     }
 
-    private static VerifiedAssemblyIdentity ReadIdentity(ReadOnlyMemory<byte> image)
-    {
-        using var stream = new MemoryStream(image.ToArray(), writable: false);
-        using var peReader = new PEReader(stream);
-        var metadata = peReader.GetMetadataReader();
-        var definition = metadata.GetAssemblyDefinition();
-        var assemblyName = new AssemblyName
-        {
-            Name = metadata.GetString(definition.Name),
-            Version = definition.Version,
-            CultureName = definition.Culture.IsNil ? null : metadata.GetString(definition.Culture)
-        };
-#pragma warning disable SYSLIB0037
-        assemblyName.ProcessorArchitecture = ReadProcessorArchitecture(peReader.PEHeaders);
-#pragma warning restore SYSLIB0037
-        if (!definition.PublicKey.IsNil)
-        {
-            assemblyName.SetPublicKey(metadata.GetBlobBytes(definition.PublicKey));
-        }
-        if (definition.Flags.HasFlag(AssemblyFlags.Retargetable))
-        {
-            assemblyName.Flags |= AssemblyNameFlags.Retargetable;
-        }
-        if (definition.Flags.HasFlag(AssemblyFlags.WindowsRuntime))
-        {
-            assemblyName.ContentType = AssemblyContentType.WindowsRuntime;
-        }
-
-        return new VerifiedAssemblyIdentity(
-            assemblyName,
-            metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
-    }
-
     private sealed class VerifiedMigrationAssemblyLoadContext
         : AssemblyLoadContext
     {
@@ -1036,7 +1001,7 @@ internal sealed class ModuleMigrationExecutor(
                 .Select(stream =>
                 {
                     var bytes = stream.AssemblyImage!.CopyBytes();
-                    return new VerifiedMigrationImage(ReadIdentity(bytes), bytes);
+                    return new VerifiedMigrationImage(VerifiedAssemblyIdentityReader.Read(bytes), bytes);
                 })
                 .GroupBy(static image => image.Identity.AssemblyName.Name!, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
@@ -1047,7 +1012,7 @@ internal sealed class ModuleMigrationExecutor(
 
         internal Assembly LoadVerifiedImage(string owner, byte[] image)
         {
-            var expected = ReadIdentity(image);
+            var expected = VerifiedAssemblyIdentityReader.Read(image);
             var existing = Assemblies.FirstOrDefault(assembly =>
                 VerifiedAssemblyIdentityPolicy.MatchesExact(assembly.GetName(), expected.AssemblyName)
                 && assembly.ManifestModule.ModuleVersionId == expected.Mvid);
@@ -1120,7 +1085,7 @@ internal sealed class ModuleMigrationExecutor(
             }
 
             var bytes = PathContainment.ReadContainedFile(root, path);
-            var identity = ReadIdentity(bytes);
+            var identity = VerifiedAssemblyIdentityReader.Read(bytes);
             if (!VerifiedAssemblyIdentityPolicy.MatchesExact(identity.AssemblyName, assemblyName))
             {
                 throw new FileLoadException($"Host/platform shared dependency '{assemblyName.FullName}' differs from its distribution image.");
@@ -1137,21 +1102,6 @@ internal sealed class ModuleMigrationExecutor(
             return assembly;
         }
     }
-
-#pragma warning disable SYSLIB0037
-    private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>
-        headers.CoffHeader.Machine switch
-        {
-            Machine.I386 when headers.CorHeader?.Flags.HasFlag(CorFlags.Requires32Bit) == true => ProcessorArchitecture.X86,
-            Machine.I386 => ProcessorArchitecture.MSIL,
-            Machine.Amd64 => ProcessorArchitecture.Amd64,
-            Machine.IA64 => ProcessorArchitecture.IA64,
-            Machine.Arm or Machine.ArmThumb2 or Machine.Arm64 => ProcessorArchitecture.Arm,
-            _ => ProcessorArchitecture.None
-        };
-#pragma warning restore SYSLIB0037
-
-    private sealed record VerifiedAssemblyIdentity(AssemblyName AssemblyName, Guid Mvid);
 
     private sealed record VerifiedMigrationImage(VerifiedAssemblyIdentity Identity, byte[] Bytes);
 

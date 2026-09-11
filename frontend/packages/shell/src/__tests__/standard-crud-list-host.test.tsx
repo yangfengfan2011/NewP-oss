@@ -1724,6 +1724,11 @@ describe('StandardCrudListPageHost', () => {
 
     await renderHost();
     expect(container.textContent).toContain('正在加载列表');
+    const searchButton = container.querySelector<HTMLButtonElement>('button[aria-label="搜索"]');
+    const resetButton = container.querySelector<HTMLButtonElement>('button[aria-label="重置"]');
+    expect(searchButton?.disabled).toBe(true);
+    expect(searchButton?.classList.contains('ant-btn-loading')).toBe(false);
+    expect(resetButton?.disabled).toBe(true);
 
     await act(async () => {
       resolveRequest?.(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {

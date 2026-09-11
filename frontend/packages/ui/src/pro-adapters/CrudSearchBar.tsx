@@ -28,7 +28,7 @@ export function CrudSearchBar({ fields, primaryAction, loading = false, onSearch
       <div className="np-crud-search-fields">{fields}</div>
       <Space className="np-crud-search-actions">
         {primaryAction}
-        <Button htmlType="submit" loading={loading} aria-label="搜索">
+        <Button htmlType="submit" disabled={loading} aria-label="搜索">
           搜索
         </Button>
         <Button onClick={onReset} disabled={loading} aria-label="重置">

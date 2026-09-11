@@ -32,7 +32,6 @@ public sealed class StandardCrudServiceWriteTests
             [],
             [],
             [],
-            [],
             temporalInputNormalizer: normalizer);
 
         var result = await service.CreateAsync(TemporalDescriptor(), new Dictionary<string, object?>
@@ -1236,7 +1235,6 @@ public sealed class StandardCrudServiceWriteTests
             [],
             [],
             [],
-            [],
             [new AllowingDeleteGuard()]);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
@@ -1273,7 +1271,6 @@ public sealed class StandardCrudServiceWriteTests
             [],
             [],
             [],
-            [],
             [executor],
             [executor]);
 
@@ -1295,7 +1292,6 @@ public sealed class StandardCrudServiceWriteTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
-            [],
             [],
             [],
             [],

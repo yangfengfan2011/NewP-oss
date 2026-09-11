@@ -20,7 +20,7 @@ public sealed class StandardCrudServiceReadTests
         var repository = new InMemoryStandardCrudRepository(
             [new Dictionary<string, object?> { ["EID"] = "person-1", ["CreatedBy"] = "actor-1", ["UpdatedBy"] = "actor-1" }]);
         var directory = new RecordingUserDirectory();
-        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], [], userDisplayNameDirectory: directory);
+        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], userDisplayNameDirectory: directory);
         var descriptor = new StandardCrudDescriptor
         {
             ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person",
@@ -76,7 +76,7 @@ public sealed class StandardCrudServiceReadTests
                 new LookupFieldDisplayProjectionPlan(field, field + "_DisplayValue", LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME")
                 { IsEntityAuditField = true }).ToArray())
         };
-        var service = new StandardCrudService(new InMemoryStandardCrudRepository([]), executor, [], [], [], [], [], [],
+        var service = new StandardCrudService(new InMemoryStandardCrudRepository([]), executor, [], [], [], [], [],
             userDisplayNameDirectory: directory,
             presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")));
 
@@ -119,7 +119,7 @@ public sealed class StandardCrudServiceReadTests
                 "CreatedBy", "CreatedBy_DisplayValue", LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME") { IsEntityAuditField = true }])
         };
         var service = new StandardCrudService(new InMemoryStandardCrudRepository(
-            [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = actor }]), EmptyQueryExecutor(), [], [], [], [], [], [],
+            [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = actor }]), EmptyQueryExecutor(), [], [], [], [], [],
             userDisplayNameDirectory: directory,
             presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")));
 
@@ -148,7 +148,7 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
-            [], [], [], [], [], [],
+            [], [], [], [], [],
             temporalDisplayProjectionExecutor: executor);
         var descriptor = new StandardCrudDescriptor
         {
@@ -213,7 +213,6 @@ public sealed class StandardCrudServiceReadTests
             [new PersonDisplayResolver()],
             [],
             [],
-            [],
             []);
 
         var result = await service.ListAsync(
@@ -243,7 +242,6 @@ public sealed class StandardCrudServiceReadTests
             executor,
             [],
             [new PersonDisplayResolver()],
-            [],
             [],
             [],
             []);
@@ -289,7 +287,6 @@ public sealed class StandardCrudServiceReadTests
             [],
             [],
             [],
-            [],
             []);
 
         var result = await service.ListAsync(
@@ -314,7 +311,6 @@ public sealed class StandardCrudServiceReadTests
             [],
             [new PersonDisplayResolver()],
             [new FailingSummaryProvider()],
-            [],
             [],
             []);
 
@@ -344,7 +340,6 @@ public sealed class StandardCrudServiceReadTests
             [new PersonDisplayResolver()],
             [],
             [],
-            [],
             []);
 
         var detail = await service.GetDetailAsync(Descriptor(), "person-1");
@@ -361,7 +356,7 @@ public sealed class StandardCrudServiceReadTests
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], []);
+        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], []);
 
         var options = await service.OptionsAsync(Descriptor(), new StandardCrudListQuery());
 
@@ -379,7 +374,6 @@ public sealed class StandardCrudServiceReadTests
             executor,
             [],
             [new RawOverwritingDisplayResolver()],
-            [],
             [],
             [],
             []);
@@ -401,7 +395,6 @@ public sealed class StandardCrudServiceReadTests
             DisplayValueQueryExecutor(),
             [],
             [new ExtraFieldDisplayResolver()],
-            [],
             [],
             [],
             []);
@@ -427,7 +420,6 @@ public sealed class StandardCrudServiceReadTests
             [new FixedDisplayValueResolver(invalidDisplayValue)],
             [],
             [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -449,7 +441,6 @@ public sealed class StandardCrudServiceReadTests
             DisplayValueQueryExecutor(),
             [],
             [new FixedDisplayValueResolver(displayValue)],
-            [],
             [],
             [],
             []);
@@ -496,7 +487,6 @@ public sealed class StandardCrudServiceReadTests
             [new BrokenPersonDisplayResolver()],
             [],
             [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -537,7 +527,6 @@ public sealed class StandardCrudServiceReadTests
             executor,
             [],
             [new MissingDisplayResolver()],
-            [],
             [],
             [],
             []);
@@ -584,7 +573,6 @@ public sealed class StandardCrudServiceReadTests
             [],
             [],
             [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -613,7 +601,6 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             executor,
-            [],
             [],
             [],
             [],

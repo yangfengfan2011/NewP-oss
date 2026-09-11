@@ -49,7 +49,6 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             displayResolvers: [new DepartmentCrudDisplayValueResolver(directory, departments)],
             summaryProviders: [],
             validators: [],
-            actionHandlers: [],
             deleteGuards: []);
 
         var result = await service.ListAsync(

@@ -77,7 +77,6 @@ public sealed class DepartmentCrudUniqueConstraintTests
         displayResolvers: [],
         summaryProviders: [],
         validators: [],
-        actionHandlers: [],
         deleteGuards: [],
         auditStampProvider: new FixedAuditStampProvider());
 

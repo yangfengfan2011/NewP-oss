@@ -41,7 +41,7 @@ public sealed class RoleManagementDisplayTests
         db.ChangeTracker.Clear();
         var names = new Names();
         var service = new StandardCrudService(new EfStandardCrudRepository(db, new PlatformObjectIdGenerator()),
-            new EfPlatformQueryExecutor(db), [new RoleReadResource()], [], [], [], [], [],
+            new EfPlatformQueryExecutor(db), [new RoleReadResource()], [], [], [], [],
             temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
             userDisplayNameDirectory: names);
         var query = new RoleManagementQuery(service, registry);

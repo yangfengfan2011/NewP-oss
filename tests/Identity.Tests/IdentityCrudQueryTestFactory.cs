@@ -24,7 +24,7 @@ internal static class IdentityCrudQueryTestFactory
         IStandardCrudRepository crudRepository = context is null
             ? new AccountReadRepository(repository)
             : new EfStandardCrudRepository(context, new PlatformObjectIdGenerator());
-        var crud = new StandardCrudService(crudRepository, executor, [new IdentityAccountCrudResource()], [], [], [], [], [],
+        var crud = new StandardCrudService(crudRepository, executor, [new IdentityAccountCrudResource()], [], [], [], [],
             temporalDisplayProjectionExecutor: temporal,
             userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository)));
         return new IdentityManagementQueryService(repository, crud, temporal, registry);

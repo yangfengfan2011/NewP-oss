@@ -37,7 +37,7 @@ public sealed class EntityAuditProjectionTests
         await using var context = new EfPlatformDbContext(options, plan, stamp);
         var directory = new Names();
         IStandardCrudService service = new StandardCrudService(new EfStandardCrudRepository(context, new PlatformObjectIdGenerator()),
-            new EfPlatformQueryExecutor(context), [], [], [], [], [], [], auditStampProvider: stamp,
+            new EfPlatformQueryExecutor(context), [], [], [], [], [], auditStampProvider: stamp,
             temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
             userDisplayNameDirectory: directory);
 

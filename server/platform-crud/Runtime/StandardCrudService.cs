@@ -20,7 +20,6 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IReadOnlyDictionary<string, IStandardCrudDisplayValueResolver> _displayResolvers;
     private readonly IReadOnlyDictionary<(string ResourceKey, string Key), IStandardCrudSummaryProvider> _summaryProviders;
     private readonly IReadOnlyDictionary<string, IStandardCrudValidator> _validators;
-    private readonly IReadOnlyDictionary<(string ResourceKey, string ActionKey), IStandardCrudActionHandler> _actionHandlers;
     private readonly IReadOnlyDictionary<string, IStandardCrudDeleteGuard> _deleteGuards;
     private readonly IReadOnlyDictionary<string, IStandardCrudConditionalDeleteExecutor> _conditionalDeleteExecutors;
     private readonly IEntityAuditStampProvider? _auditStampProvider;
@@ -43,7 +42,6 @@ public sealed class StandardCrudService : IStandardCrudService
         IEnumerable<IStandardCrudDisplayValueResolver> displayResolvers,
         IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
         IEnumerable<IStandardCrudValidator> validators,
-        IEnumerable<IStandardCrudActionHandler> actionHandlers,
         IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
         IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null,
         IEntityAuditStampProvider? auditStampProvider = null,
@@ -62,7 +60,6 @@ public sealed class StandardCrudService : IStandardCrudService
         _displayResolvers = displayResolvers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _summaryProviders = summaryProviders.ToDictionary(item => (item.ResourceKey, item.Key));
         _validators = validators.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
-        _actionHandlers = actionHandlers.ToDictionary(item => (item.ResourceKey, item.ActionKey));
         _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _conditionalDeleteExecutors = (conditionalDeleteExecutors ?? [])
             .ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);

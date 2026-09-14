@@ -75,7 +75,9 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
         if (body.RootElement.GetProperty("points").GetArrayLength() == 0) throw new InvalidOperationException("Workbench catalog is empty.");
         var roleName = $"授权旅程-{_runId[..8]}";
-        using var role = await PostAsync(client, "/api/authorization/roles", new { Code = "AUTH-" + _runId[..8], Name = roleName }, token);
+        var roleCreate = features.Action(features.Behavior("Authorization", "authorization.role.read"), "create", "list.pageActions");
+        using var role = await PostAsync(client, "/api/authorization/roles", new { Code = "AUTH-" + _runId[..8], Name = roleName }, token,
+            request => request.Headers.Add("X-NewP-Feature", roleCreate.Position));
         var shellPort = state.RootElement.GetProperty("ports").GetProperty("shell").GetInt32();
         await RunScenarioAsync("authorization.browser", _ => RunBrowserAsync(shellPort, password, roleName), token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "startup-read.json"), new { catalog = _catalog, devRun = _devRun, formalMigration = true, workbenchRead = true }, token);
@@ -135,11 +137,12 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
     }
 
     // 同一会话获取防伪令牌；secure loopback cookie 仅由验收客户端显式回放。
-    private static async Task<JsonDocument> PostAsync(HttpClient client, string path, object body, CancellationToken token)
+    private static async Task<JsonDocument> PostAsync(HttpClient client, string path, object body, CancellationToken token, Action<HttpRequestMessage>? configure = null)
     {
         using var antiforgery = await client.GetFromJsonAsync<JsonDocument>("/api/auth/antiforgery-token", token);
         using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
         request.Headers.Add("X-CSRF-TOKEN", antiforgery!.RootElement.GetProperty("requestToken").GetString());
+        configure?.Invoke(request);
         using var response = await client.SendAsync(request, token);
         await EnsureSuccessAsync(response, token);
         if (response.Headers.TryGetValues("Set-Cookie", out var cookies))

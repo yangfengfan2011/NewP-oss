@@ -6,18 +6,32 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class AcceptanceFeatureCatalogTests
 {
-    [Fact]
-    public void RealOrganizationAuthoring_ResolvesEveryGateRequestPosition()
+    [Theory]
+    [InlineData("Organization")]
+    [InlineData("Authorization")]
+    public void RealAuthoring_ResolvesEveryGateRequestPosition(string module)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
         Assert.NotNull(root);
-        var documents = Directory.EnumerateFiles(Path.Combine(root.FullName, "modules", "Organization", "metadata"), "*.json", SearchOption.AllDirectories)
+        var documents = Directory.EnumerateFiles(Path.Combine(root.FullName, "modules", module, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonDocument.Parse(File.ReadAllText(path))).ToArray();
         try
         {
-            var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Organization", documents.Select(document => document.RootElement)));
+            using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(root.FullName, "modules", module, "newp.plugin.json")));
+            var custom = FeatureCatalogCompiler.Read(capsule.RootElement, module);
+            var points = FeatureCatalogCompiler.Compile([.. custom,
+                .. StandardFeatureMetadataCompiler.Read(module, documents.Select(document => document.RootElement), custom)]);
             var catalog = new AcceptanceFeatureCatalog(points);
+            if (module == "Authorization")
+            {
+                var roleEntry = catalog.Behavior(module, "authorization.role.read");
+                Assert.Equal("authorization.roles", roleEntry.Key);
+                var create = catalog.Action(roleEntry, "create", "list.pageActions");
+                Assert.Equal("authorization.role.create", create.BehaviorKey);
+                Assert.Contains(roleEntry.Position, create.EntryDependencies);
+                return;
+            }
             foreach (var key in new[] { "structure", "companies", "departments", "positions", "persons" })
                 Assert.Contains(catalog.OrganizationTab(key), points);
             foreach (var key in new[] { "companies", "departments", "persons" })

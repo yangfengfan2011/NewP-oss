@@ -24,7 +24,7 @@ C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，�
 
 已切换的标准入口在 navigation 声明 `featureAuthorization: true`。`StandardFeatureMetadataCompiler` 展开真实 View 和 PageRef，`FeatureCatalogCompiler` 与 Capsule 的自定义功能声明合并为同一目录。导航、Tab、动作是授权点；页面和静态类型展示组不是授权点。同一 View 在不同分支复用时分别生成位置，局部动作 Key 可以重复。
 
-View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资源范围内把模型字段或查询 override 所用 provider 绑定到只读 behavior。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
+View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资源范围内把模型字段或查询 override 所用 provider 绑定到只读 behavior。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。标准 `pageActions` / `rowActions` 也可声明 `readBehaviors`，补充动作输入所需的只读行为；它们与资源读取和实际表单 Lookup 一同随发起动作授权。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
 
 完整位置由声明引用及其祖先、静态节点类型和动作所在位置编译产生，不能使用 URL、文案、数组序号或记录 ID。导航的 `featureOwner` 为重定向别名和独立详情指定已有入口引用；别名不创建重复授权点。`ReferenceKey`、`StaticScope`、`ActionScope`、`StaticScopeTitle` 和 `Container` 是标准适配器的派生事实，不能据此推断 Capsule 自定义声明已经支持这些输入字段。
 

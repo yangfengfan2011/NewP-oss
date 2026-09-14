@@ -400,7 +400,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var browserErrors = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
         var apiResponses = new System.Collections.Concurrent.ConcurrentQueue<object>();
-        foreach (var observedPage in new[] { page, maintainerPage, readerPage })
+        void ObservePage(IPage observedPage)
         {
             observedPage.PageError += (_, message) => browserErrors.Enqueue(message);
             observedPage.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
@@ -413,6 +413,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             };
             observedPage.SetDefaultTimeout(30_000);
             observedPage.SetDefaultNavigationTimeout(120_000);
+        }
+        foreach (var observedPage in new[] { page, maintainerPage, readerPage }) ObservePage(observedPage);
+        async Task CapturePresentationAsync(string name)
+        {
+            var path = Path.Combine(_runDirectory, "personnel", name + ".png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, path));
         }
         try
         {
@@ -545,6 +552,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = treeScreenshot, FullPage = true });
             _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, treeScreenshot));
             browserAssertions.Add("person-located-in-organization-tree-and-detail-opened");
+            if (phase == "initial")
+            {
+                await page.SetViewportSizeAsync(900, 1000);
+                await CapturePresentationAsync("tree-person-narrow");
+                await page.SetViewportSizeAsync(1440, 1000);
+            }
             // 旧人员书签仍进入同一个组合页面，且完整详情保留独立受控地址。
             await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons");
             await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/organization/structure" && StandardCrudPageDriver.HasQueryValue(new Uri(url), "tab", "persons"));
@@ -565,6 +578,35 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
             _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            if (phase == "initial")
+            {
+                // 仅采样既有详情的直达/刷新呈现，不重复写入或新增字段语义断言。
+                var detailPage = page;
+                var address = detailPage.Url;
+                page = await maintainerContext.NewPageAsync();
+                ObservePage(page);
+                driver = new StandardCrudPageDriver(page);
+                await page.GotoAsync(address);
+                await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+                await CapturePresentationAsync("person-detail-direct");
+                await page.ReloadAsync();
+                await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+                await CapturePresentationAsync("person-detail-refresh");
+                // 失败时保留当前 page 供外层原始诊断；context 的现有释放路径兜底关闭。
+                await page.CloseAsync();
+
+                page = administratorPage;
+                driver = administratorDriver;
+                await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{_roleId}");
+                await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
+                await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = $"Personnel Gate Role M {_runId[..8]}", Exact = true })).ToBeEnabledAsync();
+                await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "展开全部", Exact = true }).ClickAsync();
+                await CapturePresentationAsync("workbench-expanded-groups");
+                await page.GetByLabel("搜索功能", new PageGetByLabelOptions { Exact = true }).FillAsync("编辑");
+                await CapturePresentationAsync("workbench-filtered-groups");
+                page = detailPage;
+                driver = maintainerDriver;
+            }
             await WriteEvidenceAsync($"personnel/browser-{phase}.json", new
             {
                 status = "passed",

@@ -36,6 +36,11 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const saved = useMemo(() => new Set(current?.positions ?? []), [current]);
   const diff = useMemo(() => featureDiff(saved, draft), [saved, draft]);
   const dirty = diff.added.length + diff.removed.length > 0;
+  const missingEntries = useMemo(() => {
+    const dependencies = new Set((catalog?.points ?? []).filter(point => draft.has(point.position))
+      .flatMap(point => point.entryDependencies).filter(position => !draft.has(position)));
+    return (catalog?.points ?? []).filter(point => dependencies.has(point.position));
+  }, [catalog, draft]);
   const savePoint = catalog?.points.find(point => point.behaviorKey === "authorization.workbench.save");
   const readOnly = !savePoint || !hasFeature(savePoint.position) || current?.role.code.toLowerCase() === "localadmin";
   const tree = useMemo(() => buildFeatureTree(catalog?.points ?? [], query, draft, grantedOnly), [catalog, query, draft, grantedOnly]);
@@ -81,7 +86,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
 
   // 一次整组提交，失败保留草稿；网络不确定不重放，ref 同步阻止双击。
   const save = useCallback(async (): Promise<boolean> => {
-    if (pending.current || readOnly || !current || !catalog) return false;
+    if (pending.current || readOnly || !current || !catalog || missingEntries.length > 0) return false;
     const action = catalog.points.find(point => point.behaviorKey === "authorization.workbench.save");
     if (!action) { setError("保存功能声明不可用"); return false; }
     pending.current = true;
@@ -97,7 +102,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
       return true;
     } catch (failure) { setError(message(failure)); return false; }
     finally { pending.current = false; setSaving(false); }
-  }, [catalog, current, draft, readOnly]);
+  }, [catalog, current, draft, readOnly, missingEntries]);
   useEffect(() => { reportState({ dirty, submitting: saving || loading }, reset, save); }, [dirty, saving, loading, reset, save, reportState]);
   const chooseRole = (id: string) => {
     if (pending.current || id === current?.role.id) return;
@@ -137,10 +142,11 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
           <Tree checkable checkStrictly virtual height={420} treeData={tree} checkedKeys={[...draft]} expandedKeys={expanded}
             onExpand={setExpanded} onSelect={keys => setBranch(keys[0]?.toString())} disabled={readOnly || saving}
             onCheck={(_keys, info) => setDraft(previous => { const next = new Set(previous); if (info.checked) next.add(String(info.node.key)); else next.delete(String(info.node.key)); return next; })} />
+          {missingEntries.length > 0 && <Alert type="warning" showIcon message={`请先补选入口：${missingEntries.map(point => point.title).join("、")}`} />}
           <Space wrap style={{ marginTop: 16 }}>
             <Typography.Text>已授权 {draft.size} / {catalog.points.length}</Typography.Text>
             <Tag color="green">新增 {diff.added.length}</Tag><Tag color="red">移除 {diff.removed.length}</Tag>
-            <Button type="primary" disabled={!dirty || readOnly || loading} loading={saving} onClick={() => void save()}>保存授权</Button>
+            <Button type="primary" disabled={!dirty || readOnly || loading || missingEntries.length > 0} loading={saving} onClick={() => void save()}>保存授权</Button>
             <Button disabled={!dirty || saving || loading} onClick={reset}>重置</Button>
           </Space>
         </Spin>}
@@ -149,7 +155,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     <Modal open={!!switchTarget} title="当前角色有未保存的授权" closable={!saving} onCancel={() => setSwitchTarget(undefined)} footer={[
       <Button key="cancel" disabled={saving} onClick={() => setSwitchTarget(undefined)}>取消</Button>,
       <Button key="discard" disabled={saving} onClick={() => { const target = switchTarget!; setSwitchTarget(undefined); void loadRole(target); }}>放弃并切换</Button>,
-      <Button key="save" type="primary" loading={saving} onClick={async () => { if (await save()) { const target = switchTarget!; setSwitchTarget(undefined); await loadRole(target); } }}>保存并切换</Button>,
+      <Button key="save" type="primary" disabled={missingEntries.length > 0} loading={saving} onClick={async () => { if (await save()) { const target = switchTarget!; setSwitchTarget(undefined); await loadRole(target); } }}>保存并切换</Button>,
     ]}>保存失败会保留当前角色及草稿。</Modal>
   </div>;
 }

@@ -86,3 +86,20 @@ it('discards a late response after switching to another role', async () => {
     expect(fetcher.mock.calls.filter(call => String(call[0]).endsWith('/catalog'))).toHaveLength(1);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it('asks for missing entry selections and blocks saving an isolated action', async () => {
+  fetcher.mockImplementation((url: string) => Promise.resolve(json(url.endsWith('/catalog') ? { points }
+    : url.includes('/roles?') ? { items: [], total: 0 } : { role: role('one'), positions: [] })));
+  let lifecycle!: Parameters<PageProps['reportState']>;
+  const reportState: PageProps['reportState'] = (...state) => { lifecycle = state; };
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<FeatureWorkbench input={{ parameters: { featurePosition: 'read', roleId: 'one' } }} reportState={reportState} />));
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '展开全部')!.click());
+    await act(async () => (container.querySelectorAll('.ant-tree-checkbox')[1] as HTMLElement).click());
+    expect(container.textContent).toContain('请先补选入口：读取');
+    expect([...container.querySelectorAll('button')].find(button => button.textContent === '保存授权')!.disabled).toBe(true);
+    await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
+    expect(fetcher.mock.calls.filter(call => call[1]?.method === 'PUT')).toHaveLength(0);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

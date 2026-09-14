@@ -102,7 +102,7 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         try
         {
             await new ShellPageDriver(page, $"http://127.0.0.1:{port}").LoginAsync("admin", password);
-            await page.GetByRole(AriaRole.Link, new() { Name = "角色管理", Exact = true }).ClickAsync();
+            await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "角色管理", Exact = true }).ClickAsync();
             var row = await new StandardCrudPageDriver(page).WaitForRowAsync(roleName);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "role-list-baseline.png"), FullPage = true });
             await row.GetByRole(AriaRole.Button, new() { Name = "配置权限", Exact = true }).ClickAsync();

@@ -4,12 +4,24 @@ const platformFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', () => ({ platformFetch: platformFetchMock }));
 
 import {
+  createAccount,
+  setAccountStatus,
   getAccountSnapshot,
   listAccountSecurityEvents,
   resetCredential,
 } from '../api/identityClient';
 
 describe('identity management client', () => {
+  it('carries the initiating feature on reads and security writes with distinct status routes', async () => {
+    platformFetchMock.mockImplementation(async () => new Response('{}', { status: 200 }));
+    const context = { featurePosition: 'Identity/navigation:accounts/action:create' };
+    await createAccount({ ecode: 'alice', ename: 'Alice' }, context);
+    await getAccountSnapshot('u1', context);
+    await listAccountSecurityEvents('u1', 1, 20, context);
+    await setAccountStatus('u1', { targetStatus: 'Disabled', expectedRevision: 1, reason: '停用' }, context);
+    for (const call of platformFetchMock.mock.calls) expect(call[1].headers).toMatchObject({ 'X-NewP-Feature': context.featurePosition });
+    expect(platformFetchMock.mock.calls[3][0]).toBe('/api/identity/accounts/u1/status/disable');
+  });
   beforeEach(() => platformFetchMock.mockReset());
 
   it('never retries a credential reset when the server reports a revision conflict', async () => {

@@ -119,7 +119,7 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
         var export = http.Organization("persons", "export", "list");
         var link = http.Organization("persons", "linkUser", "detail.custom");
         var (roleId, user) = await UserAsync(fixture, admin, "exporter");
-        var account = await BusinessAuditSqlServerHttpApiTests.CreateAsync(admin, "/api/identity/accounts", new { ECODE = "binding-target", ENAME = "待绑定账号" });
+        var account = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "binding-target", ENAME = "待绑定账号" });
         var binding = new { accountEid = account.GetProperty("account").GetProperty("eid").GetString(), expectedRevision = account.GetProperty("account").GetProperty("revision").GetInt64(), reason = "位置绑定" };
         using (user)
         {
@@ -160,7 +160,7 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
     {
         var http = new FeatureHttpTestRequests(fixture);
         var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = code, Name = code });
-        var account = await BusinessAuditSqlServerHttpApiTests.CreateAsync(admin, "/api/identity/accounts", new { ECODE = code, ENAME = code });
+        var account = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = code, ENAME = code });
         using var membership = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{account.GetProperty("account").GetProperty("eid").GetString()}/roles", new { RoleCodes = new[] { code } });
         Assert.Equal(HttpStatusCode.NoContent, membership.StatusCode);
         return (role.GetProperty("id").GetString()!, await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!));

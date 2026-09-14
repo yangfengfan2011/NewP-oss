@@ -22,7 +22,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var roleId = role.GetProperty("id").GetString()!;
         var target = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
         var targetId = target.GetProperty("id").GetString()!;
-        var account = await CreateAsync(admin, "/api/identity/accounts", new { ECODE = "feature-reader", ENAME = "普通授权者" });
+        var account = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "feature-reader", ENAME = "普通授权者" });
         var actor = account.GetProperty("account").GetProperty("eid").GetString();
         SetPosition(admin, save);
         using (var grant = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);

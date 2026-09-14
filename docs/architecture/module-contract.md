@@ -30,9 +30,9 @@ View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资�
 
 纯导航快捷动作以 `navigationTargetKey` 引用已有导航，沿用现有 handler 与 navigation-result 跳转；按目标导航的位置资格呈现，不生成独立业务动作点。目标必须是采用位置授权的真实导航，缺失或无效引用拒绝候选；不能借用当前资源的查看或保存资格。
 
-Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
+Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。已有 Host policy 可作为同一端点的附加约束，与功能位置判权共同满足；它不能代替位置授权，也不与旧 Permission、匿名或拒绝规则组成另一条放行路径。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
 
-当前 Organization 标准路径，以及 Authorization 的角色读取、创建、编辑、账号角色分配和工作台消费位置授权。角色页面未声明删除动作，遗留删除 HTTP 入口明确拒绝；旧角色 Permission 读取/保存接口暂保留原 Permission 与 LocalAdmin 准入，随旧模型退出。其他未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
+当前 Organization 标准路径，以及 Authorization 的角色读取、创建、编辑、账号角色分配和工作台消费位置授权。角色页面未声明删除动作，遗留删除 HTTP 入口明确拒绝；旧角色 Permission 读取/保存接口暂保留原 Permission 与 LocalAdmin 准入，随旧模型退出。Identity 账号管理入口也消费位置授权，并保留既有 `AdminOnly` Host policy；读取、创建、编辑、启用、停用、删除和重置凭据分别绑定声明行为。启用和停用使用独立的 `/status/enable`、`/status/disable`，校验请求的目标状态，旧 `/status` 入口明确拒绝。其他未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
 
 ## Guardrails
 

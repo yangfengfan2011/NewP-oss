@@ -1,5 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
-import type { StandardCrudDetailReadContext } from '@icp-platform/sdk';
+import type { StandardCrudDetailReadContext, StandardCrudFeatureRequestContext } from '@icp-platform/sdk';
 
 export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
 
@@ -50,7 +50,7 @@ export interface IdentitySecurityCommand {
   reason: string;
 }
 
-interface IdentitySecurityEventsReadContext {
+interface IdentitySecurityEventsReadContext extends StandardCrudFeatureRequestContext {
   readonly signal?: AbortSignal;
 }
 
@@ -73,6 +73,7 @@ export function getAccountSnapshot(
   return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/snapshot`, {
     method: 'GET',
     ...(readContext?.signal ? { signal: readContext.signal } : {}),
+    ...(readContext?.featurePosition ? { headers: featureHeaders(readContext) } : {}),
   });
 }
 
@@ -87,45 +88,53 @@ export function listAccountSecurityEvents(
     {
       method: 'GET',
       ...(readContext?.signal ? { signal: readContext.signal } : {}),
+      ...(readContext?.featurePosition ? { headers: featureHeaders(readContext) } : {}),
     },
   );
 }
 
-export function createAccount(input: { ecode: string; ename: string }): Promise<IdentityCredentialIssuance> {
-  return requestJson('/api/identity/accounts', jsonRequest('POST', input));
+export function createAccount(input: { ecode: string; ename: string }, context?: StandardCrudFeatureRequestContext): Promise<IdentityCredentialIssuance> {
+  return requestJson('/api/identity/accounts', jsonRequest('POST', input, context));
 }
 
 export function updateAccountName(
   accountEid: string,
   input: { ename: string; expectedRevision: number },
+  context?: StandardCrudFeatureRequestContext,
 ): Promise<IdentityAccount> {
-  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}`, jsonRequest('PUT', input));
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}`, jsonRequest('PUT', input, context));
 }
 
 export function setAccountStatus(
   accountEid: string,
   input: IdentitySecurityCommand & { targetStatus: Exclude<IdentityAccountStatus, 'Deleted'> },
+  context?: StandardCrudFeatureRequestContext,
 ): Promise<IdentityAccount> {
-  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/status`, jsonRequest('PUT', input));
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/status/${input.targetStatus === 'Enabled' ? 'enable' : 'disable'}`, jsonRequest('PUT', input, context));
 }
 
 export function resetCredential(
   accountEid: string,
   input: IdentitySecurityCommand,
+  context?: StandardCrudFeatureRequestContext,
 ): Promise<IdentityCredentialIssuance> {
-  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/credential-reset`, jsonRequest('POST', input));
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/credential-reset`, jsonRequest('POST', input, context));
 }
 
-export function deleteAccount(accountEid: string, input: IdentitySecurityCommand): Promise<IdentityAccount> {
-  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/delete`, jsonRequest('POST', input));
+export function deleteAccount(accountEid: string, input: IdentitySecurityCommand, context?: StandardCrudFeatureRequestContext): Promise<IdentityAccount> {
+  return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/delete`, jsonRequest('POST', input, context));
 }
 
-function jsonRequest(method: string, body: unknown): RequestInit {
+function jsonRequest(method: string, body: unknown, context?: StandardCrudFeatureRequestContext): RequestInit {
   return {
     method,
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...featureHeaders(context) },
     body: JSON.stringify(body),
   };
+}
+
+function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
+  return context?.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {};
 }
 
 async function requestJson<T>(url: string, init: RequestInit): Promise<T> {

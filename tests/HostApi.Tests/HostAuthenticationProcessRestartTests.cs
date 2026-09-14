@@ -107,7 +107,7 @@ public sealed class HostAuthenticationProcessRestartTests
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
             using var permissionResponse = await client.PutAsJsonAsync($"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = new[] { "Organization.Person.View" } });
             Assert.Equal(HttpStatusCode.NoContent, permissionResponse.StatusCode);
-            using var accountResponse = await client.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
+            using var accountResponse = await FeatureHttpTestRequests.SendAsync(client, http.Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
             Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
             var accountId = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetProperty("eid").GetString();
             using var assignment = await FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });

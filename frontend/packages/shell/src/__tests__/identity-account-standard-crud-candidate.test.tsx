@@ -138,12 +138,12 @@ describe('Identity account Standard CRUD production route', () => {
     });
     expect(load).not.toHaveBeenCalled();
 
-    expect(compileStandardCrudRouteProjection(
+    expect(() => compileStandardCrudRouteProjection(
       [{ ...module, standardCrudCapabilities: module.standardCrudCapabilities.slice(0, 1) }],
       runtimeMetadata.navDocuments,
       runtimeMetadata.viewDocuments,
       [],
-    ).detailEntries).toEqual([]);
+    )).toThrow('STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN');
     expect(load).not.toHaveBeenCalled();
   });
 
@@ -825,7 +825,7 @@ describe('Identity account Standard CRUD production route', () => {
     const latest = { ...stale, status: 'Disabled', revision: 8, personnelDisableHold: true };
     let current = stale;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      if (String(input).endsWith('/User_2/status') && init?.method === 'PUT') {
+      if (String(input).endsWith('/User_2/status/disable') && init?.method === 'PUT') {
         current = latest;
         return new Response(JSON.stringify({ code: 'IDENTITY_REVISION_CONFLICT', current: latest }), {
           status: 409, headers: { 'Content-Type': 'application/problem+json' },
@@ -871,7 +871,7 @@ describe('Identity account Standard CRUD production route', () => {
     await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await waitForBodyText('最新状态 Disabled，Revision 8');
 
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/User_2/status'))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/User_2/status/disable'))).toHaveLength(1);
     expect(document.body.querySelector('textarea[aria-label="操作原因"]')).toBeNull();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'GET').length).toBeGreaterThanOrEqual(2);
   });

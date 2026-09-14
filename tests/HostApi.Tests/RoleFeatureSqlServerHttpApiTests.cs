@@ -15,7 +15,7 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         var requests = new FeatureHttpTestRequests(fixture);
         var create = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.role.create");
         var manager = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/authorization/roles", new { Code = "RoleCreator", Name = "角色创建者" });
-        using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "role-creator", ENAME = "普通角色创建者" });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "role-creator", ENAME = "普通角色创建者" });
         Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var accountId = account.GetProperty("account").GetProperty("eid").GetString();
@@ -55,8 +55,8 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         await http.GrantAsync(admin, roles["ManagerA"], member);
         await http.GrantAsync(admin, roles["ManagerB"], member);
         await http.GrantAsync(admin, roles["TargetRead"], http.Workbench("authorization.workbench.read"));
-        var manager = await BusinessAuditSqlServerHttpApiTests.CreateAsync(admin, "/api/identity/accounts", new { ECODE = "member-manager", ENAME = "普通成员管理员" });
-        var target = await BusinessAuditSqlServerHttpApiTests.CreateAsync(admin, "/api/identity/accounts", new { ECODE = "member-target", ENAME = "另一普通账号" });
+        var manager = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "member-manager", ENAME = "普通成员管理员" });
+        var target = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "member-target", ENAME = "另一普通账号" });
         var managerId = manager.GetProperty("account").GetProperty("eid").GetString();
         var targetId = target.GetProperty("account").GetProperty("eid").GetString();
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(admin, member, HttpMethod.Put, $"/api/authorization/users/{managerId}/roles", new { RoleCodes = new[] { "ManagerA", "ManagerB" } }), HttpStatusCode.NoContent);

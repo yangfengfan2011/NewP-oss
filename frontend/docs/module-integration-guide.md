@@ -56,7 +56,7 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 标准功能声明与派生规则见 [Module Contract](../../docs/architecture/module-contract.md#功能位置授权)。Shell 消费活动目录中的完整 position，并按导航、Tab 和树的静态节点类型传递所属入口。独立详情使用声明的入口，重定向采用目标入口，Drawer 沿用发起动作的位置；模块不从 URL、Referer、点击历史或记录 ID 推导位置。
 
-`StandardCrudFeatureRequestContext.featurePosition` 是每次请求的执行上下文。标准 client、data adapter、Lookup 和 action handler 沿调用链传递它，由请求写入 `X-NewP-Feature`；不把位置加入业务 payload、筛选值或查询 URL，也不使用可被并发操作覆盖的全局请求头。自定义 handler 调用模块服务时同样传递 `context.featurePosition`。位置只表明请求要执行的声明功能，服务端仍按当前可信主体判权。
+`StandardCrudFeatureRequestContext.featurePosition` 是每次请求的执行上下文。标准 client、data adapter、Lookup 和 action handler 沿调用链传递它，由请求写入 `X-NewP-Feature`；不把位置加入业务 payload、筛选值或查询 URL，也不使用可被并发操作覆盖的全局请求头。自定义 handler 调用模块服务时同样传递 `context.featurePosition`。位置只表明请求要执行的声明功能，服务端仍按当前可信主体判权。既有 Host policy 等额外约束继续生效，例如 Identity 账号管理仍要求 `AdminOnly`，不能仅凭功能点投影推断可执行。
 
 需要输入的动作通过 `StandardCrudActionInputRenderContext.featurePosition` 将发起动作位置传给 renderer。列表及详情共用 ReviewDialog；renderer 调用准备端点时传递该位置，最终 handler 继续使用同一位置。例如账号角色弹窗的账号候选、角色分页目录、当前分配与保存由该动作拥有，不能要求用户再获得其他管理页面的资格。
 
@@ -64,7 +64,7 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 列表与详情读取、Lookup 的缓存按位置隔离。标准宿主只加载可用入口及动作所需读取，创建或编辑的准备步骤和提交使用同一动作位置；动作 Drawer 不加载底层列表查询的 Lookup。纯容器没有可用后代时隐藏，默认 Tab 不可用时进入首个可用 Tab，不预读未授权内容。
 
-详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。
+详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。摘要的内容读取使用所属详情的读取上下文；例如 Identity 安全事件由模块自己的 summary data 传递 `readContext.featurePosition`，查询缓存同时区分位置，不能借用写动作或其他页面的读取资格。
 
 ## 验证
 

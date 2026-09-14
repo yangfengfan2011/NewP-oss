@@ -277,8 +277,11 @@ public sealed class IdentityManagementControllerTests
     [Fact]
     public void Routes_SeparateLocalAdministratorManagementFromAuthenticatedSelfService()
     {
-        var usersPolicy = Assert.Single(typeof(IdentityAccountsController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>());
-        Assert.Equal("AdminOnly", usersPolicy.Policy);
+        var actions = typeof(IdentityAccountsController).GetMethods().Where(method => method.GetCustomAttributes(typeof(RequireFeatureAttribute), true).Length > 0).ToArray();
+        Assert.Equal(10, actions.Length);
+        foreach (var action in actions)
+            Assert.Contains(action.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>(), policy => policy.Policy == "AdminOnly");
+        Assert.Single(typeof(IdentityAccountsController).GetMethod(nameof(IdentityAccountsController.SetStatus))!.GetCustomAttributes(typeof(DenyAllAttribute), true));
         Assert.Single(typeof(IdentitySelfServiceController).GetCustomAttributes(typeof(AuthenticatedOnlyAttribute), true));
     }
 

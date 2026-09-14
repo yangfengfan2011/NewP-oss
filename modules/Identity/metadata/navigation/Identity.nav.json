@@ -19,6 +19,16 @@
         "order": 90,
         "entryType": "standard-list",
         "targetKey": "identity.account.list",
+        "featureAuthorization": true,
+        "localAdministratorOnly": true
+      },
+      {
+        "key": "identity.account.detail",
+        "path": "/identity/accounts/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "identity.account.detail",
+        "featureOwner": "navigation:identity.accounts",
         "localAdministratorOnly": true
       }
     ]

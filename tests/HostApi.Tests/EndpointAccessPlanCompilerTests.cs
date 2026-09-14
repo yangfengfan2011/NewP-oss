@@ -16,6 +16,40 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class EndpointAccessPlanCompilerTests
 {
     [Fact]
+    public void Compile_FeatureWithExistingHostGuard_IsOneBusinessRule()
+    {
+        var builder = WebApplication.CreateBuilder();
+        using var app = builder.Build();
+        app.MapGet("/account", static () => "ok")
+            .RequireAuthorization(new RequireFeatureAttribute("identity.account.read"), new AuthorizeAttribute("AdminOnly"));
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources, Registry());
+    }
+    [Theory]
+    [InlineData("anonymous")]
+    [InlineData("authenticated")]
+    [InlineData("denied")]
+    [InlineData("feature")]
+    [InlineData("permission")]
+    public void Compile_FeatureRejectsAnotherTerminalRule(string kind)
+    {
+        var builder = WebApplication.CreateBuilder();
+        using var app = builder.Build();
+        var endpoint = app.MapGet("/conflict", static () => "never")
+            .RequireAuthorization(new RequireFeatureAttribute("identity.account.read"), new AuthorizeAttribute("AdminOnly"));
+        if (kind == "anonymous") endpoint.AllowAnonymous();
+        else endpoint.RequireAuthorization(kind switch
+        {
+            "authenticated" => new AuthenticatedOnlyAttribute(),
+            "denied" => new DenyAllAttribute("frozen"),
+            "feature" => new RequireFeatureAttribute("identity.account.create"),
+            _ => new RequirePermissionAttribute("Identity.Old")
+        });
+        var error = Assert.Throws<EndpointAccessPlanValidationException>(() =>
+            EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources, Registry()));
+        Assert.Contains(error.Diagnostics, item => item.Code == EndpointAccessFailureCodes.RuleConflict);
+    }
+
+    [Fact]
     public void Compile_AcceptsExactlyOneTerminalRuleAndKnownOwnedPermission()
     {
         var registry = Registry(new PermissionModule(

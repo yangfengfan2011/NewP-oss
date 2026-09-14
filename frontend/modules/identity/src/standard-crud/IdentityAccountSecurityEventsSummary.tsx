@@ -13,6 +13,7 @@ const EVENT_PAGE_SIZE = 20;
 
 interface IdentityAccountSecurityEventsSummaryProps {
   accountEid: string;
+  featurePosition?: string;
   title: string;
 }
 
@@ -30,13 +31,14 @@ const eventColumns: ColumnsType<IdentitySecurityEvent> = [
 
 export function IdentityAccountSecurityEventsSummary({
   accountEid,
+  featurePosition,
   title,
 }: IdentityAccountSecurityEventsSummaryProps) {
   const [page, setPage] = useState(1);
   // 查询身份只包含影响安全事件事实的 Identity 输入；标题与安全命令状态不参与复用。
   const query = usePlatformQuery<IdentityPage<IdentitySecurityEvent>>({
-    key: ['identity.security-events', accountEid, page, EVENT_PAGE_SIZE],
-    load: ({ signal }) => listAccountSecurityEvents(accountEid, page, EVENT_PAGE_SIZE, { signal }),
+    key: ['identity.security-events', accountEid, page, EVENT_PAGE_SIZE, featurePosition ?? ''],
+    load: ({ signal }) => listAccountSecurityEvents(accountEid, page, EVENT_PAGE_SIZE, { signal, ...(featurePosition ? { featurePosition } : {}) }),
   });
   const result = query.data;
   const loading = result === undefined && (query.status === 'idle' || query.isFetching);
@@ -103,7 +105,9 @@ export const identityAccountSecurityEventsSummaryRenderer: StandardCrudSummaryRe
     && typeof block.data.accountEid === 'string'
     ? block.data.accountEid
     : null;
+  const featurePosition = typeof block.data === 'object' && block.data !== null
+    && 'featurePosition' in block.data && typeof block.data.featurePosition === 'string' ? block.data.featurePosition : undefined;
   return accountEid
-    ? <IdentityAccountSecurityEventsSummary key={accountEid} accountEid={accountEid} title={title} />
+    ? <IdentityAccountSecurityEventsSummary key={accountEid} accountEid={accountEid} title={title} featurePosition={featurePosition} />
     : <Alert type="error" showIcon message="安全事件目标账号不可用。" />;
 };

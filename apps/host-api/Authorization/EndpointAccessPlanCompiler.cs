@@ -131,6 +131,7 @@ public static class EndpointAccessPlanCompiler
         return permissions;
     }
 
+    // 功能位置是业务终态；既有 Host policy 作为附加约束共同满足，不替代位置判权。
     private static void ValidateEndpoint(
         Endpoint endpoint,
         IReadOnlyDictionary<string, PermissionDescriptor> permissionsByCode,
@@ -141,11 +142,13 @@ public static class EndpointAccessPlanCompiler
         var authenticatedOnly = endpoint.Metadata.GetOrderedMetadata<AuthenticatedOnlyAttribute>();
         var denyAll = endpoint.Metadata.GetOrderedMetadata<DenyAllAttribute>();
         var permissionRules = endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>();
+        var featureRules = endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
         var authorizeData = endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>();
         var otherAuthorization = authorizeData
             .Where(static data => data is not AuthenticatedOnlyAttribute
                                   && data is not DenyAllAttribute
-                                  && data is not RequirePermissionAttribute)
+                                  && data is not RequirePermissionAttribute
+                                  && data is not RequireFeatureAttribute)
             .ToArray();
         var hostPolicies = otherAuthorization
             .Where(static data => !string.IsNullOrWhiteSpace(data.Policy))
@@ -158,7 +161,8 @@ public static class EndpointAccessPlanCompiler
                                 + authenticatedOnly.Count
                                 + denyAll.Count
                                 + permissionRules.Count
-                                + hostPolicies.Length;
+                                + featureRules.Count
+                                + (featureRules.Count == 0 ? hostPolicies.Length : 0);
         var conflict = terminalRuleCount > 1
                        || (allowAnonymous.Count > 0 && authorizeData.Count > 0)
                        || (bareAuthorization.Length > 0 && terminalRuleCount > 0);

@@ -99,10 +99,11 @@ describe('Identity account Standard CRUD resource candidate', () => {
     const result = await identityAccountStandardCrudResource.dataAdapter.create?.(
       { ECODE: ' alice ', ENAME: ' Alice ' },
       {},
+      { featurePosition: 'create-position' },
     );
 
     expect(createAccountMock).toHaveBeenCalledTimes(1);
-    expect(createAccountMock).toHaveBeenCalledWith({ ecode: 'alice', ename: 'Alice' });
+    expect(createAccountMock).toHaveBeenCalledWith({ ecode: 'alice', ename: 'Alice' }, { featurePosition: 'create-position' });
     expect(result).toEqual({ operation: 'create', payload: issuance });
   });
 
@@ -114,10 +115,11 @@ describe('Identity account Standard CRUD resource candidate', () => {
       'User_2',
       { ECODE: 'must-not-be-sent', ENAME: ' Alice 2 ' },
       { Revision: 7 },
+      { featurePosition: 'edit-position' },
     );
 
     expect(updateAccountNameMock).toHaveBeenCalledTimes(1);
-    expect(updateAccountNameMock).toHaveBeenCalledWith('User_2', { ename: 'Alice 2', expectedRevision: 7 });
+    expect(updateAccountNameMock).toHaveBeenCalledWith('User_2', { ename: 'Alice 2', expectedRevision: 7 }, { featurePosition: 'edit-position' });
     expect(result).toEqual({ operation: 'update', payload: account });
   });
 
@@ -134,17 +136,17 @@ describe('Identity account Standard CRUD resource candidate', () => {
     const abortController = new AbortController();
     const detail = await identityAccountStandardCrudResource.dataAdapter.get(
       'User_2',
-      { signal: abortController.signal },
+      { signal: abortController.signal, featurePosition: 'read-position' },
     );
 
-    expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2', { signal: abortController.signal });
+    expect(getAccountSnapshotMock).toHaveBeenCalledWith('User_2', { signal: abortController.signal, featurePosition: 'read-position' });
     expect(detail.normalized.fields).toMatchObject({
       EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Enabled', Revision: 7,
       CreatedBy: 'User_1', CreatedBy_DisplayValue: 'Current account name', CreatedAt_DisplayValue: '2026/8/1 08:00:00',
       UpdatedBy_DisplayValue: null, UpdatedAt_DisplayValue: '2026/8/2 08:00:00',
     });
     expect(detail.normalized.summaries).toEqual({
-      securityEvents: { status: 'ready', data: { accountEid: 'User_2' } },
+      securityEvents: { status: 'ready', data: { accountEid: 'User_2', featurePosition: 'read-position' } },
     });
     expect(identityAccountStandardCrudResource.detailViewKey).toBe('identity.account.detail');
     expect(Object.keys(identityAccountStandardCrudResource.summaryRenderers ?? {})).toEqual(['securityEvents']);
@@ -249,6 +251,7 @@ describe('Identity account Standard CRUD resource candidate', () => {
     setAccountStatusMock.mockResolvedValue({ eid: 'User_2', status: targetStatus, revision: 8 });
 
     await identityAccountStandardCrudResource.actionHandlers?.[actionKey]?.({
+      featurePosition: 'action-position',
       id: 'User_2',
       row: actionRow({ Status: currentStatus }),
       input: { reason: '  风险处置  ' },
@@ -257,11 +260,12 @@ describe('Identity account Standard CRUD resource candidate', () => {
     expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
     expect(setAccountStatusMock).toHaveBeenCalledWith('User_2', {
       targetStatus, expectedRevision: 7, reason: '风险处置',
-    });
+    }, expect.objectContaining({ featurePosition: 'action-position' }));
   });
 
   it('requires the full current ECODE before calling the irreversible delete command', async () => {
     const context = {
+      featurePosition: 'action-position',
       id: 'User_2',
       row: actionRow({ Status: 'Disabled' }),
     };
@@ -277,7 +281,7 @@ describe('Identity account Standard CRUD resource candidate', () => {
       ...context,
       input: { reason: '账号退役', confirmation: 'alice' },
     });
-    expect(deleteAccountMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '账号退役' });
+    expect(deleteAccountMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '账号退役' }, expect.objectContaining({ featurePosition: 'action-position' }));
   });
 
   it('hands only the current credential reset issuance to the existing result seam', async () => {
@@ -288,12 +292,13 @@ describe('Identity account Standard CRUD resource candidate', () => {
     resetCredentialMock.mockResolvedValue(issuance);
 
     const result = await identityAccountStandardCrudResource.actionHandlers?.credentialReset?.({
+      featurePosition: 'action-position',
       id: 'User_2',
       detail: { fields: { EID: 'User_2', ECODE: 'alice', Status: 'Enabled', Revision: 7 }, summaries: {} },
       input: { reason: '凭据泄露' },
     });
 
-    expect(resetCredentialMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '凭据泄露' });
+    expect(resetCredentialMock).toHaveBeenCalledWith('User_2', { expectedRevision: 7, reason: '凭据泄露' }, expect.objectContaining({ featurePosition: 'action-position' }));
     expect(result).toEqual({ operation: 'action', payload: issuance });
   });
 
@@ -304,6 +309,7 @@ describe('Identity account Standard CRUD resource candidate', () => {
     setAccountStatusMock.mockRejectedValue(failure);
 
     await expect(identityAccountStandardCrudResource.actionHandlers?.enable?.({
+      featurePosition: 'action-position',
       id: 'User_2',
       row: actionRow({ Status: 'Disabled' }),
       input: { reason: '恢复账号' },
@@ -320,6 +326,7 @@ describe('Identity account Standard CRUD resource candidate', () => {
     ));
 
     await expect(identityAccountStandardCrudResource.actionHandlers?.disable?.({
+      featurePosition: 'action-position',
       id: 'User_2',
       row: actionRow(),
       input: { reason: '风险处置' },
@@ -331,6 +338,7 @@ describe('Identity account Standard CRUD resource candidate', () => {
     deleteAccountMock.mockRejectedValue(new TypeError('Failed to fetch'));
 
     await expect(identityAccountStandardCrudResource.actionHandlers?.delete?.({
+      featurePosition: 'action-position',
       id: 'User_2',
       row: actionRow({ Status: 'Disabled' }),
       input: { reason: '账号退役', confirmation: 'alice' },

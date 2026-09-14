@@ -61,7 +61,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         foreach (var maintenance in new[] { true, false })
         {
             var code = maintenance ? "assignment-one" : "assignment-two";
-            using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = code, ENAME = code });
+            using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = code, ENAME = code });
             var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
             var id = account.GetProperty("account").GetProperty("eid").GetString();
             using var roleResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = code, Name = code });
@@ -85,7 +85,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "assigned-user", ENAME = "分配账号" });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "assigned-user", ENAME = "分配账号" });
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var userId = account.GetProperty("account").GetProperty("eid").GetString();
         using var roleResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "Assigned", Name = "分配职责" });
@@ -132,11 +132,11 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{administratorId}/roles", new { RoleCodes = Array.Empty<string>() })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Get, $"/api/authorization/users/{administratorId}/roles")).StatusCode);
-        using var disabled = await admin.PutAsJsonAsync($"/api/identity/accounts/{userId}/status", new { TargetStatus = "Disabled", ExpectedRevision = projection.GetProperty("revision").GetInt64(), Reason = "测试停用" });
+        using var disabled = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{userId}/status/disable", new { TargetStatus = "Disabled", ExpectedRevision = projection.GetProperty("revision").GetInt64(), Reason = "测试停用" });
         Assert.True(disabled.IsSuccessStatusCode, await disabled.Content.ReadAsStringAsync());
         var disabledAccount = await disabled.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = new[] { "Assigned" } })).StatusCode);
-        using var deleted = await admin.PostAsJsonAsync($"/api/identity/accounts/{userId}/delete", new { ExpectedRevision = disabledAccount.GetProperty("revision").GetInt64(), Reason = "测试删除" });
+        using var deleted = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("delete"), HttpMethod.Post, $"/api/identity/accounts/{userId}/delete", new { ExpectedRevision = disabledAccount.GetProperty("revision").GetInt64(), Reason = "测试删除" });
         Assert.True(deleted.IsSuccessStatusCode, await deleted.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = Array.Empty<string>() })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Get, route)).StatusCode);
@@ -151,7 +151,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "race-user", ENAME = "并发账号" });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "race-user", ENAME = "并发账号" });
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var userId = account.GetProperty("account").GetProperty("eid").GetString();
         foreach (var code in new[] { "First", "Second" }) Assert.True((await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = code, Name = code })).IsSuccessStatusCode);
@@ -196,7 +196,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var response = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "internal-member", ENAME = "普通显示账号" });
+        using var response = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "internal-member", ENAME = "普通显示账号" });
         var account = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.False(account.GetProperty("account").GetProperty("isLocalAdministrator").GetBoolean());
         var id = account.GetProperty("account").GetProperty("eid").GetString()!;
@@ -215,7 +215,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "roles-user", ENAME = "权限持有者" });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "roles-user", ENAME = "权限持有者" });
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var actor = account.GetProperty("account").GetProperty("eid").GetString();
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
@@ -573,7 +573,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "writer", ENAME = "人员操作者" });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "writer", ENAME = "人员操作者" });
         Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var actor = account.GetProperty("account").GetProperty("eid").GetString()!;

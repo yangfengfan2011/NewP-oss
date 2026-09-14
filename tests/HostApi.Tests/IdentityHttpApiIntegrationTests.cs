@@ -1,3 +1,6 @@
+using ICP.Platform.Authorization;
+using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Http;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -32,6 +35,8 @@ public sealed class IdentityHttpApiIntegrationTests
             .AddApplicationPart(typeof(IdentityAccountsController).Assembly);
         builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
+        builder.Services.AddPlatformAuthorization();
+        builder.Services.AddSingleton<IFeatureDecisionSource, TestFeatures>();
         builder.Services.AddAuthorization(options =>
             options.AddPolicy("AdminOnly", policy => policy.RequireRole("LocalAdmin")));
         builder.Services.AddSingleton<IIdentityManagementQueryService, EmptyQueries>();
@@ -54,6 +59,7 @@ public sealed class IdentityHttpApiIntegrationTests
         using var administrator = new HttpRequestMessage(HttpMethod.Get, "/api/identity/accounts");
         administrator.Headers.Add("X-Test-User", "admin-1");
         administrator.Headers.Add("X-Test-Role", "LocalAdmin");
+        administrator.Headers.Add("X-NewP-Feature", "test-feature");
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(administrator)).StatusCode);
 
         using var passwordChange = new HttpRequestMessage(HttpMethod.Post, "/api/identity/me/password-change")
@@ -68,7 +74,7 @@ public sealed class IdentityHttpApiIntegrationTests
         Assert.Equal("rotated-session-secret", cookie.Credential);
         Assert.DoesNotContain("rotated-session-secret", await changed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        using var invalidStatus = new HttpRequestMessage(HttpMethod.Put, "/api/identity/accounts/user-1/status")
+        using var invalidStatus = new HttpRequestMessage(HttpMethod.Put, "/api/identity/accounts/user-1/status/disable")
         {
             Content = new StringContent(
                 """{"targetStatus":"Archived","expectedRevision":1,"reason":"invalid enum"}""",
@@ -77,6 +83,7 @@ public sealed class IdentityHttpApiIntegrationTests
         };
         invalidStatus.Headers.Add("X-Test-User", "admin-1");
         invalidStatus.Headers.Add("X-Test-Role", "LocalAdmin");
+        invalidStatus.Headers.Add("X-NewP-Feature", "test-feature");
         var invalidStatusResponse = await client.SendAsync(invalidStatus);
 
         Assert.Equal(HttpStatusCode.BadRequest, invalidStatusResponse.StatusCode);
@@ -96,10 +103,17 @@ public sealed class IdentityHttpApiIntegrationTests
             };
             forged.Headers.Add("X-Test-User", "admin-1");
             forged.Headers.Add("X-Test-Role", "LocalAdmin");
+        forged.Headers.Add("X-NewP-Feature", "test-feature");
             var rejected = await client.SendAsync(forged);
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
             }
         }
+    }
+
+    private sealed class TestFeatures : IFeatureDecisionSource
+    {
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(position == "test-feature" ? PermissionDecision.Granted : PermissionDecision.Denied);
     }
 
     private sealed class EmptyQueries : IIdentityManagementQueryService

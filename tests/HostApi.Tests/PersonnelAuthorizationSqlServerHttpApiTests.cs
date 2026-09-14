@@ -127,7 +127,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
     internal static async Task<(string Id, string RoleId, HttpClient Client)> CreateActorAsync(BusinessAuditHostFixture fixture, HttpClient admin, string code, FeaturePoint[] features, string[]? permissions = null)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = code, ENAME = code });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = code, ENAME = code });
         Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var id = account.GetProperty("account").GetProperty("eid").GetString()!;

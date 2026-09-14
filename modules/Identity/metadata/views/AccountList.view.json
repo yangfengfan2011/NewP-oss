@@ -8,6 +8,7 @@
     "descriptionKey": "Description",
     "mode": "list",
     "model": "IdentityAccount",
+    "resourceKey": "identity.account",
     "detailViewKey": "identity.account.detail",
     "query": {
       "fields": [

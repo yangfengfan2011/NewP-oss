@@ -6,6 +6,7 @@ import {
   readStandardCrudString,
   StandardCrudRequestError,
   type StandardCrudDataAdapter,
+  type StandardCrudFeatureRequestContext,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import {
@@ -64,7 +65,7 @@ function mapIdentityAccountListItem(value: unknown): IdentityAccountListRow {
   };
 }
 
-function mapIdentityAccountDetail(account: IdentityAccount) {
+function mapIdentityAccountDetail(account: IdentityAccount, context?: StandardCrudFeatureRequestContext) {
   return {
     fields: {
       EID: account.eid,
@@ -87,7 +88,7 @@ function mapIdentityAccountDetail(account: IdentityAccount) {
     summaries: {
       securityEvents: {
         status: 'ready' as const,
-        data: { accountEid: account.eid },
+        data: { accountEid: account.eid, featurePosition: context?.featurePosition },
       },
     },
   };
@@ -225,7 +226,7 @@ async function setIdentityAccountLifecycleStatus(
       targetStatus,
       expectedRevision: snapshot.revision,
       reason: input.reason,
-    });
+    }, context);
   } catch (error) {
     throw toIdentitySecurityActionError(error);
   }
@@ -241,7 +242,7 @@ async function deleteIdentityAccount(
     throw new Error(`请完整输入登录账号 ${snapshot.ecode} 以确认不可恢复删除。`);
   }
   try {
-    await deleteAccount(context.id, { expectedRevision: snapshot.revision, reason: input.reason });
+    await deleteAccount(context.id, { expectedRevision: snapshot.revision, reason: input.reason }, context);
   } catch (error) {
     throw toIdentitySecurityActionError(error);
   }
@@ -257,7 +258,7 @@ async function resetIdentityAccountCredential(
     const issuance = await resetCredential(context.id, {
       expectedRevision: snapshot.revision,
       reason: input.reason,
-    });
+    }, context);
     return { operation: 'action' as const, payload: issuance };
   } catch (error) {
     throw toIdentitySecurityActionError(error);
@@ -265,12 +266,12 @@ async function resetIdentityAccountCredential(
 }
 
 // 创建结果可能已在服务端生效；网络结果未知时只提示人工核对，绝不自动重试签发。
-async function createIdentityAccount(values: Record<string, unknown>) {
+async function createIdentityAccount(values: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) {
   try {
     const issuance = await createAccount({
       ecode: readMutationString(values, 'ECODE'),
       ename: readMutationString(values, 'ENAME'),
-    });
+    }, context);
     return { operation: 'create' as const, payload: issuance };
   } catch (error) {
     if (error instanceof IdentityApiError) {
@@ -284,6 +285,7 @@ async function updateIdentityAccount(
   id: string | undefined,
   values: Record<string, unknown>,
   detailFields: Record<string, unknown>,
+  context?: StandardCrudFeatureRequestContext,
 ) {
   const expectedRevision = detailFields.Revision;
   if (!id || typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
@@ -294,7 +296,7 @@ async function updateIdentityAccount(
     const account = await updateAccountName(id, {
       ename: readMutationString(values, 'ENAME'),
       expectedRevision,
-    });
+    }, context);
     return { operation: 'update' as const, payload: account };
   } catch (error) {
     if (error instanceof IdentityApiError) {
@@ -315,14 +317,14 @@ const identityAccountDataAdapter: StandardCrudDataAdapter<IdentityAccountListRow
   list: identityAccountRestListAdapter.list,
   getRowId: identityAccountRestListAdapter.getRowId,
   get: async (id, readContext) => {
-    const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id, readContext));
+    const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id, readContext), readContext);
     return { normalized, value: normalized };
   },
-  create: (values) => createIdentityAccount(values),
-  update: (id, values, detailFields) => updateIdentityAccount(id, values, detailFields ?? {}),
+  create: (values, _fields, context) => createIdentityAccount(values, context),
+  update: (id, values, detailFields, context) => updateIdentityAccount(id, values, detailFields ?? {}, context),
 };
 
-// 该候选注册标准列表、普通表单与正式 Identity 写入；生产导航切换仍由后续迁移票拥有。
+// Identity 专用命令共享标准宿主的发起位置，不重新推断导航或动作身份。
 export const identityAccountStandardCrudResource: StandardCrudResourceRegistration<
   Record<string, unknown>,
   IdentityAccountListRow

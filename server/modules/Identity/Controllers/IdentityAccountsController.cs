@@ -13,7 +13,7 @@ namespace ICP.Platform.Modules.Identity.Controllers;
 
 [ApiController]
 [Route("api/identity/accounts")]
-[Authorize(Policy = "AdminOnly")]
+[EndpointModule("Identity")]
 [PlatformRequestValidation]
 public sealed class IdentityAccountsController : ControllerBase
 {
@@ -28,7 +28,10 @@ public sealed class IdentityAccountsController : ControllerBase
         _accounts = accounts;
     }
 
+    /// <summary>创建账号并一次性返回凭据，调用前同时满足位置与 Host 管理资格。</summary>
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.create")]
     public async Task<ActionResult<IdentityCredentialIssuanceResponse>> Create(
         [FromBody] CreateIdentityAccountRequest request,
         CancellationToken cancellationToken)
@@ -52,7 +55,10 @@ public sealed class IdentityAccountsController : ControllerBase
         }
     }
 
+    /// <summary>读取账号及安全事件详情，沿用所属入口的读取授权。</summary>
     [HttpGet("{accountEid}")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.read")]
     public async Task<ActionResult<IdentityAccountDetailResponse>> Get(
         string accountEid,
         [FromQuery] int? eventPage,
@@ -74,6 +80,8 @@ public sealed class IdentityAccountsController : ControllerBase
     /// 返回标准详情普通字段所需的账号快照，不读取安全事件集合。
     /// </summary>
     [HttpGet("{accountEid}/snapshot")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.read")]
     public async Task<ActionResult<IdentityAccountViewResponse>> GetSnapshot(
         string accountEid,
         CancellationToken cancellationToken)
@@ -88,6 +96,8 @@ public sealed class IdentityAccountsController : ControllerBase
     /// 独立分页返回目标账号安全事件，供 Identity 完整详情摘要按需装载。
     /// </summary>
     [HttpGet("{accountEid}/security-events")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.read")]
     public async Task<ActionResult<IdentitySecurityEventPageResponse>> GetSecurityEvents(
         string accountEid,
         [FromQuery] int? page,
@@ -111,7 +121,10 @@ public sealed class IdentityAccountsController : ControllerBase
             : Ok(IdentitySecurityEventPageResponse.From(events));
     }
 
+    /// <summary>按编辑位置修改显示名称，保留既有 Revision 校验。</summary>
     [HttpPut("{accountEid}")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.update")]
     public async Task<ActionResult<IdentityAccountResponse>> UpdateName(
         string accountEid,
         [FromBody] UpdateIdentityAccountRequest request,
@@ -130,7 +143,9 @@ public sealed class IdentityAccountsController : ControllerBase
         }
     }
 
+    /// <summary>冻结旧混合入口，保留同一领域事务供独立方向动作调用。</summary>
     [HttpPut("{accountEid}/status")]
+    [DenyAll("账号状态操作已由独立启用和停用位置承接。")]
     public async Task<ActionResult<IdentityAccountResponse>> SetStatus(
         string accountEid,
         [FromBody] SetIdentityAccountStatusRequest request,
@@ -154,7 +169,34 @@ public sealed class IdentityAccountsController : ControllerBase
         }
     }
 
+    /// <summary>启用位置只接受 Enabled，保留账号自身及人员绑定保护。</summary>
+    [HttpPut("{accountEid}/status/enable"), Authorize(Policy = "AdminOnly"), RequireFeature("identity.account.enable")]
+    public Task<ActionResult<IdentityAccountResponse>> Enable(string accountEid, [FromBody] SetIdentityAccountStatusRequest request,
+        CancellationToken cancellationToken) => request.TargetStatus == IdentityAccountStatus.Enabled
+            ? SetStatus(accountEid, request, cancellationToken) : Task.FromResult<ActionResult<IdentityAccountResponse>>(DirectionProblem());
+
+    /// <summary>停用位置只接受 Disabled，复用账号停用及会话撤销事务。</summary>
+    [HttpPut("{accountEid}/status/disable"), Authorize(Policy = "AdminOnly"), RequireFeature("identity.account.disable")]
+    public Task<ActionResult<IdentityAccountResponse>> Disable(string accountEid, [FromBody] SetIdentityAccountStatusRequest request,
+        CancellationToken cancellationToken) => request.TargetStatus == IdentityAccountStatus.Disabled
+            ? SetStatus(accountEid, request, cancellationToken) : Task.FromResult<ActionResult<IdentityAccountResponse>>(DirectionProblem());
+
+    // 参数方向沿用稳定请求校验形状，不能借用反向动作的授权。
+    private BadRequestObjectResult DirectionProblem()
+    {
+        var problem = new ValidationProblemDetails(new Dictionary<string, string[]> { ["targetStatus"] = ["目标状态与当前动作不一致。"] })
+        { Status = 400, Title = "REQUEST_VALIDATION_FAILED" };
+        problem.Extensions["code"] = "REQUEST_VALIDATION_FAILED";
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        var result = BadRequest(problem);
+        result.ContentTypes.Add("application/problem+json");
+        return result;
+    }
+
+    /// <summary>按删除位置执行不可恢复删除，保留账号自身保护。</summary>
     [HttpPost("{accountEid}/delete")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.delete")]
     public async Task<ActionResult<IdentityAccountResponse>> Delete(
         string accountEid,
         [FromBody] IdentityAccountSecurityCommandRequest request,
@@ -173,7 +215,10 @@ public sealed class IdentityAccountsController : ControllerBase
         }
     }
 
+    /// <summary>按重置位置签发一次性凭据，保留本地管理员维护边界。</summary>
     [HttpPost("{accountEid}/credential-reset")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.credentialReset")]
     public async Task<ActionResult<IdentityCredentialIssuanceResponse>> ResetCredential(
         string accountEid,
         [FromBody] IdentityAccountSecurityCommandRequest request,
@@ -199,6 +244,8 @@ public sealed class IdentityAccountsController : ControllerBase
     /// 查询账号目录；同时接受既有 page 与标准宿主 pageIndex，并把允许的排序意图交给 Identity 查询服务。
     /// </summary>
     [HttpGet]
+    [Authorize(Policy = "AdminOnly")]
+    [RequireFeature("identity.account.read")]
     public async Task<ActionResult<IdentityAccountPageResponse>> List(
         [FromQuery] string? query,
         [FromQuery] IdentityAccountStatus? status,
